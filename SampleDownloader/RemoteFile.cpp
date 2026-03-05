@@ -121,6 +121,16 @@ bool RemoteFile::sync (QUrl const& url, bool local, bool force)
 
 void RemoteFile::download (QUrl url)
 {
+  if (!network_manager_)
+    {
+      if (listener_)
+        {
+          listener_->download_finished (false);
+          listener_->error (tr ("Network Error"), tr ("Network manager not configured"));
+        }
+      return;
+    }
+
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
   if (QNetworkAccessManager::Accessible != network_manager_->networkAccessible ()) {
     // try and recover network access for QNAM
@@ -135,6 +145,10 @@ void RemoteFile::download (QUrl url)
   QNetworkRequest request {url};
   request.setRawHeader ("User-Agent", "Decodium3SE-KP5 Sample Downloader");
   request.setOriginatingObject (this);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
+  request.setAttribute (QNetworkRequest::RedirectPolicyAttribute
+                        , QNetworkRequest::NoLessSafeRedirectPolicy);
+#endif
 
   // this blocks for a second or two the first time it is used on
   // Windows - annoying
@@ -145,6 +159,15 @@ void RemoteFile::download (QUrl url)
   else
     {
       reply_ = network_manager_->get (request);
+    }
+  if (!reply_)
+    {
+      if (listener_)
+        {
+          listener_->download_finished (false);
+          listener_->error (tr ("Network Error"), tr ("Unable to create request"));
+        }
+      return;
     }
 
   connect (reply_.data (), &QNetworkReply::finished, this, &RemoteFile::reply_finished);

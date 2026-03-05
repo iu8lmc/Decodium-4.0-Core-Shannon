@@ -773,6 +773,7 @@ private:
   bool bSpecialOp_;
   bool alternate_erase_button_;
   bool show_country_names_;
+  bool show_greyline_;
   int LotW_days_since_upload_;
 
   TransceiverFactory::ParameterPack rig_params_;
@@ -1061,6 +1062,7 @@ bool Configuration::detailed_blank () const {return m_->detailed_blank_;}
 bool Configuration::DXCC () const {return m_->DXCC_;}
 bool Configuration::GridMap() const { return m_->gridMap_;}
 bool Configuration::GridMapAll() const { return m_->gridMapAll_;}
+bool Configuration::show_greyline () const {return m_->show_greyline_;}
 bool Configuration::ppfx() const {return m_->ppfx_;}
 bool Configuration::miles () const {return m_->miles_;}
 bool Configuration::quick_call () const {return !m_externalCtrlMode and m_->quick_call_;}   //avt 10/2/25
@@ -1856,6 +1858,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   , bSpecialOp_ {false}
   , alternate_erase_button_ {false}
   , show_country_names_ {false}
+  , show_greyline_ {true}
   , LotW_days_since_upload_ {0}
   , last_port_type_ {TransceiverFactory::Capabilities::none}
   , rig_is_dummy_ {false}
@@ -1985,6 +1988,9 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   ui_->add_macro_line_edit->setValidator (new QRegularExpressionValidator {message_alphabet, this});
   ui_->Field_Day_Exchange->setValidator (new QRegularExpressionValidator {field_day_exchange_re, this});
   ui_->RTTY_Exchange->setValidator (new QRegularExpressionValidator {RTTY_roundup_exchange_re, this});
+  ui_->lotwEntry->setEchoMode (QLineEdit::Password);
+  ui_->leCloudlogApiKey->setEchoMode (QLineEdit::Password);
+  ui_->OTPSeed->setEchoMode (QLineEdit::Password);
   QRegularExpression b32(QString("(^[") + QString(BASE32_CHARSET)+QString(BASE32_CHARSET).toLower() + QString("]{16}$)|(^$)"));
   ui_->OTPSeed->setValidator(new QRegularExpressionValidator(b32, this));
 
@@ -2257,6 +2263,7 @@ void Configuration::impl::initialize_models ()
   ui_->insert_blank_check_box->setChecked (insert_blank_);
   ui_->cb_detailed_blank_line->setChecked (detailed_blank_);
   ui_->DXCC_check_box->setChecked (DXCC_);
+  ui_->show_greyline_check_box->setChecked (show_greyline_);
   ui_->ppfx_check_box->setChecked (ppfx_);
   ui_->show_country_names_check_box->setChecked (show_country_names_);
   if (!ui_->DXCC_check_box->isChecked()) {
@@ -2729,6 +2736,7 @@ void Configuration::impl::read_settings ()
   insert_blank_ = settings_->value ("InsertBlank", true).toBool ();
   detailed_blank_ = settings_->value ("DetailedBlank", true).toBool ();
   DXCC_ = settings_->value ("DXCCEntity", true).toBool ();
+  show_greyline_ = settings_->value ("MapShowGreyline", true).toBool ();
   gridMap_ = settings_->value("MapGridEntity", true).toBool();
   gridMapAll_ = settings_->value("MapGridAllEntity", true).toBool();
   ppfx_ = settings_->value ("PrincipalPrefix", false).toBool ();
@@ -3012,6 +3020,7 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("InsertBlank", insert_blank_);
   settings_->setValue ("DetailedBlank", detailed_blank_);
   settings_->setValue ("DXCCEntity", DXCC_);
+  settings_->setValue ("MapShowGreyline", show_greyline_);
   settings_->setValue ("MapGridEntity", gridMap_);
   settings_->setValue ("MapGridAllEntity", gridMapAll_);
   settings_->setValue ("PrincipalPrefix", ppfx_);
@@ -3616,6 +3625,7 @@ void Configuration::impl::accept ()
   insert_blank_ = ui_->insert_blank_check_box->isChecked ();
   detailed_blank_ = ui_->cb_detailed_blank_line->isChecked ();
   DXCC_ = ui_->DXCC_check_box->isChecked ();
+  show_greyline_ = ui_->show_greyline_check_box->isChecked ();
   gridMap_= ui_->Map_Grid_to_State->isChecked ();
   gridMapAll_ = ui_->Map_All_Messages->isChecked();
   ppfx_ = ui_->ppfx_check_box->isChecked ();

@@ -2,10 +2,11 @@
 #include "mainwindow.h"
 #include <QTextStream>
 #include <QDebug>
+#include <QComboBox>
 #include <cstdio>
 #include <portaudio.h>
 
-#define MAXDEVICES 200
+#define MAXDEVICES 100
 
 //----------------------------------------------------------- DevSetup()
 DevSetup::DevSetup(QWidget *parent) :	QDialog(parent)
@@ -29,7 +30,6 @@ DevSetup::~DevSetup()
 void DevSetup::initDlg()
 {
   int k,id;
-  int valid_devices=0;
   int minChan[MAXDEVICES];
   int maxChan[MAXDEVICES];
   int minSpeed[MAXDEVICES];
@@ -38,15 +38,17 @@ void DevSetup::initDlg()
   char s[256];
   int numDevices=Pa_GetDeviceCount();
   getDev(&numDevices,hostAPI_DeviceName,minChan,maxChan,minSpeed,maxSpeed);
+  auto const in_list_capacity = static_cast<int> (sizeof (m_inDevList) / sizeof (m_inDevList[0]));
+  auto const out_list_capacity = static_cast<int> (sizeof (m_outDevList) / sizeof (m_outDevList[0]));
   k=0;
   for(id=0; id<numDevices; id++)  {
     if(96000 >= minSpeed[id] && 96000 <= maxSpeed[id]) {
+      if (k >= in_list_capacity) break;
       m_inDevList[k]=id;
       k++;
-      sprintf(s,"%2d   %d  %-49s",id,maxChan[id],hostAPI_DeviceName[id]);
+      snprintf(s,sizeof(s),"%2d   %d  %-49s",id,maxChan[id],hostAPI_DeviceName[id]);
       QString t(s);
       ui.comboBoxSndIn->addItem(t);
-      valid_devices++;
     }
   }
 
@@ -62,10 +64,11 @@ void DevSetup::initDlg()
     pdi=Pa_GetDeviceInfo(id);
     nchout=pdi->maxOutputChannels;
     if(nchout>=2) {
+      if (k >= out_list_capacity) break;
       m_outDevList[k]=id;
       k++;
-      sprintf((char*)(pa_device_name),"%s",pdi->name);
-      sprintf((char*)(pa_device_hostapi),"%s",
+      snprintf((char*)(pa_device_name),sizeof(pa_device_name),"%s",pdi->name);
+      snprintf((char*)(pa_device_hostapi),sizeof(pa_device_hostapi),"%s",
               Pa_GetHostApiInfo(pdi->hostApi)->name);
 
       p1=(char*)"";
@@ -80,7 +83,7 @@ void DevSetup::initDlg()
       p=strstr(pa_device_hostapi,"WDM-KS");
       if(p!=NULL) p1=(char*)"WDM-KS";
 
-      sprintf(p2,"%2d   %-8s  %-39s",id,p1,pa_device_name);
+      snprintf(p2,sizeof(p2),"%2d   %-8s  %-39s",id,p1,pa_device_name);
       QString t(p2);
       ui.comboBoxSndOut->addItem(t);
     }
@@ -109,8 +112,20 @@ void DevSetup::initDlg()
   ui.rbSi570->setChecked(!m_bIQxt);
   ui.mult570TxSpinBox->setEnabled(m_bIQxt);
   ui.comboBoxSndIn->setEnabled(!m_network);
-  ui.comboBoxSndIn->setCurrentIndex(m_nDevIn);
-  ui.comboBoxSndOut->setCurrentIndex(m_nDevOut);
+  if (ui.comboBoxSndIn->count() > 0) {
+    if (m_nDevIn < 0) m_nDevIn = 0;
+    if (m_nDevIn >= ui.comboBoxSndIn->count()) m_nDevIn = ui.comboBoxSndIn->count() - 1;
+    ui.comboBoxSndIn->setCurrentIndex(m_nDevIn);
+  } else {
+    m_nDevIn = -1;
+  }
+  if (ui.comboBoxSndOut->count() > 0) {
+    if (m_nDevOut < 0) m_nDevOut = 0;
+    if (m_nDevOut >= ui.comboBoxSndOut->count()) m_nDevOut = ui.comboBoxSndOut->count() - 1;
+    ui.comboBoxSndOut->setCurrentIndex(m_nDevOut);
+  } else {
+    m_nDevOut = -1;
+  }
   ui.sbPort->setValue(m_udpPort);
   ui.cbIQswap->setChecked(m_IQswap);
   ui.cbInitIQplus->setChecked(m_initIQplus);
@@ -138,8 +153,10 @@ void DevSetup::initDlg()
   ui.sbBlue2->setValue(b2);
   ui.sbBlue3->setValue(b3);
 
-  m_paInDevice=m_inDevList[m_nDevIn];
-  m_paOutDevice=m_outDevList[m_nDevOut];
+  if (m_nDevIn >= 0 && m_nDevIn < in_list_capacity) m_paInDevice=m_inDevList[m_nDevIn];
+  else m_paInDevice=-1;
+  if (m_nDevOut >= 0 && m_nDevOut < out_list_capacity) m_paOutDevice=m_outDevList[m_nDevOut];
+  else m_paOutDevice=-1;
 
   ui.otherUrlBox->setText(m_otherUrl);
   if(m_w3szUrl) ui.w3szBut->setChecked(true);
@@ -154,14 +171,28 @@ void DevSetup::accept()
   // Check to see whether SoundInThread must be restarted,
   // and save user parameters.
 
+  auto const in_list_capacity = static_cast<int> (sizeof (m_inDevList) / sizeof (m_inDevList[0]));
+  auto const out_list_capacity = static_cast<int> (sizeof (m_outDevList) / sizeof (m_outDevList[0]));
+  auto clamp_combo_index = [] (QComboBox * box) {
+    if (!box || box->count() <= 0) return -1;
+    auto idx = box->currentIndex();
+    if (idx < 0) idx = 0;
+    if (idx >= box->count()) idx = box->count() - 1;
+    return idx;
+  };
+  auto const selected_in = clamp_combo_index(ui.comboBoxSndIn);
+  auto const selected_out = clamp_combo_index(ui.comboBoxSndOut);
+  auto const selected_pa_in = (selected_in >= 0 && selected_in < in_list_capacity) ? m_inDevList[selected_in] : -1;
+  auto const selected_pa_out = (selected_out >= 0 && selected_out < out_list_capacity) ? m_outDevList[selected_out] : -1;
+
   if(m_network!=ui.networkRadioButton->isChecked() or
-     m_nDevIn!=ui.comboBoxSndIn->currentIndex() or
-     m_paInDevice!=m_inDevList[m_nDevIn] or
+     m_nDevIn!=selected_in or
+     m_paInDevice!=selected_pa_in or
      m_xpol!=ui.cbXpol->isChecked() or
      m_udpPort!=ui.sbPort->value()) m_restartSoundIn=true;
 
-  if(m_nDevOut!=ui.comboBoxSndOut->currentIndex() or
-     m_paOutDevice!=m_outDevList[m_nDevOut]) m_restartSoundOut=true;
+  if(m_nDevOut!=selected_out or
+     m_paOutDevice!=selected_pa_out) m_restartSoundOut=true;
 
   m_myCall=ui.myCallEntry->text();
   m_myGrid=ui.myGridEntry->text();
@@ -181,10 +212,10 @@ void DevSetup::accept()
   m_network=ui.networkRadioButton->isChecked();
   m_fs96000=ui.rb96000->isChecked();
   m_bIQxt=ui.rbIQXT->isChecked();
-  m_nDevIn=ui.comboBoxSndIn->currentIndex();
-  m_paInDevice=m_inDevList[m_nDevIn];
-  m_nDevOut=ui.comboBoxSndOut->currentIndex();
-  m_paOutDevice=m_outDevList[m_nDevOut];
+  m_nDevIn=selected_in;
+  m_paInDevice=selected_pa_in;
+  m_nDevOut=selected_out;
+  m_paOutDevice=selected_pa_out;
   m_udpPort=ui.sbPort->value();
   m_IQswap=ui.cbIQswap->isChecked();
   m_initIQplus=ui.cbInitIQplus->isChecked();

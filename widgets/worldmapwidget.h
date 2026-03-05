@@ -28,6 +28,8 @@ public:
 
   explicit WorldMapWidget(QWidget * parent = nullptr);
   void setHomeGrid(QString const& grid);
+  void setGreylineEnabled(bool enabled);
+  void setDistanceInMiles(bool enabled);
   void setTransmitState(bool transmitting, QString const& targetCall, QString const& targetGrid, QString const& mode);
   void addContact(QString const& call, QString const& sourceGrid, QString const& destinationGrid,
                   PathRole role = PathRole::Generic);
@@ -88,6 +90,8 @@ private:
   qint64 m_txStartMs {0};
   int m_txTravelMs {5200};
   qint64 m_postTxQueueUntilMs {0};
+  bool m_greylineEnabled {true};
+  bool m_distanceInMiles {false};
 
   double m_viewCenterLon {0.0};
   double m_viewCenterLat {0.0};

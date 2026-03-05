@@ -1,5 +1,6 @@
 #include "getfile.h"
 #include <QDir>
+#include <QFile>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -17,9 +18,8 @@ void getfile(QString fname, int dbDgrd)
   float fac=23.0/sqrt(dgrd*dgrd + 23.0*23.0);
 
   memset(id,0,2*npts);
-  char name[80];
-  strcpy(name,fname.toLocal8Bit());
-  FILE* fp=fopen(name,"rb");
+  auto const encoded_name = QFile::encodeName (fname);
+  FILE* fp=fopen(encoded_name.constData(),"rb");
 
   if(fp != NULL) {
     auto n = fread(&datcom_.fcenter,sizeof(datcom_.fcenter),1,fp);
@@ -60,9 +60,8 @@ void save_iq(QString fname)
 {
   int npts=2*60*96000;
   qint16* buf=(qint16*)malloc(2*npts);
-  char name[80];
-  strcpy(name,fname.toLocal8Bit());
-  FILE* fp=fopen(name,"wb");
+  auto const encoded_name = QFile::encodeName (fname);
+  FILE* fp=fopen(encoded_name.constData(),"wb");
 
   if(fp != NULL) {
     fwrite(&datcom_.fcenter,sizeof(datcom_.fcenter),1,fp);

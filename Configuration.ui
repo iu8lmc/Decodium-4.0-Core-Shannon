@@ -288,6 +288,19 @@
             </property>
            </widget>
           </item>
+          <item row="5" column="0">
+           <widget class="QCheckBox" name="show_greyline_check_box">
+            <property name="toolTip">
+             <string>Enable day/night shadow (greyline) on the world map panel.</string>
+            </property>
+            <property name="text">
+             <string>Show greyline on world map</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

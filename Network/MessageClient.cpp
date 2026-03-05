@@ -29,6 +29,36 @@
 #define TRACE_UDP(MSG)
 #endif
 
+namespace
+{
+char const * message_type_name (NetworkMessage::Type type)
+{
+  switch (type)
+    {
+    case NetworkMessage::Heartbeat: return "Heartbeat";
+    case NetworkMessage::Status: return "Status";
+    case NetworkMessage::Decode: return "Decode";
+    case NetworkMessage::Clear: return "Clear";
+    case NetworkMessage::Reply: return "Reply";
+    case NetworkMessage::QSOLogged: return "QSOLogged";
+    case NetworkMessage::Close: return "Close";
+    case NetworkMessage::Replay: return "Replay";
+    case NetworkMessage::HaltTx: return "HaltTx";
+    case NetworkMessage::FreeText: return "FreeText";
+    case NetworkMessage::WSPRDecode: return "WSPRDecode";
+    case NetworkMessage::Location: return "Location";
+    case NetworkMessage::LoggedADIF: return "LoggedADIF";
+    case NetworkMessage::HighlightCallsign: return "HighlightCallsign";
+    case NetworkMessage::SwitchConfiguration: return "SwitchConfiguration";
+    case NetworkMessage::Configure: return "Configure";
+    case NetworkMessage::AnnotationInfo: return "AnnotationInfo";
+    case NetworkMessage::SetupTx: return "SetupTx";
+    case NetworkMessage::EnqueueDecode: return "EnqueueDecode";
+    default: return "Unknown";
+    }
+}
+}
+
 class MessageClient::impl
   : public QUdpSocket
 {
@@ -77,6 +107,8 @@ public:
   void rebuild_trusted_senders ();
   bool is_trusted_sender (QHostAddress const&, port_type) const;
   bool message_target_matches (QString const&) const;
+  bool control_target_matches (QString const&) const;
+  bool requires_direct_target (NetworkMessage::Type) const;
   void send_message (QByteArray const&, bool queue_if_pending = true, bool allow_duplicates = false);
   void send_message (QDataStream const& out, QByteArray const& message, bool queue_if_pending = true, bool allow_duplicates = false)
   {
@@ -105,6 +137,7 @@ public:
   std::vector<QHostAddress> blocked_addresses_;
   QSet<QHostAddress> trusted_senders_;
   bool warned_untrusted_sender_ {false};
+  bool warned_broadcast_control_ {false};
 
   // hold messages sent before host lookup completes asynchronously
   QQueue<QByteArray> pending_messages_;
@@ -123,6 +156,7 @@ void MessageClient::impl::set_server (QString const& server_name, QStringList co
       network_interfaces_.push_back (QNetworkInterface::interfaceFromName (net_if_name));
     }
   warned_untrusted_sender_ = false;
+  warned_broadcast_control_ = false;
 
   if (server_.isNull () && server_name.size ()) // DNS lookup required
     {
@@ -268,9 +302,31 @@ void MessageClient::impl::parse_message (QByteArray const& msg, QHostAddress con
               return;
             }
 
-          if (!message_target_matches (in.id ()))
+          auto const incoming_type = static_cast<NetworkMessage::Type> (in.type ());
+          auto const incoming_id = in.id ();
+
+          if (requires_direct_target (incoming_type) && !control_target_matches (incoming_id))
             {
-              TRACE_UDP ("ignored message for id:" << in.id ());
+              if (!warned_broadcast_control_)
+                {
+                  warned_broadcast_control_ = true;
+                  Q_EMIT self_->error (
+                    QString {
+                      "Rejected UDP control packet (%1): target id \"%2\" does not match this instance id \"%3\". "
+                      "Configure your controller to use target id \"%3\" (not ALLCALL/BROADCAST/*)."
+                    }
+                      .arg (QString::fromLatin1 (message_type_name (incoming_type)))
+                      .arg (incoming_id)
+                      .arg (id_)
+                  );
+                }
+              TRACE_UDP ("rejected control message with non-direct target id:" << incoming_id);
+              return;
+            }
+
+          if (!message_target_matches (incoming_id))
+            {
+              TRACE_UDP ("ignored message for id:" << incoming_id);
               return;
             }
 
@@ -551,6 +607,32 @@ bool MessageClient::impl::message_target_matches (QString const& incoming_id) co
   return trimmed.compare ("ALLCALL", Qt::CaseInsensitive) == 0
       || trimmed.compare ("BROADCAST", Qt::CaseInsensitive) == 0
       || trimmed == "*";
+}
+
+bool MessageClient::impl::control_target_matches (QString const& incoming_id) const
+{
+  auto const trimmed = incoming_id.trimmed ();
+  return !trimmed.isEmpty () && 0 == trimmed.compare (id_, Qt::CaseInsensitive);
+}
+
+bool MessageClient::impl::requires_direct_target (NetworkMessage::Type type) const
+{
+  switch (type)
+    {
+    case NetworkMessage::Clear:
+    case NetworkMessage::Reply:
+    case NetworkMessage::Close:
+    case NetworkMessage::Replay:
+    case NetworkMessage::HaltTx:
+    case NetworkMessage::FreeText:
+    case NetworkMessage::SwitchConfiguration:
+    case NetworkMessage::Configure:
+    case NetworkMessage::SetupTx:
+      return true;
+
+    default:
+      return false;
+    }
 }
 
 void MessageClient::impl::heartbeat ()

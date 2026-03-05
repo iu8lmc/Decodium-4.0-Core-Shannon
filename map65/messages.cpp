@@ -19,7 +19,8 @@
 Messages::Messages (QString const& settings_filename, QWidget * parent) :
   QDialog {parent},
   ui {new Ui::Messages},
-  m_settings_filename {settings_filename}
+  m_settings_filename {settings_filename},
+  m_liveCqManager {new QNetworkAccessManager {this}}
 {
   ui->setupUi(this);
   setWindowTitle("Messages");
@@ -33,8 +34,6 @@ Messages::Messages (QString const& settings_filename, QWidget * parent) :
   ui->messagesTextBrowser->clear();
   m_cqOnly=false;
   m_cqStarOnly=false;
-  QString guiDate;
-  QStringList allDecodes =  { "" };
   connect (ui->messagesTextBrowser, &DisplayText::selectCallsign, this, &Messages::selectCallsign2);
 }
 
@@ -62,6 +61,7 @@ void Messages::sendLiveCQData(QStringList decodeList) {
   QString theDate = guiDate;
   QString rpol = "--";
   QString theUrl;
+  if (m_myCall.length() < 3 || m_myGrid.length() < 4) return;
 
   if(m_w3szUrl) {
     theUrl = w3szUrlAddr;
@@ -69,7 +69,6 @@ void Messages::sendLiveCQData(QStringList decodeList) {
     theUrl = m_otherUrl;
   }
 
-  QNetworkAccessManager *manager = new QNetworkAccessManager(this);
   QUrl url(theUrl);
   QNetworkRequest request(url);
   request.setRawHeader("User-Agent", "QMAP v0.5");
@@ -77,9 +76,11 @@ void Messages::sendLiveCQData(QStringList decodeList) {
   request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
   for (const QString &theLine : decodeList) {
     QStringList thePostLine = theLine.split(" ",SkipEmptyParts);
-    if((thePostLine.at(5) == "CQ" || thePostLine.at(5) == "QRZ" || thePostLine.at(5) == "CQV" ||  thePostLine.at(5) == "CQH" || thePostLine.at(5) == "QRT") && m_myCall.length() >=3 && m_myGrid.length()>=4) {
+    if (thePostLine.size() < 8) continue;
+    if((thePostLine.at(5) == "CQ" || thePostLine.at(5) == "QRZ" || thePostLine.at(5) == "CQV" ||  thePostLine.at(5) == "CQH" || thePostLine.at(5) == "QRT")) {
       if(allDecodes.filter(theLine.mid(0,53)).length() == 0) {
         allDecodes.append(theLine);
+        if (thePostLine.size() < 8) continue;
         QString freq = thePostLine.at(0).trimmed();
         QString dF = thePostLine.at(1).trimmed();
         QString utcdatetimestringOriginal = guiDate + " " + thePostLine.at(3).trimmed() + "00"; //needs 2 spaces between date and time
@@ -96,6 +97,7 @@ void Messages::sendLiveCQData(QStringList decodeList) {
         QString dT = "";
         QString modeChar = "";
         if(thePostLine.at(7).contains(".")) {
+          if (thePostLine.size() < 9) continue;
           dT =thePostLine.at(7).trimmed();
           modeChar = thePostLine.at(8).trimmed(); 
           if(modeChar.contains("#")) mode = "JT65" + modeChar.back();
@@ -107,6 +109,7 @@ void Messages::sendLiveCQData(QStringList decodeList) {
           }
           txpol = "--";    
         } else {
+          if (thePostLine.size() < 10) continue;
           grid = thePostLine.at(7).trimmed();
           dT =thePostLine.at(8).trimmed();
           modeChar = thePostLine.at(9).trimmed();
@@ -114,6 +117,7 @@ void Messages::sendLiveCQData(QStringList decodeList) {
           {  
             mode = "JT65" + modeChar.back();            
             if (m_xpol) {
+              if (thePostLine.size() < 11) continue;
               rpol = thePostLine.at(2).trimmed();
               if(thePostLine.at(10).contains("H")) txpol = "H";
               else if(thePostLine.at(10).contains("V")) txpol = "V";
@@ -121,6 +125,7 @@ void Messages::sendLiveCQData(QStringList decodeList) {
           } else if(modeChar.contains(":")) {
             mode = "Q65-60" + modeChar.back();            
             if (m_xpol) {
+              if (thePostLine.size() < 11) continue;
               rpol = thePostLine.at(2).trimmed();
               if(thePostLine.at(10).contains("H")) txpol = "H";
               else if(thePostLine.at(10).contains("V")) txpol = "V";
@@ -128,18 +133,27 @@ void Messages::sendLiveCQData(QStringList decodeList) {
           }
         }
         if(mode.contains("JT65") || mode.contains("Q65")) {
-          QString postString =  "skedfreq=" + freq + "&rxfreq=" + dF + "&rpol=" + rpol + "&dt="  +  dT + "&dB="  + dB + "&msgtype="  +  msgType.toUpper() + "&callsign="  +  callsign.toUpper() + "&grid="  +  grid.toUpper() + "&mode="  +  mode + "&utcdatetime="  +  utcdatetimeUTCString + "&spotter="  +  m_myCall.toUpper() + "&spottergrid="  + m_myGrid.toUpper() + "&txpol=" + txpol + "&apptype=MAP65";
-          //qDebug() << postString;
-          QByteArray postByteArray = postString.toUtf8();
+          QUrlQuery postData;
+          postData.addQueryItem("skedfreq", freq);
+          postData.addQueryItem("rxfreq", dF);
+          postData.addQueryItem("rpol", rpol);
+          postData.addQueryItem("dt", dT);
+          postData.addQueryItem("dB", dB);
+          postData.addQueryItem("msgtype", msgType.toUpper());
+          postData.addQueryItem("callsign", callsign.toUpper());
+          postData.addQueryItem("grid", grid.toUpper());
+          postData.addQueryItem("mode", mode);
+          postData.addQueryItem("utcdatetime", utcdatetimeUTCString);
+          postData.addQueryItem("spotter", m_myCall.toUpper());
+          postData.addQueryItem("spottergrid", m_myGrid.toUpper());
+          postData.addQueryItem("txpol", txpol);
+          postData.addQueryItem("apptype", "MAP65");
+          QByteArray postByteArray = postData.query(QUrl::FullyEncoded).toUtf8();
           request.setRawHeader("Content-Length",QByteArray::number(postByteArray.size()));
 
-          try {
-			QNetworkReply *reply = manager->post(request,postByteArray);				
-			QObject::connect(reply, &QNetworkReply::finished, this, &Messages::handleReply);
-          }
-          catch(...)
-          {
-          }
+          if (!m_liveCqManager) continue;
+          QNetworkReply *reply = m_liveCqManager->post(request,postByteArray);
+          QObject::connect(reply, &QNetworkReply::finished, this, &Messages::handleReply);
         }
       }
     }
@@ -150,11 +164,13 @@ void Messages::sendLiveCQData(QStringList decodeList) {
 void Messages::handleReply()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) return;
     if (reply->error() == QNetworkReply::NoError) {
 		qDebug() << reply->readAll();
     } else {
 		qDebug() << reply->errorString();
     }
+    reply->deleteLater();
 }
 
 void Messages::setText(QString t, QString t2)

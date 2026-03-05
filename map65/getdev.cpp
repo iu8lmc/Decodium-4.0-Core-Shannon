@@ -4,6 +4,12 @@
 #include <portaudio.h>
 #include <QDebug>
 
+namespace
+{
+  constexpr int kPaNameBufferSize = 128;
+  constexpr int kUiDeviceNameSize = 50;
+}
+
 //------------------------------------------------------- pa_get_device_info
 int pa_get_device_info (int  n,
                         void *pa_device_name,
@@ -52,9 +58,10 @@ int pa_get_device_info (int  n,
   if(n >= Pa_GetDeviceCount() ) return -1;
   deviceInfo = Pa_GetDeviceInfo(n);
   if (deviceInfo->maxInputChannels==0) return -1;
-  sprintf((char*)(pa_device_name),"%s",deviceInfo->name);
-  sprintf((char*)(pa_device_hostapi),"%s",
-          Pa_GetHostApiInfo( deviceInfo->hostApi )->name);
+  snprintf(static_cast<char*>(pa_device_name), kPaNameBufferSize, "%s",
+           deviceInfo->name ? deviceInfo->name : "");
+  snprintf(static_cast<char*>(pa_device_hostapi), kPaNameBufferSize, "%s",
+           Pa_GetHostApiInfo(deviceInfo->hostApi)->name);
   speed_warning=0;
 
 // bypass bug in Juli@ ASIO driver:
@@ -176,7 +183,6 @@ end_pa_get_device_info:;
 void paInputDevice(int id, char* hostAPI_DeviceName, int* minChan,
                    int* maxChan, int* minSpeed, int* maxSpeed)
 {
-  int i;
   char pa_device_name[128];
   char pa_device_hostapi[128];
   double pa_device_max_speed;
@@ -214,19 +220,14 @@ void paInputDevice(int id, char* hostAPI_DeviceName, int* minChan,
     p=strstr(pa_device_hostapi,"WDM-KS");
     if(p!=NULL) p1=(char*)"WDM-KS";
 
-    sprintf(p2,"%-8s %-39s",p1,pa_device_name);
-    for(i=0; i<50; i++) {
-      hostAPI_DeviceName[i]=p2[i];
-      if(p2[i]==0) break;
-    }
+    snprintf(p2,sizeof(p2),"%-8s %-39s",p1,pa_device_name);
+    snprintf(hostAPI_DeviceName, kUiDeviceNameSize, "%s", p2);
     *minChan=pa_device_min_channels;
     *maxChan=pa_device_max_channels;
     *minSpeed=(int)pa_device_min_speed;
     *maxSpeed=(int)pa_device_max_speed;
   } else {
-    for(i=0; i<50; i++) {
-      hostAPI_DeviceName[i]=0;
-    }
+    memset(hostAPI_DeviceName, 0, kUiDeviceNameSize);
     *minChan=0;
     *maxChan=0;
     *minSpeed=0;
@@ -238,19 +239,25 @@ void getDev(int* numDevices0, char hostAPI_DeviceName[][50],
             int minChan[], int maxChan[],
             int minSpeed[], int maxSpeed[])
 {
-  int i,id,numDevices;
+  int id,numDevices;
   int minch,maxch,minsp,maxsp;
   char apidev[256];
 
   numDevices=Pa_GetDeviceCount();
+  if (numDevices < 0) {
+    *numDevices0 = 0;
+    return;
+  }
+  if (numDevices > MAXDEVICES) {
+    qWarning() << "getDev: clamping PortAudio device count from" << numDevices << "to" << MAXDEVICES;
+    numDevices = MAXDEVICES;
+  }
   *numDevices0=numDevices;
 
   for(id=0; id<numDevices; id++)  {
+    memset(apidev, 0, sizeof(apidev));
     paInputDevice(id,apidev,&minch,&maxch,&minsp,&maxsp);
-    for(i=0; i<50; i++) {
-      hostAPI_DeviceName[id][i]=apidev[i];
-    }
-    hostAPI_DeviceName[id][49]=0;
+    snprintf(hostAPI_DeviceName[id], kUiDeviceNameSize, "%s", apidev);
     minChan[id]=minch;
     maxChan[id]=maxch;
     minSpeed[id]=minsp;

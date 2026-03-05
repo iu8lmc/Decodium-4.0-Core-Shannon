@@ -8,6 +8,7 @@
 
 #include "SettingsGroup.hpp"
 #include "qt_helpers.hpp"
+#include "WindowGeometryUtils.hpp"
 #include "ui_activeStations.h"
 
 #include "moc_activeStations.cpp"
@@ -63,7 +64,7 @@ void ActiveStations::addLine(QString line) {
 void ActiveStations::read_settings ()
 {
   SettingsGroup group {settings_, "ActiveStations"};
-  restoreGeometry (settings_->value ("window/geometry").toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, settings_->value ("window/geometry").toByteArray ());
   ui->sbMaxRecent->setValue(settings_->value("MaxRecent",10).toInt());
   ui->sbMaxAge->setValue(settings_->value("MaxAge",10).toInt());
   ui->cbReadyOnly->setChecked(settings_->value("ReadyOnly",false).toBool());

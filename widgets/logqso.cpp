@@ -19,6 +19,7 @@
 #include "models/Bands.hpp"
 #include "models/CabrilloLog.hpp"
 #include "validators/MaidenheadLocatorValidator.hpp"
+#include "WindowGeometryUtils.hpp"
 #include "Logger.hpp"
 
 #include "ui_logqso.h"
@@ -148,7 +149,7 @@ LogQSO::~LogQSO ()
 void LogQSO::loadSettings ()
 {
   m_settings->beginGroup ("LogQSO");
-  restoreGeometry (m_settings->value ("geometry", saveGeometry ()).toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, m_settings->value ("geometry", saveGeometry ()).toByteArray ());
   ui->cbTxPower->setChecked (m_settings->value ("SaveTxPower", false).toBool ());
   ui->cbComments->setChecked (m_settings->value ("SaveComments", false).toBool ());
   ui->cbPropMode->setChecked (m_settings->value ("SavePropMode", false).toBool ());

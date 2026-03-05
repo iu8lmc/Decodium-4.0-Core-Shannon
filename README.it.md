@@ -1,22 +1,17 @@
-# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.3.7 (Italiano)
+# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.3.8 (Italiano)
 
 Per la versione bilingue completa (English + Italiano), vedere [README.md](README.md).
 
 ## Sintesi italiana
 
-Questa release fork (`v1.3.7`) e' basata su Decodium v3.0 SE Raptor upstream e introduce i seguenti fix/aggiornamenti rispetto a `v1.3.6`:
+Questa release fork (`v1.3.8`) aggiorna e completa i fix dalla `v1.3.7` con focus su robustezza CAT/UDP, mappa e UX:
 
-- selezione contatti direttamente dal mappamondo con highlight marker e compilazione DX call/grid;
-- nuova opzione configurazione `Map: single click starts Tx` per invertire logica single/double click mappa;
-- visibilita' `View -> World Map` resa persistente tra riavvii;
-- nuova finestra `Ionospheric Forecast` (dati HamQSL + immagine sole, refresh periodico);
-- nuova finestra `DX Cluster` (spot live con filtro modo e banda corrente);
-- rendering giorno/notte mappa migliorato e pulizia percorsi stale su fine QSO;
-- layout controlli top migliorato in modalita' compatta/2 righe su display piccoli;
-- fix affidabilita' decode all'avvio: timestamp sequence-start impostato su ingest audio prima del decode;
-- fix affidabilita' segnali cross-thread `ModulatorState` (registrazione metatype Qt esplicita);
-- stile UI predefinito impostato a `Fusion` per coerenza grafica cross-macOS;
-- rimozione sorgente hardcoded del suffisso legacy revision: `Using:` su PSKReporter non mostra piu' `mod by IU8LMC...`.
+- hardening CAT/Configure remoto: pacchetti Configure generici non forzano piu' FT2;
+- hardening UDP controllo: richiesto target id diretto per i comandi di controllo;
+- opzione greyline in `Settings -> General` (disattivabile per mappa sempre illuminata);
+- distanza visualizzata sul path mappa attivo in km/mi in base alle unita' configurate;
+- rifinitura layout controlli top su display piccoli e riallineamento area DX-ped;
+- `.pkg` non necessario: release solo DMG/ZIP/SHA256 (macOS) e AppImage/SHA256 (Linux).
 
 ## Target release
 
@@ -25,6 +20,12 @@ Questa release fork (`v1.3.7`) e' basata su Decodium v3.0 SE Raptor upstream e i
 - Apple Intel Sequoia
 - Apple Intel Monterey (12.x, sperimentale/best-effort)
 - Linux x86_64 AppImage
+
+## Hamlib nelle build release
+
+- Su macOS i workflow eseguono `brew update` + `brew upgrade hamlib` prima della compilazione.
+- Su Linux i workflow compilano Hamlib dall'ultima release ufficiale GitHub e lo installano in `/usr/local` prima di compilare `ft2`.
+- I log CI riportano sempre la versione effettiva usata (`rigctl --version`, `pkg-config --modversion hamlib`).
 
 ## Requisiti minimi Linux
 
@@ -38,6 +39,17 @@ Questa release fork (`v1.3.7`) e' basata su Decodium v3.0 SE Raptor upstream e i
   - stack audio ALSA, PulseAudio o PipeWire
 - Integrazione stazione: hardware CAT/audio secondo setup radio
 
+## Avvio consigliato AppImage su Linux
+
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage:
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
+
 ## Comando macOS (quarantena)
 
 ```bash
@@ -46,10 +58,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ## Documentazione
 
-- [RELEASE_NOTES_v1.3.7.md](RELEASE_NOTES_v1.3.7.md)
+- [RELEASE_NOTES_v1.3.8.md](RELEASE_NOTES_v1.3.8.md)
 - [CHANGELOG.md](CHANGELOG.md)
 - [README.es.md](README.es.md)
+- [doc/GITHUB_RELEASE_BODY_v1.3.8.md](doc/GITHUB_RELEASE_BODY_v1.3.8.md)
 - [doc/SECURITY_BUG_ANALYSIS_REPORT.md](doc/SECURITY_BUG_ANALYSIS_REPORT.md)
-- [doc/MACOS_PORTING_v1.2.0.md](doc/MACOS_PORTING_v1.2.0.md)
-- [doc/DT_NTP_ROBUST_SYNC_v1.2.0.md](doc/DT_NTP_ROBUST_SYNC_v1.2.0.md)
-- [doc/README.es.md](doc/README.es.md)

@@ -189,6 +189,7 @@ public:
   bool DXCC () const;
   bool GridMap() const;
   bool GridMapAll() const;
+  bool show_greyline () const;
   bool ppfx() const;
   bool miles () const;
   bool quick_call () const;

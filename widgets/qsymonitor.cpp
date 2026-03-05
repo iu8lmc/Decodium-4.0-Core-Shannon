@@ -4,6 +4,7 @@
 #include "Configuration.hpp"
 #include "qt_helpers.hpp"
 #include "commons.h"
+#include "WindowGeometryUtils.hpp"
 #include <QSettings>
 #include <QObject>
 #include <QCloseEvent>
@@ -41,7 +42,7 @@ void QSYMonitor::read_settings ()
 {
   SettingsGroup g (settings_, "QSYMonitor");
   move (settings_->value ("window/pos", pos ()).toPoint ());
-  restoreGeometry(settings_->value("geometry").toByteArray());
+  WindowGeometryUtils::restore_window_geometry(this, settings_->value("geometry").toByteArray());
 }
 
 void QSYMonitor::write_settings ()
@@ -344,4 +345,3 @@ void QSYMonitor::getBandModeFreq(QString theTime, QString theCall, QString value
     ui->QSYMonitorTextBrowser->append(qsyMessageString);
   }
 }
-

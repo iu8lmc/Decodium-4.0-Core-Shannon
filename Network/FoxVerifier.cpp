@@ -15,8 +15,8 @@ FoxVerifier::FoxVerifier(QString user_agent, QNetworkAccessManager *manager,QStr
   // make sure we URLencode the callsign, for things like E51D/MM
   QString encodedCall = QString::fromUtf8(QUrl::toPercentEncoding(callsign));
   QString url = QString("%1/check/").arg(base_url) + encodedCall + QString("/%1/%2.text").arg(timestamp.toString(Qt::ISODate)).arg(code);
-  LOG_INFO(QString("FoxVerifier: url %1").arg(url).toStdString());
   q_url_ = QUrl(url);
+  LOG_INFO(QString("FoxVerifier: prepared request to host %1").arg(q_url_.host()).toStdString());
   if (manager_ == nullptr) {
     LOG_INFO("FoxVerifier: manager is null, creating new one");
     manager_ = new QNetworkAccessManager(this);
@@ -53,7 +53,7 @@ FoxVerifier::FoxVerifier(QString user_agent, QNetworkAccessManager *manager,QStr
 #endif
 
   } else {
-    LOG_INFO(QString("FoxVerifier: url invalid ! %1").arg(url).toStdString());
+    LOG_INFO(QString("FoxVerifier: url invalid").toStdString());
   }
 }
 
@@ -109,7 +109,8 @@ void FoxVerifier::httpFinished()
     emit verifyError(status, ts_, callsign_, code_, hz_, reply_->errorString());
   }
   return_value = reply_->read(1024); // limit amount we get
-  LOG_INFO(QString("FoxVerifier: httpFinished status:[%1 - %2] body:[%3] ").arg(status).arg(reason).arg(return_value).toStdString());
+  LOG_INFO(QString("FoxVerifier: httpFinished status:[%1 - %2] body_length:[%3]")
+           .arg(status).arg(reason).arg(return_value.size()).toStdString());
   finished_ = true;
   reply_->deleteLater();
   if (status >= 200 && status <= 299) {
@@ -144,7 +145,7 @@ void FoxVerifier::sslErrors(const QList<QSslError> & errors)
 }
 
 void FoxVerifier::httpRedirected(const QUrl &url) {
-  LOG_INFO(QString("FoxVerifier: redirected to %1").arg(url.toString()).toStdString());
+  LOG_INFO(QString("FoxVerifier: redirected to host %1").arg(url.host()).toStdString());
 }
 
 void FoxVerifier::httpEncrypted() {

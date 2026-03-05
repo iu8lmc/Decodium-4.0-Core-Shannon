@@ -2,9 +2,11 @@
 #include "DXClusterWindow.h"
 
 #include "SettingsGroup.hpp"
+#include "WindowGeometryUtils.hpp"
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -19,6 +21,7 @@
 #include <QSettings>
 #include <QShowEvent>
 #include <QHideEvent>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QTextStream>
 #include <QUrl>
@@ -67,6 +70,14 @@ DXClusterWindow::DXClusterWindow(QSettings * settings, QWidget * parent)
 
   auto * controlsRow = new QHBoxLayout {};
   bandLabel_ = new QLabel {tr("Band: -"), this};
+  followAppBandCheck_ = new QCheckBox {tr("Follow app band"), this};
+  followAppBandCheck_->setChecked(true);
+  bandFilter_ = new QComboBox {this};
+  bandFilter_->addItems(QStringList {}
+                        << "160M" << "80M" << "60M" << "40M" << "30M" << "20M"
+                        << "17M" << "15M" << "12M" << "10M" << "6M" << "4M"
+                        << "2M" << "70CM");
+  bandFilter_->setEnabled(false);
   modeFilter_ = new QComboBox {this};
   modeFilter_->addItems(QStringList {}
                         << "All" << "FT8" << "FT4" << "FT2" << "Q65"
@@ -74,6 +85,11 @@ DXClusterWindow::DXClusterWindow(QSettings * settings, QWidget * parent)
                         << "JT65" << "JT9" << "FST4" << "MSK144"
                         << "AM" << "FM" << "Other");
   controlsRow->addWidget(bandLabel_);
+  controlsRow->addSpacing(12);
+  controlsRow->addWidget(followAppBandCheck_);
+  controlsRow->addSpacing(12);
+  controlsRow->addWidget(new QLabel {tr("Cluster band:"), this});
+  controlsRow->addWidget(bandFilter_);
   controlsRow->addSpacing(12);
   controlsRow->addWidget(new QLabel {tr("Mode filter:"), this});
   controlsRow->addWidget(modeFilter_);
@@ -119,6 +135,8 @@ DXClusterWindow::DXClusterWindow(QSettings * settings, QWidget * parent)
   connect(openSourceButton, &QPushButton::clicked, this, [] {
       QDesktopServices::openUrl(kSourcePage);
     });
+  connect(bandFilter_, SIGNAL(currentIndexChanged(int)), this, SLOT(onBandFilterChanged(int)));
+  connect(followAppBandCheck_, &QCheckBox::toggled, this, &DXClusterWindow::onFollowAppBandChanged);
   connect(modeFilter_, SIGNAL(currentIndexChanged(int)), this, SLOT(onModeFilterChanged(int)));
   connect(network_, &QNetworkAccessManager::finished, this, &DXClusterWindow::onNetworkFinished);
   connect(&refreshTimer_, &QTimer::timeout, this, &DXClusterWindow::refreshNow);
@@ -330,7 +348,7 @@ void DXClusterWindow::rebuildTable()
     }
 }
 
-void DXClusterWindow::setBand(QString const& bandName)
+void DXClusterWindow::applyBand(QString const& bandName, bool refresh)
 {
   auto normalized = normalizeBand(bandName);
   if (normalized.isEmpty())
@@ -344,8 +362,27 @@ void DXClusterWindow::setBand(QString const& bandName)
       return;
     }
 
+  if (bandFilter_)
+    {
+      QSignalBlocker blocker {bandFilter_};
+      int idx = bandFilter_->findText(normalized, Qt::MatchFixedString);
+      if (idx < 0)
+        {
+          bandFilter_->addItem(normalized);
+          idx = bandFilter_->findText(normalized, Qt::MatchFixedString);
+        }
+      if (idx >= 0)
+        {
+          bandFilter_->setCurrentIndex(idx);
+        }
+    }
+
   if (currentBand_ == normalized && !spots_.isEmpty())
     {
+      if (refresh)
+        {
+          refreshNow();
+        }
       return;
     }
 
@@ -356,7 +393,54 @@ void DXClusterWindow::setBand(QString const& bandName)
   spots_.clear();
   rebuildTable();
   setStatus(tr("Band changed to %1: refreshing...").arg(currentBand_));
-  refreshNow();
+  if (refresh)
+    {
+      refreshNow();
+    }
+}
+
+void DXClusterWindow::setBand(QString const& bandName, bool forceSyncToAppBand)
+{
+  appBand_ = normalizeBand(bandName);
+  if (appBand_.isEmpty())
+    {
+      if (forceSyncToAppBand)
+        {
+          applyBand(QString {}, false);
+        }
+      return;
+    }
+
+  if (!forceSyncToAppBand && followAppBandCheck_ && !followAppBandCheck_->isChecked())
+    {
+      return;
+    }
+
+  applyBand(appBand_, true);
+}
+
+void DXClusterWindow::onBandFilterChanged(int)
+{
+  if (followAppBandCheck_ && followAppBandCheck_->isChecked())
+    {
+      return;
+    }
+  if (bandFilter_)
+    {
+      applyBand(bandFilter_->currentText(), true);
+    }
+}
+
+void DXClusterWindow::onFollowAppBandChanged(bool checked)
+{
+  if (bandFilter_)
+    {
+      bandFilter_->setEnabled(!checked);
+    }
+  if (checked && !appBand_.isEmpty())
+    {
+      applyBand(appBand_, true);
+    }
 }
 
 void DXClusterWindow::refreshNow()
@@ -468,7 +552,24 @@ void DXClusterWindow::read_settings()
   auto geometry = settings_->value("geometry").toByteArray();
   if (!geometry.isEmpty())
     {
-      restoreGeometry(geometry);
+      WindowGeometryUtils::restore_window_geometry(this, geometry);
+    }
+  bool followAppBand = settings_->value("follow_app_band", true).toBool();
+  auto savedBand = normalizeBand(settings_->value("cluster_band", QString {"20M"}).toString());
+  if (!savedBand.isEmpty() && bandFilter_)
+    {
+      int idx = bandFilter_->findText(savedBand, Qt::MatchFixedString);
+      if (idx >= 0)
+        {
+          QSignalBlocker blocker {bandFilter_};
+          bandFilter_->setCurrentIndex(idx);
+        }
+    }
+  followAppBandCheck_->setChecked(followAppBand);
+  bandFilter_->setEnabled(!followAppBand);
+  if (!followAppBand && !savedBand.isEmpty())
+    {
+      applyBand(savedBand, false);
     }
   auto savedMode = settings_->value("mode_filter", QString {"All"}).toString();
   int idx = modeFilter_->findText(savedMode);
@@ -487,5 +588,7 @@ void DXClusterWindow::write_settings()
   SettingsGroup g {settings_, "DXClusterWindow"};
   settings_->setValue("window/pos", pos());
   settings_->setValue("geometry", saveGeometry());
+  settings_->setValue("follow_app_band", followAppBandCheck_ ? followAppBandCheck_->isChecked() : true);
+  settings_->setValue("cluster_band", currentBand_);
   settings_->setValue("mode_filter", modeFilter_ ? modeFilter_->currentText() : QString {"All"});
 }

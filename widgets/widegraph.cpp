@@ -11,6 +11,7 @@
 #include "Configuration.hpp"
 #include "MessageBox.hpp"
 #include "SettingsGroup.hpp"
+#include "WindowGeometryUtils.hpp"
 #include "moc_widegraph.cpp"
 
 WideGraph::WideGraph(QSettings * settings, QWidget *parent) :
@@ -45,7 +46,7 @@ WideGraph::WideGraph(QSettings * settings, QWidget *parent) :
   {
     //Restore user's settings
     SettingsGroup g {m_settings, "WideGraph"};
-    restoreGeometry (m_settings->value ("geometry", saveGeometry ()).toByteArray ());
+    WindowGeometryUtils::restore_window_geometry (this, m_settings->value ("geometry", saveGeometry ()).toByteArray ());
     ui->widePlot->setPlotZero(m_settings->value("PlotZero", 0).toInt());
     ui->widePlot->setPlotGain(m_settings->value("PlotGain", 0).toInt());
     ui->widePlot->setPlot2dGain(m_settings->value("Plot2dGain", 0).toInt());

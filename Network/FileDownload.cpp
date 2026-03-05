@@ -31,7 +31,7 @@ void FileDownload::errorOccurred(QNetworkReply::NetworkError code)
 #else
 void FileDownload::obsoleteError()
 {
-  LOG_INFO(QString{"FileDownload [%1]: error -> %3"}.arg(user_agent_).arg(reply_->errorString()));
+  LOG_INFO(QString{"FileDownload [%1]: error -> %2"}.arg(user_agent_).arg(reply_->errorString()));
   Q_EMIT error (reply_->errorString ());
   destfile_.cancelWriting ();
   destfile_.commit ();
@@ -166,6 +166,11 @@ void FileDownload::start_download()
 
 void FileDownload::download(QUrl qurl)
 {
+  if (!manager_) {
+    Q_EMIT download_error(tr("Network Error:\nNetwork manager not configured"));
+    return;
+  }
+
   request_.setUrl(qurl);
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
@@ -179,6 +184,10 @@ void FileDownload::download(QUrl qurl)
   LOG_INFO(QString{"FileDownload [%1]: Starting download of %2 to %3"}.arg(user_agent_).arg(source_url_).arg(destination_filename_));
 
   request_.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
+  request_.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                        QNetworkRequest::NoLessSafeRedirectPolicy);
+#endif
   request_.setRawHeader("Accept", "*/*");
   request_.setRawHeader ("User-Agent", user_agent_.toLocal8Bit());  // Must have a UA for some sites, like country-files
 
@@ -189,6 +198,10 @@ void FileDownload::download(QUrl qurl)
   else
   {
     reply_ = manager_->get (request_);
+  }
+  if (!reply_) {
+    Q_EMIT download_error(tr("Network Error:\nUnable to create request"));
+    return;
   }
 
   QObject::connect(reply_, &QNetworkReply::downloadProgress, this, &FileDownload::downloadProgress, Qt::UniqueConnection);

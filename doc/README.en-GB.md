@@ -6,7 +6,7 @@ Repository-specific notes for the macOS fork.
 
 ## Current Release Context
 
-- Latest stable release: `v1.3.7`
+- Latest stable release: `v1.3.8`
 - Targets: macOS Tahoe ARM64, Sequoia ARM64, Sequoia Intel, Monterey Intel (experimental), Linux x86_64 AppImage
 
 ## Build and Runtime Notes
@@ -21,18 +21,13 @@ Repository-specific notes for the macOS fork.
 - This fork now uses `SharedMemorySegment` with file-backed `mmap` on Darwin.
 - The release flow no longer depends on System V shared-memory `sysctl` tuning (`kern.sysv.shmmax/shmall`).
 
-### Security/concurrency hardening and UI/runtime updates (v1.3.7)
+### Security/concurrency and CAT/network updates (v1.3.8)
 
-- Added world-map contact click handling with marker highlight and DX call/grid transfer.
-- Added configurable map click mode (`Map: single click starts Tx`).
-- Added persistent `View -> World Map` visibility state.
-- Added new tool windows: `Ionospheric Forecast` and `DX Cluster`.
-- Improved day/night map rendering and end-of-QSO path cleanup logic.
-- Improved compact/two-row top-controls behavior for small displays.
-- Decode sequence-start timestamp is now captured before decode start to avoid startup misalignment.
-- Registered `ModulatorState` as Qt metatype for robust queued cross-thread delivery.
-- Default Qt style set to `Fusion` for consistent macOS rendering.
-- Removed hardcoded legacy revision suffix source affecting PSKReporter `Using:`.
+- CAT/remote Configure is hardened to avoid forced FT2 mode from generic control packets.
+- UDP control commands now require direct target id matching.
+- Optional greyline toggle is available in Settings -> General.
+- Active map path can render a distance badge in km/mi according to user units.
+- Compact top controls were refined for DX-ped alignment on small displays.
 
 ### Release artifacts
 
@@ -49,6 +44,15 @@ Repository-specific notes for the macOS fork.
 - RAM: 4 GB minimum
 - Runtime: `glibc >= 2.35`, `libfuse2`/FUSE2, ALSA/PulseAudio/PipeWire
 
+### Linux AppImage recommendation
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
+
 ### Gatekeeper quarantine command
 
 ```bash
@@ -58,7 +62,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## References
 
 - `CHANGELOG.md`
-- `RELEASE_NOTES_v1.3.7.md`
-- `doc/GITHUB_RELEASE_BODY_v1.3.7.md`
+- `RELEASE_NOTES_v1.3.8.md`
+- `doc/GITHUB_RELEASE_BODY_v1.3.8.md`
 - `doc/README.es.md`
 - `doc/SECURITY_BUG_ANALYSIS_REPORT.md`

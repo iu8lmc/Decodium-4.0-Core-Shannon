@@ -16,28 +16,22 @@ security fixes, and release automation for:
 ## Current Baseline
 
 - Source branch: `master`
-- Latest stable release: `v1.3.7`
+- Latest stable release: `v1.3.8`
 - App bundle/executable: `ft2.app` / `ft2`
 
-## Key Notes for v1.3.7
+## Key Notes for v1.3.8
 
-- Added interactive world-map contact selection with marker highlight and DX call/grid propagation.
-- Added configuration toggle for map click behavior (`Map: single click starts Tx`).
-- Added persistent visibility control for `View -> World Map`.
-- Added new `Ionospheric Forecast` tool window (HamQSL XML + sun image, timed refresh).
-- Added new `DX Cluster` tool window (live spots, current-band context, mode filter).
-- Improved world-map day/night rendering and end-of-QSO path cleanup.
-- Improved compact/two-row top-control layout behavior on small displays.
-- Decode timing reliability fix: sequence start timestamp is captured at data ingest before decode.
-- Cross-thread reliability improvement for modulator state signals via explicit Qt metatype registration.
-- Default UI style set to `Fusion` for consistent rendering across macOS variants.
-- Removed hardcoded legacy revision suffix source to keep PSKReporter `Using:` branding clean.
-- `.pkg` remains unnecessary; release line stays on DMG/ZIP/SHA256 for macOS plus AppImage/SHA256 for Linux.
+- CAT/remote Configure hardening: generic broadcast Configure packets no longer force FT2 mode.
+- UDP control hardening: control messages now require direct target ID, reducing cross-app interference.
+- Optional greyline control in Settings -> General (map can stay fully daylight when disabled).
+- Active world-map path now shows distance badge in km/mi based on configured units.
+- Top controls refined for compact screens, including DX-ped button placement.
+- `.pkg` remains unnecessary; release line stays on DMG/ZIP/SHA256 (macOS) and AppImage/SHA256 (Linux).
 
 ## Quick Start (macOS)
 
 ```bash
-cmake -S . -B build -DFORK_RELEASE_VERSION=v1.3.7
+cmake -S . -B build -DFORK_RELEASE_VERSION=v1.3.8
 cmake --build build -j8
 ./build/ft2.app/Contents/MacOS/ft2
 ```
@@ -47,22 +41,20 @@ cmake --build build -j8
 Local release script:
 
 ```bash
-scripts/release-macos.sh v1.3.7 --publish --repo elisir80/decodium3-build-macos
+scripts/release-macos.sh v1.3.8 --publish --repo elisir80/decodium3-build-macos
 ```
 
 Per-platform suffix example:
 
 ```bash
-scripts/release-macos.sh v1.3.7 --compat-macos 15.0 --asset-suffix macos-sequoia-arm64
+scripts/release-macos.sh v1.3.8 --compat-macos 15.0 --asset-suffix macos-sequoia-arm64
 ```
 
-Generated assets:
+## Hamlib in Release Builds
 
-- `decodium3-ft2-<version>-<asset-suffix>.dmg`
-- `decodium3-ft2-<version>-<asset-suffix>.zip`
-- `decodium3-ft2-<version>-<asset-suffix>-sha256.txt`
-
-Note: `.pkg` is no longer required for shared-memory sysctl setup in this fork release flow.
+- macOS workflows run `brew update` and `brew upgrade hamlib` before build/package.
+- Linux workflows build Hamlib from the latest official GitHub release and install it to `/usr/local` before compiling `ft2`.
+- Workflow logs always print the effective Hamlib version (`rigctl --version`, `pkg-config --modversion hamlib`).
 
 ## Linux Minimum Requirements
 
@@ -76,6 +68,17 @@ Note: `.pkg` is no longer required for shared-memory sysctl setup in this fork r
   - ALSA, PulseAudio, or PipeWire audio stack
 - Station integration: CAT/audio hardware according to radio setup
 
+## Linux AppImage Launch Recommendation
+
+To avoid issues caused by AppImage read-only filesystem mode:
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
+
 ## macOS Quarantine Command
 
 If Gatekeeper blocks startup after download/install, run:
@@ -87,11 +90,11 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## Documentation
 
 - `README.md`
+- `README.it.md`
 - `README.es.md`
-- `RELEASE_NOTES_v1.3.7.md`
+- `RELEASE_NOTES_v1.3.8.md`
 - `CHANGELOG.md`
-- `doc/GITHUB_RELEASE_BODY_v1.3.7.md`
-- `doc/README.es.md`
+- `doc/GITHUB_RELEASE_BODY_v1.3.8.md`
 - `doc/SECURITY_BUG_ANALYSIS_REPORT.md`
 
 ## Licence

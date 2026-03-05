@@ -222,6 +222,7 @@ private slots:
   void on_ft4Button_clicked();
   void on_ft2Button_clicked();
   void on_autoCQButton_clicked(bool checked);
+  void on_dxpedButton_clicked(bool checked);
   void on_msk144Button_clicked();
   void on_q65Button_clicked();
   void on_jt65Button_clicked();
@@ -725,6 +726,9 @@ private:
   qint32  m_cqRetryCount {0}; // CQ (Tx6) retry counter for period toggle
   static constexpr int MAX_TX_RETRIES = 3;    // Tx2/Tx3/Tx4 retries before returning to CQ
   static constexpr int MAX_CQ_RETRIES = 10;   // CQ retries before toggling Tx Even/1st
+  qint32  m_autoCQPeriodsMissed {0};          // RX periods without reply from current AutoCQ partner
+  bool    m_receivedReplyThisPeriod {false};  // Reset each decode period in AutoCQ
+  static constexpr int MAX_MISSED_PERIODS = 4;
   qint32  m_kin0=0;
   qint32  m_earlyDecode=41;
   qint32  m_earlyDecode2=47;
@@ -811,8 +815,24 @@ private:
   bool    m_bCallingCQ;
   bool    m_autoCQ;
   QQueue<QString> m_callerQueue;
-  void enqueueCaller (QString const& call, int freq);
+  void enqueueCaller (QString const& call, int freq, int snr = -99);
   void processNextInQueue ();
+  // DX-pedition 2-slot (compatible with existing FT8/FT2 flow; separate from Fox/Hound state machine)
+  struct DXpedSlot {
+    QString call;
+    int     freq {0};
+    int     txStep {0};        // 2=Tx2, 3=Tx3, 5=Tx5, 0=free slot
+    int     missedPeriods {0};
+    int     snr {-99};
+    DXpedSlot () = default;
+    DXpedSlot (QString c, int f, int t, int m, int s)
+      : call {c}, freq {f}, txStep {t}, missedPeriods {m}, snr {s} {}
+  };
+  bool      m_bDXpedMode {false};
+  DXpedSlot m_dxpedSlots[2];
+  void dxpedLoadSlot (int slot);
+  void dxpedTxSequencer ();
+  void dxpedRxProcess (QString const& call);
   bool    m_bAutoReply;
   QString m_lastloggedcall; //ft8md
   bool    m_bCheckedContest;

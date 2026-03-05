@@ -13,6 +13,7 @@
 #include <QTimer>
 #include "Configuration.hpp"
 #include "SettingsGroup.hpp"
+#include "WindowGeometryUtils.hpp"
 #include "MessageBox.hpp"
 #include "models/FontOverrideModel.hpp"
 #include "pimpl_impl.hpp"
@@ -133,7 +134,7 @@ void AbstractLogWindow::set_log_view (QTableView * log_view)
 {
   // do this here because we know the UI must be setup before this
   SettingsGroup g {m_->settings_, m_->settings_key_};
-  restoreGeometry (m_->settings_->value ("window/geometry").toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, m_->settings_->value ("window/geometry").toByteArray ());
   m_->log_view_ = log_view;
   set_log_view_font (m_->configuration_->decoded_text_font ());
   log_view->setSortingEnabled (true);

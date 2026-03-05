@@ -5,6 +5,7 @@
 
 #include "SettingsGroup.hpp"
 #include "models/DecodeHighlightingModel.hpp"
+#include "WindowGeometryUtils.hpp"
 
 #include "ui_colorhighlighting.h"
 #include "moc_colorhighlighting.cpp"
@@ -28,7 +29,7 @@ ColorHighlighting::~ColorHighlighting()
 void ColorHighlighting::read_settings ()
 {
   SettingsGroup group {settings_, "ColorScheme"};
-  restoreGeometry (settings_->value ("window/geometry").toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, settings_->value ("window/geometry").toByteArray ());
 }
 
 void ColorHighlighting::write_settings ()

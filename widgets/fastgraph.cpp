@@ -6,6 +6,7 @@
 #include <QKeyEvent>
 #include "fastplot.h"
 #include "SettingsGroup.hpp"
+#include "WindowGeometryUtils.hpp"
 
 #include "ui_fastgraph.h"
 #include "moc_fastgraph.cpp"
@@ -27,7 +28,7 @@ FastGraph::FastGraph(QSettings * settings, QWidget *parent) :
 
   //Restore user's settings
   SettingsGroup g {m_settings, "FastGraph"};
-  restoreGeometry (m_settings->value ("geometry", saveGeometry ()).toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, m_settings->value ("geometry", saveGeometry ()).toByteArray ());
   ui->fastPlot->setPlotZero(m_settings->value("PlotZero", 0).toInt());
   ui->fastPlot->setPlotGain(m_settings->value("PlotGain", 0).toInt());
   ui->zeroSlider->setValue(ui->fastPlot->m_plotZero);

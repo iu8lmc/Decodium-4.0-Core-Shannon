@@ -1,5 +1,58 @@
 # Changelog / Registro Modifiche
 
+## [1.3.8] - 2026-03-05
+
+### English
+
+Release focused on CAT/network hardening, world-map usability, and compact-layout stability after DX-ped integration.
+
+#### Changed
+
+- Added optional world-map greyline control in Settings -> General.
+- Added active map-path distance badge rendering (km/mi based on unit preference).
+- Refined compact top-controls layout behavior for small displays, including DX-ped area alignment.
+- Updated release/docs/workflow defaults to `v1.3.8`, keeping macOS Tahoe/Sequoia + Intel Sequoia/Monterey and Linux AppImage targets.
+
+#### Fixed
+
+- Fixed external-control mode lock scenario: generic remote Configure traffic no longer forces FT2 mode.
+- Hardened UDP control handling by requiring direct target id on control messages.
+- Improved network diagnostics text when packets are rejected for target-id mismatch.
+
+### Italiano
+
+Release focalizzata su hardening CAT/rete, usabilita' mappa e stabilita' layout compatto dopo integrazione DX-ped.
+
+#### Modificato
+
+- Aggiunto toggle opzionale greyline mappa in Settings -> General.
+- Aggiunto rendering badge distanza sul path mappa attivo (km/mi in base all'unita' selezionata).
+- Rifinito comportamento layout controlli top compatti su schermi piccoli, incluso allineamento area DX-ped.
+- Aggiornati default release/doc/workflow a `v1.3.8`, mantenendo target macOS Tahoe/Sequoia + Intel Sequoia/Monterey e Linux AppImage.
+
+#### Corretto
+
+- Corretto scenario di lock modalita' con controllo esterno: traffico Configure remoto generico non forza piu' FT2.
+- Hardening gestione controllo UDP richiedendo target id diretto nei messaggi di controllo.
+- Migliorata diagnostica rete quando i pacchetti sono rifiutati per mismatch target-id.
+
+### Espanol
+
+Release centrada en hardening CAT/red, usabilidad del mapa y estabilidad del layout compacto tras integrar DX-ped.
+
+#### Cambios
+
+- Se anade opcion greyline del mapa en Settings -> General.
+- Se anade badge de distancia en la ruta activa del mapa (km/mi segun unidades configuradas).
+- Se ajusta el layout compacto de controles superiores en pantallas pequenas, incluyendo alineacion del area DX-ped.
+- Defaults de release/docs/workflows actualizados a `v1.3.8`, manteniendo objetivos macOS Tahoe/Sequoia + Intel Sequoia/Monterey y Linux AppImage.
+
+#### Corregido
+
+- Corregido bloqueo de modo con control externo: Configure remoto generico ya no fuerza FT2.
+- Hardening del control UDP requiriendo target id directo para mensajes de control.
+- Mejora de diagnostico de red cuando los paquetes se rechazan por mismatch de target-id.
+
 ## [1.3.7] - 2026-03-03
 
 ### English

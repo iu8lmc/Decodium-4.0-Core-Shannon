@@ -6,7 +6,7 @@ Note specifiche del fork macOS nel repository.
 
 ## Contesto release attuale
 
-- Ultima release stabile: `v1.3.7`
+- Ultima release stabile: `v1.3.8`
 - Target: macOS Tahoe ARM64, Sequoia ARM64, Sequoia Intel, Monterey Intel (sperimentale), Linux x86_64 AppImage
 
 ## Note build e runtime
@@ -21,18 +21,13 @@ Note specifiche del fork macOS nel repository.
 - Il fork usa `SharedMemorySegment` con backend `mmap` su Darwin.
 - Il flusso release non dipende piu' da tuning `sysctl` System V (`kern.sysv.shmmax/shmall`).
 
-### Hardening sicurezza/concorrenza e aggiornamenti UI/runtime (v1.3.7)
+### Hardening CAT/rete e aggiornamenti mappa/UI (v1.3.8)
 
-- Aggiunta gestione click contatti mappa con highlight marker e trasferimento DX call/grid.
-- Aggiunta opzione configurabile click mappa (`Map: single click starts Tx`).
-- Aggiunta persistenza stato visibilita' `View -> World Map`.
-- Aggiunte nuove finestre strumenti: `Ionospheric Forecast` e `DX Cluster`.
-- Migliorato rendering giorno/notte mappa e logica pulizia path a fine QSO.
-- Migliorato comportamento controlli top in modalita' compatta/2 righe su display piccoli.
-- Timestamp sequence-start decode ora acquisito prima dell'avvio decode per evitare disallineamenti in startup.
-- Registrazione esplicita metatype Qt per `ModulatorState` per delivery cross-thread affidabile.
-- Stile Qt predefinito impostato a `Fusion` per rendering macOS coerente.
-- Rimossa sorgente hardcoded del suffisso revision legacy che contaminava `Using:` su PSKReporter.
+- Hardening CAT/Configure remoto per evitare forzature FT2 da pacchetti generici.
+- I comandi di controllo UDP richiedono target id diretto.
+- Toggle greyline opzionale in Settings -> General.
+- Badge distanza sul path mappa attivo in km/mi secondo unita' impostate.
+- Rifiniture layout controlli top per allineamento DX-ped su schermi piccoli.
 
 ### Artifact release
 
@@ -49,6 +44,15 @@ Note specifiche del fork macOS nel repository.
 - RAM: minimo 4 GB
 - Runtime: `glibc >= 2.35`, `libfuse2`/FUSE2, ALSA/PulseAudio/PipeWire
 
+### Avvio consigliato AppImage
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
+
 ### Comando quarantena Gatekeeper
 
 ```bash
@@ -58,7 +62,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## Riferimenti
 
 - `CHANGELOG.md`
-- `RELEASE_NOTES_v1.3.7.md`
-- `doc/GITHUB_RELEASE_BODY_v1.3.7.md`
+- `RELEASE_NOTES_v1.3.8.md`
+- `doc/GITHUB_RELEASE_BODY_v1.3.8.md`
 - `doc/README.es.md`
 - `doc/SECURITY_BUG_ANALYSIS_REPORT.md`

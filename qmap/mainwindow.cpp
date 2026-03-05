@@ -26,6 +26,8 @@
 #include <QUrlQuery>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <cstddef>
+#include <cstring>
 
 #define NFFT 32768
 
@@ -53,6 +55,18 @@ namespace
         qWarning () << context << "clamped sample index from" << value << "to" << clamped;
       }
     return clamped;
+  }
+
+  template <std::size_t N>
+  void copy_fixed_char_array (char (&destination)[N], QString const& source)
+  {
+    memset (destination, ' ', N);
+    auto const bytes = source.toLatin1 ();
+    auto const count = qMin<int> (bytes.size (), static_cast<int> (N));
+    if (count > 0)
+      {
+        memcpy (destination, bytes.constData (), static_cast<std::size_t> (count));
+      }
   }
 }
 
@@ -1038,11 +1052,8 @@ void MainWindow::decode()                                       //decode()
     return;
   }
 
-  int len1=m_saveFileName.length();
-  int len2=m_revision.length();
-
-  memcpy(savecom_.revision, m_revision.toLatin1(), len2);
-  memcpy(savecom_.saveFileName, m_saveFileName.toLatin1(),len1);
+  copy_fixed_char_array (savecom_.revision, m_revision);
+  copy_fixed_char_array (savecom_.saveFileName, m_saveFileName);
 
   ui->actionExport_wav_file_at_fQSO->setEnabled(m_diskData);
   watcher3.setFuture(QtConcurrent::run (q65c_));
@@ -1073,82 +1084,74 @@ void MainWindow::CreateLiveCQ(QStringList cqliveText)
 //return if cqliveText is empty or data were read from disk.
   if ((m_diskData && m_myCall.toUpper() != "W3SZ" && m_myCall.toUpper() != "DL3WDG") or (cqliveText.size() == 0)) return;
 
-  QStringList cqliveFinalText;
-  QStringList oldFile;
-  bool ok;
   int freqOffset = ui->sbOffset->value();
   QStringList bandInfo;
   bandInfo = ui->labFreq->text().split(".",SkipEmptyParts);
+  if (bandInfo.isEmpty()) return;
   QString bandFreq = bandInfo.at(0);
   QString theDate = ui->labUTC->text().trimmed().mid(0,12);
+  QString myCallUpper = m_myCall.toUpper();
+  QString myGridUpper = m_myGrid.toUpper();
+  if (myCallUpper.length() < 3 || myGridUpper.length() < 4) return;
   QList<QStringList> decodeList;
 
   for (const QString &item : cqliveText) {
-    QString line = " ";
-    QStringList thePostLine;
-    line = line.repeated(100);  //.replace("<","").replace(">","");
-    QStringList thePieces;
+    auto const thePieces = item.split(" ",SkipEmptyParts);
+    if (thePieces.size() < 9) continue;
 
-    thePieces = item.split(" ",SkipEmptyParts);
-    if((thePieces.at(6) == "CQ" || thePieces.at(6) == "QRZ" || thePieces.at(6) == "CQV" ||  thePieces.at(6) == "CQH" ||  thePieces.at(6) == "QRT") && m_myCall.length() >=3 && m_myGrid.length()>=4) {
+    auto const msgType = thePieces.at(6);
+    if((msgType == "CQ" || msgType == "QRZ" || msgType == "CQV" || msgType == "CQH" || msgType == "QRT")) {
       //extract Fsked freq and format to 3 digits no decimals
-      QString theMsg;
-      QStringList thekHz;
+      QString freqToken;
+      QString dxGridToken = "--";
       int nWords=thePieces.length();
       if(nWords==9) {
         // Handle CQ messages that do not include a locator
-      if(thePieces.at(6)==NULL or thePieces.at(7)==NULL or thePieces.at(8)==NULL) return;
-        theMsg = thePieces.at(6) + " " + thePieces.at(7);
-        thekHz = thePieces.at(8).split(".");
+        freqToken = thePieces.at(8);
       } else {
-      if(thePieces.at(6)==NULL or thePieces.at(7)==NULL or thePieces.at(8)==NULL or thePieces.at(9)==NULL) return;
-        theMsg = thePieces.at(6) + " " + thePieces.at(7) + " " + thePieces.at(8);
-        thekHz = thePieces.at(9).split(".");
+        if (thePieces.size() < 10) continue;
+        dxGridToken = thePieces.at(8);
+        freqToken = thePieces.at(9);
       }
-      int rxFreq = freqOffset + thekHz.at(1).toInt(&ok);
-      // int rxFreq = freqOffset + 100 * thekHz.at(1).toInt(&ok);
+
+      auto const thekHz = freqToken.split(".", Qt::KeepEmptyParts);
+      if (thekHz.size() < 2) continue;
+
+      bool okMHz = false;
+      bool okHz = false;
+      int khzBase = thekHz.at(0).toInt(&okMHz);
+      int khzOffset = thekHz.at(1).toInt(&okHz);
+      if (!okMHz || !okHz) continue;
+
+      int rxFreq = freqOffset + khzOffset;
       int skedFreq;
-      QString skedFreqString;
       if (rxFreq <= freqOffset + 500) {
-        skedFreq = thekHz.at(0).toInt(&ok);
+        skedFreq = khzBase;
       } else {
-        skedFreq = thekHz.at(0).toInt(&ok) + 1;
+        skedFreq = khzBase + 1;
         rxFreq=rxFreq - 1000;
       }
+      QString skedFreqString;
       skedFreqString = QString::number(skedFreq).rightJustified(3,'0');
-      QString mode = "0 Q65-" + thePieces.at(5);
-      line.insert(0,bandFreq + "." + skedFreqString);
-      line.insert(10,QString::number(rxFreq));
-      line.insert(15,"0");
-      line.insert(18,thePieces.at(0));
-      line.insert(26,thePieces.at(3));
-      line.insert(32,thePieces.at(4));
-      line.insert(36,theMsg);
-      line.insert(55,mode);
-      line.insert(67,m_myGrid.toUpper());
-      line.insert(74,"Q");
-      line.insert(76,theDate);
-      line.insert(88,m_myCall.toUpper());
-      cqliveFinalText << line.trimmed();
-
-      thePostLine.insert(0, bandFreq + "." + skedFreqString);  //skedfreq
-      thePostLine.insert(1, QString::number(rxFreq)); //rxfreq
-      thePostLine.insert(2, "--"); //rpol
-      thePostLine.insert(3,thePieces.at(0)); //utc HHmmSS
-      thePostLine.insert(4,thePieces.at(3)); //dt
-      thePostLine.insert(5, thePieces.at(4)); //dB
-      thePostLine.insert(6, "Q65-" + thePieces.at(5)); //Q65 submode
-      thePostLine.insert(7, thePieces.at(6)); //msg type
-      thePostLine.insert(8, thePieces.at(7)); //dx call
-      if (thePieces.at(8).contains(".")) {
-        thePostLine.insert(9, "--"); //no dx grid
-      } else {
-        thePostLine.insert(9, thePieces.at(8)); //dx grid
+      if (dxGridToken.contains(".")) {
+        dxGridToken = "--";
       }
-      thePostLine.insert(10, m_myGrid.toUpper()); //myGrid
-      thePostLine.insert(11, theDate);  //the date
-      thePostLine.insert(12, m_myCall.toUpper()); //myCall
-      thePostLine.insert(13, "--"); //txpol
+
+      QStringList thePostLine;
+      thePostLine << (bandFreq + "." + skedFreqString)  //skedfreq
+                  << QString::number(rxFreq)             //rxfreq
+                  << "--"                                 //rpol
+                  << thePieces.at(0)                      //utc HHmmSS
+                  << thePieces.at(3)                      //dt
+                  << thePieces.at(4)                      //dB
+                  << ("Q65-" + thePieces.at(5))          //Q65 submode
+                  << thePieces.at(6)                      //msg type
+                  << thePieces.at(7)                      //dx call
+                  << dxGridToken                           //dx grid
+                  << myGridUpper                           //myGrid
+                  << theDate                               //the date
+                  << myCallUpper                           //myCall
+                  << "--";                                //txpol
       decodeList.append(thePostLine);
     }
   }
@@ -1172,6 +1175,10 @@ void MainWindow::sendLiveCQData(QList<QStringList>decodeList)
   request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
   for (const QStringList &thePostLine : decodeList) {
+    if (thePostLine.size() < 14) {
+      qWarning() << "sendLiveCQData: skipping malformed post line";
+      continue;
+    }
 
     QString utcdatetimestringOriginal = thePostLine.at(11) + " " + thePostLine.at(3);
     QDateTime utcdatetimeUTC = QDateTime::fromString(utcdatetimestringOriginal, "yyyy MMM dd  HHmmss");
@@ -1179,9 +1186,23 @@ void MainWindow::sendLiveCQData(QList<QStringList>decodeList)
     QString utcdatetimeUTCString = utcdatetimeUTC.toString("yyyy-MM-ddTHH:mm:ss");
     utcdatetimeUTCString = utcdatetimeUTCString + "Z";
 
-    QString postString =  "skedfreq=" + thePostLine.at(0) + "&rxfreq=" + thePostLine.at(1) + "&rpol=" + thePostLine.at(2) + "&dt="  +  thePostLine.at(4) + "&dB="  + thePostLine.at(5) + "&msgtype="  +  thePostLine.at(7) + "&callsign="  +  thePostLine.at(8) + "&grid="  +  thePostLine.at(9) + "&mode="  +  thePostLine.at(6) + "&utcdatetime="  +  utcdatetimeUTCString + "&spotter="  +  thePostLine.at(12) + "&spottergrid=" +  thePostLine.at(10)  + "&txpol=" + thePostLine.at(13) + "&apptype=QMAP";
+    QUrlQuery postData;
+    postData.addQueryItem("skedfreq", thePostLine.at(0));
+    postData.addQueryItem("rxfreq", thePostLine.at(1));
+    postData.addQueryItem("rpol", thePostLine.at(2));
+    postData.addQueryItem("dt", thePostLine.at(4));
+    postData.addQueryItem("dB", thePostLine.at(5));
+    postData.addQueryItem("msgtype", thePostLine.at(7));
+    postData.addQueryItem("callsign", thePostLine.at(8));
+    postData.addQueryItem("grid", thePostLine.at(9));
+    postData.addQueryItem("mode", thePostLine.at(6));
+    postData.addQueryItem("utcdatetime", utcdatetimeUTCString);
+    postData.addQueryItem("spotter", thePostLine.at(12));
+    postData.addQueryItem("spottergrid", thePostLine.at(10));
+    postData.addQueryItem("txpol", thePostLine.at(13));
+    postData.addQueryItem("apptype", "QMAP");
 
-    QByteArray postByteArray = postString.toUtf8();
+    QByteArray postByteArray = postData.query(QUrl::FullyEncoded).toUtf8();
     request.setRawHeader("Content-Length",QByteArray::number(postByteArray.size()));
 
 

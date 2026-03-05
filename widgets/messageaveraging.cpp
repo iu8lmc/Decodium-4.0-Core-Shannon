@@ -6,6 +6,7 @@
 
 #include "SettingsGroup.hpp"
 #include "qt_helpers.hpp"
+#include "WindowGeometryUtils.hpp"
 #include "ui_messageaveraging.h"
 
 #include "moc_messageaveraging.cpp"
@@ -58,7 +59,7 @@ void MessageAveraging::setContentFont(QFont const& font)
 void MessageAveraging::read_settings ()
 {
   SettingsGroup group {settings_, "MessageAveraging"};
-  restoreGeometry (settings_->value ("window/geometry").toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, settings_->value ("window/geometry").toByteArray ());
 }
 
 void MessageAveraging::write_settings ()

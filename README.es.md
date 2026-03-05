@@ -1,22 +1,17 @@
-# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.3.7 (Espanol)
+# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.3.8 (Espanol)
 
 Para la version completa bilingue (English + Italiano), ver [README.md](README.md).
 
-## Resumen (v1.3.7)
+## Resumen (v1.3.8)
 
-Esta version del fork incluye, respecto a `v1.3.6`:
+Esta version del fork completa los fixes desde `v1.3.7` con enfoque en robustez CAT/UDP, mapa y UX:
 
-- seleccion de contactos directamente desde el mapamundi con resaltado visual y carga de indicativo/cuadricula DX;
-- nueva opcion de configuracion `Map: single click starts Tx` para elegir la logica click simple/doble en el mapa;
-- persistencia del estado `View -> World Map` entre reinicios;
-- nueva ventana `Ionospheric Forecast` (datos HamQSL + imagen solar, refresco periodico);
-- nueva ventana `DX Cluster` (spots en vivo con filtro por modo y banda actual);
-- renderizado dia/noche del mapa mejorado y limpieza de lineas antiguas al terminar QSO;
-- mejora del layout de controles superiores en modo compacto/2 filas para pantallas pequenas;
-- correccion de sincronizacion de decode al arranque (timestamp de secuencia capturado antes del decode);
-- mejora de fiabilidad de senales Qt entre hilos para `ModulatorState` (metatype registrado);
-- estilo visual por defecto cambiado a `Fusion` para mayor consistencia en macOS;
-- eliminada la fuente hardcoded del sufijo legacy de revision: en PSKReporter `Using:` ya no aparece `mod by IU8LMC...`.
+- hardening CAT/Configure remoto: paquetes Configure genericos ya no fuerzan FT2;
+- hardening de control UDP: se exige target id directo en mensajes de control;
+- opcion de greyline en `Settings -> General` (desactivada = mapa siempre iluminado);
+- distancia sobre la ruta activa del mapa en km/mi segun la unidad configurada;
+- ajustes de layout de controles superiores en pantallas pequenas y realineacion del area DX-ped;
+- `.pkg` no necesario: releases solo DMG/ZIP/SHA256 (macOS) y AppImage/SHA256 (Linux).
 
 ## Objetivos de release
 
@@ -25,6 +20,12 @@ Esta version del fork incluye, respecto a `v1.3.6`:
 - Apple Intel Sequoia
 - Apple Intel Monterey (12.x, experimental/best-effort)
 - Linux x86_64 AppImage
+
+## Hamlib en builds de release
+
+- En macOS los workflows ejecutan `brew update` + `brew upgrade hamlib` antes de compilar.
+- En Linux los workflows compilan Hamlib desde la ultima release oficial de GitHub e instalan en `/usr/local` antes de compilar `ft2`.
+- Los logs CI muestran siempre la version efectiva usada (`rigctl --version`, `pkg-config --modversion hamlib`).
 
 ## Requisitos minimos Linux
 
@@ -38,6 +39,17 @@ Esta version del fork incluye, respecto a `v1.3.6`:
   - audio ALSA, PulseAudio o PipeWire
 - Integracion de estacion: hardware CAT/audio segun configuracion de radio
 
+## Recomendacion de arranque AppImage en Linux
+
+Para evitar problemas por el sistema de archivos de solo lectura de AppImage:
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
+
 ## Comando macOS (cuarentena)
 
 ```bash
@@ -46,8 +58,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ## Documentacion
 
-- [RELEASE_NOTES_v1.3.7.md](RELEASE_NOTES_v1.3.7.md)
+- [RELEASE_NOTES_v1.3.8.md](RELEASE_NOTES_v1.3.8.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.3.7.md](doc/GITHUB_RELEASE_BODY_v1.3.7.md)
+- [doc/GITHUB_RELEASE_BODY_v1.3.8.md](doc/GITHUB_RELEASE_BODY_v1.3.8.md)
 - [doc/README.es.md](doc/README.es.md)
 - [doc/SECURITY_BUG_ANALYSIS_REPORT.md](doc/SECURITY_BUG_ANALYSIS_REPORT.md)

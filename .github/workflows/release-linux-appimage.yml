@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. v1.3.7)"
+        description: "Release version (e.g. v1.3.8)"
         required: true
-        default: "v1.3.7"
+        default: "v1.3.8"
       publish_release:
         description: "Upload AppImage to GitHub release"
         required: true
@@ -52,7 +52,10 @@ jobs:
             build-essential \
             gfortran \
             cmake \
+            python3 \
             pkg-config \
+            ca-certificates \
+            curl \
             qtbase5-dev \
             qtmultimedia5-dev \
             libqt5multimedia5-plugins \
@@ -63,8 +66,6 @@ jobs:
             qttools5-dev \
             qttools5-dev-tools \
             libfftw3-dev \
-            libhamlib-dev \
-            libhamlib-utils \
             libusb-1.0-0-dev \
             libudev-dev \
             libboost-log-dev \
@@ -79,11 +80,35 @@ jobs:
             libfuse2 \
             texinfo
 
+      - name: Build and install latest Hamlib
+        run: |
+          set -euo pipefail
+          HAMLIB_TAG="$(curl -fsSL https://api.github.com/repos/Hamlib/Hamlib/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"tag_name\"])')"
+          HAMLIB_VERSION="${HAMLIB_TAG#v}"
+          echo "Using Hamlib ${HAMLIB_TAG}"
+          echo "HAMLIB_TAG=${HAMLIB_TAG}" >> "$GITHUB_ENV"
+
+          cd /tmp
+          wget -q "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix=/usr/local --disable-static --enable-shared
+          make -j"$(nproc)"
+          sudo make install
+          sudo ldconfig
+
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+          pkg-config --modversion hamlib
+          /usr/local/bin/rigctl --version || rigctl --version
+
       - name: Configure CMake
         run: |
           cmake -B build-appimage -G "Unix Makefiles" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_PREFIX_PATH=/usr/local \
             -DFORK_RELEASE_VERSION="${VERSION}" \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
@@ -223,12 +248,12 @@ jobs:
               echo
               echo "Linux x86_64 AppImage release for fork ${VERSION}."
               echo
-              echo "Includes v1.3.7 updates:"
-              echo "- interactive world-map contact click pipeline;"
-              echo "- configurable map click TX behavior;"
-              echo "- new Ionospheric Forecast and DX Cluster windows;"
-              echo "- decode startup timing initialization fix;"
-              echo "- cleanup of legacy hardcoded revision suffix affecting PSKReporter Using:."
+              echo "Includes v1.3.8 updates:"
+              echo "- CAT/remote Configure hardening (no forced FT2 mode on generic Configure packets);"
+              echo "- UDP control hardening with direct target id enforcement;"
+              echo "- optional map greyline toggle in Settings -> General;"
+              echo "- active map path distance badge in km/mi;"
+              echo "- compact top-controls/DX-ped layout refinements."
               echo
               echo "Linux minimum requirements:"
               echo "- x86_64 CPU, 4 GB RAM minimum"
@@ -238,11 +263,17 @@ jobs:
               echo "If the macOS app is blocked, run:"
               echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
               echo
+              echo "Linux AppImage recommendation (avoid read-only filesystem issues):"
+              echo "\`chmod +x /path/to/Decodium.AppImage\`"
+              echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
+              echo "\`cd squashfs-root\`"
+              echo "\`./AppRun\`"
+              echo
               echo "Italiano:"
-              echo "- aggiornamenti v1.3.7 inclusi (mappa interattiva, nuove finestre, fix timing decode, cleanup branding)."
+              echo "- aggiornamenti v1.3.8 inclusi (hardening CAT/UDP, toggle greyline, distanza su path mappa, layout DX-ped)."
               echo
               echo "Espanol:"
-              echo "- incluye mejoras v1.3.7 (mapa interactivo, nuevas ventanas, fix timing decode, limpieza branding)."
+              echo "- incluye mejoras v1.3.8 (hardening CAT/UDP, opcion greyline, distancia en ruta de mapa, layout DX-ped)."
             } > "${NOTES_FILE}"
             gh release create "${VERSION}" "${ASSETS[@]}" \
               --repo "${REPO}" \

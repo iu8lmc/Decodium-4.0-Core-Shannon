@@ -3,6 +3,7 @@
 #include "ui_TimeSyncPanel.h"
 #include "Network/NtpClient.hpp"
 #include "PrecisionTime.hpp"
+#include "WindowGeometryUtils.hpp"
 
 #include <QSettings>
 #include <QCloseEvent>
@@ -298,7 +299,7 @@ void TimeSyncPanel::closeEvent(QCloseEvent *event)
 void TimeSyncPanel::read_settings()
 {
   settings_->beginGroup("TimeSyncPanel");
-  restoreGeometry(settings_->value("geometry").toByteArray());
+  WindowGeometryUtils::restore_window_geometry(this, settings_->value("geometry").toByteArray());
   settings_->endGroup();
 }
 

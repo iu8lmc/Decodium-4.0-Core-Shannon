@@ -7,6 +7,7 @@
 namespace Ui {
   class Messages;
 }
+class QNetworkAccessManager;
 
 class Messages : public QDialog
 {
@@ -42,6 +43,7 @@ private:
   bool m_cqOnly;
   bool m_cqStarOnly;
   bool doLiveCQ=true; //liveCQ
+  QNetworkAccessManager * m_liveCqManager {nullptr};
   void CreateLiveCQ(QStringList cqliveText);  //liveCQ
   void sendLiveCQData(QStringList decodeList);  //liveCQ
 

@@ -9,6 +9,8 @@
 #include <QByteArray>
 #include <QEvent>
 
+#include "WindowGeometryUtils.hpp"
+
 //
 // Class MultiGeometryWidget<N, Widget> - Decorate a QWidget type with
 // 																				switchable geometries
@@ -37,7 +39,7 @@ public:
     Q_ASSERT (current < the_geometries.size ());
     saved_geometries_ = the_geometries;
     current_geometry_ = current;
-    Widget::restoreGeometry (saved_geometries_[current_geometry_]);
+    WindowGeometryUtils::restore_window_geometry (this, saved_geometries_[current_geometry_]);
   }
 
   std::array<QByteArray, N> const& geometries () const {return saved_geometries_;}
@@ -79,7 +81,7 @@ private:
         // so by clearing the desired_geometry_ member variable.
         QByteArray geometry;
         std::swap (geometry, desired_geometry_);
-        Widget::restoreGeometry (geometry);
+        WindowGeometryUtils::restore_window_geometry (this, geometry);
       }
     return ret;
   }

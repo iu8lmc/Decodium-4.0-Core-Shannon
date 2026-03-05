@@ -8,6 +8,7 @@
 
 class QCloseEvent;
 class QComboBox;
+class QCheckBox;
 class QLabel;
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -25,7 +26,7 @@ public:
   explicit DXClusterWindow(QSettings * settings, QWidget * parent = nullptr);
   ~DXClusterWindow() override;
 
-  void setBand(QString const& bandName);
+  void setBand(QString const& bandName, bool forceSyncToAppBand = false);
 
 Q_SIGNALS:
   void windowVisibleChanged(bool visible);
@@ -38,6 +39,8 @@ protected:
 private Q_SLOTS:
   void refreshNow();
   void onNetworkFinished(QNetworkReply * reply);
+  void onBandFilterChanged(int);
+  void onFollowAppBandChanged(bool checked);
   void onModeFilterChanged(int);
 
 private:
@@ -60,6 +63,7 @@ private:
   static QString normalizeBand(QString const& bandName);
   static QString normalizeMode(QString const& comment);
   static QString yesNoFlag(QString const& flag);
+  void applyBand(QString const& bandName, bool refresh);
   bool matchesModeFilter(Spot const& spot) const;
   void rebuildTable();
   bool parsePayload(QByteArray const& payload, QVector<Spot> * out, QString * error) const;
@@ -71,6 +75,8 @@ private:
   QLabel * titleLabel_ {nullptr};
   QLabel * sourceLabel_ {nullptr};
   QLabel * bandLabel_ {nullptr};
+  QCheckBox * followAppBandCheck_ {nullptr};
+  QComboBox * bandFilter_ {nullptr};
   QComboBox * modeFilter_ {nullptr};
   QPushButton * refreshButton_ {nullptr};
   QTableWidget * table_ {nullptr};
@@ -78,6 +84,7 @@ private:
   QTimer refreshTimer_;
   QNetworkAccessManager * network_ {nullptr};
   bool requestInFlight_ {false};
+  QString appBand_;
   QString currentBand_;
   QVector<Spot> spots_;
 };

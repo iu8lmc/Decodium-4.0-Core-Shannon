@@ -2,6 +2,7 @@
 #include "IonosphericForecastWindow.h"
 
 #include "SettingsGroup.hpp"
+#include "WindowGeometryUtils.hpp"
 
 #include <QApplication>
 #include <QBuffer>
@@ -565,7 +566,7 @@ void IonosphericForecastWindow::read_settings()
   auto geometry = settings_->value("geometry").toByteArray();
   if (!geometry.isEmpty())
     {
-      restoreGeometry(geometry);
+      WindowGeometryUtils::restore_window_geometry(this, geometry);
     }
 }
 

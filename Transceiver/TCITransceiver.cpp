@@ -138,6 +138,66 @@ namespace
       }
     return true;
   }
+
+  bool parse_decimal_tenths (QString const& value, int * out)
+  {
+    if (!out)
+      {
+        return false;
+      }
+    auto const parts = value.split ('.', Qt::KeepEmptyParts);
+    if (parts.size () < 2)
+      {
+        return false;
+      }
+    bool ok_whole = false;
+    bool ok_fraction = false;
+    auto const whole = parts.value (0).toInt (&ok_whole);
+    auto const fraction = parts.value (1).toInt (&ok_fraction);
+    if (!ok_whole || !ok_fraction)
+      {
+        return false;
+      }
+    *out = 10 * whole + fraction;
+    return true;
+  }
+
+  QUrl make_tci_ws_url (QString const& server)
+  {
+    auto endpoint = server.trimmed ();
+    QUrl url;
+    if (endpoint.contains ("://"))
+      {
+        url = QUrl {endpoint};
+      }
+    else
+      {
+        url = QUrl {"ws://" + endpoint};
+      }
+
+    if (url.scheme () == "http")
+      {
+        url.setScheme ("ws");
+      }
+    else if (url.scheme () == "https")
+      {
+        url.setScheme ("wss");
+      }
+    else if (url.scheme ().isEmpty ())
+      {
+        url.setScheme ("ws");
+      }
+
+    if (url.host ().isEmpty ())
+      {
+        url.setHost ("localhost");
+      }
+    if (url.port () == -1)
+      {
+        url.setPort (url.scheme ().toLower () == "wss" ? 443 : 40001);
+      }
+    return url;
+  }
 }
 
 extern "C" {
@@ -309,7 +369,11 @@ void TCITransceiver::onError(QAbstractSocket::SocketError err)
 {
   qDebug() << "WebInThread::onError";
   CAT_TRACE ("TCITransceiver entered TCI onError and ErrorNumber is " + QString::number(err) + '\n');
-  error_ = tr ("TCI websocket error: %1").arg (errortable.at (err));
+  auto const index = static_cast<int> (err);
+  auto const error_name = (index >= 0 && index < errortable.size ())
+      ? errortable.at (index)
+      : tr ("UnknownSocket");
+  error_ = tr ("TCI websocket error: %1").arg (error_name);
 }
 
 int TCITransceiver::do_start ()
@@ -318,9 +382,7 @@ int TCITransceiver::do_start ()
   CAT_TRACE ("TCITransceiver entered TCI do_start and tci_Ready is " + QString::number(tci_Ready) + '\n');
   qDebug () << "qDebug says do_start tci_Ready is: " << tci_Ready;
   if (wrapped_) wrapped_->start (0);
-  url_.setUrl("ws://" + server_); //server_
-  if (url_.host() == "") url_.setHost("localhost");
-  if (url_.port() == -1) url_.setPort(40001);
+  url_ = make_tci_ws_url (server_);
 
   if (!commander_) {
     commander_ = new QWebSocket {}; // QObject takes ownership
@@ -569,71 +631,95 @@ void TCITransceiver::do_stop ()
 void TCITransceiver::onMessageReceived(const QString &str)
 {
   qDebug() << "From WEB" << str;
-  QStringList cmd_list = str.split(";", SkipEmptyParts);
-  for (QString cmds : cmd_list){
-    QStringList cmd = cmds.split(":", SkipEmptyParts);
-    QStringList args = cmd.last().split(",", SkipEmptyParts);
-    Tci_Cmd idCmd = mapCmd_[cmd.first()];
+  QStringList const cmd_list = str.split (SmTZ, SkipEmptyParts);
+  for (QString const& cmds : cmd_list){
+    QStringList const cmd = cmds.split (SmDP, Qt::KeepEmptyParts);
+    if (cmd.isEmpty ()) continue;
+    auto const command_name = cmd.first ().trimmed ();
+    QStringList const args = (cmd.size () > 1)
+        ? cmd.last ().split (SmCM, Qt::KeepEmptyParts)
+        : QStringList {};
+    auto const arg = [&args] (int index) -> QString { return args.value (index).trimmed (); };
+    Tci_Cmd idCmd = mapCmd_.value (command_name, Cmd_Unknown);
     if (idCmd != Cmd_Power && idCmd != Cmd_SWR && idCmd != Cmd_Smeter && idCmd != Cmd_AppFocus && idCmd != Cmd_RxSensors && idCmd != Cmd_TxSensors) { printf("%s TCI message received:|%s| ",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),str.toStdString().c_str()); printf("idCmd : %d args : %s\n",idCmd,args.join("|").toStdString().c_str());}
     qDebug() << cmds << idCmd;
     if (idCmd <=0) continue;
 
     switch (idCmd) {
       case Cmd_Smeter:
-        if(args.at(0)==rx_ && args.at(1) == "0") level_ = args.at(2).toInt() + 73;
+        if(arg (0) == rx_ && arg (1) == "0") level_ = arg (2).toInt() + 73;
         break;
       case Cmd_RxSensors:
-        if(args.at(0)==rx_) level_ = args.at(1).split(".")[0].toInt() + 73;
+        if(arg (0) == rx_) level_ = arg (1).split ('.', Qt::KeepEmptyParts).value (0).toInt () + 73;
         printf("Smeter=%d\n",level_);
         break;
       case Cmd_TxSensors:
-        if(args.at(0)==rx_) {
-          power_ = 10 * args.at(3).split(".")[0].toInt() + args.at(3).split(".")[1].toInt();
-          swr_ = 10 * args.at(4).split(".")[0].toInt() + args.at(4).split(".")[1].toInt();
+        if(arg (0) == rx_) {
+          int parsed = 0;
+          if (parse_decimal_tenths (arg (3), &parsed))
+            {
+              power_ = parsed;
+            }
+          if (parse_decimal_tenths (arg (4), &parsed))
+            {
+              swr_ = parsed;
+            }
           printf("Power=%d SWR=%d\n",power_,swr_);
         }
         break;
       case Cmd_SWR:
         printf("%s Cmd_SWR : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        swr_ = 10 * args.at(0).split(".")[0].toInt() + args.at(0).split(".")[1].toInt();
+        {
+          int parsed = 0;
+          if (parse_decimal_tenths (arg (0), &parsed))
+            {
+              swr_ = parsed;
+            }
+        }
         break;
       case Cmd_Power:
-        power_ = 10 * args.at(0).split(".")[0].toInt() + args.at(0).split(".")[1].toInt();
+        {
+          int parsed = 0;
+          if (parse_decimal_tenths (arg (0), &parsed))
+            {
+              power_ = parsed;
+            }
+        }
         printf("%s Cmd_Power : %s %d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str(),power_);
         break;
       case Cmd_VFO:
         printf("%s Cmd_VFO : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        printf("band_change:%d busy_other_frequency_:%d timer1_remaining:%d timer2_remaining:%d",band_change,busy_other_frequency_,tci_timer7_->remainingTime(),tci_timer2_->remainingTime()); //was timer1 and timer2
-        if(args.at(0)==rx_ && args.at(1) == "0") {
-          if (args.at(2).left(1) != "-") rx_frequency_ = args.at(2);
+        printf("band_change:%d busy_other_frequency_:%d timer1_remaining:%d timer2_remaining:%d",band_change,busy_other_frequency_,tci_timer7_ ? tci_timer7_->remainingTime() : -1,tci_timer2_ ? tci_timer2_->remainingTime() : -1); //was timer1 and timer2
+        if(arg (0) == rx_ && arg (1) == "0") {
+          if (arg (2).left(1) != "-") rx_frequency_ = arg (2);
           CAT_TRACE("Rx VFO Frequency from SDR is :");
           CAT_TRACE(rx_frequency_);
           if (!tci_Ready && requested_rx_frequency_.isEmpty()) requested_rx_frequency_ = rx_frequency_;
           if (busy_rx_frequency_ && !band_change) {
             printf (" cmdvfo0 done1");
             tci_done7(); //was tci_done1 (do_frequency)
-          } else if (!tci_timer2_->isActive() && split_) {
+          } else if (tci_timer2_ && !tci_timer2_->isActive() && split_) {
             printf (" cmdvfo0 timer2 start 210");
             tci_timer2_->start(210);
           }
         }
-        else if (args.at(0)==rx_ && args.at(1) == "1") {
-          if (args.at(2).left(1) != "-") other_frequency_ = args.at(2);
+        else if (arg (0) == rx_ && arg (1) == "1") {
+          if (arg (2).left(1) != "-") other_frequency_ = arg (2);
           CAT_TRACE("Tx VFO (other) Frequency from SDR is :");
           CAT_TRACE(other_frequency_);
           if (!tci_Ready && requested_other_frequency_.isEmpty()) requested_other_frequency_ = other_frequency_;
-          if (band_change && tci_timer7_->isActive()) { //was tci_timer1
+          if (band_change && tci_timer7_ && tci_timer7_->isActive()) { //was tci_timer1
             printf (" cmdvfo1 done1");
             band_change = false;
-            tci_timer2_->start(210);
+            if (tci_timer2_) tci_timer2_->start(210);
             tci_done7(); //was tci_done1 (do_frequency)
           } else if (busy_other_frequency_) {
             printf (" cmdvfo1 done2");
             tci_done2();
-          } else if (tci_timer2_->isActive()) {
+          } else if (tci_timer2_ && tci_timer2_->isActive()) {
             printf (" cmdvfo1 timer2 reset 210");
             tci_timer2_->start(210);
-          } else if (other_frequency_ != requested_other_frequency_ && tci_Ready && split_ && !tci_timer2_->isActive()) {
+          } else if (tci_timer2_ && other_frequency_ != requested_other_frequency_ && tci_Ready && split_ && !tci_timer2_->isActive()) {
             printf (" cmdvfo1 timer2 start 210");
             tci_timer2_->start(210);
           }
@@ -641,10 +727,10 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_Mode:
         printf("%s Cmd_Mode : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)==rx_) {
+        if(arg (0) == rx_) {
           if (ESDR3 || HPSDR) {
-            if (args.at(1) == "0" ) mode_ = args.at(2).toLower(); else mode_ = args.at(1).toLower();
-          } else mode_ = args.at(1);
+            if (arg (1) == "0" ) mode_ = arg (2).toLower(); else mode_ = arg (1).toLower();
+          } else mode_ = arg (1);
           if (started_mode_.isEmpty()) started_mode_ = mode_;
           if (busy_mode_) return; // was tci_done1();
           else if (!requested_mode_.isEmpty() && requested_mode_ != mode_ && !band_change) {
@@ -654,12 +740,12 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_SplitEnable:
         printf("%s Cmd_SplitEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)==rx_) {
-          if (args.at(1) == "false") split_ = false;
-          else if (args.at(1) == "true") split_ = true;
+        if(arg (0) == rx_) {
+          if (arg (1) == "false") split_ = false;
+          else if (arg (1) == "true") split_ = true;
           if (!tci_Ready) {started_split_ = split_;}
           else if (busy_split_) tci_done5();  //was tci_done2
-          else if (requested_split_ != split_ && !tci_timer5_->isActive()) { //was tci_timer2
+          else if (tci_timer5_ && requested_split_ != split_ && !tci_timer5_->isActive()) { //was tci_timer2
               CAT_TRACE("tci_timer5 started in onMessageReceived-Cmd_SplitEnable");
             tci_timer5_->start(210);  //was tci_timer2
             rig_split();
@@ -668,8 +754,8 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_Drive:
         printf("%s Cmd_Drive : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if((!ESDR3 && !HPSDR) || args.at(0)==rx_) {
-          if (ESDR3 || HPSDR) drive_ = args.at(1); else drive_ = args.at(0);
+        if((!ESDR3 && !HPSDR) || arg (0) == rx_) {
+          if (ESDR3 || HPSDR) drive_ = arg (1); else drive_ = arg (0);
           if (requested_drive_.isEmpty()) requested_drive_ = drive_;
           busy_drive_ = false;
         }
@@ -678,9 +764,9 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_Trx:
         printf("%s Cmd_Trx : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)==rx_) {
-          if (args.at(1) == "false") PTT_ = false;
-          else if (args.at(1) == "true") PTT_ = true;
+        if(arg (0) == rx_) {
+          if (arg (1) == "false") PTT_ = false;
+          else if (arg (1) == "true") PTT_ = true;
           if (tci_Ready && requested_PTT_ == PTT_) tci_done3();
           else if (tci_Ready && !PTT_) {
             requested_PTT_ = PTT_;
@@ -692,7 +778,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_AudioStart:
         printf("%s Cmd_AudioStart : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)==rx_) {
+        if(arg (0) == rx_) {
           stream_audio_ = true;
           if (tci_Ready) {
             printf ("cmdaudiostart done1\n");
@@ -702,9 +788,9 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_RxEnable:
         printf("%s Cmd_RxEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)=="1") {
-          if (args.at(1) == "false") rx2_ = false;
-          else if (args.at(1) == "true") rx2_ = true;
+        if(arg (0) == "1") {
+          if (arg (1) == "false") rx2_ = false;
+          else if (arg (1) == "true") rx2_ = true;
           if(!tci_Ready) {requested_rx2_ = rx2_; started_rx2_ = rx2_;}
           else if (tci_Ready && busy_rx2_ && requested_rx2_ == rx2_) {
             tci_done4();
@@ -713,7 +799,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_AudioStop:
         printf("%s CmdAudioStop : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)==rx_) {
+        if(arg (0) == rx_) {
           stream_audio_ = false;
           if (tci_Ready) {
             printf ("cmdaudiostop done1\n");
@@ -741,7 +827,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
           Q_EMIT tci_mod_active(m_state != Idle);
         }
         _power_ = false;
-        if (tci_timer1_->isActive()) {  //was tci_timer1
+        if (tci_timer1_ && tci_timer1_->isActive()) {  //was tci_timer1
           printf ("cmdstop done1\n");
           tci_done1();
         } else {
@@ -750,12 +836,12 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_Version:
         printf("%s CmdVersion : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(args.at(0)=="ExpertSDR3") ESDR3 = true;
-        else if (args.at(0)=="Thetis") HPSDR = true;
+        if(arg (0) == "ExpertSDR3") ESDR3 = true;
+        else if (arg (0) == "Thetis") HPSDR = true;
         break;
       case Cmd_Device:
         printf("%s CmdDevice : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if((args.at(0)=="SunSDR2DX" || args.at(0)=="SunSDR2PRO") && !ESDR3) tx_top_ = false;
+        if((arg (0) == "SunSDR2DX" || arg (0) == "SunSDR2PRO") && !ESDR3) tx_top_ = false;
         printf ("tx_top_:%d\n",tx_top_);
         break;
       case Cmd_Ready:

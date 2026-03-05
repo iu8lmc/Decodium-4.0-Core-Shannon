@@ -1,13 +1,13 @@
-# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.3.7
+# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.3.8
 
 English, Italian, and Spanish documentation for this fork is included in this repository.
 
 ## English
 
-Fork release `v1.3.7` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor` and adds macOS-focused operational hardening.
+Fork release `v1.3.8` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor` and adds macOS-focused operational hardening.
 
 - Upstream base: Decodium v3.0 SE "Raptor"
-- Fork release: `v1.3.7`
+- Fork release: `v1.3.8`
 - App bundle/executable on macOS: `ft2.app` / `ft2`
 - License: GPLv3
 
@@ -60,6 +60,12 @@ Fork release `v1.3.7` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor`
   - Fixed cross-thread Qt signal delivery for `ModulatorState` with explicit metatype registration.
   - Set default Qt style to `Fusion` for more consistent rendering across macOS variants.
   - Removed hardcoded legacy revision suffix source so PSKReporter `Using:` no longer appends `mod by IU8LMC...`.
+- Fork `v1.3.8` CAT/network/map updates (from `v1.3.7`):
+  - CAT/remote Configure hardening: generic Configure packets no longer force FT2 mode.
+  - UDP control hardening: control commands now require direct target id matching.
+  - Added optional greyline toggle in `Settings -> General` for world map day/night overlay.
+  - Added distance badge on active world-map path (km/mi based on current unit setting).
+  - Refined compact top-controls layout with DX-ped button alignment improvements.
 
 ### Build (macOS)
 
@@ -89,12 +95,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ### Documentation
 
-- Release notes (EN/IT/ES): [RELEASE_NOTES_v1.3.7.md](RELEASE_NOTES_v1.3.7.md)
+- Release notes (EN/IT/ES): [RELEASE_NOTES_v1.3.8.md](RELEASE_NOTES_v1.3.8.md)
 - Changelog (EN/IT/ES for latest release): [CHANGELOG.md](CHANGELOG.md)
 - Security and bug analysis report: [doc/SECURITY_BUG_ANALYSIS_REPORT.md](doc/SECURITY_BUG_ANALYSIS_REPORT.md)
 - macOS porting details (EN/IT): [doc/MACOS_PORTING_v1.2.0.md](doc/MACOS_PORTING_v1.2.0.md)
 - DT/NTP architecture (EN/IT): [doc/DT_NTP_ROBUST_SYNC_v1.2.0.md](doc/DT_NTP_ROBUST_SYNC_v1.2.0.md)
-- GitHub release body template (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.3.7.md](doc/GITHUB_RELEASE_BODY_v1.3.7.md)
+- GitHub release body template (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.3.8.md](doc/GITHUB_RELEASE_BODY_v1.3.8.md)
 
 ### CI release targets
 
@@ -103,6 +109,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 - Apple Intel Sequoia
 - Apple Intel Monterey (experimental / best effort)
 - Linux x86_64 AppImage
+
+### Hamlib version in release builds
+
+- macOS CI now runs `brew update` + `brew upgrade hamlib` before packaging.
+- Linux CI now builds Hamlib from the latest official GitHub release and installs it under `/usr/local` before compiling `ft2`.
+- Each workflow prints the effective Hamlib version in logs (`rigctl --version`, `pkg-config --modversion hamlib`) so release provenance is explicit.
 
 ## Espanol
 
@@ -123,12 +135,23 @@ Tambien esta disponible un resumen en espanol:
   - ALSA/PulseAudio/PipeWire audio stack available
 - Radio integration: CAT/audio interface hardware as required by station setup
 
+### Linux AppImage launch recommendation
+
+To avoid issues caused by AppImage read-only filesystem mode, run:
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
+
 ## Italiano
 
-La release fork `v1.3.7` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e aggiunge hardening operativo specifico per macOS.
+La release fork `v1.3.8` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e aggiunge hardening operativo specifico per macOS.
 
 - Base upstream: Decodium v3.0 SE "Raptor"
-- Versione fork: `v1.3.7`
+- Versione fork: `v1.3.8`
 - Bundle/eseguibile su macOS: `ft2.app` / `ft2`
 - Licenza: GPLv3
 
@@ -181,6 +204,12 @@ La release fork `v1.3.7` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e ag
   - Corretto delivery segnali cross-thread `ModulatorState` con registrazione metatype esplicita.
   - Impostato stile Qt predefinito `Fusion` per rendering piu' coerente tra varianti macOS.
   - Rimossa sorgente hardcoded del suffisso revision legacy: PSKReporter `Using:` non appende piu' `mod by IU8LMC...`.
+- Aggiornamenti CAT/rete/mappa fork `v1.3.8` (da `v1.3.7`):
+  - Hardening CAT/Configure remoto: pacchetti Configure generici non forzano piu' FT2.
+  - Hardening UDP controllo: i comandi di controllo richiedono target id diretto.
+  - Aggiunto toggle opzionale greyline in `Settings -> General`.
+  - Aggiunto badge distanza sul path mappa attivo (km/mi in base all'unita' configurata).
+  - Rifinito il layout controlli top compatti con allineamento pulsante DX-ped.
 
 ### Compilazione (macOS)
 
@@ -210,12 +239,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ### Documentazione
 
-- Note di rilascio (EN/IT/ES): [RELEASE_NOTES_v1.3.7.md](RELEASE_NOTES_v1.3.7.md)
+- Note di rilascio (EN/IT/ES): [RELEASE_NOTES_v1.3.8.md](RELEASE_NOTES_v1.3.8.md)
 - Changelog (EN/IT/ES per release attuale): [CHANGELOG.md](CHANGELOG.md)
 - Report analisi sicurezza e bug: [doc/SECURITY_BUG_ANALYSIS_REPORT.md](doc/SECURITY_BUG_ANALYSIS_REPORT.md)
 - Porting macOS (EN/IT): [doc/MACOS_PORTING_v1.2.0.md](doc/MACOS_PORTING_v1.2.0.md)
 - Architettura DT/NTP (EN/IT): [doc/DT_NTP_ROBUST_SYNC_v1.2.0.md](doc/DT_NTP_ROBUST_SYNC_v1.2.0.md)
-- Template release GitHub (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.3.7.md](doc/GITHUB_RELEASE_BODY_v1.3.7.md)
+- Template release GitHub (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.3.8.md](doc/GITHUB_RELEASE_BODY_v1.3.8.md)
 
 ### Target CI release
 
@@ -224,6 +253,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 - Apple Intel Sequoia
 - Apple Intel Monterey (sperimentale / best effort)
 - Linux x86_64 AppImage
+
+### Versione Hamlib nelle build release
+
+- La CI macOS esegue ora `brew update` + `brew upgrade hamlib` prima del packaging.
+- La CI Linux compila Hamlib dall'ultima release ufficiale GitHub e la installa in `/usr/local` prima della compilazione di `ft2`.
+- Ogni workflow stampa nei log la versione Hamlib effettiva (`rigctl --version`, `pkg-config --modversion hamlib`) per rendere tracciabile la provenienza della release.
 
 ### Requisiti minimi Linux
 
@@ -236,6 +271,17 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
   - supporto `FUSE 2` (`libfuse2`) o launcher/runtime compatibile AppImage
   - stack audio ALSA/PulseAudio/PipeWire disponibile
 - Integrazione radio: hardware CAT/interfaccia audio secondo setup stazione
+
+### Avvio consigliato AppImage su Linux
+
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, eseguire:
+
+```bash
+chmod +x /path/to/Decodium.AppImage
+/path/to/Decodium.AppImage --appimage-extract
+cd squashfs-root
+./AppRun
+```
 
 ## Credits
 

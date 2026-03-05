@@ -1,5 +1,6 @@
 #include "echograph.h"
 #include "commons.h"
+#include "WindowGeometryUtils.hpp"
 #include <QSettings>
 #include <QApplication>
 #include <QDebug>
@@ -24,7 +25,7 @@ EchoGraph::EchoGraph(QSettings * settings, QWidget *parent) :
 
 //Restore user's settings
   m_settings->beginGroup("EchoGraph");
-  restoreGeometry (m_settings->value ("geometry", saveGeometry ()).toByteArray ());
+  WindowGeometryUtils::restore_window_geometry (this, m_settings->value ("geometry", saveGeometry ()).toByteArray ());
   ui->echoPlot->setPlotZero(m_settings->value("PlotZero", 0).toInt());
   ui->echoPlot->setPlotGain(m_settings->value("PlotGain", 0).toInt());
   ui->zeroSlider->setValue(ui->echoPlot->getPlotZero());

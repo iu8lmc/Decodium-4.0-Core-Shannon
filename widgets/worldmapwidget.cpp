@@ -30,6 +30,7 @@ int const kRoleDowngradeHoldSeconds = 75;
 int const kPostTxQueueMs = 10 * 1000;
 int const kPostTxQueueMaxVisible = 6;
 int const kClickHighlightMs = 1600;
+double constexpr kEarthRadiusKm = 6371.0;
 
 qint64 monotonicNowMs()
 {
@@ -79,6 +80,82 @@ int rolePriority(WorldMapWidget::PathRole role)
       return 0;
     }
   return 0;
+}
+
+double greatCircleDistanceKm(QPointF const& aLonLat, QPointF const& bLonLat)
+{
+  double const lat1 = qDegreesToRadians(aLonLat.y());
+  double const lat2 = qDegreesToRadians(bLonLat.y());
+  double const dLat = lat2 - lat1;
+  double const dLon = qDegreesToRadians(bLonLat.x() - aLonLat.x());
+
+  double const sLat = std::sin(dLat * 0.5);
+  double const sLon = std::sin(dLon * 0.5);
+  double h = sLat * sLat + std::cos(lat1) * std::cos(lat2) * sLon * sLon;
+  h = qBound(0.0, h, 1.0);
+  double const c = 2.0 * std::atan2(std::sqrt(h), std::sqrt(1.0 - h));
+  return kEarthRadiusKm * c;
+}
+
+QPointF projectedPathMidpoint(QVector<QPointF> const& projected, QRectF const& bounds)
+{
+  if (projected.size() < 2)
+    {
+      return projected.isEmpty() ? QPointF {} : projected.first();
+    }
+
+  struct Segment
+  {
+    QPointF a;
+    QPointF b;
+    qreal length {0.0};
+  };
+
+  QVector<Segment> segments;
+  segments.reserve(projected.size() - 1);
+  qreal totalLength = 0.0;
+  for (int i = 0; i < projected.size() - 1; ++i)
+    {
+      QPointF const a = projected[i];
+      QPointF const b = projected[i + 1];
+      qreal len = QLineF {a, b}.length();
+      if (len <= 1.0 || qAbs(a.x() - b.x()) >= bounds.width() * 0.42)
+        {
+          continue;
+        }
+      Segment s;
+      s.a = a;
+      s.b = b;
+      s.length = len;
+      segments.push_back(s);
+      totalLength += len;
+    }
+
+  if (totalLength <= 0.0 || segments.isEmpty())
+    {
+      return projected.at(projected.size() / 2);
+    }
+
+  qreal targetDistance = totalLength * 0.5;
+  qreal walked = 0.0;
+  for (auto const& s : segments)
+    {
+      if (walked + s.length >= targetDistance)
+        {
+          qreal t = (targetDistance - walked) / s.length;
+          return s.a + (s.b - s.a) * t;
+        }
+      walked += s.length;
+    }
+
+  return segments.last().b;
+}
+
+QString formatDistanceLabel(double distanceKm, bool miles)
+{
+  double const value = miles ? distanceKm * 0.621371192 : distanceKm;
+  int const rounded = qMax(0, qRound(value));
+  return QStringLiteral("%1 %2").arg(rounded).arg(miles ? QStringLiteral("mi") : QStringLiteral("km"));
 }
 }
 
@@ -135,6 +212,28 @@ void WorldMapWidget::setHomeGrid(QString const& grid)
       m_hasHome = false;
     }
   updateViewportTargets();
+  update();
+}
+
+void WorldMapWidget::setGreylineEnabled(bool enabled)
+{
+  if (m_greylineEnabled == enabled)
+    {
+      return;
+    }
+
+  m_greylineEnabled = enabled;
+  update();
+}
+
+void WorldMapWidget::setDistanceInMiles(bool enabled)
+{
+  if (m_distanceInMiles == enabled)
+    {
+      return;
+    }
+
+  m_distanceInMiles = enabled;
   update();
 }
 
@@ -915,6 +1014,11 @@ void WorldMapWidget::drawGrid(QPainter * painter, QRectF const& bounds) const
 
 void WorldMapWidget::drawDayNightMask(QPainter * painter, QRectF const& bounds) const
 {
+  if (!m_greylineEnabled)
+    {
+      return;
+    }
+
   auto now = QDateTime::currentDateTimeUtc();
   auto t = now.time();
   double utcHours = t.hour() + (t.minute() / 60.0) + (t.second() / 3600.0);
@@ -1136,6 +1240,18 @@ void WorldMapWidget::drawContact(QPainter * painter, QRectF const& bounds, Conta
       previous = p;
     }
 
+  auto normalizeCall = [] (QString call) {
+    call = call.trimmed().toUpper();
+    call.remove('<');
+    call.remove('>');
+    return call;
+  };
+  qint64 nowMs = monotonicNowMs();
+  bool clickedActive = !m_lastClickedCall.isEmpty()
+    && m_lastClickedUntilMs > nowMs
+    && normalizeCall(contact.call) == m_lastClickedCall;
+  bool txActive = (forcedProgress >= 0.0);
+
   QLinearGradient grad {source, destination};
   grad.setColorAt(0.0, txColor);
   grad.setColorAt(1.0, rxColor);
@@ -1154,14 +1270,42 @@ void WorldMapWidget::drawContact(QPainter * painter, QRectF const& bounds, Conta
   painter->setBrush(rxColor);
   painter->drawEllipse(destination, 2.6, 2.6);
 
+  if (contact.role != PathRole::BandOnly && (txActive || clickedActive))
+    {
+      double const distanceKm = greatCircleDistanceKm(contact.sourceLonLat, contact.destinationLonLat);
+      QString const distanceText = formatDistanceLabel(distanceKm, m_distanceInMiles);
+      QPointF anchor = projectedPathMidpoint(projected, bounds);
+
+      painter->save();
+      QFont distanceFont = painter->font();
+      if (distanceFont.pixelSize() > 0)
+        {
+          distanceFont.setPixelSize(qMax(9, distanceFont.pixelSize() - 1));
+        }
+      else if (distanceFont.pointSizeF() > 0.0)
+        {
+          distanceFont.setPointSizeF(qMax(8.0, distanceFont.pointSizeF() - 0.5));
+        }
+      painter->setFont(distanceFont);
+
+      QFontMetricsF fm {distanceFont};
+      qreal const padX = 6.0;
+      qreal const width = fm.horizontalAdvance(distanceText) + padX * 2.0;
+      qreal const height = fm.height() + 2.0;
+      QRectF badge {anchor.x() - width * 0.5, anchor.y() - height * 0.5, width, height};
+      badge.moveLeft(qBound(bounds.left() + 2.0, badge.left(), bounds.right() - badge.width() - 2.0));
+      badge.moveTop(qBound(bounds.top() + 2.0, badge.top(), bounds.bottom() - badge.height() - 2.0));
+
+      QColor bg = txActive ? QColor(21, 64, 39, 205) : QColor(9, 28, 58, 198);
+      painter->setBrush(bg);
+      painter->setPen(QPen(QColor(240, 232, 168, 220), 1.0));
+      painter->drawRoundedRect(badge, 4.0, 4.0);
+      painter->setPen(QColor(245, 248, 235, 240));
+      painter->drawText(badge, Qt::AlignCenter, distanceText);
+      painter->restore();
+    }
+
   // Brief visual feedback for the selected marker.
-  auto normalizeCall = [] (QString call) {
-    call = call.trimmed().toUpper();
-    call.remove('<');
-    call.remove('>');
-    return call;
-  };
-  qint64 nowMs = monotonicNowMs();
   if (!m_lastClickedCall.isEmpty() && m_lastClickedUntilMs > nowMs
       && normalizeCall(contact.call) == m_lastClickedCall)
     {

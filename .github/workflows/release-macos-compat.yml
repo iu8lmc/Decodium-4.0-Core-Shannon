@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. v1.3.7)"
+        description: "Release version (e.g. v1.3.8)"
         required: true
-        default: "v1.3.7"
+        default: "v1.3.8"
       publish_release:
         description: "Publish GitHub release"
         required: true
@@ -56,9 +56,6 @@ jobs:
             compat_macos: "12.0"
             asset_suffix: "macos-monterey-x86_64"
             experimental: true
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -78,7 +75,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          brew update
+          brew upgrade hamlib || true
           brew install qt@5 gcc fftw hamlib libusb boost pkg-config
+          brew list --versions hamlib || true
+          rigctl --version || true
 
           GCC_PREFIX="$(brew --prefix gcc)"
           GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
@@ -174,14 +175,12 @@ jobs:
             echo
             echo "## English (UK)"
             echo "This release includes:"
-            echo "- Interactive world-map contact click handling with DX call/grid transfer."
-            echo "- Configurable map click behavior (single-click can start TX if enabled)."
-            echo "- New Ionospheric Forecast and DX Cluster windows in View menu."
-            echo "- Improved world-map day/night rendering and stale path cleanup."
-            echo "- Improved compact/two-row top controls behavior for small displays."
-            echo "- Decode startup timing fix (sequence timestamp set before decode)."
-            echo "- ModulatorState queued signal robustness via explicit Qt metatype registration."
-            echo "- Legacy hardcoded revision suffix removed (clean PSKReporter Using: branding)."
+            echo "- CAT/remote Configure hardening: mode is no longer forced to FT2 when external controllers send generic Configure packets."
+            echo "- UDP control hardening: control messages now require direct target id (no ALLCALL/BROADCAST wildcard control)."
+            echo "- Optional greyline toggle in Settings -> General (disabled = always daylight map rendering)."
+            echo "- Active map path now shows distance badge in km/mi based on configured units."
+            echo "- DX-ped button/top controls layout refinements for compact screens."
+            echo "- Interactive map + DX Cluster + Ionospheric Forecast workflow from previous releases retained."
             echo "- Existing mmap shared-memory release flow retained (no .pkg required)."
             echo "- Apple Silicon build for macOS Tahoe."
             echo "- Apple Silicon build for macOS Sequoia."
@@ -197,18 +196,22 @@ jobs:
             echo "If the app does not start on macOS, run from Terminal:"
             echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
             echo
+            echo "Linux AppImage recommendation (avoid read-only FS issues):"
+            echo "\`chmod +x /path/to/Decodium.AppImage\`"
+            echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
+            echo "\`cd squashfs-root\`"
+            echo "\`./AppRun\`"
+            echo
             echo "Refer to \`CHANGELOG.md\` for full details."
             echo
             echo "## Italiano"
             echo "Questa release include:"
-            echo "- Gestione click contatti su mappa con trasferimento nominativo/griglia DX."
-            echo "- Comportamento click mappa configurabile (single-click puo' avviare TX)."
-            echo "- Nuove finestre Ionospheric Forecast e DX Cluster nel menu View."
-            echo "- Migliorato rendering giorno/notte mappa e pulizia linee stale."
-            echo "- Migliorata gestione controlli top compatti/2 righe su schermi piccoli."
-            echo "- Fix timing startup decode (timestamp sequenza impostato prima del decode)."
-            echo "- Robustezza segnali queued ModulatorState con metatype Qt esplicito."
-            echo "- Rimossa sorgente hardcoded del suffisso legacy revision (Using: PSKReporter pulito)."
+            echo "- Hardening CAT/Configure remoto: la modalita' non viene piu' forzata a FT2 con pacchetti Configure generici."
+            echo "- Hardening controllo UDP: i messaggi di controllo richiedono target id diretto (niente ALLCALL/BROADCAST/wildcard)."
+            echo "- Toggle greyline opzionale in Settings -> General (disattivo = mappa sempre illuminata)."
+            echo "- Badge distanza sul path mappa attivo in km/mi in base all'unita' configurata."
+            echo "- Rifinitura layout controlli top e pulsante DX-ped su schermi compatti."
+            echo "- Workflow mappa interattiva + DX Cluster + Ionospheric Forecast delle versioni precedenti mantenuto."
             echo "- Flusso shared-memory macOS su mmap confermato (nessun .pkg richiesto)."
             echo "- Build Apple Silicon per macOS Tahoe."
             echo "- Build Apple Silicon per macOS Sequoia."
@@ -224,18 +227,22 @@ jobs:
             echo "Se l'app non si avvia su macOS, esegui da Terminale:"
             echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
             echo
+            echo "Consiglio Linux AppImage (evitare problemi FS sola lettura):"
+            echo "\`chmod +x /path/to/Decodium.AppImage\`"
+            echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
+            echo "\`cd squashfs-root\`"
+            echo "\`./AppRun\`"
+            echo
             echo "Per i dettagli completi, vedi \`CHANGELOG.md\`."
             echo
             echo "## Espanol"
             echo "Esta release incluye:"
-            echo "- Click interactivo en mapa con transferencia de indicativo/cuadricula DX."
-            echo "- Comportamiento de click en mapa configurable (click simple puede iniciar TX)."
-            echo "- Nuevas ventanas Ionospheric Forecast y DX Cluster en el menu View."
-            echo "- Render dia/noche del mapa mejorado y limpieza de rutas stale."
-            echo "- Mejoras de controles superiores compactos/2 filas en pantallas pequenas."
-            echo "- Fix de timing decode al arranque (timestamp de secuencia antes del decode)."
-            echo "- Robustez de senales queued ModulatorState con metatype Qt explicito."
-            echo "- Eliminada fuente hardcoded del sufijo legacy de revision (Using: PSKReporter limpio)."
+            echo "- Hardening CAT/Configure remoto: el modo ya no queda forzado en FT2 con Configure generico."
+            echo "- Hardening de control UDP: los mensajes de control exigen target id directo (sin ALLCALL/BROADCAST/comodin)."
+            echo "- Opcion greyline en Settings -> General (desactivada = mapa siempre iluminado)."
+            echo "- Distancia sobre la ruta activa del mapa en km/mi segun unidad configurada."
+            echo "- Ajustes de layout de controles superiores y boton DX-ped en pantallas pequenas."
+            echo "- Se mantiene el flujo de mapa interactivo + DX Cluster + Ionospheric Forecast de versiones previas."
             echo "- Flujo mmap compartido en macOS confirmado (no se requiere .pkg)."
             echo
             echo "Requisitos minimos Linux:"
@@ -245,6 +252,12 @@ jobs:
             echo
             echo "Si la app no inicia en macOS, ejecutar:"
             echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
+            echo
+            echo "Recomendacion Linux AppImage (evitar problemas de FS solo lectura):"
+            echo "\`chmod +x /path/to/Decodium.AppImage\`"
+            echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
+            echo "\`cd squashfs-root\`"
+            echo "\`./AppRun\`"
             echo
             echo "Para detalles completos, ver \`CHANGELOG.md\`."
           } > "${NOTES_FILE}"

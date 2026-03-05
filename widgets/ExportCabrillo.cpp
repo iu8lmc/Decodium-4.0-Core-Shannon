@@ -8,6 +8,7 @@
 #include "SettingsGroup.hpp"
 #include "Configuration.hpp"
 #include "MessageBox.hpp"
+#include "WindowGeometryUtils.hpp"
 #include "models/CabrilloLog.hpp"
 
 #include "ui_ExportCabrillo.h"
@@ -35,7 +36,7 @@ ExportCabrillo::~ExportCabrillo ()
 void ExportCabrillo::read_settings ()
 {
   SettingsGroup group {settings_, "ExportCabrillo"};
-  restoreGeometry (settings_->value("window/geometry").toByteArray());
+  WindowGeometryUtils::restore_window_geometry (this, settings_->value("window/geometry").toByteArray());
   ui->location_line_edit->setText(settings_->value("Location").toString());
   ui->contest_line_edit->setText(settings_->value("Contest").toString());
   ui->call_line_edit->setText(settings_->value("Callsign").toString());
