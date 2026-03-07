@@ -2168,6 +2168,16 @@ When not checked you can view the calibration results.</string>
                      </widget>
                     </item>
                     <item>
+                     <widget class="QCheckBox" name="cbAsyncDecode">
+                      <property name="toolTip">
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Decoder asincrono FT2: decodifica continua a finestra scorrevole (~1.5s). I segnali vengono decodificati indipendentemente dai bordi periodo.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                      </property>
+                      <property name="text">
+                       <string>Async</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
                      <widget class="QStackedWidget" name="opt_controls_stack">
                       <property name="currentIndex">
                        <number>1</number>

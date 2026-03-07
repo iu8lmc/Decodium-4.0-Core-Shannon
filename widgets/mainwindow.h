@@ -211,6 +211,8 @@ private slots:
   void on_houndButton_clicked(bool checked);
   void on_cbHoldTxFreq_clicked (bool);
   void on_cbDualCarrier_toggled (bool checked);
+  void on_cbAsyncDecode_toggled (bool checked);
+  void asyncDecodeDone ();
   void on_ft8Button_clicked();
   void on_ft4Button_clicked();
   void on_ft2Button_clicked();
@@ -892,6 +894,14 @@ private:
   QFuture<void> m_wav_future;
   QFutureWatcher<void> m_wav_future_watcher;
   QFutureWatcher<void> watcher3;
+  QFutureWatcher<void> m_asyncDecodeWatcher;
+  QTimer m_asyncDecodeTimer;
+  short int m_asyncAudio[90000];     // ring buffer ~7.5s at 12kHz
+  int m_asyncAudioPos {0};           // write position in ring buffer
+  bool m_bAsyncDecoding {false};     // async decode in progress
+  char m_asyncMsg[100][80];          // async decode results
+  QSet<QString> m_asyncDedupeSet;    // deduplication within sliding window
+  QDateTime m_asyncDedupeLastCleared;
   QFutureWatcher<QString> m_saveWAVWatcher;
 
   NonInheritingProcess proc_jt9;

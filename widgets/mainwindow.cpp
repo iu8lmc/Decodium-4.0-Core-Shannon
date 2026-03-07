@@ -200,6 +200,12 @@ extern "C" {
                     fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
   void degrade_snr_(short d2[], int* n, float* db, float* bandwidth);
 
+  void ft2_async_decode_(short iwave[], int* nqsoprogress, int* nfqso,
+                         int* nfa, int* nfb, int* ndepth, int* ncontest,
+                         char mycall[], char hiscall[],
+                         char outlines[], int* nout,
+                         fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
+
   void wav12_(short d2[], short d1[], int* nbytes, short* nbitsam2);
 
   void refspectrum_(short int d2[], bool* bclearrefspec,
@@ -1374,6 +1380,46 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (&m_wav_future_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::diskDat);
 
   connect(&watcher3, SIGNAL(finished()),this,SLOT(fast_decode_done()));
+  connect(&m_asyncDecodeWatcher, &QFutureWatcher<void>::finished, this, &MainWindow::asyncDecodeDone);
+  connect(&m_asyncDecodeTimer, &QTimer::timeout, this, [this]() {
+    if (m_mode != "FT2" || !ui->cbAsyncDecode->isChecked()) return;
+    if (m_bAsyncDecoding) return;  // previous decode still running
+    if (m_asyncAudioPos < 45000) return;  // not enough audio yet
+
+    // Extract last 45000 samples from ring buffer
+    static short int asyncBuf[45000];
+    int pos = m_asyncAudioPos;
+    int start = (pos - 45000 + 90000) % 90000;
+    for (int i = 0; i < 45000; i++) {
+      asyncBuf[i] = m_asyncAudio[(start + i) % 90000];
+    }
+
+    // Clear dedup set every 10 seconds
+    auto now = QDateTime::currentDateTimeUtc();
+    if (m_asyncDedupeLastCleared.isNull() || m_asyncDedupeLastCleared.secsTo(now) > 10) {
+      m_asyncDedupeSet.clear();
+      m_asyncDedupeLastCleared = now;
+    }
+
+    // Set up decode parameters
+    int nqsoprogress = m_QSOProgress;
+    int nfqso = m_wideGraph->rxFreq();
+    int nfa = m_wideGraph->nStartFreq();
+    int nfb = m_wideGraph->Fmax();
+    int ndepth = m_ndepth;
+    int ncontest = int(m_specOp);
+    m_asyncMsg[0][0] = 0;
+    m_bAsyncDecoding = true;
+
+    m_asyncDecodeWatcher.setFuture(QtConcurrent::run([=]() mutable {
+      int nout = 0;
+      ft2_async_decode_(asyncBuf, &nqsoprogress, &nfqso, &nfa, &nfb,
+                        &ndepth, &ncontest,
+                        dec_data.params.mycall, dec_data.params.hiscall,
+                        &m_asyncMsg[0][0], &nout,
+                        (FCL)12, (FCL)12, (FCL)(100*80));
+    }));
+  });
   
   m_tci = m_config.is_tci();
   m_tci_audio = (m_config.tci_audio() && m_config.is_tci());
@@ -2501,6 +2547,17 @@ void MainWindow::dataSink(qint64 frames)
   static float s[NSMAX];
   char line[80];
   int k(frames);
+
+  // Async FT2: fill ring buffer with latest audio
+  if (m_mode == "FT2" && ui->cbAsyncDecode->isChecked() && k > 0) {
+    int nsamples = qMin(k, 90000);
+    int src_start = qMax(0, k - nsamples);
+    for (int i = 0; i < nsamples; i++) {
+      m_asyncAudio[m_asyncAudioPos % 90000] = dec_data.d2[src_start + i];
+      m_asyncAudioPos++;
+    }
+  }
+
   auto fname {QDir::toNativeSeparators(m_config.writeable_data_dir ().absoluteFilePath ("refspec.dat")).toLocal8Bit ()};
 
   if(m_diskData) {
@@ -17065,6 +17122,52 @@ void MainWindow::on_cbHoldTxFreq_clicked (bool)
 void MainWindow::on_cbDualCarrier_toggled (bool checked)
 {
     ui->labelDualCarrierWarning->setVisible (checked);
+}
+
+void MainWindow::on_cbAsyncDecode_toggled (bool checked)
+{
+    if (checked && m_mode == "FT2") {
+      m_asyncAudioPos = 0;
+      m_asyncDedupeSet.clear();
+      m_asyncDedupeLastCleared = QDateTime::currentDateTimeUtc();
+      m_asyncDecodeTimer.start(1500);  // decode every 1.5 seconds
+    } else {
+      m_asyncDecodeTimer.stop();
+      m_bAsyncDecoding = false;
+    }
+}
+
+void MainWindow::asyncDecodeDone()
+{
+    m_bAsyncDecoding = false;
+    auto now = QDateTime::currentDateTimeUtc();
+    auto hhmmss = now.toString("hhmmss");
+
+    for (int i = 0; m_asyncMsg[i][0] && i < 100; i++) {
+      QString raw = QString::fromLatin1(m_asyncMsg[i]);
+      m_asyncMsg[i][0] = 0;
+      if (raw.trimmed().isEmpty()) continue;
+
+      // Deduplication: skip if same message decoded within last 10s
+      QString msgKey = raw.mid(14).trimmed();  // message text after freq
+      if (m_asyncDedupeSet.contains(msgKey)) continue;
+      m_asyncDedupeSet.insert(msgKey);
+
+      // Format: prepend UTC timestamp to match standard decode format
+      QString message = hhmmss + raw;
+
+      // Display in left (Band Activity) window
+      DecodedText decodedtext {message.replace(QChar::LineFeed, "")};
+      ui->decodedTextBrowser->displayDecodedText(decodedtext, m_config.my_callsign(),
+          m_mode, m_config.DXCC(), m_logBook, m_currentBandPeriod, m_config.ppfx(),
+          false, false, 0.0, false, -99, "", m_muted);
+
+      postDecode(true, decodedtext);
+      write_all("Rx", message);
+
+      // Auto-sequence
+      auto_sequence(decodedtext, ui->sbFtol->value(), ui->sbFtol->value());
+    }
 }
 
 void MainWindow::on_ft8Button_clicked()
