@@ -550,6 +550,7 @@ set (wsjt_FSRCS
   lib/ft4/ft4sim_mult.f90
   lib/ft2/ft2_downsample.f90
   lib/ft2/ft2_async_decode.f90
+  lib/ft2/ft2_triggered_decode.f90
   lib/ft4/ft4_downsample.f90
   lib/77bit/my_hash.f90
   lib/wsprd/osdwspr.f90

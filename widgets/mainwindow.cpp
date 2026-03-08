@@ -200,11 +200,11 @@ extern "C" {
                     fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
   void degrade_snr_(short d2[], int* n, float* db, float* bandwidth);
 
-  void ft2_async_decode_(short iwave[], int* nqsoprogress, int* nfqso,
-                         int* nfa, int* nfb, int* ndepth, int* ncontest,
-                         char mycall[], char hiscall[],
-                         char outlines[], int* nout,
-                         fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
+  void ft2_triggered_decode_(short iwave[], int* nqsoprogress, int* nfqso,
+                             int* nfa, int* nfb, int* ndepth, int* ncontest,
+                             char mycall[], char hiscall[],
+                             char outlines[], int* nout,
+                             fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
 
   void wav12_(short d2[], short d1[], int* nbytes, short* nbitsam2);
 
@@ -1413,11 +1413,11 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
     m_asyncDecodeWatcher.setFuture(QtConcurrent::run([=]() mutable {
       int nout = 0;
-      ft2_async_decode_(asyncBuf, &nqsoprogress, &nfqso, &nfa, &nfb,
-                        &ndepth, &ncontest,
-                        dec_data.params.mycall, dec_data.params.hiscall,
-                        &m_asyncMsg[0][0], &nout,
-                        (FCL)12, (FCL)12, (FCL)(100*80));
+      ft2_triggered_decode_(asyncBuf, &nqsoprogress, &nfqso, &nfa, &nfb,
+                            &ndepth, &ncontest,
+                            dec_data.params.mycall, dec_data.params.hiscall,
+                            &m_asyncMsg[0][0], &nout,
+                            (FCL)12, (FCL)12, (FCL)(100*80));
     }));
   });
   
@@ -17130,7 +17130,7 @@ void MainWindow::on_cbAsyncDecode_toggled (bool checked)
       m_asyncAudioPos = 0;
       m_asyncDedupeSet.clear();
       m_asyncDedupeLastCleared = QDateTime::currentDateTimeUtc();
-      m_asyncDecodeTimer.start(1500);  // decode every 1.5 seconds
+      m_asyncDecodeTimer.start(750);  // Level 2: sync-triggered every 750ms
     } else {
       m_asyncDecodeTimer.stop();
       m_bAsyncDecoding = false;
