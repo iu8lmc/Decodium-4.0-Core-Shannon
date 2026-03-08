@@ -159,10 +159,13 @@
 #include <QIntValidator>
 #include <QThread>
 #include <QTimer>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QFont>
 #include <QFontDialog>
 #include <QComboBox>
+#include <QGroupBox>
+#include <QGridLayout>
 #include <QScopedPointer>
 #include <QNetworkInterface>
 #include <QHostInfo>
@@ -174,6 +177,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QSerialPortInfo>
+#include <QSpinBox>
 #include <vector>
 #include <utility>
 #include <iostream>
@@ -284,6 +288,318 @@ namespace
   constexpr quint32 qrg_magic {0xadbccbdb};
   constexpr quint32 qrg_version {101}; // M.mm
   constexpr quint32 qrg_version_100 {100};
+
+  QString secure_settings_service (QString const& callsign)
+  {
+    auto profile = callsign.trimmed ().toUpper ();
+    if (profile.isEmpty ())
+      {
+        profile = QStringLiteral ("DEFAULT");
+      }
+    profile.replace (QRegularExpression {R"([^A-Z0-9._-])"}, QStringLiteral ("_"));
+    return QStringLiteral ("org.decodium3.ft2.%1").arg (profile);
+  }
+
+  bool secure_settings_backend_available ()
+  {
+#if defined (Q_OS_MACOS)
+    return QFileInfo::exists (QStringLiteral ("/usr/bin/security"));
+#elif defined (Q_OS_LINUX)
+    return !QStandardPaths::findExecutable (QStringLiteral ("secret-tool")).isEmpty ();
+#else
+    return false;
+#endif
+  }
+
+  QString trim_single_trailing_newline (QString text)
+  {
+    if (text.endsWith ('\n'))
+      {
+        text.chop (1);
+      }
+    if (text.endsWith ('\r'))
+      {
+        text.chop (1);
+      }
+    return text;
+  }
+
+  struct SecureLookupResult
+  {
+    bool backend_available {false};
+    bool found {false};
+    QString value;
+    QString error;
+  };
+
+  SecureLookupResult secure_settings_lookup (QString const& service, QString const& account)
+  {
+    SecureLookupResult result;
+    result.backend_available = secure_settings_backend_available ();
+    if (!result.backend_available)
+      {
+        return result;
+      }
+
+#if defined (Q_OS_MACOS)
+    QProcess p;
+    p.start (QStringLiteral ("/usr/bin/security"),
+             QStringList {
+               QStringLiteral ("find-generic-password"),
+               QStringLiteral ("-a"), account,
+               QStringLiteral ("-s"), service,
+               QStringLiteral ("-w")
+             });
+    if (!p.waitForFinished (5000))
+      {
+        result.error = QObject::tr ("macOS Keychain read timeout");
+        return result;
+      }
+    if (0 == p.exitCode ())
+      {
+        result.found = true;
+        result.value = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardOutput ()));
+        return result;
+      }
+    auto stderr_text = QString::fromUtf8 (p.readAllStandardError ());
+    if (stderr_text.contains (QStringLiteral ("could not be found"), Qt::CaseInsensitive))
+      {
+        result.found = false;
+        return result;
+      }
+    result.error = trim_single_trailing_newline (stderr_text);
+    return result;
+#elif defined (Q_OS_LINUX)
+    auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));
+    if (secret_tool.isEmpty ())
+      {
+        result.backend_available = false;
+        return result;
+      }
+    QProcess p;
+    p.start (secret_tool,
+             QStringList {
+               QStringLiteral ("lookup"),
+               QStringLiteral ("service"), service,
+               QStringLiteral ("account"), account
+             });
+    if (!p.waitForFinished (5000))
+      {
+        result.error = QObject::tr ("secret-tool lookup timeout");
+        return result;
+      }
+    if (0 == p.exitCode ())
+      {
+        result.found = true;
+        result.value = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardOutput ()));
+        return result;
+      }
+    result.found = false;
+    return result;
+#else
+    Q_UNUSED (service);
+    Q_UNUSED (account);
+    return result;
+#endif
+  }
+
+  bool secure_settings_store (QString const& service, QString const& account, QString const& value, QString * error = nullptr)
+  {
+    if (!secure_settings_backend_available ())
+      {
+        if (error) *error = QObject::tr ("secure backend unavailable");
+        return false;
+      }
+
+#if defined (Q_OS_MACOS)
+    QProcess p;
+    p.start (QStringLiteral ("/usr/bin/security"),
+             QStringList {
+               QStringLiteral ("add-generic-password"),
+               QStringLiteral ("-U"),
+               QStringLiteral ("-a"), account,
+               QStringLiteral ("-s"), service,
+               QStringLiteral ("-w"), value
+             });
+    if (!p.waitForFinished (5000))
+      {
+        if (error) *error = QObject::tr ("macOS Keychain write timeout");
+        return false;
+      }
+    if (0 != p.exitCode ())
+      {
+        if (error) *error = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardError ()));
+        return false;
+      }
+    return true;
+#elif defined (Q_OS_LINUX)
+    auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));
+    if (secret_tool.isEmpty ())
+      {
+        if (error) *error = QObject::tr ("secret-tool not available");
+        return false;
+      }
+
+    QProcess p;
+    p.start (secret_tool,
+             QStringList {
+               QStringLiteral ("store"),
+               QStringLiteral ("--label"),
+               QStringLiteral ("Decodium Credentials"),
+               QStringLiteral ("service"), service,
+               QStringLiteral ("account"), account
+             });
+    if (!p.waitForStarted (3000))
+      {
+        if (error) *error = QObject::tr ("secret-tool store failed to start");
+        return false;
+      }
+    p.write (value.toUtf8 ());
+    p.closeWriteChannel ();
+    if (!p.waitForFinished (5000))
+      {
+        if (error) *error = QObject::tr ("secret-tool store timeout");
+        return false;
+      }
+    if (0 != p.exitCode ())
+      {
+        if (error) *error = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardError ()));
+        return false;
+      }
+    return true;
+#else
+    Q_UNUSED (service);
+    Q_UNUSED (account);
+    Q_UNUSED (value);
+    if (error) *error = QObject::tr ("secure backend unsupported");
+    return false;
+#endif
+  }
+
+  bool secure_settings_remove (QString const& service, QString const& account, QString * error = nullptr)
+  {
+    if (!secure_settings_backend_available ())
+      {
+        return true;
+      }
+
+#if defined (Q_OS_MACOS)
+    QProcess p;
+    p.start (QStringLiteral ("/usr/bin/security"),
+             QStringList {
+               QStringLiteral ("delete-generic-password"),
+               QStringLiteral ("-a"), account,
+               QStringLiteral ("-s"), service
+             });
+    if (!p.waitForFinished (5000))
+      {
+        if (error) *error = QObject::tr ("macOS Keychain delete timeout");
+        return false;
+      }
+    if (0 == p.exitCode ())
+      {
+        return true;
+      }
+    auto const stderr_text = QString::fromUtf8 (p.readAllStandardError ());
+    if (stderr_text.contains (QStringLiteral ("could not be found"), Qt::CaseInsensitive))
+      {
+        return true;
+      }
+    if (error) *error = trim_single_trailing_newline (stderr_text);
+    return false;
+#elif defined (Q_OS_LINUX)
+    auto const secret_tool = QStandardPaths::findExecutable (QStringLiteral ("secret-tool"));
+    if (secret_tool.isEmpty ())
+      {
+        return true;
+      }
+    QProcess p;
+    p.start (secret_tool,
+             QStringList {
+               QStringLiteral ("clear"),
+               QStringLiteral ("service"), service,
+               QStringLiteral ("account"), account
+             });
+    if (!p.waitForFinished (5000))
+      {
+        if (error) *error = QObject::tr ("secret-tool clear timeout");
+        return false;
+      }
+    return true;
+#else
+    Q_UNUSED (service);
+    Q_UNUSED (account);
+    Q_UNUSED (error);
+    return true;
+#endif
+  }
+
+  QString secure_settings_load_or_import (QSettings * settings,
+                                          QString const& service,
+                                          QString const& setting_key,
+                                          QString const& plain_value)
+  {
+    auto plain = plain_value;
+    if (plain == QStringLiteral ("__secure__"))
+      {
+        plain.clear ();
+      }
+
+    auto const lookup = secure_settings_lookup (service, setting_key);
+    if (lookup.found)
+      {
+        return lookup.value;
+      }
+
+    if (!lookup.backend_available)
+      {
+        return plain;
+      }
+
+    if (!plain.isEmpty ())
+      {
+        QString store_error;
+        if (secure_settings_store (service, setting_key, plain, &store_error))
+          {
+            if (settings)
+              {
+                settings->setValue (setting_key, QStringLiteral ("__secure__"));
+              }
+          }
+        else if (!store_error.isEmpty ())
+          {
+            qWarning () << "Secure settings import failed for" << setting_key << ":" << store_error;
+          }
+      }
+    return plain;
+  }
+
+  QString secure_settings_value_for_write (QString const& service,
+                                           QString const& setting_key,
+                                           QString const& value)
+  {
+    if (!secure_settings_backend_available ())
+      {
+        return value;
+      }
+
+    if (value.isEmpty ())
+      {
+        secure_settings_remove (service, setting_key, nullptr);
+        return QString {};
+      }
+
+    QString error;
+    if (secure_settings_store (service, setting_key, value, &error))
+      {
+        return QStringLiteral ("__secure__");
+      }
+    if (!error.isEmpty ())
+      {
+        qWarning () << "Secure settings store failed for" << setting_key << ":" << error;
+      }
+    return value;
+  }
 }
 
 
@@ -776,6 +1092,15 @@ private:
   bool show_greyline_;
   int LotW_days_since_upload_;
 
+  // Experimental remote web dashboard controls (Settings -> General).
+  QGroupBox * remote_web_group_box_ {nullptr};
+  QLabel * remote_web_warning_label_ {nullptr};
+  QCheckBox * remote_web_enable_check_box_ {nullptr};
+  QSpinBox * remote_http_port_spin_box_ {nullptr};
+  QLineEdit * remote_ws_bind_line_edit_ {nullptr};
+  QLineEdit * remote_user_line_edit_ {nullptr};
+  QLineEdit * remote_token_line_edit_ {nullptr};
+
   TransceiverFactory::ParameterPack rig_params_;
   TransceiverFactory::ParameterPack saved_rig_params_;
   TransceiverFactory::Capabilities::PortType last_port_type_;
@@ -844,6 +1169,11 @@ private:
   QString hamlib_backed_up_;
   QString cloudLogApiUrl_;
   QString cloudLogApiKey_;
+  bool remote_web_enabled_ {false};
+  quint16 remote_http_port_ {19091};
+  QString remote_ws_bind_ {"0.0.0.0"};
+  QString remote_user_ {"admin"};
+  QString remote_token_;
 
   QString OTPUrl_;
   QString OTPSeed_;
@@ -1712,6 +2042,31 @@ bool Configuration::ShowOTP () const
   return m_->ShowOTP_;
 }
 
+bool Configuration::remote_web_enabled () const
+{
+  return m_->remote_web_enabled_;
+}
+
+quint16 Configuration::remote_http_port () const
+{
+  return m_->remote_http_port_;
+}
+
+QString Configuration::remote_ws_bind () const
+{
+  return m_->remote_ws_bind_;
+}
+
+QString Configuration::remote_user () const
+{
+  return m_->remote_user_;
+}
+
+QString Configuration::remote_token () const
+{
+  return m_->remote_token_;
+}
+
 void Configuration::setExternalCtrlMode(bool active) 
 {         //avt  10/2/25
   m_externalCtrlMode = active;
@@ -1880,6 +2235,87 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   , isExternalCtrlMode_ {false}
 {
   ui_->setupUi (this);
+
+  // Experimental remote web dashboard settings.
+  // Kept in General tab to be immediately discoverable.
+  if (auto * generalLayout = qobject_cast<QVBoxLayout *> (ui_->general_tab->layout ()))
+    {
+      remote_web_group_box_ = new QGroupBox {tr ("Remote Web Dashboard (LAN)"), this};
+      auto * remoteLayout = new QGridLayout {remote_web_group_box_};
+
+      remote_web_warning_label_ = new QLabel {tr ("ATTENZIONE SEZIONE SPERIMENTALE"), remote_web_group_box_};
+      QFont warnFont = remote_web_warning_label_->font ();
+      warnFont.setBold (true);
+      remote_web_warning_label_->setFont (warnFont);
+      remote_web_warning_label_->setStyleSheet (QStringLiteral ("color:#b00020;"));
+
+      remote_web_enable_check_box_ = new QCheckBox {tr ("Enable remote web dashboard"), remote_web_group_box_};
+      remote_web_enable_check_box_->setToolTip (
+        tr ("Enables the HTTP/WS remote dashboard for browser control on your LAN."));
+
+      auto * remotePortLabel = new QLabel {tr ("HTTP port:"), remote_web_group_box_};
+      remote_http_port_spin_box_ = new QSpinBox {remote_web_group_box_};
+      remote_http_port_spin_box_->setRange (1025, 65535);
+      remote_http_port_spin_box_->setValue (19091);
+      remote_http_port_spin_box_->setToolTip (
+        tr ("HTTP dashboard port. WebSocket port is HTTP port minus 1."));
+      remotePortLabel->setBuddy (remote_http_port_spin_box_);
+
+      auto * remoteBindLabel = new QLabel {tr ("WS bind address:"), remote_web_group_box_};
+      remote_ws_bind_line_edit_ = new QLineEdit {remote_web_group_box_};
+      remote_ws_bind_line_edit_->setPlaceholderText (QStringLiteral ("0.0.0.0"));
+      remote_ws_bind_line_edit_->setToolTip (
+        tr ("Listening address for WS/HTTP (examples: 0.0.0.0, 127.0.0.1, ::)."));
+      remoteBindLabel->setBuddy (remote_ws_bind_line_edit_);
+
+      auto * remoteUserLabel = new QLabel {tr ("Username:"), remote_web_group_box_};
+      remote_user_line_edit_ = new QLineEdit {remote_web_group_box_};
+      remote_user_line_edit_->setPlaceholderText (QStringLiteral ("admin"));
+      remote_user_line_edit_->setToolTip (
+        tr ("Username requested by the remote dashboard login page."));
+      remoteUserLabel->setBuddy (remote_user_line_edit_);
+
+      auto * remoteTokenLabel = new QLabel {tr ("Access token (password):"), remote_web_group_box_};
+      remote_token_line_edit_ = new QLineEdit {remote_web_group_box_};
+      remote_token_line_edit_->setEchoMode (QLineEdit::Password);
+      remote_token_line_edit_->setPlaceholderText (tr ("Required by web login page"));
+      remote_token_line_edit_->setToolTip (
+        tr ("Password requested by the remote dashboard login page."));
+      remoteTokenLabel->setBuddy (remote_token_line_edit_);
+
+      auto * remoteHint = new QLabel {
+        tr ("Changes apply on next application start."),
+        remote_web_group_box_};
+      remoteHint->setStyleSheet (QStringLiteral ("color:#666;"));
+
+      remoteLayout->addWidget (remote_web_warning_label_, 0, 0, 1, 2);
+      remoteLayout->addWidget (remote_web_enable_check_box_, 1, 0, 1, 2);
+      remoteLayout->addWidget (remotePortLabel, 2, 0);
+      remoteLayout->addWidget (remote_http_port_spin_box_, 2, 1);
+      remoteLayout->addWidget (remoteBindLabel, 3, 0);
+      remoteLayout->addWidget (remote_ws_bind_line_edit_, 3, 1);
+      remoteLayout->addWidget (remoteUserLabel, 4, 0);
+      remoteLayout->addWidget (remote_user_line_edit_, 4, 1);
+      remoteLayout->addWidget (remoteTokenLabel, 5, 0);
+      remoteLayout->addWidget (remote_token_line_edit_, 5, 1);
+      remoteLayout->addWidget (remoteHint, 6, 0, 1, 2);
+      remoteLayout->setColumnStretch (0, 0);
+      remoteLayout->setColumnStretch (1, 1);
+
+      auto updateRemoteEnabledUi = [this] {
+        bool enabled = remote_web_enable_check_box_ && remote_web_enable_check_box_->isChecked ();
+        if (remote_http_port_spin_box_) remote_http_port_spin_box_->setEnabled (enabled);
+        if (remote_ws_bind_line_edit_) remote_ws_bind_line_edit_->setEnabled (enabled);
+        if (remote_user_line_edit_) remote_user_line_edit_->setEnabled (enabled);
+        if (remote_token_line_edit_) remote_token_line_edit_->setEnabled (enabled);
+      };
+      connect (remote_web_enable_check_box_, &QCheckBox::toggled, this, [updateRemoteEnabledUi] (bool) {
+          updateRemoteEnabledUi ();
+        });
+      updateRemoteEnabledUi ();
+
+      generalLayout->addWidget (remote_web_group_box_);
+    }
 
   {
     // Make sure the default save directory exists
@@ -2266,6 +2702,26 @@ void Configuration::impl::initialize_models ()
   ui_->cb_detailed_blank_line->setChecked (detailed_blank_);
   ui_->DXCC_check_box->setChecked (DXCC_);
   ui_->show_greyline_check_box->setChecked (show_greyline_);
+  if (remote_web_enable_check_box_)
+    {
+      remote_web_enable_check_box_->setChecked (remote_web_enabled_);
+    }
+  if (remote_http_port_spin_box_)
+    {
+      remote_http_port_spin_box_->setValue (remote_http_port_);
+    }
+  if (remote_ws_bind_line_edit_)
+    {
+      remote_ws_bind_line_edit_->setText (remote_ws_bind_);
+    }
+  if (remote_user_line_edit_)
+    {
+      remote_user_line_edit_->setText (remote_user_);
+    }
+  if (remote_token_line_edit_)
+    {
+      remote_token_line_edit_->setText (remote_token_);
+    }
   ui_->ppfx_check_box->setChecked (ppfx_);
   ui_->show_country_names_check_box->setChecked (show_country_names_);
   if (!ui_->DXCC_check_box->isChecked()) {
@@ -2544,9 +3000,15 @@ void Configuration::impl::read_settings ()
   PWR_and_SWR_ = settings_->value ("PWRandSWR", false).toBool ();
   check_SWR_ = settings_->value ("CheckSWR", false).toBool ();
 
+  auto const secure_service = secure_settings_service (my_callsign_);
+
   OTPinterval_ = settings_->value ("OTPinterval", 1).toUInt ();
   OTPUrl_ = settings_->value ("OTPUrl", FoxVerifier::default_url()).toString ();
-  OTPSeed_ = settings_->value ("OTPSeed", QString {}).toString ();
+  OTPSeed_ = secure_settings_load_or_import (
+    settings_,
+    secure_service,
+    QStringLiteral ("OTPSeed"),
+    settings_->value ("OTPSeed", QString {}).toString ());
   OTPEnabled_ = settings_->value ("OTPEnabled", false).toBool ();
   ShowOTP_ = settings_->value ("ShowOTP", false).toBool ();
 
@@ -2729,7 +3191,11 @@ void Configuration::impl::read_settings ()
   data_mode_ = settings_->value ("DataMode", QVariant::fromValue (data_mode_none)).value<Configuration::DataMode> ();
   bLowSidelobes_ = settings_->value("LowSidelobes",true).toBool();
   prompt_to_log_ = settings_->value ("PromptToLog", false).toBool ();
-  lotw_pwd_ = settings_->value ("Lotw_pwd", QString {}).toString ();    //avt 9/23/25
+  lotw_pwd_ = secure_settings_load_or_import (
+    settings_,
+    secure_service,
+    QStringLiteral ("Lotw_pwd"),
+    settings_->value ("Lotw_pwd", QString {}).toString ());    //avt 9/23/25
   nonQsl_ = settings_->value ("NonQsl", false).toBool ();    //avt 9/23/25
   autoLog_ = settings_->value ("AutoLog", true).toBool ();
   contestingOnly_ = settings_->value ("ContestingOnly", true).toBool ();
@@ -2740,6 +3206,28 @@ void Configuration::impl::read_settings ()
   detailed_blank_ = settings_->value ("DetailedBlank", true).toBool ();
   DXCC_ = settings_->value ("DXCCEntity", true).toBool ();
   show_greyline_ = settings_->value ("MapShowGreyline", true).toBool ();
+  remote_web_enabled_ = settings_->value ("RemoteWebEnabled", false).toBool ();
+  {
+    bool ok {false};
+    auto port = settings_->value ("RemoteHttpPort", 19091).toInt (&ok);
+    if (!ok) port = 19091;
+    remote_http_port_ = static_cast<quint16> (qBound (1025, port, 65535));
+  }
+  remote_ws_bind_ = settings_->value ("RemoteWsBind", QString {"0.0.0.0"}).toString ().trimmed ();
+  if (remote_ws_bind_.isEmpty ())
+    {
+      remote_ws_bind_ = QStringLiteral ("0.0.0.0");
+    }
+  remote_user_ = settings_->value ("RemoteUser", QString {"admin"}).toString ().trimmed ();
+  if (remote_user_.isEmpty ())
+    {
+      remote_user_ = QStringLiteral ("admin");
+    }
+  remote_token_ = secure_settings_load_or_import (
+    settings_,
+    secure_service,
+    QStringLiteral ("RemoteToken"),
+    settings_->value ("RemoteToken", QString {}).toString ());
   gridMap_ = settings_->value("MapGridEntity", true).toBool();
   gridMapAll_ = settings_->value("MapGridAllEntity", true).toBool();
   ppfx_ = settings_->value ("PrincipalPrefix", false).toBool ();
@@ -2795,7 +3283,11 @@ void Configuration::impl::read_settings ()
   bSpecialOp_ = settings_->value("SpecialOpActivity",false).toBool ();
   bCloudLog_ = settings_->value("CloudLog",false).toBool ();
   cloudLogApiUrl_ = settings_->value ("CloudLogApiUrl", QString {}).toString ();
-  cloudLogApiKey_ = settings_->value ("CloudLogApiKey", QString {}).toString ();
+  cloudLogApiKey_ = secure_settings_load_or_import (
+    settings_,
+    secure_service,
+    QStringLiteral ("CloudLogApiKey"),
+    settings_->value ("CloudLogApiKey", QString {}).toString ());
   cloudLogStationID_ = settings_->value("CloudLogStationID",1).toInt ();
   SelectedActivity_ = settings_->value("SelectedActivity",1).toInt ();
   x2ToneSpacing_ = settings_->value("x2ToneSpacing",false).toBool ();
@@ -2898,6 +3390,7 @@ void Configuration::impl::find_audio_devices ()
 void Configuration::impl::write_settings ()
 {
   SettingsGroup g {settings_, "Configuration"};
+  auto const secure_service = secure_settings_service (my_callsign_);
 
   settings_->setValue ("MyCall", my_callsign_);
   settings_->setValue ("MyGrid", my_grid_);
@@ -3014,7 +3507,9 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("DataMode", QVariant::fromValue (data_mode_));
   settings_->setValue ("LowSidelobes",bLowSidelobes_);
   settings_->setValue ("PromptToLog", prompt_to_log_);
-  settings_->setValue ("Lotw_pwd", lotw_pwd_);      //avt 9/23/25
+  settings_->setValue (
+    "Lotw_pwd",
+    secure_settings_value_for_write (secure_service, QStringLiteral ("Lotw_pwd"), lotw_pwd_));      //avt 9/23/25
   settings_->setValue ("NonQsl", nonQsl_);      //avt 9/23/25
   settings_->setValue ("AutoLog", autoLog_);
   settings_->setValue ("ContestingOnly", contestingOnly_);
@@ -3025,6 +3520,13 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("DetailedBlank", detailed_blank_);
   settings_->setValue ("DXCCEntity", DXCC_);
   settings_->setValue ("MapShowGreyline", show_greyline_);
+  settings_->setValue ("RemoteWebEnabled", remote_web_enabled_);
+  settings_->setValue ("RemoteHttpPort", remote_http_port_);
+  settings_->setValue ("RemoteWsBind", remote_ws_bind_);
+  settings_->setValue ("RemoteUser", remote_user_);
+  settings_->setValue (
+    "RemoteToken",
+    secure_settings_value_for_write (secure_service, QStringLiteral ("RemoteToken"), remote_token_));
   settings_->setValue ("MapGridEntity", gridMap_);
   settings_->setValue ("MapGridAllEntity", gridMapAll_);
   settings_->setValue ("PrincipalPrefix", ppfx_);
@@ -3075,7 +3577,9 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("SpecialOpActivity", bSpecialOp_);
   settings_->setValue ("CloudLog", bCloudLog_);
   settings_->setValue ("CloudLogApiUrl", cloudLogApiUrl_);
-  settings_->setValue ("CloudLogApiKey", cloudLogApiKey_);
+  settings_->setValue (
+    "CloudLogApiKey",
+    secure_settings_value_for_write (secure_service, QStringLiteral ("CloudLogApiKey"), cloudLogApiKey_));
   settings_->setValue ("CloudLogStationID", cloudLogStationID_);
   settings_->setValue ("x2ToneSpacing", x2ToneSpacing_);
   settings_->setValue ("x4ToneSpacing", x4ToneSpacing_);
@@ -3105,7 +3609,9 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("highlight_DXgrid", highlight_DXgrid_);
   settings_->setValue ("OTPinterval", OTPinterval_);
   settings_->setValue ("OTPUrl", OTPUrl_);
-  settings_->setValue ("OTPSeed", OTPSeed_);
+  settings_->setValue (
+    "OTPSeed",
+    secure_settings_value_for_write (secure_service, QStringLiteral ("OTPSeed"), OTPSeed_));
   settings_->setValue ("OTPEnabled", OTPEnabled_);
   settings_->setValue ("ShowOTP", ShowOTP_);
   settings_->setValue ("clear_DXgrid", clear_DXgrid_);
@@ -3548,6 +4054,12 @@ void Configuration::impl::accept ()
   //           << "reset i/p:" << restart_sound_input_device_
   //           << "reset o/p:" << restart_sound_output_device_;
 
+  auto const old_remote_web_enabled = remote_web_enabled_;
+  auto const old_remote_http_port = remote_http_port_;
+  auto const old_remote_ws_bind = remote_ws_bind_;
+  auto const old_remote_user = remote_user_;
+  auto const old_remote_token = remote_token_;
+
   my_callsign_ = ui_->callsign_line_edit->text ();
   my_grid_ = ui_->grid_line_edit->text ();
   FD_exchange_= ui_->Field_Day_Exchange->text ().toUpper ();
@@ -3631,6 +4143,34 @@ void Configuration::impl::accept ()
   detailed_blank_ = ui_->cb_detailed_blank_line->isChecked ();
   DXCC_ = ui_->DXCC_check_box->isChecked ();
   show_greyline_ = ui_->show_greyline_check_box->isChecked ();
+  if (remote_web_enable_check_box_)
+    {
+      remote_web_enabled_ = remote_web_enable_check_box_->isChecked ();
+    }
+  if (remote_http_port_spin_box_)
+    {
+      remote_http_port_ = static_cast<quint16> (qBound (1025, remote_http_port_spin_box_->value (), 65535));
+    }
+  if (remote_ws_bind_line_edit_)
+    {
+      remote_ws_bind_ = remote_ws_bind_line_edit_->text ().trimmed ();
+      if (remote_ws_bind_.isEmpty ())
+        {
+          remote_ws_bind_ = QStringLiteral ("0.0.0.0");
+        }
+    }
+  if (remote_user_line_edit_)
+    {
+      remote_user_ = remote_user_line_edit_->text ().trimmed ();
+      if (remote_user_.isEmpty ())
+        {
+          remote_user_ = QStringLiteral ("admin");
+        }
+    }
+  if (remote_token_line_edit_)
+    {
+      remote_token_ = remote_token_line_edit_->text ();
+    }
   gridMap_= ui_->Map_Grid_to_State->isChecked ();
   gridMapAll_ = ui_->Map_All_Messages->isChecked();
   ppfx_ = ui_->ppfx_check_box->isChecked ();
@@ -3812,6 +4352,21 @@ void Configuration::impl::accept ()
   alert_DXcall_ = ui_->cbDXcall->isChecked();
   alert_QSYmessage_ = ui_->cbQSYmessage->isChecked();
   alert_Enabled_ = ui_->pbAlerts->isChecked();
+
+  bool const remote_settings_changed =
+    (old_remote_web_enabled != remote_web_enabled_) ||
+    (old_remote_http_port != remote_http_port_) ||
+    (0 != old_remote_ws_bind.compare (remote_ws_bind_, Qt::CaseSensitive)) ||
+    (0 != old_remote_user.compare (remote_user_, Qt::CaseSensitive)) ||
+    (0 != old_remote_token.compare (remote_token_, Qt::CaseSensitive));
+
+  if (remote_settings_changed)
+    {
+      MessageBox::information_message (
+        this,
+        tr ("Remote Dashboard Settings"),
+        tr ("Remote dashboard settings were saved.\nRestart the application to apply listener changes."));
+    }
 
   write_settings ();		// make visible to all
 }

@@ -16,6 +16,7 @@
 #include <fftw3.h>
 #include <thread> // TCI
 #include <QApplication>
+#include <QGuiApplication>
 #include <QStringListModel>
 #include <QSettings>
 #include <QKeyEvent>
@@ -52,6 +53,11 @@
 #include <QInputDialog>
 #include <QSound> // TCI
 #include <QtMath> // TCI
+#include <QSignalBlocker>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QWriteLocker>
+#include <QHash>
 #if QT_VERSION >= QT_VERSION_CHECK (5, 15, 0)
 #include <QRandomGenerator>
 #endif
@@ -63,6 +69,7 @@
 #include "revision_utils.hpp"
 #include "qt_helpers.hpp"
 #include "Network/NetworkAccessManager.hpp"
+#include "SharedMemorySegment.hpp"
 #include "Audio/soundout.h"
 #include "Audio/soundin.h"
 #include "Modulator/Modulator.hpp"
@@ -74,7 +81,6 @@
 #include "fastgraph.h"
 #include "otpgenerator.h"
 #include "about.h"
-#include "UpdateChecker.hpp"
 #include "messageaveraging.h"
 #include "activeStations.h"
 #include "colorhighlighting.h"
@@ -88,6 +94,7 @@
 #include "models/StationList.hpp"
 #include "validators/LiveFrequencyValidator.hpp"
 #include "Network/MessageClient.hpp"
+#include "Network/RemoteCommandServer.hpp"
 #include "Network/FoxVerifier.hpp"
 #include "Network/wsprnet.h"
 #include "signalmeter.h"
@@ -239,9 +246,9 @@ extern "C" {
   void jpl_setup_(char* fname, FCL len);
 }
 QList<FoxVerifier *> m_verifications;
-int volatile itone[MAX_NUM_SYMBOLS];   //Audio tones for all Tx symbols
-int volatile itone0[MAX_NUM_SYMBOLS];  //Dummy array, data not actually used
-int volatile icw[NUM_CW_SYMBOLS];      //Dits for CW ID
+int itone[MAX_NUM_SYMBOLS];   //Audio tones for all Tx symbols
+int itone0[MAX_NUM_SYMBOLS];  //Dummy array, data not actually used
+int icw[NUM_CW_SYMBOLS];      //Dits for CW ID
 dec_data_t dec_data;                   //For sharing with Fortran
 int outBufSize;
 int rc;
@@ -324,6 +331,22 @@ namespace
   constexpr int N_WIDGETS {38};
   constexpr int default_rx_audio_buffer_frames {-1}; // lets Qt decide
   constexpr int default_tx_audio_buffer_frames {16384}; // ~341ms @ 48kHz, prevents underrun on Windows
+  constexpr int kDecDataSampleCount {static_cast<int> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0]))};
+  constexpr int kMaxCwSymbols {static_cast<int> (sizeof (icw) / sizeof (icw[0]))};
+  constexpr int kFoxWaveSampleCount {static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]))};
+
+  struct AllTxtWriterState
+  {
+    QMutex mutex;
+    QHash<QString, QStringList> pending_by_file;
+    bool worker_active {false};
+  };
+
+  AllTxtWriterState& all_txt_writer_state ()
+  {
+    static AllTxtWriterState state;
+    return state;
+  }
 
   bool message_is_73 (int type, QStringList const& msg_parts)
   {
@@ -340,11 +363,252 @@ namespace
     auto second = time.second ();
     return now.msecsTo (now.addSecs (second > 30 ? 60 - second : -second)) - time.msec ();
   }
+
+  [[maybe_unused]] void process_events_no_user_input ()
+  {
+    // Flush posted UI updates without spinning a nested event loop.
+    QCoreApplication::sendPostedEvents (nullptr, 0);
+  }
+
+  [[maybe_unused]] int clamp_frames_to_d2 (qint64 frames, char const * context)
+  {
+    if (frames <= 0)
+      {
+        return 0;
+      }
+    auto const clamped = frames > kDecDataSampleCount ? kDecDataSampleCount : static_cast<int> (frames);
+    if (clamped != frames)
+      {
+        LOG_WARN (QString {"%1: clamped frames from %2 to %3 (d2 size %4)"}
+                    .arg (context)
+                    .arg (frames)
+                    .arg (clamped)
+                    .arg (kDecDataSampleCount)
+                    .toStdString ());
+      }
+    return clamped;
+  }
+
+  [[maybe_unused]] int clamp_cw_symbols (int ncw, char const * context)
+  {
+    auto const clamped = qBound (0, ncw, kMaxCwSymbols);
+    if (clamped != ncw)
+      {
+        LOG_WARN (QString {"%1: clamped CW symbols from %2 to %3"}
+                    .arg (context)
+                    .arg (ncw)
+                    .arg (clamped)
+                    .toStdString ());
+      }
+    return clamped;
+  }
+
+  [[maybe_unused]] QString load_text_file_for_ui (QString const& path, qint64 max_size_bytes, char const * label)
+  {
+    QFileInfo info {path};
+    if (!info.exists () || !info.isFile ())
+      {
+        return QString {};
+      }
+
+    if (info.size () > max_size_bytes)
+      {
+        LOG_WARN (QString {"%1 too large (%2 bytes), refusing to load"}
+                  .arg (label)
+                  .arg (info.size ())
+                  .toStdString ());
+        return QString {};
+      }
+
+    QFile file {path};
+    if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
+      {
+        LOG_WARN (QString {"Failed to open %1 at %2: %3"}
+                  .arg (label)
+                  .arg (path)
+                  .arg (file.errorString ())
+                  .toStdString ());
+        return QString {};
+      }
+
+    QTextStream stream {&file};
+    return stream.readAll ();
+  }
+
+  [[maybe_unused]] QPair<int, QStringList> load_eme_worked_entries (QString const& path
+                                                                     , int max_lines
+                                                                     , qint64 max_size_bytes)
+  {
+    QFileInfo info {path};
+    if (!info.exists () || !info.isFile ())
+      {
+        return {0, QStringList {}};
+      }
+    if (info.size () > max_size_bytes)
+      {
+        LOG_WARN (QString {"wsjtx.log too large for EME startup scan (%1 bytes), skipping"}
+                  .arg (info.size ())
+                  .toStdString ());
+        return {0, QStringList {}};
+      }
+
+    QFile file {path};
+    if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
+      {
+        LOG_WARN (QString {"Failed to open wsjtx.log for EME scan: %1"}
+                  .arg (file.errorString ())
+                  .toStdString ());
+        return {0, QStringList {}};
+      }
+
+    QTextStream in {&file};
+    QStringList calls;
+    int score {0};
+    for (int i = 0; i < max_lines; ++i)
+      {
+        auto const line = in.readLine ();
+        if (line.isNull () || line.isEmpty ())
+          {
+            break;
+          }
+        auto callsign = line.mid (40, 6).trimmed ();
+        auto const comma = callsign.indexOf (',');
+        if (comma > 0)
+          {
+            callsign = callsign.left (comma).trimmed ();
+          }
+        if (!callsign.isEmpty ())
+          {
+            calls.append (callsign);
+            ++score;
+          }
+      }
+    return {score, calls};
+  }
+
+  [[maybe_unused]] bool wait_for_process_exit_no_input (QProcess& process, int timeout_ms)
+  {
+    if (QProcess::NotRunning == process.state ())
+      {
+        return true;
+      }
+    return process.waitForFinished (timeout_ms);
+  }
+
+  [[maybe_unused]] void clamp_wave_arguments (int& nsym, int& nsps, int extra_symbols, int& nwave, char const * context)
+  {
+    if (nsps <= 0)
+      {
+        LOG_WARN (QString {"%1: invalid nsps=%2, forcing 1"}.arg (context).arg (nsps).toStdString ());
+        nsps = 1;
+      }
+    if (nsym <= 0)
+      {
+        LOG_WARN (QString {"%1: invalid nsym=%2, forcing 1"}.arg (context).arg (nsym).toStdString ());
+        nsym = 1;
+      }
+    if (nsym > MAX_NUM_SYMBOLS)
+      {
+        LOG_WARN (QString {"%1: clamped nsym from %2 to %3"}
+                    .arg (context)
+                    .arg (nsym)
+                    .arg (MAX_NUM_SYMBOLS)
+                    .toStdString ());
+        nsym = MAX_NUM_SYMBOLS;
+      }
+
+    auto requested = static_cast<qint64> (nsym + extra_symbols) * nsps;
+    if (requested <= 0)
+      {
+        requested = 1;
+      }
+    if (requested > kFoxWaveSampleCount)
+      {
+        auto max_nsym = (kFoxWaveSampleCount / nsps) - extra_symbols;
+        if (max_nsym < 1)
+          {
+            max_nsym = 1;
+          }
+        if (max_nsym < nsym)
+          {
+            LOG_WARN (QString {"%1: clamped nsym from %2 to %3 to fit wave buffer (%4 samples)"}
+                        .arg (context)
+                        .arg (nsym)
+                        .arg (max_nsym)
+                        .arg (kFoxWaveSampleCount)
+                        .toStdString ());
+            nsym = max_nsym;
+          }
+        requested = static_cast<qint64> (nsym + extra_symbols) * nsps;
+      }
+
+    nwave = static_cast<int> (qMax<qint64> (1, requested));
+  }
+
+  [[maybe_unused]] void queue_all_txt_line (QString const& file_path, QString const& line)
+  {
+    auto& state = all_txt_writer_state ();
+    bool launch_worker {false};
+    {
+      QMutexLocker lock {&state.mutex};
+      state.pending_by_file[file_path].append (line);
+      if (!state.worker_active)
+        {
+          state.worker_active = true;
+          launch_worker = true;
+        }
+    }
+
+    if (!launch_worker)
+      {
+        return;
+      }
+
+    QtConcurrent::run ([&state] {
+      for (;;)
+        {
+          QHash<QString, QStringList> batch;
+          {
+            QMutexLocker lock {&state.mutex};
+            if (state.pending_by_file.isEmpty ())
+              {
+                state.worker_active = false;
+                break;
+              }
+            batch.swap (state.pending_by_file);
+          }
+
+          for (auto it = batch.cbegin (); it != batch.cend (); ++it)
+            {
+              QFile file {it.key ()};
+              if (!file.open (QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
+                {
+                  LOG_ERROR ("Failed to append " << it.key ().toStdString ()
+                             << ": " << file.errorString ().toStdString ());
+                  continue;
+                }
+              QTextStream out {&file};
+              for (auto const& one_line : it.value ())
+                {
+                  out << one_line
+#if QT_VERSION >= QT_VERSION_CHECK (5, 15, 0)
+                      << Qt::endl
+#else
+                      << endl
+#endif
+                    ;
+                }
+              file.close ();
+            }
+        }
+    });
+  }
+
 }
 
 //--------------------------------------------------- MainWindow constructor
 MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
-                       MultiSettings * multi_settings, QSharedMemory *shdmem,
+                       MultiSettings * multi_settings, SharedMemorySegment *shdmem,
                        unsigned downSampleFactor,
                        QSplashScreen * splash, QProcessEnvironment const& env, QWidget *parent) :
   MultiGeometryWidget {parent},
@@ -380,6 +644,10 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_soundOutput {new SoundOutput},
   m_rx_audio_buffer_frames {0},
   m_tx_audio_buffer_frames {0},
+  m_last_tx_audio_rebind_ms {0},
+  m_last_wake_audio_rebind_ms {0},
+  m_last_application_state {QGuiApplication::applicationState ()},
+  m_ptt_request_ms {0},
   m_msErase {0},
   m_secBandChanged {0},
   m_msDecStarted {0}, //ft8md
@@ -578,8 +846,12 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_autoButtonState {false}   //avt 10/2/25
 {
   ui->setupUi(this);
+  ui->cbAutoTogglePeriod->setChecked (false);
   setUnifiedTitleAndToolBarOnMac (true);
   createStatusBar();
+
+  connect (qApp, &QGuiApplication::applicationStateChanged,
+           this, &MainWindow::onApplicationStateChanged);
 
   // NTP Time Synchronization
   m_ntpClient = new NtpClient(this);
@@ -663,6 +935,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect(m_wideGraph.data (), SIGNAL(freezeDecode2(int)),this,SLOT(freezeDecode(int)));
   connect(m_wideGraph.data (), SIGNAL(f11f12(int)),this,SLOT(bumpFqso(int)));
   connect(m_wideGraph.data (), SIGNAL(setXIT2(int)),this,SLOT(setXIT(int)));
+  connect(m_wideGraph.data (), &WideGraph::waterfallRowReady,
+          this, &MainWindow::onWideGraphWaterfallRow);
 
   connect (m_fastGraph.data (), &FastGraph::fastPick, this, &MainWindow::fastPick);
 
@@ -912,6 +1186,182 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
       }
     });
 
+  // Optional remote WS + HTTP control:
+  // 1) env var override (FT2_REMOTE_*)
+  // 2) Settings -> General -> Experimental Remote Dashboard.
+  {
+    QString wsPortText = m_env.value("FT2_REMOTE_WS_PORT").trimmed();
+    QString httpPortText = m_env.value("FT2_REMOTE_HTTP_PORT").trimmed();
+    QString bindText = m_env.value("FT2_REMOTE_WS_BIND").trimmed();
+    QString authUser = m_env.value("FT2_REMOTE_WS_USER").trimmed();
+    QString authToken = m_env.value("FT2_REMOTE_WS_TOKEN").trimmed();
+
+    if (wsPortText.isEmpty())
+      {
+        bool remoteEnabled = m_config.remote_web_enabled();
+        int remoteHttpPort = static_cast<int> (m_config.remote_http_port());
+        QString remoteBind = m_config.remote_ws_bind().trimmed();
+        QString remoteUser = m_config.remote_user().trimmed();
+        QString remoteToken = m_config.remote_token();
+
+        if (remoteUser.isEmpty())
+          {
+            remoteUser = QStringLiteral("admin");
+          }
+
+        if (remoteEnabled)
+          {
+            if (remoteHttpPort < 1025 || remoteHttpPort > 65535)
+              {
+                showStatusMessage(tr("Remote Web disabled: invalid configured HTTP port %1").arg(remoteHttpPort));
+              }
+            else
+              {
+                httpPortText = QString::number(remoteHttpPort);
+                wsPortText = QString::number(remoteHttpPort - 1);
+              }
+
+            if (bindText.isEmpty())
+              {
+                bindText = remoteBind;
+              }
+            if (authToken.isEmpty())
+              {
+                authToken = remoteToken;
+              }
+            if (authUser.isEmpty())
+              {
+                authUser = remoteUser;
+              }
+          }
+      }
+
+    bool wsPortOk {false};
+    auto const wsPortRaw = wsPortText.toUInt(&wsPortOk);
+    auto const wsPort = static_cast<quint16>(wsPortRaw & 0xFFFFu);
+
+    if (wsPortOk && wsPort > 0)
+      {
+        QHostAddress bindAddress;
+        if (bindText.isEmpty())
+          {
+            bindText = QStringLiteral("0.0.0.0");
+          }
+        auto const bindLower = bindText.toLower();
+        if (bindLower.isEmpty() ||
+            0 == bindLower.compare("any", Qt::CaseInsensitive) ||
+            0 == bindLower.compare("any4", Qt::CaseInsensitive) ||
+            0 == bindLower.compare("*", Qt::CaseInsensitive) ||
+            0 == bindLower.compare("0.0.0.0", Qt::CaseInsensitive))
+          {
+            bindAddress = QHostAddress::AnyIPv4;
+          }
+        else if (0 == bindLower.compare("any6", Qt::CaseInsensitive) ||
+                 0 == bindLower.compare("::", Qt::CaseInsensitive))
+          {
+            bindAddress = QHostAddress::AnyIPv6;
+          }
+        else if (0 == bindLower.compare("localhost", Qt::CaseInsensitive))
+          {
+            bindAddress = QHostAddress::LocalHost;
+          }
+        else if (!bindAddress.setAddress(bindText))
+          {
+            showStatusMessage(tr("Remote WS: invalid FT2_REMOTE_WS_BIND=\"%1\" (using 0.0.0.0)").arg(bindText));
+            bindAddress = QHostAddress::AnyIPv4;
+          }
+
+        m_remoteCommandServer = new RemoteCommandServer {this};
+        m_remoteCommandServer->setRuntimeStateProvider([this] {
+            RemoteCommandServer::RuntimeState state;
+            state.mode = m_mode;
+            state.band = ui && ui->bandComboBox ? ui->bandComboBox->currentText().trimmed() : QString {};
+            state.dialFrequencyHz = static_cast<qint64>(m_freqNominal);
+            state.rxFrequencyHz = ui && ui->RxFreqSpinBox ? ui->RxFreqSpinBox->value() : 0;
+            state.txFrequencyHz = ui && ui->TxFreqSpinBox ? ui->TxFreqSpinBox->value() : 0;
+            state.periodMs = qMax<qint64>(1, qRound64(m_TRperiod * 1000.0));
+            state.txEnabled = m_auto;
+            state.autoCqEnabled = m_autoCQ;
+            state.monitoring = m_monitoring;
+            state.transmitting = m_transmitting;
+            state.myCall = m_config.my_callsign();
+            state.dxCall = ui && ui->dxCallEntry ? ui->dxCallEntry->text().trimmed().toUpper() : QString {};
+            state.nowUtcMs = ntpCorrectedCurrentMSecsSinceEpoch();
+            return state;
+          });
+
+        bool guardOk {false};
+        auto const guardMs = m_env.value("FT2_REMOTE_GUARD_PRE_MS", "300").toInt(&guardOk);
+        if (guardOk)
+          {
+            m_remoteCommandServer->setGuardPreMs(guardMs);
+          }
+
+        bool ageOk {false};
+        auto const maxAgeMs = m_env.value("FT2_REMOTE_MAX_AGE_MS", "7500").toInt(&ageOk);
+        if (ageOk)
+          {
+            m_remoteCommandServer->setMaxCommandAgeMs(maxAgeMs);
+          }
+
+        m_remoteCommandServer->setAuthUser(authUser);
+        if (!authToken.isEmpty())
+          {
+            m_remoteCommandServer->setAuthToken(authToken);
+          }
+        else if (bindAddress == QHostAddress::AnyIPv4 || bindAddress == QHostAddress::AnyIPv6)
+          {
+            showStatusMessage(tr("Remote Web warning: no token configured while listening on LAN."));
+          }
+
+        quint16 httpPort {0};
+        if (!httpPortText.isEmpty())
+          {
+            bool httpPortOk {false};
+            auto const httpPortRaw = httpPortText.toUInt(&httpPortOk);
+            if (httpPortOk && httpPortRaw <= 65535u)
+              {
+                httpPort = static_cast<quint16>(httpPortRaw);
+              }
+            else
+              {
+                showStatusMessage(tr("Remote HTTP: invalid FT2_REMOTE_HTTP_PORT=\"%1\" (using default ws+1)")
+                                  .arg(httpPortText));
+              }
+          }
+
+        connect(m_remoteCommandServer, &RemoteCommandServer::selectCallerDue,
+                this, &MainWindow::onRemoteSelectCallerDue);
+        connect(m_remoteCommandServer, &RemoteCommandServer::setModeRequested,
+                this, &MainWindow::onRemoteSetModeRequested);
+        connect(m_remoteCommandServer, &RemoteCommandServer::setBandRequested,
+                this, &MainWindow::onRemoteSetBandRequested);
+        connect(m_remoteCommandServer, &RemoteCommandServer::setRxFrequencyRequested,
+                this, &MainWindow::onRemoteSetRxFrequencyRequested);
+        connect(m_remoteCommandServer, &RemoteCommandServer::setTxEnabledRequested,
+                this, &MainWindow::onRemoteSetTxEnabledRequested);
+        connect(m_remoteCommandServer, &RemoteCommandServer::setAutoCqRequested,
+                this, &MainWindow::onRemoteSetAutoCqRequested);
+        connect(m_remoteCommandServer, &RemoteCommandServer::waterfallStreamingChanged,
+                this, &MainWindow::onRemoteWaterfallStreamingChanged);
+        connect(m_remoteCommandServer, &RemoteCommandServer::logMessage, this,
+                [this] (QString const& message) { showStatusMessage(message); });
+
+        m_remoteWaterfallStreamingEnabled = m_remoteCommandServer->waterfallEnabled();
+
+        if (!m_remoteCommandServer->start(wsPort, bindAddress, httpPort))
+          {
+            showStatusMessage(tr("Remote WS disabled: failed to bind %1:%2")
+                                .arg(bindAddress.toString())
+                                .arg(wsPort));
+          }
+      }
+    else if (!wsPortText.isEmpty())
+      {
+        showStatusMessage(tr("Remote WS disabled: invalid FT2_REMOTE_WS_PORT=\"%1\"").arg(wsPortText));
+      }
+  }
+
   // Hook up WSPR band hopping
   connect (ui->band_hopping_schedule_push_button, &QPushButton::clicked
            , &m_WSPR_band_hopping, &WSPRBandHopping::show_dialog);
@@ -1031,7 +1481,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (ui->decodedTextBrowser2, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnCall);
   connect (ui->houndQueueTextBrowser, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnFoxQueue);
   connect (ui->foxTxListTextBrowser, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnFoxInProgress);
-  connect (ui->callerQueueTextBrowser, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnCallerQueue);
+  connect (ui->houndQueueTextBrowser, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnCallerQueue);
   connect (ui->decodedTextBrowser, &DisplayText::erased, this, &MainWindow::band_activity_cleared);
   connect (ui->decodedTextBrowser2, &DisplayText::erased, this, &MainWindow::rx_frequency_activity_cleared);
   connect (ui->decodedTextBrowser->horizontalScrollBar(),SIGNAL(sliderMoved(int)),SLOT(ScrollBarPosition(int)));
@@ -1665,10 +2115,6 @@ void MainWindow::initialize_fonts ()
 void MainWindow::splash_done ()
 {
   m_splash && m_splash->close ();
-  // Check silenzioso aggiornamenti 5s dopo lo splash (non blocca lo startup)
-  QTimer::singleShot (5000, this, [this] () {
-    UpdateChecker::checkForUpdates (this, true);   // silent=true: mostra dialog solo se c'è update
-  });
 }
 
 void MainWindow::invalidate_frequencies_filter ()
@@ -2454,9 +2900,9 @@ void MainWindow::setDecodedTextFont (QFont const& font)
   ui->foxTxListTextBrowser->displayHoundToBeCalled(" ");
   ui->foxTxListTextBrowser->setText("");
 
-  ui->callerQueueTextBrowser->setContentFont(font);
-  ui->callerQueueTextBrowser->setText("");
-  ui->tab2StackedWidget->setCurrentIndex(0);  // default Fox
+  // AutoCQ caller queue reuses the existing Fox/Hound queue pane.
+  ui->houndQueueTextBrowser->setContentFont(font);
+  ui->houndQueueTextBrowser->setText("");
 
   auto style_sheet = "QLabel {" + font_as_stylesheet (font) + '}';
   ui->lh_decodes_headings_label->setStyleSheet (ui->lh_decodes_headings_label->styleSheet () + style_sheet);
@@ -3785,6 +4231,78 @@ void MainWindow::showStatusMessage(const QString& statusMsg)
   statusBar()->showMessage(statusMsg, 5000);
 }
 
+void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
+{
+  auto const previous = m_last_application_state;
+  m_last_application_state = state;
+
+  // Recover audio streams after system wake (macOS/Linux external USB rigs):
+  // the selected device may stay "selected" in UI but the runtime stream
+  // can become stale after sleep/standby.
+  if (state != Qt::ApplicationActive || previous == Qt::ApplicationActive)
+    {
+      return;
+    }
+
+  if (m_tci_audio || m_transmitting)
+    {
+      return;
+    }
+
+  auto const nowMs = QDateTime::currentMSecsSinceEpoch ();
+  if (nowMs - m_last_wake_audio_rebind_ms < 1500)
+    {
+      return;
+    }
+  m_last_wake_audio_rebind_ms = nowMs;
+
+  LOG_INFO (QString {"wake-resume: monitor=%1 tx=%2 tci=%3 in=\"%4\" out=\"%5\""}
+              .arg (m_monitoring)
+              .arg (m_transmitting)
+              .arg (m_tci_audio)
+              .arg (m_config.audio_input_device ().isNull ()
+                      ? QString {"<null>"}
+                      : m_config.audio_input_device ().deviceName ())
+              .arg (m_config.audio_output_device ().isNull ()
+                      ? QString {"<null>"}
+                      : m_config.audio_output_device ().deviceName ())
+              .toStdString ());
+
+  if (m_monitoring && !m_config.audio_input_device ().isNull ())
+    {
+      QTimer::singleShot (250, this, [this] {
+          if (m_tci_audio || !m_monitoring)
+            {
+              return;
+            }
+          auto const& inDevice = m_config.audio_input_device ();
+          if (inDevice.isNull ())
+            {
+              return;
+            }
+
+          Q_EMIT startAudioInputStream (inDevice
+                                        , m_rx_audio_buffer_frames
+                                        , m_detector, m_downSampleFactor
+                                        , m_config.audio_input_channel ());
+          Q_EMIT resumeAudioInputStream ();
+          showStatusMessage (tr ("Audio input resumed after system wake."));
+        });
+    }
+
+  if (!m_config.audio_output_device ().isNull ())
+    {
+      QTimer::singleShot (450, this, [this] {
+          if (!m_tci_audio)
+            {
+              Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
+                                                  , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                                  , m_tx_audio_buffer_frames);
+            }
+        });
+    }
+}
+
 void MainWindow::showQSYMessage(QString message)
 {
   QString the_line = message;
@@ -4070,7 +4588,7 @@ void MainWindow::on_actionAbout_triggered()                  //Display "About"
 
 void MainWindow::on_actionCheck_for_Updates_triggered ()
 {
-  UpdateChecker::checkForUpdates (this, false);   // false = non-silent, mostra sempre risultato
+  showStatusMessage (tr ("Update check is not available in this build."));
 }
 
 void MainWindow::on_autoButton_clicked (bool checked)       //avt 10/2/25 manually or as result of controller command
@@ -5038,10 +5556,8 @@ void MainWindow::on_stopButton_clicked()                       //stopButton
   m_autoCQ = false;
   m_callerQueue.clear();
   ui->autoCQButton->setChecked(false);
-  ui->tab2StackedWidget->setCurrentIndex(0);   // Bug fix: ripristina Fox/Hound page
   ui->tabWidget->setCurrentIndex(0);           // Bug fix: torna a Tab 1
-  ui->callerQueueTextBrowser->erase();
-  ui->callerQueueTitleLabel->setText(tr("Caller Queue (0)"));
+  ui->houndQueueTextBrowser->erase();
   ui->autoButton->setChecked(false);  // ensure autoButton is unchecked
   m_autoButtonState = false;   //avt 10/2/25
   //debugToFile(QString{"onStopButton m_autoButtonState:%1"}.arg(m_autoButtonState));   //avt 2/2/24
@@ -8145,7 +8661,7 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
         if (!newCaller.isEmpty () && newCaller != m_hisCall
             && newCaller != Radio::base_callsign (ui->dxCallEntry->text ())) {
           // No B4 filter: skip stations already worked on this band
-          if (ui->cbNoBefore->isChecked()) {
+          if (ui->actionIgnoreB4->isChecked()) {
             bool callB4=false, cB4=false, gB4=false, contB4=false, cqzB4=false, ituzB4=false;
             auto looked_up = m_logBook.countries()->lookup(newCaller);
             m_logBook.match(newCaller, m_mode, grid, looked_up,
@@ -9727,7 +10243,7 @@ void MainWindow::doubleClickOnCall(Qt::KeyboardModifiers modifiers)
     //avt 10/2/25is correct time period
     if (!is_externalCtrlMode()) {    //avt 10/2/25
       // No B4 filter: skip stations already worked on this band
-      if (ui->cbNoBefore->isChecked()) {
+      if (ui->actionIgnoreB4->isChecked()) {
         QString dxCall, dxGrid;
         message.deCallAndGrid(dxCall, dxGrid);
         if (!dxCall.isEmpty()) {
@@ -10831,9 +11347,7 @@ void MainWindow::processNextInQueue ()
 void MainWindow::refreshCallerQueueDisplay ()
 {
   if (!m_autoCQ && !m_bDXpedMode) return;
-  ui->callerQueueTitleLabel->setText(
-    tr("Caller Queue (%1)").arg(m_callerQueue.size()));
-  ui->callerQueueTextBrowser->erase();
+  ui->houndQueueTextBrowser->erase();
   int n = 0;
   for (auto const& entry : m_callerQueue) {
     auto parts = entry.split(' ');
@@ -10847,10 +11361,10 @@ void MainWindow::refreshCallerQueueDisplay ()
     QColor bg = (qAbs(dt) > 0.7f) ? QColor("#5a3a00") : QColor("#2a5a2a");
     QString line = QString("  #%1  %2  %3Hz  %4  DT%5")
         .arg(n, 2).arg(parts.at(0), -12).arg(parts.at(1), 5).arg(snrStr).arg(dtStr);
-    ui->callerQueueTextBrowser->insertText(line, bg, QColor("#ffffff"));
+    ui->houndQueueTextBrowser->insertText(line, bg, QColor("#ffffff"));
   }
   if (m_callerQueue.isEmpty()) {
-    ui->callerQueueTextBrowser->insertText(
+    ui->houndQueueTextBrowser->insertText(
       "  (empty - double-click to add stations)", QColor{}, QColor("#888888"));
   }
 }
@@ -10942,8 +11456,6 @@ void MainWindow::on_dxpedButton_clicked(bool checked)
     if (!m_auto) auto_tx_mode(true);
     // Se auto_tx_mode è stato bloccato dal logbook-loading check, forza m_auto=true per DXped
     if (!m_auto) { m_auto = true; ui->autoButton->setChecked(true); }
-    // Fix: DXped usa Fox/Hound controls — assicura stacked widget su page 0
-    ui->tab2StackedWidget->setCurrentIndex(0);
     refreshCallerQueueDisplay();
     // Porta al tab CallerQueue/DXped (index 1) per mostrare la coda subito
     ui->tabWidget->setCurrentIndex(1);
@@ -10957,10 +11469,8 @@ void MainWindow::on_dxpedButton_clicked(bool checked)
     m_autoCQ = false;
     m_callerQueue.clear();
     ui->autoCQButton->setChecked(false);
-    ui->tab2StackedWidget->setCurrentIndex(0);
     ui->tabWidget->setCurrentIndex(0);
-    ui->callerQueueTextBrowser->erase();
-    ui->callerQueueTitleLabel->setText(tr("Caller Queue (0)"));
+    ui->houndQueueTextBrowser->erase();
   }
 }
 
@@ -11191,7 +11701,7 @@ void MainWindow::dxpedAutoSequence (DecodedText const& msg)
   if (isFinalAck) return;
 
   // Filtro B4: non accodare stazioni già lavorate su questa banda
-  if (ui->cbNoBefore->isChecked ()) {
+  if (ui->actionIgnoreB4->isChecked()) {
     bool callB4=false, cB4=false, gB4=false, contB4=false, cqzB4=false, ituzB4=false;
     auto looked_up = m_logBook.countries ()->lookup (callerCall);
     m_logBook.match (callerCall, m_mode, QString{}, looked_up,
@@ -14922,6 +15432,11 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
                                , m_diskData);
     }
 
+  if (is_new && m_remoteCommandServer)
+    {
+      m_remoteCommandServer->publishBandActivityLine(decode);
+    }
+
   if (!is_new) return;    //avt 8/22/23
 
   //avt 1/2/21
@@ -16597,7 +17112,7 @@ void MainWindow::doubleClickOnFoxInProgress(Qt::KeyboardModifiers modifiers)
 void MainWindow::doubleClickOnCallerQueue(Qt::KeyboardModifiers modifiers)
 {
   if (modifiers == 9999) return;
-  QTextCursor cursor = ui->callerQueueTextBrowser->textCursor();
+  QTextCursor cursor = ui->houndQueueTextBrowser->textCursor();
   cursor.setPosition(cursor.selectionStart());
   QString line = cursor.block().text().trimmed();
   QRegularExpression re(R"(#\s*\d+\s+(\S+))");
@@ -17219,20 +17734,17 @@ void MainWindow::on_autoCQButton_clicked(bool checked)
         ui->autoButton->setChecked(true);
         on_autoButton_clicked(true);
       }
-      // Mostra caller queue in Tab 2 e seleziona il tab
+      // Mostra caller queue nel tab dedicato
       if (SpecOp::FOX != m_specOp) {
-        ui->tab2StackedWidget->setCurrentIndex(1);
         ui->tabWidget->setCurrentIndex(1);
       }
       refreshCallerQueueDisplay();
     } else {
       m_bCallingCQ = false;
       m_callerQueue.clear();
-      // Ripristina Tab 2 a Fox/Hound e torna a Tab 1
-      ui->tab2StackedWidget->setCurrentIndex(0);
+      // Torna al tab principale
       ui->tabWidget->setCurrentIndex(0);
-      ui->callerQueueTextBrowser->erase();
-      ui->callerQueueTitleLabel->setText(tr("Caller Queue (0)"));
+      ui->houndQueueTextBrowser->erase();
     }
     check_button_color();
 }
@@ -19864,4 +20376,256 @@ void MainWindow::onNtpSyncStatusChanged(bool synced, QString const& statusText)
   if (m_timeSyncPanel) m_timeSyncPanel->updateNtpSyncStatus(synced, statusText);
 }
 
+void MainWindow::onSoundcardDriftUpdated(double driftMsPerPeriod, double driftPpm)
+{
 
+  // Soundcard drift display removed per user request (was alternating with DT)
+  /*
+  // Update the DT label with soundcard drift info
+  QString text = QString("SC:%1%2ppm")
+    .arg(driftPpm > 0 ? "+" : "")
+    .arg(driftPpm, 0, 'f', 1);
+  dt_correction_label.setText(text);
+  dt_correction_label.setToolTip(
+    QString("Soundcard drift: %1 ppm (%2%3 ms/period)")
+    .arg(driftPpm, 0, 'f', 2)
+    .arg(driftMsPerPeriod > 0 ? "+" : "")
+    .arg(driftMsPerPeriod, 0, 'f', 2));
+
+  // Color: green if drift low, yellow if medium, red if high
+  if(qAbs(driftPpm) < 10.0)
+    dt_correction_label.setStyleSheet("QLabel{color:#000;background:#00ff00}");
+  else if(qAbs(driftPpm) < 50.0)
+    dt_correction_label.setStyleSheet("QLabel{color:#000;background:#ffff00}");
+  else
+    dt_correction_label.setStyleSheet("QLabel{color:#fff;background:#ff0000}");
+  */
+
+  if (m_timeSyncPanel) m_timeSyncPanel->updateSoundcardDrift(driftMsPerPeriod, driftPpm);
+}
+
+void MainWindow::onMapContactClicked(QString const& call, QString const& grid)
+{
+  auto mapCall = call.trimmed().toUpper();
+  mapCall.remove('<');
+  mapCall.remove('>');
+  auto mapGrid = grid.trimmed().toUpper();
+
+  if (mapCall.isEmpty())
+    {
+      return;
+    }
+
+  qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+  int dblIntervalMs = qMax(180, QApplication::doubleClickInterval());
+  bool isDoubleClick = !m_mapLastClickCall.isEmpty()
+                       && (m_mapLastClickCall == mapCall)
+                       && (m_mapLastClickMs > 0)
+                       && (nowMs - m_mapLastClickMs) >= 0
+                       && (nowMs - m_mapLastClickMs) <= (dblIntervalMs + 120);
+
+  m_mapLastClickCall = mapCall;
+  m_mapLastClickMs = nowMs;
+
+  // In SuperFox/Hound mode, DX call changes are ignored unless treated as a direct station selection.
+  bool const previousDoubleClick = m_bDoubleClicked;
+  m_bDoubleClicked = true;
+  ui->dxCallEntry->setText(mapCall);
+  if (mapGrid.contains(grid_regexp))
+    {
+      ui->dxGridEntry->setText(mapGrid.left(6));
+    }
+  m_bDoubleClicked = previousDoubleClick;
+
+  on_dxCallEntry_editingFinished();
+
+  // Always prepare standard messages after map selection so single click is actionable.
+  on_genStdMsgsPushButton_clicked();
+
+  // Single click = compile/fill, double click = start TX (or inverted if option enabled).
+  bool singleClickStartsTx = m_config.map_single_click_starts_tx ();
+  bool startTxNow = singleClickStartsTx ? !isDoubleClick : isDoubleClick;
+  if (!startTxNow)
+    {
+      return;
+    }
+  if (m_mode != "WSPR" && m_mode != "FST4W")
+    {
+      if (!m_auto)
+        {
+          auto_tx_mode(true);
+        }
+      if (m_transmitting)
+        {
+          m_restart = true;
+        }
+    }
+
+  // Reset double-click matcher to avoid chaining a third quick click.
+  m_mapLastClickMs = 0;
+  m_mapLastClickCall.clear();
+}
+
+void MainWindow::onRemoteWaterfallStreamingChanged(bool enabled)
+{
+  m_remoteWaterfallStreamingEnabled = enabled;
+  showStatusMessage(enabled
+                      ? tr("Remote waterfall stream enabled")
+                      : tr("Remote waterfall stream disabled"));
+}
+
+void MainWindow::onWideGraphWaterfallRow(QByteArray const& rowLevels,
+                                         int startFrequencyHz,
+                                         int spanHz,
+                                         int rxFrequencyHz,
+                                         int txFrequencyHz,
+                                         QString const& mode)
+{
+  if (!m_remoteCommandServer || !m_remoteWaterfallStreamingEnabled || rowLevels.isEmpty())
+    {
+      return;
+    }
+
+  m_remoteCommandServer->publishWaterfallRow(rowLevels,
+                                             startFrequencyHz,
+                                             spanHz,
+                                             rxFrequencyHz,
+                                             txFrequencyHz,
+                                             mode);
+}
+
+void MainWindow::onRemoteSelectCallerDue(QString const& commandId, QString const& call, QString const& grid)
+{
+  Q_UNUSED(commandId);
+
+  if (m_mode.compare("FT2", Qt::CaseInsensitive) != 0)
+    {
+      return;
+    }
+
+  auto mapCall = call.trimmed().toUpper();
+  mapCall.remove('<');
+  mapCall.remove('>');
+  auto mapGrid = grid.trimmed().toUpper();
+
+  if (mapCall.isEmpty())
+    {
+      return;
+    }
+
+  bool const previousDoubleClick = m_bDoubleClicked;
+  m_bDoubleClicked = true;
+  ui->dxCallEntry->setText(mapCall);
+  if (mapGrid.contains(grid_regexp))
+    {
+      ui->dxGridEntry->setText(mapGrid.left(6));
+    }
+  m_bDoubleClicked = previousDoubleClick;
+
+  on_dxCallEntry_editingFinished();
+  on_genStdMsgsPushButton_clicked();
+
+  if (m_mode != "WSPR" && m_mode != "FST4W")
+    {
+      if (!m_auto)
+        {
+          auto_tx_mode(true);
+        }
+      if (m_transmitting)
+        {
+          m_restart = true;
+        }
+    }
+
+  showStatusMessage(tr("Remote FT2 caller queued: %1").arg(mapCall));
+}
+
+void MainWindow::onRemoteSetModeRequested(QString const& commandId, QString const& mode)
+{
+  Q_UNUSED(commandId);
+  auto requested = mode.trimmed().toUpper();
+  if (requested.isEmpty())
+    {
+      return;
+    }
+  if (requested != m_mode.toUpper())
+    {
+      set_mode(requested);
+      showStatusMessage(tr("Remote mode set: %1").arg(requested));
+    }
+}
+
+void MainWindow::onRemoteSetBandRequested(QString const& commandId, QString const& band)
+{
+  Q_UNUSED(commandId);
+  if (!ui || !ui->bandComboBox)
+    {
+      return;
+    }
+  auto requestedBand = band.trimmed();
+  if (requestedBand.isEmpty())
+    {
+      return;
+    }
+
+  int index = ui->bandComboBox->findText(requestedBand, Qt::MatchFixedString);
+  if (index < 0)
+    {
+      index = ui->bandComboBox->findText(requestedBand, Qt::MatchContains);
+    }
+  if (index < 0)
+    {
+      return;
+    }
+
+  if (index != ui->bandComboBox->currentIndex())
+    {
+      ui->bandComboBox->setCurrentIndex(index);
+      on_bandComboBox_activated(index);
+      showStatusMessage(tr("Remote band set: %1").arg(ui->bandComboBox->itemText(index)));
+    }
+}
+
+void MainWindow::onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz)
+{
+  Q_UNUSED(commandId);
+  if (!ui || !ui->RxFreqSpinBox)
+    {
+      return;
+    }
+  int clamped = qBound(ui->RxFreqSpinBox->minimum(), rxFrequencyHz, ui->RxFreqSpinBox->maximum());
+  ui->RxFreqSpinBox->setValue(clamped);
+  showStatusMessage(tr("Remote Rx frequency set: %1 Hz").arg(clamped));
+}
+
+void MainWindow::onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled)
+{
+  Q_UNUSED(commandId);
+  if (!ui || !ui->autoButton)
+    {
+      return;
+    }
+  if (ui->autoButton->isChecked() != enabled)
+    {
+      ui->autoButton->setChecked(enabled);
+      on_autoButton_clicked(enabled);
+    }
+  showStatusMessage(enabled ? tr("Remote TX enabled") : tr("Remote TX disabled"));
+}
+
+void MainWindow::onRemoteSetAutoCqRequested(QString const& commandId, bool enabled)
+{
+  Q_UNUSED(commandId);
+  if (!ui || !ui->autoCQButton)
+    {
+      return;
+    }
+
+  if (ui->autoCQButton->isChecked() != enabled)
+    {
+      ui->autoCQButton->setChecked(enabled);
+      on_autoCQButton_clicked(enabled);
+    }
+
+  showStatusMessage(enabled ? tr("Remote Auto CQ enabled") : tr("Remote Auto CQ disabled"));
+}

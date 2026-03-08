@@ -313,6 +313,11 @@ public:
   bool OTPEnabled() const;
   bool ShowOTP() const;
   unsigned int OTPinterval() const;
+  bool remote_web_enabled () const;
+  quint16 remote_http_port () const;
+  QString remote_ws_bind () const;
+  QString remote_user () const;
+  QString remote_token () const;
   void setExternalCtrlMode(bool);         //avt  10/2/25
   bool is_pwr_swr_supported() const;      //avt 1/25/26
   void setPskReporter(bool enable);       //avt 2/4/26

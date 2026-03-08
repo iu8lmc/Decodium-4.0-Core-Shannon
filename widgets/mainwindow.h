@@ -82,8 +82,8 @@
 //#define DEBUG_LOG_FNAME "debug.txt"
 #define TEMP_LOG_QSL_FNAME "lotwreport_qsl.adi"  //avt 9/23/25
 
-extern int volatile itone[MAX_NUM_SYMBOLS];   //Audio tones for all Tx symbols
-extern int volatile icw[NUM_CW_SYMBOLS];	    //Dits for CW ID
+extern int itone[MAX_NUM_SYMBOLS];   //Audio tones for all Tx symbols
+extern int icw[NUM_CW_SYMBOLS];      //Dits for CW ID
 
 //--------------------------------------------------------------- MainWindow
 namespace Ui {
@@ -121,6 +121,11 @@ class MultiSettings;
 class EqualizationToolsDialog;
 class DecodedText;
 class Cloudlog;
+class WorldMapWidget;
+class SharedMemorySegment;
+class IonosphericForecastWindow;
+class DXClusterWindow;
+class RemoteCommandServer;
 
 class MainWindow
   : public MultiGeometryWidget<3, QMainWindow>
@@ -134,7 +139,7 @@ public:
   using SpecOp = Configuration::SpecialOperatingActivity;
 
   explicit MainWindow(QDir const& temp_directory, bool multiple, MultiSettings *,
-                      QSharedMemory *shdmem, unsigned downSampleFactor,
+                      SharedMemorySegment *shdmem, unsigned downSampleFactor,
                       QSplashScreen *, QProcessEnvironment const&,
                       QWidget *parent = nullptr);
   ~MainWindow();
@@ -236,6 +241,7 @@ private slots:
   void on_tx6_editingFinished();
   void on_actionSettings_triggered();
   void on_monitorButton_clicked (bool);
+  void onApplicationStateChanged (Qt::ApplicationState state);
   void on_actionAbout_triggered();
   void on_actionCheck_for_Updates_triggered();
   void on_autoButton_clicked (bool);
@@ -499,6 +505,21 @@ private slots:
   void downloadQslComplete(bool result);  //avt 10/2/25
   void onNtpOffsetUpdated(double offsetMs);
   void onNtpSyncStatusChanged(bool synced, QString const& statusText);
+  void onSoundcardDriftUpdated(double driftMsPerPeriod, double driftPpm);
+  void onRemoteSelectCallerDue(QString const& commandId, QString const& call, QString const& grid);
+  void onRemoteSetModeRequested(QString const& commandId, QString const& mode);
+  void onRemoteSetBandRequested(QString const& commandId, QString const& band);
+  void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
+  void onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAutoCqRequested(QString const& commandId, bool enabled);
+  void onMapContactClicked(QString const& call, QString const& grid);
+  void onRemoteWaterfallStreamingChanged(bool enabled);
+  void onWideGraphWaterfallRow(QByteArray const& rowLevels,
+                               int startFrequencyHz,
+                               int spanHz,
+                               int rxFrequencyHz,
+                               int txFrequencyHz,
+                               QString const& mode);
 
 private:
   Q_SIGNAL void initializeAudioOutputStream (QAudioDeviceInfo,
@@ -595,6 +616,10 @@ private:
   SoundOutput * m_soundOutput;
   int m_rx_audio_buffer_frames;
   int m_tx_audio_buffer_frames;
+  qint64 m_last_tx_audio_rebind_ms;
+  qint64 m_last_wake_audio_rebind_ms;
+  Qt::ApplicationState m_last_application_state;
+  qint64 m_ptt_request_ms;
   QThread m_audioThread;
 
   qint64  m_msErase;
@@ -1052,7 +1077,7 @@ private:
   QDateTime m_dateTimeBestSP;
   QDateTime m_dateTimeSeqStart;        //Nominal start time of Rx sequence about to be decoded
 
-  QSharedMemory *mem_jt9;
+  SharedMemorySegment *mem_jt9;
   QString m_QSOText;
   unsigned m_downSampleFactor;
   QThread::Priority m_audioThreadPriority;
@@ -1073,6 +1098,10 @@ private:
   QProgressDialog m_optimizingProgress;
   QTimer m_heartbeat;
   MessageClient * m_messageClient;
+  QPointer<RemoteCommandServer> m_remoteCommandServer;
+  bool m_remoteWaterfallStreamingEnabled {false};
+  QString m_mapLastClickCall;
+  qint64 m_mapLastClickMs {0};
   PSKReporter m_psk_Reporter;
   DisplayManual m_manual;
   QHash<QString, QVariant> m_pwrBandTxMemory; // Remembers power level by band

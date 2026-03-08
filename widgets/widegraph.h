@@ -3,6 +3,7 @@
 #define WIDEGRAPH_H_
 
 #include <QDialog>
+#include <QByteArray>
 #include <QScopedPointer>
 #include <QDir>
 #include <QHash>
@@ -62,6 +63,12 @@ signals:
   void f11f12(int n);
   void setXIT2(int n);
   void setFreq3(int rxFreq, int txFreq);
+  void waterfallRowReady(QByteArray const& rowLevels,
+                         int startFrequencyHz,
+                         int spanHz,
+                         int rxFrequencyHz,
+                         int txFrequencyHz,
+                         QString const& mode);
 
 public slots:
   void wideFreezeDecode(int n);

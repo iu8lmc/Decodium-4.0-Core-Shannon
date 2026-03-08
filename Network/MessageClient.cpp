@@ -14,6 +14,8 @@
 #include <QColor>
 #include <QDebug>
 #include <QSet>
+#include <QMessageAuthenticationCode>
+#include <QCryptographicHash>
 
 #include "NetworkMessage.hpp"
 #include "qt_helpers.hpp"
@@ -57,6 +59,50 @@ char const * message_type_name (NetworkMessage::Type type)
     default: return "Unknown";
     }
 }
+
+QByteArray const& udp_hmac_marker ()
+{
+  static QByteArray const marker {"WSJTHMAC256:"};
+  return marker;
+}
+
+bool env_flag_enabled (char const * name, bool default_value = false)
+{
+  auto const value = qEnvironmentVariable (name).trimmed ().toLower ();
+  if (value.isEmpty ())
+    {
+      return default_value;
+    }
+  if (value == QStringLiteral ("1")
+      || value == QStringLiteral ("true")
+      || value == QStringLiteral ("yes")
+      || value == QStringLiteral ("on"))
+    {
+      return true;
+    }
+  if (value == QStringLiteral ("0")
+      || value == QStringLiteral ("false")
+      || value == QStringLiteral ("no")
+      || value == QStringLiteral ("off"))
+    {
+      return false;
+    }
+  return default_value;
+}
+
+bool constant_time_equals (QByteArray const& a, QByteArray const& b)
+{
+  if (a.size () != b.size ())
+    {
+      return false;
+    }
+  quint8 diff = 0;
+  for (int i = 0; i < a.size (); ++i)
+    {
+      diff |= static_cast<quint8> (a.at (i) ^ b.at (i));
+    }
+  return 0 == diff;
+}
 }
 
 class MessageClient::impl
@@ -80,6 +126,13 @@ public:
   {
     connect (heartbeat_timer_, &QTimer::timeout, this, &impl::heartbeat);
     connect (this, &QIODevice::readyRead, this, &impl::pending_datagrams);
+
+    auto key = qEnvironmentVariable ("WSJT_UDP_HMAC_KEY").trimmed ();
+    if (!key.isEmpty ())
+      {
+        hmac_key_ = key.toUtf8 ();
+      }
+    require_hmac_ = !hmac_key_.isEmpty () && env_flag_enabled ("WSJT_UDP_HMAC_REQUIRED", true);
 
     heartbeat_timer_->start (NetworkMessage::pulse * 1000);
   }
@@ -109,6 +162,8 @@ public:
   bool message_target_matches (QString const&) const;
   bool control_target_matches (QString const&) const;
   bool requires_direct_target (NetworkMessage::Type) const;
+  QByteArray sign_datagram (QByteArray const& payload) const;
+  bool extract_hmac (QByteArray const& datagram, QByteArray * payload, QByteArray * signature) const;
   void send_message (QByteArray const&, bool queue_if_pending = true, bool allow_duplicates = false);
   void send_message (QDataStream const& out, QByteArray const& message, bool queue_if_pending = true, bool allow_duplicates = false)
   {
@@ -139,6 +194,10 @@ public:
   QSet<QHostAddress> trusted_senders_;
   bool warned_untrusted_sender_ {false};
   bool warned_broadcast_control_ {false};
+  bool warned_missing_hmac_ {false};
+  bool warned_invalid_hmac_ {false};
+  bool require_hmac_ {false};
+  QByteArray hmac_key_;
 
   // hold messages sent before host lookup completes asynchronously
   QQueue<QByteArray> pending_messages_;
@@ -277,10 +336,46 @@ void MessageClient::impl::parse_message (QByteArray const& msg, QHostAddress con
 {
   try
     {
+      QByteArray signed_payload = msg;
+      QByteArray received_signature;
+      bool const has_hmac = extract_hmac (msg, &signed_payload, &received_signature);
+      if (!hmac_key_.isEmpty ())
+        {
+          if (!has_hmac)
+            {
+              if (require_hmac_)
+                {
+                  if (!warned_missing_hmac_)
+                    {
+                      warned_missing_hmac_ = true;
+                      Q_EMIT self_->error (QString {"Rejected UDP packet without HMAC from %1:%2"}
+                                           .arg (sender_address.toString ())
+                                           .arg (sender_port));
+                    }
+                  return;
+                }
+            }
+          else
+            {
+              auto const expected = sign_datagram (signed_payload);
+              if (!constant_time_equals (expected, received_signature))
+                {
+                  if (!warned_invalid_hmac_)
+                    {
+                      warned_invalid_hmac_ = true;
+                      Q_EMIT self_->error (QString {"Rejected UDP packet with invalid HMAC from %1:%2"}
+                                           .arg (sender_address.toString ())
+                                           .arg (sender_port));
+                    }
+                  return;
+                }
+            }
+        }
+
       // 
       // message format is described in NetworkMessage.hpp
       // 
-      NetworkMessage::Reader in {msg};
+      NetworkMessage::Reader in {signed_payload};
       if (OK == check_status (in))
         {
           if (!sender_address.isNull () && !is_trusted_sender (sender_address, sender_port))
@@ -548,6 +643,44 @@ void MessageClient::impl::parse_message (QByteArray const& msg, QHostAddress con
     }
 }
 
+QByteArray MessageClient::impl::sign_datagram (QByteArray const& payload) const
+{
+  return QMessageAuthenticationCode::hash (payload, hmac_key_, QCryptographicHash::Sha256);
+}
+
+bool MessageClient::impl::extract_hmac (QByteArray const& datagram, QByteArray * payload, QByteArray * signature) const
+{
+  auto const& marker = udp_hmac_marker ();
+  int const trailer_size = marker.size () + 64; // SHA-256 as hex
+  if (datagram.size () < trailer_size)
+    {
+      return false;
+    }
+
+  int const marker_pos = datagram.size () - trailer_size;
+  if (datagram.mid (marker_pos, marker.size ()) != marker)
+    {
+      return false;
+    }
+
+  auto const sig_hex = datagram.mid (marker_pos + marker.size (), 64);
+  auto const sig_bin = QByteArray::fromHex (sig_hex);
+  if (sig_bin.size () != 32)
+    {
+      return false;
+    }
+
+  if (payload)
+    {
+      *payload = datagram.left (marker_pos);
+    }
+  if (signature)
+    {
+      *signature = sig_bin;
+    }
+  return true;
+}
+
 void MessageClient::impl::rebuild_trusted_senders ()
 {
   trusted_senders_.clear ();
@@ -670,6 +803,12 @@ void MessageClient::impl::send_message (QByteArray const& message, bool queue_if
     {
       if (!server_.isNull ())
         {
+          QByteArray wire_message = message;
+          if (!hmac_key_.isEmpty ())
+            {
+              wire_message += udp_hmac_marker ();
+              wire_message += sign_datagram (message).toHex ();
+            }
           if (allow_duplicates || message != last_message_) // avoid duplicates
             {
               if (is_multicast_address (server_))
@@ -679,13 +818,13 @@ void MessageClient::impl::send_message (QByteArray const& message, bool queue_if
                                  , [&] (QNetworkInterface const& net_if) {
                                      setMulticastInterface (net_if);
                                      // qDebug () << "Multicast UDP datagram sent to:" << server_ << "port:" << server_port_ << "on:" << multicastInterface ().humanReadableName ();
-                                     writeDatagram (message, server_, server_port_);
+                                     writeDatagram (wire_message, server_, server_port_);
                                    });
                 }
               else
                 {
                   // qDebug () << "Unicast UDP datagram sent to:" << server_ << "port:" << server_port_;
-                  writeDatagram (message, server_, server_port_);
+                  writeDatagram (wire_message, server_, server_port_);
                 }
               last_message_ = message;
             }

@@ -43,6 +43,9 @@ WideGraph::WideGraph(QSettings * settings, QWidget *parent) :
   connect(ui->widePlot, SIGNAL(setFreq1(int,int)),this,
           SLOT(setFreq2(int,int)));
 
+  connect(ui->widePlot, &CPlotter::waterfallRowAvailable,
+          this, &WideGraph::waterfallRowReady);
+
   {
     //Restore user's settings
     SettingsGroup g {m_settings, "WideGraph"};

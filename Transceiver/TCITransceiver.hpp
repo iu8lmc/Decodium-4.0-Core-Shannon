@@ -2,7 +2,6 @@
 #define TCI_TRANSCEIVER_HPP__
 
 #include <memory>
-#include <array>
 
 #include "TransceiverFactory.hpp"
 #include "PollingTransceiver.hpp"
@@ -11,6 +10,7 @@
 #include <QtWebSockets/QWebSocket>
 #include <QTimer>
 #include <QVector>
+#include <QQueue>
 #include <mutex>
 
 typedef float REAL;
@@ -18,6 +18,7 @@ typedef float REAL;
 class QWebSocket;
 class QByteArray;
 class QString;
+class QThread;
 //
 // TCI Interface
 //
@@ -55,6 +56,7 @@ public:
   explicit TCITransceiver (logger_type * logger, std::unique_ptr<TransceiverBase> wrapped, QString const& rignr,
                                            QString const& address, bool use_for_ptt,
                                            int poll_interval, QObject * parent = nullptr);
+  ~TCITransceiver () override;
 
 enum Tci_Cmd {
 Cmd_Unknown,
@@ -134,6 +136,9 @@ private slots:
   void onError(QAbstractSocket::SocketError err);
   void onConnected();
   void onDisconnected();
+  void onSocketTextFrame(QString const& text);
+  void onSocketBinaryFrame(QByteArray const& data);
+  void process_pending_tci_frames();
 
 signals:
   void sendIqData(int, quint32, float*, bool);
@@ -148,6 +153,10 @@ signals:
   void tci_done6();
   void tci_done7();
   void tci_done8();
+  void request_socket_open(QUrl const& url);
+  void request_socket_close();
+  void request_socket_send_text(QString const& message);
+  void request_socket_send_binary(QByteArray const& payload);
 
 protected:
   int do_start () override;
@@ -205,18 +214,11 @@ private:
   MODE get_mode (bool requested = false);
   QString frequency_to_string (Frequency) const;
   Frequency string_to_frequency (QString) const;
-  void mysleep1 (int ms = 1);
-  void mysleep2 (int ms = 1);
-  void mysleep3 (int ms = 1);
-  void mysleep4 (int ms = 1);
-  void mysleep5 (int ms = 1);
-  void mysleep6 (int ms = 1);
-  void mysleep7 (int ms = 1);
-  void mysleep8 (int ms = 1);
   QString mode_to_command (QString) const;
   std::unique_ptr<TransceiverBase> wrapped_; // may be null
-  bool wait_for_tci_event (QTimer * timer, int index, int ms);
-  void reset_tci_wait_flags ();
+  void arm_wait_timer (QTimer * timer, int ms, char const * context);
+  void ensure_socket_worker ();
+  void shutdown_socket_worker ();
   QString rx_;
   QString server_;
   bool use_for_ptt_;
@@ -228,7 +230,11 @@ private:
   bool rig_power_off_;
   bool tci_audio_;
   bool _power_;
-  QWebSocket * commander_;
+  QThread * socket_thread_ {nullptr};
+  QObject * socket_worker_ {nullptr};
+  QTimer * parse_queue_timer_ {nullptr};
+  QQueue<QString> pending_text_frames_;
+  QQueue<QByteArray> pending_binary_frames_;
   QLocale locale_;
   QTimer * tci_timer1_;
   QTimer * tci_timer2_;
@@ -238,7 +244,6 @@ private:
   QTimer * tci_timer6_;
   QTimer * tci_timer7_;
   QTimer * tci_timer8_;
-  std::array<bool, 8> tci_done_flags_ {};
   int nIqBytes;
   bool inConnected;
   bool tci_Ready;
@@ -256,6 +261,7 @@ private:
   int trxB;
   int cntIQ;
   bool bIQ;
+  QVector<float> rx_scaled_buffer_;
 
 // CAT internal variables
   QString requested_mode_;

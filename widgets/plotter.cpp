@@ -207,6 +207,8 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
     plotsave_(swide,&m_w,&m_h1,&irow);
   }
   ymin = 0;
+  QByteArray rowLevels;
+  rowLevels.resize(iz);
   for(int i=0; i<iz; i++) {
     y=swide[i];
     int y1 = 10.0*gain*y + m_plotZero;
@@ -214,8 +216,19 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
     if (y1>254) y1=254;
     if (swide[i]<1.e29) painter1.setPen(g_ColorTbl[y1]);
     painter1.drawPoint(i,m_j);
+    rowLevels[i] = static_cast<char>(y1);
   }
   m_line++;
+
+  if (!m_bReplot && bScroll && swide[0] < 1.e29f && iz > 0)
+    {
+      int spanHz = static_cast<int>(m_fSpan + 0.5f);
+      if (spanHz <= 0)
+        {
+          spanHz = 1;
+        }
+      emit waterfallRowAvailable(rowLevels, m_startFreq, spanHz, m_rxFreq, m_txFreq, m_mode);
+    }
 
   float y2min=1.e30;
   float y2max=-1.e30;

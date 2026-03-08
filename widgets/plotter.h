@@ -11,6 +11,7 @@
 #include <QFrame>
 #include <QSize>
 #include <QImage>
+#include <QByteArray>
 #include <QVector>
 #include <QColor>
 #include <QToolTip>
@@ -104,6 +105,12 @@ public:
 signals:
   void freezeDecode1(int n);
   void setFreq1(int rxFreq, int txFreq);
+  void waterfallRowAvailable(QByteArray const& rowLevels,
+                             int startFrequencyHz,
+                             int spanHz,
+                             int rxFrequencyHz,
+                             int txFrequencyHz,
+                             QString const& mode);
 
 protected:
   //re-implemented widget event handlers

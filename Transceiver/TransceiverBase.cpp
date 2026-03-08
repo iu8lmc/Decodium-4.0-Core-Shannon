@@ -6,12 +6,23 @@
 #include <QTimer>
 #include <QThread>
 #include <QDebug>
+#include <QCoreApplication>
 
 #include "moc_TransceiverBase.cpp"
 
 namespace
 {
   auto const unexpected = TransceiverBase::tr ("Unexpected rig error");
+
+  void sleep_non_gui_thread (unsigned long ms)
+  {
+    auto * app = QCoreApplication::instance ();
+    if (app && QThread::currentThread () == app->thread ())
+      {
+        return;
+      }
+    QThread::msleep (ms);
+  }
 }
 
 void TransceiverBase::start (unsigned sequence_number) noexcept
@@ -139,7 +150,7 @@ void TransceiverBase::set (TransceiverState const& s,
               {
                 do_ptt (false);
                 do_post_ptt (false);
-                if (!requested_.audio()) QThread::msleep (100); // some rigs cannot process CAT
+                if (!requested_.audio()) sleep_non_gui_thread (100); // some rigs cannot process CAT
                                        // commands while switching from
                                        // Tx to Rx
               }
@@ -180,7 +191,7 @@ void TransceiverBase::set (TransceiverState const& s,
             {
               do_ptt (true);
               do_post_ptt (true);
-              QThread::msleep (100); // some rigs cannot process CAT
+              sleep_non_gui_thread (100); // some rigs cannot process CAT
                                      // commands while switching from
                                      // Rx to Tx
             }
