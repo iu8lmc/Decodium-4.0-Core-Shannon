@@ -6870,15 +6870,27 @@ void MainWindow::applyDtFeedback()
 
     // Convert averaged DT (seconds) to ms correction — negative DT means we're
     // starting too early, so we need positive correction
+    // NOTE: Predictive correction (dtRate extrapolation) was removed because it
+    // amplified oscillations when combined with NTP feedback. Simple proportional
+    // correction is more stable with 3.75s FT2 periods.
     double correctionStep = -m_avgDtValue * 1000.0 * m_dtSmoothFactor;
+    bool const ntpStable =
+        m_ntpEnabled
+        && m_ntpClient
+        && m_ntpClient->isSynced()
+        && qAbs(m_ntpOffset_ms) < 100.0;
+    if (m_mode == "FT2" && ntpStable) {
+      // If NTP is healthy, DT feedback must stay conservative.
+      correctionStep *= 0.45;
+    }
 
     // Clamp correction step — tighter for FT2 (short period, small steps safer)
-    double maxStep = (m_mode == "FT2") ? 30.0 : 50.0;
+    double maxStep = (m_mode == "FT2") ? (ntpStable ? 15.0 : 30.0) : 50.0;
     correctionStep = qBound(-maxStep, correctionStep, maxStep);
     m_dtCorrection_ms += correctionStep;
 
     // Clamp total correction — tighter for FT2 (should never be far off sync)
-    double maxTotal = (m_mode == "FT2") ? 300.0 : 500.0;
+    double maxTotal = (m_mode == "FT2") ? (ntpStable ? 180.0 : 300.0) : 500.0;
     m_dtCorrection_ms = qBound(-maxTotal, m_dtCorrection_ms, maxTotal);
 
     // DT correction is computed for TimeSyncPanel display only — NOT applied
@@ -6896,6 +6908,21 @@ void MainWindow::applyDtFeedback()
     } else {
       m_ntpDtDivergenceCount = 0;
     }
+  } else if (m_dtFeedbackEnabled && !m_diskData) {
+    // No fresh DT samples this cycle: decay historical correction so UI
+    // does not stay pinned at clamp limits after transient conditions.
+    if (qAbs(m_dtCorrection_ms) < 0.5) {
+      m_dtCorrection_ms = 0.0;
+    } else {
+      // Decay faster when NTP appears healthy.
+      double decay = 0.92;
+      if (m_ntpEnabled && m_ntpClient && m_ntpClient->isSynced() && qAbs(m_ntpOffset_ms) < 100.0) {
+        decay = 0.85;
+      }
+      m_dtCorrection_ms *= decay;
+    }
+    // Keep the averaged DT from becoming stale forever.
+    m_avgDtValue *= 0.9;
   }
 
   // Calculate decode latency
@@ -6917,20 +6944,39 @@ void MainWindow::applyDtFeedback()
       m_dtSmoothFactor);
   }
 
-  // Update status bar DT label with actual DT info
-  if (m_dtLastSampleCount > 0) {
-    QString text = QString("DT:%1%2ms(%3)")
-      .arg(m_dtCorrection_ms > 0 ? "+" : "")
-      .arg(m_dtCorrection_ms, 0, 'f', 1)
-      .arg(m_dtLastSampleCount);
-    dt_correction_label.setText(text);
-    // Color based on convergence quality
-    if (qAbs(m_avgDtValue) < 0.1)
-      dt_correction_label.setStyleSheet("QLabel{color:#000;background:#00ff00}");
-    else if (qAbs(m_avgDtValue) < 0.3)
-      dt_correction_label.setStyleSheet("QLabel{color:#000;background:#ffff00}");
-    else
-      dt_correction_label.setStyleSheet("QLabel{color:#fff;background:#ff0000}");
+  // Show effective DT in the status bar: raw decode DT compensated by NTP offset
+  // when NTP is synced. This better reflects net slot timing error.
+  double const rawDtMs = m_avgDtValue * 1000.0;
+  bool const ntpSyncedForDisplay =
+      m_ntpEnabled
+      && m_ntpClient
+      && m_ntpClient->isSynced();
+  double const dtDisplayMs = ntpSyncedForDisplay ? (rawDtMs + m_ntpOffset_ms) : rawDtMs;
+  QString text = QString("DT:%1%2ms(%3)")
+    .arg(dtDisplayMs > 0 ? "+" : "")
+    .arg(dtDisplayMs, 0, 'f', 1)
+    .arg(m_dtLastSampleCount);
+  dt_correction_label.setText(text);
+  dt_correction_label.setToolTip(
+      QString("Effective DT: %1%2 ms\nRaw decode DT: %3%4 ms\nNTP offset: %5%6 ms\nInternal correction: %7%8 ms")
+          .arg(dtDisplayMs > 0 ? "+" : "")
+          .arg(dtDisplayMs, 0, 'f', 1)
+          .arg(rawDtMs > 0 ? "+" : "")
+          .arg(rawDtMs, 0, 'f', 1)
+          .arg(m_ntpOffset_ms > 0 ? "+" : "")
+          .arg(m_ntpOffset_ms, 0, 'f', 1)
+          .arg(m_dtCorrection_ms > 0 ? "+" : "")
+          .arg(m_dtCorrection_ms, 0, 'f', 1));
+
+  double const absDisplayDtMs = qAbs(dtDisplayMs);
+  if (m_dtLastSampleCount <= 0) {
+    dt_correction_label.setStyleSheet("QLabel{color:#888;background:#333}");
+  } else if (absDisplayDtMs < 80.0) {
+    dt_correction_label.setStyleSheet("QLabel{color:#000;background:#00ff00}");
+  } else if (absDisplayDtMs < 180.0) {
+    dt_correction_label.setStyleSheet("QLabel{color:#000;background:#ffff00}");
+  } else {
+    dt_correction_label.setStyleSheet("QLabel{color:#fff;background:#ff0000}");
   }
 
   m_dtSamples.clear();
@@ -7385,18 +7431,24 @@ void MainWindow::readFromStdout()                             //readFromStdout
            || (decodedtext.snr() < -21 && decodedtext.isLowConfidence()))))       // very weak + uncertain
       )
     {
-    // Collect DT samples for TimeSyncPanel display
-    if(!decodedtext.isLowConfidence()) {
-      int snr = decodedtext.snr();
-      // #7: FT2 uses lower SNR threshold (-20) to collect more DT samples
-      // FT2 has 6.67x better DT precision so even weaker signals give usable DT
-      int snrThreshold = (m_mode=="FT2") ? -20 : -18;
-      if(snr >= snrThreshold) {
-        float dt_val = decodedtext.dt();
-        // #7: FT2 tighter outlier rejection (±0.5s) due to higher DT precision
-        float dtLimit = (m_mode=="FT2") ? 0.5f : 2.0f;
-        if(qAbs(dt_val) < dtLimit) {
-          m_dtSamples.append(dt_val);
+    // DT Feedback Loop: collect DT only from verified decodes with good SNR
+    if(m_dtFeedbackEnabled && !m_diskData && (m_mode=="FT2" || m_mode=="FT4" || m_mode=="FT8")) {
+      // Exclude low-confidence AP decodes ("?" marker) — DT less reliable
+      if(!decodedtext.isLowConfidence()) {
+        int snr = decodedtext.snr();
+        int snrThreshold = -18;
+        if (m_mode=="FT2") snrThreshold = -16;
+        if (m_mode=="FT8") snrThreshold = -15;  // FT8: reduce weak-signal DT bias
+        if (m_mode=="FT4") snrThreshold = -16;  // FT4: reduce weak-signal DT bias
+        if(snr >= snrThreshold) {
+          float dt_val = decodedtext.dt();
+          float dtLimit = 2.0f;
+          if (m_mode=="FT2") dtLimit = 0.35f;
+          if (m_mode=="FT8") dtLimit = 0.60f;   // FT8: reject broad outliers
+          if (m_mode=="FT4") dtLimit = 0.80f;   // FT4: reject broad outliers
+          if(qAbs(dt_val) < dtLimit) {
+            m_dtSamples.append(dt_val);
+          }
         }
       }
     }
@@ -8854,10 +8906,10 @@ void MainWindow::guiUpdate()
     tx2 += m_TRperiod;
   }
 
-  // Use precise system time + DT feedback correction + NTP offset
-  // DT > 0 means signals arrive late → our clock is FAST → subtract correction
-  // NTP offset > 0 means our clock is ahead of UTC → subtract offset
-  qint64 ms = (preciseCurrentMSecsSinceEpoch() - qRound64(m_ntpOffset_ms)) % 86400000;
+  // Keep TX/RX slot scheduling on raw system time.
+  // NTP offset is for monitoring/diagnostics and must not phase-shift
+  // the real-time transmit scheduler.
+  qint64 ms = preciseCurrentMSecsSinceEpoch() % 86400000;
   if(ms < 0) ms += 86400000;  // handle negative modulo
   int nsec=ms/1000;
   double tsec=0.001*ms;
@@ -12875,7 +12927,7 @@ void MainWindow::on_actionFT2_triggered()
   // Decodium FT2: faster NTP refresh and tighter RTT filter
   if (m_ntpClient) {
     m_ntpClient->setRefreshInterval(60000);  // 60s for FT2 (was 30s — too frequent destabilizes DT)
-    m_ntpClient->setMaxRtt(100.0);           // default RTT filter (50ms rejected too many servers)
+    m_ntpClient->setMaxRtt(70.0);            // FT2: stricter RTT gate to reduce offset bias
   }
   initExternalCtrl();
   statusChanged();
@@ -12907,6 +12959,11 @@ void MainWindow::on_actionFT4_triggered()
   else Q_EMIT FFTSize (m_FFTSize);
   m_hsymStop=21;
   setup_status_bar (bVHF);
+  if (m_ntpClient) {
+    m_ntpClient->setRefreshInterval(60000);  // FT4: keep NTP cadence responsive
+    m_ntpClient->setMaxRtt(65.0);            // FT4: tighter RTT gate
+    if (m_ntpEnabled) m_ntpClient->syncNow();
+  }
   m_toneSpacing=12000.0/576.0;
   ui->actionFT4->setChecked(true);
   m_wideGraph->setMode(m_mode);
@@ -12975,6 +13032,11 @@ void MainWindow::on_actionFT8_triggered()
     m_earlyDecode2=47;
   }
   setup_status_bar (bVHF);
+  if (m_ntpClient) {
+    m_ntpClient->setRefreshInterval(60000);  // FT8: keep NTP cadence responsive
+    m_ntpClient->setMaxRtt(60.0);            // FT8: tighter RTT gate
+    if (m_ntpEnabled) m_ntpClient->syncNow();
+  }
   m_toneSpacing=0.0;                   //???
   ui->actionFT8->setChecked(true);     //???
   m_wideGraph->setMode(m_mode);
@@ -15795,7 +15857,7 @@ void MainWindow::WSPR_scheduling ()
     int n=t.right (1).toInt (&ok);
     if (!ok || 0 == n) return;
 
-    qint64 ms = (preciseCurrentMSecsSinceEpoch() - qRound64(m_ntpOffset_ms)) % 86400000;
+    qint64 ms = preciseCurrentMSecsSinceEpoch() % 86400000;
     if(ms < 0) ms += 86400000;  // handle negative modulo
     int nsec=ms/1000;
     int ntr=m_TRperiod;
