@@ -252,6 +252,7 @@ private slots:
   void on_actionSettings_triggered();
   void on_monitorButton_clicked (bool);
   void onApplicationStateChanged (Qt::ApplicationState state);
+  void on_actionWorld_Map_toggled (bool checked);
   void on_actionAbout_triggered();
   void on_actionCheck_for_Updates_triggered();
   void on_autoButton_clicked (bool);
@@ -522,6 +523,9 @@ private slots:
   void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
   void onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled);
   void onRemoteSetAutoCqRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAsyncL2Requested(QString const& commandId, bool enabled);
+  void onRemoteSetDualCarrierRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAlt12Requested(QString const& commandId, bool enabled);
   void onMapContactClicked(QString const& call, QString const& grid);
   void onRemoteWaterfallStreamingChanged(bool enabled);
   void onWideGraphWaterfallRow(QByteArray const& rowLevels,
@@ -559,6 +563,8 @@ private:
 
 private:
   void set_mode (QString const& mode);
+  QString startup_mode_for_frequency (Frequency dial_frequency) const;
+  void maybe_apply_startup_mode_from_rig_frequency (Frequency dial_frequency);
   void astroUpdate ();
   void writeAllTxt(QString message);
   void auto_sequence (DecodedText const& message, unsigned start_tolerance, unsigned stop_tolerance);
@@ -737,7 +743,9 @@ private:
   qint32  m_nSentFoxRrpt=0;    //Serial number for next R+rpt Hound will send to Fox
   qint32  m_txRetryCount {0};  // Consecutive Tx retry counter for auto-sequence timeout
   qint32  m_lastNtx {-1};     // Last Tx number sent (for retry detection)
+  qint32  m_cqRetryCount {0}; // CQ (Tx6) retry counter for period toggle
   static constexpr int MAX_TX_RETRIES = 3;    // Tx2/Tx3/Tx4 retries before returning to CQ
+  static constexpr int MAX_CQ_RETRIES = 10;   // CQ retries before toggling Tx Even/1st
   int  m_autoCQPeriodsMissed   {0};           // RX periods senza risposta dal caller corrente
   bool m_receivedReplyThisPeriod {false};     // flag reset ogni periodo RX
   static constexpr int MAX_MISSED_PERIODS = 4;
@@ -857,6 +865,7 @@ private:
 
   bool    m_bAutoReply;
   QString m_lastloggedcall; //ft8md
+  QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
   bool    m_bCheckedContest;
   bool    m_bWarnedSplit=false;
   bool    m_bTUmsg;
@@ -985,6 +994,8 @@ private:
   QString m_dateTime;
   QString m_mode;
   QString m_modeTx;//ft8md
+  bool m_startupModeAutoPending {true};
+  qint64 m_startupModeAutoUntilMs {0};
   QString m_fnameWE;            // save path without extension
   QString m_rpt;
   QString m_nextRpt;
@@ -1179,7 +1190,7 @@ private:
   void fixStop();
   bool shortList(QString callsign) const;
   void transmit (double snr = 99.);
-  void rigFailure (QString const& reason);
+  void rigFailure (QString const& reason, bool allowAutoRetry = false);
   void pskSetLocal ();
   void pskPost(DecodedText const& decodedtext);
   void displayDialFrequency ();

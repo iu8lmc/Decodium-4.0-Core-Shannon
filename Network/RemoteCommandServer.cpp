@@ -44,7 +44,7 @@ R"FT2HTML(<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <meta name="theme-color" content="#0b1220" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -155,6 +155,17 @@ R"FT2HTML(<!doctype html>
             <button id="btn_auto_cq" type="button">Auto CQ</button>
             <button id="btn_tx_off" class="warn">Disable TX</button>
           </div>
+        </div>
+      </div>
+
+      <div class="mode-row emission-row">
+        <div class="group-title">Emission Options</div>
+        <div id="ft2_controls" class="btn-grid emission-grid hidden">
+          <button id="btn_async_l2" type="button">Async L2</button>
+          <button id="btn_dual_carrier" type="button">Dual Carrier</button>
+        </div>
+        <div id="alt_controls" class="btn-grid emission-grid hidden">
+          <button id="btn_alt_12" type="button">Alt 1/2</button>
         </div>
       </div>
     </section>
@@ -274,6 +285,8 @@ button.active{background:var(--ok);color:#001509;border-color:transparent;font-w
 button.primary{background:#255489}
 button.ok{background:#0f4f34;border-color:#2d8b65}
 button.warn{background:#4c1e1e;border-color:#8a3939}
+button.ok.active{background:#1fd27b;color:#04170f;border-color:#78ffbf;box-shadow:0 0 0 1px rgba(6,44,27,.5) inset,0 0 12px rgba(32,207,120,.45)}
+button.warn.active{background:#ff4a4a;color:#fff;border-color:#ffc0c0;box-shadow:0 0 0 1px rgba(64,10,10,.35) inset,0 0 12px rgba(255,74,74,.45)}
 button,input{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 
 .quick-row{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:8px}
@@ -283,6 +296,9 @@ button,input{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .tx-inline{grid-template-columns:repeat(3,minmax(96px,1fr))}
 .quick-row .inline button{padding:6px 6px;font-size:.75rem}
 input{width:100%;padding:8px;border-radius:8px;border:1px solid #37567f;background:#0a1322;color:var(--text)}
+.emission-row{margin-top:8px}
+.emission-grid{grid-template-columns:repeat(2,minmax(0,180px));max-width:420px}
+#alt_controls.emission-grid{grid-template-columns:repeat(1,minmax(0,180px))}
 
 .waterfall-panel{margin-bottom:10px}
 .waterfall-wrap{position:relative;border:1px solid #243b5f;border-radius:10px;background:#040914;overflow:hidden}
@@ -318,6 +334,8 @@ input{width:100%;padding:8px;border-radius:8px;border:1px solid #37567f;backgrou
   .freq-row{grid-template-columns:1fr}
   .kv-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .btn-grid{grid-template-columns:repeat(8,minmax(0,1fr))}
+  .emission-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-width:none}
+  #alt_controls.emission-grid{grid-template-columns:1fr}
   .split{grid-template-columns:1fr}
 }
 @media (max-width:760px){
@@ -325,6 +343,8 @@ input{width:100%;padding:8px;border-radius:8px;border:1px solid #37567f;backgrou
   .top-actions{align-self:flex-end}
   .kv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .btn-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .emission-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-width:none}
+  #alt_controls.emission-grid{grid-template-columns:1fr}
   .quick-row{grid-template-columns:1fr}
   #activity_table th,#activity_table td{padding:3px 4px;font-size:.74rem}
   #activity_table th:nth-child(1),#activity_table td:nth-child(1){width:62px}
@@ -352,6 +372,13 @@ R"FT2JS((() => {
   const btnActivityClear = el('btn_activity_clear');
   const btnWfToggle = el('btn_wf_toggle');
   const btnAutoCQ = el('btn_auto_cq');
+  const btnTxOn = el('btn_tx_on');
+  const btnTxOff = el('btn_tx_off');
+  const btnAsyncL2 = el('btn_async_l2');
+  const btnDualCarrier = el('btn_dual_carrier');
+  const btnAlt12 = el('btn_alt_12');
+  const ft2Controls = el('ft2_controls');
+  const altControls = el('alt_controls');
   const btnInstall = el('btn_install');
   const installHint = el('install_hint');
   const wfCanvas = el('waterfall_canvas');
@@ -381,7 +408,11 @@ R"FT2JS((() => {
   let lastTransmitting = null;
   let lastTxPeer = '';
   let txPeerFromRows = '';
+  let txEnabledState = false;
   let autoCqEnabled = false;
+  let asyncL2Enabled = false;
+  let dualCarrierEnabled = false;
+  let alt12Enabled = false;
   let waterfallEnabled = false;
   let waterfallMeta = {startHz:0, spanHz:0, width:0};
   let currentMode = '';
@@ -389,11 +420,18 @@ R"FT2JS((() => {
   let currentTxHz = 0;
   let pendingRxHz = null;
   let deferredInstallPrompt = null;
+  let statePollTimer = null;
+  let waterfallPollTimer = null;
 
   const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
     || window.navigator.standalone === true;
+  const wsIsUsable = () => !!ws && ws.readyState === WebSocket.OPEN && (!requiresAuth || wsAuthed);
+
+  document.addEventListener('gesturestart', (ev) => ev.preventDefault(), {passive:false});
+  document.addEventListener('gesturechange', (ev) => ev.preventDefault(), {passive:false});
+  document.addEventListener('gestureend', (ev) => ev.preventDefault(), {passive:false});
 
   function loadSavedAuth() {
     try {
@@ -531,15 +569,56 @@ R"FT2JS((() => {
     btnAutoCQ.textContent = autoCqEnabled ? 'Auto CQ ON' : 'Auto CQ OFF';
   }
 
+  function applyTxButtonsState() {
+    if (btnTxOn) btnTxOn.classList.toggle('active', txEnabledState);
+    if (btnTxOff) btnTxOff.classList.toggle('active', !txEnabledState);
+  }
+
+  function applyEmissionControlVisibility() {
+    const isFt2 = (currentMode || '').toUpperCase() === 'FT2';
+    if (ft2Controls) ft2Controls.classList.toggle('hidden', !isFt2);
+    if (altControls) altControls.classList.toggle('hidden', isFt2);
+  }
+
+  function applyEmissionButtonsState() {
+    if (btnAsyncL2) {
+      btnAsyncL2.classList.toggle('active', asyncL2Enabled);
+      btnAsyncL2.textContent = asyncL2Enabled ? 'Async L2 ON' : 'Async L2';
+    }
+    if (btnDualCarrier) {
+      btnDualCarrier.classList.toggle('active', dualCarrierEnabled);
+      btnDualCarrier.textContent = dualCarrierEnabled ? 'Dual Carrier ON' : 'Dual Carrier';
+    }
+    if (btnAlt12) {
+      btnAlt12.classList.toggle('active', alt12Enabled);
+      btnAlt12.textContent = alt12Enabled ? 'Alt 1/2 ON' : 'Alt 1/2';
+    }
+  }
+
   function updateAutoCqState(enabled) {
     autoCqEnabled = !!enabled;
     applyAutoCqButtonState();
+  }
+
+  function updateTxEnabledState(enabled) {
+    txEnabledState = !!enabled;
+    applyTxButtonsState();
+  }
+
+  function updateModeSpecificControlState(s) {
+    if (!s || typeof s !== 'object') return;
+    if (typeof s.async_l2_enabled === 'boolean') asyncL2Enabled = s.async_l2_enabled;
+    if (typeof s.dual_carrier_enabled === 'boolean') dualCarrierEnabled = s.dual_carrier_enabled;
+    if (typeof s.alt_12_enabled === 'boolean') alt12Enabled = s.alt_12_enabled;
+    applyEmissionControlVisibility();
+    applyEmissionButtonsState();
   }
 
   function updateWaterfallState(enabled) {
     waterfallEnabled = !!enabled;
     applyWaterfallButtonState();
     drawWaterfallOverlay();
+    refreshWaterfallPoller();
   }
 
   function modeBandwidthHz(mode) {
@@ -661,9 +740,12 @@ R"FT2JS((() => {
 
   applyWaterfallButtonState();
   applyAutoCqButtonState();
+  applyTxButtonsState();
+  applyEmissionControlVisibility();
+  applyEmissionButtonsState();
 
   function setConnectionState(isConnected, text) {
-    conn.textContent = isConnected ? 'connesso' : (text || 'disconnesso');
+    conn.textContent = text || (isConnected ? 'connesso' : 'disconnesso');
     conn.classList.toggle('on', isConnected);
     conn.classList.toggle('off', !isConnected);
   }
@@ -703,6 +785,58 @@ R"FT2JS((() => {
   }
 
   function setActionStatus() {}
+
+  async function fetchLatestWaterfall() {
+    if (!waterfallEnabled) return;
+    try {
+      const r = await fetch('/api/v1/waterfall/latest', {headers: buildHeaders()});
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j && j.row_b64) drawWaterfallRow(j);
+    } catch {}
+  }
+
+  function refreshWaterfallPoller() {
+    const shouldPoll = waterfallEnabled && !wsIsUsable();
+    if (shouldPoll && !waterfallPollTimer) {
+      waterfallPollTimer = window.setInterval(fetchLatestWaterfall, 350);
+      fetchLatestWaterfall();
+      return;
+    }
+    if (!shouldPoll && waterfallPollTimer) {
+      window.clearInterval(waterfallPollTimer);
+      waterfallPollTimer = null;
+    }
+  }
+
+  function startStatePolling() {
+    if (statePollTimer) window.clearInterval(statePollTimer);
+    statePollTimer = window.setInterval(async () => {
+      try {
+        const replaceActivity = !wsIsUsable() && !activityPaused;
+        await getState(replaceActivity);
+        if (!wsIsUsable()) {
+          setConnectionState(true, 'connesso (poll)');
+        }
+      } catch {
+        if (!wsIsUsable()) {
+          setConnectionState(false, 'disconnected');
+        }
+      }
+      refreshWaterfallPoller();
+    }, 1000);
+  }
+
+  function stopStatePolling() {
+    if (statePollTimer) {
+      window.clearInterval(statePollTimer);
+      statePollTimer = null;
+    }
+    if (waterfallPollTimer) {
+      window.clearInterval(waterfallPollTimer);
+      waterfallPollTimer = null;
+    }
+  }
 
   function setInstallHint(text = '', visible = false) {
     if (!installHint) return;
@@ -828,14 +962,16 @@ R"FT2JS((() => {
     return health;
   }
 
-  async function getState() {
+  async function getState(replaceActivity = true) {
     const r = await fetch('/api/v1/state', {headers: buildHeaders()});
     if (r.status === 401) throw new Error('not authorized');
     if (!r.ok) throw new Error('state http ' + r.status);
     const s = await r.json();
     renderState(s);
-    activityRows.length = 0;
-    (s.recent_band_activity || []).forEach(pushActivity);
+    if (replaceActivity) {
+      activityRows.length = 0;
+      (s.recent_band_activity || []).forEach(pushActivity);
+    }
   }
 
   function renderState(s) {
@@ -850,6 +986,9 @@ R"FT2JS((() => {
     if (typeof s.rx_frequency_hz === 'number') currentRxHz = Number(s.rx_frequency_hz);
     if (typeof s.tx_frequency_hz === 'number') currentTxHz = Number(s.tx_frequency_hz);
     pendingRxHz = null;
+    if (typeof s.tx_enabled === 'boolean') {
+      updateTxEnabledState(s.tx_enabled);
+    }
     set('st_txen', s.tx_enabled ? 'yes' : 'no');
     set('st_mon', s.monitoring ? 'yes' : 'no');
     set('st_trx', s.transmitting ? 'yes' : 'no');
@@ -871,6 +1010,7 @@ R"FT2JS((() => {
     if (typeof s.waterfall_enabled === 'boolean') {
       updateWaterfallState(s.waterfall_enabled);
     }
+    updateModeSpecificControlState(s);
     drawWaterfallOverlay();
     refreshButtonHighlights();
   }
@@ -892,6 +1032,21 @@ R"FT2JS((() => {
     if (type === 'set_auto_cq' && typeof j.enabled === 'boolean') {
       updateAutoCqState(j.enabled);
     }
+    if (type === 'set_tx_enabled' && typeof j.enabled === 'boolean') {
+      updateTxEnabledState(j.enabled);
+    }
+    if (type === 'set_async_l2' && typeof j.enabled === 'boolean') {
+      asyncL2Enabled = !!j.enabled;
+      applyEmissionButtonsState();
+    }
+    if (type === 'set_dual_carrier' && typeof j.enabled === 'boolean') {
+      dualCarrierEnabled = !!j.enabled;
+      applyEmissionButtonsState();
+    }
+    if (type === 'set_alt_12' && typeof j.enabled === 'boolean') {
+      alt12Enabled = !!j.enabled;
+      applyEmissionButtonsState();
+    }
     if (type === 'set_rx_frequency' && typeof j.rx_frequency_hz === 'number') {
       currentRxHz = Number(j.rx_frequency_hz);
       pendingRxHz = null;
@@ -899,9 +1054,12 @@ R"FT2JS((() => {
     }
     if (type === 'set_mode' && typeof j.mode === 'string') {
       currentMode = j.mode.toUpperCase();
+      activeMode = currentMode;
+      applyEmissionControlVisibility();
       drawWaterfallOverlay();
+      refreshButtonHighlights();
     }
-    setTimeout(() => { getState().catch(() => {}); }, 120);
+    setTimeout(() => { getState(false).catch(() => {}); }, 120);
     return j;
   }
 
@@ -919,14 +1077,19 @@ R"FT2JS((() => {
       } else {
         setConnectionState(true, 'connesso');
       }
+      refreshWaterfallPoller();
     };
     ws.onclose = () => {
       setConnectionState(false, 'disconnected');
+      refreshWaterfallPoller();
       if (!loginOverlay || loginOverlay.classList.contains('hidden')) {
         setTimeout(connectWs, 1500);
       }
     };
-    ws.onerror = () => { setConnectionState(false, 'ws error'); };
+    ws.onerror = () => {
+      setConnectionState(false, 'ws error');
+      refreshWaterfallPoller();
+    };
     ws.onmessage = (ev) => {
       let m = {};
       try { m = JSON.parse(ev.data); } catch { return; }
@@ -934,18 +1097,31 @@ R"FT2JS((() => {
         requiresAuth = !!m.requires_auth;
         if (typeof m.auth_user === 'string' && m.auth_user.trim()) authUser = m.auth_user.trim();
         if (loginUser && !loginUser.value) loginUser.value = authUser || 'admin';
+        if (typeof m.mode === 'string') {
+          currentMode = m.mode.toUpperCase();
+          activeMode = currentMode;
+          refreshButtonHighlights();
+        }
         if (typeof m.auto_cq_enabled === 'boolean') {
           updateAutoCqState(m.auto_cq_enabled);
         }
+        if (typeof m.tx_enabled === 'boolean') {
+          updateTxEnabledState(m.tx_enabled);
+        }
+        updateModeSpecificControlState(m);
         if (typeof m.waterfall_enabled === 'boolean') {
           updateWaterfallState(m.waterfall_enabled);
         }
+        refreshWaterfallPoller();
       } else if (m.event === 'auth_ok') {
         wsAuthed = true;
         setConnectionState(true, 'connesso');
+        getState(false).catch(() => {});
+        refreshWaterfallPoller();
       } else if (m.event === 'auth_failed') {
         wsAuthed = false;
         setConnectionState(false, 'auth failed');
+        stopStatePolling();
         clearAuth();
         showLogin(true, 'Invalid username or password');
         if (ws) ws.close();
@@ -968,15 +1144,43 @@ R"FT2JS((() => {
         if (type === 'set_auto_cq' && typeof m.enabled === 'boolean') {
           updateAutoCqState(m.enabled);
         }
+        if (type === 'set_tx_enabled' && typeof m.enabled === 'boolean') {
+          updateTxEnabledState(m.enabled);
+        }
+        if (type === 'set_async_l2' && typeof m.enabled === 'boolean') {
+          asyncL2Enabled = !!m.enabled;
+          applyEmissionButtonsState();
+        }
+        if (type === 'set_dual_carrier' && typeof m.enabled === 'boolean') {
+          dualCarrierEnabled = !!m.enabled;
+          applyEmissionButtonsState();
+        }
+        if (type === 'set_alt_12' && typeof m.enabled === 'boolean') {
+          alt12Enabled = !!m.enabled;
+          applyEmissionButtonsState();
+        }
       }
     };
   }
 
   el('btn_rxfreq').onclick = () => sendCommand({type:'set_rx_frequency', rx_frequency_hz:Number(el('rxfreq').value || 0)}).catch((e) => showLogin(true, e.message));
-  el('btn_tx_on').onclick = () => sendCommand({type:'set_tx_enabled', enabled:true}).catch((e) => showLogin(true, e.message));
-  el('btn_tx_off').onclick = () => sendCommand({type:'set_tx_enabled', enabled:false}).catch((e) => showLogin(true, e.message));
+  if (btnTxOn) {
+    btnTxOn.onclick = () => sendCommand({type:'set_tx_enabled', enabled:true}).catch((e) => showLogin(true, e.message));
+  }
+  if (btnTxOff) {
+    btnTxOff.onclick = () => sendCommand({type:'set_tx_enabled', enabled:false}).catch((e) => showLogin(true, e.message));
+  }
   if (btnAutoCQ) {
     btnAutoCQ.onclick = () => sendCommand({type:'set_auto_cq', enabled:!autoCqEnabled}).catch((e) => showLogin(true, e.message));
+  }
+  if (btnAsyncL2) {
+    btnAsyncL2.onclick = () => sendCommand({type:'set_async_l2', enabled:!asyncL2Enabled}).catch((e) => showLogin(true, e.message));
+  }
+  if (btnDualCarrier) {
+    btnDualCarrier.onclick = () => sendCommand({type:'set_dual_carrier', enabled:!dualCarrierEnabled}).catch((e) => showLogin(true, e.message));
+  }
+  if (btnAlt12) {
+    btnAlt12.onclick = () => sendCommand({type:'set_alt_12', enabled:!alt12Enabled}).catch((e) => showLogin(true, e.message));
   }
   el('btn_call').onclick = () => sendCommand({type:'select_caller', target_call:el('caller_call').value, target_grid:el('caller_grid').value}).catch((e) => showLogin(true, e.message));
   if (btnWfToggle) {
@@ -1029,12 +1233,14 @@ R"FT2JS((() => {
       return;
     }
     try {
-      await getState();
+      await getState(true);
       saveAuth();
       dismissMobileKeyboard();
       showLogin(false);
+      startStatePolling();
       connectWs();
     } catch (e) {
+      stopStatePolling();
       clearAuth();
       showLogin(true, 'Invalid username or password');
     }
@@ -1055,21 +1261,24 @@ R"FT2JS((() => {
 
       if (requiresAuth) {
         if (!authToken) {
+          stopStatePolling();
           setConnectionState(false, 'locked');
           if (loginUser) loginUser.value = authUser || 'admin';
           showLogin(true);
           return;
         }
-        await getState();
+        await getState(true);
         saveAuth();
         showLogin(false);
       } else {
-        await getState();
+        await getState(true);
       }
 
+      startStatePolling();
       connectWs();
     } catch (e) {
       if (requiresAuth) {
+        stopStatePolling();
         setConnectionState(false, 'locked');
         showLogin(true);
       } else {
@@ -1291,6 +1500,13 @@ void RemoteCommandServer::stop()
   authenticatedClients_.clear();
   waterfallEnabled_ = false;
   lastWaterfallRowUtcMs_ = 0;
+  lastWaterfallRowB64_.clear();
+  lastWaterfallWidth_ = 0;
+  lastWaterfallStartFrequencyHz_ = 0;
+  lastWaterfallSpanHz_ = 0;
+  lastWaterfallRxFrequencyHz_ = 0;
+  lastWaterfallTxFrequencyHz_ = 0;
+  lastWaterfallMode_.clear();
 
   for (auto const& clientPtr : clients_)
     {
@@ -1409,16 +1625,23 @@ void RemoteCommandServer::publishWaterfallRow(QByteArray const& rowLevels,
       return;
     }
   lastWaterfallRowUtcMs_ = nowUtcMs;
+  lastWaterfallRowB64_ = rowLevels.toBase64();
+  lastWaterfallWidth_ = rowLevels.size();
+  lastWaterfallStartFrequencyHz_ = startFrequencyHz;
+  lastWaterfallSpanHz_ = qMax(1, spanHz);
+  lastWaterfallRxFrequencyHz_ = rxFrequencyHz;
+  lastWaterfallTxFrequencyHz_ = txFrequencyHz;
+  lastWaterfallMode_ = mode;
 
   QJsonObject event {
     {"event", QStringLiteral("waterfall_row")},
-    {"row_b64", QString::fromLatin1(rowLevels.toBase64())},
-    {"width", rowLevels.size()},
-    {"start_frequency_hz", startFrequencyHz},
-    {"span_hz", qMax(1, spanHz)},
-    {"rx_frequency_hz", rxFrequencyHz},
-    {"tx_frequency_hz", txFrequencyHz},
-    {"mode", mode},
+    {"row_b64", QString::fromLatin1(lastWaterfallRowB64_)},
+    {"width", lastWaterfallWidth_},
+    {"start_frequency_hz", lastWaterfallStartFrequencyHz_},
+    {"span_hz", lastWaterfallSpanHz_},
+    {"rx_frequency_hz", lastWaterfallRxFrequencyHz_},
+    {"tx_frequency_hz", lastWaterfallTxFrequencyHz_},
+    {"mode", lastWaterfallMode_},
     {"server_now_ms", nowUtcMs},
   };
   broadcastJson(event);
@@ -1505,13 +1728,19 @@ void RemoteCommandServer::onNewConnection()
       connect(client, &QWebSocket::textMessageReceived, this, &RemoteCommandServer::onTextMessageReceived);
       connect(client, &QWebSocket::disconnected, this, &RemoteCommandServer::onSocketDisconnected);
 
+      auto const rt = runtimeState();
       QJsonObject hello {
         {"event", QStringLiteral("hello")},
         {"server", QStringLiteral("decodium-remote-ws")},
         {"protocol", 1},
         {"requires_auth", isAuthRequired()},
         {"auth_user", authUser_},
-        {"auto_cq_enabled", runtimeState().autoCqEnabled},
+        {"mode", rt.mode},
+        {"tx_enabled", rt.txEnabled},
+        {"async_l2_enabled", rt.asyncL2Enabled},
+        {"dual_carrier_enabled", rt.dualCarrierEnabled},
+        {"alt_12_enabled", rt.alt12Enabled},
+        {"auto_cq_enabled", rt.autoCqEnabled},
         {"waterfall_enabled", waterfallEnabled_},
       };
       sendJson(client, hello);
@@ -1906,6 +2135,90 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
         {"event", QStringLiteral("command_ack")},
         {"command_id", commandId},
         {"type", QStringLiteral("set_auto_cq")},
+        {"status", QStringLiteral("accepted_immediate")},
+        {"enabled", enabled},
+        {"server_now_ms", nowUtcMs},
+      };
+      return result;
+    }
+
+  if (commandType == QStringLiteral("set_async_l2"))
+    {
+      if (!object.contains(QStringLiteral("enabled")))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("enabled is required"));
+          return result;
+        }
+      auto const mode = state.mode.trimmed().toUpper();
+      if (mode != QStringLiteral("FT2"))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_state"), QStringLiteral("Async L2 is available only in FT2"));
+          return result;
+        }
+      auto enabled = object.value(QStringLiteral("enabled")).toBool(false);
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT setAsyncL2Requested(commandId, enabled);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", QStringLiteral("set_async_l2")},
+        {"status", QStringLiteral("accepted_immediate")},
+        {"enabled", enabled},
+        {"server_now_ms", nowUtcMs},
+      };
+      return result;
+    }
+
+  if (commandType == QStringLiteral("set_dual_carrier"))
+    {
+      if (!object.contains(QStringLiteral("enabled")))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("enabled is required"));
+          return result;
+        }
+      auto const mode = state.mode.trimmed().toUpper();
+      if (mode != QStringLiteral("FT2"))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_state"), QStringLiteral("Dual Carrier is available only in FT2"));
+          return result;
+        }
+      auto enabled = object.value(QStringLiteral("enabled")).toBool(false);
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT setDualCarrierRequested(commandId, enabled);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", QStringLiteral("set_dual_carrier")},
+        {"status", QStringLiteral("accepted_immediate")},
+        {"enabled", enabled},
+        {"server_now_ms", nowUtcMs},
+      };
+      return result;
+    }
+
+  if (commandType == QStringLiteral("set_alt_12"))
+    {
+      if (!object.contains(QStringLiteral("enabled")))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("enabled is required"));
+          return result;
+        }
+      auto const mode = state.mode.trimmed().toUpper();
+      if (mode == QStringLiteral("FT2"))
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_state"), QStringLiteral("Alt 1/2 is unavailable in FT2"));
+          return result;
+        }
+      auto enabled = object.value(QStringLiteral("enabled")).toBool(false);
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT setAlt12Requested(commandId, enabled);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", QStringLiteral("set_alt_12")},
         {"status", QStringLiteral("accepted_immediate")},
         {"enabled", enabled},
         {"server_now_ms", nowUtcMs},
@@ -2333,6 +2646,9 @@ void RemoteCommandServer::onHttpSocketReadyRead()
           health.insert(QStringLiteral("period_ms"), static_cast<double>(rt.periodMs));
           health.insert(QStringLiteral("tx_enabled"), rt.txEnabled);
           health.insert(QStringLiteral("auto_cq_enabled"), rt.autoCqEnabled);
+          health.insert(QStringLiteral("async_l2_enabled"), rt.asyncL2Enabled);
+          health.insert(QStringLiteral("dual_carrier_enabled"), rt.dualCarrierEnabled);
+          health.insert(QStringLiteral("alt_12_enabled"), rt.alt12Enabled);
           health.insert(QStringLiteral("monitoring"), rt.monitoring);
           health.insert(QStringLiteral("transmitting"), rt.transmitting);
           health.insert(QStringLiteral("my_call"), rt.myCall);
@@ -2375,6 +2691,9 @@ void RemoteCommandServer::onHttpSocketReadyRead()
                       {"period_ms", static_cast<double>(periodMs)},
                       {"tx_enabled", rt.txEnabled},
                       {"auto_cq_enabled", rt.autoCqEnabled},
+                      {"async_l2_enabled", rt.asyncL2Enabled},
+                      {"dual_carrier_enabled", rt.dualCarrierEnabled},
+                      {"alt_12_enabled", rt.alt12Enabled},
                       {"monitoring", rt.monitoring},
                       {"transmitting", rt.transmitting},
                       {"my_call", rt.myCall},
@@ -2386,6 +2705,38 @@ void RemoteCommandServer::onHttpSocketReadyRead()
                       {"requires_auth", isAuthRequired()},
                       {"server_now_ms", rt.nowUtcMs},
                     });
+      socket->disconnectFromHost();
+      return;
+    }
+
+  if (state.method == QStringLiteral("GET") && route == QStringLiteral("/api/v1/waterfall/latest"))
+    {
+      if (!isHttpAuthorized(state))
+        {
+          sendHttpJson(socket, 401, QJsonObject {
+                        {"error", QStringLiteral("not_authorized")},
+                        {"requires_auth", isAuthRequired()},
+                      });
+          socket->disconnectFromHost();
+          return;
+        }
+
+      QJsonObject payload {
+        {"waterfall_enabled", waterfallEnabled_},
+        {"server_now_ms", currentUtcMs()},
+      };
+      if (!lastWaterfallRowB64_.isEmpty())
+        {
+          payload.insert(QStringLiteral("row_b64"), QString::fromLatin1(lastWaterfallRowB64_));
+          payload.insert(QStringLiteral("width"), lastWaterfallWidth_);
+          payload.insert(QStringLiteral("start_frequency_hz"), lastWaterfallStartFrequencyHz_);
+          payload.insert(QStringLiteral("span_hz"), lastWaterfallSpanHz_);
+          payload.insert(QStringLiteral("rx_frequency_hz"), lastWaterfallRxFrequencyHz_);
+          payload.insert(QStringLiteral("tx_frequency_hz"), lastWaterfallTxFrequencyHz_);
+          payload.insert(QStringLiteral("mode"), lastWaterfallMode_);
+        }
+
+      sendHttpJson(socket, 200, payload);
       socket->disconnectFromHost();
       return;
     }
@@ -2486,6 +2837,9 @@ void RemoteCommandServer::onTelemetryTick()
     {"period_ms", static_cast<double>(periodMs)},
     {"tx_enabled", state.txEnabled},
     {"auto_cq_enabled", state.autoCqEnabled},
+    {"async_l2_enabled", state.asyncL2Enabled},
+    {"dual_carrier_enabled", state.dualCarrierEnabled},
+    {"alt_12_enabled", state.alt12Enabled},
     {"monitoring", state.monitoring},
     {"transmitting", state.transmitting},
     {"my_call", state.myCall},

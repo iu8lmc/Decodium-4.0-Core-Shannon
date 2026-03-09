@@ -1,13 +1,13 @@
-# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.4.0
+# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.4.1
 
 English, Italian, and Spanish documentation for this fork is included in this repository.
 
 ## English
 
-Fork release `v1.4.0` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor` and adds macOS-focused operational hardening.
+Fork release `v1.4.1` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor` and adds macOS-focused operational hardening.
 
 - Upstream base: Decodium v3.0 SE "Raptor"
-- Fork release: `v1.4.0`
+- Fork release: `v1.4.1`
 - App bundle/executable on macOS: `ft2.app` / `ft2`
 - License: GPLv3
 
@@ -60,7 +60,7 @@ Fork release `v1.4.0` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor`
   - Fixed cross-thread Qt signal delivery for `ModulatorState` with explicit metatype registration.
   - Set default Qt style to `Fusion` for more consistent rendering across macOS variants.
   - Removed hardcoded legacy revision suffix source so PSKReporter `Using:` no longer appends `mod by IU8LMC...`.
-- Fork `v1.4.0` CAT/network/map/runtime updates (from `v1.3.8`):
+- Fork `v1.4.1` CAT/network/map/runtime updates (from `v1.3.8`):
   - CAT/remote Configure hardening: generic Configure packets no longer force FT2 mode.
   - UDP control hardening: control commands now require direct target id matching.
   - TCI runtime hardening: safer websocket endpoint normalization, safer command parsing, timer/null guards.
@@ -75,6 +75,9 @@ Fork release `v1.4.0` is based on upstream `iu8lmc/Decodium-3.0-Codename-Raptor`
   - Decode-flow stability pass: packed-row split handling and near-duplicate suppression (5s window, best-SNR preference).
   - Async L2 now appears only in FT2 mode and is auto-disabled when leaving FT2.
   - Remote web dashboard maturity updates: LAN settings workflow, username/password auth path, improved mobile/PWA usability.
+  - Startup auto-mode now applies as one-shot (no repeated CAT-driven mode re-forcing loop).
+  - Initial mode-switch responsiveness restored at startup.
+  - Waterfall is no longer forced to foreground when switching mode.
 
 ### Build (macOS)
 
@@ -104,12 +107,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ### Documentation
 
-- Release notes (EN/IT/ES): [RELEASE_NOTES_v1.4.0.md](RELEASE_NOTES_v1.4.0.md)
+- Release notes (EN/IT/ES): [RELEASE_NOTES_v1.4.1.md](RELEASE_NOTES_v1.4.1.md)
 - Changelog (EN/IT/ES for latest release): [CHANGELOG.md](CHANGELOG.md)
 - Security and bug analysis report: [doc/SECURITY_BUG_ANALYSIS_REPORT.md](doc/SECURITY_BUG_ANALYSIS_REPORT.md)
 - macOS porting details (EN/IT): [doc/MACOS_PORTING_v1.2.0.md](doc/MACOS_PORTING_v1.2.0.md)
 - DT/NTP architecture (EN/IT): [doc/DT_NTP_ROBUST_SYNC_v1.2.0.md](doc/DT_NTP_ROBUST_SYNC_v1.2.0.md)
-- GitHub release body template (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.4.0.md](doc/GITHUB_RELEASE_BODY_v1.4.0.md)
+- GitHub release body template (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.4.1.md](doc/GITHUB_RELEASE_BODY_v1.4.1.md)
 - Web app setup guide (EN): [doc/WEBAPP_SETUP_GUIDE.en-GB.md](doc/WEBAPP_SETUP_GUIDE.en-GB.md)
 - Web app setup guide (IT): [doc/WEBAPP_SETUP_GUIDE.it.md](doc/WEBAPP_SETUP_GUIDE.it.md)
 - Web app setup guide (ES): [doc/WEBAPP_SETUP_GUIDE.es.md](doc/WEBAPP_SETUP_GUIDE.es.md)
@@ -160,10 +163,10 @@ cd squashfs-root
 
 ## Italiano
 
-La release fork `v1.4.0` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e aggiunge hardening operativo specifico per macOS.
+La release fork `v1.4.1` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e aggiunge hardening operativo specifico per macOS.
 
 - Base upstream: Decodium v3.0 SE "Raptor"
-- Versione fork: `v1.4.0`
+- Versione fork: `v1.4.1`
 - Bundle/eseguibile su macOS: `ft2.app` / `ft2`
 - Licenza: GPLv3
 
@@ -216,7 +219,7 @@ La release fork `v1.4.0` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e ag
   - Corretto delivery segnali cross-thread `ModulatorState` con registrazione metatype esplicita.
   - Impostato stile Qt predefinito `Fusion` per rendering piu' coerente tra varianti macOS.
   - Rimossa sorgente hardcoded del suffisso revision legacy: PSKReporter `Using:` non appende piu' `mod by IU8LMC...`.
-- Aggiornamenti CAT/rete/mappa fork `v1.4.0` (da `v1.3.7`):
+- Aggiornamenti CAT/rete/mappa fork `v1.4.1` (da `v1.3.7`):
   - Hardening CAT/Configure remoto: pacchetti Configure generici non forzano piu' FT2.
   - Hardening UDP controllo: i comandi di controllo richiedono target id diretto.
   - Hardening runtime TCI: normalizzazione endpoint websocket, parsing comandi piu' sicuro, guardie timer/null.
@@ -228,6 +231,9 @@ La release fork `v1.4.0` e' basata su `iu8lmc/Decodium-3.0-Codename-Raptor` e ag
   - Migliorata resilienza geometria multi-monitor per mantenere le finestre visibili dopo cambi display.
   - Hardening safety `map65`/`qmap` (stringhe bounded, clamp indici device, gestione path file piu' sicura).
   - Fix CI Linux su parsing latest-tag Hamlib + compatibilita' fallback Hamlib 4.x.
+  - Auto-mode startup resa one-shot (niente loop di riforzatura modalita' via CAT).
+  - Ripristinata responsiveness iniziale nel cambio modalita'.
+  - Rimosso foreground forzato waterfall durante cambio modalita'.
 
 ### Compilazione (macOS)
 
@@ -257,12 +263,12 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ### Documentazione
 
-- Note di rilascio (EN/IT/ES): [RELEASE_NOTES_v1.4.0.md](RELEASE_NOTES_v1.4.0.md)
+- Note di rilascio (EN/IT/ES): [RELEASE_NOTES_v1.4.1.md](RELEASE_NOTES_v1.4.1.md)
 - Changelog (EN/IT/ES per release attuale): [CHANGELOG.md](CHANGELOG.md)
 - Report analisi sicurezza e bug: [doc/SECURITY_BUG_ANALYSIS_REPORT.md](doc/SECURITY_BUG_ANALYSIS_REPORT.md)
 - Porting macOS (EN/IT): [doc/MACOS_PORTING_v1.2.0.md](doc/MACOS_PORTING_v1.2.0.md)
 - Architettura DT/NTP (EN/IT): [doc/DT_NTP_ROBUST_SYNC_v1.2.0.md](doc/DT_NTP_ROBUST_SYNC_v1.2.0.md)
-- Template release GitHub (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.4.0.md](doc/GITHUB_RELEASE_BODY_v1.4.0.md)
+- Template release GitHub (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.4.1.md](doc/GITHUB_RELEASE_BODY_v1.4.1.md)
 - Guida Web App (IT): [doc/WEBAPP_SETUP_GUIDE.it.md](doc/WEBAPP_SETUP_GUIDE.it.md)
 - Guida Web App (EN): [doc/WEBAPP_SETUP_GUIDE.en-GB.md](doc/WEBAPP_SETUP_GUIDE.en-GB.md)
 - Guida Web App (ES): [doc/WEBAPP_SETUP_GUIDE.es.md](doc/WEBAPP_SETUP_GUIDE.es.md)

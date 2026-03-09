@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. v1.4.0)"
+        description: "Release version (e.g. v1.4.1)"
         required: true
-        default: "v1.4.0"
+        default: "v1.4.1"
       publish_release:
         description: "Upload AppImage to GitHub release"
         required: true
@@ -248,7 +248,7 @@ jobs:
               echo
               echo "Linux x86_64 AppImage release for fork ${VERSION}."
               echo
-              echo "Includes v1.4.0 updates:"
+              echo "Includes v1.4.1 updates:"
               echo "- CAT/remote Configure hardening (no forced FT2 mode on generic Configure packets);"
               echo "- UDP control hardening with direct target id enforcement;"
               echo "- optional map greyline toggle in Settings -> General;"
@@ -270,10 +270,10 @@ jobs:
               echo "\`./AppRun\`"
               echo
               echo "Italiano:"
-              echo "- aggiornamenti v1.4.0 inclusi (hardening CAT/UDP, toggle greyline, distanza su path mappa, layout DX-ped)."
+              echo "- aggiornamenti v1.4.1 inclusi (hardening CAT/UDP, toggle greyline, distanza su path mappa, layout DX-ped)."
               echo
               echo "Espanol:"
-              echo "- incluye mejoras v1.4.0 (hardening CAT/UDP, opcion greyline, distancia en ruta de mapa, layout DX-ped)."
+              echo "- incluye mejoras v1.4.1 (hardening CAT/UDP, opcion greyline, distancia en ruta de mapa, layout DX-ped)."
             } > "${NOTES_FILE}"
             gh release create "${VERSION}" "${ASSETS[@]}" \
               --repo "${REPO}" \

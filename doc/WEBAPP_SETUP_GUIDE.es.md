@@ -4,7 +4,7 @@ Esta guia explica, paso a paso, como activar y usar el dashboard web remoto de D
 
 ## 1) Requisitos
 
-- Decodium `v1.4.0` ejecutandose en el ordenador de estacion.
+- Decodium `v1.4.1` ejecutandose en el ordenador de estacion.
 - Ordenador de estacion y telefono/tablet conectados a la misma LAN/Wi-Fi.
 - App principal Decodium funcionando primero (CAT/audio/decode).
 

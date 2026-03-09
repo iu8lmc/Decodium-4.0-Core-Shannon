@@ -13,6 +13,7 @@
 namespace
 {
   unsigned const polls_to_stabilize {3};
+  unsigned const transient_poll_failures_to_tolerate {3};
 }
 
 PollingTransceiver::PollingTransceiver (logger_type * logger, int poll_interval, QObject * parent)
@@ -20,6 +21,7 @@ PollingTransceiver::PollingTransceiver (logger_type * logger, int poll_interval,
   , interval_ {poll_interval * 1000}
   , poll_timer_ {nullptr}
   , retries_ {0}
+  , poll_failures_ {0}
 {
 }
 
@@ -146,6 +148,7 @@ void PollingTransceiver::handle_timeout ()
   try
     {
       do_poll ();              // tell sub-classes to update our state
+      poll_failures_ = 0;      // poll path recovered/healthy
 
       // Signal new state if it what we expected or, hasn't become
       // what we expected after polls_to_stabilize polls. Unsolicited
@@ -187,6 +190,14 @@ void PollingTransceiver::handle_timeout ()
     }
   if (!message.isEmpty ())
     {
+      // CAT backends can occasionally miss one poll (USB/serial jitter,
+      // temporary rig busy, log/write contention). Avoid full disconnect
+      // unless failures are consecutive.
+      if (++poll_failures_ < transient_poll_failures_to_tolerate)
+        {
+          return;
+        }
+      poll_failures_ = 0;
       offline (message);
     }
 }

@@ -68,7 +68,8 @@ private:
   // updates to determine when state changes have bubbled through
   Transceiver::TransceiverState next_state_;
 
-  unsigned retries_;       
+  unsigned retries_;
+  unsigned poll_failures_ {0};
 };
 
 #endif

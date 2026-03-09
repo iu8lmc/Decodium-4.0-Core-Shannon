@@ -4,7 +4,7 @@ This guide explains, step-by-step, how to enable and use the Decodium remote web
 
 ## 1) What you need
 
-- Decodium `v1.4.0` running on your station computer.
+- Decodium `v1.4.1` running on your station computer.
 - Station computer and phone/tablet connected to the same LAN/Wi-Fi.
 - Decodium main app working normally first (CAT/audio/decode).
 

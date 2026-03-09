@@ -1,5 +1,64 @@
 # Changelog / Registro Modifiche
 
+## [1.4.1] - 2026-03-09
+
+### English
+
+Release focused on startup/mode-switch correctness, CAT runtime resilience, and release/documentation alignment.
+
+#### Changed
+
+- Startup mode initialization is now forced through the full mode setup path to avoid partially-initialized FT controls at boot.
+- Startup auto mode-from-rig selection is now one-shot after first valid match.
+- Remote runtime state/control surface expanded for `Async L2`, `Dual Carrier`, and `Alt 1/2`.
+- World-map visibility persistence in splitter layout retained/cleaned.
+- Release/docs templates aligned to `v1.4.1` (IT/EN/ES), including macOS quarantine and Linux AppImage extract-run guidance.
+
+#### Fixed
+
+- Fixed initial mode-switch unresponsiveness caused by repeated startup auto-mode forcing.
+- Fixed unexpected advanced FT controls appearing at startup before mode initialization completed.
+- Fixed forced waterfall foreground on FT2/FT4/FT8/FST4/FST4W mode switches.
+- Reduced false CAT offline transitions by tolerating short transient poll failures in polling transceiver.
+
+### Italiano
+
+Release focalizzata su correttezza startup/cambio modalita', resilienza runtime CAT e allineamento release/documentazione.
+
+#### Modificato
+
+- Inizializzazione modalita' startup ora forzata sul percorso completo di setup per evitare controlli FT parziali all'avvio.
+- Auto-selezione modalita' startup da frequenza radio resa one-shot dopo il primo match valido.
+- Superficie stato/controllo runtime remoto estesa per `Async L2`, `Dual Carrier` e `Alt 1/2`.
+- Persistenza visibilita' world-map nel layout splitter mantenuta/rifinita.
+- Template release/documentazione allineati a `v1.4.1` (IT/EN/ES), inclusi comandi quarantena macOS e avvio AppImage estratto su Linux.
+
+#### Corretto
+
+- Corretto blocco/ritardo iniziale nel cambio modalita' causato da riforzatura ripetuta auto-mode in startup.
+- Corretta comparsa inattesa di controlli FT avanzati in avvio prima del completamento init modalita'.
+- Corretta apertura forzata in primo piano del waterfall durante switch FT2/FT4/FT8/FST4/FST4W.
+- Ridotte transizioni CAT offline false tollerando failure transitori brevi nel polling transceiver.
+
+### Espanol
+
+Release centrada en correccion de startup/cambio de modo, resiliencia CAT en runtime y alineacion release/documentacion.
+
+#### Cambios
+
+- Inicializacion de modo al arranque forzada por la ruta completa de setup para evitar controles FT parciales.
+- Auto-seleccion de modo startup por frecuencia del rig ahora one-shot tras el primer match valido.
+- Superficie de estado/control remoto ampliada para `Async L2`, `Dual Carrier` y `Alt 1/2`.
+- Persistencia de visibilidad world-map en layout splitter mantenida/ajustada.
+- Plantillas de release/docs alineadas a `v1.4.1` (IT/EN/ES), incluyendo comando de cuarentena macOS y arranque AppImage extraido en Linux.
+
+#### Corregido
+
+- Corregida falta de respuesta inicial al cambiar modo por re-forzado repetido de auto-mode en startup.
+- Corregida aparicion inesperada de controles FT avanzados al arrancar antes de terminar la inicializacion de modo.
+- Corregido enfoque forzado del waterfall en cambios FT2/FT4/FT8/FST4/FST4W.
+- Reducidas transiciones CAT offline falsas tolerando fallos transitorios cortos en polling transceiver.
+
 ## [1.3.8] - 2026-03-05
 
 ### English

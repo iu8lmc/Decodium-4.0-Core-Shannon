@@ -1019,6 +1019,22 @@
            </property>
           </widget>
          </item>
+         <item row="0" column="9">
+          <widget class="QCheckBox" name="cbAutoTogglePeriod">
+           <property name="toolTip">
+            <string>Auto CQ: toggle Tx Even/1st after repeated CQ without response</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QCheckBox { margin-left: 8px; }</string>
+           </property>
+           <property name="text">
+            <string>Alt 1/2</string>
+           </property>
+           <property name="checked">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
          <item row="0" column="10">
           <widget class="QPushButton" name="stopTxButton">
            <property name="minimumSize">
@@ -2128,7 +2144,7 @@ When not checked you can view the calibration results.</string>
                     <item>
                      <widget class="QCheckBox" name="cbDualCarrier">
                       <property name="toolTip">
-                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;TX su 2 sub-portanti FT2 (+500 Hz) per ridurre scontri di segnale.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Transmit the same FT2 message on 2 sub-carriers (+500 Hz) to reduce collisions.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                       </property>
                       <property name="text">
                        <string>Dual Carrier</string>
@@ -2138,7 +2154,7 @@ When not checked you can view the calibration results.</string>
                     <item>
                      <widget class="QLabel" name="labelDualCarrierWarning">
                       <property name="toolTip">
-                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Con Dual Carrier ogni sub-portante riceve metà potenza (-3 dB). Usare solo con segnale forte o pileup denso.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;With Dual Carrier each sub-carrier gets half power (-3 dB). Use only with strong signals or dense pileups.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                       </property>
                       <property name="text">
                        <string>TX -3dB</string>
@@ -2154,7 +2170,7 @@ When not checked you can view the calibration results.</string>
                     <item>
                      <widget class="QCheckBox" name="cbAsyncDecode">
                       <property name="toolTip">
-                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Level 2 Sync-Triggered decoder: scansione Costas continua ogni 750ms, decode solo su sync confermato. DT eliminato dalla pipeline di decodifica.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Level 2 sync-triggered decoder: continuous Costas scan every 750 ms, decode only on confirmed sync. DT is removed from the decode pipeline.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                       </property>
                       <property name="text">
                        <string>Async L2</string>

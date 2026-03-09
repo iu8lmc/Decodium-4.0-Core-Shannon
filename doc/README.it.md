@@ -6,7 +6,7 @@ Note specifiche del fork macOS nel repository.
 
 ## Contesto release attuale
 
-- Ultima release stabile: `v1.4.0`
+- Ultima release stabile: `v1.4.1`
 - Target: macOS Tahoe ARM64, Sequoia ARM64, Sequoia Intel, Monterey Intel (sperimentale), Linux x86_64 AppImage
 
 ## Note build e runtime
@@ -21,10 +21,12 @@ Note specifiche del fork macOS nel repository.
 - Il fork usa `SharedMemorySegment` con backend `mmap` su Darwin.
 - Il flusso release non dipende da tuning `sysctl` System V (`kern.sysv.shmmax/shmall`).
 
-### Evidenze consolidate v1.4.0
+### Evidenze consolidate v1.4.1
 
 - Stabilizzazione flusso decode FT2 con split righe packed + soppressione near-duplicate (5 secondi).
 - Controllo Async L2 visibile solo in FT2 e auto-disabilitato fuori FT2.
+- Auto-selezione startup da frequenza radio resa one-shot; risposta iniziale al cambio modalita' ripristinata.
+- Il cambio modalita' non forza piu' il waterfall in primo piano.
 - Maturazione dashboard web remota (config LAN, auth username/password, comportamento mobile/PWA).
 - Hardening CAT/UDP/TCI e opzioni mappa (greyline + distanza su path) mantenuti.
 
@@ -61,8 +63,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## Riferimenti
 
 - `CHANGELOG.md`
-- `RELEASE_NOTES_v1.4.0.md`
-- `doc/GITHUB_RELEASE_BODY_v1.4.0.md`
+- `RELEASE_NOTES_v1.4.1.md`
+- `doc/GITHUB_RELEASE_BODY_v1.4.1.md`
 - `doc/WEBAPP_SETUP_GUIDE.it.md`
 - `doc/WEBAPP_SETUP_GUIDE.en-GB.md`
 - `doc/WEBAPP_SETUP_GUIDE.es.md`

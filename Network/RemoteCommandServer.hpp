@@ -36,6 +36,9 @@ public:
     qint64 periodMs {0};
     bool txEnabled {false};
     bool autoCqEnabled {false};
+    bool asyncL2Enabled {false};
+    bool dualCarrierEnabled {false};
+    bool alt12Enabled {false};
     bool monitoring {false};
     bool transmitting {false};
     QString myCall;
@@ -75,6 +78,9 @@ Q_SIGNALS:
   void setRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
   void setTxEnabledRequested(QString const& commandId, bool enabled);
   void setAutoCqRequested(QString const& commandId, bool enabled);
+  void setAsyncL2Requested(QString const& commandId, bool enabled);
+  void setDualCarrierRequested(QString const& commandId, bool enabled);
+  void setAlt12Requested(QString const& commandId, bool enabled);
   void waterfallStreamingChanged(bool enabled);
   void logMessage(QString const& message) const;
 
@@ -157,6 +163,13 @@ private:
   bool waterfallEnabled_ {false};
   qint64 lastWaterfallRowUtcMs_ {0};
   int waterfallMinFrameIntervalMs_ {125};
+  QByteArray lastWaterfallRowB64_;
+  int lastWaterfallWidth_ {0};
+  int lastWaterfallStartFrequencyHz_ {0};
+  int lastWaterfallSpanHz_ {0};
+  int lastWaterfallRxFrequencyHz_ {0};
+  int lastWaterfallTxFrequencyHz_ {0};
+  QString lastWaterfallMode_;
   QString authUser_ {QStringLiteral("admin")};
   QString authToken_;
   quint16 wsPort_ {0};

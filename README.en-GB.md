@@ -16,12 +16,12 @@ security fixes, and release automation for:
 ## Current Baseline
 
 - Source branch: `master`
-- Latest stable release: `v1.4.0`
+- Latest stable release: `v1.4.1`
 - App bundle/executable: `ft2.app` / `ft2`
 
-## Key Notes for v1.4.0
+## Key Notes for v1.4.1
 
-This release consolidates the full stabilization cycle from `v1.3.8` to `v1.4.0`:
+This release consolidates the update cycle from `v1.4.0` to `v1.4.1`:
 
 - FT2 decode flow stabilization:
   - packed-row split handling to avoid merged/overlapped lines,
@@ -30,6 +30,10 @@ This release consolidates the full stabilization cycle from `v1.3.8` to `v1.4.0`
 - Async L2 behavior correction:
   - visible only when mode is FT2,
   - automatically disabled when leaving FT2.
+- Startup mode-switch/runtime regressions fixed:
+  - startup auto mode-from-rig is now one-shot (no repeated mode re-forcing loop),
+  - initial mode-switch responsiveness restored,
+  - no forced waterfall foreground on mode changes.
 - Remote web dashboard maturity improvements:
   - LAN settings from app configuration (bind/port/user/token),
   - username/password login flow,
@@ -44,7 +48,7 @@ This release consolidates the full stabilization cycle from `v1.3.8` to `v1.4.0`
 ## Quick Start (macOS)
 
 ```bash
-cmake -S . -B build -DFORK_RELEASE_VERSION=v1.4.0
+cmake -S . -B build -DFORK_RELEASE_VERSION=v1.4.1
 cmake --build build -j8
 ./build/ft2.app/Contents/MacOS/ft2
 ```
@@ -54,13 +58,13 @@ cmake --build build -j8
 Local release script:
 
 ```bash
-scripts/release-macos.sh v1.4.0 --publish --repo elisir80/decodium3-build-macos
+scripts/release-macos.sh v1.4.1 --publish --repo elisir80/decodium3-build-macos
 ```
 
 Per-platform suffix example:
 
 ```bash
-scripts/release-macos.sh v1.4.0 --compat-macos 15.0 --asset-suffix macos-sequoia-arm64
+scripts/release-macos.sh v1.4.1 --compat-macos 15.0 --asset-suffix macos-sequoia-arm64
 ```
 
 ## Hamlib in Release Builds
@@ -105,9 +109,9 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 - `README.md`
 - `README.it.md`
 - `README.es.md`
-- `RELEASE_NOTES_v1.4.0.md`
+- `RELEASE_NOTES_v1.4.1.md`
 - `CHANGELOG.md`
-- `doc/GITHUB_RELEASE_BODY_v1.4.0.md`
+- `doc/GITHUB_RELEASE_BODY_v1.4.1.md`
 - `doc/WEBAPP_SETUP_GUIDE.en-GB.md`
 - `doc/WEBAPP_SETUP_GUIDE.it.md`
 - `doc/WEBAPP_SETUP_GUIDE.es.md`

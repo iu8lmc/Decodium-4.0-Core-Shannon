@@ -1,10 +1,10 @@
-# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.4.0 (Italiano)
+# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.4.1 (Italiano)
 
 Per la versione bilingue completa (English + Italiano), vedere [README.md](README.md).
 
-## Sintesi italiana (v1.4.0)
+## Sintesi italiana (v1.4.1)
 
-Questa release consolida tutti i fix e le nuove feature dal ciclo `v1.3.8 -> v1.4.0`:
+Questa release consolida tutti i fix e le nuove feature del ciclo `v1.4.0 -> v1.4.1`:
 
 - Stabilizzazione flusso decode FT2:
   - gestione split righe packed (niente righe fuse/disallineate),
@@ -14,6 +14,10 @@ Questa release consolida tutti i fix e le nuove feature dal ciclo `v1.3.8 -> v1.
 - Correzione comportamento Async L2:
   - visibile solo in FT2,
   - disattivazione automatica quando si esce da FT2.
+- Corrette regressioni startup/cambio modalita':
+  - auto-selezione startup da frequenza radio ora one-shot (niente riforzatura continua modalita'),
+  - risposta iniziale al cambio modalita' ripristinata,
+  - niente apertura forzata del waterfall durante il cambio modalita'.
 - Maturazione dashboard web remota:
   - impostazioni LAN direttamente dal menu app (bind/porta/user/token),
   - login username/password,
@@ -70,9 +74,9 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ## Documentazione
 
-- [RELEASE_NOTES_v1.4.0.md](RELEASE_NOTES_v1.4.0.md)
+- [RELEASE_NOTES_v1.4.1.md](RELEASE_NOTES_v1.4.1.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.0.md](doc/GITHUB_RELEASE_BODY_v1.4.0.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.1.md](doc/GITHUB_RELEASE_BODY_v1.4.1.md)
 - [doc/README.it.md](doc/README.it.md)
 - [doc/WEBAPP_SETUP_GUIDE.it.md](doc/WEBAPP_SETUP_GUIDE.it.md)
 - [doc/WEBAPP_SETUP_GUIDE.en-GB.md](doc/WEBAPP_SETUP_GUIDE.en-GB.md)

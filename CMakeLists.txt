@@ -77,7 +77,7 @@ include (set_build_type)
 # RC 0 or omitted is a development build, GA is a General Availability release build
 set_build_type (RC 1)
 set (wsjtx_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}${BUILD_TYPE_REVISION}")
-set (FORK_RELEASE_VERSION "v1.4.0" CACHE STRING "Fork release version shown in UI title" FORCE)
+set (FORK_RELEASE_VERSION "v1.4.1" CACHE STRING "Fork release version shown in UI title" FORCE)
 add_definitions (-DFORK_RELEASE_VERSION=\"${FORK_RELEASE_VERSION}\")
 
 #
@@ -1417,6 +1417,17 @@ generate_version_info (wsprd_VERSION_RESOURCES
 add_executable (wsprd ${wsprd_CSRCS} lib/indexx.f90 lib/wsprd/osdwspr.f90 ${wsprd_VERSION_RESOURCES})
 target_include_directories (wsprd PRIVATE ${FFTW3_INCLUDE_DIRS})
 target_link_libraries (wsprd ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+if (APPLE AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+  execute_process (
+    COMMAND ${CMAKE_C_COMPILER} --print-resource-dir
+    OUTPUT_VARIABLE CLANG_RESOURCE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  set (CLANG_RT_OSX "${CLANG_RESOURCE_DIR}/lib/darwin/libclang_rt.osx.a")
+  if (EXISTS "${CLANG_RT_OSX}")
+    target_link_libraries (wsprd "${CLANG_RT_OSX}")
+  endif ()
+endif ()
 
 # Tell CMake to run moc when necessary
 set (CMAKE_AUTOMOC ON)
