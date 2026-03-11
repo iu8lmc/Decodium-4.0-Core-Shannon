@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  RELEASE_VERSION: "1.4.3"
+  RELEASE_VERSION: "1.4.4"
 
 jobs:
   build-macos:

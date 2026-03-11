@@ -1,85 +1,68 @@
-# Decodium 3 FT2 (macOS Fork)
+# Decodium 3 FT2 (macOS Fork) - v1.4.4
 
 Fork maintained by **Salvatore Raccampo 9H1SR**.
 
 ## Project Description
 
-This repository is a macOS-focused Decodium/WSJT-X fork with runtime hardening,
-security fixes, and release automation for:
+This repository is a Decodium/WSJT-X fork focused on macOS and Linux packaging, FT2 runtime stability, and DXpedition workflows.
 
-- Apple Silicon Tahoe (26.x)
-- Apple Silicon Sequoia (15.x)
-- Apple Intel Sequoia (15.x)
-- Apple Intel Monterey (12.x, experimental best-effort)
+Latest stable release: `v1.4.4`.
+
+## Changes in v1.4.4 (`v1.4.3 -> v1.4.4`)
+
+- Added DXpedition certificate verification (`.dxcert`) with canonical payload hashing and HMAC-SHA256 signature checks.
+- Added DXpedition certificate validity checks (activation window) and operator authorization checks against station callsign.
+- Added `DXped` menu actions:
+- `Load DXped Certificate...`
+- `DXped Certificate Manager...`
+- Added bundled DXped certificate tooling in `tools/` and install rules to ship tools with release artifacts.
+- Enforced certificate gate before enabling DXped mode; DXped activation is blocked if certificate is missing/invalid/expired/unauthorized.
+- Added DXped runtime protections:
+- standard `processMessage()` flow is blocked while DXped mode FSM is active, avoiding AutoSeq collisions.
+- DXped auto-sequencing is now called directly from decode paths.
+- DXped CQ fallback now mirrors `tx6` into `tx5` when queue is empty and `tx5` is blank.
+- FT2 Async L2 is now mandatory:
+- forced ON in FT2 and forced OFF outside FT2.
+- local and remote attempts to disable Async L2 in FT2 are ignored.
+- Added ASYMX timing/visibility improvements:
+- `GUARD`, `TX`, `RX`, `IDLE` progress states with dedicated coloring.
+- 300 ms TX guard phase before first FT2 auto-TX attempt.
+- explicit async buffer/counter state reset and timer state cleanup on toggle transitions.
+- Improved decode UI correctness:
+- fixed-pitch font enforcement in decode panes to preserve column alignment.
+- AP/quality marker placement moved to line tail to avoid right-column misalignment.
+- FT2 decode mode marker normalization (`~` to `+`) in both normal and async decode paths.
+- safer double-click parsing by stripping right-side annotations before `DecodedText` parsing.
+- Improved UDP multi-instance identity:
+- UDP client id now derives from application name, improving distinction between parallel instances.
+- Added Italian UI translations for async status and mandatory Async L2 messages.
+- Updated release/version metadata and CI defaults to `v1.4.4`.
+
+## Release Targets
+
+- Apple Silicon Tahoe
+- Apple Silicon Sequoia
+- Apple Intel Sequoia
+- Apple Intel Monterey (experimental / best effort)
 - Linux x86_64 AppImage
-
-## Current Baseline
-
-- Source branch: `master`
-- Latest stable release: `v1.4.3`
-- App bundle/executable: `ft2.app` / `ft2`
-
-## Key Notes for v1.4.3
-
-This release covers the `v1.4.2 -> v1.4.3` cycle:
-
-- FT2 Async L2 Linux crash hardening:
-  - added strict Fortran output bounds (`ndecodes/nout <= 100`) in triggered decode,
-  - switched async row parsing to fixed-length-safe handling in C++,
-  - explicit async buffer and counter reset on each decode/toggle cycle.
-- Wait Features + AutoSeq active-QSO protection:
-  - partner lock now prioritizes runtime partner call (`m_hisCall`),
-  - lock engages earlier (`REPLYING` through `SIGNOFF`) while Wait Features + AutoSeq are enabled.
-- Runtime behavior:
-  - removes first-decode garbage text/over-read edge cases seen with Async L2 on Linux.
-- Release/doc alignment:
-  - fork metadata and docs bumped to `v1.4.3`.
-- Existing `v1.4.2` hardening remains included (LotW POST + redirect policy, remote bind token enforcement, FT2 control visibility rules, map/tool windows, Linux geometry safeguards).
-- No `.pkg` installer flow (DMG/ZIP/SHA256 for macOS, AppImage/SHA256 for Linux).
-
-## Quick Start (macOS)
-
-```bash
-cmake -S . -B build -DFORK_RELEASE_VERSION=v1.4.3
-cmake --build build -j8
-./build/ft2.app/Contents/MacOS/ft2
-```
-
-## Release Automation
-
-Local release script:
-
-```bash
-scripts/release-macos.sh v1.4.3 --publish --repo elisir80/decodium3-build-macos
-```
-
-Per-platform suffix example:
-
-```bash
-scripts/release-macos.sh v1.4.3 --compat-macos 15.0 --asset-suffix macos-sequoia-arm64
-```
-
-## Hamlib in Release Builds
-
-- macOS workflows run `brew update` and `brew upgrade hamlib` before build/package.
-- Linux workflows build Hamlib from the latest official GitHub release and install it to `/usr/local` before compiling `ft2`.
-- Workflow logs always print the effective Hamlib version (`rigctl --version`, `pkg-config --modversion hamlib`).
 
 ## Linux Minimum Requirements
 
 - Architecture: `x86_64` (64-bit)
 - CPU: dual-core 2.0 GHz or better
 - RAM: 4 GB minimum (8 GB recommended)
-- Storage: 500 MB free (AppImage + logs + settings)
-- Runtime:
-  - Linux with `glibc >= 2.35` (Ubuntu 22.04 class or newer)
-  - `libfuse2` / FUSE2 support for AppImage execution
-  - ALSA, PulseAudio, or PipeWire audio stack
+- Storage: at least 500 MB free for AppImage + logs/settings
+- Runtime/software:
+- Linux with `glibc >= 2.35` (Ubuntu 22.04 class or newer)
+- `libfuse2` / FUSE2 support
+- ALSA, PulseAudio, or PipeWire audio stack
 - Station integration: CAT/audio hardware according to radio setup
 
 ## Linux AppImage Launch Recommendation
 
-To avoid issues caused by AppImage read-only filesystem mode:
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.
+
+Eseguire i seguenti comandi nel terminale:
 
 ```bash
 chmod +x /path/to/Decodium.AppImage
@@ -90,24 +73,30 @@ cd squashfs-root
 
 ## macOS Quarantine Command
 
-If Gatekeeper blocks startup after download/install, run:
+If Gatekeeper blocks startup, run:
 
 ```bash
 sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ```
 
+## Build and Run (local)
+
+```bash
+cmake --build build -j6
+./build/ft2.app/Contents/MacOS/ft2
+```
+
 ## Documentation
 
-- `README.md`
-- `README.it.md`
-- `README.es.md`
-- `RELEASE_NOTES_v1.4.3.md`
-- `CHANGELOG.md`
-- `doc/GITHUB_RELEASE_BODY_v1.4.3.md`
-- `doc/WEBAPP_SETUP_GUIDE.en-GB.md`
-- `doc/WEBAPP_SETUP_GUIDE.it.md`
-- `doc/WEBAPP_SETUP_GUIDE.es.md`
-- `doc/SECURITY_BUG_ANALYSIS_REPORT.md`
+- [README.md](README.md)
+- [README.it.md](README.it.md)
+- [README.es.md](README.es.md)
+- [RELEASE_NOTES_v1.4.4.md](RELEASE_NOTES_v1.4.4.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](doc/GITHUB_RELEASE_BODY_v1.4.4.md)
+- [doc/README.en-GB.md](doc/README.en-GB.md)
+- [doc/README.it.md](doc/README.it.md)
+- [doc/README.es.md](doc/README.es.md)
 
 ## Licence
 

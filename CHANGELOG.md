@@ -1,5 +1,109 @@
 # Changelog / Registro Modifiche
 
+## [1.4.4] - 2026-03-11
+
+### English
+
+Release focused on DXped certificate workflow, FT2 Async L2 mandatory behavior, ASYMX runtime visibility, and decode/UI correctness.
+
+#### Added
+
+- Added DXped certificate subsystem (`DXpedCertificate.hpp`) with canonical payload verification and HMAC-SHA256 signature validation.
+- Added DXped certificate validity and operator authorization checks prior to DXped mode enable.
+- Added DXped menu actions:
+- `Load DXped Certificate...`
+- `DXped Certificate Manager...`
+- Added bundled DXped tools (`DXpedCertManager.py`, `dxped_manage.py`, `dxped_sign_list.py`, `generate_dxcert.py`, `dxped_public.pem`) and install rules for runtime packaging.
+- Added ASYMX FT2 progress states (`GUARD`, `TX`, `RX`, `IDLE`) and 300 ms guard timer before first FT2 auto-TX attempt.
+
+#### Changed
+
+- FT2 Async L2 is now mandatory in FT2:
+- forced ON in FT2, forced OFF outside FT2.
+- local and remote disable requests in FT2 are ignored.
+- DXped mode activation now blocks when certificate is missing/invalid/expired/not authorized.
+- DXped runtime path now prioritizes DXped FSM control:
+- decode paths call DXped auto-sequence hooks.
+- standard `processMessage()` flow is blocked while DXped mode is active.
+- UDP client id now derives from application name for better multi-instance separation.
+- Fork/build/workflow defaults aligned to `v1.4.4`.
+
+#### Fixed
+
+- Fixed decode-pane alignment regressions by enforcing fixed-pitch font in decode text views.
+- Fixed AP/quality marker placement to preserve right-column alignment.
+- Fixed FT2 mode marker inconsistencies by normalizing `~` to `+` in decode outputs.
+- Fixed fragile double-click decode parsing by stripping trailing right-side annotations before `DecodedText` parsing.
+- Reduced DXped CQ stall risk when queue is empty by mirroring fallback CQ from `tx6` to `tx5`.
+
+### Italiano
+
+Release focalizzata su workflow certificati DXped, Async L2 obbligatorio in FT2, visibilita' runtime ASYMX e coerenza decode/UI.
+
+#### Aggiunto
+
+- Aggiunto sottosistema certificati DXped (`DXpedCertificate.hpp`) con verifica payload canonico e firma HMAC-SHA256.
+- Aggiunti controlli validita' certificato e autorizzazione operatore prima dell'attivazione DXped.
+- Aggiunte azioni menu DXped:
+- `Load DXped Certificate...`
+- `DXped Certificate Manager...`
+- Aggiunti tool DXped (`DXpedCertManager.py`, `dxped_manage.py`, `dxped_sign_list.py`, `generate_dxcert.py`, `dxped_public.pem`) e regole installazione per packaging runtime.
+- Aggiunti stati barra FT2 ASYMX (`GUARD`, `TX`, `RX`, `IDLE`) con guardia 300 ms prima del primo auto-TX.
+
+#### Modificato
+
+- Async L2 in FT2 ora obbligatorio:
+- ON forzato in FT2, OFF forzato fuori FT2.
+- richieste locali/remoto di disattivazione in FT2 ignorate.
+- Attivazione DXped ora bloccata se certificato assente/non valido/scaduto/non autorizzato.
+- Percorso runtime DXped ora prioritario su FSM DXped:
+- i percorsi decode richiamano hook auto-sequenza DXped.
+- il flusso standard `processMessage()` viene bloccato quando DXped e' attivo.
+- Client id UDP ora derivato dal nome applicazione per separare meglio istanze multiple.
+- Default fork/build/workflow/documentazione allineati a `v1.4.4`.
+
+#### Corretto
+
+- Corrette regressioni allineamento pane decode forzando font monospazio nelle viste testo decode.
+- Corretto posizionamento marker AP/qualita' per mantenere allineata la colonna destra.
+- Corrette incoerenze marker modalita' FT2 normalizzando `~` in `+` sugli output decode.
+- Corretto parsing double-click fragile rimuovendo annotazioni di coda prima del parsing `DecodedText`.
+- Ridotto rischio stallo CQ DXped con coda vuota specchiando CQ fallback da `tx6` a `tx5`.
+
+### Espanol
+
+Release centrada en flujo de certificados DXped, Async L2 obligatorio en FT2, visibilidad runtime ASYMX y consistencia decode/UI.
+
+#### Anadido
+
+- Anadido subsistema de certificados DXped (`DXpedCertificate.hpp`) con verificacion de payload canonico y firma HMAC-SHA256.
+- Anadidos controles de validez de certificado y autorizacion de operador antes de activar DXped.
+- Anadidas acciones de menu DXped:
+- `Load DXped Certificate...`
+- `DXped Certificate Manager...`
+- Anadidas herramientas DXped (`DXpedCertManager.py`, `dxped_manage.py`, `dxped_sign_list.py`, `generate_dxcert.py`, `dxped_public.pem`) y reglas de instalacion para packaging runtime.
+- Anadidos estados de barra FT2 ASYMX (`GUARD`, `TX`, `RX`, `IDLE`) con guardia de 300 ms antes del primer auto-TX.
+
+#### Cambios
+
+- Async L2 en FT2 ahora obligatorio:
+- ON forzado en FT2, OFF forzado fuera de FT2.
+- solicitudes locales/remotas de desactivar en FT2 se ignoran.
+- Activacion DXped ahora bloqueada si certificado falta/no es valido/expirado/no autorizado.
+- Ruta runtime DXped ahora prioriza FSM DXped:
+- rutas decode llaman hooks de auto-secuencia DXped.
+- flujo estandar `processMessage()` bloqueado cuando DXped esta activo.
+- ID cliente UDP ahora deriva del nombre de aplicacion para separar mejor instancias multiples.
+- Defaults fork/build/workflows/documentacion alineados a `v1.4.4`.
+
+#### Corregido
+
+- Corregidas regresiones de alineacion decode forzando fuente monoespaciada en paneles decode.
+- Corregida posicion del marcador AP/calidad para mantener alineada la columna derecha.
+- Corregidas inconsistencias de marcador FT2 normalizando `~` a `+` en salidas decode.
+- Corregido parseo fragil de doble click eliminando anotaciones de cola antes de parsear `DecodedText`.
+- Reducido riesgo de bloqueo CQ DXped con cola vacia reflejando CQ fallback de `tx6` a `tx5`.
+
 ## [1.4.3] - 2026-03-10
 
 ### English

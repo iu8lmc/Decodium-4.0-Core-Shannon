@@ -52,3 +52,11 @@ tmpclaude-*
 
 # Temporary scripts
 sign_all.bat
+
+# DXped certificate manager sensitive/runtime files
+tools/dxped_private.pem
+tools/dxped_config.json
+tools/dxped_database.json
+tools/verified_dxpeds.json
+tools/*.dxcert
+*.dxcert

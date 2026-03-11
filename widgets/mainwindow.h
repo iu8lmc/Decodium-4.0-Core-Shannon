@@ -36,6 +36,7 @@
 #include <QUrl>
 #include <QNetworkReply>
 
+#include "DXpedCertificate.hpp"
 #include "MultiGeometryWidget.hpp"
 #include "NonInheritingProcess.hpp"
 #include "Audio/AudioDevice.hpp"
@@ -179,7 +180,7 @@ private:
   bool eventFilter(QObject *, QEvent *) override;
   void showQSYMessage(QString message);
   void handleDoubleClickOnCall (Qt::KeyboardModifiers modifiers, bool fromBandActivityWindow);
-  bool singleDecodeColumnFlowEnabled () const { return true; }
+  bool singleDecodeColumnFlowEnabled () const { return false; }
   DisplayText * secondaryDecodeView () const;
   void applySingleDecodeColumnFlowLayout ();
   void updateAsyncL2ControlsVisibility ();
@@ -291,6 +292,8 @@ private slots:
   void on_actionKeyboard_shortcuts_triggered();
   void on_actionSpecial_mouse_commands_triggered();
   void on_actionSolve_FreqCal_triggered();
+  void on_actionLoad_DXped_Certificate_triggered();
+  void on_actionDXped_Certificate_Manager_triggered();
   void on_actionCopyright_Notice_triggered();
   void on_actionSWL_Mode_triggered (bool checked);
   void on_DecodeButton_clicked (bool);
@@ -863,11 +866,14 @@ private:
   int       m_dxpedCQcounter  {0};   // piggyback CQ ogni N periodi TX
   DXpedSlot m_dxpedSlots[3];
   void dxpedFillEmptySlots ();
+  void dxpedLoadCertificate ();
   void dxpedLoadSlot   (int slot);
   int  dxpedTxSequencer();
   void dxpedRxProcess  (QString const& call, QString const& rptRcvd = QString());
   void dxpedAutoSequence (DecodedText const& msg);
   void dxpedLogQSO       (int slot);
+  DXpedCertificate m_dxpedCert;
+  bool      m_bDXpedCertified {false};
 
   bool    m_bAutoReply;
   QString m_lastloggedcall; //ft8md
@@ -952,6 +958,10 @@ private:
   QFutureWatcher<void> m_asyncDecodeWatcher;
   QThreadPool m_asyncDecodeThreadPool;
   QTimer m_asyncDecodeTimer;
+  QTimer m_asyncTxGuardTimer;
+  bool m_wasTransmitting {false};
+  qint64 m_asyncTxStartMs {0};
+  qint64 m_asyncRxStartMs {0};
   bool m_asyncL2DefaultAppliedForCurrentFt2 {false};
   short int m_asyncAudio[90000];     // ring buffer ~7.5s at 12kHz
   int m_asyncAudioPos {0};           // write position in ring buffer

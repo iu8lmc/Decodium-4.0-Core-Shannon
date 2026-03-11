@@ -1,54 +1,53 @@
-# Documentation Notes (British English)
+# Documentation Notes (English) - v1.4.4
 
 ## Scope
 
-Repository-specific notes for the macOS fork.
+Repository-specific notes for the Decodium macOS fork and Linux AppImage release flow.
 
 ## Current Release Context
 
-- Latest stable release: `v1.4.3`
-- Targets: macOS Tahoe ARM64, Sequoia ARM64, Sequoia Intel, Monterey Intel (experimental), Linux x86_64 AppImage
+- Current release: `v1.4.4`
+- Update cycle: `v1.4.3 -> v1.4.4`
+- Targets: Apple Silicon Tahoe, Apple Silicon Sequoia, Apple Intel Sequoia, Apple Intel Monterey (experimental), Linux x86_64 AppImage
 
-## Build and Runtime Notes
+## Key Technical Changes (`v1.4.3 -> v1.4.4`)
 
-### Build output
+- Added DXped certificate subsystem (`DXpedCertificate.hpp`) with canonical JSON payload verification and HMAC-SHA256 signature validation.
+- Added DXped certificate runtime checks:
+- activation time window validation.
+- operator authorization validation against local callsign.
+- Added DXped UI actions to load certificate and launch certificate manager.
+- Added bundled Python tooling under `tools/` and install rules in `CMakeLists.txt`.
+- Enforced certificate requirement before DXped mode activation.
+- Integrated DXped auto-sequencing directly into decode flow and blocked standard `processMessage()` while DXped FSM is active.
+- Enforced mandatory Async L2 for FT2 (local + remote disable prevention).
+- Added ASYMX progress states (`GUARD/TX/RX/IDLE`) with guard timing.
+- Improved decode rendering and parsing (fixed-pitch font enforcement, AP marker alignment, FT2 marker normalization, safer double-click parsing).
+- Updated UDP client id to include application-name-derived rig suffix.
+- Updated translations and release/workflow version defaults to `v1.4.4`.
 
-- `build/ft2.app/Contents/MacOS/ft2`
-- helper executables in the same bundle path (`jt9`, `wsprd`)
+## Build and Runtime
 
-### Shared memory on macOS
+- Local build binary: `build/ft2.app/Contents/MacOS/ft2`
+- Helper binaries in bundle: `jt9`, `wsprd`
+- Shared memory backend on macOS remains file-backed `mmap` (no `.pkg` sysctl bootstrap required).
 
-- This fork uses `SharedMemorySegment` with file-backed `mmap` on Darwin.
-- The release flow no longer depends on System V shared-memory `sysctl` tuning (`kern.sysv.shmmax/shmall`).
+## Linux Minimum Requirements
 
-### v1.4.3 consolidated highlights
-
-- FT2 Async L2 Linux crash hardening:
-  - bounded Fortran async output rows (`ndecodes/nout <= 100`);
-  - fixed-length-safe C++ parsing for async decode rows;
-  - explicit async buffer and counter reset on decode/toggle cycles.
-- Wait Features + AutoSeq lock tightened for active QSO:
-  - runtime partner (`m_hisCall`) is now the primary lock source;
-  - lock engages from `REPLYING` through `SIGNOFF`.
-- Existing v1.4.2 hardening remains part of v1.4.3:
-  LotW POST + strict redirects, remote token minimum, Linux geometry clamp, FT2 control visibility rules, restored View tool windows, remote TX event continuity.
-
-### Release artifacts
-
-- `decodium3-ft2-<version>-<asset-suffix>.dmg`
-- `decodium3-ft2-<version>-<asset-suffix>.zip`
-- `decodium3-ft2-<version>-<asset-suffix>-sha256.txt`
-- `decodium3-ft2-<version>-linux-x86_64.AppImage`
-- `decodium3-ft2-<version>-linux-x86_64.AppImage.sha256.txt`
-
-### Linux minimum requirements
-
-- Architecture: `x86_64`
+- Architecture: `x86_64` (64-bit)
 - CPU: dual-core 2.0 GHz or better
-- RAM: 4 GB minimum
-- Runtime: `glibc >= 2.35`, `libfuse2`/FUSE2, ALSA/PulseAudio/PipeWire
+- RAM: 4 GB minimum (8 GB recommended)
+- Storage: at least 500 MB free
+- Runtime/software:
+- Linux with `glibc >= 2.35`
+- `libfuse2` / FUSE2
+- ALSA, PulseAudio, or PipeWire
 
-### Linux AppImage recommendation
+## Linux AppImage Recommendation
+
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.
+
+Eseguire i seguenti comandi nel terminale:
 
 ```bash
 chmod +x /path/to/Decodium.AppImage
@@ -57,7 +56,7 @@ cd squashfs-root
 ./AppRun
 ```
 
-### Gatekeeper quarantine command
+## Gatekeeper Quarantine Command
 
 ```bash
 sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
@@ -65,10 +64,9 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 
 ## References
 
-- `CHANGELOG.md`
-- `RELEASE_NOTES_v1.4.3.md`
-- `doc/GITHUB_RELEASE_BODY_v1.4.3.md`
-- `doc/WEBAPP_SETUP_GUIDE.en-GB.md`
-- `doc/WEBAPP_SETUP_GUIDE.it.md`
-- `doc/WEBAPP_SETUP_GUIDE.es.md`
-- `doc/SECURITY_BUG_ANALYSIS_REPORT.md`
+- [CHANGELOG.md](../CHANGELOG.md)
+- [RELEASE_NOTES_v1.4.4.md](../RELEASE_NOTES_v1.4.4.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](./GITHUB_RELEASE_BODY_v1.4.4.md)
+- [doc/WEBAPP_SETUP_GUIDE.en-GB.md](./WEBAPP_SETUP_GUIDE.en-GB.md)
+- [doc/WEBAPP_SETUP_GUIDE.it.md](./WEBAPP_SETUP_GUIDE.it.md)
+- [doc/WEBAPP_SETUP_GUIDE.es.md](./WEBAPP_SETUP_GUIDE.es.md)

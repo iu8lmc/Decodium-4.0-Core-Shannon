@@ -2681,6 +2681,34 @@ Errore (%2):%3</translation>
 <context>
     <name>MainWindow</name>
     <message>
+        <source>IDLE</source>
+        <translation>INATTIVO</translation>
+    </message>
+    <message>
+        <source>GUARD</source>
+        <translation>GUARDIA</translation>
+    </message>
+    <message>
+        <source>TX</source>
+        <translation>TX</translation>
+    </message>
+    <message>
+        <source>RX</source>
+        <translation>RX</translation>
+    </message>
+    <message>
+        <source>%1 %2/%3s</source>
+        <translation>%1 %2/%3s</translation>
+    </message>
+    <message>
+        <source>Async L2 Mode On</source>
+        <translation>Modalita' Async L2 attiva</translation>
+    </message>
+    <message>
+        <source>Async L2 is mandatory in FT2 mode</source>
+        <translation>Async L2 e' obbligatorio in modalita' FT2</translation>
+    </message>
+    <message>
         <location filename="../widgets/mainwindow.ui" line="20"/>
         <source>WSJT-X   by K1JT</source>
         <translation>WSJT-X   di K1JT</translation>

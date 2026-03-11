@@ -19,6 +19,8 @@
 #include <QListIterator>
 #include <QRegularExpression>
 #include <QScrollBar>
+#include <QFontDatabase>
+#include <QFontInfo>
 
 #include "Configuration.hpp"
 #include "Decoder/decodedtext.h"
@@ -81,6 +83,17 @@ void DisplayText::erase ()
 void DisplayText::setContentFont(QFont const& font)
 {
   char_font_ = font;
+  if (!QFontInfo {char_font_}.fixedPitch ()) {
+    QFont mono = QFontDatabase::systemFont (QFontDatabase::FixedFont);
+    mono.setStyleHint (QFont::TypeWriter);
+    mono.setFixedPitch (true);
+    if (char_font_.pointSizeF () > 0) {
+      mono.setPointSizeF (char_font_.pointSizeF ());
+    } else if (char_font_.pointSize () > 0) {
+      mono.setPointSize (char_font_.pointSize ());
+    }
+    char_font_ = mono;
+  }
   selectAll ();
   auto cursor = textCursor ();
   cursor.beginEditBlock ();
@@ -188,7 +201,7 @@ void DisplayText::insertText(QString const& text, QColor bg, QColor fg
           auto pos = highlighted_calls_.find (call1);
           if (pos != highlighted_calls_.end ())
             {
-              cursor.insertText(text.left (call_index));
+              cursor.insertText(text.left (call_index), format);
               if (pos.value ().first.isValid ())
                 {
                   temp_format.setBackground (pos.value ().first);
@@ -551,10 +564,11 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
     {
       extra += QString {"%1"}.arg (fSpread, 5, 'f', fSpread < 0.95 ? 3 : 2) + QChar {' '};
     }
+  QString apTag;
   auto ap_pos = message.lastIndexOf (QRegularExpression {R"((?:\?\s)?(?:a[0-9]|q[0-9][0-9*]?)$)"});
   if (ap_pos >= 0)
     {
-      extra += message.mid (ap_pos) + QChar {' '};
+      apTag = message.mid (ap_pos).trimmed ();
       message = message.left (ap_pos).trimmed ();
     }
   m_CQPriority="";
@@ -681,7 +695,7 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
       if ((decodedText.clean_string () + " ").contains (QRegularExpression {regexp}))
         {
         QStringList tw;
-        if (mode == "FT8" or mode == "FT4" or mode == "MSK144") {
+        if (mode == "FT8" or mode == "FT4" or mode == "FT2" or mode == "MSK144") {
           tw=decodedText.string().mid(24).split(" ",SkipEmptyParts);
         } else {
           tw=decodedText.string().mid(22).split(" ",SkipEmptyParts);
@@ -730,6 +744,16 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
       } else {
          message = leftJustifyAppendage (message, "[" + distance + "]");
       }
+  }
+
+  // Keep country/zone alignment stable: append AP/quality marker at line tail
+  // instead of prefixing it into the right-side country column.
+  if (!apTag.isEmpty()) {
+    if (message.contains (QChar::Nbsp)) {
+      message += QChar {' '} + apTag;
+    } else {
+      message = leftJustifyAppendage (message, apTag);
+    }
   }
 
   // initialize audible alerts for MSK144 (still experimental)

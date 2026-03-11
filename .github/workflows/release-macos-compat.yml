@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. v1.4.3)"
+        description: "Release version (e.g. v1.4.4)"
         required: true
-        default: "v1.4.3"
+        default: "v1.4.4"
       publish_release:
         description: "Publish GitHub release"
         required: true
@@ -170,91 +170,82 @@ jobs:
           REPO="${GITHUB_REPOSITORY}"
 
           NOTES_FILE="$(mktemp)"
-          {
-            echo "# Decodium 3 FT2 ${VERSION} (macOS + Linux AppImage)"
-            echo
-            echo "## English (UK)"
-            echo "This release includes:"
-            echo "- FT2 Async L2 Linux crash hardening: bounded Fortran output rows + fixed-length-safe C++ parsing."
-            echo "- Explicit async buffer/counter reset on each decode/toggle cycle."
-            echo "- Wait Features + AutoSeq lock tightened to protect active QSO (runtime partner + REPLYING..SIGNOFF lock window)."
-            echo "- Existing v1.4.2 security/runtime hardening retained (LotW POST/redirect policy, remote token checks, FT2 control visibility rules)."
-            echo "- Existing mmap shared-memory release flow retained (no .pkg required)."
-            echo "- Apple Silicon build for macOS Tahoe."
-            echo "- Apple Silicon build for macOS Sequoia."
-            echo "- Apple Intel build for macOS Sequoia."
-            echo "- Apple Intel build for macOS Monterey (best effort/experimental when generated)."
-            echo "- Linux x86_64 AppImage build (published by Linux release workflow)."
-            echo
-            echo "Linux minimum requirements:"
-            echo "- x86_64 CPU, 4 GB RAM minimum"
-            echo "- glibc >= 2.35"
-            echo "- libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire"
-            echo
-            echo "If the app does not start on macOS, run from Terminal:"
-            echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
-            echo
-            echo "Linux AppImage recommendation (avoid read-only FS issues):"
-            echo "\`chmod +x /path/to/Decodium.AppImage\`"
-            echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
-            echo "\`cd squashfs-root\`"
-            echo "\`./AppRun\`"
-            echo
-            echo "Refer to \`CHANGELOG.md\` for full details."
-            echo
-            echo "## Italiano"
-            echo "Questa release include:"
-            echo "- Hardening crash Linux FT2 Async L2: limiti rigidi output Fortran + parsing C++ async sicuro a lunghezza fissa."
-            echo "- Reset esplicito buffer async/contatori su ogni ciclo decode e toggle."
-            echo "- Lock Wait Features + AutoSeq irrigidito per proteggere il QSO attivo (partner runtime + finestra REPLYING..SIGNOFF)."
-            echo "- Hardening sicurezza/runtime v1.4.2 mantenuto (LotW POST/redirect policy, controlli token remoto, regole visibilita' FT2)."
-            echo "- Flusso shared-memory macOS su mmap confermato (nessun .pkg richiesto)."
-            echo "- Build Apple Silicon per macOS Tahoe."
-            echo "- Build Apple Silicon per macOS Sequoia."
-            echo "- Build Apple Intel per macOS Sequoia."
-            echo "- Build Apple Intel per macOS Monterey (best effort/sperimentale quando generata)."
-            echo "- Build Linux x86_64 AppImage (pubblicata dal workflow Linux release)."
-            echo
-            echo "Requisiti minimi Linux:"
-            echo "- CPU x86_64, minimo 4 GB RAM"
-            echo "- glibc >= 2.35"
-            echo "- libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire"
-            echo
-            echo "Se l'app non si avvia su macOS, esegui da Terminale:"
-            echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
-            echo
-            echo "Consiglio Linux AppImage (evitare problemi FS sola lettura):"
-            echo "\`chmod +x /path/to/Decodium.AppImage\`"
-            echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
-            echo "\`cd squashfs-root\`"
-            echo "\`./AppRun\`"
-            echo
-            echo "Per i dettagli completi, vedi \`CHANGELOG.md\`."
-            echo
-            echo "## Espanol"
-            echo "Esta release incluye:"
-            echo "- Hardening del crash Linux FT2 Async L2: limites Fortran estrictos + parsing C++ async seguro de longitud fija."
-            echo "- Reset explicito de buffers/counters async por ciclo decode/toggle."
-            echo "- Lock Wait Features + AutoSeq reforzado para proteger QSO activo (pareja runtime + ventana REPLYING..SIGNOFF)."
-            echo "- Hardening de seguridad/runtime v1.4.2 mantenido (LotW POST/redirect policy, control de token remoto, visibilidad FT2)."
-            echo "- Flujo mmap compartido en macOS confirmado (no se requiere .pkg)."
-            echo
-            echo "Requisitos minimos Linux:"
-            echo "- CPU x86_64, 4 GB RAM minimo"
-            echo "- glibc >= 2.35"
-            echo "- libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire"
-            echo
-            echo "Si la app no inicia en macOS, ejecutar:"
-            echo "\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`"
-            echo
-            echo "Recomendacion Linux AppImage (evitar problemas de FS solo lectura):"
-            echo "\`chmod +x /path/to/Decodium.AppImage\`"
-            echo "\`/path/to/Decodium.AppImage --appimage-extract\`"
-            echo "\`cd squashfs-root\`"
-            echo "\`./AppRun\`"
-            echo
-            echo "Para detalles completos, ver \`CHANGELOG.md\`."
-          } > "${NOTES_FILE}"
+          cat > "${NOTES_FILE}" <<EOF
+# Decodium 3 FT2 ${VERSION} (macOS + Linux AppImage)
+
+## English
+
+Release highlights (\`v1.4.3 -> ${VERSION}\`):
+
+- Added DXped certificate workflow (\`.dxcert\`) with HMAC-SHA256 validation.
+- Added DXped activation gating (valid/non-expired/authorized certificate required).
+- Added DXped menu actions and bundled certificate manager/tools.
+- FT2 Async L2 is mandatory (local/remote disable ignored in FT2).
+- Added ASYMX progress states: \`GUARD\`, \`TX\`, \`RX\`, \`IDLE\` with 300 ms guard.
+- Decode/UI fixes: fixed-pitch decode font, AP alignment, FT2 marker normalization, safer double-click parsing.
+- Targets: Tahoe ARM64, Sequoia ARM64, Sequoia x86_64, Monterey x86_64 (experimental), Linux AppImage (uploaded by Linux workflow).
+
+Linux minimum requirements:
+
+- x86_64 CPU (dual-core 2.0 GHz+)
+- 4 GB RAM minimum (8 GB recommended)
+- glibc >= 2.35
+- libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire
+
+If macOS blocks startup:
+\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`
+
+Linux AppImage recommendation:
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.
+
+Eseguire i seguenti comandi nel terminale:
+\`chmod +x /path/to/Decodium.AppImage\`
+\`/path/to/Decodium.AppImage --appimage-extract\`
+\`cd squashfs-root\`
+\`./AppRun\`
+
+## Italiano
+
+Punti principali:
+
+- Nuovo workflow certificati DXped con verifica HMAC-SHA256.
+- Attivazione DXped bloccata senza certificato valido/autorizzato.
+- Async L2 obbligatorio in FT2.
+- Nuovi stati progress bar ASYMX (\`GUARD/TX/RX/IDLE\`).
+- Fix decode/UI (font monospazio, allineamento AP, normalizzazione marker FT2, parsing doppio click).
+
+Requisiti minimi Linux:
+
+- CPU x86_64 dual-core 2.0 GHz+
+- 4 GB RAM minimi (8 GB consigliati)
+- glibc >= 2.35
+- libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire
+
+Se macOS blocca l'avvio:
+\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`
+
+## Espanol
+
+Resumen:
+
+- Nuevo flujo de certificados DXped con validacion HMAC-SHA256.
+- Activacion DXped bloqueada sin certificado valido/autorizado.
+- Async L2 obligatorio en FT2.
+- Nuevos estados ASYMX (\`GUARD/TX/RX/IDLE\`).
+- Fixes decode/UI (fuente monoespaciada, alineacion AP, normalizacion FT2, parseo doble click).
+
+Requisitos minimos Linux:
+
+- CPU x86_64 dual-core 2.0 GHz+
+- RAM minima 4 GB (8 GB recomendada)
+- glibc >= 2.35
+- libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire
+
+Si macOS bloquea inicio:
+\`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`
+
+Refer to \`CHANGELOG.md\`, \`RELEASE_NOTES_v1.4.4.md\`, and \`doc/GITHUB_RELEASE_BODY_v1.4.4.md\` for full details.
+EOF
 
           ASSETS=(
             "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64.dmg"

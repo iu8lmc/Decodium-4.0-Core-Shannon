@@ -5159,8 +5159,12 @@ QPushButton[state=&quot;ok&quot;] {
     <addaction name="actionMeasure_phase_response"/>
     <addaction name="view_phase_response_action"/>
     <addaction name="separator"/>
+    <addaction name="actionLoad_DXped_Certificate"/>
+    <addaction name="separator"/>
     <addaction name="actionFrequency_calibration"/>
     <addaction name="actionSolve_FreqCal"/>
+    <addaction name="separator"/>
+    <addaction name="actionDXped_Certificate_Manager"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuConfig"/>
@@ -5585,6 +5589,16 @@ QPushButton[state=&quot;ok&quot;] {
   <action name="actionSolve_FreqCal">
    <property name="text">
     <string>Solve for calibration parameters</string>
+   </property>
+  </action>
+  <action name="actionLoad_DXped_Certificate">
+   <property name="text">
+    <string>Load DXped Certificate...</string>
+   </property>
+  </action>
+  <action name="actionDXped_Certificate_Manager">
+   <property name="text">
+    <string>DXped Certificate Manager...</string>
    </property>
   </action>
   <action name="actionCopyright_Notice">

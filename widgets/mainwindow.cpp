@@ -23,11 +23,15 @@
 #include <QKeyEvent>
 #include <QWheelEvent>
 #include <QProcessEnvironment>
+#include <QProcess>
 #include <QSharedMemory>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QTextBlock>
 #include <QProgressBar>
 #include <QLineEdit>
+#include <QFontDatabase>
+#include <QFontInfo>
 #include <QRegExpValidator>
 #include <QRegExp>
 #include <QRegularExpression>
@@ -335,6 +339,40 @@ static QStringList split_packed_decode_rows (QString rawLine)
   return rows;
 }
 
+static int decoded_line_mode_column (QString const& line)
+{
+  // Decodes with seconds in UTC timestamp (hhmmss) are shifted by +2 columns.
+  return line.indexOf (' ') > 4 ? 21 : 19;
+}
+
+static void normalize_ft2_mode_marker (QString& line, QString const& currentMode)
+{
+  if (currentMode != "FT2") {
+    return;
+  }
+  int const modeColumn = decoded_line_mode_column (line);
+  if (modeColumn >= 0 && line.size () > modeColumn && line.at (modeColumn) == QChar {'~'}) {
+    line[modeColumn] = QChar {'+'};
+  }
+}
+
+static QString udp_client_id_from_application_name ()
+{
+  QString const baseId {"Decodium"};
+  QString const appName = QCoreApplication::applicationName ().trimmed ();
+  int const separator = appName.indexOf (" - ");
+  if (separator < 0) {
+    return baseId;
+  }
+
+  QString const rigName = appName.mid (separator + 3).trimmed ();
+  if (rigName.isEmpty ()) {
+    return baseId;
+  }
+
+  return QString {"%1 - %2"}.arg (baseId, rigName);
+}
+
 void MainWindow::pruneNearDuplicateDecodeCache (qint64 nowMs)
 {
   if (m_decodeDedupeLastPruneMs > 0 && (nowMs - m_decodeDedupeLastPruneMs) < 5000) {
@@ -427,23 +465,25 @@ void MainWindow::updateAsyncL2ControlsVisibility ()
   bool const isFt2 = (m_mode == "FT2");
 
   if (ui->cbAsyncDecode) {
-    if (isFt2 && !m_asyncL2DefaultAppliedForCurrentFt2) {
-      // FT2 default: Async L2 ON. User can still disable it manually.
+    if (isFt2) {
+      // FT2 rule: Async L2 is mandatory and always ON.
       ui->cbAsyncDecode->setChecked (true);
       m_asyncL2DefaultAppliedForCurrentFt2 = true;
-    }
-    if (!isFt2 && ui->cbAsyncDecode->isChecked ()) {
+      ui->cbAsyncDecode->setEnabled (false);
+    } else {
+      ui->cbAsyncDecode->setEnabled (true);
       // Force async L2 OFF when leaving FT2 to avoid hidden active state.
       ui->cbAsyncDecode->setChecked (false);
-    }
-    if (!isFt2) {
       m_asyncL2DefaultAppliedForCurrentFt2 = false;
     }
-    ui->cbAsyncDecode->setVisible (isFt2);
+    // Keep only the status badge visible in FT2 (no user toggle).
+    ui->cbAsyncDecode->setVisible (false);
   }
 
   if (ui->labelAsyncL2Active) {
     bool const asyncEnabled = ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked ();
+    ui->labelAsyncL2Active->setText (tr ("Async L2 Mode On"));
+    ui->labelAsyncL2Active->setStyleSheet ("QLabel{color:#003300; background-color:#00e676; font-weight:bold; font-size:11px; padding:1px 6px; border-radius:7px;}");
     ui->labelAsyncL2Active->setVisible (isFt2 && asyncEnabled);
   }
 
@@ -1052,7 +1092,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_optimizingProgress {"Optimizing decoder FFTs for your CPU.\n"
       "Please be patient,\n"
       "this may take a few minutes", QString {}, 0, 1, this},
-  m_messageClient {new MessageClient {QString {"WSJTX"},
+  m_messageClient {new MessageClient {udp_client_id_from_application_name (),
         version (), revision (),
         m_config.udp_server_name (), m_config.udp_server_port (),
         m_config.udp_interface_names (), m_config.udp_TTL (),
@@ -2070,6 +2110,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
   connect(&watcher3, SIGNAL(finished()),this,SLOT(fast_decode_done()));
   connect(&m_asyncDecodeWatcher, &QFutureWatcher<void>::finished, this, &MainWindow::asyncDecodeDone);
+  m_asyncTxGuardTimer.setSingleShot (true);
   m_asyncDecodeThreadPool.setMaxThreadCount (1);
 #if defined(Q_OS_LINUX)
   // Fortran/OpenMP path in async L2 is stack hungry on some Linux distros.
@@ -3208,18 +3249,31 @@ void MainWindow::set_application_font (QFont const& font)
 
 void MainWindow::setDecodedTextFont (QFont const& font)
 {
-  ui->decodedTextBrowser->setContentFont (font);
-  ui->decodedTextBrowser2->setContentFont (font);
-  ui->houndQueueTextBrowser->setContentFont(font);
+  // Decode panes use fixed-column alignment via spaces; enforce fixed-pitch font
+  // to keep right-side appendages (DXCC/zone/state/distance) visually aligned.
+  QFont decodedFont {font};
+  if (!QFontInfo {decodedFont}.fixedPitch ()) {
+    QFont mono = QFontDatabase::systemFont (QFontDatabase::FixedFont);
+    if (decodedFont.pointSizeF () > 0) {
+      mono.setPointSizeF (decodedFont.pointSizeF ());
+    } else if (decodedFont.pointSize () > 0) {
+      mono.setPointSize (decodedFont.pointSize ());
+    }
+    decodedFont = mono;
+  }
+
+  ui->decodedTextBrowser->setContentFont (decodedFont);
+  ui->decodedTextBrowser2->setContentFont (decodedFont);
+  ui->houndQueueTextBrowser->setContentFont(decodedFont);
   ui->houndQueueTextBrowser->displayHoundToBeCalled(" ");
   ui->houndQueueTextBrowser->setText("");
 
-  ui->foxTxListTextBrowser->setContentFont(font);
+  ui->foxTxListTextBrowser->setContentFont(decodedFont);
   ui->foxTxListTextBrowser->displayHoundToBeCalled(" ");
   ui->foxTxListTextBrowser->setText("");
 
   // AutoCQ caller queue reuses the existing Fox/Hound queue pane.
-  ui->houndQueueTextBrowser->setContentFont(font);
+  ui->houndQueueTextBrowser->setContentFont(decodedFont);
   ui->houndQueueTextBrowser->setText("");
 
   auto style_sheet = "QLabel {" + font_as_stylesheet (font) + '}';
@@ -5047,6 +5101,13 @@ void MainWindow::process_autoButton (bool checked)   //manually or by controller
   if (checked) {
     m_auto = checked;
 
+    // ASYMX timing bar: arm 300 ms guard window before first TX attempt.
+    if (m_mode == "FT2" && ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked()) {
+      if (!m_asyncTxGuardTimer.isActive()) {
+        m_asyncTxGuardTimer.start (300);
+      }
+    }
+
     if (is_externalCtrlMode()) {    //avt 10/2/25
       if (m_auto) {         //avt 10/2/25
         ui->label->setStyleSheet ("QLabel{color: #0000ff}");        //avt 10/2/25
@@ -5110,6 +5171,13 @@ void MainWindow::auto_tx_mode (bool state)
   m_autoButtonState = state;   //avt 10/2/25
   //debugToFile(QString{"autoTxMode   m_autoButtonState:%1"}.arg(m_autoButtonState));   //avt 2/2/24
   on_autoButton_clicked (state);
+
+  // ASYMX timing bar: arm 300 ms guard window before first TX attempt.
+  if (state && m_mode == "FT2" && ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked()) {
+    if (!m_asyncTxGuardTimer.isActive()) {
+      m_asyncTxGuardTimer.start (300);
+    }
+  }
 }
 
 void MainWindow::keyPressEvent (QKeyEvent * e)
@@ -6107,6 +6175,78 @@ void MainWindow::on_actionSolve_FreqCal_triggered()
       QFile::rename (m_config.writeable_data_dir ().absoluteFilePath ("fmt.all"), backup_file_name);
     }
   }
+}
+
+void MainWindow::on_actionLoad_DXped_Certificate_triggered()
+{
+  dxpedLoadCertificate();
+}
+
+void MainWindow::on_actionDXped_Certificate_Manager_triggered()
+{
+  QStringList script_candidates;
+  QDir const app_dir {QCoreApplication::applicationDirPath ()};
+
+#if defined (Q_OS_MAC)
+  // App bundle layout (installed) and local build-from-source layout.
+  script_candidates << app_dir.absoluteFilePath ("../Resources/wsjtx/tools/DXpedCertManager.py")
+                    << app_dir.absoluteFilePath ("../Resources/tools/DXpedCertManager.py")
+                    << app_dir.absoluteFilePath ("../../../../tools/DXpedCertManager.py");
+#else
+  // Typical Linux install layout.
+  script_candidates << app_dir.absoluteFilePath ("../share/wsjtx/tools/DXpedCertManager.py")
+                    << app_dir.absoluteFilePath ("../share/ft2/tools/DXpedCertManager.py");
+#endif
+
+  // Generic fallbacks.
+  script_candidates << app_dir.absoluteFilePath ("tools/DXpedCertManager.py")
+                    << QDir::current ().absoluteFilePath ("tools/DXpedCertManager.py")
+                    << m_config.writeable_data_dir ().absoluteFilePath ("tools/DXpedCertManager.py");
+
+  QString script_path;
+  for (auto const& candidate : script_candidates) {
+    QFileInfo fi {candidate};
+    if (!fi.exists () || !fi.isFile ()) continue;
+    script_path = fi.canonicalFilePath ();
+    if (script_path.isEmpty ()) script_path = fi.absoluteFilePath ();
+    break;
+  }
+
+  if (script_path.isEmpty ()) {
+    MessageBox::warning_message (
+      this,
+      tr ("DXped Certificate Manager"),
+      tr ("DXpedCertManager.py was not found.\n\n"
+          "Expected locations:\n"
+          "- app Resources/tools\n"
+          "- source tree tools/\n"
+          "- writable data dir tools/"));
+    return;
+  }
+
+  QString python_exe {QStandardPaths::findExecutable ("python3")};
+  if (python_exe.isEmpty ()) python_exe = QStandardPaths::findExecutable ("python");
+  if (python_exe.isEmpty ()) {
+    MessageBox::warning_message (
+      this,
+      tr ("DXped Certificate Manager"),
+      tr ("Python 3 was not found in PATH.\n"
+          "Please install Python and try again."));
+    return;
+  }
+
+  bool const started = QProcess::startDetached (
+    python_exe, QStringList {script_path}, QFileInfo {script_path}.absolutePath ());
+
+  if (!started) {
+    MessageBox::warning_message (
+      this,
+      tr ("DXped Certificate Manager"),
+      tr ("Failed to start DXped Certificate Manager."));
+    return;
+  }
+
+  statusBar ()->showMessage (tr ("DXped Certificate Manager started"), 5000);
 }
 
 void MainWindow::on_actionCopyright_Notice_triggered()
@@ -7127,7 +7267,10 @@ void::MainWindow::fast_decode_done()
 // extract details and send to PSKreporter
       if (stdMsg) pskPost (decodedtext);
     }
-    if (tmax >= 0.0) auto_sequence (decodedtext, ui->sbFtol->value (), ui->sbFtol->value ());
+    if (tmax >= 0.0) {
+      if (m_bDXpedMode) dxpedAutoSequence (decodedtext);
+      auto_sequence (decodedtext, ui->sbFtol->value (), ui->sbFtol->value ());
+    }
   }
   m_startAnother=m_loopall;
   m_nPick=0;
@@ -7808,6 +7951,12 @@ void MainWindow::readFromStdout()                             //readFromStdout
           continue;
         }
       }
+
+    {
+      QString normalizedLine = QString::fromUtf8 (line_read.constData ());
+      normalize_ft2_mode_marker (normalizedLine, m_mode);
+      line_read = normalizedLine.toUtf8 ();
+    }
 
     QString message0 {QString::fromUtf8(line_read.constData())};
     DecodedText decodedtext0 {QString::fromUtf8(line_read.constData())};
@@ -9047,6 +9196,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
       if((m_mode!="FT8" and m_mode!="FT2") or (SpecOp::HOUND != m_specOp) or (SpecOp::HOUND == m_specOp and m_config.superFox())) {
         if(m_mode=="FT8" or m_mode=="FT2" or m_mode=="FT4" or m_mode=="Q65"
            or m_mode=="JT4" or m_mode=="JT65" or m_mode=="JT9" or m_mode=="FST4") {
+          if (m_bDXpedMode) dxpedAutoSequence (decodedtext);
           auto_sequence (decodedtext, 25, 50);
         }
 
@@ -9116,94 +9266,20 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
   auto is_73 = message_words.filter (QRegularExpression {"^(73|RR73)$"}).size();
   auto msg_no_hash = message.clean_string();
   msg_no_hash = msg_no_hash.mid(22).remove("<").remove(">");
-  QString callerCall;
-  QString callerGrid;
-  message.deCallAndGrid(callerCall, callerGrid);
-  QString const callerBase = Radio::base_callsign(callerCall);
-  QString const qsoPartnerCall = !m_hisCall.trimmed().isEmpty ()
-      ? m_hisCall.trimmed ()
-      : ui->dxCallEntry->text().trimmed();
-  QString const qsoPartnerBase = Radio::base_callsign(qsoPartnerCall);
-  QString const hisBase = Radio::base_callsign(m_hisCall);
   bool is_OK=false;
   if(m_mode=="MSK144" && msg_no_hash.indexOf(ui->dxCallEntry->text()+" R ")>0) is_OK=true;
   if (message_words.size () > 3 && (message.isStandardMessage() || (is_73 or is_OK))) {
-    // Async L2 manual selection lock:
-    // when user double-clicks in Rx window, keep priority on that call for a short window
-    // so automatic sequencing cannot immediately override it with another caller.
-    if (m_mode == "FT2" && ui->cbAsyncDecode->isChecked() && !m_asyncL2PinnedCall.isEmpty()) {
-      if (!m_asyncL2PinnedUntil.isValid() || QDateTime::currentDateTimeUtc() > m_asyncL2PinnedUntil) {
-        m_asyncL2PinnedCall.clear();
-        m_asyncL2PinnedUntil = QDateTime();
-      } else {
-        QString deCall;
-        QString deGrid;
-        message.deCallAndGrid(deCall, deGrid);
-        QString const pinnedBase = Radio::base_callsign(m_asyncL2PinnedCall);
-        QString const deBase = Radio::base_callsign(deCall);
-        QString const clean = message.clean_string();
-        bool const mentionsPinned = clean.contains(m_asyncL2PinnedCall)
-                                    || (!pinnedBase.isEmpty() && clean.contains(pinnedBase));
-        if (!deBase.isEmpty() && !pinnedBase.isEmpty() && deBase != pinnedBase && !mentionsPinned) {
-          return;
-        }
-      }
-    }
-
-    bool const directedToMe = message_words.at (2).contains (m_baseCall)
-                               || message_words.at (2).contains (m_config.my_callsign ())
-                               || ("DE" == message_words.at (2)
-                                   && message_words.size () > 4
-                                   && (message_words.at (4).contains (m_baseCall)
-                                       || message_words.at (4).contains (m_config.my_callsign ())));
-    bool const fromCurrentPartner = !qsoPartnerBase.isEmpty ()
-      && ((!callerBase.isEmpty () && callerBase == qsoPartnerBase)
-          || (message_words.size () > 3
-              && (message_words.at (3).contains (qsoPartnerBase)
-                  || (!qsoPartnerCall.isEmpty ()
-                      && message_words.at (3).contains (qsoPartnerCall)))));
-    bool const waitLockEnabled = m_config.Wait_features_enabled ()
-                                 && ui->cbAutoSeq
-                                 && ui->cbAutoSeq->isChecked ();
-    bool const lockActiveQso = m_auto
-                               && waitLockEnabled
-                               && m_QSOProgress >= REPLYING
-                               && m_QSOProgress <= SIGNOFF
-                               && !qsoPartnerBase.isEmpty ();
-    if (lockActiveQso && directedToMe && !fromCurrentPartner) {
-      if (kEnableAutoCqCallerQueue && m_autoCQ
-          && !callerCall.isEmpty()
-          && callerBase != qsoPartnerBase) {
-        // No B4 filter: skip stations already worked on this band
-        if (ui->actionIgnoreB4->isChecked()) {
-          bool callB4=false, cB4=false, gB4=false, contB4=false, cqzB4=false, ituzB4=false;
-          auto looked_up = m_logBook.countries()->lookup(callerCall);
-          m_logBook.match(callerCall, m_mode, callerGrid, looked_up,
-                          callB4, cB4, gB4, contB4, cqzB4, ituzB4, m_currentBand);
-          if (callB4) return;
-        }
-        enqueueCaller(callerCall, message.frequencyOffset(), message.snr(), message.dt());
-      }
-      return;
-    }
-
     // Auto CQ caller queue: intercept messages directed to us from OTHER stations
     // while we're already in an active QSO — queue them for later processing
-    if (kEnableAutoCqCallerQueue
-        && m_autoCQ && m_auto && m_QSOProgress > CALLING && m_QSOProgress < SIGNOFF) {
+    if (m_autoCQ && m_auto && m_QSOProgress > CALLING && m_QSOProgress < SIGNOFF) {
       if (message_words.at (2).contains (m_baseCall)
           || message_words.at (2).contains (m_config.my_callsign ())) {
-        if (!callerCall.isEmpty () && callerCall != m_hisCall
-            && callerBase != qsoPartnerBase) {
-          // No B4 filter: skip stations already worked on this band
-          if (ui->actionIgnoreB4->isChecked()) {
-            bool callB4=false, cB4=false, gB4=false, contB4=false, cqzB4=false, ituzB4=false;
-            auto looked_up = m_logBook.countries()->lookup(callerCall);
-            m_logBook.match(callerCall, m_mode, callerGrid, looked_up,
-                            callB4, cB4, gB4, contB4, cqzB4, ituzB4, m_currentBand);
-            if (callB4) return;
-          }
-          enqueueCaller (callerCall, message.frequencyOffset (), message.snr(), message.dt());
+        QString newCaller;
+        QString grid;
+        message.deCallAndGrid (newCaller, grid);
+        if (!newCaller.isEmpty () && newCaller != m_hisCall
+            && newCaller != Radio::base_callsign (ui->dxCallEntry->text ())) {
+          enqueueCaller (newCaller, message.frequencyOffset (), message.snr (), message.dt ());
           return;
         }
       }
@@ -9246,8 +9322,7 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
         && SpecOp::HOUND != m_specOp && qAbs (ui->TxFreqSpinBox->value () - df) <= int (stop_tolerance) //
         && message_words.at (2) != "DE"
         && !message_words.at (2).contains (QRegularExpression {"(^(CQ|QRZ))|" + m_baseCall})
-        && !qsoPartnerBase.isEmpty ()
-        && message_words.at (3).contains (qsoPartnerBase)) {
+        && message_words.at (3).contains (Radio::base_callsign (ui->dxCallEntry->text ()))) {
       // auto stop to avoid accidental QRM
       //ui->stopTxButton->click (); // halt any transmission  avt 11/17/20  not necessary, interferes with external controller actions
     } else if (m_auto             // transmit allowed
@@ -9257,29 +9332,29 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
                     && !m_sentFirst73       // not finished QSO
                     && ((message_words.at (2).contains (m_baseCall)
                          // being called and not already in a QSO
-                         && ((!qsoPartnerBase.isEmpty () && message_words.at(3).contains(qsoPartnerBase))
+                         && (message_words.at(3).contains(Radio::base_callsign(ui->dxCallEntry->text()))
                              or bEU_VHF))
                         || message_words.at(1) == m_baseCall // <de-call> RR73; ...
                         // type 2 compound replies
                         || (within_tolerance &&
                             (acceptable_73 ||
                              ("DE" == message_words.at (2) &&
-                              !hisBase.isEmpty ()
-                              && w2.contains(hisBase))))))
-                   || (m_bCallingCQ && (m_bAutoReply || m_QSOProgress > CALLING)
+                              w2.contains(Radio::base_callsign (m_hisCall)))))))
+                   || (m_bCallingCQ && m_bAutoReply
                        // look for type 2 compound call replies on our Tx and Rx offsets
                        && ((within_tolerance && "DE" == message_words.at (2))
                            || message_words.at (2).contains (m_baseCall))))) {
       if(SpecOp::FOX != m_specOp){
-        //debugToFile(QString{"             processMessage:%1"}.arg(message.string().trimmed()));   //avt 1/4/24
-        if (m_autoCQ && m_QSOProgress > CALLING)
-          m_receivedReplyThisPeriod = true;  // risposta valida ricevuta questo periodo
+        if (m_autoCQ && m_QSOProgress > CALLING) {
+          m_receivedReplyThisPeriod = true;
+        }
         if (m_bDXpedMode) {
           QString dxpedCall;
           QString dxpedGrid;
-          message.deCallAndGrid(dxpedCall, dxpedGrid);
-          if (!dxpedCall.isEmpty()) dxpedRxProcess(dxpedCall);
+          message.deCallAndGrid (dxpedCall, dxpedGrid);
+          if (!dxpedCall.isEmpty ()) dxpedRxProcess (dxpedCall);
         }
+        //debugToFile(QString{"             processMessage:%1"}.arg(message.string().trimmed()));   //avt 1/4/24
         processMessage (message);
       }
     }
@@ -9580,11 +9655,20 @@ void MainWindow::guiUpdate()
     // quindi non usare msgLength per lo stop automatico
     if(msgLength==0 and !m_tune and !m_bDXpedMode) on_stopTxButton_clicked();
 
+    // DXped CQ fallback: if tx5 is empty but tx6 already has CQ text, mirror it to tx5.
+    if (m_bDXpedMode && ui->tx5->currentText().trimmed().isEmpty()) {
+      QString const cqFromTx6 = ui->tx6->text().trimmed();
+      if (!cqFromTx6.isEmpty()) {
+        ui->tx5->setCurrentText(cqFromTx6);
+      }
+    }
+
     // DXped mode: non alzare il PTT se la coda caller è vuota e gli slot sono vuoti
     bool dxpedSilent = m_bDXpedMode && m_callerQueue.isEmpty()
         && m_dxpedSlots[0].call.isEmpty() && m_dxpedSlots[1].call.isEmpty() && m_dxpedSlots[2].call.isEmpty();
-    // CQ mode: coda vuota ma tx5 disponibile → trasmetti CQ singolo (come MSHV)
-    bool dxpedCQmode = dxpedSilent && !ui->tx5->currentText().trimmed().isEmpty();
+    // CQ mode: coda vuota ma tx5 o tx6 disponibile → trasmetti CQ singolo (come MSHV)
+    bool dxpedCQmode = dxpedSilent
+        && (!ui->tx5->currentText().trimmed().isEmpty() || !ui->tx6->text().trimmed().isEmpty());
     if(dxpedSilent && !dxpedCQmode && g_iptt==1) stopTx(); // abbassa PTT solo se silenzio totale
     if(dxpedSilent && !dxpedCQmode) m_restart = false;     // blocca restart solo se nessun CQ
 
@@ -9686,12 +9770,18 @@ void MainWindow::guiUpdate()
   if((g_iptt==1 && m_iptt0==0) || m_restart) {
 //----------------------------------------------------------------------
     // Re-compute dxpedCQmode (originally declared in outer block, not visible here)
+    if (m_bDXpedMode && ui->tx5->currentText().trimmed().isEmpty()) {
+      QString const cqFromTx6 = ui->tx6->text().trimmed();
+      if (!cqFromTx6.isEmpty()) {
+        ui->tx5->setCurrentText(cqFromTx6);
+      }
+    }
     bool dxpedCQmode = m_bDXpedMode
         && m_callerQueue.isEmpty()
         && m_dxpedSlots[0].call.isEmpty()
         && m_dxpedSlots[1].call.isEmpty()
         && m_dxpedSlots[2].call.isEmpty()
-        && !ui->tx5->currentText().trimmed().isEmpty();
+        && (!ui->tx5->currentText().trimmed().isEmpty() || !ui->tx6->text().trimmed().isEmpty());
     QByteArray ba;
     QByteArray ba0;
 
@@ -10231,6 +10321,55 @@ void MainWindow::guiUpdate()
     mem_qmap.unlock();
   }
 
+  if (m_mode == "FT2") {
+    progressBar.setVisible(true);
+
+    // ASYMX: track TX/RX transitions
+    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_transmitting && !m_wasTransmitting) { m_asyncTxStartMs = nowMs; }
+    if (!m_transmitting && m_wasTransmitting) { m_asyncRxStartMs = nowMs; }
+    m_wasTransmitting = m_transmitting;
+
+    // ASYMX: async progress bar — GUARD/TX/RX/IDLE
+    if (ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked()) {
+      progressBar.setMaximum(100);
+      int guardRemain = m_asyncTxGuardTimer.isActive() ? m_asyncTxGuardTimer.remainingTime() : 0;
+      if (guardRemain > 0) {
+        // GUARD state (yellow)
+        progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: center; font-weight: bold;} QProgressBar::chunk {background-color: #ffaa00;}"));
+        double secs = guardRemain / 1000.0;
+        progressBar.setFormat(QString("GUARD %1s").arg(secs, 0, 'f', 1));
+        progressBar.setValue(100 - (guardRemain * 100 / 300));
+      } else if (m_transmitting) {
+        // TX state (red) with real elapsed seconds, progress over 2800ms
+        progressBar.setStyleSheet(QString("QProgressBar {color: #ffffff; text-align: center; font-weight: bold;} QProgressBar::chunk {background-color: #ff0000;}"));
+        int elapsed = (m_asyncTxStartMs > 0) ? int(nowMs - m_asyncTxStartMs) : 0;
+        double secs = elapsed / 1000.0;
+        progressBar.setFormat(QString("TX %1s").arg(secs, 0, 'f', 1));
+        progressBar.setValue(qMin(100, elapsed * 100 / 2800));
+      } else if (m_monitoring) {
+        // RX state (green): show time within current slot and cycle every 750ms.
+        progressBar.setStyleSheet(QString("QProgressBar {color: #ffffff; text-align: center; font-weight: bold;} QProgressBar::chunk {background-color: #00aa00;}"));
+        if (m_asyncRxStartMs <= 0) {
+          m_asyncRxStartMs = nowMs;
+        }
+        int elapsed = (m_asyncRxStartMs > 0) ? int(nowMs - m_asyncRxStartMs) : 0;
+        double secs = elapsed / 1000.0;
+        if (m_TRperiod > 0.0) {
+          secs = std::fmod (secs, m_TRperiod);
+        }
+        progressBar.setFormat(QString("RX %1s").arg(secs, 0, 'f', 1));
+        int cycle = (elapsed >= 0 ? elapsed % 750 : 0) * 100 / 750;
+        progressBar.setValue(cycle);
+      } else {
+        // IDLE
+        progressBar.setStyleSheet(QString("QProgressBar {color: #888888; text-align: center; font-weight: bold;} QProgressBar::chunk {background-color: #444444;}"));
+        progressBar.setFormat("IDLE");
+        progressBar.setValue(0);
+      }
+    }
+  }
+
 //Once per second (onesec)
   if(nsec != m_sec0) {
 
@@ -10295,53 +10434,55 @@ void MainWindow::guiUpdate()
       }
     }
 
-    progressBar.setVisible(true);
-    // turn the progressbar red during transmission
-    if(m_config.progressBar_red()) {
-      if(m_transmitting) {
-        if (m_useDarkStyle) {
-          progressBar.setStyleSheet(QString("QProgressBar {color: #ffffff; text-align: center;} QProgressBar::chunk {background-color: #ff0000;}"));
-          progressBar.setFormat ("%v/%m");
-          } else {
-#ifdef WIN32
-            if(m_TRperiod > 99) {
-              progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: right; margin-right: 4em;} QProgressBar::chunk {background-color: #ff0000;}"));
-              progressBar.setFormat ("%v/%m ");
-            } else {
-              progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: right; margin-right: 3em;} QProgressBar::chunk {background-color: #ff0000;}"));
-              progressBar.setFormat ("%v/%m  ");
-            }
-#else
-            progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: center;} QProgressBar::chunk {background-color: #ff4141;}"));
+    if (m_mode != "FT2") {
+      progressBar.setVisible(true);
+      // turn the progressbar red during transmission
+      if(m_config.progressBar_red()) {
+        if(m_transmitting) {
+          if (m_useDarkStyle) {
+            progressBar.setStyleSheet(QString("QProgressBar {color: #ffffff; text-align: center;} QProgressBar::chunk {background-color: #ff0000;}"));
             progressBar.setFormat ("%v/%m");
+            } else {
+#ifdef WIN32
+              if(m_TRperiod > 99) {
+                progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: right; margin-right: 4em;} QProgressBar::chunk {background-color: #ff0000;}"));
+                progressBar.setFormat ("%v/%m ");
+              } else {
+                progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: right; margin-right: 3em;} QProgressBar::chunk {background-color: #ff0000;}"));
+                progressBar.setFormat ("%v/%m  ");
+              }
+#else
+              progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: center;} QProgressBar::chunk {background-color: #ff4141;}"));
+              progressBar.setFormat ("%v/%m");
 #endif
+            }
+        } else {
+            progressBar.setStyleSheet("");
+            progressBar.setFormat ("%v/%m");
           }
       } else {
-          progressBar.setStyleSheet("");
-          progressBar.setFormat ("%v/%m");			  
+        progressBar.setStyleSheet("");
+        progressBar.setFormat ("%v/%m");
       }
-    } else {
-      progressBar.setStyleSheet("");
-      progressBar.setFormat ("%v/%m");
-    }
-    if(m_mode=="Echo") {
-      progressBar.setMaximum(3);
-      int n=0;
-      if(m_transmitting or m_monitoring) n=int(m_s6)%3;
-      progressBar.setValue(n);
-    }
-    if(m_mode!="Echo") {
-      if(m_monitoring or m_transmitting) {
-        progressBar.setMaximum(m_TRperiod);
-        int isec=int(fmod(tsec,m_TRperiod));
-        if(m_TRperiod-int(m_TRperiod)>0.0) {
-          QString progBarLabel;
-          progBarLabel = progBarLabel.asprintf("%d/%3.1f",isec,m_TRperiod);
-          progressBar.setFormat (progBarLabel);
+      if(m_mode=="Echo") {
+        progressBar.setMaximum(3);
+        int n=0;
+        if(m_transmitting or m_monitoring) n=int(m_s6)%3;
+        progressBar.setValue(n);
+      }
+      if(m_mode!="Echo") {
+        if(m_monitoring or m_transmitting) {
+          progressBar.setMaximum(m_TRperiod);
+          int isec=int(fmod(tsec,m_TRperiod));
+          if(m_TRperiod-int(m_TRperiod)>0.0) {
+            QString progBarLabel;
+            progBarLabel = progBarLabel.asprintf("%d/%3.1f",isec,m_TRperiod);
+            progressBar.setFormat (progBarLabel);
+          }
+          progressBar.setValue(isec);
+        } else {
+          progressBar.setValue(0);
         }
-        progressBar.setValue(isec);
-      } else {
-        progressBar.setValue(0);
       }
     }
 
@@ -10790,7 +10931,31 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
   } else {
     cursor=ui->decodedTextBrowser2->textCursor();
   }
-  DecodedText message {cursor.block().text().trimmed().left(61).remove("TU; ")};
+  QString clickedLine = cursor.block().text().trimmed().remove("TU; ");
+  QString parsedLine = clickedLine;
+  // DisplayText appends country/zone/distance metadata after a NBSP marker.
+  // Strip that appendage so DecodedText always parses the original decode payload.
+  int const nbPos = parsedLine.indexOf(QChar::Nbsp);
+  if (nbPos >= 0) {
+    parsedLine = parsedLine.left(nbPos).trimmed();
+  } else {
+    // Fallback: in some views/styles NBSP can be normalized, leaving annotations
+    // as plain padded text at line end (e.g. country/CQ zone).
+    static QRegularExpression const headerPattern {
+      R"(^\d{6}\s+[-+]?\d+\s+[-+]?\d+(?:\.\d+)?\s+\d+\s+\S\s+)"
+    };
+    auto const match = headerPattern.match(parsedLine);
+    if (match.hasMatch()) {
+      int const payloadStart = match.capturedEnd();
+      QString payload = parsedLine.mid(payloadStart);
+      int const annotationPos = payload.indexOf(QRegularExpression {R"(\s{2,})"});
+      if (annotationPos >= 0) {
+        payload = payload.left(annotationPos);
+      }
+      parsedLine = parsedLine.left(payloadStart) + payload.trimmed();
+    }
+  }
+  DecodedText message {parsedLine};
   QString clickedCall;
   QString clickedGrid;
   message.deCallAndGrid(clickedCall, clickedGrid);
@@ -11016,6 +11181,12 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
 void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifiers modifiers)
 {
   debugToFile("processMess  message:" + message.string()); 
+  // DXped mode uses dedicated slot-based FSM (dxpedTxSequencer/dxpedAutoSequence).
+  // Block standard processMessage flow to avoid collisions with normal AutoSeq.
+  if (m_bDXpedMode) {
+    debugToFile("processMess  BLOCKED — DXped mode active");
+    return;
+  }
   // decode keyboard modifiers we are interested in
   auto shift = modifiers.testFlag (Qt::ShiftModifier);
   auto ctrl = modifiers.testFlag (Qt::ControlModifier);
@@ -11139,8 +11310,9 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
          && firstcall != m_config.my_callsign () && firstcall != m_baseCall
          && firstcall != "DE")
         || "CQ" == firstcall || "QRZ" == firstcall || ctrl || shift) {
+      bool const holdTxForMode = ui->cbHoldTxFreq->isChecked () || (m_mode == "FT2");
       if (((SpecOp::HOUND != m_specOp) || (m_mode != "FT8" and m_mode != "FT2"))
-          && (!ui->cbHoldTxFreq->isChecked () || shift || ctrl)) {
+          && (!holdTxForMode || shift || ctrl)) {
         ui->TxFreqSpinBox->setValue(frequency);
       }
       if(m_mode != "JT4" && m_mode != "JT65" && !m_mode.startsWith ("JT9") &&
@@ -12081,9 +12253,31 @@ void MainWindow::clearDX ()
 
 void MainWindow::on_dxpedButton_clicked(bool checked)
 {
-  m_bDXpedMode = checked;
-  updateQueueTabVisibility();
   if (checked) {
+    if (!m_bDXpedCertified || !m_dxpedCert.isValid() || !m_dxpedCert.isOperator(m_config.my_callsign())) {
+      int const ret = MessageBox::query_message(
+        this,
+        tr("DXpedition Certificate Required"),
+        tr("To activate DXpedition mode you must load a valid .dxcert certificate for your callsign.\n\n"
+           "Load certificate now?"));
+      if (ret == MessageBox::Yes) {
+        dxpedLoadCertificate();
+      }
+      if (!m_bDXpedCertified || !m_dxpedCert.isValid() || !m_dxpedCert.isOperator(m_config.my_callsign())) {
+        QSignalBlocker const blocker {ui->dxpedButton};
+        ui->dxpedButton->setChecked(false);
+        m_bDXpedMode = false;
+        updateQueueTabVisibility();
+        MessageBox::warning_message(
+          this,
+          tr("DXpedition Certificate Required"),
+          tr("DXpedition mode was not activated because no valid certificate is loaded."));
+        return;
+      }
+    }
+
+    m_bDXpedMode = true;
+    updateQueueTabVisibility();
     m_dxpedSlots[0] = DXpedSlot{"", 0, 0, 0, -99};
     m_dxpedSlots[1] = DXpedSlot{"", 0, 0, 0, -99};
     m_dxpedSlots[2] = DXpedSlot{"", 0, 0, 0, -99};
@@ -12121,6 +12315,7 @@ void MainWindow::on_dxpedButton_clicked(bool checked)
     ui->tabWidget->setCurrentIndex(1);
   } else {
     m_bDXpedMode = false;
+    updateQueueTabVisibility();
     m_dxpedSlots[0] = DXpedSlot{"", 0, 0, 0, -99};
     m_dxpedSlots[1] = DXpedSlot{"", 0, 0, 0, -99};
     m_dxpedSlots[2] = DXpedSlot{"", 0, 0, 0, -99};
@@ -12133,6 +12328,67 @@ void MainWindow::on_dxpedButton_clicked(bool checked)
     ui->houndQueueTextBrowser->erase();
   }
   updateQueueTabVisibility();
+}
+
+void MainWindow::dxpedLoadCertificate()
+{
+  QString const path = QFileDialog::getOpenFileName(
+    this,
+    tr("Load DXpedition Certificate"),
+    QString{},
+    tr("DXped Certificate (*.dxcert);;JSON files (*.json);;All files (*)"));
+  if (path.isEmpty()) return;
+
+  if (!m_dxpedCert.loadFromFile(path)) {
+    m_bDXpedCertified = false;
+    MessageBox::warning_message(
+      this,
+      tr("Invalid Certificate"),
+      tr("The certificate file is invalid or the signature verification failed."));
+    return;
+  }
+
+  if (!m_dxpedCert.isValid()) {
+    m_bDXpedCertified = false;
+    MessageBox::warning_message(
+      this,
+      tr("Certificate Expired"),
+      tr("The certificate for %1 is expired or not yet valid.\n"
+         "Valid from %2 to %3.")
+        .arg(m_dxpedCert.callsign())
+        .arg(m_dxpedCert.activationStart().toString("yyyy-MM-dd"))
+        .arg(m_dxpedCert.activationEnd().toString("yyyy-MM-dd")));
+    return;
+  }
+
+  if (!m_dxpedCert.isOperator(m_config.my_callsign())) {
+    m_bDXpedCertified = false;
+    MessageBox::warning_message(
+      this,
+      tr("Unauthorized Operator"),
+      tr("Your callsign %1 is not listed in this certificate for DXpedition %2.")
+        .arg(m_config.my_callsign(), m_dxpedCert.callsign()));
+    return;
+  }
+
+  m_bDXpedCertified = true;
+  MessageBox::information_message(
+    this,
+    tr("Certificate Loaded"),
+    tr("Certificate loaded successfully.\n\n"
+       "DXpedition: %1 (%2)\n"
+       "Entity: %3\n"
+       "Operators: %4\n"
+       "Max slots: %5\n"
+       "Valid: %6 to %7\n"
+       "Fingerprint: %8")
+      .arg(m_dxpedCert.callsign(), m_dxpedCert.dxccName())
+      .arg(m_dxpedCert.dxccEntity())
+      .arg(m_dxpedCert.operators().join(", "))
+      .arg(m_dxpedCert.maxSlots())
+      .arg(m_dxpedCert.activationStart().toString("yyyy-MM-dd"))
+      .arg(m_dxpedCert.activationEnd().toString("yyyy-MM-dd"))
+      .arg(m_dxpedCert.certHash()));
 }
 
 void MainWindow::updateQueueTabVisibility()
@@ -13090,6 +13346,7 @@ void MainWindow::on_genStdMsgsPushButton_clicked()          //genStdMsgs button
 void MainWindow::cease_auto_Tx_after_QSO ()
 {
   if (is_externalCtrlMode()) return;     //avt 3/26/24
+  if (m_bDXpedMode) return;              // DXped FSM keeps auto-TX ownership
 
   // Auto CQ: don't disable auto TX here.
   // Logging and CQ restart are handled in on_logQSOButton_clicked()
@@ -18806,33 +19063,57 @@ void MainWindow::on_cbDualCarrier_toggled (bool checked)
 
 void MainWindow::on_cbAsyncDecode_toggled (bool checked)
 {
-    if (checked && m_mode == "FT2") {
-      m_asyncAudioPos = 0;
-      m_asyncMsgCount = 0;
-      std::memset (m_asyncMsg, 0, sizeof (m_asyncMsg));
-      m_asyncDedupeSet.clear();
-      m_asyncDedupeLastCleared = QDateTime::currentDateTimeUtc();
-      m_pendingAsyncL2MessageLine.clear();
-      m_pendingAsyncL2Call.clear();
-      m_pendingAsyncL2Modifiers = Qt::NoModifier;
-      m_pendingAsyncL2FromRxWindow = false;
-      m_asyncL2PinnedCall.clear();
-      m_asyncL2PinnedUntil = QDateTime();
-      m_asyncDecodeTimer.start(750);  // Level 2: sync-triggered every 750ms
-      ui->labelAsyncL2Active->setVisible(true);
+  if (m_mode == "FT2" && !checked) {
+    // FT2 rule: Async L2 cannot be disabled.
+    bool const oldBlocked = ui->cbAsyncDecode->blockSignals (true);
+    ui->cbAsyncDecode->setChecked (true);
+    ui->cbAsyncDecode->blockSignals (oldBlocked);
+    checked = true;
+    showStatusMessage (tr ("Async L2 is mandatory in FT2 mode"));
+  }
+
+  if (checked && m_mode == "FT2") {
+    m_asyncAudioPos = 0;
+    m_asyncMsgCount = 0;
+    std::memset (m_asyncMsg, 0, sizeof (m_asyncMsg));
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch ();
+    if (m_transmitting) {
+      m_asyncTxStartMs = nowMs;
     } else {
-      m_asyncDecodeTimer.stop();
-      m_bAsyncDecoding = false;
-      m_asyncMsgCount = 0;
-      std::memset (m_asyncMsg, 0, sizeof (m_asyncMsg));
-      ui->labelAsyncL2Active->setVisible(false);
-      m_pendingAsyncL2MessageLine.clear();
-      m_pendingAsyncL2Call.clear();
-      m_pendingAsyncL2Modifiers = Qt::NoModifier;
-      m_pendingAsyncL2FromRxWindow = false;
-      m_asyncL2PinnedCall.clear();
-      m_asyncL2PinnedUntil = QDateTime();
+      m_asyncRxStartMs = nowMs;
     }
+    m_wasTransmitting = m_transmitting;
+    m_asyncDedupeSet.clear();
+    m_asyncDedupeLastCleared = QDateTime::currentDateTimeUtc();
+    m_pendingAsyncL2MessageLine.clear();
+    m_pendingAsyncL2Call.clear();
+    m_pendingAsyncL2Modifiers = Qt::NoModifier;
+    m_pendingAsyncL2FromRxWindow = false;
+    m_asyncL2PinnedCall.clear();
+    m_asyncL2PinnedUntil = QDateTime();
+    m_asyncDecodeTimer.start(750);  // Level 2: sync-triggered every 750ms
+    if (ui->labelAsyncL2Active) {
+      ui->labelAsyncL2Active->setText (tr ("Async L2 Mode On"));
+      ui->labelAsyncL2Active->setVisible(true);
+    }
+  } else {
+    m_asyncDecodeTimer.stop();
+    m_bAsyncDecoding = false;
+    m_asyncMsgCount = 0;
+    std::memset (m_asyncMsg, 0, sizeof (m_asyncMsg));
+    if (ui->labelAsyncL2Active) {
+      ui->labelAsyncL2Active->setVisible(false);
+    }
+    m_pendingAsyncL2MessageLine.clear();
+    m_pendingAsyncL2Call.clear();
+    m_pendingAsyncL2Modifiers = Qt::NoModifier;
+    m_pendingAsyncL2FromRxWindow = false;
+    m_asyncL2PinnedCall.clear();
+    m_asyncL2PinnedUntil = QDateTime();
+    m_asyncTxStartMs = 0;
+    m_asyncRxStartMs = 0;
+    m_wasTransmitting = false;
+  }
 }
 
 void MainWindow::asyncDecodeDone()
@@ -18859,7 +19140,12 @@ void MainWindow::asyncDecodeDone()
 
       QString raw = QString::fromLatin1 (rowBytes.constData (), end);
       if (raw.trimmed().isEmpty()) continue;
-      QStringList rows = split_packed_decode_rows (raw);
+      QStringList rows;
+      if (singleDecodeColumnFlowEnabled() && (m_mode=="FT2" || m_mode=="FT4" || m_mode=="FT8")) {
+        rows = split_packed_decode_rows (raw);
+      } else {
+        rows = QStringList {raw};
+      }
       if (rows.isEmpty ()) continue;
 
       for (auto row : rows) {
@@ -18868,6 +19154,7 @@ void MainWindow::asyncDecodeDone()
         if (!has_decode_line_timestamp (message)) {
           message.prepend (hhmmss + " ");
         }
+        normalize_ft2_mode_marker (message, m_mode);
 
         // Deduplication: skip if same message decoded within last 10s
         QString msgKey = message.size () > 14 ? message.mid (14).trimmed () : message.trimmed ();
@@ -21717,8 +22004,16 @@ void MainWindow::onRemoteSetAsyncL2Requested(QString const& commandId, bool enab
       showStatusMessage(tr("Remote Async L2 ignored: not in FT2 mode"));
       return;
     }
-  ui->cbAsyncDecode->setChecked(enabled);
-  showStatusMessage(enabled ? tr("Remote Async L2 enabled") : tr("Remote Async L2 disabled"));
+  if (!enabled)
+    {
+      bool const oldBlocked = ui->cbAsyncDecode->blockSignals (true);
+      ui->cbAsyncDecode->setChecked (true);
+      ui->cbAsyncDecode->blockSignals (oldBlocked);
+      showStatusMessage(tr("Remote Async L2 ignored: mandatory in FT2 mode"));
+      return;
+    }
+  ui->cbAsyncDecode->setChecked(true);
+  showStatusMessage(tr("Remote Async L2 enabled (mandatory in FT2)"));
 }
 
 void MainWindow::onRemoteSetDualCarrierRequested(QString const& commandId, bool enabled)
