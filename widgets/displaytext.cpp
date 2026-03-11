@@ -541,6 +541,12 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
       if (bCQonly) return;
     }
   auto message = decodedText.string();
+  // Keep fixed-pitch visual alignment stable: normalize Unicode dash/minus
+  // variants to plain ASCII '-' before any width-based append operations.
+  message.replace (QChar {0x2212}, QChar {'-'});
+  message.replace (QChar {0x2012}, QChar {'-'});
+  message.replace (QChar {0x2013}, QChar {'-'});
+  message.replace (QChar {0x2014}, QChar {'-'});
   QString dxCall;
   QString dxGrid;
   decodedText.deCallAndGrid (/*out*/ dxCall, dxGrid);

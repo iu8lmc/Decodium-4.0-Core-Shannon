@@ -351,16 +351,50 @@ static void normalize_ft2_mode_marker (QString& line, QString const& currentMode
     return;
   }
 
-  // Preferred path: match the FT2 mode token after
-  // UTC/SNR/DT/FREQ fields, regardless of variable field spacing.
-  static QRegularExpression const modeTokenRx {
-    R"(^(\s*\d{4,6}\s+[-+]?\d+\s+[-+]?\d+(?:\.\d+)?\s+\d+\s+)~(?=\s))"
+  // Decoder output can contain Unicode minus variants (e.g. U+2212).
+  // They can render with different glyph widths and visually break column
+  // alignment in decode panes; normalize them to ASCII '-'.
+  line.replace (QChar {0x2212}, QChar {'-'});
+  line.replace (QChar {0x2012}, QChar {'-'});
+  line.replace (QChar {0x2013}, QChar {'-'});
+  line.replace (QChar {0x2014}, QChar {'-'});
+
+  // Normalize the FT2 decode prefix to fixed-width columns:
+  // UTC  dB  DT  Freq  +  Message
+  //
+  // Some decoder paths can emit variable spacing and/or Unicode minus signs,
+  // which shifts the mode marker and breaks visual column alignment.
+  static QRegularExpression const ft2PrefixRx {
+    R"(^\s*(\d{4,6})\s+([+\-−]?\d+)\s+([+\-−]?\d+(?:\.\d+)?)\s+(\d+)\s+([~+])\s+(.*)$)"
   };
-  auto const tokenMatch = modeTokenRx.match (line);
-  if (tokenMatch.hasMatch ()) {
-    int const markerPos = tokenMatch.capturedStart (1) + tokenMatch.capturedLength (1);
-    if (markerPos >= 0 && markerPos < line.size ()) {
-      line[markerPos] = QChar {'+'};
+  auto const prefixMatch = ft2PrefixRx.match (line);
+  if (prefixMatch.hasMatch ()) {
+    QString utc = prefixMatch.captured (1).trimmed ();
+    if (utc.size () < 6) {
+      utc = utc.rightJustified (6, QChar {'0'});
+    }
+
+    QString snrText = prefixMatch.captured (2);
+    snrText.replace (QChar {0x2212}, QChar {'-'});
+    bool snrOk = false;
+    int const snr = snrText.toInt (&snrOk);
+
+    QString dtText = prefixMatch.captured (3);
+    dtText.replace (QChar {0x2212}, QChar {'-'});
+    bool dtOk = false;
+    double const dt = dtText.toDouble (&dtOk);
+
+    bool freqOk = false;
+    int const freq = prefixMatch.captured (4).toInt (&freqOk);
+
+    if (snrOk && dtOk && freqOk) {
+      QString const payload = prefixMatch.captured (6).trimmed ();
+      line = QString {"%1 %2 %3 %4 + %5"}
+        .arg (utc, 6, QChar {'0'})
+        .arg (snr, 3)
+        .arg (dt, 4, 'f', 1)
+        .arg (freq, 4)
+        .arg (payload);
       return;
     }
   }
