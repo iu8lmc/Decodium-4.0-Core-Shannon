@@ -170,82 +170,14 @@ jobs:
           REPO="${GITHUB_REPOSITORY}"
 
           NOTES_FILE="$(mktemp)"
-          cat > "${NOTES_FILE}" <<EOF
-          # Decodium 3 FT2 ${VERSION} (macOS + Linux AppImage)
-
-          ## English
-
-          Release highlights (\`v1.4.3 -> ${VERSION}\`):
-
-          - Added DXped certificate workflow (\`.dxcert\`) with HMAC-SHA256 validation.
-          - Added DXped activation gating (valid/non-expired/authorized certificate required).
-          - Added DXped menu actions and bundled certificate manager/tools.
-          - FT2 Async L2 is mandatory (local/remote disable ignored in FT2).
-          - Added ASYMX progress states: \`GUARD\`, \`TX\`, \`RX\`, \`IDLE\` with 300 ms guard.
-          - Decode/UI fixes: fixed-pitch decode font, AP alignment, FT2 marker normalization, safer double-click parsing.
-          - Targets: Tahoe ARM64, Sequoia ARM64, Sequoia x86_64, Monterey x86_64 (experimental), Linux AppImage (uploaded by Linux workflow).
-
-          Linux minimum requirements:
-
-          - x86_64 CPU (dual-core 2.0 GHz+)
-          - 4 GB RAM minimum (8 GB recommended)
-          - glibc >= 2.35
-          - libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire
-
-          If macOS blocks startup:
-          \`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`
-
-          Linux AppImage recommendation:
-          Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.
-
-          Eseguire i seguenti comandi nel terminale:
-          \`chmod +x /path/to/Decodium.AppImage\`
-          \`/path/to/Decodium.AppImage --appimage-extract\`
-          \`cd squashfs-root\`
-          \`./AppRun\`
-
-          ## Italiano
-
-          Punti principali:
-
-          - Nuovo workflow certificati DXped con verifica HMAC-SHA256.
-          - Attivazione DXped bloccata senza certificato valido/autorizzato.
-          - Async L2 obbligatorio in FT2.
-          - Nuovi stati progress bar ASYMX (\`GUARD/TX/RX/IDLE\`).
-          - Fix decode/UI (font monospazio, allineamento AP, normalizzazione marker FT2, parsing doppio click).
-
-          Requisiti minimi Linux:
-
-          - CPU x86_64 dual-core 2.0 GHz+
-          - 4 GB RAM minimi (8 GB consigliati)
-          - glibc >= 2.35
-          - libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire
-
-          Se macOS blocca l'avvio:
-          \`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`
-
-          ## Espanol
-
-          Resumen:
-
-          - Nuevo flujo de certificados DXped con validacion HMAC-SHA256.
-          - Activacion DXped bloqueada sin certificado valido/autorizado.
-          - Async L2 obligatorio en FT2.
-          - Nuevos estados ASYMX (\`GUARD/TX/RX/IDLE\`).
-          - Fixes decode/UI (fuente monoespaciada, alineacion AP, normalizacion FT2, parseo doble click).
-
-          Requisitos minimos Linux:
-
-          - CPU x86_64 dual-core 2.0 GHz+
-          - RAM minima 4 GB (8 GB recomendada)
-          - glibc >= 2.35
-          - libfuse2/FUSE2 + ALSA/PulseAudio/PipeWire
-
-          Si macOS bloquea inicio:
-          \`sudo xattr -r -d com.apple.quarantine /Applications/ft2.app\`
-
-          Refer to \`CHANGELOG.md\`, \`RELEASE_NOTES_v1.4.4.md\`, and \`doc/GITHUB_RELEASE_BODY_v1.4.4.md\` for full details.
-          EOF
+          NOTES_TEMPLATE="doc/GITHUB_RELEASE_BODY_${VERSION}.md"
+          if [[ -f "${NOTES_TEMPLATE}" ]]; then
+            cp "${NOTES_TEMPLATE}" "${NOTES_FILE}"
+          elif [[ -f "doc/GITHUB_RELEASE_BODY_v1.4.4.md" ]]; then
+            cp "doc/GITHUB_RELEASE_BODY_v1.4.4.md" "${NOTES_FILE}"
+          else
+            printf "# Decodium 3 FT2 %s\n\nSee CHANGELOG.md for details.\n" "${VERSION}" > "${NOTES_FILE}"
+          fi
 
           ASSETS=(
             "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64.dmg"

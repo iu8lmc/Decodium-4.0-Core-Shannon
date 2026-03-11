@@ -350,6 +350,22 @@ static void normalize_ft2_mode_marker (QString& line, QString const& currentMode
   if (currentMode != "FT2") {
     return;
   }
+
+  // Preferred path: match the FT2 mode token after
+  // UTC/SNR/DT/FREQ fields, regardless of variable field spacing.
+  static QRegularExpression const modeTokenRx {
+    R"(^(\s*\d{4,6}\s+[-+]?\d+\s+[-+]?\d+(?:\.\d+)?\s+\d+\s+)~(?=\s))"
+  };
+  auto const tokenMatch = modeTokenRx.match (line);
+  if (tokenMatch.hasMatch ()) {
+    int const markerPos = tokenMatch.capturedStart (1) + tokenMatch.capturedLength (1);
+    if (markerPos >= 0 && markerPos < line.size ()) {
+      line[markerPos] = QChar {'+'};
+      return;
+    }
+  }
+
+  // Fallback for legacy fixed-column decodes.
   int const modeColumn = decoded_line_mode_column (line);
   if (modeColumn >= 0 && line.size () > modeColumn && line.at (modeColumn) == QChar {'~'}) {
     line[modeColumn] = QChar {'+'};
