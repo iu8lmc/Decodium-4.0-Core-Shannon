@@ -11379,17 +11379,26 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     }
   }
 
-  int nmod;
-  if(m_TRperiod < 5.0) {
-    int period = (int)round(double(message.timeInSeconds()) / m_TRperiod);
-    nmod = period % 2;
-  } else {
-    nmod = fmod(double(message.timeInSeconds()),2.0*m_TRperiod);
+  bool const lockTxPeriodInFt2AsyncQso =
+      (m_mode == "FT2")
+      && ui->cbAsyncDecode
+      && ui->cbAsyncDecode->isChecked()
+      && m_auto
+      && m_QSOProgress > CALLING
+      && !m_bDoubleClicked;
+  if (!lockTxPeriodInFt2AsyncQso) {
+    int nmod;
+    if(m_TRperiod < 5.0) {
+      int period = (int)round(double(message.timeInSeconds()) / m_TRperiod);
+      nmod = period % 2;
+    } else {
+      nmod = fmod(double(message.timeInSeconds()),2.0*m_TRperiod);
+    }
+    m_txFirst=(nmod!=0);
+    if(SpecOp::HOUND == m_specOp) m_txFirst=false;          //Hound must not transmit first
+    if(SpecOp::FOX == m_specOp) m_txFirst=true;             //Fox must always transmit first
+    ui->txFirstCheckBox->setChecked(m_txFirst);
   }
-  m_txFirst=(nmod!=0);
-  if(SpecOp::HOUND == m_specOp) m_txFirst=false;          //Hound must not transmit first
-  if(SpecOp::FOX == m_specOp) m_txFirst=true;             //Fox must always transmit first
-  ui->txFirstCheckBox->setChecked(m_txFirst);
 
   auto const& message_words = message.messageWords ();
   if (message_words.size () < 3) return;
@@ -12259,11 +12268,10 @@ void MainWindow::TxAgain()
 
 void MainWindow::enqueueCaller (QString const& call, int freq, int snr, float dt)
 {
-  // FT2: filtra caller con DT fuori dal guard time (1.28s).
-  // DT > +1.0s: TX sfora nel periodo successivo → QRM garantito.
-  // DT < -0.3s: trasmette prima del periodo → over sul DX TX.
+  // In FT2 the decode column now carries TΔ (time since TX), not raw DT.
+  // So queue decisions must not reject callers on this field.
   if (m_mode == "FT2") {
-    if (dt > 1.0f || dt < -0.3f) return;
+    dt = 0.0f;
   }
 
   // Niente duplicati
@@ -12298,9 +12306,13 @@ void MainWindow::processNextInQueue ()
     QString entry = m_callerQueue.dequeue ();
     auto parts = entry.split (' ');
     if (parts.size () < 2) continue;   // Bug fix: entry malformata → prova la prossima
+    int freq = parts.at (1).toInt ();
+    int snr = parts.size () >= 3 ? parts.at (2).toInt () : ui->rptSpinBox->value ();
+    snr = qBound (-50, snr, 49);
     ui->dxCallEntry->setText (parts.at (0));
-    ui->RxFreqSpinBox->setValue (parts.at (1).toInt ());
-    genStdMsgs (parts.at (0));
+    ui->RxFreqSpinBox->setValue (freq);
+    ui->rptSpinBox->setValue (snr);
+    genStdMsgs (QString::number (snr));
     m_autoCQPeriodsMissed = 0;
     m_receivedReplyThisPeriod = false;
     setTxMsg (2);            // MSHV-style: inizia sempre da Tx2 (report diretto)
@@ -13606,8 +13618,12 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   // Auto CQ: restart CQ calling after logging the QSO
   // DXped mode: skip reset, la macchina a stati DXped gestisce la continuazione
   if (m_autoCQ && !m_bDXpedMode) {
-    QTimer::singleShot(500, [this] {
+    QTimer::singleShot(0, [this] {
       if (!m_autoCQ || m_bDXpedMode) return;
+      if (kEnableAutoCqCallerQueue && !m_callerQueue.isEmpty()) {
+        processNextInQueue();
+        return;
+      }
       m_ntx = 6;
       ui->txrb6->setChecked(true);
       m_QSOProgress = CALLING;
