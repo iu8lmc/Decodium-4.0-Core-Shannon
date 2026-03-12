@@ -10486,7 +10486,7 @@ void MainWindow::guiUpdate()
         progressBar.setStyleSheet(QString("QProgressBar {color: #000000; text-align: center; font-weight: bold;} QProgressBar::chunk {background-color: #ffaa00;}"));
         double secs = guardRemain / 1000.0;
         progressBar.setFormat(QString("GUARD %1s").arg(secs, 0, 'f', 1));
-        progressBar.setValue(100 - (guardRemain * 100 / 300));
+        progressBar.setValue(100 - (guardRemain * 100 / 100));
       } else if (m_transmitting) {
         // TX state (red) with real elapsed seconds, progress over 2800ms
         progressBar.setStyleSheet(QString("QProgressBar {color: #ffffff; text-align: center; font-weight: bold;} QProgressBar::chunk {background-color: #ff0000;}"));
@@ -19315,13 +19315,13 @@ void MainWindow::asyncDecodeDone()
         message.replace(10, 5, tdStr.right(5));  // overwrite DT field (5 chars at pos 10)
       }
 
-      // Unified dedup: 5s window, best SNR wins
-      if (isDuplicateDecode(message)) continue;
-
       // Async confirmation filter: weak decodes need 2x confirmation
       int asyncFreq = message.mid(15, 5).trimmed().toInt();
       int asyncSnr = message.mid(6, 4).trimmed().toInt();
       if (!asyncConfirmDecode(message, asyncFreq, asyncSnr)) continue;
+
+      // Unified dedup: 5s window, best SNR wins
+      if (isDuplicateDecode(message)) continue;
 
       // Display in left (Band Activity) window
       DecodedText decodedtext {QString(message).replace(QChar::LineFeed, "")};
