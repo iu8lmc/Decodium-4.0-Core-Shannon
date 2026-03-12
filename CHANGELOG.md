@@ -1,5 +1,94 @@
 # Changelog / Registro Modifiche
 
+## [1.4.5] - 2026-03-12
+
+### English
+
+Release focused on FT2 AutoCQ sequencing reliability, decode/UDP correctness, and release workflow alignment.
+
+#### Added
+
+- Added FT2 decode `TΔ` display (time since TX) in place of DT for async-oriented monitoring.
+- Added robust UDP decode payload extraction based on live mode-marker column, avoiding fixed-offset truncation in FT2 frames.
+- Added caller-queue duplicate protection against recently logged stations in AutoCQ.
+
+#### Changed
+
+- AutoCQ caller selection now uses stronger directed-message matching (full/base callsign aware) while calling CQ.
+- Active-QSO lock logic now prioritizes current partner continuity, with manual override only via Ctrl/Shift.
+- AutoCQ retry behavior updated: `MAX_TX_RETRIES` raised to `5`, with retry state reset on partner changes.
+- FT2 signoff/autolog flow now uses safer deferred snapshot handoff and stale-timer guards.
+- Release/build/workflow defaults aligned to `v1.4.5`.
+
+#### Fixed
+
+- Fixed repeated FT2 cases where valid caller replies were not promoted to center/Rx flow during AutoCQ.
+- Fixed FT2 edge cases where non-partner `73` frames could hijack signoff state.
+- Fixed late/autonomous CQ fallback races around deferred log completion.
+- Fixed FT2 decode column alignment with variable marker spacing and Unicode minus variants.
+- Fixed FT2 TX timing path (ramp-up/ramp-down/latency) on both TCI and soundcard routes.
+- Fixed remote dashboard startup/fetch initialization regression.
+- Fixed `View -> Display a cascata` (waterfall) activation regression.
+- Fixed FT2 UDP logger compatibility (RumLog and similar): first callsign character is no longer dropped.
+
+### Italiano
+
+Release focalizzata su affidabilita' AutoCQ FT2, correttezza decode/UDP e allineamento workflow release.
+
+#### Aggiunto
+
+- Aggiunta visualizzazione `TΔ` in FT2 (tempo dall'ultimo TX) al posto di DT.
+- Aggiunta estrazione robusta payload decode UDP basata su colonna marker runtime, evitando troncamenti da offset fisso in FT2.
+- Aggiunta protezione coda caller contro duplicati appena messi a log in AutoCQ.
+
+#### Modificato
+
+- Selezione caller AutoCQ con matching messaggi diretti piu robusto (callsign completo/base).
+- Logica lock QSO attivo resa piu coerente con continuita' partner corrente, con override manuale solo Ctrl/Shift.
+- Retry AutoCQ aggiornati: `MAX_TX_RETRIES` a `5`, con reset stato retry al cambio partner.
+- Flusso signoff/autolog FT2 aggiornato con handoff snapshot deferred piu sicuro e guardie timer stale.
+- Default release/build/workflow allineati a `v1.4.5`.
+
+#### Corretto
+
+- Corrette casistiche FT2 in cui risposte valide non venivano promosse nel flusso centrale Rx durante AutoCQ.
+- Corrette casistiche FT2 in cui `73` di stazioni non partner alteravano lo stato di signoff.
+- Corrette race di fallback CQ tardivo attorno al completamento log deferred.
+- Corretto allineamento colonne FT2 con spaziatura marker variabile e segni meno Unicode.
+- Corretto percorso timing TX FT2 (ramp-up/ramp-down/latenza) su TCI e soundcard.
+- Corretta regressione startup/fetch dashboard remota.
+- Corretta regressione apertura `Vista -> Display a cascata` (waterfall).
+- Corretta compatibilita' logger UDP FT2 (RumLog e simili): non si perde piu il primo carattere del callsign.
+
+### Espanol
+
+Release centrada en fiabilidad AutoCQ FT2, correccion decode/UDP y alineacion de workflows de release.
+
+#### Anadido
+
+- Anadida visualizacion `TΔ` en FT2 (tiempo desde ultimo TX) en lugar de DT.
+- Anadida extraccion robusta de payload decode UDP basada en columna de marcador runtime, evitando truncado por offset fijo en FT2.
+- Anadida proteccion de cola caller contra duplicados recien logueados en AutoCQ.
+
+#### Cambios
+
+- Seleccion caller AutoCQ con matching de mensajes dirigidos mas robusto (callsign completo/base).
+- Logica lock de QSO activo mejorada para mantener continuidad de pareja, con override manual solo Ctrl/Shift.
+- Reintentos AutoCQ actualizados: `MAX_TX_RETRIES` a `5`, con reset al cambiar pareja.
+- Flujo signoff/autolog FT2 actualizado con handoff de snapshot deferred y guardias anti-timer stale.
+- Defaults de release/build/workflows alineados a `v1.4.5`.
+
+#### Corregido
+
+- Corregidos casos FT2 donde respuestas validas no entraban al flujo central Rx durante AutoCQ.
+- Corregidos casos FT2 donde `73` de estaciones no pareja alteraban estado de signoff.
+- Corregidas carreras de fallback CQ tardio alrededor del log deferred.
+- Corregida alineacion de columnas FT2 con espaciado variable de marcador y signos menos Unicode.
+- Corregido timing TX FT2 (ramp-up/ramp-down/latencia) en rutas TCI y soundcard.
+- Corregida regresion de inicio/fetch en dashboard remota.
+- Corregida regresion de apertura `Vista -> Display a cascata` (waterfall).
+- Corregida compatibilidad logger UDP FT2 (RumLog y similares): ya no se pierde el primer caracter del callsign.
+
 ## [1.4.4] - 2026-03-11
 
 ### English

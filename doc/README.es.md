@@ -1,4 +1,4 @@
-# Notas de Documentacion (Espanol) - v1.4.4
+# Notas de Documentacion (Espanol) - v1.4.5
 
 ## Alcance
 
@@ -6,29 +6,35 @@ Notas tecnicas del fork macOS Decodium con flujo de release Linux AppImage.
 
 ## Contexto de Release
 
-- Release actual: `v1.4.4`
-- Ciclo de actualizacion: `v1.4.3 -> v1.4.4`
+- Release actual: `v1.4.5`
+- Ciclo de actualizacion: `v1.4.4 -> v1.4.5`
 - Objetivos: Apple Silicon Tahoe, Apple Silicon Sequoia, Apple Intel Sequoia, Apple Intel Monterey (experimental), Linux x86_64 AppImage
 
-## Cambios Tecnicos Principales (`v1.4.3 -> v1.4.4`)
+## Cambios Tecnicos Principales (`v1.4.4 -> v1.4.5`)
 
-- Anadido subsistema de certificados DXped (`DXpedCertificate.hpp`) con verificacion HMAC-SHA256 de payload JSON canonico.
-- Anadidos controles runtime de certificado DXped:
-- ventana temporal de validez.
-- autorizacion de operador respecto al callsign local.
-- Anadidas acciones de menu para cargar certificado y abrir manager DXped.
-- Anadidas herramientas Python en `tools/` y reglas de instalacion en `CMakeLists.txt`.
-- Activacion DXped ahora condicionada a certificado valido.
-- Integrada auto-secuencia DXped en el flujo decode; bloqueado `processMessage()` estandar cuando la FSM DXped esta activa.
-- Async L2 en FT2 ahora obligatorio (tambien en controles remotos).
-- Nuevos estados de barra ASYMX (`GUARD/TX/RX/IDLE`) con temporizador de guardia.
-- Mejoras de consistencia decode/UI:
-- fuente monoespaciada forzada en paneles decode.
-- marcador AP/calidad alineado al final de linea.
-- normalizacion del marcador FT2 (`~` a `+`) en lineas decode.
-- doble click mas robusto eliminando anotaciones de cola antes de parsear.
-- ID de cliente UDP derivado del nombre de aplicacion para mejor separacion multiinstancia.
-- Traducciones italianas actualizadas para estados async y mensaje Async L2 obligatorio.
+- Hardening FT2 AutoCQ/secuencia QSO:
+- bloqueo de pareja activa mas fiable durante QSO.
+- respuestas dirigidas durante CQ capturadas con matching base-call.
+- `73` de estaciones no pareja ignorados en auto-secuencia.
+- timers autolog stale/deferred filtrados de forma segura.
+- cola de callers protegida contra duplicados recien trabajados.
+- Estabilidad signoff/log FT2:
+- flujo deferred signoff mejorado con handoff de snapshot log.
+- cierre RR73/73 mas estable antes de volver a CQ.
+- reintentos actualizados (`MAX_TX_RETRIES=5`).
+- Mejoras decode/runtime FT2:
+- columna FT2 actualizada con `TΔ` (tiempo desde ultimo TX).
+- fix de alineacion de columnas FT2 para marcador y signos menos Unicode.
+- confirmaciones async debiles preservadas antes de dedupe.
+- umbral decoder `nharderror` actualizado (`35 -> 48`).
+- Fix de temporizacion TX:
+- corregidos ramp-up/ramp-down y latencia FT2 en rutas TCI y soundcard.
+- Fix web/UI:
+- corregido inicio dashboard remota y fetch init.
+- corregida apertura `Vista -> Display a cascata` (waterfall).
+- restaurado hint de password web localizado (minimo 12 caracteres).
+- Compatibilidad logger UDP:
+- corregido slicing payload FT2 por UDP para evitar perdida del primer caracter del callsign en RumLog.
 
 ## Build y Runtime
 
@@ -69,8 +75,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## Referencias
 
 - [CHANGELOG.md](../CHANGELOG.md)
-- [RELEASE_NOTES_v1.4.4.md](../RELEASE_NOTES_v1.4.4.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](./GITHUB_RELEASE_BODY_v1.4.4.md)
+- [RELEASE_NOTES_v1.4.5.md](../RELEASE_NOTES_v1.4.5.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](./GITHUB_RELEASE_BODY_v1.4.5.md)
 - [doc/WEBAPP_SETUP_GUIDE.es.md](./WEBAPP_SETUP_GUIDE.es.md)
 - [doc/WEBAPP_SETUP_GUIDE.en-GB.md](./WEBAPP_SETUP_GUIDE.en-GB.md)
 - [doc/WEBAPP_SETUP_GUIDE.it.md](./WEBAPP_SETUP_GUIDE.it.md)

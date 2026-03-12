@@ -1,35 +1,37 @@
-# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.4.4
+# Decodium v3.0 SE "Raptor" - Fork 9H1SR v1.4.5
 
 This repository contains the macOS-focused fork build of Decodium 3 FT2, including Linux AppImage release flow.
 
 - Upstream base: `iu8lmc/Decodium-3.0-Codename-Raptor`
-- Fork release: `v1.4.4`
+- Fork release: `v1.4.5`
 - App bundle/executable on macOS: `ft2.app` / `ft2`
 - Licence: GPLv3
 
-## Release Scope (`v1.4.3 -> v1.4.4`)
+## Release Scope (`v1.4.4 -> v1.4.5`)
 
-- New DXpedition certificate workflow:
-- certificate verification (`.dxcert`) with HMAC-SHA256 signature and canonical JSON payload.
-- activation window and authorized-operator checks before DXped mode can start.
-- new menu actions to load certificate and open DXped certificate manager.
-- bundled DXped tools installed with release packages.
-- New DXped runtime safeguards:
-- standard `processMessage()` path blocked while DXped FSM is active.
-- DXped auto-sequence integrated directly in decode paths.
-- CQ fallback for empty queue (`tx5` mirrored from `tx6`).
-- FT2 Async L2 hardening and UX updates:
-- Async L2 is mandatory in FT2 (local/remote disable attempts are ignored).
-- new ASYMX progress states: `GUARD`, `TX`, `RX`, `IDLE`.
-- 300 ms guard window before first FT2 auto-TX attempt.
-- explicit async state reset on mode/toggle transitions.
-- Decode and UI consistency fixes:
-- fixed-pitch font enforcement in decode panes.
-- right-side AP/quality marker placement corrected.
-- FT2 decode marker normalization (`~` to `+`).
-- safer double-click decode parsing by stripping trailing annotations.
-- UDP client id now derives from application name for cleaner multi-instance operation.
-- Translations updated (`wsjtx_it.ts`) for async status labels and FT2 mandatory Async L2 messages.
+- FT2 AutoCQ flow hardening:
+- improved partner locking during active QSOs with manual override only on Ctrl/Shift.
+- immediate pickup of directed replies while calling CQ (base-call aware matching).
+- non-partner `73` frames are ignored in auto-sequence.
+- stale deferred autolog triggers are ignored safely.
+- queued callers are deduplicated after recent logs to avoid reworking same station.
+- FT2 signoff/logging stability:
+- deferred FT2 signoff path with safer snapshot-based autolog handoff.
+- RR73/73 partner handling refined to avoid premature CQ fallback.
+- retry behavior tuned for AutoCQ (`MAX_TX_RETRIES=5`) with cleaner reset on partner change.
+- FT2 decode rendering/timing updates:
+- decode column now shows `TΔ` (time since TX) in FT2.
+- fixed FT2 column alignment (`~`, minus glyph normalization, fixed-width prefix reformat).
+- tighter async confirmation + dedupe handling preserves weak valid replies.
+- decoder runtime tuning update: `nharderror` threshold relaxed (`35 -> 48`).
+- TX timing path fixes:
+- improved FT2 TX ramp-up/ramp-down and latency handling on both TCI and soundcard paths.
+- remote/web + UI fixes:
+- remote dashboard startup/fetch sequence fixed.
+- `View -> Display a cascata` / waterfall window activation fixed.
+- localized web password hint restored (minimum 12 chars).
+- FT2 UDP/logger compatibility fix:
+- fixed FT2 UDP decode payload slicing so external loggers (RumLog) no longer lose first callsign character.
 
 ## Release Targets
 
@@ -84,9 +86,9 @@ cmake --build build -j6
 - English README: [README.en-GB.md](README.en-GB.md)
 - Italian README: [README.it.md](README.it.md)
 - Spanish README: [README.es.md](README.es.md)
-- Release notes (EN/IT/ES): [RELEASE_NOTES_v1.4.4.md](RELEASE_NOTES_v1.4.4.md)
+- Release notes (EN/IT/ES): [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
 - Changelog (EN/IT/ES): [CHANGELOG.md](CHANGELOG.md)
-- GitHub release template (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.4.4.md](doc/GITHUB_RELEASE_BODY_v1.4.4.md)
+- GitHub release template (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
 - Docs index (EN): [doc/README.en-GB.md](doc/README.en-GB.md)
 - Docs index (IT): [doc/README.it.md](doc/README.it.md)
 - Docs index (ES): [doc/README.es.md](doc/README.es.md)

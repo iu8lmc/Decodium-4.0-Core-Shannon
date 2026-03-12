@@ -1,38 +1,34 @@
-# Decodium 3 FT2 (Fork macOS) - v1.4.4
+# Decodium 3 FT2 (Fork macOS) - v1.4.5
 
 Fork mantenuto da **Salvatore Raccampo 9H1SR**.
 
 Per la panoramica bilingue, vedere [README.md](README.md).
 
-## Novita' v1.4.4 (`v1.4.3 -> v1.4.4`)
+## Novita' v1.4.5 (`v1.4.4 -> v1.4.5`)
 
-- Aggiunto sistema certificati DXpedition (`.dxcert`) con verifica firma HMAC-SHA256 su payload canonico.
-- Aggiunti controlli validita' certificato (finestra temporale) e autorizzazione operatore in base al callsign locale.
-- Aggiunte nuove azioni menu DXped:
-- `Load DXped Certificate...`
-- `DXped Certificate Manager...`
-- Aggiunti tool DXped in `tools/` e installazione nei pacchetti release.
-- DXped mode ora richiede certificato valido: attivazione bloccata se certificato assente/non valido/scaduto/non autorizzato.
-- Migliorata la logica runtime DXped:
-- bloccato il flusso standard `processMessage()` quando DXped mode e' attivo, per evitare collisioni con AutoSeq.
-- `dxpedAutoSequence` ora richiamato direttamente nei percorsi decode.
-- fallback CQ migliorato: se `tx5` e' vuoto viene specchiato da `tx6`.
-- Async L2 in FT2 ora obbligatorio:
-- ON forzato in FT2 e OFF forzato fuori FT2.
-- tentativi locali/remoti di disabilitarlo in FT2 vengono ignorati.
-- Migliorie ASYMX/progress bar:
-- nuovi stati `GUARD`, `TX`, `RX`, `IDLE` con colori dedicati.
-- guardia TX di 300 ms prima del primo auto-TX in FT2.
-- reset esplicito stato buffer/counter/timer async nelle transizioni toggle.
-- Migliorata correttezza visualizzazione decode:
-- font monospazio forzato nelle pane decode per preservare allineamenti a colonne.
-- marker AP/qualita' spostato in coda riga per evitare disallineamento colonna destra.
-- normalizzazione marker FT2 (`~` in `+`) nei decode normali e async.
-- doppio click su decode reso piu robusto: rimozione annotazioni a destra prima del parsing.
-- Migliorata identificazione UDP multiistanza:
-- client id derivato dal nome applicazione (distinzione migliore tra istanze parallele).
-- Aggiunte traduzioni italiane per stati async e messaggi "Async L2 obbligatorio".
-- Allineati metadati release/workflow/documentazione a `v1.4.4`.
+- Correzioni FT2 AutoCQ e macchina stati QSO:
+- lock partner attivo piu rigoroso durante QSO (override manuale solo con Ctrl/Shift).
+- risposta diretta durante CQ agganciata in modo piu affidabile (match su base callsign).
+- i `73` non del partner non forzano piu chiusure errate.
+- timer di autolog differiti/stale ora ignorati in sicurezza.
+- coda caller protetta da duplicati appena lavorati dopo logging.
+- Affidabilita' signoff/log FT2:
+- migliorato percorso deferred signoff FT2 con snapshot autolog piu robusto.
+- completamento RR73/73 gestito meglio prima del ritorno a CQ.
+- retry AutoCQ aggiornati (`MAX_TX_RETRIES=5`) con reset pulito al cambio DX.
+- Migliorie decode/runtime FT2:
+- colonna FT2 ora mostra `TΔ` (tempo da ultimo TX) al posto di DT.
+- corretto allineamento colonne FT2 (`~`, segni meno Unicode, prefisso a larghezza fissa).
+- conferme async deboli preservate prima della soppressione near-duplicate.
+- hardening decoder con soglia `nharderror` rilassata (`35 -> 48`).
+- Correzioni timing TX:
+- sistemati ramp-up/ramp-down e latenza TX FT2 su percorsi TCI e soundcard.
+- Correzioni web/UI:
+- fix startup dashboard remota e inizializzazione fetch.
+- fix apertura `Vista -> Display a cascata` (waterfall).
+- ripristinato hint password web localizzato (minimo 12 caratteri).
+- Fix compatibilita' logger UDP FT2:
+- corretto slicing payload decode FT2 via UDP: logger esterni (RumLog) non perdono piu la prima lettera del callsign.
 
 ## Target release
 
@@ -86,7 +82,7 @@ cmake --build build -j6
 
 - [README.en-GB.md](README.en-GB.md)
 - [README.es.md](README.es.md)
-- [RELEASE_NOTES_v1.4.4.md](RELEASE_NOTES_v1.4.4.md)
+- [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](doc/GITHUB_RELEASE_BODY_v1.4.4.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
 - [doc/README.it.md](doc/README.it.md)

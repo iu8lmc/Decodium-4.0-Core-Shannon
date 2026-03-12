@@ -5,6 +5,7 @@ Fork-specific markdown documentation is also available:
 
  - doc/README.en-GB.md
  - doc/README.it.md
+ - doc/README.es.md
 
 If you do not wish to build  the documentation, it is possible to skip
 this  directory  in the  WSJT-X  build  by  setting the  CMake  option

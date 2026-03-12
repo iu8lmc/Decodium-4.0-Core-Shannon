@@ -1,38 +1,34 @@
-# Decodium 3 FT2 (Fork macOS) - v1.4.4
+# Decodium 3 FT2 (Fork macOS) - v1.4.5
 
 Fork mantenido por **Salvatore Raccampo 9H1SR**.
 
 Para la vista general bilingue, ver [README.md](README.md).
 
-## Cambios en v1.4.4 (`v1.4.3 -> v1.4.4`)
+## Cambios en v1.4.5 (`v1.4.4 -> v1.4.5`)
 
-- Anadido sistema de certificados DXpedition (`.dxcert`) con verificacion HMAC-SHA256 sobre payload canonico.
-- Anadidos controles de validez temporal del certificado y autorizacion del operador segun callsign local.
-- Anadidas nuevas acciones de menu DXped:
-- `Load DXped Certificate...`
-- `DXped Certificate Manager...`
-- Anadidas herramientas DXped en `tools/` e instalacion en artefactos release.
-- DXped mode ahora exige certificado valido: activacion bloqueada si falta, es invalido, expirado o no autorizado.
-- Mejoras en runtime DXped:
-- flujo estandar `processMessage()` bloqueado cuando la FSM DXped esta activa, evitando colisiones con AutoSeq.
-- `dxpedAutoSequence` llamado directamente desde rutas de decode.
-- fallback CQ mejorado: si `tx5` esta vacio se copia desde `tx6`.
-- Async L2 en FT2 ahora es obligatorio:
-- ON forzado en FT2 y OFF forzado fuera de FT2.
-- intentos locales/remotos de desactivarlo en FT2 se ignoran.
-- Mejoras ASYMX/progress bar:
-- nuevos estados `GUARD`, `TX`, `RX`, `IDLE` con color dedicado.
-- guardia TX de 300 ms antes del primer auto-TX FT2.
-- reset explicito de buffers/counters/timers async en transiciones de toggle.
-- Mejoras de consistencia en decodes:
-- fuente monoespaciada forzada en paneles decode para mantener columnas.
-- marcador AP/calidad movido al final de linea para no romper alineacion de columna derecha.
-- normalizacion de marcador FT2 (`~` a `+`) en decode normal y async.
-- doble click mas robusto: elimina anotaciones de la derecha antes de parsear `DecodedText`.
-- Mejor identificacion UDP multiinstancia:
-- client id derivado del nombre de aplicacion para diferenciar instancias paralelas.
-- Anadidas traducciones italianas de estados async y mensaje "Async L2 obligatorio".
-- Metadatos de release/workflows/documentacion alineados a `v1.4.4`.
+- Correcciones FT2 AutoCQ y maquina de estados QSO:
+- bloqueo de pareja activa mas robusto durante QSO (override manual solo con Ctrl/Shift).
+- respuestas dirigidas durante CQ capturadas de forma mas fiable (matching por base callsign).
+- mensajes `73` de estaciones no pareja ya no fuerzan cierres incorrectos.
+- timers diferidos/stale de autolog ahora se ignoran con seguridad.
+- cola de callers protegida contra duplicados recien trabajados tras log.
+- Fiabilidad signoff/log en FT2:
+- mejorado flujo deferred signoff FT2 con handoff de snapshot autolog.
+- completado RR73/73 mas estable antes de volver a CQ.
+- reintentos AutoCQ ajustados (`MAX_TX_RETRIES=5`) con reset limpio al cambiar DX.
+- Mejoras decode/runtime FT2:
+- columna FT2 ahora muestra `TΔ` (tiempo desde ultimo TX) en lugar de DT.
+- corregida alineacion de columnas FT2 (`~`, signos menos Unicode, prefijo de ancho fijo).
+- confirmaciones async debiles preservadas antes de la supresion near-duplicate.
+- hardening del decoder con umbral `nharderror` relajado (`35 -> 48`).
+- Correcciones de temporizacion TX:
+- ajustados ramp-up/ramp-down y latencia TX FT2 en rutas TCI y soundcard.
+- Correcciones web/UI:
+- fix de inicio dashboard remota e inicializacion de fetch.
+- fix de apertura `Vista -> Display a cascata` (waterfall).
+- restaurado hint de password web localizado (minimo 12 caracteres).
+- Fix compatibilidad logger UDP FT2:
+- corregido el slicing del payload FT2 por UDP para que loggers externos (RumLog) no pierdan el primer caracter del callsign.
 
 ## Objetivos de release
 
@@ -86,7 +82,7 @@ cmake --build build -j6
 
 - [README.en-GB.md](README.en-GB.md)
 - [README.it.md](README.it.md)
-- [RELEASE_NOTES_v1.4.4.md](RELEASE_NOTES_v1.4.4.md)
+- [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](doc/GITHUB_RELEASE_BODY_v1.4.4.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
 - [doc/README.es.md](doc/README.es.md)

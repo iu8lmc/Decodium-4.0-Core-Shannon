@@ -753,7 +753,7 @@ private:
   qint32  m_txRetryCount {0};  // Consecutive Tx retry counter for auto-sequence timeout
   qint32  m_lastNtx {-1};     // Last Tx number sent (for retry detection)
   qint32  m_cqRetryCount {0}; // CQ (Tx6) retry counter for period toggle
-  static constexpr int MAX_TX_RETRIES = 3;    // Tx2/Tx3/Tx4 retries before returning to CQ
+  static constexpr int MAX_TX_RETRIES = 5;    // Tx2/Tx3/Tx4 retries before returning to CQ
   static constexpr int MAX_CQ_RETRIES = 10;   // CQ retries before toggling Tx Even/1st
   int  m_autoCQPeriodsMissed   {0};           // RX periods senza risposta dal caller corrente
   bool m_receivedReplyThisPeriod {false};     // flag reset ogni periodo RX
@@ -842,10 +842,13 @@ private:
   bool    m_bDoubleClicked;
   bool    m_bCallingCQ;
   bool    m_autoCQ;
+  bool    m_ft2DeferredLogPending {false};   // FT2 AutoCQ: delay log/CQ restart while repeating RR73
   QQueue<QString> m_callerQueue;
   void enqueueCaller (QString const& call, int freq, int snr = -99, float dt = 0.0f);
   void processNextInQueue ();
   void refreshCallerQueueDisplay ();
+  void capturePendingAutoLogSnapshot ();
+  void clearPendingAutoLogSnapshot ();
 
   // DX-pedition 2-slot
   struct DXpedSlot {
@@ -1023,6 +1026,15 @@ private:
   QString m_baseCall;
   QString m_hisCall;
   QString m_hisGrid;
+  bool m_pendingAutoLogValid {false};
+  QString m_pendingAutoLogCall;
+  QString m_pendingAutoLogGrid;
+  QString m_pendingAutoLogRptSent;
+  QString m_pendingAutoLogRptRcvd;
+  QString m_pendingAutoLogXSent;
+  QString m_pendingAutoLogXRcvd;
+  QDateTime m_pendingAutoLogOn;
+  Radio::Frequency m_pendingAutoLogDialFreq {0};
   QString m_appDir;
   QString m_cqStr;
   QString m_palette;

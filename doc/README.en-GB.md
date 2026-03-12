@@ -1,4 +1,4 @@
-# Documentation Notes (English) - v1.4.4
+# Documentation Notes (English) - v1.4.5
 
 ## Scope
 
@@ -6,25 +6,35 @@ Repository-specific notes for the Decodium macOS fork and Linux AppImage release
 
 ## Current Release Context
 
-- Current release: `v1.4.4`
-- Update cycle: `v1.4.3 -> v1.4.4`
+- Current release: `v1.4.5`
+- Update cycle: `v1.4.4 -> v1.4.5`
 - Targets: Apple Silicon Tahoe, Apple Silicon Sequoia, Apple Intel Sequoia, Apple Intel Monterey (experimental), Linux x86_64 AppImage
 
-## Key Technical Changes (`v1.4.3 -> v1.4.4`)
+## Key Technical Changes (`v1.4.4 -> v1.4.5`)
 
-- Added DXped certificate subsystem (`DXpedCertificate.hpp`) with canonical JSON payload verification and HMAC-SHA256 signature validation.
-- Added DXped certificate runtime checks:
-- activation time window validation.
-- operator authorization validation against local callsign.
-- Added DXped UI actions to load certificate and launch certificate manager.
-- Added bundled Python tooling under `tools/` and install rules in `CMakeLists.txt`.
-- Enforced certificate requirement before DXped mode activation.
-- Integrated DXped auto-sequencing directly into decode flow and blocked standard `processMessage()` while DXped FSM is active.
-- Enforced mandatory Async L2 for FT2 (local + remote disable prevention).
-- Added ASYMX progress states (`GUARD/TX/RX/IDLE`) with guard timing.
-- Improved decode rendering and parsing (fixed-pitch font enforcement, AP marker alignment, FT2 marker normalization, safer double-click parsing).
-- Updated UDP client id to include application-name-derived rig suffix.
-- Updated translations and release/workflow version defaults to `v1.4.4`.
+- FT2 AutoCQ/QSO sequencing hardened:
+- partner lock reliability improved during active QSO.
+- directed replies while CQ are now matched more robustly (base-call aware).
+- non-partner `73` frames are ignored in auto-sequence.
+- deferred stale autolog timers are safely dropped.
+- caller queue skips recently worked stations.
+- FT2 signoff/logging flow stabilized:
+- deferred signoff path refined with pending log snapshot handoff.
+- RR73/73 completion handling tuned before fallback to CQ.
+- retry behavior tuned with `MAX_TX_RETRIES=5`.
+- FT2 decode/runtime updates:
+- `TΔ` display introduced in FT2 decode column.
+- FT2 alignment fixes for marker and Unicode minus variants.
+- weak async confirmations preserved before dedupe.
+- decoder threshold update: `nharderror 35 -> 48`.
+- TX timing fixes:
+- FT2 ramp-up/ramp-down and latency handling fixed for TCI and soundcard paths.
+- Remote/web and UI fixes:
+- fixed remote dashboard startup/fetch path.
+- fixed `View -> Display a cascata` / waterfall activation.
+- restored localized web password hint (minimum 12 chars).
+- UDP logger compatibility:
+- FT2 UDP payload extraction fixed so logger integrations (RumLog) keep full callsign.
 
 ## Build and Runtime
 
@@ -65,8 +75,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## References
 
 - [CHANGELOG.md](../CHANGELOG.md)
-- [RELEASE_NOTES_v1.4.4.md](../RELEASE_NOTES_v1.4.4.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](./GITHUB_RELEASE_BODY_v1.4.4.md)
+- [RELEASE_NOTES_v1.4.5.md](../RELEASE_NOTES_v1.4.5.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](./GITHUB_RELEASE_BODY_v1.4.5.md)
 - [doc/WEBAPP_SETUP_GUIDE.en-GB.md](./WEBAPP_SETUP_GUIDE.en-GB.md)
 - [doc/WEBAPP_SETUP_GUIDE.it.md](./WEBAPP_SETUP_GUIDE.it.md)
 - [doc/WEBAPP_SETUP_GUIDE.es.md](./WEBAPP_SETUP_GUIDE.es.md)

@@ -1,4 +1,4 @@
-# Decodium 3 FT2 (macOS Fork) - v1.4.4
+# Decodium 3 FT2 (macOS Fork) - v1.4.5
 
 Fork maintained by **Salvatore Raccampo 9H1SR**.
 
@@ -6,37 +6,33 @@ Fork maintained by **Salvatore Raccampo 9H1SR**.
 
 This repository is a Decodium/WSJT-X fork focused on macOS and Linux packaging, FT2 runtime stability, and DXpedition workflows.
 
-Latest stable release: `v1.4.4`.
+Latest stable release: `v1.4.5`.
 
-## Changes in v1.4.4 (`v1.4.3 -> v1.4.4`)
+## Changes in v1.4.5 (`v1.4.4 -> v1.4.5`)
 
-- Added DXpedition certificate verification (`.dxcert`) with canonical payload hashing and HMAC-SHA256 signature checks.
-- Added DXpedition certificate validity checks (activation window) and operator authorization checks against station callsign.
-- Added `DXped` menu actions:
-- `Load DXped Certificate...`
-- `DXped Certificate Manager...`
-- Added bundled DXped certificate tooling in `tools/` and install rules to ship tools with release artifacts.
-- Enforced certificate gate before enabling DXped mode; DXped activation is blocked if certificate is missing/invalid/expired/unauthorized.
-- Added DXped runtime protections:
-- standard `processMessage()` flow is blocked while DXped mode FSM is active, avoiding AutoSeq collisions.
-- DXped auto-sequencing is now called directly from decode paths.
-- DXped CQ fallback now mirrors `tx6` into `tx5` when queue is empty and `tx5` is blank.
-- FT2 Async L2 is now mandatory:
-- forced ON in FT2 and forced OFF outside FT2.
-- local and remote attempts to disable Async L2 in FT2 are ignored.
-- Added ASYMX timing/visibility improvements:
-- `GUARD`, `TX`, `RX`, `IDLE` progress states with dedicated coloring.
-- 300 ms TX guard phase before first FT2 auto-TX attempt.
-- explicit async buffer/counter state reset and timer state cleanup on toggle transitions.
-- Improved decode UI correctness:
-- fixed-pitch font enforcement in decode panes to preserve column alignment.
-- AP/quality marker placement moved to line tail to avoid right-column misalignment.
-- FT2 decode mode marker normalization (`~` to `+`) in both normal and async decode paths.
-- safer double-click parsing by stripping right-side annotations before `DecodedText` parsing.
-- Improved UDP multi-instance identity:
-- UDP client id now derives from application name, improving distinction between parallel instances.
-- Added Italian UI translations for async status and mandatory Async L2 messages.
-- Updated release/version metadata and CI defaults to `v1.4.4`.
+- FT2 AutoCQ and QSO state machine fixes:
+- stronger active-partner lock during ongoing QSO (manual override only with Ctrl/Shift).
+- directed replies during CQ are now captured more reliably (base callsign aware).
+- non-partner `73` messages no longer force wrong signoff transitions.
+- stale delayed autolog timers are ignored safely.
+- caller queue now avoids recently worked duplicates after log completion.
+- FT2 signoff/logging reliability:
+- improved deferred FT2 signoff path and snapshot-based autolog handoff.
+- better RR73/73 completion handling before returning to CQ.
+- retry behavior tuned (`MAX_TX_RETRIES=5`) with clean reset when DX call changes.
+- FT2 decode/runtime quality improvements:
+- FT2 decode column now reports `TΔ` (time since TX) instead of DT.
+- fixed FT2 column alignment and marker handling (`~`, Unicode minus variants, fixed-width prefix reformat).
+- weak async confirmations are preserved before near-duplicate suppression.
+- decoder hardening update with relaxed `nharderror` threshold (`35 -> 48`).
+- TX timing fixes:
+- corrected FT2 TX ramp-up/ramp-down and timing latency for both TCI and soundcard operation.
+- Remote/web and UI fixes:
+- fixed remote dashboard startup/fetch initialization path.
+- fixed `View -> Display a cascata` / waterfall activation behavior.
+- restored localized web password hint (minimum 12 characters).
+- FT2 UDP logger fix:
+- fixed FT2 UDP decode payload extraction so external loggers (RumLog) do not lose the first callsign character.
 
 ## Release Targets
 
@@ -91,9 +87,9 @@ cmake --build build -j6
 - [README.md](README.md)
 - [README.it.md](README.it.md)
 - [README.es.md](README.es.md)
-- [RELEASE_NOTES_v1.4.4.md](RELEASE_NOTES_v1.4.4.md)
+- [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.4.md](doc/GITHUB_RELEASE_BODY_v1.4.4.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
 - [doc/README.en-GB.md](doc/README.en-GB.md)
 - [doc/README.it.md](doc/README.it.md)
 - [doc/README.es.md](doc/README.es.md)
