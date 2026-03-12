@@ -12285,6 +12285,25 @@ void MainWindow::enqueueCaller (QString const& call, int freq, int snr, float dt
     dt = 0.0f;
   }
 
+  // AutoCQ guard: don't re-queue stations that were just logged/worked on
+  // the same band+mode (late 73/replies can otherwise re-open stale QSOs).
+  {
+    auto const nowUtc = QDateTime::currentDateTimeUtc ();
+    auto const dedupeCall = Radio::base_callsign (call).trimmed ().toUpper ();
+    auto const dedupeBand = m_config.bands ()->find (m_freqNominal).trimmed ().toUpper ();
+    auto const dedupeMode = m_mode.trimmed ().toUpper ();
+    if (!dedupeCall.isEmpty () && !dedupeBand.isEmpty () && !dedupeMode.isEmpty ()) {
+      auto const key = QString {"%1|%2|%3"}.arg (dedupeCall, dedupeBand, dedupeMode);
+      auto it = m_recentQsoLogUtcByKey.constFind (key);
+      if (it != m_recentQsoLogUtcByKey.constEnd ()) {
+        qint64 const ageSec = it.value ().secsTo (nowUtc);
+        if (ageSec >= 0 && ageSec <= (2 * kRecentDuplicateLogWindowSeconds)) {
+          return;
+        }
+      }
+    }
+  }
+
   // Niente duplicati
   for (auto const& e : m_callerQueue)
     if (e.startsWith (call + " ")) return;
@@ -12317,6 +12336,24 @@ void MainWindow::processNextInQueue ()
     QString entry = m_callerQueue.dequeue ();
     auto parts = entry.split (' ');
     if (parts.size () < 2) continue;   // Bug fix: entry malformata → prova la prossima
+    {
+      // Drop stale queued callers that were already worked recently.
+      auto const nowUtc = QDateTime::currentDateTimeUtc ();
+      auto const dedupeCall = Radio::base_callsign (parts.at (0)).trimmed ().toUpper ();
+      auto const dedupeBand = m_config.bands ()->find (m_freqNominal).trimmed ().toUpper ();
+      auto const dedupeMode = m_mode.trimmed ().toUpper ();
+      if (!dedupeCall.isEmpty () && !dedupeBand.isEmpty () && !dedupeMode.isEmpty ()) {
+        auto const key = QString {"%1|%2|%3"}.arg (dedupeCall, dedupeBand, dedupeMode);
+        auto it = m_recentQsoLogUtcByKey.constFind (key);
+        if (it != m_recentQsoLogUtcByKey.constEnd ()) {
+          qint64 const ageSec = it.value ().secsTo (nowUtc);
+          if (ageSec >= 0 && ageSec <= (2 * kRecentDuplicateLogWindowSeconds)) {
+            refreshCallerQueueDisplay();
+            continue;
+          }
+        }
+      }
+    }
     int freq = parts.at (1).toInt ();
     int snr = parts.size () >= 3 ? parts.at (2).toInt () : ui->rptSpinBox->value ();
     snr = qBound (-50, snr, 49);
