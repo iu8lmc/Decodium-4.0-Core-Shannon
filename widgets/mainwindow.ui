@@ -985,6 +985,22 @@
            </property>
           </widget>
          </item>
+         <item row="1" column="7" colspan="2">
+          <widget class="QLabel" name="labelManualTxAlert">
+           <property name="text">
+            <string>  PRESS ENTER TO TX  </string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+           <property name="styleSheet">
+            <string>background-color: #00e5ff; color: #000000; font-weight: bold; font-size: 14px; border-radius: 6px; padding: 4px 10px; border: 2px solid #00acc1;</string>
+           </property>
+           <property name="visible">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
          <item row="0" column="8">
           <widget class="QPushButton" name="autoCQButton">
            <property name="minimumSize">
@@ -2190,6 +2206,63 @@ When not checked you can view the calibration results.</string>
                       </property>
                       <property name="toolTip">
                        <string>Sync-Triggered Decoder attivo: Phase 1 Costas scan + Phase 2 targeted LDPC</string>
+                      </property>
+                    </widget>
+                   </item>
+                    <item>
+                     <widget class="QLabel" name="labelAsymxBadge">
+                      <property name="text">
+                       <string> ASYMX </string>
+                      </property>
+                      <property name="styleSheet">
+                       <string>background-color: #00cc44; color: #ffffff; font-weight: bold; font-size: 12px; border-radius: 4px; padding: 1px 6px;</string>
+                      </property>
+                      <property name="visible">
+                       <bool>false</bool>
+                      </property>
+                      <property name="toolTip">
+                       <string>ASYMX: Async FT2 decoder attivo — decodifica continua senza periodi</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QCheckBox" name="cbManualTx">
+                      <property name="toolTip">
+                       <string>Manual TX Timing: operator controls when to transmit within the TX window (contest skill mode)</string>
+                      </property>
+                      <property name="text">
+                       <string>Manual TX</string>
+                      </property>
+                      <property name="visible">
+                       <bool>false</bool>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QDoubleSpinBox" name="sbManualTxWindow">
+                      <property name="toolTip">
+                       <string>TX Window duration in seconds (time you have to press TX)</string>
+                      </property>
+                      <property name="minimum">
+                       <double>0.500000000000000</double>
+                      </property>
+                      <property name="maximum">
+                       <double>3.800000000000000</double>
+                      </property>
+                      <property name="singleStep">
+                       <double>0.100000000000000</double>
+                      </property>
+                      <property name="value">
+                       <double>3.800000000000000</double>
+                      </property>
+                      <property name="suffix">
+                       <string>s</string>
+                      </property>
+                      <property name="decimals">
+                       <number>1</number>
+                      </property>
+                      <property name="visible">
+                       <bool>false</bool>
                       </property>
                      </widget>
                     </item>

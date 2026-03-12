@@ -229,6 +229,7 @@ private slots:
   void on_cbHoldTxFreq_clicked (bool);
   void on_cbDualCarrier_toggled (bool checked);
   void on_cbAsyncDecode_toggled (bool checked);
+  void on_cbManualTx_toggled (bool checked);
   void asyncDecodeDone ();
   void on_ft8Button_clicked();
   void on_ft4Button_clicked();
@@ -993,6 +994,11 @@ private:
   QHash<QString, DecodeDedupeEntry> m_decodeDedupeCache;
   qint64 m_decodeDedupeLastPruneMs {0};
   int m_decodeDedupeWindowMs {5000};   // keep strongest duplicate within 5 seconds
+
+  // Manual TX Timing (contest skill mode)
+  bool m_bManualTxPending {false};    // decode received, waiting for operator TX
+  QTimer m_manualTxWindowTimer;       // countdown timer for TX window
+  qint64 m_manualTxWindowStartMs {0}; // when the TX window opened
   QFutureWatcher<QString> m_saveWAVWatcher;
 
   NonInheritingProcess proc_jt9;

@@ -2186,9 +2186,30 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_asyncTxGuardTimer.setSingleShot(true);
   connect(&m_asyncTxGuardTimer, &QTimer::timeout, this, [this]() {
     if (m_mode == "FT2" && ui->cbAsyncDecode->isChecked() && m_auto) {
-      m_bAsyncTxArmed = true;  // guiUpdate() will pick this up and start TX
+      if (ui->cbManualTx->isChecked()) {
+        // Manual TX mode: don't auto-arm, open TX window for operator
+        m_bManualTxPending = true;
+        m_manualTxWindowStartMs = QDateTime::currentMSecsSinceEpoch();
+        int windowMs = int(ui->sbManualTxWindow->value() * 1000);
+        m_manualTxWindowTimer.start(windowMs);
+        ui->labelManualTxAlert->setVisible(true);
+      } else {
+        m_bAsyncTxArmed = true;  // guiUpdate() will pick this up and start TX
+      }
     }
   });
+
+  // Manual TX window timer: expires when operator didn't TX in time
+  m_manualTxWindowTimer.setSingleShot(true);
+  connect(&m_manualTxWindowTimer, &QTimer::timeout, this, [this]() {
+    m_bManualTxPending = false;
+    m_manualTxWindowStartMs = 0;
+    ui->labelManualTxAlert->setVisible(false);
+    // Restore autoButton
+    ui->autoButton->setStyleSheet("QPushButton:checked { color: white; background-color: red; border-style: outset; border-width: 1px; border-radius: 5px; border-color: black; min-width: 5em; padding: 3px; }");
+    ui->autoButton->setText("E&nable Tx");
+  });
+
   m_asyncDecodeThreadPool.setMaxThreadCount (1);
 #if defined(Q_OS_LINUX)
   // Fortran/OpenMP path in async L2 is stack hungry on some Linux distros.
@@ -2657,6 +2678,8 @@ void MainWindow::writeSettings()
   m_settings->setValue("WorkDupes", ui->cbWorkDupes->isChecked());
   m_settings->setValue("DebugLog", m_debugLog);    //avt 9/29/25
   m_settings->setValue("FirstLotwDl", m_firstLotwDl);    //avt 9/29/25
+  m_settings->setValue("ManualTxTiming", ui->cbManualTx->isChecked());
+  m_settings->setValue("ManualTxWindow", ui->sbManualTxWindow->value());
   m_settings->endGroup();
 
   // do this in the General group because we save the parameters from various places
@@ -2906,6 +2929,8 @@ void MainWindow::readSettings()
   ui->cbWorkDupes->setChecked(m_settings->value("WorkDupes",false).toBool());
   m_firstLotwDl = m_settings->value("FirstLotwDl",true).toBool();    //avt 9/29/25
   m_debugLog = m_settings->value("DebugLog",false).toBool();    //avt 9/23/25
+  ui->cbManualTx->setChecked(m_settings->value("ManualTxTiming",false).toBool());
+  ui->sbManualTxWindow->setValue(m_settings->value("ManualTxWindow",3.8).toDouble());
   m_settings->endGroup();
 
   m_settings->beginGroup("Common");
@@ -5260,6 +5285,20 @@ void MainWindow::auto_tx_mode (bool state)
 
 void MainWindow::keyPressEvent (QKeyEvent * e)
 {
+  // Manual TX Timing: Enter/Space fires TX during the manual window
+  if (m_bManualTxPending && (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter
+      || e->key() == Qt::Key_Space)) {
+    m_bManualTxPending = false;
+    m_manualTxWindowTimer.stop();
+    m_manualTxWindowStartMs = 0;
+    ui->labelManualTxAlert->setVisible(false);
+    // Restore autoButton
+    ui->autoButton->setStyleSheet("QPushButton:checked { color: white; background-color: red; border-style: outset; border-width: 1px; border-radius: 5px; border-color: black; min-width: 5em; padding: 3px; }");
+    ui->autoButton->setText("E&nable Tx");
+    m_bAsyncTxArmed = true;  // arm TX now — guiUpdate will start it
+    return;
+  }
+
   if(SpecOp::FOX == m_specOp) {
     switch (e->key()) {
       case Qt::Key_Return:
@@ -7365,7 +7404,7 @@ bool MainWindow::asyncConfirmDecode(QString const& message, int freq, int snr)
   }
 
   // Strong signals: display immediately, no confirmation needed
-  if (snr >= -17) return true;
+  if (snr >= -19) return true;
 
   // Extract message key (skip timestamp+dB+DT+freq = first 22 chars)
   QString key = message.mid(22).trimmed();
@@ -14083,6 +14122,19 @@ qint64 MainWindow::nWidgets(QString t)
 void MainWindow::displayWidgets(qint64 n)
 {
   /* See text file "displayWidgets.txt" for widget numbers */
+  // ASYMX: Async L2 visible only in FT2; auto-disable when leaving FT2
+  bool isFT2 = (m_mode == "FT2");
+  ui->cbAsyncDecode->setVisible(false);  // always hidden: forced on in FT2, off elsewhere
+  ui->labelAsymxBadge->setVisible(isFT2);
+  ui->cbManualTx->setVisible(isFT2);
+  ui->sbManualTxWindow->setVisible(isFT2 && ui->cbManualTx->isChecked());
+  if (!isFT2 && ui->cbAsyncDecode->isChecked()) {
+    ui->cbAsyncDecode->setChecked(false);  // triggers on_cbAsyncDecode_toggled → stops timer
+  }
+  if (!isFT2) {
+    m_bManualTxPending = false;
+    m_manualTxWindowTimer.stop();
+  }
   qint64 j=qint64(1)<<(N_WIDGETS-1);
   bool b;
   for(int i=0; i<N_WIDGETS; i++) {
@@ -14305,6 +14357,14 @@ void MainWindow::on_actionFT2_triggered()
   ui->txb6->setEnabled(true);
   ui->txFirstCheckBox->setEnabled(true);
   ui->cbAutoSeq->setEnabled(true);
+  // ASYMX: force Async L2 in FT2, hide checkbox (always on), show ASYMX badge
+  ui->cbAsyncDecode->setChecked(true);
+  ui->cbAsyncDecode->setVisible(false);   // always on in FT2, no user toggle
+  ui->labelAsyncL2Active->setVisible(false);
+  ui->labelAsymxBadge->setVisible(true);
+  ui->cbManualTx->setVisible(true);
+  ui->sbManualTxWindow->setVisible(ui->cbManualTx->isChecked());
+
   // Decodium FT2: faster NTP refresh and tighter RTT filter
   if (m_ntpClient) {
     m_ntpClient->setRefreshInterval(60000);  // 60s for FT2 (was 30s — too frequent destabilizes DT)
@@ -19601,6 +19661,23 @@ void MainWindow::on_cbAsyncDecode_toggled (bool checked)
     m_asyncRxStartMs = 0;
     m_wasTransmitting = false;
   }
+}
+
+void MainWindow::on_cbManualTx_toggled (bool checked)
+{
+    ui->sbManualTxWindow->setVisible(checked && m_mode == "FT2");
+    if (!checked) {
+      // Switching back to auto: cancel any pending manual window
+      if (m_bManualTxPending) {
+        m_bManualTxPending = false;
+        m_manualTxWindowTimer.stop();
+        m_manualTxWindowStartMs = 0;
+      }
+      ui->labelManualTxAlert->setVisible(false);
+      // Restore autoButton normal style
+      ui->autoButton->setStyleSheet("QPushButton:checked { color: white; background-color: red; border-style: outset; border-width: 1px; border-radius: 5px; border-color: black; min-width: 5em; padding: 3px; }");
+      ui->autoButton->setText("E&nable Tx");
+    }
 }
 
 void MainWindow::asyncDecodeDone()
