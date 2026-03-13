@@ -9691,6 +9691,20 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
                            || calling_reply_eligible
                            || message_words.at (2).contains (m_baseCall))))) {
       if(SpecOp::FOX != m_specOp){
+        if (m_autoCQ && m_QSOProgress > CALLING && !from_active_partner) {
+          // Keep partner lock during an active AutoCQ QSO: queue other callers
+          // but never let them replace the running QSO state machine.
+          QString queuedCaller;
+          QString queuedGrid;
+          message.deCallAndGrid (queuedCaller, queuedGrid);
+          if (queuedCaller.isEmpty ()) queuedCaller = fromToken;
+          queuedCaller = Radio::base_callsign (normalize_call_token (queuedCaller)).trimmed ();
+          auto const activeCall = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
+          if (!queuedCaller.isEmpty () && queuedCaller.trimmed ().toUpper () != activeCall) {
+            enqueueCaller (queuedCaller, message.frequencyOffset (), message.snr (), message.dt ());
+          }
+          return;
+        }
         if (m_autoCQ && m_QSOProgress > CALLING) {
           m_receivedReplyThisPeriod = true;
         }
@@ -16460,19 +16474,12 @@ void MainWindow::transmit (double snr)
     }
   }
 
-  // AutoCQ: after a few RR73/73 repeats without partner 73, close/log and move on.
+  // AutoCQ: after a few RR73/73 repeats without partner signoff, abandon and move on.
   if (m_autoCQ && !m_bDXpedMode && m_ft2DeferredLogPending && txIs73) {
     if (m_nTx73 >= kAutoCqSignoffRetryCount) {
       m_ft2DeferredLogPending = false;
       m_nTx73 = 0;
-      if (!is_externalCtrlMode() && (m_config.prompt_to_log() || m_config.autoLog() || m_autoCQ) && !m_tune) {
-        if (!logQSOTimer.isActive()) {
-          if (m_autoCQ) capturePendingAutoLogSnapshot ();
-          logQSOTimer.start(0);
-        }
-      } else {
-        QTimer::singleShot(0, this, [this] { clearDX(); });
-      }
+      QTimer::singleShot(0, this, [this] { clearDX(); });
     }
   }
 }
