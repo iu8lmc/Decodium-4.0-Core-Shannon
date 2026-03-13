@@ -1,5 +1,79 @@
 # Changelog / Registro Modifiche
 
+## [1.4.6] - 2026-03-14
+
+### English
+
+Release focused on AutoCQ/signoff correctness across FT modes, right-pane decode continuity, and desktop/web control parity.
+
+#### Added
+
+- Added remote command path for explicit Tx frequency control (`set_tx_frequency`) from dashboard/API to UI spinbox.
+- Added web dashboard mode frequency presets (save/apply Rx+Tx per mode) with combined Rx+Tx set action.
+- Added Linux settings-dialog scroll wrapping for oversized tab pages, keeping action buttons reachable on small/HiDPI displays.
+
+#### Changed
+
+- AutoCQ caller queue behavior restored to stable FIFO logic (v1.3.8 baseline), while keeping partner lock protections.
+- Deferred RR73/73 retry handling and partner continuity checks expanded across FT2/FT8/FT4/FST4/Q65/MSK144 flows.
+- Release/build/workflow defaults aligned to `v1.4.6`.
+
+#### Fixed
+
+- Fixed recurring cases where valid partner reports/signoff frames stayed only in Band Activity and were not promoted to Rx-pane QSO flow.
+- Fixed signoff/autolog edge cases that could delay logging or trigger state carry-over during deferred completion windows.
+- Fixed macOS `View -> World Map` toggle so map visibility now follows menu state correctly.
+- Fixed splitter pane sizing regressions affecting secondary decode/map visibility on Linux/macOS.
+- Fixed startup audio initialization on some macOS setups where selected devices required manual reload to become active.
+
+### Italiano
+
+Release focalizzata su correttezza AutoCQ/signoff multi-modo, continuita' decode nel pannello centrale e parita' controlli desktop/web.
+
+#### Aggiunto
+
+- Aggiunto percorso comando remoto per controllo esplicito frequenza Tx (`set_tx_frequency`) da dashboard/API alla spinbox UI.
+- Aggiunti preset frequenze per modo nella dashboard web (save/apply Rx+Tx per modo) con azione combinata Rx+Tx.
+- Aggiunto wrapping scroll su Linux per tab impostazioni sovradimensionate, con pulsanti azione sempre raggiungibili su schermi piccoli/HiDPI.
+
+#### Modificato
+
+- Comportamento coda caller AutoCQ ripristinato a logica FIFO stabile (baseline v1.3.8), mantenendo le protezioni lock partner.
+- Gestione retry deferred RR73/73 e controlli continuita' partner estesi ai flussi FT2/FT8/FT4/FST4/Q65/MSK144.
+- Default release/build/workflow allineati a `v1.4.6`.
+
+#### Corretto
+
+- Corrette casistiche ricorrenti in cui report/signoff validi del partner restavano solo in Attivita' di Banda senza essere promossi nel flusso QSO su Frequenza Rx.
+- Corrette casistiche signoff/autolog che potevano ritardare il log o propagare stato residuo durante finestre deferred.
+- Corretto toggle `Vista -> World Map` su macOS: visibilita' mappa ora coerente con stato menu.
+- Corrette regressioni dimensionamento splitter che influivano su visibilita' pannelli decode secondario/mappa su Linux/macOS.
+- Corretto avvio audio su alcune configurazioni macOS dove periferiche gia' selezionate richiedevano reload manuale.
+
+### Espanol
+
+Release centrada en correccion AutoCQ/signoff en varios modos, continuidad decode en panel central y paridad de controles desktop/web.
+
+#### Anadido
+
+- Anadida ruta de comando remoto para control explicito de frecuencia Tx (`set_tx_frequency`) desde dashboard/API hasta spinbox UI.
+- Anadidos presets de frecuencia por modo en dashboard web (save/apply Rx+Tx por modo) con accion combinada Rx+Tx.
+- Anadido wrapping con scroll en Linux para pestañas de ajustes sobredimensionadas, manteniendo botones de accion accesibles en pantallas pequenas/HiDPI.
+
+#### Cambios
+
+- Comportamiento de cola callers AutoCQ restaurado a logica FIFO estable (baseline v1.3.8), manteniendo protecciones de lock de pareja.
+- Manejo deferred de reintentos RR73/73 y comprobaciones de continuidad de pareja ampliadas en flujos FT2/FT8/FT4/FST4/Q65/MSK144.
+- Defaults de release/build/workflows alineados a `v1.4.6`.
+
+#### Corregido
+
+- Corregidos casos recurrentes donde reportes/signoff validos de pareja quedaban solo en Actividad de Banda y no pasaban al flujo QSO en Frecuencia Rx.
+- Corregidos casos signoff/autolog que podian retrasar el log o arrastrar estado residual en ventanas deferred.
+- Corregido toggle `Vista -> World Map` en macOS: visibilidad del mapa ahora sigue correctamente el estado del menu.
+- Corregidas regresiones de tamano en splitter que afectaban visibilidad de panel decode secundario/mapa en Linux/macOS.
+- Corregido inicio de audio en algunas configuraciones macOS donde dispositivos ya seleccionados requerian recarga manual.
+
 ## [1.4.5] - 2026-03-12
 
 ### English

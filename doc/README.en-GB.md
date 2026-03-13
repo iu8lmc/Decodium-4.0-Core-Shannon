@@ -1,4 +1,4 @@
-# Documentation Notes (English) - v1.4.5
+# Documentation Notes (English) - v1.4.6
 
 ## Scope
 
@@ -6,35 +6,33 @@ Repository-specific notes for the Decodium macOS fork and Linux AppImage release
 
 ## Current Release Context
 
-- Current release: `v1.4.5`
-- Update cycle: `v1.4.4 -> v1.4.5`
+- Current release: `v1.4.6`
+- Update cycle: `v1.4.5 -> v1.4.6`
 - Targets: Apple Silicon Tahoe, Apple Silicon Sequoia, Apple Intel Sequoia, Apple Intel Monterey (experimental), Linux x86_64 AppImage
 
-## Key Technical Changes (`v1.4.4 -> v1.4.5`)
+## Key Technical Changes (`v1.4.5 -> v1.4.6`)
 
-- FT2 AutoCQ/QSO sequencing hardened:
-- partner lock reliability improved during active QSO.
-- directed replies while CQ are now matched more robustly (base-call aware).
-- non-partner `73` frames are ignored in auto-sequence.
-- deferred stale autolog timers are safely dropped.
-- caller queue skips recently worked stations.
-- FT2 signoff/logging flow stabilized:
-- deferred signoff path refined with pending log snapshot handoff.
-- RR73/73 completion handling tuned before fallback to CQ.
-- retry behavior tuned with `MAX_TX_RETRIES=5`.
-- FT2 decode/runtime updates:
-- `TΔ` display introduced in FT2 decode column.
-- FT2 alignment fixes for marker and Unicode minus variants.
-- weak async confirmations preserved before dedupe.
-- decoder threshold update: `nharderror 35 -> 48`.
-- TX timing fixes:
-- FT2 ramp-up/ramp-down and latency handling fixed for TCI and soundcard paths.
-- Remote/web and UI fixes:
-- fixed remote dashboard startup/fetch path.
-- fixed `View -> Display a cascata` / waterfall activation.
-- restored localized web password hint (minimum 12 chars).
-- UDP logger compatibility:
-- FT2 UDP payload extraction fixed so logger integrations (RumLog) keep full callsign.
+- AutoCQ/QSO sequencing hardening:
+- restored FIFO caller queue behavior from v1.3.8 baseline.
+- stronger active-partner continuity during active QSOs.
+- deferred RR73/73 retry flow generalized across FT2/FT8/FT4/FST4/Q65/MSK144.
+- payload-token partner matching strengthened for edge decode formats.
+- Logging/signoff consistency:
+- deferred autolog context recovery refined after retry windows.
+- reduced cases of premature/no-confirmation logging.
+- reduced delayed logging from stale pending-state transitions.
+- Decode/right-pane continuity:
+- robust payload extraction for variable marker spacing and optional marker frames.
+- reduced cases where valid partner messages stayed only in Band Activity pane.
+- UI/runtime:
+- fixed macOS `View -> World Map` hide/show behavior.
+- improved splitter pane sizing logic for secondary decode/map panels.
+- Linux settings tabs now use scroll wrapping to keep dialog action buttons reachable.
+- added startup audio stream refresh on macOS for already-selected devices.
+- Remote/web dashboard:
+- added remote `set_tx_frequency` command endpoint wiring.
+- web app now supports Rx+Tx set, dedicated Rx/Tx set, and per-mode frequency presets.
+- maintained localized minimum-password hint (12 chars, IT/EN).
 
 ## Build and Runtime
 
@@ -75,8 +73,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## References
 
 - [CHANGELOG.md](../CHANGELOG.md)
-- [RELEASE_NOTES_v1.4.5.md](../RELEASE_NOTES_v1.4.5.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](./GITHUB_RELEASE_BODY_v1.4.5.md)
+- [RELEASE_NOTES_v1.4.6.md](../RELEASE_NOTES_v1.4.6.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.6.md](./GITHUB_RELEASE_BODY_v1.4.6.md)
 - [doc/WEBAPP_SETUP_GUIDE.en-GB.md](./WEBAPP_SETUP_GUIDE.en-GB.md)
 - [doc/WEBAPP_SETUP_GUIDE.it.md](./WEBAPP_SETUP_GUIDE.it.md)
 - [doc/WEBAPP_SETUP_GUIDE.es.md](./WEBAPP_SETUP_GUIDE.es.md)

@@ -1,38 +1,36 @@
-# Decodium 3 FT2 (macOS Fork) - v1.4.5
+# Decodium 3 FT2 (macOS Fork) - v1.4.6
 
 Fork maintained by **Salvatore Raccampo 9H1SR**.
 
 ## Project Description
 
-This repository is a Decodium/WSJT-X fork focused on macOS and Linux packaging, FT2 runtime stability, and DXpedition workflows.
+This repository is a Decodium/WSJT-X fork focused on macOS and Linux packaging, FT2 runtime stability, AutoCQ reliability, and DXpedition workflows.
 
-Latest stable release: `v1.4.5`.
+Latest stable release: `v1.4.6`.
 
-## Changes in v1.4.5 (`v1.4.4 -> v1.4.5`)
+## Changes in v1.4.6 (`v1.4.5 -> v1.4.6`)
 
-- FT2 AutoCQ and QSO state machine fixes:
-- stronger active-partner lock during ongoing QSO (manual override only with Ctrl/Shift).
-- directed replies during CQ are now captured more reliably (base callsign aware).
-- non-partner `73` messages no longer force wrong signoff transitions.
-- stale delayed autolog timers are ignored safely.
-- caller queue now avoids recently worked duplicates after log completion.
-- FT2 signoff/logging reliability:
-- improved deferred FT2 signoff path and snapshot-based autolog handoff.
-- better RR73/73 completion handling before returning to CQ.
-- retry behavior tuned (`MAX_TX_RETRIES=5`) with clean reset when DX call changes.
-- FT2 decode/runtime quality improvements:
-- FT2 decode column now reports `TΔ` (time since TX) instead of DT.
-- fixed FT2 column alignment and marker handling (`~`, Unicode minus variants, fixed-width prefix reformat).
-- weak async confirmations are preserved before near-duplicate suppression.
-- decoder hardening update with relaxed `nharderror` threshold (`35 -> 48`).
-- TX timing fixes:
-- corrected FT2 TX ramp-up/ramp-down and timing latency for both TCI and soundcard operation.
-- Remote/web and UI fixes:
-- fixed remote dashboard startup/fetch initialization path.
-- fixed `View -> Display a cascata` / waterfall activation behavior.
-- restored localized web password hint (minimum 12 characters).
-- FT2 UDP logger fix:
-- fixed FT2 UDP decode payload extraction so external loggers (RumLog) do not lose the first callsign character.
+- AutoCQ/QSO engine hardening:
+- restored stable FIFO caller queue behavior from the trusted v1.3.8 logic.
+- stronger active-partner lock during ongoing QSO to prevent accidental station takeover.
+- deferred RR73/73 retry handling generalized across FT2, FT8, FT4, FST4, Q65, and MSK144 paths.
+- improved partner matching from normalized payload tokens, including edge decode formats.
+- Logging/signoff correctness:
+- recovered deferred autolog context after retry windows.
+- reduced forced/no-confirmation logging cases.
+- reduced delayed log completion caused by stale pending state.
+- Decode/right-pane continuity:
+- robust payload extraction for variable decode marker spacing and optional marker layouts.
+- reduced cases where valid partner replies stayed only in Band Activity and were not promoted to Rx pane flow.
+- Desktop UI/runtime fixes:
+- fixed `View -> World Map` toggle so map visibility now follows menu state on macOS.
+- splitter/pane layout logic improved to keep secondary decode/map panes coherent on Linux/macOS.
+- Linux settings dialog tabs are now scrollable on small/HiDPI desktops, keeping action buttons reachable.
+- macOS startup audio refresh added so previously selected devices initialize without manual reload.
+- Remote dashboard/web app:
+- added remote `set_tx_frequency` command wiring end-to-end.
+- web UI now supports Rx+Tx set, dedicated Rx/Tx set buttons, and per-mode preset save/apply.
+- localized access-password hint remains explicit (minimum 12 characters, IT/EN).
 
 ## Release Targets
 
@@ -87,9 +85,9 @@ cmake --build build -j6
 - [README.md](README.md)
 - [README.it.md](README.it.md)
 - [README.es.md](README.es.md)
-- [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
+- [RELEASE_NOTES_v1.4.6.md](RELEASE_NOTES_v1.4.6.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.6.md](doc/GITHUB_RELEASE_BODY_v1.4.6.md)
 - [doc/README.en-GB.md](doc/README.en-GB.md)
 - [doc/README.it.md](doc/README.it.md)
 - [doc/README.es.md](doc/README.es.md)

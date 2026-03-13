@@ -1,34 +1,32 @@
-# Decodium 3 FT2 (Fork macOS) - v1.4.5
+# Decodium 3 FT2 (Fork macOS) - v1.4.6
 
 Fork mantenuto da **Salvatore Raccampo 9H1SR**.
 
 Per la panoramica bilingue, vedere [README.md](README.md).
 
-## Novita' v1.4.5 (`v1.4.4 -> v1.4.5`)
+## Novita' v1.4.6 (`v1.4.5 -> v1.4.6`)
 
-- Correzioni FT2 AutoCQ e macchina stati QSO:
-- lock partner attivo piu rigoroso durante QSO (override manuale solo con Ctrl/Shift).
-- risposta diretta durante CQ agganciata in modo piu affidabile (match su base callsign).
-- i `73` non del partner non forzano piu chiusure errate.
-- timer di autolog differiti/stale ora ignorati in sicurezza.
-- coda caller protetta da duplicati appena lavorati dopo logging.
-- Affidabilita' signoff/log FT2:
-- migliorato percorso deferred signoff FT2 con snapshot autolog piu robusto.
-- completamento RR73/73 gestito meglio prima del ritorno a CQ.
-- retry AutoCQ aggiornati (`MAX_TX_RETRIES=5`) con reset pulito al cambio DX.
-- Migliorie decode/runtime FT2:
-- colonna FT2 ora mostra `TΔ` (tempo da ultimo TX) al posto di DT.
-- corretto allineamento colonne FT2 (`~`, segni meno Unicode, prefisso a larghezza fissa).
-- conferme async deboli preservate prima della soppressione near-duplicate.
-- hardening decoder con soglia `nharderror` rilassata (`35 -> 48`).
-- Correzioni timing TX:
-- sistemati ramp-up/ramp-down e latenza TX FT2 su percorsi TCI e soundcard.
-- Correzioni web/UI:
-- fix startup dashboard remota e inizializzazione fetch.
-- fix apertura `Vista -> Display a cascata` (waterfall).
-- ripristinato hint password web localizzato (minimo 12 caratteri).
-- Fix compatibilita' logger UDP FT2:
-- corretto slicing payload decode FT2 via UDP: logger esterni (RumLog) non perdono piu la prima lettera del callsign.
+- Hardening AutoCQ e macchina stati QSO:
+- ripristinato comportamento FIFO stabile della coda caller (baseline logica v1.3.8).
+- lock partner attivo piu rigoroso durante QSO in corso, evitando takeover involontari.
+- gestione retry deferred RR73/73 estesa in modo coerente a FT2, FT8, FT4, FST4, Q65 e MSK144.
+- migliorato matching partner su token payload normalizzati (anche con formati decode borderline).
+- Correttezza signoff/log:
+- recuperato contesto deferred autolog dopo finestre retry.
+- ridotti casi di logging forzato senza conferma reale del partner.
+- ridotte casistiche di log tardivo dovute a stati pending stale.
+- Continuita' decode e pannello Frequenza Rx:
+- estrazione payload decode resa piu robusta con marker variabile/assente.
+- ridotti i casi in cui risposte valide restavano solo su Attivita' di Banda senza seguire il flusso centrale Rx.
+- Correzioni UI/runtime desktop:
+- corretto toggle `Vista -> World Map` su macOS (la mappa ora segue lo stato menu).
+- migliorata gestione layout splitter/pannelli secondari su Linux/macOS.
+- su Linux, tab impostazioni troppo lunghe ora scorrono in `QScrollArea` (pulsante OK sempre raggiungibile).
+- su macOS aggiunto refresh automatico stream audio in avvio per evitare reload manuale periferiche.
+- Aggiornamenti dashboard remota/web app:
+- aggiunto supporto completo al comando remoto `set_tx_frequency`.
+- webapp aggiornata con: set combinato Rx+Tx, set Rx/set Tx separati, preset frequenze per modo (save/apply).
+- mantenuto hint password localizzato con minimo 12 caratteri (IT/EN).
 
 ## Target release
 
@@ -82,7 +80,7 @@ cmake --build build -j6
 
 - [README.en-GB.md](README.en-GB.md)
 - [README.es.md](README.es.md)
-- [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
+- [RELEASE_NOTES_v1.4.6.md](RELEASE_NOTES_v1.4.6.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.6.md](doc/GITHUB_RELEASE_BODY_v1.4.6.md)
 - [doc/README.it.md](doc/README.it.md)

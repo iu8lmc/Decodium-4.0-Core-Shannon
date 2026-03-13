@@ -1,4 +1,4 @@
-# Note di Documentazione (Italiano) - v1.4.5
+# Note di Documentazione (Italiano) - v1.4.6
 
 ## Scopo
 
@@ -6,35 +6,33 @@ Note tecniche del fork macOS Decodium con pacchettizzazione Linux AppImage.
 
 ## Contesto Release
 
-- Release corrente: `v1.4.5`
-- Ciclo aggiornamento: `v1.4.4 -> v1.4.5`
+- Release corrente: `v1.4.6`
+- Ciclo aggiornamento: `v1.4.5 -> v1.4.6`
 - Target: Apple Silicon Tahoe, Apple Silicon Sequoia, Apple Intel Sequoia, Apple Intel Monterey (sperimentale), Linux x86_64 AppImage
 
-## Cambi Tecnici Principali (`v1.4.4 -> v1.4.5`)
+## Cambi Tecnici Principali (`v1.4.5 -> v1.4.6`)
 
-- Hardening FT2 AutoCQ/sequenza QSO:
-- lock partner attivo piu affidabile durante QSO.
-- risposte dirette durante CQ agganciate con matching base-call.
-- `73` di stazioni non partner ignorati in auto-sequenza.
-- timer autolog stale/deferred filtrati in sicurezza.
-- coda caller filtrata contro stazioni appena lavorate.
-- Stabilita' signoff/log FT2:
-- percorso deferred signoff migliorato con handoff snapshot log.
-- gestione RR73/73 resa piu deterministica prima del ritorno a CQ.
-- retry aggiornati (`MAX_TX_RETRIES=5`).
-- Aggiornamenti decode/runtime FT2:
-- colonna FT2 aggiornata con `TΔ` (tempo da ultimo TX).
-- fix allineamento colonne per marker FT2 e segni meno Unicode.
-- conferme async deboli preservate prima della deduplica.
-- soglia decoder `nharderror` aggiornata (`35 -> 48`).
-- Fix timing TX:
-- sistemati ramp-up/ramp-down e latenza FT2 su TCI e soundcard.
-- Fix web/UI:
-- corretto avvio dashboard remota e fetch init.
-- corretta apertura `Vista -> Display a cascata` (waterfall).
-- ripristinato hint password web localizzato (minimo 12 caratteri).
-- Compatibilita' logger UDP:
-- corretto slicing payload FT2 via UDP, evitando perdita primo carattere callsign su RumLog.
+- Hardening FT2/AutoCQ/sequenza QSO:
+- ripristinato comportamento FIFO coda caller della baseline v1.3.8.
+- lock partner attivo reso piu robusto durante QSO in corso.
+- flusso deferred retry RR73/73 esteso in modo coerente su FT2/FT8/FT4/FST4/Q65/MSK144.
+- matching partner su token payload normalizzati migliorato su formati decode edge.
+- Stabilita' signoff/log:
+- recovery contesto deferred autolog migliorato dopo finestre retry.
+- ridotti i casi di logging prematuro/senza conferma partner.
+- ridotte le attese log tardive causate da stati pending stale.
+- Continuita' decode/pannello Frequenza Rx:
+- estrazione payload decode resa robusta con marker variabile/assente.
+- ridotti casi in cui messaggi validi partner restavano solo in Attivita' di Banda.
+- Fix UI/runtime:
+- corretto hide/show `Vista -> World Map` su macOS.
+- migliorata logica dimensionamento splitter per pannelli decode/map secondari.
+- su Linux le tab impostazioni ora sono wrappate in scroll area (azioni sempre raggiungibili).
+- aggiunto refresh startup stream audio su macOS per periferiche gia' selezionate.
+- Dashboard remota/web:
+- aggiunto endpoint comando remoto `set_tx_frequency`.
+- web app con set Rx+Tx, set Rx/set Tx separati, preset frequenze per modo.
+- mantenuto hint password localizzato con minimo 12 caratteri (IT/EN).
 
 ## Build e Runtime
 
@@ -75,8 +73,8 @@ sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ## Riferimenti
 
 - [CHANGELOG.md](../CHANGELOG.md)
-- [RELEASE_NOTES_v1.4.5.md](../RELEASE_NOTES_v1.4.5.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](./GITHUB_RELEASE_BODY_v1.4.5.md)
+- [RELEASE_NOTES_v1.4.6.md](../RELEASE_NOTES_v1.4.6.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.6.md](./GITHUB_RELEASE_BODY_v1.4.6.md)
 - [doc/WEBAPP_SETUP_GUIDE.it.md](./WEBAPP_SETUP_GUIDE.it.md)
 - [doc/WEBAPP_SETUP_GUIDE.en-GB.md](./WEBAPP_SETUP_GUIDE.en-GB.md)
 - [doc/WEBAPP_SETUP_GUIDE.es.md](./WEBAPP_SETUP_GUIDE.es.md)

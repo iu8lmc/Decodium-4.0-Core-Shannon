@@ -147,10 +147,23 @@ R"FT2HTML(<!doctype html>
 
       <div class="quick-row">
         <div class="quick-item">
-          <label for="rxfreq">Rx Frequency (Hz)</label>
-          <div class="inline rx-inline">
+          <label for="rxfreq">Rx / Tx Frequency (Hz)</label>
+          <div class="inline rxtx-inline">
             <input id="rxfreq" type="number" min="0" max="5000" step="1" />
+            <input id="txfreq" type="number" min="0" max="5000" step="1" />
+            <button id="btn_set_rxtx">Set Rx+Tx</button>
+          </div>
+          <div class="inline rxtx-actions">
             <button id="btn_rxfreq">Set Rx</button>
+            <button id="btn_txfreq">Set Tx</button>
+          </div>
+        </div>
+        <div class="quick-item">
+          <label for="mode_preset_select">Mode Preset (Rx/Tx)</label>
+          <div class="inline mode-preset-inline">
+            <select id="mode_preset_select"></select>
+            <button id="btn_apply_mode_preset" type="button">Apply Preset</button>
+            <button id="btn_save_mode_preset" type="button">Save Current</button>
           </div>
         </div>
         <div class="quick-item">
@@ -295,13 +308,16 @@ button.ok.active{background:#1fd27b;color:#04170f;border-color:#78ffbf;box-shado
 button.warn.active{background:#ff4a4a;color:#fff;border-color:#ffc0c0;box-shadow:0 0 0 1px rgba(64,10,10,.35) inset,0 0 12px rgba(255,74,74,.45)}
 button,input{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 
-.quick-row{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:8px}
+.quick-row{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-top:8px}
 .quick-item label{display:block;font-size:.76rem;color:var(--muted);margin-bottom:4px}
 .inline{display:grid;grid-template-columns:1fr auto;gap:6px}
 .rx-inline{grid-template-columns:1fr auto}
+.rxtx-inline{grid-template-columns:1fr 1fr auto}
+.rxtx-actions{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:6px}
+.mode-preset-inline{grid-template-columns:minmax(120px,1fr) auto auto}
 .tx-inline{grid-template-columns:repeat(3,minmax(96px,1fr))}
 .quick-row .inline button{padding:6px 6px;font-size:.75rem}
-input{width:100%;padding:8px;border-radius:8px;border:1px solid #37567f;background:#0a1322;color:var(--text)}
+input,select{width:100%;padding:8px;border-radius:8px;border:1px solid #37567f;background:#0a1322;color:var(--text)}
 .emission-row{margin-top:8px}
 .emission-grid{grid-template-columns:repeat(2,minmax(0,180px));max-width:420px}
 #alt_controls.emission-grid{grid-template-columns:repeat(1,minmax(0,180px))}
@@ -380,6 +396,12 @@ R"FT2JS((() => {
   const btnAutoCQ = el('btn_auto_cq');
   const btnTxOn = el('btn_tx_on');
   const btnTxOff = el('btn_tx_off');
+  const btnTxFreq = el('btn_txfreq');
+  const btnSetRxTx = el('btn_set_rxtx');
+  const txFreqInput = el('txfreq');
+  const modePresetSelect = el('mode_preset_select');
+  const btnApplyModePreset = el('btn_apply_mode_preset');
+  const btnSaveModePreset = el('btn_save_mode_preset');
   const btnAsyncL2 = el('btn_async_l2');
   const btnDualCarrier = el('btn_dual_carrier');
   const btnAlt12 = el('btn_alt_12');
@@ -417,6 +439,8 @@ R"FT2JS((() => {
   const ACTIVITY_WINDOW_MS = 15 * 60 * 1000;
   const AUTH_TTL_MS = 30 * 60 * 1000;
   const AUTH_STORAGE_KEY = 'ft2_remote_auth_v1';
+  const MODE_FREQ_STORAGE_KEY = 'ft2_remote_mode_freq_v1';
+  const MODE_PRESET_MODES = ['FT2','FT8','FT4','MSK144','Q65','JT65','JT9','FST4','WSPR'];
   let activeMode = '';
   let activeBand = '';
   let authUser = 'admin';
@@ -441,6 +465,7 @@ R"FT2JS((() => {
   let deferredInstallPrompt = null;
   let statePollTimer = null;
   let waterfallPollTimer = null;
+  let modeFrequencyPresets = {};
 
   const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -452,6 +477,12 @@ R"FT2JS((() => {
     return t || 'admin';
   };
   const normalizeAuthToken = (v) => (v || '').toString().replace(/[\r\n]+/g, '').trim();
+  const normalizeModeKey = (v) => (v || '').toString().trim().toUpperCase();
+  const sanitizeFrequency = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.max(0, Math.min(5000, Math.round(n)));
+  };
 
   document.addEventListener('gesturestart', (ev) => ev.preventDefault(), {passive:false});
   document.addEventListener('gesturechange', (ev) => ev.preventDefault(), {passive:false});
@@ -492,11 +523,95 @@ R"FT2JS((() => {
     try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
   }
 
+  function loadModeFrequencyPresets() {
+    modeFrequencyPresets = {};
+    try {
+      const raw = localStorage.getItem(MODE_FREQ_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      Object.keys(parsed).forEach((key) => {
+        const mode = normalizeModeKey(key);
+        if (!MODE_PRESET_MODES.includes(mode)) return;
+        const entry = parsed[key] || {};
+        const rx = sanitizeFrequency(entry.rx);
+        const tx = sanitizeFrequency(entry.tx);
+        if (rx === null || tx === null) return;
+        modeFrequencyPresets[mode] = {rx, tx};
+      });
+    } catch {
+      modeFrequencyPresets = {};
+      try { localStorage.removeItem(MODE_FREQ_STORAGE_KEY); } catch {}
+    }
+  }
+
+  function saveModeFrequencyPresets() {
+    try {
+      localStorage.setItem(MODE_FREQ_STORAGE_KEY, JSON.stringify(modeFrequencyPresets));
+    } catch {}
+  }
+
+  function getSelectedPresetMode() {
+    const modeFromSelect = modePresetSelect ? normalizeModeKey(modePresetSelect.value) : '';
+    if (modeFromSelect) return modeFromSelect;
+    const modeNow = normalizeModeKey(currentMode || activeMode);
+    return modeNow || 'FT2';
+  }
+
+  function updateModePresetSelect() {
+    if (!modePresetSelect) return;
+    const desired = getSelectedPresetMode();
+    modePresetSelect.innerHTML = '';
+    MODE_PRESET_MODES.forEach((mode) => {
+      const preset = modeFrequencyPresets[mode];
+      const option = document.createElement('option');
+      option.value = mode;
+      option.textContent = preset ? `${mode} (${preset.rx}/${preset.tx})` : `${mode} (---/---)`;
+      modePresetSelect.appendChild(option);
+    });
+    if (MODE_PRESET_MODES.includes(desired)) {
+      modePresetSelect.value = desired;
+    }
+  }
+
+  function savePresetForMode(mode, rxHz, txHz) {
+    const key = normalizeModeKey(mode);
+    const rx = sanitizeFrequency(rxHz);
+    const tx = sanitizeFrequency(txHz);
+    if (!key || !MODE_PRESET_MODES.includes(key) || rx === null || tx === null) {
+      return false;
+    }
+    modeFrequencyPresets[key] = {rx, tx};
+    saveModeFrequencyPresets();
+    updateModePresetSelect();
+    return true;
+  }
+
+  async function applyPresetForMode(mode, silent = false) {
+    const key = normalizeModeKey(mode);
+    if (!key) return false;
+    const preset = modeFrequencyPresets[key];
+    if (!preset) return false;
+    const rx = sanitizeFrequency(preset.rx);
+    const tx = sanitizeFrequency(preset.tx);
+    if (rx === null || tx === null) return false;
+    if (el('rxfreq')) el('rxfreq').value = rx;
+    if (txFreqInput) txFreqInput.value = tx;
+    await sendCommand({type:'set_rx_frequency', rx_frequency_hz:rx});
+    await sendCommand({type:'set_tx_frequency', tx_frequency_hz:tx});
+    if (!silent) {
+      setActionStatus(`preset ${key}: Rx ${rx} / Tx ${tx}`, false);
+    }
+    return true;
+  }
+
   loadSavedAuth();
+  loadModeFrequencyPresets();
   if (loginUser) loginUser.value = authUser || 'admin';
   if (loginToken && authToken) loginToken.value = authToken;
   if (loginCaption) loginCaption.textContent = uiText.loginCaptionAuth;
   if (loginTokenHint) loginTokenHint.textContent = uiText.tokenMinHint;
+  updateModePresetSelect();
 
   const set = (id, v) => { const n = el(id); if (n) n.textContent = v ?? '-'; };
   const fmtHz = (v) => Number(v || 0).toLocaleString('en-US');
@@ -1033,6 +1148,7 @@ R"FT2JS((() => {
     activeMode = (s.mode || '').toUpperCase();
     currentMode = activeMode;
     activeBand = (s.band || '').trim();
+    updateModePresetSelect();
     set('st_mode', s.mode);
     set('st_band', s.band);
     set('st_dial', fmtHz(s.dial_frequency_hz) + ' Hz');
@@ -1064,6 +1180,7 @@ R"FT2JS((() => {
     set('st_mycall', s.my_call || '-');
     set('st_dxcall', s.dx_call || '-');
     if (typeof s.rx_frequency_hz === 'number') el('rxfreq').value = s.rx_frequency_hz;
+    if (typeof s.tx_frequency_hz === 'number' && txFreqInput) txFreqInput.value = s.tx_frequency_hz;
     if (typeof s.auto_cq_enabled === 'boolean') {
       updateAutoCqState(s.auto_cq_enabled);
     }
@@ -1112,12 +1229,20 @@ R"FT2JS((() => {
       pendingRxHz = null;
       drawWaterfallOverlay();
     }
+    if (type === 'set_tx_frequency' && typeof j.tx_frequency_hz === 'number') {
+      currentTxHz = Number(j.tx_frequency_hz);
+      drawWaterfallOverlay();
+    }
     if (type === 'set_mode' && typeof j.mode === 'string') {
       currentMode = j.mode.toUpperCase();
       activeMode = currentMode;
+      updateModePresetSelect();
       applyEmissionControlVisibility();
       drawWaterfallOverlay();
       refreshButtonHighlights();
+      setTimeout(() => {
+        applyPresetForMode(currentMode, true).catch(() => {});
+      }, 220);
     }
     setTimeout(() => { getState(false).catch(() => {}); }, 120);
     return j;
@@ -1160,6 +1285,7 @@ R"FT2JS((() => {
         if (typeof m.mode === 'string') {
           currentMode = m.mode.toUpperCase();
           activeMode = currentMode;
+          updateModePresetSelect();
           refreshButtonHighlights();
         }
         if (typeof m.auto_cq_enabled === 'boolean') {
@@ -1219,11 +1345,77 @@ R"FT2JS((() => {
           alt12Enabled = !!m.enabled;
           applyEmissionButtonsState();
         }
+        if (type === 'set_tx_frequency' && typeof m.tx_frequency_hz === 'number') {
+          currentTxHz = Number(m.tx_frequency_hz);
+          if (txFreqInput) txFreqInput.value = m.tx_frequency_hz;
+          drawWaterfallOverlay();
+        }
+        if (type === 'set_mode' && typeof m.mode === 'string') {
+          currentMode = m.mode.toUpperCase();
+          activeMode = currentMode;
+          updateModePresetSelect();
+          refreshButtonHighlights();
+        }
       }
     };
   }
 
-  el('btn_rxfreq').onclick = () => sendCommand({type:'set_rx_frequency', rx_frequency_hz:Number(el('rxfreq').value || 0)}).catch((e) => showLogin(true, e.message));
+  el('btn_rxfreq').onclick = () => {
+    const rx = sanitizeFrequency(el('rxfreq').value);
+    if (rx === null) return;
+    sendCommand({type:'set_rx_frequency', rx_frequency_hz:rx})
+      .then(() => savePresetForMode(currentMode || activeMode, rx, txFreqInput ? (txFreqInput.value || currentTxHz) : currentTxHz))
+      .catch((e) => showLogin(true, e.message));
+  };
+  if (btnTxFreq) {
+    btnTxFreq.onclick = () => {
+      const tx = sanitizeFrequency(txFreqInput ? txFreqInput.value : null);
+      if (tx === null) return;
+      sendCommand({type:'set_tx_frequency', tx_frequency_hz:tx})
+        .then(() => savePresetForMode(currentMode || activeMode, el('rxfreq').value || currentRxHz, tx))
+        .catch((e) => showLogin(true, e.message));
+    };
+  }
+  if (btnSetRxTx) {
+    btnSetRxTx.onclick = async () => {
+      const rx = sanitizeFrequency(el('rxfreq').value);
+      const tx = sanitizeFrequency(txFreqInput ? txFreqInput.value : null);
+      if (rx === null || tx === null) return;
+      try {
+        await sendCommand({type:'set_rx_frequency', rx_frequency_hz:rx});
+        await sendCommand({type:'set_tx_frequency', tx_frequency_hz:tx});
+        savePresetForMode(currentMode || activeMode, rx, tx);
+        setActionStatus(`Rx/Tx set: ${rx}/${tx} Hz`, false);
+      } catch (e) {
+        showLogin(true, e.message);
+      }
+    };
+  }
+  if (modePresetSelect) {
+    modePresetSelect.addEventListener('change', () => {
+      const mode = getSelectedPresetMode();
+      const preset = modeFrequencyPresets[mode];
+      if (!preset) return;
+      if (el('rxfreq')) el('rxfreq').value = preset.rx;
+      if (txFreqInput) txFreqInput.value = preset.tx;
+    });
+  }
+  if (btnSaveModePreset) {
+    btnSaveModePreset.onclick = () => {
+      const mode = getSelectedPresetMode();
+      const rx = sanitizeFrequency(el('rxfreq').value || currentRxHz);
+      const tx = sanitizeFrequency(txFreqInput ? (txFreqInput.value || currentTxHz) : currentTxHz);
+      if (rx === null || tx === null) return;
+      if (savePresetForMode(mode, rx, tx)) {
+        setActionStatus(`preset saved: ${mode} (${rx}/${tx})`, false);
+      }
+    };
+  }
+  if (btnApplyModePreset) {
+    btnApplyModePreset.onclick = () => {
+      applyPresetForMode(getSelectedPresetMode(), false).catch((e) => showLogin(true, e.message));
+    };
+  }
   if (btnTxOn) {
     btnTxOn.onclick = () => sendCommand({type:'set_tx_enabled', enabled:true}).catch((e) => showLogin(true, e.message));
   }
@@ -2169,6 +2361,34 @@ RemoteCommandServer::CommandResult RemoteCommandServer::processCommandObject(QJs
         {"type", QStringLiteral("set_rx_frequency")},
         {"status", QStringLiteral("accepted_immediate")},
         {"rx_frequency_hz", rxFrequency},
+        {"server_now_ms", nowUtcMs},
+      };
+      return result;
+    }
+
+  if (commandType == QStringLiteral("set_tx_frequency"))
+    {
+      auto const value = object.value(QStringLiteral("tx_frequency_hz"));
+      if (!value.isDouble())
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("tx_frequency_hz must be integer"));
+          return result;
+        }
+      auto txFrequency = qRound(value.toDouble());
+      if (txFrequency < 0 || txFrequency > 5000)
+        {
+          result.payload = makeRejectPayload(commandId, QStringLiteral("rejected_invalid_request"), QStringLiteral("tx_frequency_hz out of range 0..5000"));
+          return result;
+        }
+      seenCommandIds_.insert(commandId, nowUtcMs);
+      Q_EMIT setTxFrequencyRequested(commandId, txFrequency);
+      result.accepted = true;
+      result.payload = QJsonObject {
+        {"event", QStringLiteral("command_ack")},
+        {"command_id", commandId},
+        {"type", QStringLiteral("set_tx_frequency")},
+        {"status", QStringLiteral("accepted_immediate")},
+        {"tx_frequency_hz", txFrequency},
         {"server_now_ms", nowUtcMs},
       };
       return result;

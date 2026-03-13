@@ -345,14 +345,41 @@ static int decoded_line_mode_column (QString const& line)
   return line.indexOf (' ') > 4 ? 21 : 19;
 }
 
+static bool is_decode_mode_marker (QChar c)
+{
+  switch (c.unicode ()) {
+    case '~':
+    case '+':
+    case '@':
+    case '#':
+    case ':':
+    case '&':
+    case '^':
+      return true;
+    default:
+      return false;
+  }
+}
+
 static QString udp_decode_message_text (QString const& decodeLine)
 {
   // Robust payload extraction for UDP decode packets.
   // Some FT2 rows arrive with variable spaces after the mode marker;
   // fixed mid(24)/mid(22) can drop the first payload character.
+  static QRegularExpression const payloadRegex {
+    R"(^\s*\d{4,6}\s+[+\-−]?\d+\s+[+\-−]?\d+(?:\.\d+)?\s+\d+\s*(?:[~+@:#&\^])?\s*(.*)$)"
+  };
+  auto const payloadMatch = payloadRegex.match (decodeLine);
+  if (payloadMatch.hasMatch ()) {
+    return payloadMatch.captured (1);
+  }
+
   int const modeColumn = decoded_line_mode_column (decodeLine);
   if (modeColumn >= 0 && decodeLine.size () > modeColumn) {
-    int payloadStart = modeColumn + 1;
+    int payloadStart = modeColumn;
+    if (is_decode_mode_marker (decodeLine.at (modeColumn))) {
+      ++payloadStart;
+    }
     while (payloadStart < decodeLine.size () && decodeLine.at (payloadStart).isSpace ()) {
       ++payloadStart;
     }
@@ -1727,6 +1754,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
                 this, &MainWindow::onRemoteSetBandRequested);
         connect(m_remoteCommandServer, &RemoteCommandServer::setRxFrequencyRequested,
                 this, &MainWindow::onRemoteSetRxFrequencyRequested);
+        connect(m_remoteCommandServer, &RemoteCommandServer::setTxFrequencyRequested,
+                this, &MainWindow::onRemoteSetTxFrequencyRequested);
         connect(m_remoteCommandServer, &RemoteCommandServer::setTxEnabledRequested,
                 this, &MainWindow::onRemoteSetTxEnabledRequested);
         connect(m_remoteCommandServer, &RemoteCommandServer::setAutoCqRequested,
@@ -2303,18 +2332,27 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_tci_audio = (m_config.tci_audio() && m_config.is_tci());
 
   if (!m_tci_audio) {
-    if (!m_config.audio_input_device ().isNull ())
-      {
-        Q_EMIT startAudioInputStream (m_config.audio_input_device ()
-                                      , m_rx_audio_buffer_frames
-                                      , m_detector, m_downSampleFactor, m_config.audio_input_channel ());
-      }
-    if (!m_config.audio_output_device ().isNull ())
-      {
-        Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
-                                            , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
-                                            , m_tx_audio_buffer_frames);
-      }
+    auto const reopenAudioStreams = [this] {
+      if (!m_config.audio_input_device ().isNull ())
+        {
+          Q_EMIT startAudioInputStream (m_config.audio_input_device ()
+                                        , m_rx_audio_buffer_frames
+                                        , m_detector, m_downSampleFactor
+                                        , m_config.audio_input_channel ());
+        }
+      if (!m_config.audio_output_device ().isNull ())
+        {
+          Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
+                                              , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                              , m_tx_audio_buffer_frames);
+        }
+      if (m_monitoring)
+        {
+          Q_EMIT resumeAudioInputStream ();
+        }
+    };
+
+    reopenAudioStreams ();
     Q_EMIT transmitFrequency (ui->TxFreqSpinBox->value () - m_XIT);
 
     // Startup robustness: some drivers come up muted/stale until a later
@@ -2323,21 +2361,43 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
       if (m_tci_audio || m_transmitting) {
         return;
       }
-      if (!m_config.audio_input_device ().isNull ()) {
-        Q_EMIT startAudioInputStream (m_config.audio_input_device ()
-                                      , m_rx_audio_buffer_frames
-                                      , m_detector, m_downSampleFactor
-                                      , m_config.audio_input_channel ());
-      }
-      if (!m_config.audio_output_device ().isNull ()) {
-        Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
-                                            , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
-                                            , m_tx_audio_buffer_frames);
-      }
-      if (m_monitoring) {
-        Q_EMIT resumeAudioInputStream ();
-      }
+      if (!m_config.audio_input_device ().isNull ())
+        {
+          Q_EMIT startAudioInputStream (m_config.audio_input_device ()
+                                        , m_rx_audio_buffer_frames
+                                        , m_detector, m_downSampleFactor
+                                        , m_config.audio_input_channel ());
+        }
+      if (!m_config.audio_output_device ().isNull ())
+        {
+          Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
+                                              , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                              , m_tx_audio_buffer_frames);
+        }
+      if (m_monitoring)
+        {
+          Q_EMIT resumeAudioInputStream ();
+        }
     });
+
+#if defined(Q_OS_MACOS)
+    // On some macOS CoreAudio setups, streams look selected but become active
+    // only after a monitor restart. Perform one automatic refresh at startup.
+    QTimer::singleShot (2800, this, [this] {
+      if (m_tci_audio || m_transmitting || !m_monitoring || g_iptt == 1)
+        {
+          return;
+        }
+      on_monitorButton_clicked (false);
+      QTimer::singleShot (220, this, [this] {
+        if (m_tci_audio || m_transmitting || m_monitoring || g_iptt == 1)
+          {
+            return;
+          }
+        on_monitorButton_clicked (true);
+      });
+    });
+#endif
   }
 
   enable_DXCC_entity (m_config.DXCC ());  // sets text window proportions and (re)inits the logbook
@@ -2626,38 +2686,74 @@ DisplayText * MainWindow::secondaryDecodeView () const
 
 void MainWindow::applySingleDecodeColumnFlowLayout ()
 {
-  if (!singleDecodeColumnFlowEnabled () || !ui || !ui->rh_decodes_widget || !ui->decodes_splitter)
+  if (!ui || !ui->rh_decodes_widget || !ui->decodes_splitter)
     {
       return;
     }
 
+  bool const flowEnabled = singleDecodeColumnFlowEnabled ();
   bool const showWorldMap = !ui->actionWorld_Map || ui->actionWorld_Map->isChecked ();
-  if (ui->map_container_widget)
+  if (ui->map_panel_widget)
+    {
+      ui->map_panel_widget->setVisible (showWorldMap);
+    }
+  else if (ui->map_container_widget)
     {
       ui->map_container_widget->setVisible (showWorldMap);
     }
 
   bool const hideSecondary = (m_mode == "FreqCal" || m_mode == "WSPR" || m_mode == "FST4W");
-  ui->rh_decodes_widget->setVisible (!hideSecondary);
-  if (hideSecondary && !showWorldMap)
+  bool const showSecondary = !hideSecondary;
+  ui->rh_decodes_widget->setVisible (showSecondary);
+
+  auto sizes = ui->decodes_splitter->sizes ();
+  if (sizes.size () < 3)
     {
       return;
     }
 
-  auto sizes = ui->decodes_splitter->sizes ();
-  if (sizes.size () >= 3)
+  auto total = 0;
+  for (auto const size : sizes) total += size;
+  if (total <= 0)
     {
-      int total = 0;
-      for (auto const size : sizes) total += size;
-      if (total <= 0) total = width ();
-      int const map_size = showWorldMap ? qMax (320, total * 30 / 100) : 0;
-      int const secondary_size = hideSecondary ? 0 : qMax (220, total * 18 / 100);
-      int const left_size = qMax (380, total - map_size - secondary_size);
-      sizes[0] = left_size;
-      sizes[1] = secondary_size;
-      sizes[2] = map_size;
-      ui->decodes_splitter->setSizes (sizes);
+      total = qMax (width (), ui->decodes_splitter->width ());
     }
+
+  bool const secondaryCollapsed = showSecondary && sizes[1] <= 8;
+  bool const mapCollapsed = showWorldMap && sizes[2] <= 8;
+  bool const hiddenPaneStillSized = (!showSecondary && sizes[1] > 8) || (!showWorldMap && sizes[2] > 8);
+  if (!(flowEnabled || secondaryCollapsed || mapCollapsed || hiddenPaneStillSized))
+    {
+      return;
+    }
+
+  int mapSize = showWorldMap ? qMax (280, total * 30 / 100) : 0;
+  int secondarySize = showSecondary ? qMax (240, total * 20 / 100) : 0;
+  int leftSize = total - mapSize - secondarySize;
+
+  int const minLeft = 360;
+  if (leftSize < minLeft)
+    {
+      int deficit = minLeft - leftSize;
+      if (mapSize > 0)
+        {
+          int const take = qMin (deficit, qMax (0, mapSize - (showWorldMap ? 200 : 0)));
+          mapSize -= take;
+          deficit -= take;
+        }
+      if (deficit > 0 && secondarySize > 0)
+        {
+          int const take = qMin (deficit, qMax (0, secondarySize - (showSecondary ? 160 : 0)));
+          secondarySize -= take;
+          deficit -= take;
+        }
+      leftSize = qMax (minLeft, total - mapSize - secondarySize);
+    }
+
+  sizes[0] = leftSize;
+  sizes[1] = secondarySize;
+  sizes[2] = mapSize;
+  ui->decodes_splitter->setSizes (sizes);
 }
 
 //-------------------------------------------------------- writeSettings()
@@ -4818,7 +4914,14 @@ void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
 
 void MainWindow::on_actionWorld_Map_toggled (bool checked)
 {
-  Q_UNUSED (checked);
+  if (ui && ui->map_panel_widget)
+    {
+      ui->map_panel_widget->setVisible (checked);
+    }
+  else if (ui && ui->map_container_widget)
+    {
+      ui->map_container_widget->setVisible (checked);
+    }
   applySingleDecodeColumnFlowLayout ();
 }
 
@@ -9290,6 +9393,22 @@ void MainWindow::readFromStdout()                             //readFromStdout
         bool for_us = false;
         auto const myCall = m_config.my_callsign ().trimmed ().toUpper ();
         auto const myBase = m_baseCall.trimmed ().toUpper ();
+        auto const activePartnerBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
+        auto const qsoPartnerBase = Radio::base_callsign (m_hisCall).trimmed ().toUpper ();
+        auto const partnerBaseForRouting = !activePartnerBase.isEmpty () ? activePartnerBase : qsoPartnerBase;
+        static QRegularExpression const callTokenSplitRx {"[^A-Z0-9/]+"};
+        static QRegularExpression const payloadTokenSplitRx {"[^A-Z0-9/+-]+"};
+        static QRegularExpression const callCleanupRx {"[^A-Z0-9/]"};
+        auto hasLeftTruncMatch = [] (QString const& fullCall, QString const& token) {
+          if (fullCall.isEmpty () || token.isEmpty ()) return false;
+          for (int drop = 1; drop <= 2; ++drop) {
+            int const wanted = fullCall.size () - drop;
+            if (wanted >= 3 && token.size () == wanted && fullCall.endsWith (token)) {
+              return true;
+            }
+          }
+          return false;
+        };
         auto isMyAddressedToken = [&myCall, &myBase] (QString const& token) {
           auto t = token.trimmed ().toUpper ();
           if (t.isEmpty ()) return false;
@@ -9297,42 +9416,85 @@ void MainWindow::readFromStdout()                             //readFromStdout
           auto const tBase = Radio::base_callsign (t).trimmed ().toUpper ();
           return !tBase.isEmpty () && (tBase == myCall || tBase == myBase);
         };
-        auto const& parts = decodedtext.string().remove("<").remove(">")
-            .split (' ', SkipEmptyParts);
-        if (parts.size() > 6) {
-          auto const w0 = parts[5].trimmed ().toUpper ();
-          auto const w1 = parts[6].trimmed ().toUpper ();
-          for_us = isMyAddressedToken (w0)
-            || isMyAddressedToken (w1)
+        auto isLikelyMyAddressedToken = [&isMyAddressedToken, &hasLeftTruncMatch, &myCall, &myBase] (QString const& token) {
+          auto t = token.trimmed ().toUpper ();
+          if (isMyAddressedToken (t)) return true;
+
+          // Some FT2 packed rows can occasionally lose leading chars of callsigns.
+          return hasLeftTruncMatch (myBase, t) || hasLeftTruncMatch (myCall, t);
+        };
+        auto isPartnerToken = [&partnerBaseForRouting, &hasLeftTruncMatch] (QString const& token) {
+          auto t = token.trimmed ().toUpper ();
+          if (t.isEmpty () || partnerBaseForRouting.isEmpty ()) return false;
+          if (t == partnerBaseForRouting) return true;
+          auto const tBase = Radio::base_callsign (t).trimmed ().toUpper ();
+          return (!tBase.isEmpty () && (tBase == partnerBaseForRouting))
+              || hasLeftTruncMatch (partnerBaseForRouting, t)
+              || hasLeftTruncMatch (partnerBaseForRouting, tBase);
+        };
+        auto hasAddressedToken = [&isLikelyMyAddressedToken] (QString const& text) {
+          auto const tokens = text.toUpper ().split (callTokenSplitRx, SkipEmptyParts);
+          for (auto const& token : tokens) {
+            if (isLikelyMyAddressedToken (token)) return true;
+          }
+          return false;
+        };
+        auto isQsoExchangeToken = [] (QString const& token) {
+          auto t = token.trimmed ().toUpper ();
+          if (t == "73" || t == "RR73" || t == "RRR" || t == "R") return true;
+          if (t.startsWith ("R+") || t.startsWith ("R-")) {
+            bool ok = false;
+            t.mid (2).toInt (&ok);
+            return ok;
+          }
+          if (t.startsWith ('+') || t.startsWith ('-')) {
+            bool ok = false;
+            t.mid (1).toInt (&ok);
+            return ok;
+          }
+          return false;
+        };
+        QString payload = udp_decode_message_text (decodedtext.clean_string ()).remove ("<").remove (">").toUpper ();
+        auto const payloadWords = payload.split (payloadTokenSplitRx, SkipEmptyParts);
+        if (payloadWords.size () > 1) {
+          auto const w0 = payloadWords.at (0).trimmed ();
+          auto const w1 = payloadWords.at (1).trimmed ();
+          for_us = isLikelyMyAddressedToken (w0)
+            || isLikelyMyAddressedToken (w1)
             || ("DE" == w0 && qAbs (ui->RxFreqSpinBox->value () - audioFreq) <= ftol);
         }
 
-        // Fallback to parsed message words when fixed-column token positions drift.
+        // Fallback to parsed message words when token extraction drifts.
         auto const& message_words = decodedtext.messageWords ();
-        if (!for_us && message_words.size () > 3) {
+        if (!for_us && message_words.size () > 2) {
           auto const w2 = message_words.at (2).trimmed ().toUpper ();
-          auto const w3 = message_words.at (3).trimmed ().toUpper ();
-          for_us = isMyAddressedToken (w2) || isMyAddressedToken (w3);
+          auto const w3 = message_words.size () > 3 ? message_words.at (3).trimmed ().toUpper () : QString {};
+          for_us = isLikelyMyAddressedToken (w2) || isLikelyMyAddressedToken (w3);
         }
         if (!for_us) {
-          QString payload = decodedtext.clean_string ().mid (22).remove ("<").remove (">").toUpper ();
-          auto const payloadWords = payload.split (' ', SkipEmptyParts);
           for (auto const& token : payloadWords) {
             QString t = token.trimmed ();
-            t.remove (QRegularExpression {"[^A-Z0-9/]"});
-            if (isMyAddressedToken (t)) {
+            t.remove (callCleanupRx);
+            if (isLikelyMyAddressedToken (t)) {
               for_us = true;
               break;
             }
           }
         }
         if (!for_us) {
-          QString normalized = decodedtext.clean_string ().toUpper ().remove ("<").remove (">");
-          for_us = normalized.contains (" " + myCall + " ")
-              || normalized.contains (" " + myBase + " ");
+          for_us = hasAddressedToken (decodedtext.clean_string ());
+        }
+        if (!for_us && !partnerBaseForRouting.isEmpty ()) {
+          bool hasPartner = false;
+          bool hasExchange = false;
+          for (auto const& token : payloadWords) {
+            if (!hasPartner && isPartnerToken (token)) hasPartner = true;
+            if (!hasExchange && isQsoExchangeToken (token)) hasExchange = true;
+            if (hasPartner && hasExchange) break;
+          }
+          if (hasPartner && hasExchange) for_us = true;
         }
         forceRightForUs = for_us;
-        auto const activePartnerBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
         QString fromToken;
         if (message_words.size () > 3) {
           // Standard messages are typically "<to> <from> ...": sender is word2 (index 3).
@@ -9570,8 +9732,13 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
   if (m_bDXpedMode) return;   // DXped usa dxpedAutoSequence()
   auto const& message_words = message.messageWords ();
   auto is_73 = message_words.filter (QRegularExpression {"^(73|RR73)$"}).size();
-  auto msg_no_hash = message.clean_string();
-  msg_no_hash = msg_no_hash.mid(22).remove("<").remove(">");
+  auto msg_no_hash = udp_decode_message_text (message.clean_string ()).remove ("<").remove (">");
+  auto const& w = msg_no_hash.split (" ", SkipEmptyParts);
+  QStringList wUpper;
+  wUpper.reserve (w.size ());
+  for (auto const& token : w) {
+    wUpper << token.trimmed ().toUpper ();
+  }
   bool is_OK=false;
   if(m_mode=="MSK144" && msg_no_hash.indexOf(ui->dxCallEntry->text()+" R ")>0) is_OK=true;
   if (message_words.size () > 3 && (message.isStandardMessage() || (is_73 or is_OK))) {
@@ -9605,7 +9772,6 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
 //           //avt 11/1/23 ignore possible non-std 73 for someone else on same rx freq
           || (!is_externalCtrlMode() && !message.isStandardMessage () && m_mode != "MSK144")); // free text 73/RR73 except for MSK
 
-    auto const& w = msg_no_hash.split(" ",SkipEmptyParts);
     QString w2;
     int nrpt=0;
     if (w.size () > 2)
@@ -9634,6 +9800,8 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
       (message_words.size () > 3
        && (isMyAddressedToken (message_words.at (2))
            || isMyAddressedToken (message_words.at (3))))
+      || (wUpper.size () > 0 && isMyAddressedToken (wUpper.at (0)))
+      || (wUpper.size () > 1 && isMyAddressedToken (wUpper.at (1)))
       || message.clean_string ().contains ("<" + m_config.my_callsign () + "> ")
       || message.clean_string ().toUpper ().remove ("<").remove (">").contains (" " + m_config.my_callsign ().trimmed ().toUpper () + " ")
       || message.clean_string ().toUpper ().remove ("<").remove (">").contains (" " + m_baseCall.trimmed ().toUpper () + " ");
@@ -9645,19 +9813,76 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     } else if (message_words.size () > 2) {
       fromToken = message_words.at (2).trimmed ().toUpper ();
     }
+    if ((fromToken.isEmpty () || fromToken == "DE" || fromToken == "CQ" || fromToken == "QRZ")
+        && wUpper.size () > 1) {
+      fromToken = wUpper.at (1);
+    }
+    if (fromToken.isEmpty () && !wUpper.isEmpty ()) {
+      fromToken = wUpper.at (0);
+    }
+    auto isPartnerToken = [&activePartnerBase] (QString const& token) {
+      auto t = token.trimmed ().toUpper ();
+      if (t.isEmpty () || activePartnerBase.isEmpty ()) return false;
+      if (t.contains (activePartnerBase)) return true;
+      auto const tBase = Radio::base_callsign (t).trimmed ().toUpper ();
+      return !tBase.isEmpty () && tBase == activePartnerBase;
+    };
     auto const fromBase = Radio::base_callsign (fromToken).trimmed ().toUpper ();
     bool const from_active_partner = !activePartnerBase.isEmpty ()
         && (fromToken.contains (activePartnerBase) || fromBase == activePartnerBase);
+    bool partner_seen_in_payload = false;
+    for (auto const& token : wUpper) {
+      if (isPartnerToken (token)) {
+        partner_seen_in_payload = true;
+        break;
+      }
+    }
+    bool const from_active_partner_effective = from_active_partner || partner_seen_in_payload;
+    bool payload_partner_exchange = false;
+    if (!activePartnerBase.isEmpty () && wUpper.size () >= 2 && isMyAddressedToken (wUpper.at (0))) {
+      bool const payload_from_partner = isPartnerToken (wUpper.at (1));
+      if (payload_from_partner) {
+        for (int i = 2; i < wUpper.size (); ++i) {
+          auto const token = wUpper.at (i);
+          if (token == "73" || token == "RR73" || token == "RRR" || token == "R"
+              || token.startsWith ("R+") || token.startsWith ("R-")
+              || token.startsWith ('+') || token.startsWith ('-')) {
+            payload_partner_exchange = true;
+            break;
+          }
+        }
+      }
+    }
     bool const caller_selection_open = m_bCallingCQ
         || (m_QSOProgress == CALLING)
         || activePartnerBase.isEmpty ();
-    bool const calling_reply_eligible = addressed_to_me && (caller_selection_open || from_active_partner);
+    bool const calling_reply_eligible = addressed_to_me && (caller_selection_open || from_active_partner_effective);
     bool const signoffRetryWindowOpen =
-        m_autoCQ && m_ft2DeferredLogPending && from_active_partner;
+        m_autoCQ && m_ft2DeferredLogPending && from_active_partner_effective;
     if (m_auto && m_bCallingCQ && calling_reply_eligible
         && !m_bAutoReply && m_specOp != SpecOp::FOX && m_specOp != SpecOp::HOUND) {
       m_bAutoReply = true;
     }
+
+    bool const activeQsoReplyMatch =
+        !m_bCallingCQ
+        && (!m_sentFirst73 || signoffRetryWindowOpen)
+        && ((message_words.at (2).contains (m_baseCall)
+             && (message_words.at (3).contains (Radio::base_callsign (ui->dxCallEntry->text ()))
+                 || bEU_VHF))
+            || message_words.at (1) == m_baseCall           // <de-call> RR73; ...
+            || (within_tolerance
+                && (acceptable_73
+                    || ("DE" == message_words.at (2)
+                        && w2.contains (Radio::base_callsign (m_hisCall)))))
+            || (signoffRetryWindowOpen && payload_partner_exchange));
+    bool const callingReplyMatch =
+        m_bCallingCQ && (m_bAutoReply || calling_reply_eligible)
+        && (caller_selection_open || from_active_partner_effective)
+        // look for type 2 compound call replies on our Tx and Rx offsets
+        && ((within_tolerance && "DE" == message_words.at (2))
+            || calling_reply_eligible
+            || message_words.at (2).contains (m_baseCall));
 
     //debugToFile(QString{"auto_seq:    m_bAutoReply:%1 m_bCallingCQ:%2 message:%3"}.arg(m_bAutoReply).arg(m_bCallingCQ).arg(message.string().trimmed()));   //avt 1/4/24
     //debugToFile(QString{"             cbAutoSeq->isVisible:%1 cbAutoSeq->isEnabled:%2 cbAutoSeq->isChecked:%3"}.arg(ui->cbAutoSeq->isVisible()).arg(ui->cbAutoSeq->isEnabled()).arg(ui->cbAutoSeq->isChecked()));   //avt 1/4/24
@@ -9672,26 +9897,9 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     } else if (m_auto             // transmit allowed
                //avt 10/2/25
                && ui->cbAutoSeq->isVisible () && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode()) && ui->cbAutoSeq->isChecked () // auto-sequencing allowed
-               && ((!m_bCallingCQ      // not calling CQ/QRZ
-                    && (!m_sentFirst73 || signoffRetryWindowOpen) // keep tracking active AutoCQ partner after first RR73/73
-                    && ((message_words.at (2).contains (m_baseCall)
-                         // being called and not already in a QSO
-                         && (message_words.at(3).contains(Radio::base_callsign(ui->dxCallEntry->text()))
-                             or bEU_VHF))
-                        || message_words.at(1) == m_baseCall // <de-call> RR73; ...
-                        // type 2 compound replies
-                        || (within_tolerance &&
-                            (acceptable_73 ||
-                             ("DE" == message_words.at (2) &&
-                              w2.contains(Radio::base_callsign (m_hisCall)))))))
-                   || (m_bCallingCQ && (m_bAutoReply || calling_reply_eligible)
-                       && (caller_selection_open || from_active_partner)
-                       // look for type 2 compound call replies on our Tx and Rx offsets
-                       && ((within_tolerance && "DE" == message_words.at (2))
-                           || calling_reply_eligible
-                           || message_words.at (2).contains (m_baseCall))))) {
+               && (activeQsoReplyMatch || callingReplyMatch)) {
       if(SpecOp::FOX != m_specOp){
-        if (m_autoCQ && m_QSOProgress > CALLING && !from_active_partner) {
+        if (m_autoCQ && m_QSOProgress > CALLING && !from_active_partner_effective) {
           // Keep partner lock during an active AutoCQ QSO: queue other callers
           // but never let them replace the running QSO state machine.
           QString queuedCaller;
@@ -10468,7 +10676,9 @@ void MainWindow::guiUpdate()
     auto is_73 = message_is_73 (m_currentMessageType, msg_parts);
     bool const autoCqDeferredSignoff =
         m_autoCQ && !m_bDXpedMode && is_73
-        && (m_QSOProgress >= ROGERS);
+        && (m_QSOProgress > CALLING)
+        && (m_mode=="FT2" || m_mode=="FT4" || m_mode=="FT8"
+            || m_mode=="FST4" || m_mode=="Q65" || m_mode=="MSK144");
     m_sentFirst73 = is_73
       && !message_is_73 (m_lastMessageType, m_lastMessageSent.split (' ', SkipEmptyParts));
     if (m_sentFirst73 || (is_73 && CALLING == m_QSOProgress)) {
@@ -11637,9 +11847,12 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   // prevent starting a QSO with yourself
   if (m_bDoubleClicked && hiscall==m_baseCall) return;
 
+  auto const clean_no_brackets = message.clean_string ().remove ("<").remove (">");
+  auto const payload_no_brackets = udp_decode_message_text (message.clean_string ()).remove ("<").remove (">");
+
   // don't call CQ when double-clicking on the final "73" message of your QSO
-  if (m_bDoubleClicked && message.clean_string().remove("<").remove(">").contains((" " + m_baseCall + " "))
-      && message.clean_string().remove("<").remove(">").contains(" " + hiscall + " ") && message.clean_string().mid(22).contains(" 73")) return;
+  if (m_bDoubleClicked && clean_no_brackets.contains((" " + m_baseCall + " "))
+      && clean_no_brackets.contains(" " + hiscall + " ") && payload_no_brackets.contains(" 73")) return;
 
   if(message.clean_string ().contains(hiscall+"/R")) {
     hiscall+="/R";
@@ -11652,7 +11865,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     statusUpdate();     //avt 11/21/20 so that external controller is notified
   }
 
-  QStringList w=message.clean_string ().mid(22).remove("<").remove(">").split(" ",SkipEmptyParts);
+  QStringList w=payload_no_brackets.split(" ",SkipEmptyParts);
   int nw=w.size();
   if(nw>=4) {
     if(message_words.size()<4) return;
@@ -12148,7 +12361,8 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     // i.e. compound version of same base call
     ui->dxCallEntry->setText (hiscall);    //avt 10/2/25
     statusUpdate();     //avt 11/21/20 so that external controller is notified
-    if (!((s2.contains(" " + m_config.my_callsign() + " ") && s2.mid(22).contains(" 73")) && (ui->respondComboBox->currentText()=="CQ: Max dB"
+    auto const s2_payload = udp_decode_message_text (s2);
+    if (!((s2.contains(" " + m_config.my_callsign() + " ") && s2_payload.contains(" 73")) && (ui->respondComboBox->currentText()=="CQ: Max dB"
            or ui->respondComboBox->currentText()=="CQ: Max dB"))) ui->dxCallEntry->setText (hiscall);
   }
   if (hisgrid.contains (grid_regexp)) {
@@ -22545,6 +22759,18 @@ void MainWindow::onRemoteSetRxFrequencyRequested(QString const& commandId, int r
   int clamped = qBound(ui->RxFreqSpinBox->minimum(), rxFrequencyHz, ui->RxFreqSpinBox->maximum());
   ui->RxFreqSpinBox->setValue(clamped);
   showStatusMessage(tr("Remote Rx frequency set: %1 Hz").arg(clamped));
+}
+
+void MainWindow::onRemoteSetTxFrequencyRequested(QString const& commandId, int txFrequencyHz)
+{
+  Q_UNUSED(commandId);
+  if (!ui || !ui->TxFreqSpinBox)
+    {
+      return;
+    }
+  int clamped = qBound(ui->TxFreqSpinBox->minimum(), txFrequencyHz, ui->TxFreqSpinBox->maximum());
+  ui->TxFreqSpinBox->setValue(clamped);
+  showStatusMessage(tr("Remote Tx frequency set: %1 Hz").arg(clamped));
 }
 
 void MainWindow::onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled)

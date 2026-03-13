@@ -76,6 +76,7 @@ Q_SIGNALS:
   void setModeRequested(QString const& commandId, QString const& mode);
   void setBandRequested(QString const& commandId, QString const& band);
   void setRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
+  void setTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
   void setTxEnabledRequested(QString const& commandId, bool enabled);
   void setAutoCqRequested(QString const& commandId, bool enabled);
   void setAsyncL2Requested(QString const& commandId, bool enabled);

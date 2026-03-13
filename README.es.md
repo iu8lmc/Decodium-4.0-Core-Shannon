@@ -1,34 +1,32 @@
-# Decodium 3 FT2 (Fork macOS) - v1.4.5
+# Decodium 3 FT2 (Fork macOS) - v1.4.6
 
 Fork mantenido por **Salvatore Raccampo 9H1SR**.
 
 Para la vista general bilingue, ver [README.md](README.md).
 
-## Cambios en v1.4.5 (`v1.4.4 -> v1.4.5`)
+## Cambios en v1.4.6 (`v1.4.5 -> v1.4.6`)
 
-- Correcciones FT2 AutoCQ y maquina de estados QSO:
-- bloqueo de pareja activa mas robusto durante QSO (override manual solo con Ctrl/Shift).
-- respuestas dirigidas durante CQ capturadas de forma mas fiable (matching por base callsign).
-- mensajes `73` de estaciones no pareja ya no fuerzan cierres incorrectos.
-- timers diferidos/stale de autolog ahora se ignoran con seguridad.
-- cola de callers protegida contra duplicados recien trabajados tras log.
-- Fiabilidad signoff/log en FT2:
-- mejorado flujo deferred signoff FT2 con handoff de snapshot autolog.
-- completado RR73/73 mas estable antes de volver a CQ.
-- reintentos AutoCQ ajustados (`MAX_TX_RETRIES=5`) con reset limpio al cambiar DX.
-- Mejoras decode/runtime FT2:
-- columna FT2 ahora muestra `TΔ` (tiempo desde ultimo TX) en lugar de DT.
-- corregida alineacion de columnas FT2 (`~`, signos menos Unicode, prefijo de ancho fijo).
-- confirmaciones async debiles preservadas antes de la supresion near-duplicate.
-- hardening del decoder con umbral `nharderror` relajado (`35 -> 48`).
-- Correcciones de temporizacion TX:
-- ajustados ramp-up/ramp-down y latencia TX FT2 en rutas TCI y soundcard.
-- Correcciones web/UI:
-- fix de inicio dashboard remota e inicializacion de fetch.
-- fix de apertura `Vista -> Display a cascata` (waterfall).
-- restaurado hint de password web localizado (minimo 12 caracteres).
-- Fix compatibilidad logger UDP FT2:
-- corregido el slicing del payload FT2 por UDP para que loggers externos (RumLog) no pierdan el primer caracter del callsign.
+- Hardening AutoCQ y maquina de estados QSO:
+- restaurado comportamiento FIFO estable de cola de callers (baseline de la logica v1.3.8).
+- lock de pareja activa reforzado durante QSO para evitar takeover accidental.
+- flujo deferred de reintentos RR73/73 aplicado de forma coherente a FT2, FT8, FT4, FST4, Q65 y MSK144.
+- matching de pareja mejorado con tokens de payload normalizados, incluso en formatos decode limite.
+- Correccion signoff/log:
+- recuperado contexto deferred autolog tras ventanas de reintento.
+- reducidos casos de log forzado sin confirmacion real de pareja.
+- reducidos casos de log tardio por estados pending stale.
+- Continuidad decode y panel Frecuencia Rx:
+- extraccion de payload decode mas robusta con marcador variable/ausente.
+- reducidos casos donde respuestas validas quedaban solo en Actividad de Banda sin pasar al flujo central Rx.
+- Correcciones UI/runtime desktop:
+- corregido toggle `Vista -> World Map` en macOS (mapa ahora sigue el estado del menu).
+- mejorada gestion de splitter/paneles secundarios en Linux/macOS.
+- en Linux, pestañas de ajustes largas ahora van en `QScrollArea` (boton OK siempre accesible).
+- en macOS, refresco automatico de stream audio al inicio para evitar recarga manual de dispositivos.
+- Actualizaciones dashboard remota/web app:
+- soporte completo para comando remoto `set_tx_frequency`.
+- webapp con set combinado Rx+Tx, set Rx/set Tx separados y presets por modo (save/apply).
+- mantenido hint de password localizado con minimo 12 caracteres (IT/EN).
 
 ## Objetivos de release
 
@@ -82,7 +80,7 @@ cmake --build build -j6
 
 - [README.en-GB.md](README.en-GB.md)
 - [README.it.md](README.it.md)
-- [RELEASE_NOTES_v1.4.5.md](RELEASE_NOTES_v1.4.5.md)
+- [RELEASE_NOTES_v1.4.6.md](RELEASE_NOTES_v1.4.6.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [doc/GITHUB_RELEASE_BODY_v1.4.5.md](doc/GITHUB_RELEASE_BODY_v1.4.5.md)
+- [doc/GITHUB_RELEASE_BODY_v1.4.6.md](doc/GITHUB_RELEASE_BODY_v1.4.6.md)
 - [doc/README.es.md](doc/README.es.md)

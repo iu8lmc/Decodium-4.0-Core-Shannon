@@ -181,6 +181,8 @@
 #include <QJsonArray>
 #include <QSerialPortInfo>
 #include <QSpinBox>
+#include <QScrollArea>
+#include <QFrame>
 #include <vector>
 #include <utility>
 #include <iostream>
@@ -3887,19 +3889,73 @@ int Configuration::impl::exec ()
 
   initialize_models ();
 
-  // Keep settings dialog fully reachable on small/HiDPI Linux desktops.
-  adjustSize ();
-  QScreen * screen = this->windowHandle () ? this->windowHandle ()->screen () : nullptr;
-  if (!screen) {
-    screen = QGuiApplication::screenAt (QCursor::pos ());
-  }
-  if (!screen) {
-    screen = QGuiApplication::primaryScreen ();
-  }
+  auto resolveScreen = [this] () -> QScreen *
+    {
+      QScreen * screen = this->windowHandle () ? this->windowHandle ()->screen () : nullptr;
+      if (!screen)
+        {
+          screen = QGuiApplication::screenAt (QCursor::pos ());
+        }
+      if (!screen)
+        {
+          screen = QGuiApplication::primaryScreen ();
+        }
+      return screen;
+    };
+
+  QScreen * screen = resolveScreen ();
   if (screen) {
     QRect const available = screen->availableGeometry ();
     int const maxWidth = qMax (600, available.width () - 40);
     int const maxHeight = qMax (420, available.height () - 40);
+
+#if defined(Q_OS_LINUX)
+    // On some Linux desktop/font setups, tab contents exceed screen height.
+    // Wrap each tab page into a scroll area so the OK button always stays reachable.
+    if (ui_->configuration_tabs
+        && sizeHint ().height () > maxHeight
+        && !ui_->configuration_tabs->property ("ft2_scroll_wrapped").toBool ())
+      {
+        int const currentTab = ui_->configuration_tabs->currentIndex ();
+        int const count = ui_->configuration_tabs->count ();
+        for (int i = 0; i < count; ++i)
+          {
+            QWidget * page = ui_->configuration_tabs->widget (i);
+            if (!page || qobject_cast<QScrollArea *> (page))
+              {
+                continue;
+              }
+
+            auto const text = ui_->configuration_tabs->tabText (i);
+            auto const icon = ui_->configuration_tabs->tabIcon (i);
+            auto const toolTip = ui_->configuration_tabs->tabToolTip (i);
+            auto const whatsThis = ui_->configuration_tabs->tabWhatsThis (i);
+
+            ui_->configuration_tabs->removeTab (i);
+
+            auto * scroll = new QScrollArea {ui_->configuration_tabs};
+            scroll->setObjectName (page->objectName () + QStringLiteral ("_scroll"));
+            scroll->setWidgetResizable (true);
+            scroll->setFrameShape (QFrame::NoFrame);
+            scroll->setHorizontalScrollBarPolicy (Qt::ScrollBarAsNeeded);
+            scroll->setVerticalScrollBarPolicy (Qt::ScrollBarAsNeeded);
+            page->setParent (scroll);
+            scroll->setWidget (page);
+
+            ui_->configuration_tabs->insertTab (i, scroll, icon, text);
+            ui_->configuration_tabs->setTabToolTip (i, toolTip);
+            ui_->configuration_tabs->setTabWhatsThis (i, whatsThis);
+          }
+
+        ui_->configuration_tabs->setProperty ("ft2_scroll_wrapped", true);
+        if (ui_->configuration_tabs->count () > 0)
+          {
+            ui_->configuration_tabs->setCurrentIndex (qBound (0, currentTab, ui_->configuration_tabs->count () - 1));
+          }
+      }
+#endif
+
+    adjustSize ();
     QSize const clamped = size ().boundedTo (QSize {maxWidth, maxHeight});
     resize (clamped);
 

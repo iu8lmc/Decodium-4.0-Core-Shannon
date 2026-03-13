@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. v1.4.5)"
+        description: "Release version (e.g. v1.4.6)"
         required: true
-        default: "v1.4.5"
+        default: "v1.4.6"
       publish_release:
         description: "Publish GitHub release"
         required: true
@@ -173,8 +173,8 @@ jobs:
           NOTES_TEMPLATE="doc/GITHUB_RELEASE_BODY_${VERSION}.md"
           if [[ -f "${NOTES_TEMPLATE}" ]]; then
             cp "${NOTES_TEMPLATE}" "${NOTES_FILE}"
-          elif [[ -f "doc/GITHUB_RELEASE_BODY_v1.4.5.md" ]]; then
-            cp "doc/GITHUB_RELEASE_BODY_v1.4.5.md" "${NOTES_FILE}"
+          elif [[ -f "doc/GITHUB_RELEASE_BODY_v1.4.6.md" ]]; then
+            cp "doc/GITHUB_RELEASE_BODY_v1.4.6.md" "${NOTES_FILE}"
           else
             printf "# Decodium 3 FT2 %s\n\nSee CHANGELOG.md for details.\n" "${VERSION}" > "${NOTES_FILE}"
           fi

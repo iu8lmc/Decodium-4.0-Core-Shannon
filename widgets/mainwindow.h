@@ -529,6 +529,7 @@ private slots:
   void onRemoteSetModeRequested(QString const& commandId, QString const& mode);
   void onRemoteSetBandRequested(QString const& commandId, QString const& band);
   void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
+  void onRemoteSetTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
   void onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled);
   void onRemoteSetAutoCqRequested(QString const& commandId, bool enabled);
   void onRemoteSetAsyncL2Requested(QString const& commandId, bool enabled);
