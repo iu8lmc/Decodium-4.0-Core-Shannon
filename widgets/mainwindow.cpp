@@ -687,6 +687,41 @@ namespace
           || (type == 6 && !msg_parts.filter ("73").isEmpty ()));
   }
 
+  QString normalize_call_token (QString token)
+  {
+    token.remove (QChar {'<'});
+    token.remove (QChar {'>'});
+    return token.trimmed ();
+  }
+
+  QString infer_partner_from_directed_message (QString const& message
+                                               , QString const& my_call
+                                               , QString const& my_base)
+  {
+    auto words = message.split (' ', SkipEmptyParts);
+    if (words.size () < 2) return {};
+
+    auto first = normalize_call_token (words.at (0));
+    auto second = normalize_call_token (words.at (1));
+    if (first.isEmpty () || second.isEmpty ()) return {};
+
+    auto is_my_call = [&](QString const& token) {
+      return token.compare (my_call, Qt::CaseInsensitive) == 0
+          || token.compare (my_base, Qt::CaseInsensitive) == 0;
+    };
+    auto looks_like_partner_call = [](QString const& token) {
+      if (token == "CQ" || token == "QRZ" || token == "DE"
+          || token == "TU;" || token == "73" || token == "RR73") {
+        return false;
+      }
+      return token.contains (QRegularExpression {"[0-9]"});
+    };
+
+    if (is_my_call (first) && looks_like_partner_call (second)) return second;
+    if (is_my_call (second) && looks_like_partner_call (first)) return first;
+    return {};
+  }
+
   int ms_minute_error ()
   {
     auto const& now = QDateTime::currentDateTimeUtc ();
@@ -12499,9 +12534,24 @@ void MainWindow::TxAgain()
 
 void MainWindow::capturePendingAutoLogSnapshot ()
 {
-  if (m_hisCall.trimmed ().isEmpty ()) return;
+  QString snapshotCall = m_hisCall.trimmed ();
+  if (snapshotCall.isEmpty ()) {
+    snapshotCall = ui->dxCallEntry->text ().trimmed ();
+  }
+  if (snapshotCall.isEmpty ()) {
+    snapshotCall = infer_partner_from_directed_message (m_currentMessage, m_config.my_callsign (), m_baseCall);
+  }
+  if (snapshotCall.isEmpty ()) {
+    snapshotCall = infer_partner_from_directed_message (m_lastMessageSent, m_config.my_callsign (), m_baseCall);
+  }
+  if (snapshotCall.isEmpty ()) return;
+
+  if (m_hisCall.trimmed ().isEmpty ()) {
+    m_hisCall = snapshotCall;
+  }
+
   m_pendingAutoLogValid = true;
-  m_pendingAutoLogCall = m_hisCall;
+  m_pendingAutoLogCall = snapshotCall;
   m_pendingAutoLogGrid = m_hisGrid;
   m_pendingAutoLogRptSent = m_rptSent;
   m_pendingAutoLogRptRcvd = m_rptRcvd;
@@ -13833,6 +13883,12 @@ void MainWindow::cease_auto_Tx_after_QSO ()
 
 void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
 {
+  auto const currentTxIs73 =
+      message_is_73 (m_currentMessageType, m_currentMessage.split (' ', SkipEmptyParts));
+  if (m_autoCQ && !m_pendingAutoLogValid && currentTxIs73) {
+    // Recovery path: after deferred RR73 retries, call context can be missing in m_hisCall.
+    capturePendingAutoLogSnapshot ();
+  }
   if (m_autoCQ && !m_pendingAutoLogValid && m_QSOProgress < SIGNOFF) {
     // Ignore stale deferred auto-log triggers that fire after a new QSO has already started.
     return;
@@ -13868,7 +13924,21 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   }
 
   if (!logHisCall.size ()) {
-    if (m_autoCQ) return;  // Auto CQ: skip warning, DX was cleared after previous QSO
+    if (m_autoCQ) {
+      // Last chance recovery before discarding auto-log.
+      capturePendingAutoLogSnapshot ();
+      if (m_pendingAutoLogValid) {
+        logHisCall = m_pendingAutoLogCall;
+        if (!m_pendingAutoLogGrid.isEmpty()) logHisGrid = m_pendingAutoLogGrid;
+        if (!m_pendingAutoLogRptSent.isEmpty()) logRptSent = m_pendingAutoLogRptSent;
+        if (!m_pendingAutoLogRptRcvd.isEmpty()) logRptRcvd = m_pendingAutoLogRptRcvd;
+        if (!m_pendingAutoLogXSent.isEmpty()) logXSent = m_pendingAutoLogXSent;
+        if (!m_pendingAutoLogXRcvd.isEmpty()) logXRcvd = m_pendingAutoLogXRcvd;
+        if (m_pendingAutoLogOn.isValid()) logDateTimeQSOOn = m_pendingAutoLogOn;
+        if (m_pendingAutoLogDialFreq > 0) logDialFreq = m_pendingAutoLogDialFreq;
+      }
+      if (!logHisCall.size ()) return;  // Auto CQ: still no stable partner context.
+    }
     MessageBox::warning_message (this, tr ("Warning:  DX Call field is empty."));
     if ((SpecOp::NA_VHF == m_specOp or SpecOp::WW_DIGI == m_specOp) && m_config.autoLog()) return;  // prevent program crash
   }
