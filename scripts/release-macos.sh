@@ -154,6 +154,26 @@ create_dmg_from_staged_root() {
   mv -f "${tmp_dmg}" "${out_dmg}"
 }
 
+detach_mountpoint_if_present() {
+  local mountpoint="$1"
+  local attempts="${2:-5}"
+  local dev=""
+
+  for ((i=1; i<=attempts; ++i)); do
+    dev="$(hdiutil info | awk -v mp="${mountpoint}" 'index($0, mp) {print $1; exit}')"
+    if [[ -z "${dev}" ]]; then
+      return 0
+    fi
+
+    echo "warning: detaching leftover image ${dev} mounted at ${mountpoint} (attempt ${i}/${attempts})"
+    hdiutil detach "${dev}" >/dev/null 2>&1 || hdiutil detach -force "${dev}" >/dev/null 2>&1 || true
+    sleep 2
+  done
+
+  dev="$(hdiutil info | awk -v mp="${mountpoint}" 'index($0, mp) {print $1; exit}')"
+  [[ -z "${dev}" ]]
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --publish)
@@ -248,21 +268,23 @@ echo "[2/6] Building project..."
 cmake --build "$BUILD_DIR" -j"$JOBS"
 
 echo "[3/6] Generating DMG with CPack..."
+CPACK_VOLUME_MOUNT="/Volumes/Decodium v3.0 SE"
+detach_mountpoint_if_present "${CPACK_VOLUME_MOUNT}" || true
+cpack_status=0
 (
   cd "$BUILD_DIR"
   cpack -G DragNDrop
-)
-
-LATEST_DMG="$(cd "$BUILD_DIR" && ls -t *-Darwin.dmg 2>/dev/null | head -n1 || true)"
-if [[ -z "$LATEST_DMG" ]]; then
-  echo "error: no DMG produced by CPack"
-  exit 1
-fi
+) || cpack_status=$?
 STAGED_APP="$(cd "$BUILD_DIR" && ls -td _CPack_Packages/Darwin/DragNDrop/*/ft2.app 2>/dev/null | head -n1 || true)"
 if [[ -z "$STAGED_APP" ]]; then
   echo "error: unable to locate staged ft2.app from CPack output"
+  echo "error: cpack exit status: ${cpack_status}"
   exit 1
 fi
+if [[ "${cpack_status}" -ne 0 ]]; then
+  echo "warning: CPack returned status ${cpack_status}, but staged ft2.app exists; continuing with manual DMG packaging."
+fi
+detach_mountpoint_if_present "${CPACK_VOLUME_MOUNT}" || true
 STAGED_APP_ABS="${BUILD_DIR}/${STAGED_APP}"
 STAGED_ROOT_ABS="$(dirname "${STAGED_APP_ABS}")"
 
