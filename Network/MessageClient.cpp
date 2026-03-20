@@ -128,11 +128,12 @@ public:
     connect (this, &QIODevice::readyRead, this, &impl::pending_datagrams);
 
     auto key = qEnvironmentVariable ("WSJT_UDP_HMAC_KEY").trimmed ();
-    if (!key.isEmpty ())
+    bool const enable_hmac = env_flag_enabled ("WSJT_UDP_HMAC_ENABLED", false);
+    if (enable_hmac && !key.isEmpty ())
       {
         hmac_key_ = key.toUtf8 ();
       }
-    require_hmac_ = !hmac_key_.isEmpty () && env_flag_enabled ("WSJT_UDP_HMAC_REQUIRED", true);
+    require_hmac_ = !hmac_key_.isEmpty () && env_flag_enabled ("WSJT_UDP_HMAC_REQUIRED", false);
 
     heartbeat_timer_->start (NetworkMessage::pulse * 1000);
   }

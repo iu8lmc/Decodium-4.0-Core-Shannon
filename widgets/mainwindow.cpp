@@ -20896,12 +20896,11 @@ void MainWindow::statusUpdate () const
       tr_period = m_externalCtrl ? (int)(m_TRperiod * 1000) :quint32_max;   //avt 9/30/25
     }
 
-  // JTAlert compatibility: FT2 is not in JTAlert's mode table, map it to FT8
-  // (FT2 uses the same encoding as FT8, only different T/R period)
-  QString udpMode = (m_mode == "FT2") ? "FT8" : m_mode;
-  m_messageClient->status_update (m_freqNominal, udpMode, (m_externalCtrl ? m_dxCall : m_hisCall),   //avt 11/12/21
+  // Keep UDP status aligned with the real on-air mode. External loggers
+  // such as CQRLOG expect FT2 sessions to remain FT2 from status through log.
+  m_messageClient->status_update (m_freqNominal, m_mode, (m_externalCtrl ? m_dxCall : m_hisCall),   //avt 11/12/21
                                   QString::number (ui->rptSpinBox->value ()),
-                                  udpMode, m_auto,
+                                  m_mode, m_auto,
                                   m_transmitting, m_decoderBusy,
                                   rx_frequency, ui->TxFreqSpinBox->value (),
                                   m_config.my_callsign (), m_config.my_grid (),
