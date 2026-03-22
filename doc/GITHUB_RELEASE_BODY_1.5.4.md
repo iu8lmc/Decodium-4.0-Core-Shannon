@@ -10,6 +10,7 @@ Release highlights (`1.5.3 -> 1.5.4`):
 - the web app now follows the UI language selected inside Decodium and covers all bundled app languages.
 - improved title/version alignment, removed the duplicate `English (UK)` menu item, and localized the UTC/Astro date format to `Day Month Year` plus `UTC`.
 - hardened secure settings fallback, file downloads, CAT exception logging, DXLab startup waits, and LoTW HTTPS defaults.
+- corrected macOS app packaging so sounds live under `Contents/Resources/sounds`, Hamlib helper binaries are bundled as real files instead of Homebrew symlinks, Mach-O references are normalized to `@rpath`, and stale legacy bundle artifacts are cleaned from reused build trees.
 - extended test coverage with RFC HOTP/TOTP vectors plus secure-settings and downloader integration tests.
 
 Release assets:
@@ -65,6 +66,7 @@ Punti principali (`1.5.3 -> 1.5.4`):
 - la web app segue ora la lingua selezionata dentro Decodium e copre tutte le lingue UI bundle.
 - migliorato l'allineamento titolo/versione, rimossa la voce duplicata `English (UK)` e localizzato il formato data UTC/Astro in `Giorno Mese Anno` piu' `UTC`.
 - irrigiditi fallback secure settings, download file, logging eccezioni CAT, wait di startup DXLab e default HTTPS LoTW.
+- corretto il packaging dell'app macOS: i suoni sono ora in `Contents/Resources/sounds`, gli helper Hamlib sono inclusi come file reali e non symlink Homebrew, i riferimenti Mach-O sono normalizzati a `@rpath`, e i residui legacy del bundle vengono rimossi anche nelle build riutilizzate.
 - estesa la copertura test con vettori RFC HOTP/TOTP e test integrazione per secure settings e downloader.
 
 Asset release:
@@ -120,6 +122,7 @@ Resumen (`1.5.3 -> 1.5.4`):
 - la web app sigue ahora el idioma seleccionado dentro de Decodium y cubre todas las lenguas UI bundle.
 - mejorada la alineacion titulo/version, eliminada la entrada duplicada `English (UK)` y localizado el formato fecha UTC/Astro a `Dia Mes Ano` mas `UTC`.
 - endurecidos fallback secure settings, descargas de archivos, logging de excepciones CAT, waits de arranque DXLab y defaults HTTPS de LoTW.
+- corregido el empaquetado de la app macOS: los sonidos viven ahora en `Contents/Resources/sounds`, los helpers de Hamlib se incluyen como archivos reales y no como symlinks de Homebrew, las referencias Mach-O se normalizan a `@rpath`, y los residuos legacy del bundle se eliminan tambien en arboles de build reutilizados.
 - ampliada la cobertura de test con vectores RFC HOTP/TOTP y tests de integracion para secure settings y downloader.
 
 Artefactos release:

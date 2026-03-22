@@ -1,6 +1,6 @@
 # Decodium - Fork 9H1SR 1.5.4
 
-This repository contains the macOS and Linux AppImage fork of Decodium, with FT2 anti-ghost filtering, FT2/FT4/FT8 decoder sync refinements, web-app parity controls, complete UI/web localization, secure settings hardening, safer download handling, and the release tooling maintained in this tree.
+This repository contains the macOS and Linux AppImage fork of Decodium, with FT2 anti-ghost filtering, FT2/FT4/FT8 decoder sync refinements, web-app parity controls, complete UI/web localization, secure settings hardening, safer download handling, and macOS bundle/release tooling maintained in this tree.
 
 - Upstream base: `iu8lmc/Decodium-3.0-Codename-Raptor`
 - Current fork release: `1.5.4`
@@ -19,6 +19,8 @@ This repository contains the macOS and Linux AppImage fork of Decodium, with FT2
 - added `Monitoring ON/OFF`, FT2 `ASYNC` dB display, and `Hide CQ` / `Hide 73` filters to the remote console.
 - Language and UI alignment:
 - the web app now follows the language chosen in Decodium, all bundled languages are covered, the duplicate `English (UK)` menu entry is gone, and UTC/Astro dates now use localized month names.
+- macOS packaging and release integrity:
+- release bundles now normalize sounds to `Contents/Resources/sounds`, avoid shipping symlinked Hamlib helper tools, rewrite bundled Mach-O references to `@rpath`, and clean stale legacy bundle artifacts from reused build trees.
 - Security and stability:
 - secure settings fallback/import is hardened, downloader redirects and oversize transfers are guarded, LoTW defaults to `https`, and CAT exception logging is more explicit.
 - Test and release coverage:

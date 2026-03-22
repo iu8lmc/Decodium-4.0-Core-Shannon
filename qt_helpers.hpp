@@ -78,6 +78,9 @@ void throw_qstring (QString const& qs)
 
 QString font_as_stylesheet (QFont const&);
 
+QString bundled_resource_path (QString const& relative_path);
+QString bundled_sound_path (QString const& file_name);
+
 // do what is necessary to change a dynamic property and trigger any
 // conditional style sheet updates
 void update_dynamic_property (QWidget *, char const * property, QVariant const& value);

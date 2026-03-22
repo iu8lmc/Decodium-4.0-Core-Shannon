@@ -61,18 +61,36 @@ check_bundle_compatibility() {
   local compat_macos="$2"
   local has_absolute_deps=0
   local has_bad_minos=0
+  local has_bad_bundle_paths=0
 
   while IFS= read -r file_path; do
     if ! file "$file_path" | grep -q "Mach-O"; then
       continue
     fi
 
+    local current_id=""
+    current_id="$(otool -D "$file_path" 2>/dev/null | awk 'NR==2 {print $1; exit}')"
+
+    if [[ "$file_path" == "$app_bundle/Contents/Frameworks/"* && -n "$current_id" && "$current_id" != @rpath/* ]]; then
+      echo "error: non-@rpath install id in bundled framework/dylib:"
+      echo "  ${file_path} -> ${current_id}"
+      has_bad_bundle_paths=1
+    fi
+
     while IFS= read -r dep_path; do
+      if [[ -n "$current_id" && "$dep_path" == "$current_id" ]]; then
+        continue
+      fi
       case "$dep_path" in
         /opt/*|/usr/local/*|/Users/*)
           echo "error: absolute runtime dependency in bundle:"
           echo "  ${file_path} -> ${dep_path}"
           has_absolute_deps=1
+          ;;
+        @*Frameworks/*)
+          echo "error: stale @executable_path/@loader_path Frameworks reference in bundle:"
+          echo "  ${file_path} -> ${dep_path}"
+          has_bad_bundle_paths=1
           ;;
       esac
     done < <(otool -L "$file_path" | awk 'NR>1 {print $1}')
@@ -86,7 +104,23 @@ check_bundle_compatibility() {
     fi
   done < <(find "$app_bundle" -type f)
 
-  if [[ "$has_absolute_deps" -ne 0 || "$has_bad_minos" -ne 0 ]]; then
+  if [[ -d "$app_bundle/Contents/MacOS/sounds" ]]; then
+    echo "error: sounds directory still lives in Contents/MacOS"
+    has_bad_bundle_paths=1
+  fi
+  if [[ ! -d "$app_bundle/Contents/Resources/sounds" ]]; then
+    echo "error: missing sounds directory in Contents/Resources"
+    has_bad_bundle_paths=1
+  fi
+  for tool_name in rigctl-wsjtx rigctld-wsjtx rigctlcom-wsjtx; do
+    if [[ -L "$app_bundle/Contents/MacOS/$tool_name" ]]; then
+      echo "error: bundled Hamlib tool is still a symlink:"
+      echo "  $app_bundle/Contents/MacOS/$tool_name"
+      has_bad_bundle_paths=1
+    fi
+  done
+
+  if [[ "$has_absolute_deps" -ne 0 || "$has_bad_minos" -ne 0 || "$has_bad_bundle_paths" -ne 0 ]]; then
     return 1
   fi
   return 0
@@ -242,7 +276,7 @@ fi
 
 JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 8)"
 
-echo "[1/6] Configuring project (macOS target ${COMPAT_MACOS})..."
+echo "[1/7] Configuring project (macOS target ${COMPAT_MACOS})..."
 cmake_args=(
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_OSX_DEPLOYMENT_TARGET="$COMPAT_MACOS"
@@ -261,16 +295,31 @@ fi
 if [[ -n "${FC:-}" ]]; then
   cmake_args+=("-DCMAKE_Fortran_COMPILER=${FC}")
 fi
+if [[ -n "${Hamlib_INCLUDE_DIR:-}" ]]; then
+  cmake_args+=("-DHamlib_INCLUDE_DIR=${Hamlib_INCLUDE_DIR}")
+fi
+if [[ -n "${Hamlib_LIBRARY:-}" ]]; then
+  cmake_args+=("-DHamlib_LIBRARY=${Hamlib_LIBRARY}")
+fi
+if [[ -n "${RIGCTL_EXE:-}" ]]; then
+  cmake_args+=("-DRIGCTL_EXE=${RIGCTL_EXE}")
+fi
+if [[ -n "${RIGCTLD_EXE:-}" ]]; then
+  cmake_args+=("-DRIGCTLD_EXE=${RIGCTLD_EXE}")
+fi
+if [[ -n "${RIGCTLCOM_EXE:-}" ]]; then
+  cmake_args+=("-DRIGCTLCOM_EXE=${RIGCTLCOM_EXE}")
+fi
 
 cmake \
   -S "$ROOT_DIR" \
   -B "$BUILD_DIR" \
   "${cmake_args[@]}"
 
-echo "[2/6] Building project..."
+echo "[2/7] Building project..."
 cmake --build "$BUILD_DIR" -j"$JOBS"
 
-echo "[3/6] Generating DMG with CPack..."
+echo "[3/7] Generating DMG with CPack..."
 CPACK_VOLUME_MOUNT="/Volumes/Decodium v3.0 SE"
 detach_mountpoint_if_present "${CPACK_VOLUME_MOUNT}" || true
 cpack_status=0
@@ -291,8 +340,11 @@ detach_mountpoint_if_present "${CPACK_VOLUME_MOUNT}" || true
 STAGED_APP_ABS="${BUILD_DIR}/${STAGED_APP}"
 STAGED_ROOT_ABS="$(dirname "${STAGED_APP_ABS}")"
 
+echo "[4/7] Normalizing macOS bundle layout and runtime paths..."
+"${ROOT_DIR}/scripts/normalize-macos-app.sh" "${STAGED_APP_ABS}"
+
 if [[ "$SKIP_COMPAT_CHECK" -eq 0 ]]; then
-  echo "[4/6] Checking bundle compatibility target macOS ${COMPAT_MACOS}..."
+  echo "[5/7] Checking bundle compatibility target macOS ${COMPAT_MACOS}..."
   if ! check_bundle_compatibility "${BUILD_DIR}/${STAGED_APP}" "$COMPAT_MACOS"; then
     echo
     echo "Bundle compatibility check failed."
@@ -300,7 +352,7 @@ if [[ "$SKIP_COMPAT_CHECK" -eq 0 ]]; then
     exit 1
   fi
 else
-  echo "[4/6] Skipping compatibility checks (--skip-compat-check)."
+  echo "[5/7] Skipping compatibility checks (--skip-compat-check)."
 fi
 
 if [[ -z "$ASSET_SUFFIX" ]]; then
@@ -311,10 +363,10 @@ DMG_OUT="${PREFIX}-${VERSION}-${ASSET_SUFFIX}.dmg"
 ZIP_OUT="${PREFIX}-${VERSION}-${ASSET_SUFFIX}.zip"
 SHA_OUT="${PREFIX}-${VERSION}-${ASSET_SUFFIX}-sha256.txt"
 
-echo "[5/6] Re-signing app bundle..."
+echo "[6/7] Re-signing app bundle..."
 sign_app_bundle "${STAGED_APP_ABS}" "${CODESIGN_IDENTITY}"
 
-echo "[6/6] Creating release assets..."
+echo "[7/7] Creating release assets..."
 create_dmg_from_staged_root "${STAGED_ROOT_ABS}" "${BUILD_DIR}/${DMG_OUT}" "ft2"
 (
   /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${STAGED_APP_ABS}" "${BUILD_DIR}/${ZIP_OUT}"

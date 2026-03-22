@@ -3967,7 +3967,6 @@ void MainWindow::readSettings()
 #ifdef WIN32
   if (m_config.alert_Enabled()) {  // testing and initializing the default audio device for playing audible alerts
       QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-      QString binPath = QCoreApplication::applicationDirPath();
       QAudioFormat format;
       format.setCodec("audio/pcm");
       format.setSampleRate (48000);
@@ -3977,7 +3976,7 @@ void MainWindow::readSettings()
       QAudioOutput* audio;
       audio = new QAudioOutput(format, this);
       QFile *effect = new QFile(this);
-      effect->setFileName(QString("%1/%2").arg(binPath, "/sounds/Testing.wav"));
+      effect->setFileName(bundled_sound_path(QStringLiteral("Testing.wav")));
       effect->open(QIODevice::ReadOnly);
       audio->start(effect);
   }
@@ -5364,8 +5363,7 @@ void MainWindow::fastSink(qint64 frames)
         effect1->open(QIODevice::ReadOnly);
         audio->start(effect1);
 #else
-        QString binPath = QCoreApplication::applicationDirPath();
-        QSound::play(binPath + "/sounds/DXcall.wav");  // for Linux and macOS
+        QSound::play(bundled_sound_path(QStringLiteral("DXcall.wav")));  // for Linux and macOS
 #endif
         play_DXcall = false;
       }
@@ -10897,8 +10895,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
             effect1->open(QIODevice::ReadOnly);
             audio->start(effect1);
 #else
-            QString binPath = QCoreApplication::applicationDirPath();
-            QSound::play(binPath + "/sounds/DXcall.wav");  // for Linux and macOS
+            QSound::play(bundled_sound_path(QStringLiteral("DXcall.wav")));  // for Linux and macOS
 #endif
             play_DXcall = false;
           }
@@ -16284,8 +16281,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)    // mouse press events
       effect->open(QIODevice::ReadOnly);
       audio->start(effect);
 #else
-      QString binPath = QCoreApplication::applicationDirPath();
-      QSound::play(binPath + "/sounds/Testing_long.wav");  // for Linux and macOS
+      QSound::play(bundled_sound_path(QStringLiteral("Testing_long.wav")));  // for Linux and macOS
 #endif
     }
     ui->pbBandHopping->clearFocus();
@@ -24906,8 +24902,7 @@ void MainWindow::alertQSYmessage ()
   effect1->open(QIODevice::ReadOnly);
   audio->start(effect1);
 #else
-  QString binPath = QCoreApplication::applicationDirPath();
-  QSound::play(binPath + "/sounds/Message.wav");  // for Linux and macOS
+  QSound::play(bundled_sound_path(QStringLiteral("Message.wav")));  // for Linux and macOS
 #endif
 }
 

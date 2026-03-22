@@ -4,7 +4,7 @@ Questo indice raccoglie la documentazione di rilascio del ciclo corrente del for
 
 - Release corrente: `1.5.4`
 - Ciclo aggiornamento: `1.5.3 -> 1.5.4`
-- Focus principale: filtro FT2 anti-ghost, refresh sync decoder FT2/FT4/FT8, parita' della web app, allineamento completo UI/web delle lingue e hardening di downloader/secure settings.
+- Focus principale: filtro FT2 anti-ghost, refresh sync decoder FT2/FT4/FT8, parita' della web app, allineamento completo UI/web delle lingue, hardening di downloader/secure settings e packaging release macOS corretto.
 
 ## Cambi Tecnici Principali (`1.5.3 -> 1.5.4`)
 
@@ -13,6 +13,7 @@ Questo indice raccoglie la documentazione di rilascio del ciclo corrente del for
 - aggiunti alla web app `Monitoring ON/OFF`, indicatore FT2 `ASYNC` in dB e filtri attivita' `Hide CQ` / `Hide 73`.
 - la web app segue ora la lingua scelta nell'app desktop e copre tutte le lingue bundle.
 - rimossa la voce duplicata `English (UK)` e localizzato il formato data UTC/Astro.
+- corretto il packaging release macOS: suoni in `Contents/Resources`, helper Hamlib inclusi come file reali, dipendenze Framework/plugin normalizzate a `@rpath`, e rimozione dei residui legacy del vecchio bundle nelle build tree riusate.
 - irrigiditi fallback/import secure settings, redirect/limiti size del downloader, logging eccezioni CAT, wait di startup DXLab e default HTTPS LoTW.
 - estesa la copertura automatizzata con vettori RFC HOTP/TOTP e test dedicati per downloader e secure settings.
 

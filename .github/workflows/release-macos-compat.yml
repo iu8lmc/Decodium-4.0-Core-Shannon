@@ -69,10 +69,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew upgrade hamlib || true
-          brew install qt@5 gcc fftw hamlib libusb boost pkg-config
-          brew list --versions hamlib || true
-          rigctl --version || true
+          brew install qt@5 gcc fftw libusb boost pkg-config
 
           GCC_PREFIX="$(brew --prefix gcc)"
           GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
@@ -85,7 +82,41 @@ jobs:
 
           QT5_PREFIX="$(brew --prefix qt@5)"
           echo "${QT5_PREFIX}/bin" >> "$GITHUB_PATH"
+          echo "QT5_PREFIX=${QT5_PREFIX}" >> "$GITHUB_ENV"
           echo "CMAKE_PREFIX_PATH=${QT5_PREFIX}" >> "$GITHUB_ENV"
+
+      - name: Build and install Hamlib
+        run: |
+          set -euo pipefail
+          HAMLIB_TAG="$(curl -fsSL https://api.github.com/repos/Hamlib/Hamlib/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])' | tr -d '\n')"
+          HAMLIB_VERSION="${HAMLIB_TAG#v}"
+          HAMLIB_PREFIX="${RUNNER_TEMP}/hamlib-prefix"
+
+          echo "Using Hamlib ${HAMLIB_TAG}"
+          cd "${RUNNER_TEMP}"
+          curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+
+          HAMLIB_LIBRARY="$(find "${HAMLIB_PREFIX}/lib" -maxdepth 1 -name 'libhamlib*.dylib' | head -n1 || true)"
+          if [[ -z "${HAMLIB_LIBRARY}" ]]; then
+            echo "Unable to locate libhamlib*.dylib under ${HAMLIB_PREFIX}/lib"
+            exit 1
+          fi
+
+          echo "${HAMLIB_PREFIX}/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT5_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+          echo "Hamlib_INCLUDE_DIR=${HAMLIB_PREFIX}/include" >> "$GITHUB_ENV"
+          echo "Hamlib_LIBRARY=${HAMLIB_LIBRARY}" >> "$GITHUB_ENV"
+          echo "RIGCTL_EXE=${HAMLIB_PREFIX}/bin/rigctl" >> "$GITHUB_ENV"
+          echo "RIGCTLD_EXE=${HAMLIB_PREFIX}/bin/rigctld" >> "$GITHUB_ENV"
+          echo "RIGCTLCOM_EXE=${HAMLIB_PREFIX}/bin/rigctlcom" >> "$GITHUB_ENV"
+
+          "${HAMLIB_PREFIX}/bin/rigctl" --version
 
       - name: Build release assets
         run: |

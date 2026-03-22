@@ -7,7 +7,7 @@ Scope: update cycle from `1.5.3` to `1.5.4`.
 
 ### Summary
 
-`1.5.4` is a feature-and-hardening release focused on decoder quality, web-app parity, UI/language alignment, secure storage and downloader guardrails, and release/test coverage.
+`1.5.4` is a feature-and-hardening release focused on decoder quality, web-app parity, UI/language alignment, secure storage and downloader guardrails, macOS bundle correctness, and release/test coverage.
 
 ### Detailed Changes (`1.5.3 -> 1.5.4`)
 
@@ -32,6 +32,7 @@ Scope: update cycle from `1.5.3` to `1.5.4`.
 - reduced blind DXLab startup sleeps by polling for the frequency settle window instead of waiting fixed long sleeps.
 - improved CAT/transceiver exception logging so failures are no longer silently swallowed.
 - changed the default LoTW activity URL from `http` to `https`.
+- corrected macOS app packaging: sounds now live under `Contents/Resources/sounds`, Hamlib helper binaries are bundled as real files instead of Homebrew symlinks, Mach-O references are normalized to `@rpath`, and stale legacy bundle artifacts are cleaned from reused build trees.
 - Tests / release process:
 - added RFC `4226` / `6238` validation tests for `HOTP/TOTP`, covering `SHA1`, `SHA256`, and `SHA512`.
 - added dedicated tests for secure settings fallback/migration and downloader redirect/oversize behaviour.
@@ -106,7 +107,7 @@ cd squashfs-root
 
 ### Sintesi
 
-`1.5.4` e' una release di feature e hardening focalizzata su qualita' decoder, parita' funzionale della web app, allineamento UI/lingue, protezione secure storage/downloader e copertura test/release.
+`1.5.4` e' una release di feature e hardening focalizzata su qualita' decoder, parita' funzionale della web app, allineamento UI/lingue, protezione secure storage/downloader, correttezza del bundle macOS e copertura test/release.
 
 ### Modifiche Dettagliate (`1.5.3 -> 1.5.4`)
 
@@ -131,6 +132,7 @@ cd squashfs-root
 - ridotti i blind sleep di startup DXLab, sostituendoli con polling breve sulla finestra di assestamento frequenza.
 - migliorato il logging delle eccezioni CAT/transceiver, che non vengono piu' inghiottite in silenzio.
 - cambiata la URL di default dell'attivita' LoTW da `http` a `https`.
+- corretto il packaging dell'app macOS: i suoni sono ora in `Contents/Resources/sounds`, gli helper Hamlib sono inclusi come file reali e non symlink Homebrew, i riferimenti Mach-O sono normalizzati a `@rpath`, e i residui legacy del bundle vengono rimossi anche nelle build riutilizzate.
 - Test / processo release:
 - aggiunti test RFC `4226` / `6238` per `HOTP/TOTP`, coprendo `SHA1`, `SHA256` e `SHA512`.
 - aggiunti test dedicati per fallback/migrazione secure settings e per redirect/oversize del downloader.
@@ -205,7 +207,7 @@ cd squashfs-root
 
 ### Resumen
 
-`1.5.4` es una release de funciones y hardening centrada en calidad de decoder, paridad funcional de la web app, alineacion UI/idiomas, proteccion de secure storage/downloader y cobertura de test/release.
+`1.5.4` es una release de funciones y hardening centrada en calidad de decoder, paridad funcional de la web app, alineacion UI/idiomas, proteccion de secure storage/downloader, correccion del bundle macOS y cobertura de test/release.
 
 ### Cambios Detallados (`1.5.3 -> 1.5.4`)
 
@@ -230,6 +232,7 @@ cd squashfs-root
 - reducidos los blind sleeps de arranque DXLab, sustituyendolos por polling corto de la ventana de estabilizacion de frecuencia.
 - mejorado el logging de excepciones CAT/transceiver, que ya no quedan tragadas en silencio.
 - cambiada la URL por defecto de la actividad LoTW de `http` a `https`.
+- corregido el empaquetado de la app macOS: los sonidos viven ahora en `Contents/Resources/sounds`, los helpers de Hamlib se incluyen como archivos reales y no como symlinks de Homebrew, las referencias Mach-O se normalizan a `@rpath`, y los residuos legacy del bundle se eliminan tambien en arboles de build reutilizados.
 - Test / proceso release:
 - anadidos tests RFC `4226` / `6238` para `HOTP/TOTP`, cubriendo `SHA1`, `SHA256` y `SHA512`.
 - anadidos tests dedicados para fallback/migracion de secure settings y para redirect/oversize del downloader.

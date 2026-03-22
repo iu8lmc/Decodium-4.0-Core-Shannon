@@ -1,6 +1,6 @@
 # Decodium (macOS/Linux Fork) - 1.5.4
 
-This fork packages Decodium for macOS and Linux AppImage, with FT2 anti-ghost filtering, decoder sync upgrades across FT2/FT4/FT8, remote web-console parity controls, full language coverage, downloader hardening, and secure settings protection.
+This fork packages Decodium for macOS and Linux AppImage, with FT2 anti-ghost filtering, decoder sync upgrades across FT2/FT4/FT8, remote web-console parity controls, full language coverage, downloader hardening, secure settings protection, and corrected macOS bundle packaging.
 
 Current stable release: `1.5.4`.
 
@@ -11,6 +11,7 @@ Current stable release: `1.5.4`.
 - added web-app `Monitoring ON/OFF`, FT2 `ASYNC` dB display, and `Hide CQ` / `Hide 73` filters.
 - the web app now follows the language selected in Decodium and covers all bundled languages.
 - removed the duplicate `English (UK)` menu entry, localized the UTC/Astro date format, and kept `Decodium` while removing `v3.0 FT2 "Raptor"` from the user-facing title.
+- corrected macOS release packaging: sounds now belong under `Contents/Resources`, bundled Hamlib helper tools are copied as real files, Frameworks/plugin dependencies are normalized to `@rpath`, and reused build trees are cleaned from stale legacy bundle artifacts.
 - hardened secure settings fallback/import, file downloads, CAT exception logging, DXLab startup waits, and LoTW HTTPS defaults.
 - extended automated coverage with RFC HOTP/TOTP vectors and dedicated downloader/secure-settings tests.
 

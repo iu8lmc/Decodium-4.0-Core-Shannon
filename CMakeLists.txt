@@ -158,6 +158,12 @@ attach a debugger which will then receive the console output inside its console.
 if (APPLE)
   set (CMAKE_INSTALL_BINDIR ${WSJT_APP_BUNDLE_NAME}.app/Contents/MacOS)
   set (CMAKE_INSTALL_DATAROOTDIR ${WSJT_APP_BUNDLE_NAME}.app/Contents/Resources)
+  # Clean up stale bundle artifacts from older macOS target layouts.
+  file (REMOVE_RECURSE
+    "${CMAKE_BINARY_DIR}/CMakeFiles/ft2.dir"
+    "${CMAKE_BINARY_DIR}/CMakeFiles/ft2_autogen.dir"
+    "${CMAKE_BINARY_DIR}/CMakeFiles/ft2_autogen_timestamp_deps.dir"
+    "${CMAKE_BINARY_DIR}/${WSJT_APP_BUNDLE_NAME}.app/Contents/MacOS/sounds")
 endif ()
 
 include (GNUInstallDirs)
@@ -1044,6 +1050,16 @@ find_program (RIGCTL_EXE rigctl)
 find_program (RIGCTLD_EXE rigctld)
 find_program (RIGCTLCOM_EXE rigctlcom)
 
+if (RIGCTL_EXE)
+  get_filename_component (RIGCTL_EXE "${RIGCTL_EXE}" REALPATH)
+endif ()
+if (RIGCTLD_EXE)
+  get_filename_component (RIGCTLD_EXE "${RIGCTLD_EXE}" REALPATH)
+endif ()
+if (RIGCTLCOM_EXE)
+  get_filename_component (RIGCTLCOM_EXE "${RIGCTLCOM_EXE}" REALPATH)
+endif ()
+
 check_type_size (CACHE_ALL HAMLIB_OLD_CACHING)
 check_symbol_exists (rig_set_cache_timeout_ms "hamlib/rig.h" HAVE_HAMLIB_CACHING)
 check_symbol_exists (rig_get_conf2 "hamlib/rig.h" HAVE_HAMLIB_GET_CONF2)
@@ -1682,6 +1698,8 @@ if (APPLE)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       $<TARGET_FILE:jt9>
       $<TARGET_FILE_DIR:wsjtx>/jt9
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+      $<TARGET_FILE_DIR:wsjtx>/sounds
     )
 endif ()
 
@@ -1869,11 +1887,19 @@ install (DIRECTORY
   #COMPONENT runtime
   )
 
-install (DIRECTORY
-  ${PROJECT_SOURCE_DIR}/sounds
-  DESTINATION ${CMAKE_INSTALL_BINDIR}
-  #COMPONENT runtime
-  )
+if (APPLE)
+  install (DIRECTORY
+    ${PROJECT_SOURCE_DIR}/sounds
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
+    #COMPONENT runtime
+    )
+else ()
+  install (DIRECTORY
+    ${PROJECT_SOURCE_DIR}/sounds
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    #COMPONENT runtime
+    )
+endif ()
 
 if (WIN32)
   install (FILES

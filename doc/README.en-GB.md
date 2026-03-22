@@ -4,7 +4,7 @@ This index groups the release-facing documentation for the current fork cycle.
 
 - Current release: `1.5.4`
 - Update cycle: `1.5.3 -> 1.5.4`
-- Primary focus: FT2 anti-ghost filtering, FT2/FT4/FT8 decoder sync refresh, web-app parity controls, full UI/web language alignment, and downloader/secure-settings hardening.
+- Primary focus: FT2 anti-ghost filtering, FT2/FT4/FT8 decoder sync refresh, web-app parity controls, full UI/web language alignment, downloader/secure-settings hardening, and corrected macOS release packaging.
 
 ## Key Technical Changes (`1.5.3 -> 1.5.4`)
 
@@ -13,6 +13,7 @@ This index groups the release-facing documentation for the current fork cycle.
 - added web-app `Monitoring ON/OFF`, FT2 `ASYNC` dB display, and `Hide CQ` / `Hide 73` activity filters.
 - the web app now follows the desktop UI language and covers all bundled app languages.
 - removed the duplicate `English (UK)` menu entry and localized the UTC/Astro date format.
+- corrected macOS release packaging so sounds live in `Contents/Resources`, bundled Hamlib helpers are real files, Framework/plugin references use `@rpath`, and reused build trees drop stale legacy bundle artifacts.
 - hardened secure settings fallback/import, file download redirects/size limits, CAT exception logging, DXLab startup waits, and LoTW HTTPS defaults.
 - extended automated coverage with RFC HOTP/TOTP vectors plus downloader and secure-settings tests.
 
