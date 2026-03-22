@@ -53,6 +53,24 @@ Software:
 - desktop environment capable of running Qt5 AppImages
 - network access recommended for NTP, DX Cluster, PSK Reporter, updater, and online features
 
+### Linux Local Build Reminder
+
+The AppImage already bundles the required Qt multimedia runtime. For local Ubuntu/Debian source builds, also install:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
+
 ### If macOS blocks startup
 
 ```bash
@@ -122,6 +140,24 @@ Software:
 - ambiente desktop capace di eseguire AppImage Qt5
 - accesso rete consigliato per NTP, DX Cluster, PSK Reporter, updater e funzioni online
 
+### Promemoria Build Locale Linux
+
+L'AppImage include gia' il runtime Qt multimedia richiesto. Per le build locali Ubuntu/Debian da sorgente, installare anche:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
+
 ### Se macOS blocca l'avvio
 
 ```bash
@@ -190,6 +226,24 @@ Software:
 - pila de audio ALSA, PulseAudio o PipeWire
 - entorno desktop capaz de ejecutar AppImage Qt5
 - acceso de red recomendado para NTP, DX Cluster, PSK Reporter, updater y funciones online
+
+### Recordatorio Build Local Linux
+
+La AppImage ya incluye el runtime Qt multimedia requerido. Para builds locales Ubuntu/Debian desde codigo fuente, instalar tambien:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
 
 ### Si macOS bloquea el inicio
 

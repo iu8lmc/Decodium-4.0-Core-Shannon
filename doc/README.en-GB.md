@@ -40,6 +40,24 @@ This index groups the release-facing documentation for the current fork cycle.
 - `libfuse2` / FUSE2
 - ALSA, PulseAudio, or PipeWire
 
+## Linux Local Build Note
+
+The AppImage already bundles the required Qt multimedia runtime. For local Ubuntu/Debian source builds, install the minimum system multimedia packages too, otherwise audio devices may appear empty or disabled.
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
+
 ## Startup Guidance
 
 macOS quarantine:

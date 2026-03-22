@@ -34,6 +34,24 @@ Linux minimum requirements:
 - `libfuse2` / FUSE2
 - ALSA, PulseAudio, or PipeWire
 
+Linux local build reminder:
+
+The AppImage already bundles the required Qt multimedia runtime. For local Ubuntu/Debian source builds, also install:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
+
 If macOS blocks startup:
 
 ```bash
@@ -87,6 +105,24 @@ Requisiti minimi Linux:
 - `libfuse2` / FUSE2
 - ALSA, PulseAudio o PipeWire
 
+Promemoria build locale Linux:
+
+L'AppImage include gia' il runtime Qt multimedia richiesto. Per le build locali Ubuntu/Debian da sorgente, installare anche:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
+
 Se macOS blocca l'avvio:
 
 ```bash
@@ -139,6 +175,24 @@ Requisitos minimos Linux:
 - `glibc >= 2.35`
 - `libfuse2` / FUSE2
 - ALSA, PulseAudio o PipeWire
+
+Recordatorio build local Linux:
+
+La AppImage ya incluye el runtime Qt multimedia requerido. Para builds locales Ubuntu/Debian desde codigo fuente, instalar tambien:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
 
 Si macOS bloquea el inicio:
 

@@ -47,6 +47,26 @@ Software:
 - entorno de escritorio capaz de ejecutar AppImage Qt5
 - acceso a red recomendado para NTP, DX Cluster, PSK Reporter, updater y funciones online
 
+## Nota de Build Local Linux
+
+La AppImage publicada ya incluye el runtime Qt multimedia necesario. Si compilas Decodium localmente en Ubuntu/Debian, instala tambien los paquetes multimedia minimos del sistema; de lo contrario, las listas de dispositivos de audio pueden quedar vacias o deshabilitadas aunque la AppImage funcione correctamente.
+
+Paquetes minimos recomendados para builds locales Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install \
+  qtmultimedia5-dev \
+  libqt5multimedia5 \
+  libqt5multimedia5-plugins \
+  libqt5multimediawidgets5 \
+  libqt5multimediagsttools5 \
+  libpulse-mainloop-glib0 \
+  pulseaudio-utils \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good
+```
+
 ## Guia de Arranque
 
 Si macOS bloquea el inicio:
