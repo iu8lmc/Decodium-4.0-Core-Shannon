@@ -1,5 +1,79 @@
 # Changelog / Registro Modifiche
 
+## [1.5.5] - 2026-03-23
+
+### English
+
+Release focused on macOS Preferences correctness across all UI languages, FT2 subprocess diagnostics, FT2 ADIF migration, audio startup recovery, and withdrawal of the experimental RTTY UI from the public release.
+
+#### Added
+
+- Added persistent `jt9_subprocess.log` tracing for FT2/jt9 subprocess launch, stderr, and termination events.
+- Added clearer shared-memory and stdout/stderr diagnostics for FT2 subprocess failures.
+- Added automatic backup-preserving migration of historical FT2 ADIF records to `MODE=MFSK` + `SUBMODE=FT2`.
+
+#### Changed
+
+- macOS now forces explicit menu roles so only `About`, `Preferences`, and `Quit` use native app-menu roles.
+- Settings pages are now scrollable on macOS as well as Linux.
+- The incomplete RTTY UI is hidden from menus and settings in the public release path.
+- Local version metadata, workflow defaults, release docs, and About text are aligned to semantic version `1.5.5`.
+
+#### Fixed
+
+- Fixed macOS native `Preferences...` opening the wrong action in some translated UI languages.
+- Fixed the Settings dialog growing beyond screen height on macOS and hiding the confirm buttons.
+- Fixed FT2 subprocess crash reporting being too opaque to diagnose on hardened macOS systems.
+- Fixed startup/monitor audio cases where audio only resumed after reopening `Settings > Audio`.
+
+### Italiano
+
+Release focalizzata su correttezza di Preferenze su macOS in tutte le lingue UI, diagnostica del subprocess FT2, migrazione ADIF FT2, recupero audio all'avvio e ritiro della UI RTTY sperimentale dal percorso pubblico della release.
+
+#### Aggiunto
+
+- Aggiunto `jt9_subprocess.log` persistente per tracciare avvio, stderr e terminazione del subprocess FT2/jt9.
+- Aggiunta diagnostica piu' chiara per i fallimenti FT2 del subprocess, con dettagli shared-memory e stdout/stderr.
+- Aggiunta migrazione automatica con backup dei record ADIF FT2 storici verso `MODE=MFSK` + `SUBMODE=FT2`.
+
+#### Modificato
+
+- Su macOS sono ora forzati ruoli menu espliciti, cosi' solo `About`, `Preferences` e `Quit` usano i ruoli nativi del menu app.
+- Le pagine di Settings sono ora scrollabili anche su macOS oltre che su Linux.
+- La UI RTTY incompleta e' nascosta da menu e impostazioni nel percorso pubblico della release.
+- Metadati versione locali, default workflow, documenti release e testo About sono allineati alla semver `1.5.5`.
+
+#### Corretto
+
+- Corretta l'apertura errata di `Preferences...` su macOS in alcune lingue UI tradotte.
+- Corretto il dialog Settings che su macOS poteva superare l'altezza dello schermo e nascondere i pulsanti finali.
+- Corretta l'eccessiva opacita' del reporting crash del subprocess FT2 su sistemi macOS hardened.
+- Corretti i casi di avvio/monitor in cui l'audio ripartiva solo dopo aver riaperto `Settings > Audio`.
+
+### Espanol
+
+Release centrada en la correccion de Preferencias en macOS para todas las lenguas UI, la diagnostica del subprocess FT2, la migracion ADIF FT2, la recuperacion del audio al arrancar y la retirada de la UI RTTY experimental del camino publico de release.
+
+#### Anadido
+
+- Anadido `jt9_subprocess.log` persistente para trazar arranque, stderr y finalizacion del subprocess FT2/jt9.
+- Anadida una diagnostica mas clara para fallos FT2 del subprocess, con detalles de shared-memory y stdout/stderr.
+- Anadida migracion automatica con backup de los registros ADIF FT2 historicos hacia `MODE=MFSK` + `SUBMODE=FT2`.
+
+#### Cambios
+
+- En macOS se fuerzan ahora roles explicitos de menu, de forma que solo `About`, `Preferences` y `Quit` usan roles nativos del menu app.
+- Las paginas de Settings son ahora scrollables tambien en macOS ademas de Linux.
+- La UI RTTY incompleta queda oculta de menus y ajustes en el camino publico de release.
+- Metadatos locales de version, defaults de workflow, documentos release y texto About quedan alineados a la semver `1.5.5`.
+
+#### Corregido
+
+- Corregida la apertura equivocada de `Preferences...` en macOS en algunas lenguas UI traducidas.
+- Corregido el dialogo Settings que en macOS podia superar la altura de pantalla y ocultar los botones finales.
+- Corregida la excesiva opacidad del reporting de fallos del subprocess FT2 en sistemas macOS hardened.
+- Corregidos los casos de arranque/monitor en los que el audio solo volvia tras reabrir `Settings > Audio`.
+
 ## [1.5.4] - 2026-03-22
 
 ### English

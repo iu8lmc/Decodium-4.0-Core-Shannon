@@ -48,6 +48,7 @@ public:
                         QString const& satellite, QString const& satmode, QString const& freqRx);
 
   QString const cty_version() const;
+  static int migrateAdif317 (QString const& path);
 
   Q_SIGNAL void finished_loading (int worked_before_record_count, QString const cty_version, QString const& error) const;
 

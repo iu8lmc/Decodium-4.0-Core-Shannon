@@ -72,6 +72,7 @@ namespace
       {1839000, Modes::FST4, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {1840000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {1843000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {1840000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
 
       // Band plans (all USB dial unless stated otherwise)
       //
@@ -105,6 +106,7 @@ namespace
       {3572000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {3573000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true}, // above as below JT65 is out of DM allocation
       {3578000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {3590000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {3568600, Modes::WSPR, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // needs guard marker and lock out
       {3568600, Modes::FST4W, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // needs guard marker and lock out
       {3575000, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},  // provisional
@@ -152,6 +154,7 @@ namespace
       {7056000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {7074000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {7062000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {7040000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {7076000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {7078000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {7047500, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true}, // provisional - moved
@@ -187,6 +190,7 @@ namespace
       {10131000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {10136000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {10144000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {10130000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {10138000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {10138700, Modes::WSPR, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {10138700, Modes::FST4W, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
@@ -234,6 +238,7 @@ namespace
       {14095600, Modes::FST4W, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {14074000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {14084000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {14080000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {14090000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {14076000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {14078000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
@@ -270,6 +275,7 @@ namespace
       {18095000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {18100000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {18108000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {18100000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {18102000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {18104000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {18104000, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true}, // provisional
@@ -278,6 +284,7 @@ namespace
 
       {21074000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {21144000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {21080000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {21091000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {21076000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {21078000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
@@ -288,6 +295,7 @@ namespace
       {24911000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {24915000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {24923000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {24920000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {24917000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {24919000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {24919000, Modes::FT4, IARURegions::ALL, "","", QDateTime(), QDateTime(), true}, // provisional
@@ -296,6 +304,7 @@ namespace
 
       {28074000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {28184000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {28080000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {28091000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // DXpedition
       {28076000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {28078000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},

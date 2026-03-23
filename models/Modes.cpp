@@ -26,7 +26,8 @@ namespace
     "FST4",
     "FST4W",
     "Q65",
-    "FT2"
+    "FT2",
+    "RTTY"
   };
   std::size_t constexpr mode_names_size = sizeof (mode_names) / sizeof (mode_names[0]);
 }

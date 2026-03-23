@@ -1,5 +1,9 @@
 //---------------------------------------------------------- MainWindow
 #include "mainwindow.h"
+#include "RTTYTerminalWidget.hpp"
+#include "Detector/RTTYDetector.hpp"
+#include "Modulator/RTTYModulator.hpp"
+#include "Decoder/BaudotDecoder.hpp"
 
 #include <QAudio>
 #include <QAudioOutput>
@@ -106,6 +110,7 @@
 #include "worldmapwidget.h"
 #include "asyncmodewidget.h"
 #include "FT2QsoFlowPolicy.h"
+#include "FoxWaveGuard.hpp"
 #include "colorhighlighting.h"
 #include "widegraph.h"
 #include "sleep.h"
@@ -906,7 +911,6 @@ namespace
   constexpr int kDecDataSampleCount {static_cast<int> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0]))};
   constexpr int kMaxCwSymbols {static_cast<int> (sizeof (icw) / sizeof (icw[0]))};
   constexpr int kFoxWaveSampleCount {static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]))};
-
   struct AllTxtWriterState
   {
     QMutex mutex;
@@ -1674,6 +1678,54 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_autoButtonState {false}   //avt 10/2/25
 {
   ui->setupUi(this);
+#if defined(Q_OS_MAC)
+  // Disable Qt text-heuristic menu-role guessing on macOS for every action
+  // except the native app-menu entries we want explicitly.
+  for (auto * action : findChildren<QAction *> ())
+    {
+      if (!action)
+        {
+          continue;
+        }
+      if (action == ui->actionAbout)
+        {
+          action->setMenuRole (QAction::AboutRole);
+        }
+      else if (action == ui->actionSettings)
+        {
+          action->setMenuRole (QAction::PreferencesRole);
+        }
+      else if (action == ui->actionExit)
+        {
+          action->setMenuRole (QAction::QuitRole);
+        }
+      else
+        {
+          action->setMenuRole (QAction::NoRole);
+        }
+    }
+#endif
+  if (ui->actionRTTY)
+    {
+      ui->actionRTTY->setVisible (false);
+      if (ui->menuMode)
+        {
+          ui->menuMode->removeAction (ui->actionRTTY);
+        }
+    }
+  m_rttyTerminal.reset(new RTTYTerminalWidget(this));
+  m_rttyTerminal->hide();
+  ui->decodes_splitter->addWidget(m_rttyTerminal.data());
+  m_rttyDetector.reset(new decodium::rtty::RTTYDetector(12000, 45.45, 2125.0, 2295.0, this));
+  m_rttyModulator.reset(new decodium::rtty::RTTYModulator(48000, 45.45, 2125.0, 2295.0, 2.0, this));
+  connect(m_rttyTerminal.data(), &RTTYTerminalWidget::transmitText, this, &MainWindow::transmitRttyText);
+  connect(m_rttyDetector.data(), &decodium::rtty::RTTYDetector::charDecoded, this, [this](QChar c) {
+      if (m_mode == "RTTY") m_rttyTerminal->appendRxText(QString(c));
+  });
+  connect(m_rttyModulator.data(), &decodium::rtty::RTTYModulator::txComplete,
+          this, &MainWindow::finishRttyTransmission);
+  applyRttyModemConfiguration ();
+
   if (ui->actionWorld_Map) {
     ui->actionWorld_Map->setChecked (true);
   }
@@ -1884,6 +1936,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   // hook up Modulator slots and disposal
   connect (this, &MainWindow::transmitFrequency, m_modulator, &Modulator::setFrequency);
   connect (this, &MainWindow::endTransmitMessage, m_modulator, &Modulator::stop);
+  connect (this, &MainWindow::endTransmitMessage, m_rttyModulator.data(), &decodium::rtty::RTTYModulator::stopTx);
   connect (this, &MainWindow::tune, m_modulator, &Modulator::tune);
   connect (this, &MainWindow::sendMessage, m_modulator, &Modulator::start);
   connect (&m_audioThread, &QThread::finished, m_modulator, &QObject::deleteLater);
@@ -2566,6 +2619,9 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   setWindowTitle (program_title ());
 
   connect(&proc_jt9, &QProcess::readyReadStandardOutput, this, &MainWindow::readFromStdout);
+  connect(&proc_jt9, &QProcess::readyReadStandardError, [this] () {
+    captureJt9ProcessOutput (m_jt9RecentStderr, proc_jt9.readAllStandardError (), true, QStringLiteral ("stderr"));
+  });
 #if QT_VERSION < QT_VERSION_CHECK (5, 6, 0)
   connect(&proc_jt9, static_cast<void (QProcess::*) (QProcess::ProcessError)> (&QProcess::error),
           [this] (QProcess::ProcessError error) {
@@ -2870,6 +2926,11 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   QProcessEnvironment new_env {m_env};
   new_env.insert ("OMP_STACKSIZE", "10M");
   proc_jt9.setProcessEnvironment (new_env);
+  resetJt9ProcessCapture ();
+  logJt9ProcessEvent (QStringLiteral ("launch"),
+                      QStringLiteral ("%1 %2")
+                        .arg (QDir::toNativeSeparators (m_appDir) + QDir::separator () + QStringLiteral ("jt9"),
+                              jt9_args.join (QStringLiteral (" "))));
   proc_jt9.start(QDir::toNativeSeparators (m_appDir) + QDir::separator () +
           "jt9", jt9_args, QIODevice::ReadWrite | QIODevice::Unbuffered);
 
@@ -3295,6 +3356,12 @@ void MainWindow::applySingleDecodeColumnFlowLayout ()
       return;
     }
 
+  if ("RTTY" == m_mode)
+    {
+      applyRttyTerminalLayout ();
+      return;
+    }
+
   bool const flowEnabled = singleDecodeColumnFlowEnabled ();
   bool const showWorldMap = !ui->actionWorld_Map || ui->actionWorld_Map->isChecked ();
   if (ui->map_panel_widget)
@@ -3357,6 +3424,82 @@ void MainWindow::applySingleDecodeColumnFlowLayout ()
   sizes[0] = leftSize;
   sizes[1] = secondarySize;
   sizes[2] = mapSize;
+  if (sizes.size () > 3)
+    {
+      sizes[3] = 0;
+    }
+  ui->decodes_splitter->setSizes (sizes);
+  applyRttyTerminalLayout ();
+}
+
+void MainWindow::applyRttyTerminalLayout ()
+{
+  if (!ui || !ui->decodes_splitter || !m_rttyTerminal)
+    {
+      return;
+    }
+
+  bool const isRtty = ("RTTY" == m_mode);
+  if (ui->actionWorld_Map)
+    {
+      if (isRtty && ui->actionWorld_Map->isChecked ())
+        {
+          QSignalBlocker blocker {ui->actionWorld_Map};
+          ui->actionWorld_Map->setChecked (false);
+        }
+      ui->actionWorld_Map->setEnabled (!isRtty);
+    }
+
+  auto sizes = ui->decodes_splitter->sizes ();
+  while (sizes.size () < ui->decodes_splitter->count ())
+    {
+      sizes.append (0);
+    }
+
+  int total = 0;
+  for (auto const size : sizes)
+    {
+      total += size;
+    }
+  if (total <= 0)
+    {
+      total = qMax (width (), ui->decodes_splitter->width ());
+    }
+
+  if (!isRtty)
+    {
+      m_rttyTerminal->hide ();
+      if (sizes.size () > 3)
+        {
+          sizes[3] = 0;
+          ui->decodes_splitter->setSizes (sizes);
+        }
+      return;
+    }
+
+  for (int i = 0; i < ui->decodes_splitter->count () - 1; ++i)
+    {
+      if (auto *pane = ui->decodes_splitter->widget (i))
+        {
+          pane->hide ();
+        }
+    }
+
+  if (ui->map_panel_widget)
+    {
+      ui->map_panel_widget->hide ();
+    }
+  else if (ui->map_container_widget)
+    {
+      ui->map_container_widget->hide ();
+    }
+
+  m_rttyTerminal->show ();
+  for (int i = 0; i < sizes.size () - 1; ++i)
+    {
+      sizes[i] = 0;
+    }
+  sizes[sizes.size () - 1] = qMax (1, total);
   ui->decodes_splitter->setSizes (sizes);
 }
 
@@ -4222,6 +4365,12 @@ void MainWindow::dataSink(qint64 frames)
       m_asyncAudio[m_asyncAudioPos % 90000] = dec_data.d2[src_start + i];
       m_asyncAudioPos++;
     }
+  }
+
+  if (m_mode == "RTTY" && m_rttyDetector && k > 0) {
+      std::vector<qint16> pcm(k);
+      for(int i=0; i<k; i++) pcm[i] = static_cast<qint16>(dec_data.d2[i] * 32767.0f);
+      m_rttyDetector->processAudio(pcm.data(), k);
   }
 
   auto fname {QDir::toNativeSeparators(m_config.writeable_data_dir ().absoluteFilePath ("refspec.dat")).toLocal8Bit ()};
@@ -5437,12 +5586,14 @@ void MainWindow::fastSink(qint64 frames)
 
 void MainWindow::showSoundInError(const QString& errorMsg)
 {
+  debugToFile (QString {"audioInErr   %1"}.arg (errorMsg));
   if (m_splash && m_splash->isVisible ()) m_splash->hide ();
   MessageBox::critical_message (this, tr ("Error in Sound Input"), errorMsg);
 }
 
 void MainWindow::showSoundOutError(const QString& errorMsg)
 {
+  debugToFile (QString {"audioOutErr  %1"}.arg (errorMsg));
   if (m_splash && m_splash->isVisible ()) m_splash->hide ();
   MessageBox::critical_message (this, tr ("Error in Sound Output"), errorMsg);
 }
@@ -5456,10 +5607,23 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
 {
   if (m_tci_audio || m_transmitting)
     {
+      debugToFile (QString {"audioRest   skipped tci:%1 tx:%2"}
+                     .arg (m_tci_audio)
+                     .arg (m_transmitting));
       return;
     }
 
   auto const& input_device = m_config.audio_input_device ();
+  auto const& output_device = m_config.audio_output_device ();
+  debugToFile (QString {"audioRest   resume:%1 mon:%2 in:%3 out:%4"}
+                 .arg (resume_monitor)
+                 .arg (m_monitoring)
+                 .arg (input_device.isNull ()
+                         ? QString {"<null>"}
+                         : input_device.deviceName ())
+                 .arg (output_device.isNull ()
+                         ? QString {"<null>"}
+                         : output_device.deviceName ()));
   if (!input_device.isNull ())
     {
       Q_EMIT startAudioInputStream (input_device
@@ -5471,13 +5635,20 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
           Q_EMIT resumeAudioInputStream ();
         }
     }
+  else
+    {
+      debugToFile (QStringLiteral ("audioRest   no input device configured"));
+    }
 
-  auto const& output_device = m_config.audio_output_device ();
   if (!output_device.isNull ())
     {
       Q_EMIT initializeAudioOutputStream (output_device
                                           , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
                                           , m_tx_audio_buffer_frames);
+    }
+  else
+    {
+      debugToFile (QStringLiteral ("audioRest   no output device configured"));
     }
 }
 
@@ -5487,6 +5658,10 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
     {
       return;
     }
+
+  debugToFile (QString {"audioCheck  armed baseline:%1 monitor:%2"}
+                 .arg (baseline_ms)
+                 .arg (m_monitoring));
 
   static int const delays_ms[] = {2500, 5000, 9000};
   for (auto const delay_ms : delays_ms)
@@ -5508,6 +5683,8 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
           LOG_WARN ("audio health-check: no RX frames after "
                     << delay_ms
                     << " ms from monitor start, replaying settings-style audio reopen");
+          debugToFile (QString {"audioCheck  no RX frames after %1 ms, reopening"}
+                         .arg (delay_ms));
 
           bool const was_monitoring = m_monitoring;
           if (was_monitoring)
@@ -5543,6 +5720,9 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
 
               LOG_WARN ("audio health-check: settings-style reopen applied after "
                         << delay_ms << " ms without RX frames");
+              debugToFile (QString {"audioCheck  reopen applied after %1 ms monitor:%2"}
+                             .arg (delay_ms)
+                             .arg (m_monitoring));
             });
         });
     }
@@ -5619,6 +5799,12 @@ void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
 
 void MainWindow::on_actionWorld_Map_toggled (bool checked)
 {
+  if ("RTTY" == m_mode)
+    {
+      applyRttyTerminalLayout ();
+      return;
+    }
+
   if (ui && ui->map_panel_widget)
     {
       ui->map_panel_widget->setVisible (checked);
@@ -5772,6 +5958,7 @@ void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settin
     if (m_config.my_callsign () != callsign || m_config.my_grid () != my_grid) {
       statusUpdate ();
     }
+    applyRttyModemConfiguration ();
     if (m_config.my_callsign () != callsign) {
       updateDecodiumCertificateStatus ();
     }
@@ -5939,6 +6126,11 @@ void MainWindow::monitor (bool state)
 {
   bool const activating = state && !m_monitoring;
   ui->monitorButton->setChecked (state);
+  debugToFile (QString {"monitor     request:%1 activating:%2 tci:%3 tx:%4"}
+                 .arg (state)
+                 .arg (activating)
+                 .arg (m_tci_audio)
+                 .arg (m_transmitting));
   if (state) {
     m_diskData = false;	// no longer reading WAV files
     if (!m_monitoring) {
@@ -5955,10 +6147,19 @@ void MainWindow::monitor (bool state)
           rigFailure("TCI audio cannot be started as frequency is OOB");
         }
       } else {
+        auto const restart_or_resume = [this, activating] {
+          if (activating) {
+            debugToFile (QStringLiteral ("monitor     activating via settings-style audio reopen"));
+            restartConfiguredAudioStreams (false);
+          } else {
+            debugToFile (QStringLiteral ("monitor     resuming existing audio input stream"));
+            Q_EMIT resumeAudioInputStream ();
+          }
+        };
         if(ms>=10) {
-          QTimer::singleShot (ms, [=] {resumeAudioInputStream();});
+          QTimer::singleShot (ms, this, restart_or_resume);
         } else {
-          Q_EMIT resumeAudioInputStream ();
+          restart_or_resume ();
         }
       }
     }
@@ -7407,13 +7608,74 @@ void MainWindow::setup_status_bar (bool vhf)
 
 bool MainWindow::subProcessFailed (QProcess * process, int exit_code, QProcess::ExitStatus status)
 {
+  auto collectProcessDiagnostics = [] (QProcess * target) {
+    auto const stderrText = QString::fromLocal8Bit (target->readAllStandardError ()).trimmed ();
+    auto const stdoutText = QString::fromLocal8Bit (target->readAllStandardOutput ()).trimmed ();
+    auto truncate = [] (QString text) {
+      constexpr int kMaxChars {4000};
+      if (text.size () > kMaxChars)
+        {
+          text = QStringLiteral ("...\n") + text.right (kMaxChars);
+        }
+      return text;
+    };
+
+    QStringList sections;
+    if (!stderrText.isEmpty ())
+      {
+        sections << QStringLiteral ("stderr:\n%1").arg (truncate (stderrText));
+      }
+    if (!stdoutText.isEmpty ())
+      {
+        sections << QStringLiteral ("stdout:\n%1").arg (truncate (stdoutText));
+      }
+    return sections.join (QStringLiteral ("\n\n"));
+  };
+
   if (m_valid && (exit_code || QProcess::NormalExit != status))
     {
+      bool const isJt9 = (process == &proc_jt9);
+      auto const jt9LogPath = m_config.writeable_data_dir ().absoluteFilePath (QStringLiteral ("jt9_subprocess.log"));
       QStringList arguments;
       for (auto argument: process->arguments ())
         {
           if (argument.contains (' ')) argument = '"' + argument + '"';
           arguments << argument;
+        }
+      QString diagnostics;
+      if (isJt9)
+        {
+          captureJt9ProcessOutput (m_jt9RecentStderr, process->readAllStandardError (), true, QStringLiteral ("stderr"));
+          captureJt9ProcessOutput (m_jt9RecentStdout, process->readAllStandardOutput (), false, QStringLiteral ("stdout"));
+          logJt9ProcessEvent (QStringLiteral ("finished"),
+                              QStringLiteral ("exit_code=%1 status=%2")
+                                .arg (exit_code)
+                                .arg (QProcess::NormalExit == status ? QStringLiteral ("normal") : QStringLiteral ("crashed")));
+          diagnostics = jt9ProcessDiagnostics ();
+          if (!m_jt9RecentStderr.isEmpty ())
+            {
+              appendJt9ProcessLog (QStringLiteral ("stderr-snapshot"), m_jt9RecentStderr);
+            }
+          if (!m_jt9RecentStdout.isEmpty ())
+            {
+              appendJt9ProcessLog (QStringLiteral ("stdout-snapshot"), m_jt9RecentStdout);
+            }
+          if (!diagnostics.isEmpty ())
+            {
+              diagnostics += QStringLiteral ("\n\nPersistent log:\n%1").arg (QDir::toNativeSeparators (jt9LogPath));
+            }
+        }
+      else
+        {
+          diagnostics = collectProcessDiagnostics (process);
+        }
+      if (diagnostics.isEmpty ())
+        {
+          diagnostics = tr ("No subprocess diagnostic output was captured.");
+        }
+      if (isJt9 && !diagnostics.contains (QStringLiteral ("Persistent log:")))
+        {
+          diagnostics += QStringLiteral ("\n\nPersistent log:\n%1").arg (QDir::toNativeSeparators (jt9LogPath));
         }
       if (m_splash && m_splash->isVisible ()) m_splash->hide ();
       MessageBox::critical_message (this, tr ("Subprocess Error")
@@ -7421,7 +7683,7 @@ bool MainWindow::subProcessFailed (QProcess * process, int exit_code, QProcess::
                                     .arg (exit_code)
                                     , tr ("Running: %1\n%2")
                                     .arg (process->program () + ' ' + arguments.join (' '))
-                                    .arg (QString {process->readAllStandardError()}));
+                                    .arg (diagnostics));
       return true;
     }
   return false;
@@ -7429,19 +7691,72 @@ bool MainWindow::subProcessFailed (QProcess * process, int exit_code, QProcess::
 
 void MainWindow::subProcessError (QProcess * process, QProcess::ProcessError)
 {
+  auto collectProcessDiagnostics = [] (QProcess * target) {
+    auto const stderrText = QString::fromLocal8Bit (target->readAllStandardError ()).trimmed ();
+    auto const stdoutText = QString::fromLocal8Bit (target->readAllStandardOutput ()).trimmed ();
+    auto truncate = [] (QString text) {
+      constexpr int kMaxChars {4000};
+      if (text.size () > kMaxChars)
+        {
+          text = QStringLiteral ("...\n") + text.right (kMaxChars);
+        }
+      return text;
+    };
+
+    QStringList sections;
+    sections << QStringLiteral ("error: %1").arg (target->errorString ());
+    if (!stderrText.isEmpty ())
+      {
+        sections << QStringLiteral ("stderr:\n%1").arg (truncate (stderrText));
+      }
+    if (!stdoutText.isEmpty ())
+      {
+        sections << QStringLiteral ("stdout:\n%1").arg (truncate (stdoutText));
+      }
+    return sections.join (QStringLiteral ("\n\n"));
+  };
+
   if (m_valid)
     {
+      bool const isJt9 = (process == &proc_jt9);
+      auto const jt9LogPath = m_config.writeable_data_dir ().absoluteFilePath (QStringLiteral ("jt9_subprocess.log"));
       QStringList arguments;
       for (auto argument: process->arguments ())
         {
           if (argument.contains (' ')) argument = '"' + argument + '"';
           arguments << argument;
         }
+      QString diagnostics;
+      if (isJt9)
+        {
+          captureJt9ProcessOutput (m_jt9RecentStderr, process->readAllStandardError (), true, QStringLiteral ("stderr"));
+          captureJt9ProcessOutput (m_jt9RecentStdout, process->readAllStandardOutput (), false, QStringLiteral ("stdout"));
+          logJt9ProcessEvent (QStringLiteral ("error"), process->errorString ());
+          diagnostics = QStringLiteral ("error: %1").arg (process->errorString ());
+          auto const snapshot = jt9ProcessDiagnostics ();
+          if (!snapshot.isEmpty ())
+            {
+              diagnostics += QStringLiteral ("\n\n") + snapshot;
+            }
+          if (!m_jt9RecentStderr.isEmpty ())
+            {
+              appendJt9ProcessLog (QStringLiteral ("stderr-snapshot"), m_jt9RecentStderr);
+            }
+          if (!m_jt9RecentStdout.isEmpty ())
+            {
+              appendJt9ProcessLog (QStringLiteral ("stdout-snapshot"), m_jt9RecentStdout);
+            }
+          diagnostics += QStringLiteral ("\n\nPersistent log:\n%1").arg (QDir::toNativeSeparators (jt9LogPath));
+        }
+      else
+        {
+          diagnostics = collectProcessDiagnostics (process);
+        }
       if (m_splash && m_splash->isVisible ()) m_splash->hide ();
       MessageBox::critical_message (this, tr ("Subprocess error")
                                     , tr ("Running: %1\n%2")
                                     .arg (process->program () + ' ' + arguments.join (' '))
-                                    .arg (process->errorString ()));
+                                    .arg (diagnostics));
       m_valid = false;              // ensures exit if still constructing
       QTimer::singleShot (0, this, SLOT (close ()));
     }
@@ -9754,6 +10069,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
       line_read = s_splitDecodeQueue.dequeue();
     } else {
       line_read = proc_jt9.readLine ();
+      captureJt9ProcessOutput (m_jt9RecentStdout, line_read, false, QStringLiteral ("stdout"));
 
       QString the_line = QString::fromUtf8(line_read.constData());
       if(ui->actionEnable_QSY_Popups->isChecked() || m_qsymonitorWidget) showQSYMessage(the_line);
@@ -12646,7 +12962,9 @@ void MainWindow::guiUpdate()
         m_cqRetryCount = 0;
       }
     }
-    auto const& current_message = QString::fromLatin1 (msgsent);
+    QString const current_message = (m_mode == "RTTY")
+        ? m_currentMessage
+        : QString::fromLatin1 (msgsent);
     if(m_config.watchdog () && m_mode!="WSPR" && m_mode!="FST4W"
        && current_message != m_msgSent0) {
       tx_watchdog (false);  // in case we are auto sequencing
@@ -12926,7 +13244,7 @@ void MainWindow::guiUpdate()
           if(SpecOp::FOX==m_specOp and ui->tabWidget->currentIndex()==1 and foxcom_.nslots==1) {
               t=m_fm1.trimmed();
           }
-          if(m_mode=="FT2" or m_mode=="FT4") t="Tx: "+ m_currentMessage;
+          if(m_mode=="FT2" or m_mode=="FT4" || m_mode=="RTTY") t="Tx: "+ m_currentMessage;
           tx_status_label.setText(t.trimmed());
         }
       }
@@ -13020,6 +13338,7 @@ void MainWindow::startTx2()
   bool modulator_active;
   bool tci_active = m_tci_audio;
   if (tci_active) modulator_active=m_tci_mod_active;
+  else if (m_mode == "RTTY" && m_rttyModulator) modulator_active = m_rttyModulator->isActive ();
   else modulator_active=m_modulator->isActive ();
     if (!modulator_active) { // TODO - not thread safe
     double fSpread=0.0;
@@ -17392,6 +17711,12 @@ void MainWindow::displayWidgets(qint64 n)
   ui->sbNB->setVisible(b);
   genStdMsgs (m_rpt, true);
   configActiveStations();
+
+  if (m_mode != "RTTY" && ui->decodes_splitter->count() > 1) {
+    ui->decodes_splitter->widget(0)->show();
+    ui->decodes_splitter->widget(1)->show();
+  }
+  applyRttyTerminalLayout ();
 }
 
 bool MainWindow::ft2AutoSeqEnabled() const
@@ -17635,6 +17960,264 @@ void MainWindow::on_actionFT4_triggered()
   chkFT4();
   initExternalCtrl();   //avt 1/3/24
   statusChanged();
+}
+
+void MainWindow::tci_mod_active(bool on)
+{
+  m_tci_mod_active = on;
+  if (!on && m_mode == "RTTY" && m_rttyManualTxActive) {
+    finishRttyTransmission();
+  }
+}
+
+double MainWindow::configuredRttyBaudRate () const
+{
+  return qBound (10.0, m_config.rtty_baud_rate (), 300.0);
+}
+
+double MainWindow::configuredRttyMarkTone () const
+{
+  double markTone = qBound (100.0, static_cast<double> (m_config.rtty_mark_tone ()), 5000.0);
+  double spaceTone = markTone + qBound (10.0, static_cast<double> (m_config.rtty_shift ()), 3000.0);
+  if (m_config.rtty_reverse ())
+    {
+      std::swap (markTone, spaceTone);
+    }
+  return markTone;
+}
+
+double MainWindow::configuredRttySpaceTone () const
+{
+  double markTone = qBound (100.0, static_cast<double> (m_config.rtty_mark_tone ()), 5000.0);
+  double spaceTone = markTone + qBound (10.0, static_cast<double> (m_config.rtty_shift ()), 3000.0);
+  if (m_config.rtty_reverse ())
+    {
+      std::swap (markTone, spaceTone);
+    }
+  return spaceTone;
+}
+
+double MainWindow::configuredRttyStopBits () const
+{
+  double const stopBits = m_config.rtty_stop_bits ();
+  return (stopBits == 1.0 || stopBits == 1.5 || stopBits == 2.0) ? stopBits : 2.0;
+}
+
+QString MainWindow::configuredRttySummaryText () const
+{
+  double const baudRate = configuredRttyBaudRate ();
+  int const markTone = qBound (100, m_config.rtty_mark_tone (), 5000);
+  int const shift = qBound (10, m_config.rtty_shift (), 3000);
+  double const stopBits = configuredRttyStopBits ();
+  QString const stopBitsText = std::floor (stopBits) == stopBits
+      ? QString::number (static_cast<int> (stopBits))
+      : QString::number (stopBits, 'f', 1);
+
+  return tr ("%1 baud Baudot terminal. Mark %2 Hz, shift %3 Hz, %4, %5 stop bits. Received text appears above; type the text to send below.")
+      .arg (QString::number (baudRate, 'f', 2))
+      .arg (markTone)
+      .arg (shift)
+      .arg (m_config.rtty_reverse () ? tr ("reverse") : tr ("normal"))
+      .arg (stopBitsText);
+}
+
+QString MainWindow::expandRttyPlaceholders (QString text) const
+{
+  text.replace (QStringLiteral ("<MYCALL>"), m_config.my_callsign (), Qt::CaseInsensitive);
+  text.replace (QStringLiteral ("<MYGRID>"), m_config.my_grid (), Qt::CaseInsensitive);
+  text.replace (QStringLiteral ("<DXCALL>"), m_dxCall, Qt::CaseInsensitive);
+  text.replace (QStringLiteral ("<DXGRID>"), m_hisGrid, Qt::CaseInsensitive);
+  return text;
+}
+
+void MainWindow::applyRttyModemConfiguration ()
+{
+  double const baudRate = configuredRttyBaudRate ();
+  double const markTone = configuredRttyMarkTone ();
+  double const spaceTone = configuredRttySpaceTone ();
+  double const stopBits = configuredRttyStopBits ();
+
+  if (m_rttyDetector)
+    {
+      m_rttyDetector->setParameters (baudRate, markTone, spaceTone);
+    }
+  if (m_rttyModulator)
+    {
+      m_rttyModulator->setParameters (baudRate, markTone, spaceTone, stopBits);
+    }
+  if (m_rttyTerminal)
+    {
+      m_rttyTerminal->setSummaryText (configuredRttySummaryText ());
+      m_rttyTerminal->setMacroTexts (m_config.rtty_macro_cq (), m_config.rtty_macro_73 ());
+    }
+}
+
+bool MainWindow::prepareRttyTransmission(QString const& text)
+{
+  QString const expandedText = expandRttyPlaceholders (text);
+  if (expandedText.trimmed().isEmpty()) {
+    return false;
+  }
+
+  decodium::rtty::BaudotHandler encoder;
+  QByteArray const symbols = encoder.encodeString(expandedText);
+  if (symbols.isEmpty()) {
+    statusBar()->showMessage(tr("RTTY text contains no encodable Baudot characters"), 3000);
+    return false;
+  }
+
+  m_currentMessage = expandedText.simplified();
+  if (m_currentMessage.size() > 37) {
+    m_currentMessage = m_currentMessage.left(37);
+  }
+
+  if (m_tci_audio) {
+    double const baudRate = configuredRttyBaudRate ();
+    QVector<float> const wave = decodium::rtty::synthesizeWave(symbols, 48000,
+                                                               baudRate,
+                                                               configuredRttyMarkTone (),
+                                                               configuredRttySpaceTone (),
+                                                               configuredRttyStopBits ());
+    {
+      QWriteLocker waveLock {&fox_wave_lock()};
+      int const copySamples = qMin(kFoxWaveSampleCount, wave.size());
+      if (copySamples <= 0) {
+        return false;
+      }
+      std::copy_n(wave.constBegin(), copySamples, foxcom_.wave);
+      std::fill(foxcom_.wave + copySamples, foxcom_.wave + kFoxWaveSampleCount, 0.0f);
+    }
+
+    double const totalBitUnits = symbols.size () * (6.0 + configuredRttyStopBits ());
+    m_rttyTciSymbolsLength = static_cast<unsigned>(std::ceil(totalBitUnits * 2.0));
+    m_rttyTciFramesPerSymbol = (48000.0 / baudRate) / 8.0;
+  } else if (m_rttyModulator) {
+    for (char symbol : symbols) {
+      m_rttyModulator->enqueueSymbol(static_cast<uint8_t>(symbol));
+    }
+  }
+
+  return true;
+}
+
+void MainWindow::transmitRttyText(QString const& text)
+{
+  if (m_mode != "RTTY") {
+    return;
+  }
+
+  QString const trimmed = text.trimmed();
+  if (trimmed.isEmpty()) {
+    return;
+  }
+
+  if (m_rttyManualTxActive) {
+    m_rttyQueuedText += text;
+    return;
+  }
+
+  if (!prepareRttyTransmission(text)) {
+    return;
+  }
+
+  m_rttyManualTxActive = true;
+  if (m_auto || ui->autoButton->isChecked()) {
+    auto_tx_mode(false);
+  }
+
+  if (g_iptt == 1 || m_transmitting) {
+    transmit(99.0);
+    return;
+  }
+
+  setXIT(ui->TxFreqSpinBox->value());
+  setRig();
+  g_iptt = 1;
+  m_config.transceiver_ptt(true);
+
+  int const msDelay = qMax(0, int(1000.0 * m_config.txDelay()));
+  QTimer::singleShot(msDelay, this, [this] {
+    if (m_mode == "RTTY" && m_rttyManualTxActive && g_iptt == 1) {
+      transmit(99.0);
+    }
+  });
+}
+
+void MainWindow::finishRttyTransmission()
+{
+  if (!m_rttyManualTxActive) {
+    return;
+  }
+
+  if (!m_rttyQueuedText.isEmpty()) {
+    QString const queued = m_rttyQueuedText;
+    m_rttyQueuedText.clear();
+    if (prepareRttyTransmission(queued)) {
+      transmit(99.0);
+      return;
+    }
+  }
+
+  resetRttyTransmissionState();
+  if (g_iptt == 1 || m_transmitting) {
+    stopTx();
+  }
+}
+
+void MainWindow::resetRttyTransmissionState()
+{
+  m_rttyQueuedText.clear();
+  m_rttyTciSymbolsLength = 0;
+  m_rttyTciFramesPerSymbol = 0.0;
+  m_rttyManualTxActive = false;
+}
+
+void MainWindow::on_actionRTTY_triggered()
+{
+  if (m_auto) auto_tx_mode(false);
+  resetRttyTransmissionState();
+  QTimer::singleShot (50, [=] {
+    ui->TxFreqSpinBox->setValue(m_settings->value("TxFreq_old",1500).toInt());
+    ui->RxFreqSpinBox->setValue(m_settings->value("RxFreq_old",1500).toInt());
+    on_sbSubmode_valueChanged(ui->sbSubmode->value());
+    ui->cbHoldTxFreq->setChecked (HoldTxFreqStatus);
+  });
+  m_mode="RTTY";
+  m_dtSamples.clear();  
+
+  bool bVHF=m_config.enable_VHF_features();
+  m_bFast9=false;
+  m_bFastMode=false;
+  WSPR_config(false);
+  m_nsps=6912;
+  m_FFTSize = m_nsps / 2;
+  if (m_tci_audio) Q_EMIT m_config.transceiver_blocksize (m_FFTSize);
+  else Q_EMIT FFTSize (m_FFTSize);
+  
+  setup_status_bar (bVHF);
+  applyRttyModemConfiguration ();
+  ui->actionRTTY->setChecked(true);
+  switch_mode(Modes::RTTY);
+  
+  m_wideGraph->setMode(m_mode);
+  VHF_features_enabled(bVHF);
+  ui->cbAutoSeq->setChecked(false);
+  
+  m_fastGraph->hide();
+  
+  // RTTY UI tweaks
+  ui->lh_decodes_title_label->setText(tr ("RTTY Received Text"));
+  ui->rh_decodes_title_label->setText(tr ("RTTY Transmitted Text"));
+
+  // Adjust display widgets
+  displayWidgets(nWidgets("11101000010011100001000000000000100000"));
+  ui->txFirstCheckBox->setEnabled(false);
+
+  // RTTY terminal swap logic will go here
+  
+  initExternalCtrl();
+  statusChanged();
+  configActiveStations();
 }
 
 void MainWindow::on_actionFT8_triggered()
@@ -18379,6 +18962,22 @@ void MainWindow::switch_mode (Mode mode)
     if (!(m_mode=="Echo" or ((m_mode=="Q65" or m_mode=="JT65") && m_config.decode_at_52s()))
         && ui->actionAstronomical_data->isChecked () && m_config.auto_astro()) ui->actionAstronomical_data->setChecked (false);
   });
+  switch (mode)
+    {
+    case Modes::FT2:
+    case Modes::FT4:
+    case Modes::FT8:
+      m_config.set_transceiver_mode_override (Transceiver::DIG_U);
+      break;
+
+    case Modes::RTTY:
+      m_config.set_transceiver_mode_override (Transceiver::FSK);
+      break;
+
+    default:
+      m_config.set_transceiver_mode_override (Transceiver::UNK);
+      break;
+    }
   applySingleDecodeColumnFlowLayout();
   check_button_color();
 }
@@ -18951,6 +19550,7 @@ void MainWindow::stopTuneATU()
 
 void MainWindow::on_stopTxButton_clicked()                    // Stop Tx
 {
+  resetRttyTransmissionState();
   if (m_enableButtonNotify) debugToFile(QString{});       //avt 10/2/25 by operator, not from a controller command
   debugToFile(QString{"on_stopTxBut by operator:%1"}.arg(m_enableButtonNotify));   //avt 2/2/24
   debugToFile(QString{"             autoButton m_autoButtonState:%1"}.arg(m_autoButtonState));   //avt 2/2/24
@@ -19522,6 +20122,26 @@ void MainWindow::transmit (double snr)
                           m_toneSpacing*nToneSpacing, m_soundOutput,
                           m_config.audio_output_channel(),true, false, snr,
                           m_TRperiod);
+    }
+  }
+
+  if (m_mode == "RTTY" && m_rttyManualTxActive) {
+    if (m_tci_audio) {
+      if (m_rttyTciSymbolsLength > 0 && m_rttyTciFramesPerSymbol > 0.0) {
+        Q_EMIT m_config.transceiver_modulator_start(m_mode,
+                                                    m_rttyTciSymbolsLength,
+                                                    m_rttyTciFramesPerSymbol,
+                                                    ui->TxFreqSpinBox->value() - m_XIT,
+                                                    -5.0,
+                                                    false,
+                                                    false,
+                                                    snr,
+                                                    m_TRperiod);
+      }
+    } else if (m_rttyModulator) {
+      QMetaObject::invokeMethod(m_soundOutput, "restart", Qt::QueuedConnection,
+                                Q_ARG(QIODevice*, m_rttyModulator.data()));
+      m_rttyModulator->startTx();
     }
   }
 
@@ -22648,7 +23268,10 @@ void MainWindow::maybe_apply_startup_mode_from_rig_frequency (Frequency dial_fre
 
 void MainWindow::set_mode (QString const& mode)
 {
-  if ("FT2" == mode) {
+  if ("RTTY" == mode) {
+    if ("FT8" != m_mode) on_actionFT8_triggered ();
+    else ui->actionFT8->setChecked (true);
+  } else if ("FT2" == mode) {
     if ("FT2" != m_mode) on_actionFT2_triggered ();
     else ui->actionFT2->setChecked (true);
   } else if ("FT4" == mode) {
@@ -23372,6 +23995,95 @@ void MainWindow::showExternalCtrlDisconnect()     //avt 12/16/21
   QApplication::beep();
   showStatusMessage("Controller disconnected");
   QApplication::alert (this);
+}
+
+void MainWindow::resetJt9ProcessCapture ()
+{
+  m_jt9RecentStdout.clear ();
+  m_jt9RecentStderr.clear ();
+}
+
+void MainWindow::captureJt9ProcessOutput (QByteArray& target, QByteArray const& data, bool persist, QString const& channel)
+{
+  if (data.isEmpty ())
+    {
+      return;
+    }
+
+  target += data;
+  constexpr int kMaxCaptureBytes {16384};
+  if (target.size () > kMaxCaptureBytes)
+    {
+      target = target.right (kMaxCaptureBytes);
+    }
+
+  if (persist)
+    {
+      appendJt9ProcessLog (channel, data);
+    }
+}
+
+void MainWindow::appendJt9ProcessLog (QString const& channel, QByteArray const& data)
+{
+  if (data.isEmpty ())
+    {
+      return;
+    }
+
+  QFile outputFile {m_config.writeable_data_dir ().absoluteFilePath (QStringLiteral ("jt9_subprocess.log"))};
+  if (!outputFile.open (QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
+    {
+      return;
+    }
+
+  QTextStream outStream (&outputFile);
+  QString text = QString::fromLocal8Bit (data);
+  text.replace (QStringLiteral ("\r\n"), QStringLiteral ("\n"));
+  text.replace (QChar {'\r'}, QChar {'\n'});
+  auto const lines = text.split (QChar {'\n'});
+  auto const timestamp = QDateTime::currentDateTimeUtc ().toString (QStringLiteral ("yyyy-MM-dd HH:mm:ss.zzz 'UTC' "));
+  for (auto const& line : lines)
+    {
+      if (line.isEmpty ())
+        {
+          continue;
+        }
+      outStream << timestamp << QStringLiteral ("jt9/") << channel << QStringLiteral (" ") << line << Qt::endl;
+    }
+}
+
+void MainWindow::logJt9ProcessEvent (QString const& event, QString const& details)
+{
+  auto line = QByteArray {"event:"} + event.toLocal8Bit ();
+  if (!details.isEmpty ())
+    {
+      line += " ";
+      line += details.toLocal8Bit ();
+    }
+  appendJt9ProcessLog (QStringLiteral ("event"), line + '\n');
+}
+
+QString MainWindow::jt9ProcessDiagnostics () const
+{
+  auto truncate = [] (QByteArray const& data) {
+    constexpr int kMaxChars {4000};
+    if (data.size () <= kMaxChars)
+      {
+        return QString::fromLocal8Bit (data).trimmed ();
+      }
+    return QStringLiteral ("...\n") + QString::fromLocal8Bit (data.right (kMaxChars)).trimmed ();
+  };
+
+  QStringList sections;
+  if (!m_jt9RecentStderr.trimmed ().isEmpty ())
+    {
+      sections << QStringLiteral ("stderr:\n%1").arg (truncate (m_jt9RecentStderr));
+    }
+  if (!m_jt9RecentStdout.trimmed ().isEmpty ())
+    {
+      sections << QStringLiteral ("stdout:\n%1").arg (truncate (m_jt9RecentStdout));
+    }
+  return sections.join (QStringLiteral ("\n\n"));
 }
 
 void MainWindow::debugToFile(QString str)       //avt 11/25/19
@@ -25089,6 +25801,7 @@ void MainWindow::downloadQsoComplete(bool result)
       return;
     }
     //rename downloaded file to log file
+    LogBook::migrateAdif317 (tmpFilePathName);
     QString logFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + FULL_LOG_FNAME;
     if (QFile::exists(logFilePathName)) {
       QString savFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + QDateTime::currentDateTimeUtc().toString("yyMMdd_hhmmss").toLocal8Bit() + "_" + FULL_LOG_FNAME;
@@ -25171,6 +25884,8 @@ void MainWindow::downloadQslComplete(bool result)
   }
 
   bool success = false;
+  LogBook::migrateAdif317 (m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_QSL_FNAME);
+  LogBook::migrateAdif317 (m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_FNAME);
   
   //create merged QSL/QSO file
   QString line;
@@ -25874,6 +26589,11 @@ void MainWindow::onRemoteSetModeRequested(QString const& commandId, QString cons
   auto requested = mode.trimmed().toUpper();
   if (requested.isEmpty())
     {
+      return;
+    }
+  if (requested == QStringLiteral ("RTTY"))
+    {
+      showStatusMessage (tr ("Remote mode request ignored: RTTY is hidden in this release"));
       return;
     }
   if (requested != m_mode.toUpper())

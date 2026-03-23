@@ -5676,6 +5676,14 @@ QPushButton[state=&quot;ok&quot;] {
     <string>MSK144</string>
    </property>
   </action>
+  <action name="actionRTTY">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>RTTY</string>
+   </property>
+  </action>
   <action name="actionQRA64">
    <property name="checkable">
     <bool>true</bool>
@@ -6018,6 +6026,9 @@ QPushButton[state=&quot;ok&quot;] {
   <action name="actionRecommended_Audio_Settings">
    <property name="text">
     <string>Recommended audio settings</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
    </property>
    <property name="whatsThis">
     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Recommended Audio Settings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>

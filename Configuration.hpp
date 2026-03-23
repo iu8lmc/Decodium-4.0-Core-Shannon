@@ -105,6 +105,13 @@ public:
   bool nonQsl () const;    //avt 9/23/25
   QString Field_Day_Exchange() const;
   QString RTTY_Exchange() const;
+  double rtty_baud_rate () const;
+  int rtty_mark_tone () const;
+  int rtty_shift () const;
+  bool rtty_reverse () const;
+  double rtty_stop_bits () const;
+  QString rtty_macro_cq () const;
+  QString rtty_macro_73 () const;
   QString Contest_Name() const;
   QString Blacklist1() const;
   QString Blacklist2() const;
@@ -391,6 +398,9 @@ public:
 
   // Set transceiver mode.
   Q_SLOT void transceiver_mode (MODE);
+
+  // Override the CAT mode enforced on subsequent frequency/PTT updates.
+  Q_SLOT void set_transceiver_mode_override (MODE);
 
   // Set/unset PTT.
   //

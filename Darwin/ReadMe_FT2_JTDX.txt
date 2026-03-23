@@ -1,42 +1,37 @@
-FT2 + JTDX shared-memory coexistence on macOS
-=============================================
+Legacy note: FT2 + JTDX macOS coexistence
+=========================================
 
-Problem
--------
-If both applications install their own LaunchDaemon, each can overwrite
-kern.sysv.shmmax at boot. If JTDX sets shmmax=20971520 (20MB), FT2 fails
-to start because it needs about 48MB.
+Status
+------
+This document is retained only as historical reference for older macOS
+installations that used `sysctl` / `LaunchDaemon` tuning for shared memory.
 
-Use one daemon only
--------------------
-Disable existing per-app daemons, then enable the shared FT2/JTDX daemon:
+It does not describe the normal installation path for current Decodium
+releases.
 
-  sudo launchctl bootout system /Library/LaunchDaemons/com.jtdx.sysctl.plist 2>/dev/null || true
-  sudo launchctl bootout system /Library/LaunchDaemons/com.wsjtx.sysctl.plist 2>/dev/null || true
+What changed
+------------
+Current Decodium macOS builds in this fork use the newer Darwin shared-memory
+wrapper and do not require users to install `com.ft2.jtdx.sysctl.plist` as a
+normal setup step.
 
-  sudo mv /Library/LaunchDaemons/com.jtdx.sysctl.plist /Library/LaunchDaemons/com.jtdx.sysctl.plist.disabled 2>/dev/null || true
-  sudo mv /Library/LaunchDaemons/com.wsjtx.sysctl.plist /Library/LaunchDaemons/com.wsjtx.sysctl.plist.disabled 2>/dev/null || true
+Why keep this file
+------------------
+Older WSJT-X / JTDX / FT2 installations may still leave behind system files
+such as:
+- `/Library/LaunchDaemons/com.wsjtx.sysctl.plist`
+- `/Library/LaunchDaemons/com.jtdx.sysctl.plist`
+- `/Library/LaunchDaemons/com.ft2.jtdx.sysctl.plist`
 
-  sudo cp /Volumes/ft2/com.ft2.jtdx.sysctl.plist /Library/LaunchDaemons/
-  sudo chown root:wheel /Library/LaunchDaemons/com.ft2.jtdx.sysctl.plist
-  sudo chmod 644 /Library/LaunchDaemons/com.ft2.jtdx.sysctl.plist
-  sudo launchctl bootstrap system /Library/LaunchDaemons/com.ft2.jtdx.sysctl.plist
+If a user is diagnosing a legacy machine that already contains these files,
+they may still matter for historical troubleshooting.
 
-If your mounted volume has a different name, replace `/Volumes/ft2` with the
-actual mount path.
+Guidance for current users
+--------------------------
+- Do not install or enable the old `sysctl` daemon files on a normal current
+  Decodium installation unless you are deliberately investigating a legacy
+  environment.
+- For current app installation, use the normal macOS release notes and, if
+  needed, the quarantine command:
 
-Reboot and verify
------------------
-After reboot, check:
-
-  sysctl kern.sysv.shmmax kern.sysv.shmall
-
-Expected values:
-  kern.sysv.shmmax: 104857600
-  kern.sysv.shmall: 51200
-
-Notes
------
-- `shmmax` is the maximum size for one shared-memory segment.
-- `shmall` is total shared-memory capacity in pages (4096 bytes/page).
-- Using a single daemon avoids non-deterministic "last writer wins" behavior.
+  sudo xattr -r -d com.apple.quarantine /Applications/ft2.app

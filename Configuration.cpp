@@ -507,6 +507,7 @@ public:
   void transceiver_frequency (Frequency);
   void transceiver_tx_frequency (Frequency);
   void transceiver_mode (MODE);
+  void set_transceiver_mode_override (MODE);
   void transceiver_ptt (bool);
   void transceiver_audio (bool);
   void transceiver_tune (bool);
@@ -801,6 +802,14 @@ private:
   QLineEdit * dx_cluster_host_line_edit_ {nullptr};
   QSpinBox * dx_cluster_port_spin_box_ {nullptr};
   QCheckBox * auto_spot_check_box_ {nullptr};
+  QGroupBox * rtty_modem_group_box_ {nullptr};
+  QDoubleSpinBox * rtty_baud_rate_spin_box_ {nullptr};
+  QSpinBox * rtty_mark_tone_spin_box_ {nullptr};
+  QSpinBox * rtty_shift_spin_box_ {nullptr};
+  QCheckBox * rtty_reverse_check_box_ {nullptr};
+  QComboBox * rtty_stop_bits_combo_box_ {nullptr};
+  QLineEdit * rtty_macro_cq_line_edit_ {nullptr};
+  QLineEdit * rtty_macro_73_line_edit_ {nullptr};
 
   TransceiverFactory::ParameterPack rig_params_;
   TransceiverFactory::ParameterPack saved_rig_params_;
@@ -824,6 +833,13 @@ private:
   bool nonQsl_;      //avt 9/23/25
   QString FD_exchange_;
   QString RTTY_exchange_;
+  double rtty_baud_rate_ {45.45};
+  int rtty_mark_tone_ {2125};
+  int rtty_shift_ {170};
+  bool rtty_reverse_ {false};
+  double rtty_stop_bits_ {2.0};
+  QString rtty_macro_cq_ {QStringLiteral ("CQ CQ CQ DE <MYCALL> <MYCALL> K")};
+  QString rtty_macro_73_ {QStringLiteral ("TU 73 SK")};
   QString Contest_Name_;
   QString Blacklist1_;
   QString Blacklist2_;
@@ -977,6 +993,7 @@ private:
   bool udpWindowToFront_;
   bool udpWindowRestore_;
   DataMode data_mode_;
+  MODE transceiver_mode_override_ {Transceiver::UNK};
   bool bLowSidelobes_;
   bool sortAlphabetically_;
   bool hideCARD_;
@@ -1273,6 +1290,12 @@ void Configuration::transceiver_mode (MODE mode)
   m_->transceiver_mode (mode);
 }
 
+void Configuration::set_transceiver_mode_override (MODE mode)
+{
+  LOG_TRACE (mode << ' ' << m_->cached_rig_state_);
+  m_->set_transceiver_mode_override (mode);
+}
+
 void Configuration::transceiver_ptt (bool on)
 {
   LOG_TRACE (on << ' ' << m_->cached_rig_state_);
@@ -1440,6 +1463,41 @@ QString Configuration::Field_Day_Exchange() const
 QString Configuration::RTTY_Exchange() const
 {
   return m_->RTTY_exchange_;
+}
+
+double Configuration::rtty_baud_rate () const
+{
+  return m_->rtty_baud_rate_;
+}
+
+int Configuration::rtty_mark_tone () const
+{
+  return m_->rtty_mark_tone_;
+}
+
+int Configuration::rtty_shift () const
+{
+  return m_->rtty_shift_;
+}
+
+bool Configuration::rtty_reverse () const
+{
+  return m_->rtty_reverse_;
+}
+
+double Configuration::rtty_stop_bits () const
+{
+  return m_->rtty_stop_bits_;
+}
+
+QString Configuration::rtty_macro_cq () const
+{
+  return m_->rtty_macro_cq_;
+}
+
+QString Configuration::rtty_macro_73 () const
+{
+  return m_->rtty_macro_73_;
 }
 
 QString Configuration::Contest_Name() const
@@ -2078,6 +2136,86 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
       clusterLayout->setColumnStretch (1, 1);
 
       generalLayout->addWidget (dx_cluster_group_box_);
+
+      rtty_modem_group_box_ = new QGroupBox {tr ("RTTY Modem"), this};
+      auto * rttyLayout = new QGridLayout {rtty_modem_group_box_};
+
+      auto * baudLabel = new QLabel {tr ("Baud rate:"), rtty_modem_group_box_};
+      rtty_baud_rate_spin_box_ = new QDoubleSpinBox {rtty_modem_group_box_};
+      rtty_baud_rate_spin_box_->setDecimals (2);
+      rtty_baud_rate_spin_box_->setRange (10.0, 300.0);
+      rtty_baud_rate_spin_box_->setSingleStep (0.05);
+      rtty_baud_rate_spin_box_->setToolTip (
+        tr ("RTTY baud rate used for both receive and transmit."));
+      baudLabel->setBuddy (rtty_baud_rate_spin_box_);
+
+      auto * markLabel = new QLabel {tr ("Mark tone (Hz):"), rtty_modem_group_box_};
+      rtty_mark_tone_spin_box_ = new QSpinBox {rtty_modem_group_box_};
+      rtty_mark_tone_spin_box_->setRange (100, 5000);
+      rtty_mark_tone_spin_box_->setSingleStep (5);
+      rtty_mark_tone_spin_box_->setToolTip (
+        tr ("Base mark tone. Space tone is mark tone plus shift."));
+      markLabel->setBuddy (rtty_mark_tone_spin_box_);
+
+      auto * shiftLabel = new QLabel {tr ("Shift (Hz):"), rtty_modem_group_box_};
+      rtty_shift_spin_box_ = new QSpinBox {rtty_modem_group_box_};
+      rtty_shift_spin_box_->setRange (10, 3000);
+      rtty_shift_spin_box_->setSingleStep (5);
+      rtty_shift_spin_box_->setToolTip (
+        tr ("Difference between mark and space tones."));
+      shiftLabel->setBuddy (rtty_shift_spin_box_);
+
+      auto * stopBitsLabel = new QLabel {tr ("Stop bits:"), rtty_modem_group_box_};
+      rtty_stop_bits_combo_box_ = new QComboBox {rtty_modem_group_box_};
+      rtty_stop_bits_combo_box_->addItem (QStringLiteral ("1"), 1.0);
+      rtty_stop_bits_combo_box_->addItem (QStringLiteral ("1.5"), 1.5);
+      rtty_stop_bits_combo_box_->addItem (QStringLiteral ("2"), 2.0);
+      rtty_stop_bits_combo_box_->setToolTip (
+        tr ("Transmit stop bits appended after each 5-bit Baudot character."));
+      stopBitsLabel->setBuddy (rtty_stop_bits_combo_box_);
+
+      rtty_reverse_check_box_ = new QCheckBox {tr ("Reverse / normal"), rtty_modem_group_box_};
+      rtty_reverse_check_box_->setToolTip (
+        tr ("Swap mark and space tones for both decoding and transmitting."));
+
+      auto * macroCqLabel = new QLabel {tr ("Macro CQ:"), rtty_modem_group_box_};
+      rtty_macro_cq_line_edit_ = new QLineEdit {rtty_modem_group_box_};
+      rtty_macro_cq_line_edit_->setToolTip (
+        tr ("Text sent by the CQ macro button. Supported placeholders: <MYCALL>, <MYGRID>, <DXCALL>, <DXGRID>."));
+      macroCqLabel->setBuddy (rtty_macro_cq_line_edit_);
+
+      auto * macro73Label = new QLabel {tr ("Macro 73:"), rtty_modem_group_box_};
+      rtty_macro_73_line_edit_ = new QLineEdit {rtty_modem_group_box_};
+      rtty_macro_73_line_edit_->setToolTip (
+        tr ("Text sent by the 73 macro button. Supported placeholders: <MYCALL>, <MYGRID>, <DXCALL>, <DXGRID>."));
+      macro73Label->setBuddy (rtty_macro_73_line_edit_);
+
+      auto * rttyHint = new QLabel {
+        tr ("These settings apply to the built-in RTTY modem. Mark stays fixed; space is mark tone plus shift. "
+            "Reverse swaps mark and space. Placeholders for CQ/73 macros: <MYCALL>, <MYGRID>, <DXCALL>, <DXGRID>."),
+        rtty_modem_group_box_};
+      rttyHint->setWordWrap (true);
+      rttyHint->setStyleSheet (QStringLiteral ("color:#666;"));
+
+      rttyLayout->addWidget (baudLabel, 0, 0);
+      rttyLayout->addWidget (rtty_baud_rate_spin_box_, 0, 1);
+      rttyLayout->addWidget (markLabel, 0, 2);
+      rttyLayout->addWidget (rtty_mark_tone_spin_box_, 0, 3);
+      rttyLayout->addWidget (shiftLabel, 1, 0);
+      rttyLayout->addWidget (rtty_shift_spin_box_, 1, 1);
+      rttyLayout->addWidget (stopBitsLabel, 1, 2);
+      rttyLayout->addWidget (rtty_stop_bits_combo_box_, 1, 3);
+      rttyLayout->addWidget (rtty_reverse_check_box_, 2, 0, 1, 4);
+      rttyLayout->addWidget (macroCqLabel, 3, 0);
+      rttyLayout->addWidget (rtty_macro_cq_line_edit_, 3, 1, 1, 3);
+      rttyLayout->addWidget (macro73Label, 4, 0);
+      rttyLayout->addWidget (rtty_macro_73_line_edit_, 4, 1, 1, 3);
+      rttyLayout->addWidget (rttyHint, 5, 0, 1, 4);
+      rttyLayout->setColumnStretch (1, 1);
+      rttyLayout->setColumnStretch (3, 1);
+
+      generalLayout->addWidget (rtty_modem_group_box_);
+      rtty_modem_group_box_->setVisible (false);
     }
 
   {
@@ -2451,6 +2589,35 @@ void Configuration::impl::initialize_models ()
   ui_->monitor_off_check_box->setChecked (monitor_off_at_startup_);
   ui_->monitor_last_used_check_box->setChecked (monitor_last_used_);
   ui_->log_as_RTTY_check_box->setChecked (log_as_RTTY_);
+  if (rtty_baud_rate_spin_box_)
+    {
+      rtty_baud_rate_spin_box_->setValue (rtty_baud_rate_);
+    }
+  if (rtty_mark_tone_spin_box_)
+    {
+      rtty_mark_tone_spin_box_->setValue (rtty_mark_tone_);
+    }
+  if (rtty_shift_spin_box_)
+    {
+      rtty_shift_spin_box_->setValue (rtty_shift_);
+    }
+  if (rtty_reverse_check_box_)
+    {
+      rtty_reverse_check_box_->setChecked (rtty_reverse_);
+    }
+  if (rtty_stop_bits_combo_box_)
+    {
+      int const index = rtty_stop_bits_combo_box_->findData (rtty_stop_bits_);
+      rtty_stop_bits_combo_box_->setCurrentIndex (index >= 0 ? index : 2);
+    }
+  if (rtty_macro_cq_line_edit_)
+    {
+      rtty_macro_cq_line_edit_->setText (rtty_macro_cq_);
+    }
+  if (rtty_macro_73_line_edit_)
+    {
+      rtty_macro_73_line_edit_->setText (rtty_macro_73_);
+    }
   ui_->report_in_comments_check_box->setChecked (report_in_comments_);
   ui_->specOp_in_comments_check_box->setChecked (specOp_in_comments_);
   ui_->prompt_to_log_check_box->setChecked (prompt_to_log_);
@@ -2682,6 +2849,17 @@ void Configuration::impl::read_settings ()
   my_grid_ = settings_->value ("MyGrid", QString {}).toString ();
   FD_exchange_ = settings_->value ("Field_Day_Exchange",QString {}).toString ();
   RTTY_exchange_ = settings_->value ("RTTY_Exchange",QString {}).toString ();
+  rtty_baud_rate_ = qBound (10.0, settings_->value ("RTTYBaudRate", 45.45).toDouble (), 300.0);
+  rtty_mark_tone_ = qBound (100, settings_->value ("RTTYMarkTone", 2125).toInt (), 5000);
+  rtty_shift_ = qBound (10, settings_->value ("RTTYShift", 170).toInt (), 3000);
+  rtty_reverse_ = settings_->value ("RTTYReverse", false).toBool ();
+  rtty_stop_bits_ = settings_->value ("RTTYStopBits", 2.0).toDouble ();
+  if (rtty_stop_bits_ != 1.0 && rtty_stop_bits_ != 1.5 && rtty_stop_bits_ != 2.0)
+    {
+      rtty_stop_bits_ = 2.0;
+    }
+  rtty_macro_cq_ = settings_->value ("RTTYMacroCQ", QStringLiteral ("CQ CQ CQ DE <MYCALL> <MYCALL> K")).toString ();
+  rtty_macro_73_ = settings_->value ("RTTYMacro73", QStringLiteral ("TU 73 SK")).toString ();
   Contest_Name_ = settings_->value ("Contest_Name",QString {}).toString ();
   ui_->Field_Day_Exchange->setText(FD_exchange_);
   ui_->RTTY_Exchange->setText(RTTY_exchange_);
@@ -3193,6 +3371,13 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("MyGrid", my_grid_);
   settings_->setValue ("Field_Day_Exchange", FD_exchange_);
   settings_->setValue ("RTTY_Exchange", RTTY_exchange_);
+  settings_->setValue ("RTTYBaudRate", rtty_baud_rate_);
+  settings_->setValue ("RTTYMarkTone", rtty_mark_tone_);
+  settings_->setValue ("RTTYShift", rtty_shift_);
+  settings_->setValue ("RTTYReverse", rtty_reverse_);
+  settings_->setValue ("RTTYStopBits", rtty_stop_bits_);
+  settings_->setValue ("RTTYMacroCQ", rtty_macro_cq_);
+  settings_->setValue ("RTTYMacro73", rtty_macro_73_);
   settings_->setValue ("Contest_Name", Contest_Name_);
   settings_->setValue ("Blacklist1", Blacklist1_);
   settings_->setValue ("Blacklist2", Blacklist2_);
@@ -3704,11 +3889,10 @@ int Configuration::impl::exec ()
     int const maxWidth = qMax (600, available.width () - 40);
     int const maxHeight = qMax (420, available.height () - 40);
 
-#if defined(Q_OS_LINUX)
-    // On some Linux desktop/font setups, tab contents exceed screen height.
+    // On some desktop/font setups, tab contents exceed screen height.
     // Wrap each tab page into a scroll area so the OK button always stays reachable.
-    // Do this unconditionally on Linux because some desktop themes/font scales
-    // resize tabs after open (especially on KDE), even when initial sizeHint fits.
+    // Do this cross-platform because the extended General tab can overflow on macOS
+    // as well, especially after adding remote dashboard, AutoSpot, and RTTY sections.
     if (ui_->configuration_tabs
         && !ui_->configuration_tabs->property ("ft2_scroll_wrapped").toBool ())
       {
@@ -3768,7 +3952,6 @@ int Configuration::impl::exec ()
       {
         rootLayout->setSizeConstraint (QLayout::SetNoConstraint);
       }
-#endif
 
     if (auto * rootVBox = qobject_cast<QVBoxLayout *> (layout ()))
       {
@@ -4034,6 +4217,46 @@ void Configuration::impl::accept ()
   monitor_last_used_ = ui_->monitor_last_used_check_box->isChecked ();
   type_2_msg_gen_ = static_cast<Type2MsgGen> (ui_->type_2_msg_gen_combo_box->currentIndex ());
   log_as_RTTY_ = ui_->log_as_RTTY_check_box->isChecked ();
+  if (rtty_baud_rate_spin_box_)
+    {
+      rtty_baud_rate_ = qBound (10.0, rtty_baud_rate_spin_box_->value (), 300.0);
+    }
+  if (rtty_mark_tone_spin_box_)
+    {
+      rtty_mark_tone_ = qBound (100, rtty_mark_tone_spin_box_->value (), 5000);
+    }
+  if (rtty_shift_spin_box_)
+    {
+      rtty_shift_ = qBound (10, rtty_shift_spin_box_->value (), 3000);
+    }
+  if (rtty_reverse_check_box_)
+    {
+      rtty_reverse_ = rtty_reverse_check_box_->isChecked ();
+    }
+  if (rtty_stop_bits_combo_box_)
+    {
+      rtty_stop_bits_ = rtty_stop_bits_combo_box_->currentData ().toDouble ();
+      if (rtty_stop_bits_ != 1.0 && rtty_stop_bits_ != 1.5 && rtty_stop_bits_ != 2.0)
+        {
+          rtty_stop_bits_ = 2.0;
+        }
+    }
+  if (rtty_macro_cq_line_edit_)
+    {
+      rtty_macro_cq_ = rtty_macro_cq_line_edit_->text ().trimmed ();
+      if (rtty_macro_cq_.isEmpty ())
+        {
+          rtty_macro_cq_ = QStringLiteral ("CQ CQ CQ DE <MYCALL> <MYCALL> K");
+        }
+    }
+  if (rtty_macro_73_line_edit_)
+    {
+      rtty_macro_73_ = rtty_macro_73_line_edit_->text ().trimmed ();
+      if (rtty_macro_73_.isEmpty ())
+        {
+          rtty_macro_73_ = QStringLiteral ("TU 73 SK");
+        }
+    }
   report_in_comments_ = ui_->report_in_comments_check_box->isChecked ();
   specOp_in_comments_ = ui_->specOp_in_comments_check_box->isChecked ();
   prompt_to_log_ = ui_->prompt_to_log_check_box->isChecked ();
@@ -5702,13 +5925,20 @@ bool Configuration::impl::open_rig (bool force)
 void Configuration::impl::set_cached_mode ()
 {
   MODE mode {Transceiver::UNK};
+  if (transceiver_mode_override_ != Transceiver::UNK)
+    {
+      mode = transceiver_mode_override_;
+    }
+  else
+    {
   // override cache mode with what we want to enforce which includes
   // UNK (unknown) where we want to leave the rig mode untouched
-  switch (data_mode_)
-    {
-    case data_mode_USB: mode = Transceiver::USB; break;
-    case data_mode_data: mode = Transceiver::DIG_U; break;
-    default: break;
+      switch (data_mode_)
+        {
+        case data_mode_USB: mode = Transceiver::USB; break;
+        case data_mode_data: mode = Transceiver::DIG_U; break;
+        default: break;
+        }
     }
 
   cached_rig_state_.mode (mode);
@@ -5766,6 +5996,15 @@ void Configuration::impl::transceiver_mode (MODE m)
   cached_rig_state_.mode (m);
   // qDebug () << "Configuration::impl::transceiver_mode: n:" << transceiver_command_number_ + 1 << "m:" << m;
   LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+  Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
+}
+
+void Configuration::impl::set_transceiver_mode_override (MODE m)
+{
+  transceiver_mode_override_ = m;
+  cached_rig_state_.online (true); // we want the rig online
+  set_cached_mode ();
+  LOG_TRACE ("emitting set_transceiver override: requested state:" << cached_rig_state_);
   Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
 }
 

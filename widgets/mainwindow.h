@@ -133,7 +133,10 @@ class SharedMemorySegment;
 class IonosphericForecastWindow;
 class DXClusterWindow;
 class RemoteCommandServer;
+namespace decodium { namespace rtty { class RTTYDetector; class RTTYModulator; } }
+
 class AsyncModeWidget;
+class RTTYTerminalWidget;
 
 class MainWindow
   : public MultiGeometryWidget<3, QMainWindow>
@@ -160,7 +163,7 @@ public slots:
   void showStatusMessage(const QString& statusMsg);
   void dataSink(qint64 frames);
   void fastSink(qint64 frames);
-  void tci_mod_active(bool on) {m_tci_mod_active = on;}
+  void tci_mod_active(bool on);
   void diskDat();
   void freezeDecode(int n);
   void guiUpdate();
@@ -189,10 +192,22 @@ private:
   bool singleDecodeColumnFlowEnabled () const { return false; }
   DisplayText * secondaryDecodeView () const;
   void applySingleDecodeColumnFlowLayout ();
+  void applyRttyTerminalLayout ();
   void updateAsyncL2ControlsVisibility ();
   void selectBandFrequency (Frequency preferredFrequency, Frequency fallbackFrequency);
   bool shouldSuppressNearDuplicateDecode (DecodedText const& decodedtext);
   void pruneNearDuplicateDecodeCache (qint64 nowMs);
+  void applyRttyModemConfiguration ();
+  double configuredRttyBaudRate () const;
+  double configuredRttyMarkTone () const;
+  double configuredRttySpaceTone () const;
+  double configuredRttyStopBits () const;
+  QString configuredRttySummaryText () const;
+  QString expandRttyPlaceholders (QString text) const;
+  void transmitRttyText(QString const& text);
+  bool prepareRttyTransmission(QString const& text);
+  void finishRttyTransmission();
+  void resetRttyTransmissionState();
 
 private slots:
   void initialize_fonts ();
@@ -364,6 +379,7 @@ private slots:
   void on_actionFT8_triggered();
   void on_actionFST4_triggered();
   void on_actionFST4W_triggered();
+  void on_actionRTTY_triggered();
   void on_TxFreqSpinBox_valueChanged(int arg1);
   void on_actionSave_decoded_triggered();
   void on_actionQuickDecode_toggled (bool);
@@ -648,6 +664,13 @@ private:
   QScopedPointer<FoxLogWindow> m_foxLogWindow;
   QScopedPointer<CabrilloLogWindow> m_contestLogWindow;
   QScopedPointer<ColorHighlighting> m_colorHighlighting;
+  QScopedPointer<RTTYTerminalWidget> m_rttyTerminal;
+  QScopedPointer<decodium::rtty::RTTYDetector> m_rttyDetector;
+  QScopedPointer<decodium::rtty::RTTYModulator> m_rttyModulator;
+  QString m_rttyQueuedText;
+  unsigned m_rttyTciSymbolsLength {0};
+  double m_rttyTciFramesPerSymbol {0.0};
+  bool m_rttyManualTxActive {false};
   Transceiver::TransceiverState m_rigState;
   Frequency  m_lastDialFreq;
   QString m_lastBand;
@@ -1072,6 +1095,8 @@ private:
   NonInheritingProcess proc_jt9;
   NonInheritingProcess p1;
   NonInheritingProcess p3;
+  QByteArray m_jt9RecentStdout;
+  QByteArray m_jt9RecentStderr;
 
   QProcess p2;
   QProcess p4;
@@ -1410,6 +1435,11 @@ private:
   bool is_externalCtrlMode();     //avt 12/5/20
   void initExternalCtrl();     //avt 12/5/20
   void externalCtrlDisconnected();  //avt 12/16/21
+  void resetJt9ProcessCapture ();
+  void captureJt9ProcessOutput (QByteArray& target, QByteArray const& data, bool persist, QString const& channel);
+  void appendJt9ProcessLog (QString const& channel, QByteArray const& data);
+  void logJt9ProcessEvent (QString const& event, QString const& details = QString {});
+  QString jt9ProcessDiagnostics () const;
   void debugToFile(QString str);        //avt 12/6/23
   void debugAutoCq(QString const& event, QString const& details = QString {});
   bool ft2AutoSeqEnabled() const;

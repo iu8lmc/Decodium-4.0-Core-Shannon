@@ -1,63 +1,46 @@
-# Notas de Documentacion (Espanol) - 1.5.4
+# Notas de Documentacion (Espanol) - 1.5.5
 
 Este indice agrupa la documentacion de release del ciclo actual del fork.
 
-- Release actual: `1.5.4`
-- Ciclo de actualizacion: `1.5.3 -> 1.5.4`
-- Foco principal: filtro FT2 anti-ghost, refresh sync decoder FT2/FT4/FT8, paridad de la web app, alineacion completa UI/web de idiomas, endurecimiento de downloader/secure settings y packaging release macOS corregido.
+- Release actual: `1.5.5`
+- Ciclo de actualizacion: `1.5.4 -> 1.5.5`
+- Foco principal: fiabilidad de Preferencias en macOS para todas las lenguas UI, `Settings` con scroll en macOS, diagnostica del subprocess FT2, migracion ADIF FT2, recuperacion de audio al arranque y retirada de la UI RTTY experimental del camino publico.
 
-## Cambios Tecnicos Principales (`1.5.3 -> 1.5.4`)
+## Cambios Tecnicos Principales (`1.5.4 -> 1.5.5`)
 
-- anadido el filtro FT2 anti-ghost para payloads muy debiles y malformados, con logging diagnostico `ghostPass` / `ghostFilt`.
-- actualizado el sync decoder en FT2, FT4 y FT8 con logica Costas `best 3 of 4` / `best 2 of 3` y sustraccion adaptativa mas profunda.
-- anadidos a la web app `Monitoring ON/OFF`, indicador FT2 `ASYNC` en dB y filtros de actividad `Hide CQ` / `Hide 73`.
-- la web app sigue ahora el idioma seleccionado en la app de escritorio y cubre todas las lenguas bundle.
-- eliminada la entrada duplicada `English (UK)` y localizado el formato fecha UTC/Astro.
-- corregido el packaging release de macOS: sonidos en `Contents/Resources`, helpers Hamlib incluidos como ficheros reales, dependencias Framework/plugin normalizadas a `@rpath`, y limpieza de residuos legacy del bundle antiguo en arboles de build reutilizados.
-- endurecidos fallback/import de secure settings, redirects/limites de tamano del downloader, logging de excepciones CAT, waits de arranque DXLab y defaults HTTPS de LoTW.
-- ampliada la cobertura automatizada con vectores RFC HOTP/TOTP y tests dedicados para downloader y secure settings.
+- corregido el enrutado de roles nativos de menu en macOS para que solo las entradas previstas usen roles especiales, sin depender del idioma traducido.
+- hechas scrollables tambien en macOS las paginas de `Settings`, manteniendo accesible `OK`.
+- anadido `jt9_subprocess.log` con trazas persistentes de arranque/errores/finalizacion del decoder FT2 y popups diagnosticos mas ricos.
+- sustituidos los fallos opacos de FT2 por rutas de reporte mas claras para shared memory y stdout/stderr.
+- llevado el ADIF FT2 al estilo ADIF 3.17 `MODE=MFSK` + `SUBMODE=FT2`, con migracion automatica del historico y backup.
+- mejorada la recuperacion del audio al arrancar y al activar monitor mediante reopen estilo Settings mas health checks.
+- retirada de la ruta de usuario la UI RTTY incompleta para esta release publica.
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.4-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.4-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.4-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.4-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.4-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.4-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.4-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.4-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.4-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.4-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.4-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.4-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.4-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.4-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.5-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.5-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.5-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.5-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.5-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.5-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.5-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.5-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.5-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.5-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.5-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.5-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
-- `x86_64`, dual-core 2.0 GHz+, 4 GB RAM minima, 500 MB libres
+- `x86_64`, dual-core 2.0 GHz+
+- 4 GB RAM minima (8 GB recomendados)
+- 500 MB libres en disco
 - `glibc >= 2.35`
 - `libfuse2` / FUSE2
 - ALSA, PulseAudio o PipeWire
-
-## Nota de Build Local Linux
-
-La AppImage ya incluye el runtime Qt multimedia requerido. Para builds locales desde codigo fuente en Ubuntu/Debian, instala tambien los paquetes multimedia minimos del sistema; de lo contrario, los dispositivos de audio pueden aparecer vacios o deshabilitados.
-
-```bash
-sudo apt update
-sudo apt install \
-  qtmultimedia5-dev \
-  libqt5multimedia5 \
-  libqt5multimedia5-plugins \
-  libqt5multimediawidgets5 \
-  libqt5multimediagsttools5 \
-  libpulse-mainloop-glib0 \
-  pulseaudio-utils \
-  gstreamer1.0-plugins-base \
-  gstreamer1.0-plugins-good
-```
 
 ## Guia de Arranque
 
@@ -82,6 +65,6 @@ cd squashfs-root
 - [README.en-GB.md](../README.en-GB.md)
 - [README.it.md](../README.it.md)
 - [README.es.md](../README.es.md)
-- [RELEASE_NOTES_1.5.4.md](../RELEASE_NOTES_1.5.4.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.4.md](./GITHUB_RELEASE_BODY_1.5.4.md)
+- [RELEASE_NOTES_1.5.5.md](../RELEASE_NOTES_1.5.5.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.5.md](./GITHUB_RELEASE_BODY_1.5.5.md)
 - [CHANGELOG.md](../CHANGELOG.md)

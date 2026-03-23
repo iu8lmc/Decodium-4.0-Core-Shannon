@@ -1,6 +1,9 @@
 #include "logbook.h"
 
 #include <QDateTime>
+#include <QDebug>
+#include <QFile>
+#include <QRegularExpression>
 #include "Configuration.hpp"
 #include "AD1CCty.hpp"
 #include "Multiplier.hpp"
@@ -29,6 +32,55 @@ QString sanitize_adif_value (QString const& in, bool preserve_spaces = true)
     }
   return out.trimmed ();
 }
+}
+
+int LogBook::migrateAdif317 (QString const& path)
+{
+  QFile file {path};
+  if (!file.exists ())
+    {
+      return 0;
+    }
+  if (!file.open (QIODevice::ReadOnly))
+    {
+      return 0;
+    }
+
+  auto data = file.readAll ();
+  file.close ();
+  if (!data.toLower ().contains ("<mode:3>ft2"))
+    {
+      return 0;
+    }
+
+  auto const backup_path = path + ".pre317bak";
+  if (!QFile::exists (backup_path))
+    {
+      QFile::copy (path, backup_path);
+    }
+
+  QString text = QString::fromUtf8 (data);
+  QRegularExpression const legacy_ft2_mode {
+    QStringLiteral ("<mode:3>FT2"),
+    QRegularExpression::CaseInsensitiveOption
+  };
+  int const count = text.count (legacy_ft2_mode);
+  if (!count)
+    {
+      return 0;
+    }
+
+  text.replace (legacy_ft2_mode, QStringLiteral ("<MODE:4>MFSK <SUBMODE:3>FT2"));
+
+  if (!file.open (QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+      return -1;
+    }
+  file.write (text.toUtf8 ());
+  file.close ();
+
+  qDebug () << "ADIF 3.17 migrated" << count << "FT2 record(s) in" << path;
+  return count;
 }
 
 LogBook::LogBook (Configuration const * configuration)
@@ -126,7 +178,7 @@ QByteArray LogBook::QSOToADIF (QString const& hisCall, QString const& hisGrid, Q
   QString t;
   t = "<call:" + QString::number(safeHisCall.size()) + ">" + safeHisCall;
   t += " <gridsquare:" + QString::number(safeHisGrid.size()) + ">" + safeHisGrid;
-  if (safeMode != "FT4" && safeMode != "FST4" && safeMode != "Q65")
+  if (safeMode != "FT2" && safeMode != "FT4" && safeMode != "FST4" && safeMode != "Q65")
     {
       t += " <mode:" + QString::number(safeMode.size()) + ">" + safeMode;
     }

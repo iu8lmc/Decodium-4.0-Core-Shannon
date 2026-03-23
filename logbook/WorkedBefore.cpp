@@ -1,4 +1,5 @@
 #include "WorkedBefore.hpp"
+#include "logbook.h"
 
 #include <functional>
 #include <stdexcept>
@@ -437,6 +438,7 @@ QString WorkedBefore::cty_version () const
 
 void WorkedBefore::reload ()
 {
+  LogBook::migrateAdif317 (m_->path_);
   m_->reload ();
 }
 

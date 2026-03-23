@@ -1,5 +1,6 @@
 subroutine jt9a()
   use, intrinsic :: iso_c_binding, only: c_f_pointer, c_null_char, c_bool
+  use, intrinsic :: iso_fortran_env, only: error_unit
   use prog_args
   use timer_module, only: timer
   use timer_impl, only: init_timer !, limtrace
@@ -21,15 +22,16 @@ subroutine jt9a()
 !  limtrace=-1                            !Disable all calls to timer()
 
 ! Multiple instances: set the shared memory key before attaching
-  call shmem_setkey(trim(shm_key)//c_null_char)
-  ok=shmem_attach()
-  if(.not.ok) call abort
   msdelay=10
+  call shmem_setkey(trim(shm_key)//c_null_char)
+  ok=shmem_attach_retry(200, msdelay)
+  if(.not.ok) call decoder_fail('jt9a: shared-memory attach failed during decoder startup for key "' // &
+       trim(shm_key) // '".')
   call c_f_pointer(shmem_address(),shared_data)
 
 ! Terminate if ipc(2) is 999
-10 ok=shmem_lock()
-  if(.not.ok) call abort
+10 ok=shmem_lock_retry(200, msdelay)
+  if(.not.ok) call decoder_fail('jt9a: shared-memory lock failed while waiting for decoder work.', .true.)
   if(shared_data%ipc(2).eq.999.0) then
      ok=shmem_unlock()
      ok=shmem_detach()
@@ -37,7 +39,7 @@ subroutine jt9a()
   endif! Wait here until GUI has set ipc(2) to 1
   if(shared_data%ipc(2).ne.1) then
      ok=shmem_unlock()
-     if(.not.ok) call abort
+     if(.not.ok) call decoder_fail('jt9a: shared-memory unlock failed while waiting for decoder work.', .true.)
      call sleep_msec(msdelay)
      go to 10
   endif
@@ -52,7 +54,7 @@ subroutine jt9a()
   endif
   local_params=shared_data%params !save a copy because wsjtx carries on accessing  
   ok=shmem_unlock()
-  if(.not.ok) call abort
+  if(.not.ok) call decoder_fail('jt9a: shared-memory unlock failed after parameter copy.', .true.)
   call flush(6)
   call timer('decoder ',0)
   if(local_params%nmode.eq.8 .and. local_params%ndiskdat .and.    &
@@ -150,20 +152,64 @@ subroutine jt9a()
 
 !print*,time, ' jt9a before final loop which waits for ipc(3) ==1' !ft8md
 ! Wait here until GUI routine decodeDone() has set ipc(3) to 1
-100 ok=shmem_lock()
-  if(.not.ok) call abort
+100 ok=shmem_lock_retry(200, msdelay)
+  if(.not.ok) call decoder_fail('jt9a: shared-memory lock failed while waiting for decode acknowledgement.', .true.)
   if(shared_data%ipc(3).ne.1) then
      ok=shmem_unlock()
-     if(.not.ok) call abort
+     if(.not.ok) call decoder_fail('jt9a: shared-memory unlock failed while waiting for decode acknowledgement.', .true.)
      call sleep_msec(msdelay)
      go to 100
   endif
   shared_data%ipc(3)=0
   ok=shmem_unlock()
-  if(.not.ok) call abort
+  if(.not.ok) call decoder_fail('jt9a: shared-memory unlock failed after decode acknowledgement.', .true.)
   go to 10
   
 999 call timer('decoder ',101)
 
   return
+
+contains
+
+  logical(c_bool) function shmem_attach_retry(attempts, delay_ms)
+    integer, intent(in) :: attempts, delay_ms
+    integer :: i
+
+    shmem_attach_retry = .false.
+    do i = 1, attempts
+       if (shmem_attach()) then
+          shmem_attach_retry = .true.
+          return
+       endif
+       call sleep_msec(delay_ms)
+    enddo
+  end function shmem_attach_retry
+
+  logical(c_bool) function shmem_lock_retry(attempts, delay_ms)
+    integer, intent(in) :: attempts, delay_ms
+    integer :: i
+
+    shmem_lock_retry = .false.
+    do i = 1, attempts
+       if (shmem_lock()) then
+          shmem_lock_retry = .true.
+          return
+       endif
+       call sleep_msec(delay_ms)
+    enddo
+  end function shmem_lock_retry
+
+  subroutine decoder_fail(message, detach_segment)
+    character(len=*), intent(in) :: message
+    logical, intent(in), optional :: detach_segment
+    logical(c_bool) :: detached
+
+    write(error_unit,'(A)') trim(message)
+    call flush(error_unit)
+    call flush(6)
+    if (present(detach_segment)) then
+       if (detach_segment) detached = shmem_detach()
+    endif
+    stop 1
+  end subroutine decoder_fail
 end subroutine jt9a

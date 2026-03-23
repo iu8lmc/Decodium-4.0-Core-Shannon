@@ -312,6 +312,10 @@ set (wsjtx_CXXSRCS
   widgets/activeStations.cpp
   widgets/worldmapwidget.cpp
   widgets/colorhighlighting.cpp
+  widgets/RTTYTerminalWidget.cpp
+  Modulator/RTTYModulator.cpp
+  Detector/RTTYDetector.cpp
+  Decoder/BaudotDecoder.cpp
   DecodiumCertificate.cpp
   WSPR/WsprTxScheduler.cpp
   widgets/mainwindow.cpp
