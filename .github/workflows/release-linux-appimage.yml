@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+env:
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
+
 jobs:
   build:
     name: Build Linux AppImage
@@ -77,8 +81,6 @@ jobs:
       - name: Build and install latest Hamlib
         run: |
           set -euo pipefail
-          HAMLIB_TAG="$(curl -fsSL https://api.github.com/repos/Hamlib/Hamlib/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])' | tr -d '\n')"
-          HAMLIB_VERSION="${HAMLIB_TAG#v}"
           echo "Using Hamlib ${HAMLIB_TAG}"
           echo "HAMLIB_TAG=${HAMLIB_TAG}" >> "$GITHUB_ENV"
 

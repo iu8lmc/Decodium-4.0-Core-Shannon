@@ -7,6 +7,8 @@ on:
 
 env:
   RELEASE_VERSION: "1.5.5"
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
 
 jobs:
   build-macos:
@@ -72,8 +74,6 @@ jobs:
       - name: Build and install Hamlib
         run: |
           set -euo pipefail
-          HAMLIB_TAG="$(curl -fsSL https://api.github.com/repos/Hamlib/Hamlib/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])' | tr -d '\n')"
-          HAMLIB_VERSION="${HAMLIB_TAG#v}"
           HAMLIB_PREFIX="${RUNNER_TEMP}/hamlib-prefix"
 
           echo "Using Hamlib ${HAMLIB_TAG}"
