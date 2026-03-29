@@ -1370,6 +1370,28 @@ add_executable (fmeasure lib/fmeasure.f90)
 
 endif(WSJT_BUILD_UTILS)
 
+# build the wsprd WSPR mode decoder driver
+generate_version_info (wsprd_VERSION_RESOURCES
+  NAME wsprd
+  BUNDLE ${PROJECT_BUNDLE_NAME}
+  ICON ${WSJTX_ICON_FILE}
+  FILE_DESCRIPTION "WSPR mode decoder"
+  )
+add_executable (wsprd ${wsprd_CSRCS} lib/indexx.f90 lib/wsprd/osdwspr.f90 ${wsprd_VERSION_RESOURCES})
+target_include_directories (wsprd PRIVATE ${FFTW3_INCLUDE_DIRS})
+target_link_libraries (wsprd ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+if (APPLE AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+  execute_process (
+    COMMAND ${CMAKE_C_COMPILER} --print-resource-dir
+    OUTPUT_VARIABLE CLANG_RESOURCE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  set (CLANG_RT_OSX "${CLANG_RESOURCE_DIR}/lib/darwin/libclang_rt.osx.a")
+  if (EXISTS "${CLANG_RT_OSX}")
+    target_link_libraries (wsprd "${CLANG_RT_OSX}")
+  endif ()
+endif ()
+
 # Tell CMake to run moc when necessary
 set (CMAKE_AUTOMOC ON)
 include_directories (${CMAKE_CURRENT_BINARY_DIR})
@@ -1703,6 +1725,11 @@ install (TARGETS wsjtx
 #   )
 
 install (TARGETS udp_daemon message_aggregator wsjtx_app_version
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
+  BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
+  )
+
+install (TARGETS jt9 wsprd
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   )
