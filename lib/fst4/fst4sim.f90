@@ -3,10 +3,11 @@ program fst4sim
 ! Generate simulated signals for experimental slow FT4  mode
 
    use wavhdr
-   use packjt77
+   use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_pack
    include 'fst4_params.f90'               !Set various constants
    type(hdr) h                                !Header for .wav file
    logical*1 wspr_hint
+   logical unpk77_success
    character arg*12,fname*17
    character msg37*37,msgsent37*37,c77*77
    complex, allocatable :: c0(:)
@@ -82,7 +83,8 @@ program fst4sim
       i3=-1
       n3=-1
    endif
-   call pack77(msg37,i3,n3,c77)
+   call ftx_pack77_reset_context()
+   call ftx_pack77_pack(msg37,i3,n3,c77,msgsent37,unpk77_success,0)
    if(i3.eq.0.and.n3.eq.6) iwspr=1
    call genfst4(msg37,0,msgsent37,msgbits,itone,iwspr)
    write(*,*)

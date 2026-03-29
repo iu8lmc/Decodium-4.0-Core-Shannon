@@ -1,7 +1,10 @@
 module jt9_decode
+  integer, parameter :: JT9_NSMAX=6827
 
   type :: jt9_decoder
      procedure(jt9_decode_callback), pointer :: callback
+     real*4 :: ccfred(JT9_NSMAX)=0.0
+     real*4 :: red2(JT9_NSMAX)=0.0
    contains
      procedure :: decode
   end type jt9_decoder
@@ -33,14 +36,11 @@ contains
     real ss(184,NSMAX)
     logical, intent(in) :: newdat, nagain
     character*22 msg
-    real*4 ccfred(NSMAX)
-    real*4 red2(NSMAX)
     logical ccfok(NSMAX)
     logical done(NSMAX)
     integer*2 id2(NTMAX*12000)
     integer*1 i1SoftSymbols(207)
     common/decstats/ntry65a,ntry65b,n65a,n65b,num9,numfano
-    save ccfred,red2
 
     if(nexp_decode.eq.-99) stop     !Silence compiler warning
     this%callback => callback
@@ -70,7 +70,7 @@ contains
     lag2=int(5.0/tstep + 0.9999)
     if(newdat) then
        call timer('sync9   ',0)
-       call sync9(ss,nzhsym,lag1,lag2,ia,ib,ccfred,red2,ipk)
+       call sync9(ss,nzhsym,lag1,lag2,ia,ib,this%ccfred,this%red2,ipk)
        call timer('sync9   ',1)
     endif
 
@@ -106,8 +106,8 @@ contains
           nfb1=nfqso+ntol
           ia=max(1,nint((nfa1-nf0)/df3))
           ib=min(NSMAX,nint((nfb1-nf0)/df3))
-          ccfok(ia:ib)=(ccfred(ia:ib).gt.(ccflim-2.0)) .and.               &
-               (red2(ia:ib).gt.(red2lim-1.0))
+          ccfok(ia:ib)=(this%ccfred(ia:ib).gt.(ccflim-2.0)) .and.          &
+               (this%red2(ia:ib).gt.(red2lim-1.0))
           ia1=ia
           ib1=ib
        else
@@ -116,7 +116,7 @@ contains
           ia=max(1,nint((nfa1-nf0)/df3))
           ib=min(NSMAX,nint((nfb1-nf0)/df3))
           do i=ia,ib
-             ccfok(i)=ccfred(i).gt.ccflim .and. red2(i).gt.red2lim
+             ccfok(i)=this%ccfred(i).gt.ccflim .and. this%red2(i).gt.red2lim
           enddo
           ccfok(ia1:ib1)=.false.
        endif
@@ -126,7 +126,7 @@ contains
           if(done(i) .or. (.not.ccfok(i))) cycle
           f=(i-1)*df3
           if(nqd.eq.1 .or.                                                   &
-               (ccfred(i).ge.ccflim .and. abs(f-fgood).gt.10.0*df8)) then
+               (this%ccfred(i).ge.ccflim .and. abs(f-fgood).gt.10.0*df8)) then
 
              call timer('softsym ',0)
              fpk=nf0 + df3*(i-1)

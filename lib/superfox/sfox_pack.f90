@@ -2,7 +2,8 @@ subroutine sfox_pack(line,ckey,bMoreCQs,bSendMsg,freeTextMsg,xin)
 
   use qpc_mod
   use packjt
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_pack28,                   &
+       ftx_pack77_packtext77
   use julian
   parameter (NQU1RKS=203514677)
   integer*8 n47,n58,now
@@ -71,7 +72,7 @@ subroutine sfox_pack(line,ckey,bMoreCQs,bSendMsg,freeTextMsg,xin)
      go to 800
   endif
 
-  call pack28(w(1),n28)                      !Fox call
+  call ftx_pack77_pack28(w(1),n28)        !Fox call
   write(msgbits(1:28),'(b28.28)') n28
 
 ! Default report is RR73 if we're also sending a free text message.
@@ -84,7 +85,7 @@ subroutine sfox_pack(line,ckey,bMoreCQs,bSendMsg,freeTextMsg,xin)
      if(w(i)(1:1).eq.'+' .or. w(i)(1:1).eq.'-') cycle     !Skip report words
      i1=min(i+1,nwords)
      if(w(i1)(1:1) .eq.'+' .or. w(i1)(1:1).eq.'-') cycle  !Skip if i+1 is report
-     call pack28(w(i),n28)
+     call ftx_pack77_pack28(w(i),n28)
      write(msgbits(j:j+27),1002) n28         !Insert this call for RR73 message
 1002 format(b28.28)
      j=j+28
@@ -104,7 +105,7 @@ subroutine sfox_pack(line,ckey,bMoreCQs,bSendMsg,freeTextMsg,xin)
   do i=2,nwords
      i1=min(i+1,nwords)
      if(w(i1)(1:1).eq.'+' .or. w(i1)(1:1).eq.'-') then
-        call pack28(w(i),n28)
+        call ftx_pack77_pack28(w(i),n28)
         write(msgbits(j:j+27),1002) n28       !Insert this call 
         read(w(i1),*) n              !Valid reports are -18 to +12, plus RR73
         if(n.lt.-18) n=-18           !... Even numbers only ...
@@ -129,11 +130,11 @@ subroutine sfox_pack(line,ckey,bMoreCQs,bSendMsg,freeTextMsg,xin)
         freeTextMsg(i:i)='.'
      enddo
      if(i3.eq.3) then
-        call packtext77(freeTextMsg(1:13),msgbits(74:144))
-        call packtext77(freeTextMsg(14:26),msgbits(145:215))
+        call ftx_pack77_packtext77(freeTextMsg(1:13),msgbits(74:144))
+        call ftx_pack77_packtext77(freeTextMsg(14:26),msgbits(145:215))
      elseif(i3.eq.2) then
-        call packtext77(freeTextMsg(1:13),msgbits(161:231))
-        call packtext77(freeTextMsg(14:26),msgbits(232:302))
+        call ftx_pack77_packtext77(freeTextMsg(1:13),msgbits(161:231))
+        call ftx_pack77_packtext77(freeTextMsg(14:26),msgbits(232:302))
      endif
      write(msgbits(327:329),'(b3.3)') i3     !Message type i3=2
   endif

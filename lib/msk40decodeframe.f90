@@ -1,11 +1,12 @@
-subroutine msk40decodeframe(c,mycall,hiscall,xsnr,bswl,nhasharray,             &
+subroutine msk40decodeframe(c,mycall,hiscall,xsnr,bswl,recent_calls,nhasharray, &
                             msgreceived,nsuccess)
 !  use timer_module, only: timer
-  use packjt77
+  use ftx_pack77_c_api, only: MAXRECENT
 
   parameter (NSPM=240)
   character*4 rpt(0:15)
   character*12 mycall,hiscall,mycall0,hiscall0
+  character*13 recent_calls(MAXRECENT)
   character*37 hashmsg,msgreceived
   complex cb(42)
   complex cfac,cca

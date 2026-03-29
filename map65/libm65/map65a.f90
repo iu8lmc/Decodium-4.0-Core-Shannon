@@ -8,6 +8,13 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
 
   use wideband_sync
   use timer_module, only: timer
+  use, intrinsic :: iso_c_binding, only: c_int
+
+  interface
+     integer(c_int) function ftx_map65_native_last_quick_count_c() bind(C,name="ftx_map65_native_last_quick_count_c")
+       use, intrinsic :: iso_c_binding, only: c_int
+     end function ftx_map65_native_last_quick_count_c
+  end interface
 
   parameter (MAXMSG=1000)            !Size of decoded message list
   parameter (NSMAX=60*96000)
@@ -23,8 +30,7 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
   character mycall*12,hiscall*12,mygrid*6,hisgrid*6,cp*1,cm*1
   integer indx(MAXMSG),nsiz(MAXMSG)
   logical done(MAXMSG)
-  logical xpol,bq65,q65b_called
-  logical candec(MAX_CANDIDATES)
+  logical xpol
   logical ldecoded
   character decoded*22,blank*22,cmode*2
   real short(3,NFFT)                 !SNR dt ipol for potential shorthands
@@ -44,7 +50,7 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
   rewind 12
   ndecodes=0
 
-! Clean start for Q65 at early decode
+! Clean start for the native FTX backend at early decode
   if(nhsym.eq.nhsym1 .or. nagain.ne.0) ldecoded=.false.
   if(ndiskdat.eq.1) ldecoded=.false.
 
@@ -53,9 +59,8 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
   mfb=nfb-nkhz_center+48
   mode65=mod(nmode,10)
   if(mode65.eq.3) mode65=4
-  mode_q65=nmode/10
+  mode_native=nmode/10
   nts_jt65=mode65                     !JT65 tone separation factor
-  nts_q65=2**(mode_q65-1)             !Q65 tone separation factor
   xpol=(nxpol.ne.0)
   
 ! No second decode for JT65?
@@ -63,9 +68,8 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
 
   if(nagain.eq.0) then
      call timer('get_cand',0)
-     call get_candidates(ss,savg,xpol,nhsym,mfa,mfb,nts_jt65,nts_q65,cand,ncand)
+     call get_candidates(ss,savg,xpol,nhsym,mfa,mfb,nts_jt65,cand,ncand)
      call timer('get_cand',1)
-     candec=.false.
   endif
 !###
 !  do k=1,ncand
@@ -77,8 +81,8 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
 !  enddo
 !###
 
-  nwrite_q65=0
-  bq65=mode_q65.gt.0
+  nwrite_native=0
+  if(mode_native.gt.0) nwrite_native=ftx_map65_native_last_quick_count_c()
 
   mcall3a=mcall3b
   mousefqso0=mousefqso
@@ -352,37 +356,7 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
            endif
         enddo  ! k=1,km
 
-        if(bq65) then
-           q65b_called=.false.
-           do icand=1,ncand
-              if(cand(icand)%iflip.ne.0) cycle        !Keep only Q65 candidates
-              freq=cand(icand)%f+nkhz_center-48.0-1.27046
-              nhzdiff=nint(1000.0*(freq-mousefqso)-mousedf) - nfcal
-! Now looking for "quick decode" (nqd=1) candidates at cursor freq +/- ntol.
-              if(nqd.eq.1 .and. abs(nhzdiff).gt.ntol) cycle
-              ikhz=mousefqso
-              q65b_called=.true.
-              f0=cand(icand)%f
-              call timer('q65b    ',0)
-              call q65b(nutc,nqd,nxant,fcenter,nfcal,nfsample,ikhz,mousedf,   &
-                   ntol,xpol,mycall,mygrid, hiscall,hisgrid,mode_q65,f0,fqso, &
-                   newdat,nagain,max_drift,nhsym,ndop00,idec)
-              call timer('q65b    ',1)
-              if(idec.ge.0) candec(icand)=.true.
-           enddo
-           if(.not.q65b_called) then
-              freq=mousefqso + 0.001*mousedf
-              ikhz=mousefqso
-              f0=freq - (nkhz_center-48.0-1.27046)   !### ??? ###
-              call timer('q65b    ',0)
-              call q65b(nutc,nqd,nxant,fcenter,nfcal,nfsample,ikhz,mousedf,   &
-                   ntol,xpol,mycall,mygrid,hiscall,hisgrid,mode_q65,f0,fqso,  &
-                   newdat,nagain,max_drift,nhsym,ndop00,idec)
-              call timer('q65b    ',1)
-           endif
-        endif
-
-        if(nwrite.eq.0 .and. nwrite_q65.eq.0) then
+        if(nwrite.eq.0 .and. nwrite_native.eq.0) then
            write(*,1012) mousefqso,nutc
 1012       format('!',i3,9x,i6.4,'  ')
         endif
@@ -408,24 +382,6 @@ subroutine map65a(dd,ss,savg,newdat,nutc,fcenter,ntol,idphi,nfa,nfb,        &
      if(nhsym.eq.nhsym1 .and. tsec0.gt.3.0) go to 700
      if(nqd.eq.1 .and. nagain.eq.1) go to 900
 
-     if(nqd.eq.0 .and. bq65) then
-! Do the wideband Q65 decode        
-        do icand=1,ncand
-           if(cand(icand)%iflip.ne.0) cycle    !Do only Q65 candidates here
-           if(candec(icand)) cycle             !Skip if already decoded
-           freq=cand(icand)%f+nkhz_center-48.0-1.27046
-!###! If here at nqd=1, do only candidates at mousefqso +/- ntol
-!###           if(nqd.eq.1 .and. abs(freq-mousefqso).gt.0.001*ntol) cycle
-           ikhz=nint(freq)
-           f0=cand(icand)%f
-           call timer('q65b    ',0)
-           call q65b(nutc,nqd,nxant,fcenter,nfcal,nfsample,ikhz,mousedf,ntol, &
-                xpol,mycall,mygrid,hiscall,hisgrid,mode_q65,f0,fqso,newdat,   &
-                nagain,max_drift,nhsym,ndop00,idec)
-           call timer('q65b    ',1)
-           if(idec.ge.0) candec(icand)=.true.
-        enddo  ! icand
-     endif
      call sec0(1,tsec0)
 
   enddo  ! nqd

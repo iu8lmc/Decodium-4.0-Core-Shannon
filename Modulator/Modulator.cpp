@@ -6,6 +6,9 @@
 #include <qmath.h>
 #include <QDateTime>
 #include <QReadLocker>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 #include <QRandomGenerator>
 #endif
@@ -29,6 +32,41 @@ extern float gran();		// Noise generator (for tests only)
 #endif
 
 double constexpr Modulator::m_twoPi;
+
+namespace
+{
+void append_modulator_debug (QString const& line)
+{
+  auto const dir = QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation);
+  if (dir.isEmpty ()) return;
+
+  QFile outputFile {dir + QLatin1String ("/debug.txt")};
+  if (!outputFile.open (QIODevice::ReadWrite | QIODevice::Append))
+    {
+      return;
+    }
+
+  QTextStream outStream (&outputFile);
+  outStream << QDateTime::currentDateTimeUtc ().toString ("HH:mm:ss.zzz ") << line << Qt::endl;
+}
+
+double vector_peak (QVector<float> const& wave)
+{
+  double peak = 0.0;
+  for (float sample : wave)
+    {
+      peak = qMax (peak, std::abs (static_cast<double> (sample)));
+    }
+  return peak;
+}
+
+QString precomputed_debug_tag (QString const& mode)
+{
+  if (mode == QLatin1String ("FT2")) return QStringLiteral ("ft2");
+  if (mode == QLatin1String ("FT4")) return QStringLiteral ("ft4");
+  return mode.toLower ();
+}
+}
 
 //    float wpm=20.0;
 //    unsigned m_nspd=1.2*48000.0/wpm;
@@ -74,6 +112,12 @@ void Modulator::setSymbolTables (QVector<int> const& itone_values, QVector<int> 
     }
 }
 
+void Modulator::setPrecomputedWave (QString const& mode, QVector<float> const& wave)
+{
+  m_pendingPrecomputedWaveMode = mode;
+  m_pendingPrecomputedWave = wave;
+}
+
 void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSymbol,
                        double frequency, double toneSpacing,
                        SoundOutput * stream, Channel channel,
@@ -83,6 +127,16 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
   Q_ASSERT (stream);
   // FT2 stability guard: keep encoder/modulator contract fixed even if
   // a stale/incorrect queued start slips through.
+  bool const ft2_precomputed_wave = (mode == "FT2" && !m_tuning && toneSpacing < 0.0);
+  bool const ft4_precomputed_wave = (mode == "FT4" && !m_tuning && toneSpacing < 0.0);
+  m_modeName = mode;
+  m_ft2PrecomputedWave = ft2_precomputed_wave;
+  m_ft4PrecomputedWave = ft4_precomputed_wave;
+  m_loggedWaveChunk = false;
+  m_waveFramesAccum = 0;
+  m_waveNonZeroAccum = 0;
+  m_waveAbsAccum = 0;
+  m_wavePeakAccum = 0;
   if (mode == "FT2")
     {
       symbolsLength = 105;
@@ -115,10 +169,32 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
           requiredSamples = qMax (requiredSamples, static_cast<qint64> (std::ceil (m_TRperiod * 48000.0 - 24000.0)) + 2);
         }
       int const kFoxWaveSampleCount = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
-      int const copySamples = static_cast<int> (qBound<qint64> (1, requiredSamples, kFoxWaveSampleCount));
-      m_waveSnapshot.resize (copySamples);
-      QReadLocker wave_lock {&fox_wave_lock ()};
-      std::memcpy (m_waveSnapshot.data (), foxcom_.wave, static_cast<size_t> (copySamples) * sizeof (float));
+      if (!m_pendingPrecomputedWave.isEmpty () && m_pendingPrecomputedWaveMode == mode)
+        {
+          int const copySamples = static_cast<int> (
+              qBound<qint64> (1, qMin<qint64> (requiredSamples, m_pendingPrecomputedWave.size ()),
+                              m_pendingPrecomputedWave.size ()));
+          m_waveSnapshot = m_pendingPrecomputedWave.mid (0, copySamples);
+        }
+      else
+        {
+          QReadLocker wave_lock {&fox_wave_lock ()};
+          auto const& cachedWave = precomputed_tx_wave_buffer ();
+          auto const& cachedMode = precomputed_tx_wave_mode ();
+          if (!cachedWave.isEmpty () && cachedMode == mode)
+            {
+              int const copySamples = static_cast<int> (qBound<qint64> (1, qMin<qint64> (requiredSamples, cachedWave.size ()), cachedWave.size ()));
+              m_waveSnapshot = cachedWave.mid (0, copySamples);
+            }
+          else
+            {
+              int const copySamples = static_cast<int> (qBound<qint64> (1, requiredSamples, kFoxWaveSampleCount));
+              m_waveSnapshot.resize (copySamples);
+              std::memcpy (m_waveSnapshot.data (), foxcom_.wave, static_cast<size_t> (copySamples) * sizeof (float));
+            }
+        }
+      m_pendingPrecomputedWave.clear ();
+      m_pendingPrecomputedWaveMode.clear ();
     }
   m_icmin=4294967295;
   m_icmax=0;
@@ -127,7 +203,7 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
   if((mode=="FT8" and m_nsps==1024)) delay_ms=400;            //SuperFox Qary Polar Code transmission
   if(mode=="Q65" and m_nsps<=3600) delay_ms=500;              //Q65-15 and Q65-30
   if(mode=="FT4") delay_ms=300;                               //FT4
-  if(mode=="FT2") delay_ms=100;                               //FT2 async: minimal delay
+  if(mode=="FT2") delay_ms=300;                               //FT2 needs a less aggressive audio start on some rigs/macOS setups
 
 // noise generator parameters
   if (m_addNoise) {
@@ -146,14 +222,41 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
         {
           if(delay_ms > mstr) m_silentFrames = (delay_ms - mstr) * m_frameRate / 1000;
 
+          // FT2 is short enough that some rigs/macOS audio paths can key PTT
+          // before the data audio becomes usable. Hold the payload back a bit
+          // longer to guarantee a small lead-in after PTT.
+          if (ft2_precomputed_wave || ft4_precomputed_wave)
+            {
+              unsigned constexpr kFtxLeadInMs = 450;
+              m_silentFrames = qMax<qint64> (m_silentFrames, (kFtxLeadInMs * m_frameRate) / 1000);
+            }
+
           // adjust for late starts (only when synchronized to period)
-          if(!m_silentFrames && mstr >= delay_ms)
+          //
+          // FT2 is unusually sensitive here because its precomputed waveform is
+          // much shorter than the slot length. If we skip deep into the wave to
+          // "catch up", the radio can key with little or no payload audio left.
+          // Keep the nominal early-start alignment, but when FT2 starts late,
+          // transmit the full waveform from sample 0 instead of trimming it away.
+          if(!m_silentFrames && mstr >= delay_ms && !ft2_precomputed_wave && !ft4_precomputed_wave)
             {
               m_ic = (mstr - delay_ms) * m_frameRate / 1000;
             }
         }
     }
   if(mode=="Echo") m_ic=0;
+
+  if (m_ft2PrecomputedWave || m_ft4PrecomputedWave)
+    {
+      auto const tag = precomputed_debug_tag (m_modeName);
+      append_modulator_debug (QString {"%1modStart snapPeak:%2 samples:%3 silent:%4 mstr:%5 period:%6"}
+                                  .arg (tag)
+                                  .arg (vector_peak (m_waveSnapshot), 0, 'f', 6)
+                                  .arg (m_waveSnapshot.size ())
+                                  .arg (m_silentFrames)
+                                  .arg (mstr)
+                                  .arg (m_period, 0, 'f', 2));
+    }
 
   initialize (QIODevice::ReadOnly, channel);
   Q_EMIT stateChanged ((m_state = (synchronize && m_silentFrames) ?
@@ -251,6 +354,9 @@ qint64 Modulator::readData (char * data, qint64 maxSize)
     case Active:
       {
         unsigned int isym=0;
+        qint64 waveFramesGenerated = 0;
+        int waveNonZero = 0;
+        qint16 wavePeak = 0;
 
         if(!m_tuning) isym=m_ic/(4.0*m_nsps);            // Actual fsample=48000
         bool slowCwId=((isym >= m_symbolsLength) && (m_icw[0] > 0)) && (!m_bFastMode);
@@ -327,9 +433,13 @@ qint64 Modulator::readData (char * data, qint64 maxSize)
         } else {
           i0=(m_symbolsLength - 0.017) * 4.0 * m_nsps;
           i1= m_symbolsLength * 4.0 * m_nsps;
-          // Precomputed wave (FT2/Fox): include ramp-up/down symbols (+2)
-          if (m_toneSpacing < 0 && itone[0] < 100) {
-            i1 = (m_symbolsLength + 2) * 4.0 * m_nsps;
+          // Precomputed wave (FT2/FT4/Fox): trust the copied snapshot length
+          // rather than re-deriving duration from mode-specific symbol counts.
+          if (m_toneSpacing < 0 && m_itone[0] < 100) {
+            if (!m_waveSnapshot.isEmpty ())
+              {
+                i1 = static_cast<unsigned int> (m_waveSnapshot.size () - 1);
+              }
             i0 = i1;  // wave has built-in ramp, disable internal fade-out
           }
         }
@@ -389,6 +499,13 @@ qint64 Modulator::readData (char * data, qint64 maxSize)
                 wave_sample = m_waveSnapshot[static_cast<int> (m_ic)];
               }
             sample=qRound(m_amp * wave_sample);
+            ++waveFramesGenerated;
+            if (sample != 0) ++waveNonZero;
+            wavePeak = qMax<qint16> (wavePeak, static_cast<qint16> (std::abs (sample)));
+            ++m_waveFramesAccum;
+            if (sample != 0) ++m_waveNonZeroAccum;
+            m_waveAbsAccum += static_cast<quint64> (std::abs (sample));
+            m_wavePeakAccum = qMax<qint16> (m_wavePeakAccum, static_cast<qint16> (std::abs (sample)));
             m_icmin=qMin(m_ic,m_icmin);
             m_icmax=qMax(m_ic,m_icmax);
           }
@@ -403,12 +520,47 @@ qint64 Modulator::readData (char * data, qint64 maxSize)
         }
 
         if(m_TRperiod==3 and m_ic >i1) {
+          if (m_ft2PrecomputedWave || m_ft4PrecomputedWave)
+            {
+              quint64 const avgAbs = m_waveFramesAccum ? (m_waveAbsAccum / m_waveFramesAccum) : 0;
+              auto const tag = precomputed_debug_tag (m_modeName);
+              append_modulator_debug (QString {"%1modDone frames:%2 nonzero:%3 avgAbs:%4 peak:%5"}
+                                          .arg (tag)
+                                          .arg (m_waveFramesAccum)
+                                          .arg (m_waveNonZeroAccum)
+                                          .arg (avgAbs)
+                                          .arg (m_wavePeakAccum));
+            }
           Q_EMIT stateChanged ((m_state = Idle));
           return framesGenerated * bytesPerFrame ();
         }
 
+        if ((m_ft2PrecomputedWave || m_ft4PrecomputedWave) && !m_loggedWaveChunk && waveFramesGenerated > 0)
+          {
+            auto const tag = precomputed_debug_tag (m_modeName);
+            append_modulator_debug (QString {"%1modChunk frames:%2 nonzero:%3 peak:%4 ic:%5 i1:%6"}
+                                        .arg (tag)
+                                        .arg (waveFramesGenerated)
+                                        .arg (waveNonZero)
+                                        .arg (wavePeak)
+                                        .arg (m_ic)
+                                        .arg (i1));
+            m_loggedWaveChunk = true;
+          }
+
         // Precomputed wave finished (FT2/Fox) — clean exit after ramp-down
-        if (!m_tuning && m_toneSpacing < 0 && itone[0] < 100 && m_ic > i1) {
+        if (!m_tuning && m_toneSpacing < 0 && m_itone[0] < 100 && m_ic > i1) {
+          if (m_ft2PrecomputedWave || m_ft4PrecomputedWave)
+            {
+              quint64 const avgAbs = m_waveFramesAccum ? (m_waveAbsAccum / m_waveFramesAccum) : 0;
+              auto const tag = precomputed_debug_tag (m_modeName);
+              append_modulator_debug (QString {"%1modDone frames:%2 nonzero:%3 avgAbs:%4 peak:%5"}
+                                          .arg (tag)
+                                          .arg (m_waveFramesAccum)
+                                          .arg (m_waveNonZeroAccum)
+                                          .arg (avgAbs)
+                                          .arg (m_wavePeakAccum));
+            }
           Q_EMIT stateChanged ((m_state = Idle));
           return framesGenerated * bytesPerFrame ();
         }
@@ -419,6 +571,17 @@ qint64 Modulator::readData (char * data, qint64 maxSize)
         if (m_amp == 0.0) { // TODO G4WJS: compare double with zero might not be wise
           if (m_icw[0] == 0) {
             // no CW ID to send
+            if (m_ft2PrecomputedWave || m_ft4PrecomputedWave)
+              {
+                quint64 const avgAbs = m_waveFramesAccum ? (m_waveAbsAccum / m_waveFramesAccum) : 0;
+                auto const tag = precomputed_debug_tag (m_modeName);
+                append_modulator_debug (QString {"%1modDone frames:%2 nonzero:%3 avgAbs:%4 peak:%5"}
+                                            .arg (tag)
+                                            .arg (m_waveFramesAccum)
+                                            .arg (m_waveNonZeroAccum)
+                                            .arg (avgAbs)
+                                            .arg (m_wavePeakAccum));
+              }
             Q_EMIT stateChanged ((m_state = Idle));
             return framesGenerated * bytesPerFrame ();
           }

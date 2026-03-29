@@ -1,7 +1,7 @@
 program hash22calc 
 ! Given a valid callsign, calculate and print its 22-bit hash.
 
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_hash_call
   
   character*13 callsign
   character*1  c
@@ -34,7 +34,7 @@ program hash22calc
   endif
 
 ! calculate the hash
-  n22 = ihashcall(callsign,22)
+  n22 = ftx_pack77_hash_call(callsign,22)
   write(*,'(a,i7.7)') callsign,n22
 
 999 end program hash22calc

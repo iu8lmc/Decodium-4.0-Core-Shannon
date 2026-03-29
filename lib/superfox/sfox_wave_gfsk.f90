@@ -12,13 +12,15 @@ subroutine sfox_wave_gfsk()
   character*40 cmsg2
   integer itone(151)
   real*8 dt,twopi,f0,phi,dphi_peak
-  real*8 dphi(0:NPTS-1)
+  real*8, allocatable :: dphi(:)
   real*8 pulse(3*NSPS)
   logical first/.true./
 
   common/foxcom/wave(NWAVE)
   common/foxcom3/nslots2,cmsg2(5),itone3(151)
   save first,twopi,dt,hmod,dphi_peak,pulse
+
+  allocate(dphi(0:NPTS-1))
 
   if(first) then
     fsample=48000.0

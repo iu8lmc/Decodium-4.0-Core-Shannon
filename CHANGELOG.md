@@ -1,5 +1,79 @@
 # Changelog / Registro Modifiche
 
+## [1.5.6] - 2026-03-29
+
+### English
+
+Release focused on completing the promoted native C++ runtime for FT8/FT4/FT2/Q65, extending the worker-based in-process architecture, hardening TX/build behaviour, and aligning the validated macOS/Linux release layout to semantic version `1.5.6`.
+
+#### Added
+
+- Added native C++ utilities/frontends for `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65`, and `rtty_spec`.
+- Added parity/regression tooling with `ft8_stage_compare`, `ft4_stage_compare`, `ft2_stage_compare`, `ft2_equalized_compare`, `q65_stage_compare`, and `ft2_make_test_wav`.
+- Added richer FT2/FT4/Fox waveform snapshot tracing in writable `debug.txt`.
+
+#### Changed
+
+- FT8, FT4, FT2, and Q65 now use the promoted native C++ runtime path without mode-specific Fortran orchestration on the active path.
+- The main application no longer provisions the old `jt9` shared-memory bootstrap for promoted FTX runtime workers.
+- macOS release packaging keeps the folder/layout changes already validated by the last successful deploy and aligns Tahoe, Sequoia, Intel Sequoia, Monterey, and Linux AppImage release targets.
+- Local version metadata, workflow defaults, release docs, and About text are aligned to semantic version `1.5.6`.
+
+#### Fixed
+
+- Fixed GNU `ld` static-library cycle and link-order failures across `wsjt_qt`, `wsjt_cxx`, and `wsjt_fort`.
+- Fixed GCC 15 / Qt5 / C++11 build failures in native tools, tests, and bridge code.
+- Fixed FT2/FT4/Fox precomputed-wave startup timing by keeping safer lead-in and cached waveform handoff.
+- Fixed several parity/regression blind spots by extending stage-compare and helper-test coverage.
+
+### Italiano
+
+Release focalizzata sul completamento del runtime promosso nativo C++ per FT8/FT4/FT2/Q65, sull'estensione dell'architettura in-process a worker, sull'hardening di TX/build e sull'allineamento del layout release macOS/Linux gia' validato alla semver `1.5.6`.
+
+#### Aggiunto
+
+- Aggiunti utility/front-end nativi C++ per `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65` e `rtty_spec`.
+- Aggiunti strumenti di parita'/regressione con `ft8_stage_compare`, `ft4_stage_compare`, `ft2_stage_compare`, `ft2_equalized_compare`, `q65_stage_compare` e `ft2_make_test_wav`.
+- Aggiunto tracing piu' ricco in `debug.txt` per snapshot waveform FT2/FT4/Fox.
+
+#### Modificato
+
+- FT8, FT4, FT2 e Q65 usano ora il runtime promosso nativo C++ senza orchestrazione Fortran specifica nel path attivo.
+- L'app principale non alloca piu' il vecchio bootstrap `jt9` a shared memory per i worker runtime FTX promossi.
+- Il packaging release macOS mantiene le cartelle/layout gia' validati dall'ultimo deploy riuscito e allinea i target Tahoe, Sequoia, Intel Sequoia, Monterey e Linux AppImage.
+- Metadati versione locali, default workflow, documenti release e testo About sono allineati alla semver `1.5.6`.
+
+#### Corretto
+
+- Corretti i fallimenti GNU `ld` di cicli di librerie statiche e ordine di link fra `wsjt_qt`, `wsjt_cxx` e `wsjt_fort`.
+- Corretti i fallimenti di build GCC 15 / Qt5 / C++11 nei tool nativi, nei test e nel codice bridge.
+- Corretta la temporizzazione di avvio delle wave precompute FT2/FT4/Fox mantenendo lead-in piu' sicuro e handoff waveform cache.
+- Ridotte diverse zone cieche di parita'/regressione estendendo stage-compare e test helper.
+
+### Espanol
+
+Release centrada en completar el runtime promovido nativo C++ para FT8/FT4/FT2/Q65, ampliar la arquitectura in-process con workers, endurecer TX/build y alinear el layout release macOS/Linux ya validado con la semver `1.5.6`.
+
+#### Anadido
+
+- Anadidas utilidades/frontends nativos C++ para `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65` y `rtty_spec`.
+- Anadidas herramientas de paridad/regresion con `ft8_stage_compare`, `ft4_stage_compare`, `ft2_stage_compare`, `ft2_equalized_compare`, `q65_stage_compare` y `ft2_make_test_wav`.
+- Anadido trazado mas rico en `debug.txt` para snapshots waveform FT2/FT4/Fox.
+
+#### Cambios
+
+- FT8, FT4, FT2 y Q65 usan ahora el runtime promovido nativo C++ sin orquestacion Fortran especifica en el camino activo.
+- La aplicacion principal ya no reserva el viejo bootstrap `jt9` de shared memory para los workers runtime FTX promovidos.
+- El packaging release macOS mantiene las carpetas/layout ya validados por el ultimo deploy correcto y alinea Tahoe, Sequoia, Intel Sequoia, Monterey y Linux AppImage.
+- Metadatos locales de version, defaults de workflow, documentos release y texto About quedan alineados a la semver `1.5.6`.
+
+#### Corregido
+
+- Corregidos los fallos GNU `ld` de ciclos de librerias estaticas y orden de enlace entre `wsjt_qt`, `wsjt_cxx` y `wsjt_fort`.
+- Corregidos los fallos de build GCC 15 / Qt5 / C++11 en herramientas nativas, tests y codigo bridge.
+- Corregida la temporizacion de arranque de ondas precomputadas FT2/FT4/Fox manteniendo lead-in mas seguro y handoff waveform cache.
+- Reducidas varias zonas ciegas de paridad/regresion ampliando stage-compare y tests helper.
+
 ## [1.5.5] - 2026-03-23
 
 ### English

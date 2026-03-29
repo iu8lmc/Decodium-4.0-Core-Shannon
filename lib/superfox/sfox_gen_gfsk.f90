@@ -13,11 +13,13 @@ subroutine sfox_gen_gfsk(idat,f0,isync,itone,cdat)
   integer isync(NS)
   integer itone(NDS)
   real*8 dt,twopi,phi,dphi_peak
-  real*8 dphi(0:NPTS-1)
+  real*8, allocatable :: dphi(:)
   real  pulse(3*NSPS)
   logical first/.true./
 
   save first,twopi,dt,hmod,dphi_peak,pulse
+
+  allocate(dphi(0:NPTS-1))
 
   if(first) then
     twopi=8.d0*atan(1.0)

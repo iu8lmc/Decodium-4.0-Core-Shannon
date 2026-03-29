@@ -10,7 +10,7 @@ subroutine ftninit(appd)
 
   addpfx='    '
   call pfxdump(appd//'/prefixes.txt')
-  open(12,file=appd//'/wb_q65.txt',status='unknown')
+  open(12,file=appd//'/wb_ftx.txt',status='unknown')
   open(13,file=appd//'/map65.log',status='unknown')
 !  open(19,file=appd//'/livecq.txt',status='unknown')  ! not written with new livecq code
   open(21,file=appd//'/map65_rx.log',status='unknown',access='append',err=950)

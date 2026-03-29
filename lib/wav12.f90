@@ -12,7 +12,7 @@ subroutine wav12(d2,d1,npts,nbitsam2)
   parameter (NZ11=60*11025,NZ12=60*12000)
   parameter (NFFT1=64*11025,NFFT2=64*12000)
   integer*1 d1(NZ11)
-  integer*1 d1a(NZ11)
+  integer*1, allocatable :: d1a(:)
   integer*1 i1
   integer*2 i2
   integer*2 d2(NZ12)
@@ -20,6 +20,8 @@ subroutine wav12(d2,d1,npts,nbitsam2)
   complex cx(0:NFFT2/2)
   integer*2 nbitsam2
   equivalence (x,cx),(i1,i2)
+
+  allocate(d1a(NZ11))
 
   jz=min(NZ11,npts)
   if(nbitsam2.eq.8) then

@@ -1,6 +1,4 @@
 module packjt77
-
-use packjt77var, only : hash10var,hash12var,hash22var
   
 ! These variables are accessible from outside via "use packjt77":
   parameter (MAXHASH=1000,MAXRECENT=10)
@@ -323,7 +321,7 @@ subroutine unpack77(c77,nrx,msg,unpk77_success)
      call hash10(n10,call_3)
      if(call_3.eq.'<...>') then
       ! print*,'pre std n10 ',n10,' call_3 ',call_3
-       call hash10var(n10,call_3,1)
+       call hash10(n10,call_3)
       ! print*,'std n10 ',n10,' call_3 ',call_3
      endif
      if(nrx.eq.1     .and. &
@@ -580,7 +578,7 @@ subroutine unpack77(c77,nrx,msg,unpk77_success)
      call hash12(n12,call_3)
      if(call_3.eq.'<...>') then
       ! print*,'pre std n12 1 ',n12,' call_3 ',call_3
-       call hash12var(n12,call_3,1)
+       call hash12(n12,call_3)
       ! print*,'std n12 1 ',n12,' call_3 ',call_3
      endif
      if(iflip.eq.0) then       ! 12 bit hash for TO call
@@ -626,14 +624,14 @@ subroutine unpack77(c77,nrx,msg,unpk77_success)
      call hash12(n12,call_1)
      if(call_1.eq.'<...>') then
       ! print*,'pre std n12 1 ',n12,' call_1 ',call_1
-       call hash12var(n12,call_1,1)
+       call hash12(n12,call_1)
       ! print*,'std n12 2 ',n12,' call_1 ',call_1
      endif
      if(n12.eq.hashmy12) call_1='<'//trim(mycall13)//'>'
      call hash22(n22,call_2)
      if(call_2.eq.'<...>') then
       ! print*,'pre std n22 ',n22,' call_2 ',call_2
-       call hash22var(n22,call_2,1)
+       call hash22(n22,call_2)
       ! print*,'std n22 ',n22,' call_2 ',call_2
      endif
      nrs=52+irpt
@@ -833,7 +831,7 @@ subroutine unpack28(n28_0,c13,success)
      call hash22(n22,c13)     !Retrieve callsign from hash table
      if(c13.eq.'<...>') then
       ! print*,'pre std n22 ',n22,' c13 ',c13
-       call hash22var(n22,c13,1)
+       call hash22(n22,c13)
       ! print*,'std n22 ',n22,' c13 ',c13
      endif
      go to 900
@@ -1093,6 +1091,7 @@ subroutine pack77_06(nwords,w,i3,n3,c77,i3_hint,n3_hint)
      endif
      call chkcall(w(1),bcall,ok)
      if(.not.ok) go to 900
+     npfx=0
      if(i1.le.4) then
 ! We have a prefix
         npfx=index(a2,w(1)(1:1))-1

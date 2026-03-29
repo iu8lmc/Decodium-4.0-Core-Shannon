@@ -6,6 +6,7 @@
 #include <QAudio>
 #include <QMetaType>
 #include <QPointer>
+#include <QString>
 #include <QVector>
 
 #include "Audio/AudioDevice.hpp"
@@ -48,6 +49,7 @@ public:
   Q_SLOT void tune (bool newState = true);
   Q_SLOT void setFrequency (double newFrequency) {m_frequency = newFrequency;}
   Q_SLOT void setSymbolTables (QVector<int> const& itone_values, QVector<int> const& icw_values);
+  Q_SLOT void setPrecomputedWave (QString const& mode, QVector<float> const& wave);
   Q_SIGNAL void stateChanged (ModulatorState) const;
 
 protected:
@@ -92,6 +94,13 @@ private:
   bool m_tuning;
   bool m_addNoise;
   bool m_bFastMode;
+  bool m_ft2PrecomputedWave {false};
+  bool m_ft4PrecomputedWave {false};
+  bool m_loggedWaveChunk {false};
+  quint64 m_waveFramesAccum {0};
+  quint64 m_waveNonZeroAccum {0};
+  quint64 m_waveAbsAccum {0};
+  qint16 m_wavePeakAccum {0};
 
   bool m_cwLevel;
   unsigned m_ic;
@@ -100,9 +109,12 @@ private:
   unsigned m_isym0;
   int m_j0;
   double m_toneFrequency0;
+  QString m_modeName;
+  QString m_pendingPrecomputedWaveMode;
   std::array<int, MAX_NUM_SYMBOLS> m_itone {};
   std::array<int, NUM_CW_SYMBOLS> m_icw {};
   QVector<float> m_waveSnapshot;
+  QVector<float> m_pendingPrecomputedWave;
 };
 
 Q_DECLARE_METATYPE (Modulator::ModulatorState);

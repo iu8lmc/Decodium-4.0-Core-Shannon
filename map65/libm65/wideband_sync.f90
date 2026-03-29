@@ -6,7 +6,7 @@ module wideband_sync
      real :: xdt          !DT of matching sync pattern, -1.0 to +4.0 s
      real :: pol          !Polarization angle, degrees
      integer :: ipol      !Polarization angle, 1 to 4 ==> 0, 45, 90, 135 deg
-     integer :: iflip     !Sync type: JT65 = +/- 1, Q65 = 0
+     integer :: iflip     !JT65 sync type: standard = +1, shorthand = -1
      integer :: indx
   end type candidate
   type sync_dat
@@ -26,12 +26,12 @@ module wideband_sync
 
   contains
 
-subroutine get_candidates(ss,savg,xpol,jz,nfa,nfb,nts_jt65,nts_q65,cand,ncand)
+subroutine get_candidates(ss,savg,xpol,jz,nfa,nfb,nts_jt65,cand,ncand)
 
 ! Search symbol spectra ss() over frequency range nfa to nfb (in kHz) for
-! JT65 and Q65 sync patterns. The nts_* variables are the submode tone
-! spacings: 1 2 4 8 16 for A B C D E.  Birdies are detected and
-! excised.  Candidates are returned in the structure array cand().
+! JT65 sync patterns. The nts_jt65 variable is the submode tone
+! spacing: 1 2 4 8 16 for A B C D E. Birdies are detected and
+! excised. Candidates are returned in the structure array cand().
 
   parameter (MAX_PEAKS=100)
   real ss(4,322,NFFT),savg(4,NFFT)
@@ -43,7 +43,7 @@ subroutine get_candidates(ss,savg,xpol,jz,nfa,nfb,nts_jt65,nts_q65,cand,ncand)
 
   call wb_sync(ss,savg,xpol,jz,nfa,nfb)          !Output to sync() array
 
-  tstep=2048.0/11025.0        !0.185760 s: 0.5*tsym_jt65, 0.3096*tsym_q65
+  tstep=2048.0/11025.0        !0.185760 s: 0.5*tsym_jt65
   df3=96000.0/NFFT
   ia=nint(1000*nfa/df3) + 1
   ib=nint(1000*nfb/df3) + 1
@@ -61,7 +61,6 @@ subroutine get_candidates(ss,savg,xpol,jz,nfa,nfb,nts_jt65,nts_q65,cand,ncand)
      if(snr1.lt.SNR1_THRESHOLD) exit
      flip=sync(n)%iflip
      if(flip.ne.0.0 .and. nts_jt65.eq.0) cycle
-     if(flip.eq.0.0 .and. nts_q65.eq.0) cycle
      if(sync(n)%birdie) cycle
 
 ! Test for signal outside of TxT range and set bw for this signal type   
@@ -84,8 +83,7 @@ subroutine get_candidates(ss,savg,xpol,jz,nfa,nfb,nts_jt65,nts_q65,cand,ncand)
      skip=.false.
      do m=1,k                              !Skip false syncs within signal bw
         diffhz=1000.0*(f0-cand(m)%f)
-        bw=nts_q65*110.0
-        if(cand(m)%iflip.ne.0) bw=nts_jt65*178.0
+        bw=nts_jt65*178.0
         if(diffhz.gt.-0.03*bw .and. diffhz.lt.1.03*bw) skip=.true.
      enddo
      if(skip) cycle
@@ -108,7 +106,7 @@ end subroutine get_candidates
 
 subroutine wb_sync(ss,savg,xpol,jz,nfa,nfb)
 
-! Compute "orange sync curve" using the Q65 sync pattern
+! Compute the wideband sync curve using JT65 standard and shorthand sync.
 
   use timer_module, only: timer
   parameter (NFFT=32768)
@@ -118,12 +116,9 @@ subroutine wb_sync(ss,savg,xpol,jz,nfa,nfb)
   real savg_med(4)
   real ccf4(4),ccf4best(4),a(3)
   logical first,xpol
-  integer isync(22)
   integer jsync0(63),jsync1(63)
   integer ip(1)
 
-! Q65 sync symbols
-  data isync/1,9,12,13,15,22,23,26,27,33,35,38,46,50,55,60,62,66,69,74,76,85/
   data jsync0/                                                         &
        1,  4,  5,  9, 10, 11, 12, 13, 14, 16, 18, 22, 24, 25, 28, 32,  &
        33, 34, 37, 38, 39, 40, 42, 43, 45, 46, 47, 48, 52, 53, 55, 57, &
@@ -135,14 +130,10 @@ subroutine wb_sync(ss,savg,xpol,jz,nfa,nfb)
        72, 74, 75, 76, 77, 78, 79, 82, 83, 84, 85, 86, 87, 88, 91, 93, &
        94, 96, 99,101,103,105,106,109,110,112,113,115,116,117,118/
   data first/.true./
-  save first,isync,jsync0,jsync1
+  save first,jsync0,jsync1
 
-  tstep=2048.0/11025.0        !0.185760 s: 0.5*tsym_jt65, 0.3096*tsym_q65
+  tstep=2048.0/11025.0        !0.185760 s: 0.5*tsym_jt65
   if(first) then
-     fac=0.6/tstep
-     do i=1,22                                !Expand the Q65 sync stride
-        isync(i)=nint((isync(i)-1)*fac) + 1
-     enddo
      do i=1,63
         jsync0(i)=2*(jsync0(i)-1) + 1
         jsync1(i)=2*(jsync1(i)-1) + 1
@@ -173,25 +164,6 @@ subroutine wb_sync(ss,savg,xpol,jz,nfa,nfb)
   do i=ia,ib
      ccfmax=0.
      do lag=0,LAGMAX
-
-        ccf=0.
-        ccf4=0.
-        do j=1,22                        !Test for Q65 sync
-           k=isync(j) + lag
-           ccf4(1:npol)=ccf4(1:npol) + ss(1:npol,k,i+1) +       &
-                ss(1:npol,k+1,i+1) + ss(1:npol,k+2,i+1) 
-        enddo
-        ccf4(1:npol)=ccf4(1:npol) - savg(1:npol,i+1)*3*22/float(jz)
-        ccf=maxval(ccf4)
-        ip=maxloc(ccf4)
-        ipol=ip(1)
-        if(ccf.gt.ccfmax) then
-           ipolbest=ipol
-           lagbest=lag
-           ccfmax=ccf
-           ccf4best=ccf4
-           flip=0.
-        endif
 
         ccf=0.
         ccf4=0.
@@ -243,18 +215,12 @@ subroutine wb_sync(ss,savg,xpol,jz,nfa,nfb)
      sync(i)%iflip=flip
      sync(i)%birdie=.false.
      if(ccfmax/(savg(ipolbest,i)/savg_med(ipolbest)).lt.3.0) sync(i)%birdie=.true.
-!     if(sync(i)%iflip.eq.0 .and. sync(i)%ccfmax .gt. 20.0) then
-!        write(50,3050) i,lagbest,sync(i)%ccfmax,sync(i)%xdt,sync(i)%ipol,  &
-!             sync(i)%birdie,ccf4best
-!3050    format(2i5,f10.3,f8.2,i5,1x,L3,4f7.1)
-!     endif
-
   enddo  ! i (frequency bin)
 
   call pctile(sync(ia:ib)%ccfmax,ib-ia+1,50,base)
   sync(ia:ib)%ccfmax=sync(ia:ib)%ccfmax/base
 
-  bw=65*4*1.66666667                        !Q65-60C bandwidth
+  bw=max(178.0,float(max(1,nts_jt65))*178.0)
   nbw=bw/df3 + 1                            !Number of bins to blank
   syncmin=2.0
   nguard=10

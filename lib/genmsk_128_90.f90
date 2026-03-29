@@ -18,7 +18,8 @@ subroutine genmsk_128_90(msg0,ichk,msgsent,i4tone,itype)
 !                 7 = short message     "<Call_1 Call2> Rpt"
 
   use iso_c_binding, only: c_loc,c_size_t
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_reset_context,            &
+     ftx_pack77_pack
   character*37 msg0
   character*37 message                    !Message to be generated
   character*37 msgsent                    !Message as it will be received
@@ -81,8 +82,8 @@ subroutine genmsk_128_90(msg0,ichk,msgsent,i4tone,itype)
 
      i3=-1
      n3=-1
-     call pack77(message,i3,n3,c77)
-     call unpack77(c77,0,msgsent,unpk77_success) !Unpack to get msgsent
+     call ftx_pack77_reset_context()
+     call ftx_pack77_pack(message,i3,n3,c77,msgsent,unpk77_success,0)
      if(ichk.eq.1) go to 999
      read(c77,"(77i1)") msgbits
      call encode_128_90(msgbits,codeword)

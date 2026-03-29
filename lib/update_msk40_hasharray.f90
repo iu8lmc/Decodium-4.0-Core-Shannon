@@ -1,7 +1,8 @@
-subroutine update_msk40_hasharray(nhasharray)
+subroutine update_msk40_hasharray(recent_calls,nhasharray)
 
-  use packjt77  
+  use ftx_pack77_c_api, only: MAXRECENT
   character*37 hashmsg
+  character*13 recent_calls(MAXRECENT)
   integer nhasharray(MAXRECENT,MAXRECENT)
 
   nhasharray=-1

@@ -28,7 +28,7 @@ OBJS1 = trimlist.o display.o getdphi.o pctile.o ccf65.o \
 	twkfreq.o decode65b.o indexx.o ssort.o fchisq.o setup65.o \
 	extract.o deep65.o ccf2.o demod64a.o chkhist.o graycode.o \
 	interleave63.o encode65.o igray.o set.o shell.o qra64_subs.o \
-	grid2k.o getpfx2.o q65b.o qra64c.o twkfreq_xy.o qra64zap.o \
+	grid2k.o getpfx2.o qra64c.o twkfreq_xy.o qra64zap.o \
 	deg2grid.o getpfx1.o k2grid.o ftrsd2.o graycode65.o \
 	wrapkarn.o nchar.o init_rs.o encode_rs.o decode_rs.o \
 	four2a.o rfile3a.o grid2deg.o pfxdump.o dpol.o sync64.o spec64.o \
@@ -37,7 +37,7 @@ OBJS1 = trimlist.o display.o getdphi.o pctile.o ccf65.o \
 	gen65.o chkmsg.o ptt.o astrosub.o astro0.o recvpkt.o symspec.o \
 	iqcal.o iqfix.o timf2.o s3avg.o packjt.o badmsg.o fmtmsg.o \
 	qracodes.o qra64.o smo.o averms.o lorentzian.o npfwht.o pdmath.o \
-	qra13_64_64_irr_e.o fchisq0.o gen_q65_wave.o wavhdr.o
+	qra13_64_64_irr_e.o fchisq0.o wavhdr.o
 
 packjt.o: packjt.f90
 	$(FC) -c packjt.f90

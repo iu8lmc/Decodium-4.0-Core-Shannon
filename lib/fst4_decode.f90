@@ -8,7 +8,7 @@ module fst4_decode
 
    abstract interface
       subroutine fst4_decode_callback (this,nutc,sync,nsnr,dt,freq,    &
-         decoded,nap,qual,ntrperiod,fmid,w50)
+         decoded,nap,qual,ntrperiod,fmid,w50,bits77)
          import fst4_decoder
          implicit none
          class(fst4_decoder), intent(inout) :: this
@@ -23,6 +23,7 @@ module fst4_decode
          integer, intent(in) :: ntrperiod
          real, intent(in) :: fmid
          real, intent(in) :: w50
+         integer*1, intent(in) :: bits77(77)
       end subroutine fst4_decode_callback
    end interface
 
@@ -34,7 +35,8 @@ contains
 
       use prog_args
       use timer_module, only: timer
-      use packjt77
+      use ftx_pack77_c_api, only: ftx_pack77_reset_context,          &
+         ftx_pack77_set_context, ftx_pack77_pack, ftx_pack77_unpack
       use, intrinsic :: iso_c_binding
       include 'fst4/fst4_params.f90'
       parameter (MAXCAND=100,MAXWCALLS=100)
@@ -85,8 +87,8 @@ contains
       save wcalls,nwcalls
 
       this%callback => callback
-      dxcall13=hiscall   ! initialize for use in packjt77
-      mycall13=mycall
+      call ftx_pack77_reset_context()
+      call ftx_pack77_set_context(mycall,hiscall)
 
       if(iwspr.ne.0 .and. iwspr.ne.1) return 
 
@@ -161,8 +163,7 @@ contains
          msg=trim(mycall)//' '//trim(hiscall0)//' RR73'
          i3=-1
          n3=-1
-         call pack77(msg,i3,n3,c77)
-         call unpack77(c77,1,msgsent,unpk77_success)
+         call ftx_pack77_pack(msg,i3,n3,c77,msgsent,unpk77_success)
          if(i3.ne.1 .or. (msg.ne.msgsent) .or. .not.unpk77_success) go to 10
          read(c77,'(77i1)') message77
          message77=mod(message77+rvec,2)
@@ -486,7 +487,7 @@ contains
                         cycle
                      endif
                      write(c77,'(77i1)') mod(message101(1:77)+rvec,2)
-                     call unpack77(c77,1,msg,unpk77_success)
+                     call ftx_pack77_unpack(c77,1,msg,unpk77_success)
                   elseif(iwspr.eq.1) then
 ! Try decoding with Keff=66
                      maxosd=2
@@ -503,7 +504,7 @@ contains
                      endif
                      write(c77,'(50i1)') message74(1:50)
                      c77(51:77)='000000000000000000000110000'
-                     call unpack77(c77,1,msg,unpk77_success)
+                     call ftx_pack77_unpack(c77,1,msg,unpk77_success)
                      if(lprinthash22 .and. unpk77_success .and. index(msg,'<...>').gt.0) then
                         read(c77,'(b22.22)') n22tmp
                         i1=index(msg,' ')
@@ -553,7 +554,7 @@ contains
                         endif
                         write(c77,'(50i1)') message74(1:50)
                         c77(51:77)='000000000000000000000110000'
-                        call unpack77(c77,1,msg,unpk77_success)
+                        call ftx_pack77_unpack(c77,1,msg,unpk77_success)
 ! No CRC in this mode, so only accept the decode if call/grid have been seen before
                         if(unpk77_success) then
                            unpk77_success=.false.
@@ -634,8 +635,9 @@ contains
 3021                    format(i6.6,i4,6i3,3i4,f6.1,i4,f6.1,f9.2,f6.1,f6.2,f7.1,f7.3,1x,a)
                         close(21)
                      endif
+                     read(c77,'(77i1)') message77
                      call this%callback(nutc,smax1,nsnr,xdt,fsig,msg,    &
-                        iaptype,qual,ntrperiod,fmid,w50)
+                        iaptype,qual,ntrperiod,fmid,w50,message77)
                      goto 800
                   endif
                enddo  ! metrics

@@ -18,6 +18,7 @@ subroutine setup65
   data mr2/0/                !Silence compiler warning
 
 ! Put the appropriate pseudo-random sequence into pr
+  if(.not.allocated(s1)) allocate(s1(-255:256,126))
   nsym=126
   do i=1,nsym
      pr(i)=2*nprc(i)-1

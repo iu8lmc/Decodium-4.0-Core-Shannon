@@ -1,11 +1,13 @@
 subroutine sh65(cx,n5,mode65,ntol,xdf,nspecial,snrdb)
   parameter(NFFT=2048,NH=NFFT/2)
   complex cx(n5)               !Centered on nfqso, sample rate 1378.125
-  complex c(0:NFFT-1)
-  real s(-NH+1:NH)
-  real ss(-NH+1:NH,16)
+  complex, allocatable :: c(:)
+  real, allocatable :: s(:)
+  real, allocatable :: ss(:,:)
   real sigmax(16)
   integer ipk(16)
+
+  allocate(c(0:NFFT-1), s(-NH+1:NH), ss(-NH+1:NH,16))
 
   ss=0.
 

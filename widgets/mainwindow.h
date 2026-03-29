@@ -31,6 +31,7 @@
 #include <QMap>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QMetaObject>
 #include <QThreadPool>
 #include <QDateTime>
 #include <QSaveFile>
@@ -97,7 +98,6 @@ namespace Ui {
 }
 
 class QProcessEnvironment;
-class QSharedMemory;
 class QSplashScreen;
 class QSettings;
 class QLineEdit;
@@ -129,10 +129,18 @@ class EqualizationToolsDialog;
 class DecodedText;
 class Cloudlog;
 class WorldMapWidget;
-class SharedMemorySegment;
 class IonosphericForecastWindow;
 class DXClusterWindow;
 class RemoteCommandServer;
+namespace decodium { namespace ft2 { class FT2DecodeWorker; } }
+namespace decodium { namespace ft4 { class FT4DecodeWorker; } }
+namespace decodium { namespace fst4 { class FST4DecodeWorker; } }
+namespace decodium { namespace ft8 { class FT8DecodeWorker; } }
+namespace decodium { namespace jt9fast { class JT9FastDecodeWorker; } }
+namespace decodium { namespace q65 { class Q65DecodeWorker; } }
+namespace decodium { namespace msk144 { class MSK144DecodeWorker; } }
+namespace decodium { namespace legacyjt { class LegacyJtDecodeWorker; } }
+namespace decodium { namespace wspr { class WSPRDecodeWorker; } }
 namespace decodium { namespace rtty { class RTTYDetector; class RTTYModulator; } }
 
 class AsyncModeWidget;
@@ -150,7 +158,7 @@ public:
   using SpecOp = Configuration::SpecialOperatingActivity;
 
   explicit MainWindow(QDir const& temp_directory, bool multiple, MultiSettings *,
-                      SharedMemorySegment *shdmem, unsigned downSampleFactor,
+                      unsigned downSampleFactor,
                       QSplashScreen *, QProcessEnvironment const&,
                       QWidget *parent = nullptr);
   ~MainWindow();
@@ -173,13 +181,30 @@ public slots:
   void doubleClickOnFoxInProgress(Qt::KeyboardModifiers modifiers);
   void doubleClickOnCallerQueue(Qt::KeyboardModifiers);
   void readFromStdout();
-  void p1ReadFromStdout();
   void setXIT(int n, Frequency base = 0u);
   void setFreq4(int rxFreq, int txFreq);
   void msgAvgDecode2();
   void fastPick(int x0, int x1, int y);
 
 private:
+  enum class DecoderBackend
+  {
+    InProcess
+  };
+
+  enum class DecodedRowSource
+  {
+    InProcess
+  };
+
+  enum class DecodedRowAction
+  {
+    Continue,
+    ReturnFromReader
+  };
+
+  struct PreparedDecodedRow;
+
   void change_layout (std::size_t) override;
   void keyPressEvent (QKeyEvent *) override;
   void closeEvent(QCloseEvent *) override;
@@ -193,6 +218,35 @@ private:
   DisplayText * secondaryDecodeView () const;
   void applySingleDecodeColumnFlowLayout ();
   void applyRttyTerminalLayout ();
+  DecoderBackend decoderBackendForMode (QString const& mode) const;
+  void requestSubprocessDecodeStart (qint32 ihsym);
+  bool cancelPendingInProcessDecode ();
+  void requestInProcessFt2Decode ();
+  void requestInProcessFt4Decode ();
+  void requestInProcessFst4Decode ();
+  void requestInProcessFt8Decode ();
+  void requestInProcessJt9FastDecode ();
+  void requestInProcessQ65Decode ();
+  void requestInProcessMsk144Decode ();
+  void requestInProcessLegacyJtDecode ();
+  void requestInProcessWsprDecode ();
+  bool takeNextDecodedTransportRow (QQueue<QByteArray>& splitDecodeQueue, QByteArray& line_read, QString& all_decodes);
+  bool prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, DecodedRowSource source,
+                          PreparedDecodedRow& prepared, DecodedRowAction& action);
+  void processFastDecodedRows (QStringList const& rows);
+  void processFt2AsyncDecodedRows (QStringList const& rows);
+  void processFt2DecodedRows (quint64 serial, QStringList const& rows);
+  void processFt4DecodedRows (quint64 serial, QStringList const& rows);
+  void processFst4DecodedRows (quint64 serial, QStringList const& rows);
+  void processFt8DecodedRows (quint64 serial, QStringList const& rows);
+  void processJt9FastDecodedRows (quint64 serial, QStringList const& rows);
+  void processQ65DecodedRows (quint64 serial, QStringList const& rows);
+  void processMsk144DecodedRows (quint64 serial, QStringList const& rows);
+  void processLegacyJtDecodedRows (quint64 serial, QStringList const& rows);
+  void processWsprDecodedRows (quint64 serial, QStringList const& rows,
+                               QStringList const& diagnostics, int exitCode);
+  void processWsprDecoderLine (QString const& line);
+  void finishWsprDecode ();
   void updateAsyncL2ControlsVisibility ();
   void selectBandFrequency (Frequency preferredFrequency, Frequency fallbackFrequency);
   bool shouldSuppressNearDuplicateDecode (DecodedText const& decodedtext);
@@ -254,7 +308,6 @@ private slots:
   void on_cbManualTx_toggled (bool checked);
   void on_cbSpeedyContest_toggled (bool checked);
   void on_cbDigitalMorse_toggled (bool checked);
-  void asyncDecodeDone ();
   void on_ft8Button_clicked();
   void on_ft4Button_clicked();
   void on_ft2Button_clicked();
@@ -426,7 +479,7 @@ private slots:
   void on_actionErase_list_of_Q65_callers_triggered();
   void on_actionExport_Cabrillo_log_triggered();
   void startTx2();
-  void startP1();
+  void startWsprDecode();
   void stopTx();
   void stopTx2();
   void on_rptSpinBox_valueChanged(int n);
@@ -593,6 +646,7 @@ private:
   Q_SIGNAL void transmitFrequency (double) const;
   Q_SIGNAL void endTransmitMessage (bool quick = false) const;
   Q_SIGNAL void tune (bool = true) const;
+  Q_SIGNAL void sendPrecomputedWave (QString mode, QVector<float> wave) const;
   Q_SIGNAL void sendMessage (QString mode, unsigned symbolsLength,
       double framesPerSymbol, double frequency, double toneSpacing,
       SoundOutput *, AudioDevice::Channel = AudioDevice::Mono,
@@ -630,7 +684,11 @@ private:
   MultiSettings * m_multi_settings;
   QPushButton * m_configurations_button;
   QSettings * m_settings;
+  bool m_dataSinkShuttingDown {false};
   QScopedPointer<Ui::MainWindow> ui;
+  QMetaObject::Connection m_applicationStateChangedConnection;
+  QMetaObject::Connection m_detectorFramesWrittenConnection;
+  QMetaObject::Connection m_tciFramesWrittenConnection;
 
   Configuration m_config;
   bool m_logbookRead;          //avt 9/23/25
@@ -744,7 +802,6 @@ private:
   qint32  m_ft8Sensitivity;
   qint32  m_ft8DecoderStart;
   qint32  m_nsecBandChanged;
-  qint32  m_nFT4depth;
   //ft8md
 
   qint32  m_sec0;
@@ -1042,10 +1099,46 @@ private:
   QFuture<void> m_wav_future;
   QFutureWatcher<void> m_wav_future_watcher;
   QFutureWatcher<void> watcher3;
-  QFutureWatcher<void> m_asyncDecodeWatcher;
-  QThreadPool m_asyncDecodeThreadPool;
   QTimer m_asyncDecodeTimer;
   QTimer m_asyncTxGuardTimer;
+  QThread m_ft2DecodeThread;
+  decodium::ft2::FT2DecodeWorker * m_ft2DecodeWorker {nullptr};
+  quint64 m_ft2DecodeSerial {0};
+  bool m_ft2DecodePending {false};
+  int m_ft2DecodePendingUtc {0};
+  QThread m_ft4DecodeThread;
+  decodium::ft4::FT4DecodeWorker * m_ft4DecodeWorker {nullptr};
+  quint64 m_ft4DecodeSerial {0};
+  bool m_ft4DecodePending {false};
+  QThread m_fst4DecodeThread;
+  decodium::fst4::FST4DecodeWorker * m_fst4DecodeWorker {nullptr};
+  quint64 m_fst4DecodeSerial {0};
+  bool m_fst4DecodePending {false};
+  QThread m_ft8DecodeThread;
+  decodium::ft8::FT8DecodeWorker * m_ft8DecodeWorker {nullptr};
+  quint64 m_ft8DecodeSerial {0};
+  bool m_ft8DecodePending {false};
+  QThread m_jt9FastDecodeThread;
+  decodium::jt9fast::JT9FastDecodeWorker * m_jt9FastDecodeWorker {nullptr};
+  quint64 m_jt9FastDecodeSerial {0};
+  bool m_jt9FastDecodePending {false};
+  QThread m_q65DecodeThread;
+  decodium::q65::Q65DecodeWorker * m_q65DecodeWorker {nullptr};
+  quint64 m_q65DecodeSerial {0};
+  bool m_q65DecodePending {false};
+  QThread m_msk144DecodeThread;
+  decodium::msk144::MSK144DecodeWorker * m_msk144DecodeWorker {nullptr};
+  quint64 m_msk144DecodeSerial {0};
+  bool m_msk144DecodePending {false};
+  QThread m_legacyJtDecodeThread;
+  decodium::legacyjt::LegacyJtDecodeWorker * m_legacyJtDecodeWorker {nullptr};
+  quint64 m_legacyJtDecodeSerial {0};
+  bool m_legacyJtDecodePending {false};
+  QThread m_wsprDecodeThread;
+  decodium::wspr::WSPRDecodeWorker * m_wsprDecodeWorker {nullptr};
+  quint64 m_wsprDecodeSerial {0};
+  bool m_wsprDecodePending {false};
+  QQueue<QByteArray> m_decodedTransportQueue;
   bool m_wasTransmitting {false};
   qint64 m_asyncTxStartMs {0};
   qint64 m_asyncRxStartMs {0};
@@ -1053,8 +1146,6 @@ private:
   short int m_asyncAudio[90000];     // ring buffer ~7.5s at 12kHz
   int m_asyncAudioPos {0};           // write position in ring buffer
   bool m_bAsyncDecoding {false};     // async decode in progress
-  char m_asyncMsg[100][80];          // async decode results
-  int m_asyncMsgCount {0};           // number of valid async decode rows
   QSet<QString> m_asyncDedupeSet;    // deduplication within sliding window
   QDateTime m_asyncDedupeLastCleared;
   // Unified async dedup cache: key -> strongest SNR seen in the recent window.
@@ -1092,11 +1183,7 @@ private:
   qint64 m_manualTxWindowStartMs {0}; // when the TX window opened
   QFutureWatcher<QString> m_saveWAVWatcher;
 
-  NonInheritingProcess proc_jt9;
-  NonInheritingProcess p1;
   NonInheritingProcess p3;
-  QByteArray m_jt9RecentStdout;
-  QByteArray m_jt9RecentStderr;
 
   QProcess p2;
   QProcess p4;
@@ -1159,7 +1246,7 @@ private:
   QString m_rptRcvd;
   QString m_qsoStart;
   QString m_qsoStop;
-  QStringList m_cmndP1;
+  QStringList m_wsprDecodeArguments;
   QString m_msgSent0;
   QString m_calls;
   QString m_CQtype;
@@ -1263,7 +1350,6 @@ private:
   QDateTime m_dateTimeBestSP;
   QDateTime m_dateTimeSeqStart;        //Nominal start time of Rx sequence about to be decoded
 
-  SharedMemorySegment *mem_jt9;
   QString m_QSOText;
   unsigned m_downSampleFactor;
   QThread::Priority m_audioThreadPriority;
@@ -1416,7 +1502,6 @@ private:
   void foxGenWaveform(int i,QString fm);
   void writeFoxQSO (QString const& msg);
   void update_foxLogWindow_rate();
-  void to_jt9(qint32 n, qint32 istart, qint32 idone);
   bool is77BitMode () const;
   void cease_auto_Tx_after_QSO ();
   Q_SLOT void ARRL_Digi_Display();
@@ -1435,11 +1520,6 @@ private:
   bool is_externalCtrlMode();     //avt 12/5/20
   void initExternalCtrl();     //avt 12/5/20
   void externalCtrlDisconnected();  //avt 12/16/21
-  void resetJt9ProcessCapture ();
-  void captureJt9ProcessOutput (QByteArray& target, QByteArray const& data, bool persist, QString const& channel);
-  void appendJt9ProcessLog (QString const& channel, QByteArray const& data);
-  void logJt9ProcessEvent (QString const& event, QString const& details = QString {});
-  QString jt9ProcessDiagnostics () const;
   void debugToFile(QString str);        //avt 12/6/23
   void debugAutoCq(QString const& event, QString const& details = QString {});
   bool ft2AutoSeqEnabled() const;

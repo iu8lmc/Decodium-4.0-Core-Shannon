@@ -4,8 +4,20 @@ module jt65_decode
 
   type :: jt65_decoder
      procedure(jt65_decode_callback), pointer :: callback => null()
+     integer :: avg_last_utc=-999
+     integer :: avg_last_freq=-999
+     integer :: avg_ring_index=0
+     logical :: clear_avg65=.true.
+     integer :: avg_iutc(64)=-1
+     integer :: avg_nfsave(64)=0
+     integer :: avg_nflipsave(64)=0
+     real :: avg_s1save(-255:256,126,64)=0.0
+     real :: avg_s3save(64,63,64)=0.0
+     real :: avg_dtsave(64)=0.0
+     real :: avg_syncsave(64)=0.0
    contains
      procedure :: decode
+     procedure, private :: avg65
   end type jt65_decoder
 
 ! Callback function to be called with each decode
@@ -57,7 +69,7 @@ contains
     character(len=12), intent(in) :: mycall, hiscall
     character(len=6), intent(in) :: hisgrid
 
-    real dd(NZMAX)
+    real, allocatable :: dd(:)
     real ss(552,NSZ)
     real savg(NSZ)
     real a(5)
@@ -76,7 +88,7 @@ contains
        character*22 decoded
     end type accepted_decode
     type(accepted_decode) dec(50)
-    logical :: first_time,prtavg,single_decode,bVHF,clear_avg65
+    logical :: first_time,prtavg,single_decode,bVHF
 
     integer h0(0:11),d0(0:11)
     real r0(0:11)
@@ -90,9 +102,7 @@ contains
 
 !             0    1    2    3    4    5    6    7    8    9   10   11
     data r0/0.70,0.72,0.74,0.76,0.78,0.80,0.82,0.84,0.86,0.88,0.90,0.90/
-    data nutc0/-999/,nfreq0/-999/,nsave/0/,clear_avg65/.true./
-    save
-
+    allocate(dd(NZMAX))
     this%callback => callback
     first_time=nrobust .and. (emedelay.eq.-999.9)    !Silence compiler warning
     first_time=newdat
@@ -186,8 +196,10 @@ contains
        if(.not.nagain) nsum=0
        if(clearave) then
           nsum=0
-          nsave=0
-          clear_avg65=.true.
+          this%avg_ring_index=0
+          this%avg_last_utc=-999
+          this%avg_last_freq=-999
+          this%clear_avg65=.true.
        endif
 
        if(bVHF) then
@@ -258,14 +270,14 @@ contains
           if(nft.ne.1 .and. iand(ndepth,16).eq.16 .and.                    &
                sync1.ge.float(minsync) .and. (.not.prtavg)) then
 ! Single-sequence FT decode failed, so try for an average FT decode.
-             if(nutc.ne.nutc0 .or. abs(nfreq-nfreq0).gt.ntol) then
+             if(nutc.ne.this%avg_last_utc .or. abs(nfreq-this%avg_last_freq).gt.ntol) then
 ! This is a new minute or a new frequency, so call avg65.
-                nutc0=nutc
-                nfreq0=nfreq
-                nsave=nsave+1
-                nsave=mod(nsave-1,64)+1
-                call avg65(nutc,nsave,sync1,dtx,nflip,nfreq,mode65,ntol,     &
-                     ndepth,nagain,ntrials,naggressive,clear_avg65,neme,     &
+                this%avg_last_utc=nutc
+                this%avg_last_freq=nfreq
+                this%avg_ring_index=this%avg_ring_index+1
+                this%avg_ring_index=mod(this%avg_ring_index-1,64)+1
+                call this%avg65(nutc,this%avg_ring_index,sync1,dtx,nflip,nfreq,mode65,ntol, &
+                     ndepth,nagain,ntrials,naggressive,neme,                 &
                      mycall,hiscall,hisgrid,nftt,avemsg,qave,deepave,nsum,   &
                      ndeepave,nQSOProgress,ljt65apon)
                 nsmo=param(9)
@@ -341,61 +353,54 @@ contains
 900 return
   end subroutine decode
 
-  subroutine avg65(nutc,nsave,snrsync,dtxx,nflip,nfreq,mode65,ntol,ndepth,    &
-       nagain, ntrials,naggressive,clear_avg65,neme,mycall,hiscall,hisgrid,   &
+  subroutine avg65(this,nutc,nsave,snrsync,dtxx,nflip,nfreq,mode65,ntol,ndepth, &
+       nagain,ntrials,naggressive,neme,mycall,hiscall,hisgrid,               &
        nftt,avemsg,qave,deepave,nsum,ndeepave,nQSOProgress,ljt65apon)
 
 ! Decodes averaged JT65 data
 
     use jt65_mod
     parameter (MAXAVE=64)
+    class(jt65_decoder), intent(inout) :: this
     character*22 avemsg,deepave,deepbest
     character mycall*12,hiscall*12,hisgrid*6
     character*1 csync,cused(64)
-    logical nagain
+    logical nagain,ljt65apon
     integer iused(64)
-! Accumulated data for message averaging
-    integer iutc(MAXAVE)
-    integer nfsave(MAXAVE)
-    integer nflipsave(MAXAVE)
-    real s1b(-255:256,126)
-    real s1save(-255:256,126,MAXAVE)
-    real s2(66,126)
-    real s3save(64,63,MAXAVE)
-    real s3b(64,63)
-    real s3c(64,63)
-    real dtsave(MAXAVE)
-    real syncsave(MAXAVE)
-    logical first,clear_avg65,ljt65apon
-    data first/.true./
-    save
+    real, allocatable :: s1b(:,:)
+    real, allocatable :: s2(:,:)
+    real, allocatable :: s3b(:,:)
+    real, allocatable :: s3c(:,:)
 
-    if(first .or. clear_avg65) then
-       iutc=-1
-       nfsave=0
+    allocate(s1b(-255:256,126), s2(66,126), s3b(64,63), s3c(64,63))
+
+    if(this%clear_avg65) then
+       this%avg_iutc=-1
+       this%avg_nfsave=0
+       this%avg_nflipsave=0
+       this%avg_dtsave=0.0
+       this%avg_syncsave=0.0
+       this%avg_s3save=0.0
+       this%avg_s1save=0.0
        dtdiff=0.2
-       s3save=0.
-       s1save=0.
-       nsave=1           !### ???
 ! Silence compiler warnings
        if(nagain .and. ndeepave.eq.-99 .and. neme.eq.-99) stop
-       first=.false.
-       clear_avg65=.false.
+       this%clear_avg65=.false.
     endif
 
     do i=1,64
-       if(iutc(i).lt.0) exit
-       if(nutc.eq.iutc(i) .and. abs(nfreq-nfsave(i)).le.ntol) go to 10
+       if(this%avg_iutc(i).lt.0) exit
+       if(nutc.eq.this%avg_iutc(i) .and. abs(nfreq-this%avg_nfsave(i)).le.ntol) go to 10
     enddo
 
 ! Save data for message averaging
-    iutc(nsave)=nutc
-    syncsave(nsave)=snrsync
-    dtsave(nsave)=dtxx
-    nfsave(nsave)=nfreq
-    nflipsave(nsave)=nflip
-    s1save(-255:256,1:126,nsave)=s1
-    s3save(1:64,1:63,nsave)=s3a
+    this%avg_iutc(nsave)=nutc
+    this%avg_syncsave(nsave)=snrsync
+    this%avg_dtsave(nsave)=dtxx
+    this%avg_nfsave(nsave)=nfreq
+    this%avg_nflipsave(nsave)=nflip
+    this%avg_s1save(-255:256,1:126,nsave)=s1
+    this%avg_s3save(1:64,1:63,nsave)=s3a
     avemsg='                      '
     deepbest='                      '
     nfttbest=0
@@ -410,18 +415,18 @@ contains
 
     do i=1,MAXAVE                               !Consider all saved spectra
        cused(i)='.'
-       if(iutc(i).lt.0) exit
-       if(mod(iutc(i),2).ne.mod(nutc,2)) cycle  !Use only same (odd/even) seq
-       if(abs(dtxx-dtsave(i)).gt.dtdiff) cycle  !DT must match
-       if(abs(nfreq-nfsave(i)).gt.ntol) cycle   !Freq must match
-       if(nflipsave(i).eq.0) cycle              !No sync
-       if(nflip.ne.nflipsave(i)) cycle          !Sync type (*/#) must match
+       if(this%avg_iutc(i).lt.0) exit
+       if(mod(this%avg_iutc(i),2).ne.mod(nutc,2)) cycle  !Use only same (odd/even) seq
+       if(abs(dtxx-this%avg_dtsave(i)).gt.dtdiff) cycle  !DT must match
+       if(abs(nfreq-this%avg_nfsave(i)).gt.ntol) cycle   !Freq must match
+       if(this%avg_nflipsave(i).eq.0) cycle              !No sync
+       if(nflip.ne.this%avg_nflipsave(i)) cycle          !Sync type (*/#) must match
 
-       s3b=s3b + s3save(1:64,1:63,i)
-       s1b=s1b + s1save(-255:256,1:126,i)
-       syncsum=syncsum + syncsave(i)
-       dtsum=dtsum + dtsave(i)
-       nfsum=nfsum + nfsave(i)
+       s3b=s3b + this%avg_s3save(1:64,1:63,i)
+       s1b=s1b + this%avg_s1save(-255:256,1:126,i)
+       syncsum=syncsum + this%avg_syncsave(i)
+       dtsum=dtsum + this%avg_dtsave(i)
+       nfsum=nfsum + this%avg_nfsave(i)
        cused(i)='$'
        nsum=nsum+1
        iused(nsum)=i
@@ -439,9 +444,10 @@ contains
 
     do i=1,nsave
        csync=' '
-       if(nflipsave(i).lt.0.0) csync='#'
-       if(nflipsave(i).gt.0.0) csync='*'
-       write(14,1000) cused(i),iutc(i),syncsave(i),dtsave(i)-1.0,nfsave(i),csync
+       if(this%avg_nflipsave(i).lt.0.0) csync='#'
+       if(this%avg_nflipsave(i).gt.0.0) csync='*'
+       write(14,1000) cused(i),this%avg_iutc(i),this%avg_syncsave(i),      &
+            this%avg_dtsave(i)-1.0,this%avg_nfsave(i),csync
 1000   format(a1,i5.4,f6.1,f6.2,i6,1x,a1)
     enddo
     if(nsum.lt.2) go to 900

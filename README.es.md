@@ -1,18 +1,20 @@
-# Decodium (Fork macOS/Linux) - 1.5.5
+# Decodium (Fork macOS/Linux) - 1.5.6
 
 Este repositorio contiene el fork mantenido de Decodium para macOS y Linux AppImage.
 
-- Release estable actual: `1.5.5`
-- Ciclo de actualizacion: `1.5.4 -> 1.5.5`
+- Release estable actual: `1.5.6`
+- Ciclo de actualizacion: `1.5.5 -> 1.5.6`
 
-## Cambios en 1.5.5 (`1.5.4 -> 1.5.5`)
+## Cambios en 1.5.6 (`1.5.5 -> 1.5.6`)
 
-- corregido el manejo nativo de `Preferencias...` en macOS para que las heuristicas de menu no abran acciones equivocadas en UIs traducidas.
-- hecho scroll-safe el dialogo `Settings` tambien en macOS, manteniendo accesibles los botones finales en pantallas pequenas y layouts localizados mas largos.
-- anadido el log persistente `jt9_subprocess.log` y una diagnostica stdout/stderr mas rica para analizar fallos del subprocess FT2.
-- actualizado el ADIF FT2 a `MODE=MFSK` + `SUBMODE=FT2`, con migracion automatica de registros historicos `MODE=FT2` y backup del fichero original.
-- mejorada la recuperacion del audio al arrancar/activar monitor, de forma que ya no haga falta reabrir `Settings > Audio` para despertar el stream.
-- retirada de la release publica la UI experimental de RTTY, todavia incompleta, dejandola fuera del camino del usuario.
+- completada la migracion del runtime promovido nativo C++ para FT8, FT4, FT2 y Q65, eliminando del camino activo la orquestacion Fortran especifica de esos modos.
+- ampliada la arquitectura in-process con workers y retirada del bootstrap principal la antigua shared memory de `jt9` para los modos FTX promovidos.
+- promovidas herramientas/frontends nativos C++ para `jt9`, `jt9a`, `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65` y `rtty_spec`.
+- endurecido el TX FT2/FT4/Fox con snapshots de ondas precomputadas, lead-in mas prudente y trazas extra en `debug.txt`.
+- corregidos fallos de compilacion/enlazado en GNU `ld`, GCC 15, Qt5 y C++11 dentro de bridges, herramientas y tests.
+- ampliada la validacion de paridad/regresion con nuevos stage-compare y cobertura reforzada en `test_qt_helpers`.
+- mantenido el layout/carpetas macOS ya validado en el ultimo deploy correcto, alineando las releases Tahoe, Sequoia, Intel Sequoia, Monterey y Linux AppImage.
+- la UI publica de RTTY sigue oculta a la espera de validacion dedicada.
 
 ## Targets Release
 
@@ -24,20 +26,20 @@ Este repositorio contiene el fork mantenido de Decodium para macOS y Linux AppIm
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.5-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.5-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
@@ -52,7 +54,7 @@ Hardware:
 Software:
 
 - Linux `x86_64` con `glibc >= 2.35`
-- `libfuse2` / soporte FUSE2
+- `libfuse2` / soporte FUSE2 si se quiere montar directamente la AppImage
 - ALSA, PulseAudio o PipeWire
 - una sesion de escritorio capaz de ejecutar AppImages Qt5
 
@@ -77,6 +79,6 @@ cd squashfs-root
 
 ## Documentacion Relacionada
 
-- [RELEASE_NOTES_1.5.5.md](RELEASE_NOTES_1.5.5.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.5.md](doc/GITHUB_RELEASE_BODY_1.5.5.md)
+- [RELEASE_NOTES_1.5.6.md](RELEASE_NOTES_1.5.6.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.6.md](doc/GITHUB_RELEASE_BODY_1.5.6.md)
 - [CHANGELOG.md](CHANGELOG.md)

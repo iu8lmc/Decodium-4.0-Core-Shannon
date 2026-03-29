@@ -3263,13 +3263,13 @@ Errore (%2):%3</translation>
         <translation type="vanished">%1 %2/%3s</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="783"/>
-        <location filename="../widgets/mainwindow.cpp" line="23510"/>
+        <location filename="../widgets/mainwindow.cpp" line="962"/>
+        <location filename="../widgets/mainwindow.cpp" line="24408"/>
         <source>Async L2 Mode On</source>
         <translation>Modalita&apos; Async L2 attiva</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8812"/>
+        <location filename="../widgets/mainwindow.cpp" line="8991"/>
         <source>&lt;table cellspacing=1&gt;
   &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, abort QSO, clear next-call queue&lt;/td&gt;&lt;/tr&gt;
   &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Online User&apos;s Guide (Alt: transmit Tx6)&lt;/td&gt;&lt;/tr&gt;
@@ -3323,12 +3323,17 @@ Errore (%2):%3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19268"/>
+        <location filename="../widgets/mainwindow.cpp" line="10767"/>
+        <source>Embedded WSPR decoder unavailable.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/mainwindow.cpp" line="20127"/>
         <source>Are you sure you want to erase file decodium_log.adi?</source>
         <translation>Sei sicuro di voler cancellare il file decodium_log.adi?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="23486"/>
+        <location filename="../widgets/mainwindow.cpp" line="24386"/>
         <source>Async L2 is mandatory in FT2 mode</source>
         <translation>Async L2 e&apos; obbligatorio in modalita&apos; FT2</translation>
     </message>
@@ -3338,15 +3343,15 @@ Errore (%2):%3</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="52"/>
-        <location filename="../widgets/mainwindow.cpp" line="7365"/>
-        <location filename="../widgets/mainwindow.cpp" line="7368"/>
-        <location filename="../widgets/mainwindow.cpp" line="17750"/>
-        <location filename="../widgets/mainwindow.cpp" line="17863"/>
-        <location filename="../widgets/mainwindow.cpp" line="17947"/>
-        <location filename="../widgets/mainwindow.cpp" line="18282"/>
-        <location filename="../widgets/mainwindow.cpp" line="18530"/>
-        <location filename="../widgets/mainwindow.cpp" line="18594"/>
-        <location filename="../widgets/mainwindow.cpp" line="18763"/>
+        <location filename="../widgets/mainwindow.cpp" line="7587"/>
+        <location filename="../widgets/mainwindow.cpp" line="7590"/>
+        <location filename="../widgets/mainwindow.cpp" line="18609"/>
+        <location filename="../widgets/mainwindow.cpp" line="18722"/>
+        <location filename="../widgets/mainwindow.cpp" line="18806"/>
+        <location filename="../widgets/mainwindow.cpp" line="19141"/>
+        <location filename="../widgets/mainwindow.cpp" line="19389"/>
+        <location filename="../widgets/mainwindow.cpp" line="19453"/>
+        <location filename="../widgets/mainwindow.cpp" line="19622"/>
         <source>Band Activity</source>
         <translation>Attività di Banda</translation>
     </message>
@@ -3358,13 +3363,13 @@ Errore (%2):%3</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="195"/>
-        <location filename="../widgets/mainwindow.cpp" line="7369"/>
-        <location filename="../widgets/mainwindow.cpp" line="17751"/>
-        <location filename="../widgets/mainwindow.cpp" line="17862"/>
-        <location filename="../widgets/mainwindow.cpp" line="17946"/>
-        <location filename="../widgets/mainwindow.cpp" line="18277"/>
-        <location filename="../widgets/mainwindow.cpp" line="18531"/>
-        <location filename="../widgets/mainwindow.cpp" line="18595"/>
+        <location filename="../widgets/mainwindow.cpp" line="7591"/>
+        <location filename="../widgets/mainwindow.cpp" line="18610"/>
+        <location filename="../widgets/mainwindow.cpp" line="18721"/>
+        <location filename="../widgets/mainwindow.cpp" line="18805"/>
+        <location filename="../widgets/mainwindow.cpp" line="19136"/>
+        <location filename="../widgets/mainwindow.cpp" line="19390"/>
+        <location filename="../widgets/mainwindow.cpp" line="19454"/>
         <source>Rx Frequency</source>
         <translation>Frequenza Rx</translation>
     </message>
@@ -4266,7 +4271,7 @@ Non disponibile per i possessori di nominativi non standard.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1650"/>
-        <location filename="../widgets/mainwindow.cpp" line="18317"/>
+        <location filename="../widgets/mainwindow.cpp" line="19176"/>
         <source>Fox</source>
         <translation>Volpe</translation>
     </message>
@@ -4719,10 +4724,10 @@ elenco. L&apos;elenco può essere gestito in Impostazioni (F2).</translation>
         <location filename="../widgets/mainwindow.ui" line="3138"/>
         <location filename="../widgets/mainwindow.ui" line="3145"/>
         <location filename="../widgets/mainwindow.ui" line="4208"/>
-        <location filename="../widgets/mainwindow.cpp" line="4041"/>
-        <location filename="../widgets/mainwindow.cpp" line="16269"/>
-        <location filename="../widgets/mainwindow.cpp" line="18997"/>
-        <location filename="../widgets/mainwindow.cpp" line="21532"/>
+        <location filename="../widgets/mainwindow.cpp" line="4258"/>
+        <location filename="../widgets/mainwindow.cpp" line="17058"/>
+        <location filename="../widgets/mainwindow.cpp" line="19856"/>
+        <location filename="../widgets/mainwindow.cpp" line="22423"/>
         <source>Random</source>
         <translation>Casuale</translation>
     </message>
@@ -6424,19 +6429,19 @@ elenco. L&apos;elenco può essere gestito in Impostazioni (F2).</translation>
         <translation>FT4</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1462"/>
+        <location filename="../widgets/mainwindow.cpp" line="1640"/>
         <source>Rig Control Error</source>
         <translation>Errore di controllo rig</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1587"/>
-        <location filename="../widgets/mainwindow.cpp" line="13254"/>
-        <location filename="../widgets/mainwindow.cpp" line="21306"/>
+        <location filename="../widgets/mainwindow.cpp" line="1765"/>
+        <location filename="../widgets/mainwindow.cpp" line="14043"/>
+        <location filename="../widgets/mainwindow.cpp" line="22260"/>
         <source>Receiving</source>
         <translation>Ricevendo</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1912"/>
+        <location filename="../widgets/mainwindow.cpp" line="2090"/>
         <source>Do you want to reconfigure the radio interface?</source>
         <translation>Vuoi riconfigurare l&apos;interfaccia radio?</translation>
     </message>
@@ -6449,47 +6454,47 @@ elenco. L&apos;elenco può essere gestito in Impostazioni (F2).</translation>
         <translation type="vanished">Log ADIF scansionato, %1 record elaborati prima della creazione. CTY: %2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2584"/>
+        <location filename="../widgets/mainwindow.cpp" line="2767"/>
         <source>Error Loading LotW Users Data</source>
         <translation>Errore durante il caricamento dei dati degli utenti di LotW</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2712"/>
+        <location filename="../widgets/mainwindow.cpp" line="2848"/>
         <source>Error Writing WAV File</source>
         <translation>Errore durante la scrittura del file WAV</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2746"/>
+        <location filename="../widgets/mainwindow.cpp" line="2883"/>
         <source>Enumerating audio devices</source>
         <translation>Enumerazione dei dispositivi audio</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2767"/>
+        <location filename="../widgets/mainwindow.cpp" line="2904"/>
         <source>Configurations...</source>
         <translation>Configurazioni...</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="4574"/>
-        <location filename="../widgets/mainwindow.cpp" line="2854"/>
-        <location filename="../widgets/mainwindow.cpp" line="17851"/>
-        <location filename="../widgets/mainwindow.cpp" line="17938"/>
-        <location filename="../widgets/mainwindow.cpp" line="17948"/>
-        <location filename="../widgets/mainwindow.cpp" line="18269"/>
-        <location filename="../widgets/mainwindow.cpp" line="18283"/>
-        <location filename="../widgets/mainwindow.cpp" line="18437"/>
-        <location filename="../widgets/mainwindow.cpp" line="18438"/>
-        <location filename="../widgets/mainwindow.cpp" line="18512"/>
-        <location filename="../widgets/mainwindow.cpp" line="18513"/>
-        <location filename="../widgets/mainwindow.cpp" line="18519"/>
-        <location filename="../widgets/mainwindow.cpp" line="18520"/>
-        <location filename="../widgets/mainwindow.cpp" line="18662"/>
-        <location filename="../widgets/mainwindow.cpp" line="18663"/>
-        <location filename="../widgets/mainwindow.cpp" line="18754"/>
-        <location filename="../widgets/mainwindow.cpp" line="18755"/>
-        <location filename="../widgets/mainwindow.cpp" line="20500"/>
-        <location filename="../widgets/mainwindow.cpp" line="20503"/>
-        <location filename="../widgets/mainwindow.cpp" line="20508"/>
-        <location filename="../widgets/mainwindow.cpp" line="20511"/>
+        <location filename="../widgets/mainwindow.cpp" line="2991"/>
+        <location filename="../widgets/mainwindow.cpp" line="18710"/>
+        <location filename="../widgets/mainwindow.cpp" line="18797"/>
+        <location filename="../widgets/mainwindow.cpp" line="18807"/>
+        <location filename="../widgets/mainwindow.cpp" line="19128"/>
+        <location filename="../widgets/mainwindow.cpp" line="19142"/>
+        <location filename="../widgets/mainwindow.cpp" line="19296"/>
+        <location filename="../widgets/mainwindow.cpp" line="19297"/>
+        <location filename="../widgets/mainwindow.cpp" line="19371"/>
+        <location filename="../widgets/mainwindow.cpp" line="19372"/>
+        <location filename="../widgets/mainwindow.cpp" line="19378"/>
+        <location filename="../widgets/mainwindow.cpp" line="19379"/>
+        <location filename="../widgets/mainwindow.cpp" line="19521"/>
+        <location filename="../widgets/mainwindow.cpp" line="19522"/>
+        <location filename="../widgets/mainwindow.cpp" line="19613"/>
+        <location filename="../widgets/mainwindow.cpp" line="19614"/>
+        <location filename="../widgets/mainwindow.cpp" line="21378"/>
+        <location filename="../widgets/mainwindow.cpp" line="21381"/>
+        <location filename="../widgets/mainwindow.cpp" line="21386"/>
+        <location filename="../widgets/mainwindow.cpp" line="21389"/>
         <source>Message</source>
         <translation>Messaggio</translation>
     </message>
@@ -6502,119 +6507,117 @@ elenco. L&apos;elenco può essere gestito in Impostazioni (F2).</translation>
         <translation type="vanished">Codice di ritorno KillByName:%1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2898"/>
         <source>Error removing &quot;%1&quot;</source>
-        <translation>Errore durante la rimozione di &quot;%1&quot;</translation>
+        <translation type="vanished">Errore durante la rimozione di &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2899"/>
         <source>Click OK to retry</source>
-        <translation>Fai clic su OK per riprovare</translation>
+        <translation type="vanished">Fai clic su OK per riprovare</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="4135"/>
-        <location filename="../widgets/mainwindow.cpp" line="18715"/>
+        <location filename="../widgets/mainwindow.cpp" line="4352"/>
+        <location filename="../widgets/mainwindow.cpp" line="19574"/>
         <source>Improper mode</source>
         <translation>Modalità impropria</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="4447"/>
-        <location filename="../widgets/mainwindow.cpp" line="22965"/>
+        <location filename="../widgets/mainwindow.cpp" line="4664"/>
+        <location filename="../widgets/mainwindow.cpp" line="23855"/>
         <source>File Open Error</source>
         <translation>Errore apertura file</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="4448"/>
-        <location filename="../widgets/mainwindow.cpp" line="21435"/>
-        <location filename="../widgets/mainwindow.cpp" line="21954"/>
-        <location filename="../widgets/mainwindow.cpp" line="22966"/>
-        <location filename="../widgets/mainwindow.cpp" line="23152"/>
+        <location filename="../widgets/mainwindow.cpp" line="4665"/>
+        <location filename="../widgets/mainwindow.cpp" line="22326"/>
+        <location filename="../widgets/mainwindow.cpp" line="22844"/>
+        <location filename="../widgets/mainwindow.cpp" line="23856"/>
+        <location filename="../widgets/mainwindow.cpp" line="24042"/>
         <source>Cannot open &quot;%1&quot; for append: %2</source>
         <translation>Impossibile aprire &quot;%1&quot; per aggiungere:%2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="4649"/>
+        <location filename="../widgets/mainwindow.cpp" line="4866"/>
         <source>Error saving c2 file</source>
         <translation>Errore salvataggio file c2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="5591"/>
+        <location filename="../widgets/mainwindow.cpp" line="5808"/>
         <source>Error in Sound Input</source>
         <translation>Errore nell&apos;ingresso audio</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="5598"/>
+        <location filename="../widgets/mainwindow.cpp" line="5815"/>
         <source>Error in Sound Output</source>
         <translation>Errore nell&apos;uscita audio</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6042"/>
-        <location filename="../widgets/mainwindow.cpp" line="7361"/>
+        <location filename="../widgets/mainwindow.cpp" line="6264"/>
+        <location filename="../widgets/mainwindow.cpp" line="7583"/>
         <source>Single-Period Decodes</source>
         <translation>Decodifiche a periodo singolo</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6043"/>
-        <location filename="../widgets/mainwindow.cpp" line="7362"/>
+        <location filename="../widgets/mainwindow.cpp" line="6265"/>
+        <location filename="../widgets/mainwindow.cpp" line="7584"/>
         <source>Average Decodes</source>
         <translation>Media Decodifiche</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7092"/>
+        <location filename="../widgets/mainwindow.cpp" line="7314"/>
         <source>Change Operator</source>
         <translation>Cambio Operatore</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7092"/>
+        <location filename="../widgets/mainwindow.cpp" line="7314"/>
         <source>New operator:</source>
         <translation>Nuovo operatore:</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7328"/>
+        <location filename="../widgets/mainwindow.cpp" line="7550"/>
         <source>Status File Error</source>
         <translation>Errore del file di stato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7329"/>
-        <location filename="../widgets/mainwindow.cpp" line="16111"/>
+        <location filename="../widgets/mainwindow.cpp" line="7551"/>
+        <location filename="../widgets/mainwindow.cpp" line="16900"/>
         <source>Cannot open &quot;%1&quot; for writing: %2</source>
         <translation>Impossibile aprire &quot;%1&quot; per la scrittura:%2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7366"/>
+        <location filename="../widgets/mainwindow.cpp" line="7588"/>
         <source>Decodes containing My Call</source>
         <translation>Decodifiche contenente la mia chiamata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7681"/>
+        <location filename="../widgets/mainwindow.cpp" line="7871"/>
         <source>Subprocess Error</source>
         <translation>Errore sottoprocesso</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7682"/>
+        <location filename="../widgets/mainwindow.cpp" line="7872"/>
         <source>Subprocess failed with exit code %1</source>
         <translation>Il sottoprocesso non è riuscito con il codice di uscita%1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7684"/>
-        <location filename="../widgets/mainwindow.cpp" line="7757"/>
+        <location filename="../widgets/mainwindow.cpp" line="7874"/>
+        <location filename="../widgets/mainwindow.cpp" line="7920"/>
         <source>Running: %1
 %2</source>
         <translation>In esecuzione: %1
 %2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7756"/>
+        <location filename="../widgets/mainwindow.cpp" line="7919"/>
         <source>Subprocess error</source>
         <translation>Errore sottoprocesso</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7859"/>
+        <location filename="../widgets/mainwindow.cpp" line="8038"/>
         <source>Reference spectrum saved</source>
         <translation>Spettro di riferimento salvato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7948"/>
+        <location filename="../widgets/mainwindow.cpp" line="8127"/>
         <source>It is very important to avoid audio harmonics and distorted audio signals.
 This is usually achieved by the following step-by-step approach:
 
@@ -6662,22 +6665,22 @@ Se possibile, controlla la tua trasmissione di tanto in tanto con un webSDR
 per assicurarti che il segnale sia pulito e non distorto.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7964"/>
+        <location filename="../widgets/mainwindow.cpp" line="8143"/>
         <source>&lt;b&gt;Recommended Audio Settings&lt;/b&gt;</source>
         <translation>&lt;b&gt;Impostazioni audio consigliate&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8019"/>
+        <location filename="../widgets/mainwindow.cpp" line="8198"/>
         <source>Invalid data in fmt.all at line %1</source>
         <translation>Dati non validi in fmt.all alla riga%1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8025"/>
+        <location filename="../widgets/mainwindow.cpp" line="8204"/>
         <source>Good Calibration Solution</source>
         <translation>Buona soluzione di calibrazione</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8026"/>
+        <location filename="../widgets/mainwindow.cpp" line="8205"/>
         <source>&lt;pre&gt;%1%L2 ±%L3 ppm
 %4%L5 ±%L6 Hz
 
@@ -6690,12 +6693,12 @@ per assicurarti che il segnale sia pulito e non distorto.</translation>
 %9%L10 Hz&lt;/pre&gt;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8040"/>
+        <location filename="../widgets/mainwindow.cpp" line="8219"/>
         <source>Delete Calibration Measurements</source>
         <translation>Elimina misure di calibrazione</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8041"/>
+        <location filename="../widgets/mainwindow.cpp" line="8220"/>
         <source>The &quot;fmt.all&quot; file will be renamed as &quot;fmt.bak&quot;</source>
         <translation>Il file &quot;fmt.all&quot; verrà rinominato come &quot;fmt.bak&quot;</translation>
     </message>
@@ -6811,7 +6814,7 @@ WSJT-X non opera in modalità Fox
 sulle sottobande standard di FT8.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8765"/>
+        <location filename="../widgets/mainwindow.cpp" line="8944"/>
         <source>No data read from disk. Wrong file format?</source>
         <translation>Nessun dato letto dal disco. Formato file errato?</translation>
     </message>
@@ -6824,17 +6827,17 @@ sulle sottobande standard di FT8.</translation>
 &quot;Gli algoritmi, il codice sorgente, l&apos;aspetto grafico di WSJT-X e dei programmi correlati, e le specifiche di protocollo per le modalità FSK441, FST4, FT8, JT4, JT6M, JT9, JT65, JTMS, QRA64, Q65, MSK144 sono protetti da Copyright (C) 2001-2025 da uno o più dei seguenti autori: Joseph Taylor, K1JT; Bill Somerville, G4WJS; Steven Franke, K9AN; Nico Palermo, IV3NWV; Greg Beam, KI7MT; Michael Black, W9MDB; Edson Pereira, PY2SDR; Philip Karn, KA9Q; Uwe Risse, DG2YCB; Brian Moran, N9ADG; e altri membri del Gruppo di Sviluppo WSJT.&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8772"/>
+        <location filename="../widgets/mainwindow.cpp" line="8951"/>
         <source>Confirm Delete</source>
         <translation>Conferma Eliminazione</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8773"/>
+        <location filename="../widgets/mainwindow.cpp" line="8952"/>
         <source>Are you sure you want to delete all *.wav and *.c2 files in &quot;%1&quot;?</source>
         <translation>Sei sicuro di voler eliminare tutti i file * .wav e * .c2 in &quot;%1&quot;?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8810"/>
+        <location filename="../widgets/mainwindow.cpp" line="8989"/>
         <source>Keyboard Shortcuts</source>
         <translation>Scorciatoie da tastiera</translation>
     </message>
@@ -6940,7 +6943,7 @@ sulle sottobande standard di FT8.</translation>
 &lt;/table&gt;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8872"/>
+        <location filename="../widgets/mainwindow.cpp" line="9051"/>
         <source>Special Mouse Commands</source>
         <translation>Comandi speciali mouse</translation>
     </message>
@@ -7011,13 +7014,13 @@ sulle sottobande standard di FT8.</translation>
 &lt;/table&gt;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="9510"/>
+        <location filename="../widgets/mainwindow.cpp" line="9690"/>
         <source>No more files to open.</source>
         <translation>Niente più file da aprire.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12016"/>
-        <location filename="../widgets/mainwindow.cpp" line="22000"/>
+        <location filename="../widgets/mainwindow.cpp" line="12790"/>
+        <location filename="../widgets/mainwindow.cpp" line="22890"/>
         <source>Spotting to PSK Reporter unavailable</source>
         <translation>Spotting su PSK Reporter non disponibile</translation>
     </message>
@@ -7026,7 +7029,7 @@ sulle sottobande standard di FT8.</translation>
         <translation type="vanished">Scegli un&apos;altra frequenza Tx. WSJT-X non trasmetterà consapevolmente un&apos;altra modalità nella sottobanda WSPR a 30 m.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12242"/>
+        <location filename="../widgets/mainwindow.cpp" line="13016"/>
         <source>WSPR Guard Band</source>
         <translation>Banda di guardia WSPR</translation>
     </message>
@@ -7035,8 +7038,8 @@ sulle sottobande standard di FT8.</translation>
         <translation type="vanished">Scegli un&apos;altra frequenza di composizione. WSJT-X non funzionerà in modalità Fox nelle sottobande FT8 standard.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12261"/>
-        <location filename="../widgets/mainwindow.cpp" line="12278"/>
+        <location filename="../widgets/mainwindow.cpp" line="13035"/>
+        <location filename="../widgets/mainwindow.cpp" line="13052"/>
         <source>Fox Mode warning</source>
         <translation>Avviso modalità Fox</translation>
     </message>
@@ -7062,7 +7065,7 @@ Fare clic sul pulsante MSK144 per ri-abilitare la casella
 Tx pari/primo, o scegliere un&apos;altra stazione.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8874"/>
+        <location filename="../widgets/mainwindow.cpp" line="9053"/>
         <source>&lt;table cellpadding=5&gt;
   &lt;tr&gt;
     &lt;th align=&quot;right&quot;&gt;Click on&lt;/th&gt;
@@ -7293,7 +7296,7 @@ WSJT-X non funzionerà in modalità Fox
 sovrapponendosi alle sottobande WSPR.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="13763"/>
+        <location filename="../widgets/mainwindow.cpp" line="14552"/>
         <source>This station transmits in the same time slot as you do.
 
 You must not start a QSO if both stations Tx even/1st
@@ -7310,7 +7313,7 @@ Cliccate sul pulsante della modalità MSK144 per riabilitare la casella di contr
 oppure scegliete un&apos;altra stazione.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="14228"/>
+        <location filename="../widgets/mainwindow.cpp" line="15017"/>
         <source>Should you switch to EU VHF Contest mode?
 
 To do so, check &apos;Special operating activity&apos; and
@@ -7321,286 +7324,286 @@ Per fare ciò, selezionare &quot;Attività operativa speciale&quot; e
 &quot;Contest VHF EU&quot; sulle impostazioni | Scheda Avanzate.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="14247"/>
+        <location filename="../widgets/mainwindow.cpp" line="15036"/>
         <source>Should you switch to ARRL Field Day mode?</source>
         <translation>Dovresti passare alla modalità Field Day di ARRL?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="14252"/>
+        <location filename="../widgets/mainwindow.cpp" line="15041"/>
         <source>Should you switch to RTTY contest mode?</source>
         <translation>Dovresti passare alla modalità contest RTTY?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16073"/>
-        <location filename="../widgets/mainwindow.cpp" line="16092"/>
-        <location filename="../widgets/mainwindow.cpp" line="16110"/>
-        <location filename="../widgets/mainwindow.cpp" line="16137"/>
+        <location filename="../widgets/mainwindow.cpp" line="16862"/>
+        <location filename="../widgets/mainwindow.cpp" line="16881"/>
+        <location filename="../widgets/mainwindow.cpp" line="16899"/>
+        <location filename="../widgets/mainwindow.cpp" line="16926"/>
         <source>Add to CALL3.TXT</source>
         <translation>Aggiungi a CALL3.TXT</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16074"/>
+        <location filename="../widgets/mainwindow.cpp" line="16863"/>
         <source>Please enter a valid grid locator</source>
         <translation>Inserisci un localizzatore di griglia valido</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16093"/>
+        <location filename="../widgets/mainwindow.cpp" line="16882"/>
         <source>Cannot open &quot;%1&quot; for read/write: %2</source>
         <translation>Impossibile aprire &quot;%1&quot; per lettura / scrittura:%2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16135"/>
+        <location filename="../widgets/mainwindow.cpp" line="16924"/>
         <source>%1
 is already in CALL3.TXT, do you wish to replace it?</source>
         <translation>%1
 è già in CALL3.TXT, desideri sostituirlo?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16813"/>
+        <location filename="../widgets/mainwindow.cpp" line="17602"/>
         <source>Warning:  DX Call field is empty.</source>
         <translation>Avviso: il campo Chiamata DX è vuoto.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2188"/>
-        <location filename="../widgets/mainwindow.cpp" line="17517"/>
+        <location filename="../widgets/mainwindow.cpp" line="2371"/>
+        <location filename="../widgets/mainwindow.cpp" line="18306"/>
         <source>Log file error</source>
         <translation>Errore nel file di registro</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1843"/>
+        <location filename="../widgets/mainwindow.cpp" line="2021"/>
         <source>Language</source>
         <translation>Lingua</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1883"/>
+        <location filename="../widgets/mainwindow.cpp" line="2061"/>
         <source>Language changed</source>
         <translation>La lingua è cambiata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1884"/>
+        <location filename="../widgets/mainwindow.cpp" line="2062"/>
         <source>Please restart the application for the language change to take effect.</source>
         <translation>Riavviare l&apos;applicazione affinché la modifica della lingua abbia effetto.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1981"/>
+        <location filename="../widgets/mainwindow.cpp" line="2164"/>
         <source>Error scanning logbook</source>
         <translation>Errore durante la scansione del registro</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="1986"/>
+        <location filename="../widgets/mainwindow.cpp" line="2169"/>
         <source>Scanned logbook, %1 worked-before records created. CTY: %2</source>
         <translation>Registro scansionato, record lavorati %1 prima della creazione. CTY: %2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2183"/>
+        <location filename="../widgets/mainwindow.cpp" line="2366"/>
         <source>Error</source>
         <translation>Errore</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2183"/>
+        <location filename="../widgets/mainwindow.cpp" line="2366"/>
         <source>parts != 4</source>
         <translation>parti!= 4</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2188"/>
-        <location filename="../widgets/mainwindow.cpp" line="17518"/>
+        <location filename="../widgets/mainwindow.cpp" line="2371"/>
+        <location filename="../widgets/mainwindow.cpp" line="18307"/>
         <source>Cannot open &quot;%1&quot;</source>
         <translation>Impossibile aprire &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2197"/>
-        <location filename="../widgets/mainwindow.cpp" line="17538"/>
+        <location filename="../widgets/mainwindow.cpp" line="2380"/>
+        <location filename="../widgets/mainwindow.cpp" line="18327"/>
         <source>Error sending log to N1MM</source>
         <translation>Errore durante l&apos;invio del Log a N1MM</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2197"/>
-        <location filename="../widgets/mainwindow.cpp" line="17539"/>
+        <location filename="../widgets/mainwindow.cpp" line="2380"/>
+        <location filename="../widgets/mainwindow.cpp" line="18328"/>
         <source>Write returned &quot;%1&quot;</source>
         <translation>Scrivi ha restituito &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2224"/>
+        <location filename="../widgets/mainwindow.cpp" line="2407"/>
         <source>AutoSpot</source>
         <translation>Individuazione automatica</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2226"/>
+        <location filename="../widgets/mainwindow.cpp" line="2409"/>
         <source>Invia spot al cluster configurato dopo il log QSO (73 confermato).</source>
         <translation>Invia spot al cluster configurato dopo il log QSO (73 confermato).</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2263"/>
+        <location filename="../widgets/mainwindow.cpp" line="2446"/>
         <source>Remote Web disabled: invalid configured HTTP port %1</source>
         <translation>Web remoto disabilitato: porta HTTP configurata non valida %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2317"/>
+        <location filename="../widgets/mainwindow.cpp" line="2500"/>
         <source>Remote WS: invalid FT2_REMOTE_WS_BIND=&quot;%1&quot; (using 0.0.0.0)</source>
         <translation>WS remoto: FT2_REMOTE_WS_BIND=&quot;%1&quot; non valido (utilizzando 0.0.0.0)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2328"/>
+        <location filename="../widgets/mainwindow.cpp" line="2511"/>
         <source>Remote Web disabled: non-loopback bind requires token authentication.</source>
         <translation>Web remoto disabilitato: il collegamento non di loopback richiede l&apos;autenticazione del token.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2333"/>
+        <location filename="../widgets/mainwindow.cpp" line="2516"/>
         <source>Remote Web disabled: token must be at least 12 characters on LAN/WAN bind.</source>
         <translation>Web remoto disabilitato: il token deve contenere almeno 12 caratteri sul collegamento LAN/WAN.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2417"/>
+        <location filename="../widgets/mainwindow.cpp" line="2600"/>
         <source>Remote HTTP: invalid FT2_REMOTE_HTTP_PORT=&quot;%1&quot; (using default ws+1)</source>
         <translation>HTTP remoto: FT2_REMOTE_HTTP_PORT=&quot;%1&quot; non valido (utilizzando ws+1 predefinito)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2465"/>
+        <location filename="../widgets/mainwindow.cpp" line="2648"/>
         <source>Remote WS disabled: failed to bind %1:%2</source>
         <translation>WS remoto disabilitato: impossibile eseguire il collegamento %1:%2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2471"/>
+        <location filename="../widgets/mainwindow.cpp" line="2654"/>
         <source>Remote Web notice: traffic is plain HTTP/WS. Use only trusted LAN/VPN or a TLS reverse proxy.</source>
         <translation>Avviso Web remoto: il traffico è semplicemente HTTP/WS. Utilizza solo LAN/VPN attendibili o un proxy inverso TLS.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="2477"/>
+        <location filename="../widgets/mainwindow.cpp" line="2660"/>
         <source>Remote WS disabled: invalid FT2_REMOTE_WS_PORT=&quot;%1&quot;</source>
         <translation>WS remoto disabilitato: FT2_REMOTE_WS_PORT=&quot;%1&quot; non valido</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="5783"/>
+        <location filename="../widgets/mainwindow.cpp" line="6005"/>
         <source>Audio input resumed after system wake.</source>
         <translation>L&apos;ingresso audio è ripreso dopo la riattivazione del sistema.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6197"/>
+        <location filename="../widgets/mainwindow.cpp" line="6419"/>
         <source>Check for updates...</source>
         <translation>Controlla aggiornamenti...</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6280"/>
+        <location filename="../widgets/mainwindow.cpp" line="6502"/>
         <source>An update check is already in progress.</source>
         <translation>Un controllo aggiornamenti è già in corso.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6294"/>
+        <location filename="../widgets/mainwindow.cpp" line="6516"/>
         <source>Checking for updates...</source>
         <translation>Controllo aggiornamenti in corso...</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6528"/>
+        <location filename="../widgets/mainwindow.cpp" line="6750"/>
         <source>A new Decodium release is available.</source>
         <translation>È disponibile una nuova release di Decodium.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6530"/>
+        <location filename="../widgets/mainwindow.cpp" line="6752"/>
         <source>Installed version: %1
 Latest version: %2%3</source>
         <translation>Versione installata: %1
 Ultima versione: %2%3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6539"/>
+        <location filename="../widgets/mainwindow.cpp" line="6761"/>
         <source>Direct download: %1</source>
         <translation>Download diretto: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6543"/>
+        <location filename="../widgets/mainwindow.cpp" line="6765"/>
         <source>Selected asset: %1
 </source>
         <translation>Asset selezionato: %1
 </translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6547"/>
+        <location filename="../widgets/mainwindow.cpp" line="6769"/>
         <source>Release page: %1</source>
         <translation>Pagina della release: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6552"/>
+        <location filename="../widgets/mainwindow.cpp" line="6774"/>
         <source>Download page: %1</source>
         <translation>Pagina di download: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6560"/>
+        <location filename="../widgets/mainwindow.cpp" line="6782"/>
         <source>Download</source>
         <translation>Scarica</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6561"/>
+        <location filename="../widgets/mainwindow.cpp" line="6783"/>
         <source>Remind me later</source>
         <translation>Ricordamelo più tardi</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6562"/>
+        <location filename="../widgets/mainwindow.cpp" line="6784"/>
         <source>Skip this version</source>
         <translation>Salta questa versione</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6606"/>
-        <location filename="../widgets/mainwindow.cpp" line="6620"/>
-        <location filename="../widgets/mainwindow.cpp" line="6646"/>
+        <location filename="../widgets/mainwindow.cpp" line="6828"/>
+        <location filename="../widgets/mainwindow.cpp" line="6842"/>
+        <location filename="../widgets/mainwindow.cpp" line="6868"/>
         <source>Update check failed.</source>
         <translation>Controllo aggiornamenti non riuscito.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6621"/>
+        <location filename="../widgets/mainwindow.cpp" line="6843"/>
         <source>The release metadata returned by GitHub could not be parsed.</source>
         <translation>I metadati della release restituiti da GitHub non possono essere analizzati.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6647"/>
+        <location filename="../widgets/mainwindow.cpp" line="6869"/>
         <source>Unable to compare version numbers.</source>
         <translation>Impossibile confrontare i numeri di versione.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6648"/>
+        <location filename="../widgets/mainwindow.cpp" line="6870"/>
         <source>Installed: %1
 Remote tag: %2</source>
         <translation>Installata: %1
 Tag remoto: %2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6661"/>
+        <location filename="../widgets/mainwindow.cpp" line="6883"/>
         <source>You are up to date.</source>
         <translation>Sei aggiornato.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6662"/>
+        <location filename="../widgets/mainwindow.cpp" line="6884"/>
         <source>Installed version: %1</source>
         <translation>Versione installata: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="6672"/>
+        <location filename="../widgets/mainwindow.cpp" line="6894"/>
         <source>Update available: %1</source>
         <translation>Aggiornamento disponibile: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="7674"/>
+        <location filename="../widgets/mainwindow.cpp" line="7868"/>
         <source>No subprocess diagnostic output was captured.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8055"/>
+        <location filename="../widgets/mainwindow.cpp" line="8234"/>
         <source>Load Decodium Certificate</source>
         <translation>Carica certificato Decodium</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8057"/>
+        <location filename="../widgets/mainwindow.cpp" line="8236"/>
         <source>Decodium Certificate (*.decodium);;All files (*)</source>
         <translation>Certificato Decodium (*.decodium);;Tutti i file (*)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8101"/>
-        <location filename="../widgets/mainwindow.cpp" line="8115"/>
-        <location filename="../widgets/mainwindow.cpp" line="8127"/>
+        <location filename="../widgets/mainwindow.cpp" line="8280"/>
+        <location filename="../widgets/mainwindow.cpp" line="8294"/>
+        <location filename="../widgets/mainwindow.cpp" line="8306"/>
         <source>DXped Certificate Manager</source>
         <translation>Gestore certificati DXped</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8102"/>
+        <location filename="../widgets/mainwindow.cpp" line="8281"/>
         <source>DXpedCertManager.py was not found.
 
 Expected locations:
@@ -7615,63 +7618,63 @@ Percorsi previsti:
 - tools/ della directory dati scrivibile</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8116"/>
+        <location filename="../widgets/mainwindow.cpp" line="8295"/>
         <source>Python 3 was not found in PATH.
 Please install Python and try again.</source>
         <translation>Python 3 non è stato trovato nel PATH.
 Installa Python e riprova.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8128"/>
+        <location filename="../widgets/mainwindow.cpp" line="8307"/>
         <source>Failed to start DXped Certificate Manager.</source>
         <translation>Avvio del Gestore certificati DXped non riuscito.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8132"/>
+        <location filename="../widgets/mainwindow.cpp" line="8311"/>
         <source>DXped Certificate Manager started</source>
         <translation>Gestore certificati DXped avviato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8149"/>
-        <location filename="../widgets/mainwindow.cpp" line="15700"/>
+        <location filename="../widgets/mainwindow.cpp" line="8328"/>
+        <location filename="../widgets/mainwindow.cpp" line="16489"/>
         <source>Invalid Certificate</source>
         <translation>Certificato non valido</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8150"/>
+        <location filename="../widgets/mainwindow.cpp" line="8329"/>
         <source>The Decodium certificate file is invalid or the signature verification failed.</source>
         <translation>Il file del certificato Decodium non è valido o la verifica della firma non è riuscita.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8176"/>
+        <location filename="../widgets/mainwindow.cpp" line="8355"/>
         <source>Decodium certificate loaded but expired: %1 (%2)</source>
         <translation>Certificato Decodium caricato ma scaduto: %1 (%2)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8182"/>
-        <location filename="../widgets/mainwindow.cpp" line="15709"/>
+        <location filename="../widgets/mainwindow.cpp" line="8361"/>
+        <location filename="../widgets/mainwindow.cpp" line="16498"/>
         <source>Certificate Expired</source>
         <translation>Certificato scaduto</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8183"/>
+        <location filename="../widgets/mainwindow.cpp" line="8362"/>
         <source>The Decodium certificate for %1 expired on %2.</source>
         <translation>Il certificato Decodium per %1 è scaduto il %2.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8195"/>
+        <location filename="../widgets/mainwindow.cpp" line="8374"/>
         <source>Decodium certificate loaded for %1, current callsign is %2</source>
         <translation>Certificato Decodium caricato per %1, il nominativo corrente è %2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8201"/>
-        <location filename="../widgets/mainwindow.cpp" line="8221"/>
-        <location filename="../widgets/mainwindow.cpp" line="15731"/>
+        <location filename="../widgets/mainwindow.cpp" line="8380"/>
+        <location filename="../widgets/mainwindow.cpp" line="8400"/>
+        <location filename="../widgets/mainwindow.cpp" line="16520"/>
         <source>Certificate Loaded</source>
         <translation>Certificato caricato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8202"/>
+        <location filename="../widgets/mainwindow.cpp" line="8381"/>
         <source>Certificate loaded successfully.
 
 Certificate call: %1
@@ -7690,12 +7693,12 @@ Scadenza: %4
 Il certificato è attivo, ma non corrisponde al nominativo dell&apos;operatore corrente.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8215"/>
+        <location filename="../widgets/mainwindow.cpp" line="8394"/>
         <source>Decodium certificate active: %1 (%2)</source>
         <translation>Certificato Decodium attivo: %1 (%2)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8222"/>
+        <location filename="../widgets/mainwindow.cpp" line="8401"/>
         <source>Certificate loaded successfully.
 
 Call: %1
@@ -7708,12 +7711,12 @@ Livello: %2
 Scadenza: %3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8291"/>
+        <location filename="../widgets/mainwindow.cpp" line="8470"/>
         <source>No Decodium certificate loaded.</source>
         <translation>Nessun certificato Decodium caricato.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8295"/>
+        <location filename="../widgets/mainwindow.cpp" line="8474"/>
         <source>Call: %1
 Tier: %2
 Expires: %3</source>
@@ -7722,21 +7725,21 @@ Livello: %2
 Scadenza: %3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8300"/>
+        <location filename="../widgets/mainwindow.cpp" line="8479"/>
         <source>
 Path: %1</source>
         <translation>
 Percorso: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8303"/>
+        <location filename="../widgets/mainwindow.cpp" line="8482"/>
         <source>
 Current operator: %1</source>
         <translation>
 Operatore corrente: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="8322"/>
+        <location filename="../widgets/mainwindow.cpp" line="8501"/>
         <source>If you make fair use of any part of WSJT-X under terms of the GNU General Public License, you must display the following copyright notice prominently in your derivative work:
 
 &quot;The algorithms, source code, look-and-feel of WSJT-X and related programs, and protocol specifications for the modes FSK441, FST4, FT8, JT4, JT6M, JT9, JT65, JTMS, QRA64, Q65, MSK144 are Copyright (C) 2001-2025 by one or more of the following authors: Joseph Taylor, K1JT; Bill Somerville, G4WJS; Steven Franke, K9AN; Nico Palermo, IV3NWV; Greg Beam, KI7MT; Michael Black, W9MDB; Edson Pereira, PY2SDR; Philip Karn, KA9Q; Uwe Risse, DG2YCB; Brian Moran, N9ADG; Roger Rehr, W3SZ; and other members of the WSJT Development Group.&quot;</source>
@@ -7846,22 +7849,22 @@ Operatore corrente: %1</translation>
 &lt;/table&gt;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12218"/>
+        <location filename="../widgets/mainwindow.cpp" line="12992"/>
         <source>Async L2: starting queued call %1</source>
         <translation>Asincrono L2: avvio chiamata in coda %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12220"/>
+        <location filename="../widgets/mainwindow.cpp" line="12994"/>
         <source>Async L2: starting queued call</source>
         <translation>Asincrono L2: avvio della chiamata in coda</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12238"/>
+        <location filename="../widgets/mainwindow.cpp" line="13012"/>
         <source>Please choose another Tx frequency. Decodium v3.0 FT2 Raptor will not knowingly transmit another mode in the WSPR sub-band on 30m.</source>
         <translation>Scegli un&apos;altra frequenza Tx. Decodium v3.0 FT2 Raptor non trasmetterà consapevolmente un&apos;altra modalità nella sottobanda WSPR sui 30 metri.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12256"/>
+        <location filename="../widgets/mainwindow.cpp" line="13030"/>
         <source>Please choose another dial frequency.
 Must be 3Khz away from %1.
 Decodium v3.0 FT2 Raptor will not operate in Fox mode
@@ -7872,7 +7875,7 @@ Decodium v3.0 FT2 Raptor non funzionerà in modalità Fox
 sovrapponendosi alle sottobande FT8 standard.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="12274"/>
+        <location filename="../widgets/mainwindow.cpp" line="13048"/>
         <source>Please choose another dial frequency.
 Decodium v3.0 FT2 Raptor will not operate in Fox mode
 overlapping the WSPR sub-bands.</source>
@@ -7881,23 +7884,23 @@ Decodium v3.0 FT2 Raptor non funzionerà in modalità Fox
 sovrapponendo le sottobande WSPR.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="13713"/>
+        <location filename="../widgets/mainwindow.cpp" line="14502"/>
         <source>Async L2: %1 queued, waiting free TX slot</source>
         <translation>Asincrono L2: %1 in coda, in attesa slot TX libero</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="13715"/>
+        <location filename="../widgets/mainwindow.cpp" line="14504"/>
         <source>Async L2: caller queued, waiting free TX slot</source>
         <translation>Asincrono L2: chiamante in coda, in attesa slot TX libero</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15614"/>
-        <location filename="../widgets/mainwindow.cpp" line="15627"/>
+        <location filename="../widgets/mainwindow.cpp" line="16403"/>
+        <location filename="../widgets/mainwindow.cpp" line="16416"/>
         <source>DXpedition Certificate Required</source>
         <translation>Certificato DXpedition richiesto</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15615"/>
+        <location filename="../widgets/mainwindow.cpp" line="16404"/>
         <source>To activate DXpedition mode you must load a valid .dxcert certificate for your callsign.
 
 Load certificate now?</source>
@@ -7906,44 +7909,44 @@ Load certificate now?</source>
 Caricare il certificato adesso?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15628"/>
+        <location filename="../widgets/mainwindow.cpp" line="16417"/>
         <source>DXpedition mode was not activated because no valid certificate is loaded.</source>
         <translation>La modalità DXpedition non è stata attivata perché non è caricato alcun certificato valido.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15691"/>
+        <location filename="../widgets/mainwindow.cpp" line="16480"/>
         <source>Load DXpedition Certificate</source>
         <translation>Carica il certificato della spedizione DX</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15693"/>
+        <location filename="../widgets/mainwindow.cpp" line="16482"/>
         <source>DXped Certificate (*.dxcert);;JSON files (*.json);;All files (*)</source>
         <translation>Certificato DXped (*.dxcert);;File JSON (*.json);;Tutti i file (*)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15701"/>
+        <location filename="../widgets/mainwindow.cpp" line="16490"/>
         <source>The certificate file is invalid or the signature verification failed.</source>
         <translation>Il file del certificato non è valido oppure la verifica della firma non è riuscita.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15710"/>
+        <location filename="../widgets/mainwindow.cpp" line="16499"/>
         <source>The certificate for %1 is expired or not yet valid.
 Valid from %2 to %3.</source>
         <translation>Il certificato per %1 è scaduto o non è ancora valido.
 Valido da %2 a %3.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15722"/>
+        <location filename="../widgets/mainwindow.cpp" line="16511"/>
         <source>Unauthorized Operator</source>
         <translation>Operatore non autorizzato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15723"/>
+        <location filename="../widgets/mainwindow.cpp" line="16512"/>
         <source>Your callsign %1 is not listed in this certificate for DXpedition %2.</source>
         <translation>Il vostro nominativo %1 non è elencato in questo certificato per la DXpedition %2.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="15732"/>
+        <location filename="../widgets/mainwindow.cpp" line="16521"/>
         <source>Certificate loaded successfully.
 
 DXpedition: %1 (%2)
@@ -7962,164 +7965,169 @@ Valido: da %6 a %7
 Impronta digitale: %8</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16983"/>
+        <location filename="../widgets/mainwindow.cpp" line="17772"/>
         <source>AutoSpot skipped: invalid DX cluster endpoint</source>
         <translation>AutoSpot ignorato: endpoint del cluster DX non valido</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="16984"/>
+        <location filename="../widgets/mainwindow.cpp" line="17773"/>
         <source>SKIP invalid endpoint</source>
         <translation>SKIP endpoint non valido</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17016"/>
+        <location filename="../widgets/mainwindow.cpp" line="17805"/>
         <source>AutoSpot skipped: empty DX cluster host</source>
         <translation>AutoSpot ignorato: host cluster DX vuoto</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17017"/>
+        <location filename="../widgets/mainwindow.cpp" line="17806"/>
         <source>SKIP empty host</source>
         <translation>SALTA host vuoto</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17025"/>
+        <location filename="../widgets/mainwindow.cpp" line="17814"/>
         <source>AutoSpot skipped: %1:%2 is read-only. Configure a writable DX cluster endpoint.</source>
         <translation>AutoSpot saltato: %1:%2 è di sola lettura. Configurare un endpoint del cluster DX scrivibile.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17045"/>
+        <location filename="../widgets/mainwindow.cpp" line="17834"/>
         <source>AutoSpot skipped: empty MyCall</source>
         <translation>AutoSpot saltato: MyCall vuota</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17046"/>
+        <location filename="../widgets/mainwindow.cpp" line="17835"/>
         <source>SKIP empty MyCall</source>
         <translation>SALTA MyCall vuota</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17054"/>
+        <location filename="../widgets/mainwindow.cpp" line="17843"/>
         <source>SUBMIT %1:%2 | %3</source>
         <translation>INVIA %1:%2 | %3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17268"/>
+        <location filename="../widgets/mainwindow.cpp" line="18057"/>
         <source>AutoSpot accepted by cluster node for %1 on %2:%3</source>
         <translation>AutoSpot accettato dal nodo cluster per %1 su %2:%3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17270"/>
+        <location filename="../widgets/mainwindow.cpp" line="18059"/>
         <source>AutoSpot rejected for %1 on %2:%3</source>
         <translation>AutoSpot rifiutato per %1 su %2:%3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17510"/>
+        <location filename="../widgets/mainwindow.cpp" line="18299"/>
         <source>Duplicate log suppressed for %1 (%2 s window)</source>
         <translation>Eliminazione del protocollo duplicato per %1 (finestra s %2)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18016"/>
+        <location filename="../widgets/mainwindow.cpp" line="18875"/>
         <source>%1 baud Baudot terminal. Mark %2 Hz, shift %3 Hz, %4, %5 stop bits. Received text appears above; type the text to send below.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18020"/>
+        <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>reverse</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18020"/>
+        <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>normal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18065"/>
+        <location filename="../widgets/mainwindow.cpp" line="18924"/>
         <source>RTTY text contains no encodable Baudot characters</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18209"/>
+        <location filename="../widgets/mainwindow.cpp" line="19068"/>
         <source>RTTY Received Text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18210"/>
+        <location filename="../widgets/mainwindow.cpp" line="19069"/>
         <source>RTTY Transmitted Text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18279"/>
+        <location filename="../widgets/mainwindow.cpp" line="19138"/>
         <source>Stations calling DXpedition %1</source>
         <translation>Stazioni che chiamano la DXpedition %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18313"/>
+        <location filename="../widgets/mainwindow.cpp" line="19172"/>
         <source>Show Already Worked</source>
         <translation>Mostra già lavorato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18315"/>
+        <location filename="../widgets/mainwindow.cpp" line="19174"/>
         <source>Super Fox</source>
         <translation>Super.Fox</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18333"/>
+        <location filename="../widgets/mainwindow.cpp" line="19192"/>
         <source>Super Hound</source>
         <translation>Super.Hound</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18344"/>
+        <location filename="../widgets/mainwindow.cpp" line="19203"/>
         <source>Hound</source>
         <translatorcomment>(Hound=Cane da caccia)</translatorcomment>
         <translation>Segugio</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="18764"/>
+        <location filename="../widgets/mainwindow.cpp" line="19623"/>
         <source>Tx Messages</source>
         <translation>Messaggi Tx</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19217"/>
-        <location filename="../widgets/mainwindow.cpp" line="19228"/>
-        <location filename="../widgets/mainwindow.cpp" line="19267"/>
-        <location filename="../widgets/mainwindow.cpp" line="19277"/>
-        <location filename="../widgets/mainwindow.cpp" line="25509"/>
-        <location filename="../widgets/mainwindow.cpp" line="25555"/>
+        <location filename="../widgets/mainwindow.cpp" line="20076"/>
+        <location filename="../widgets/mainwindow.cpp" line="20087"/>
+        <location filename="../widgets/mainwindow.cpp" line="20126"/>
+        <location filename="../widgets/mainwindow.cpp" line="20136"/>
+        <location filename="../widgets/mainwindow.cpp" line="26506"/>
+        <location filename="../widgets/mainwindow.cpp" line="26552"/>
         <source>Confirm Erase</source>
         <translation>Conferma Cancella</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19218"/>
+        <location filename="../widgets/mainwindow.cpp" line="20077"/>
         <source>Are you sure you want to erase file ALL.TXT?</source>
         <translation>Sei sicuro di voler cancellare il file ALL.TXT?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19229"/>
+        <location filename="../widgets/mainwindow.cpp" line="20088"/>
         <source>Are you sure you want to erase the list of Q65 callers?</source>
         <translation>Vuoi davvero cancellare l&apos;elenco dei chiamanti Q65?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19238"/>
-        <location filename="../widgets/mainwindow.cpp" line="22132"/>
+        <location filename="../widgets/mainwindow.cpp" line="20097"/>
+        <location filename="../widgets/mainwindow.cpp" line="23022"/>
         <source>Confirm Reset</source>
         <translation>Conferma Ripristina</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19239"/>
+        <location filename="../widgets/mainwindow.cpp" line="20098"/>
         <source>Are you sure you want to erase your contest log?</source>
         <translation>Sei sicuro di voler cancellare il tuo Log del contest?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19240"/>
+        <location filename="../widgets/mainwindow.cpp" line="20099"/>
         <source>Doing this will remove all QSO records for the current contest. They will be kept in the ADIF log file but will not be available for export in your Cabrillo log.</source>
         <translation>In questo modo verranno rimossi tutti i record QSO per il contest corrente. Saranno conservati nel file di registro ADIF ma non saranno disponibili per l&apos;esportazione nel registro Cabrillo.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19260"/>
+        <location filename="../widgets/mainwindow.cpp" line="20119"/>
         <source>Cabrillo Log saved</source>
         <translation>Log Cabrillo salvato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25696"/>
+        <location filename="../widgets/mainwindow.cpp" line="24834"/>
+        <source>Embedded WSPR decoder failed: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/mainwindow.cpp" line="26693"/>
         <source>Call sign and LOTW password are required.
 
 Enter these in Settings at the Reporting tab.</source>
@@ -8128,99 +8136,99 @@ Enter these in Settings at the Reporting tab.</source>
 Inseriscili in Impostazioni nella scheda Reporting.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25704"/>
+        <location filename="../widgets/mainwindow.cpp" line="26701"/>
         <source>Upload QSOs to LOTW first, and *wait* for LOTW to update.</source>
         <translation>Carica prima i QSO su LOTW e *attendi* l&apos;aggiornamento di LOTW.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25721"/>
+        <location filename="../widgets/mainwindow.cpp" line="26718"/>
         <source>Downloading from LOTW...</source>
         <translation>Download da LOTW...</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25812"/>
+        <location filename="../widgets/mainwindow.cpp" line="26809"/>
         <source>Download QSOs from LOTW succeeded.</source>
         <translation>Download dei QSO da LOTW riuscito.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25825"/>
+        <location filename="../widgets/mainwindow.cpp" line="26822"/>
         <source>Download QSOs from LOTW failed.</source>
         <translation>Il download dei QSO da LOTW non è riuscito.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25900"/>
-        <location filename="../widgets/mainwindow.cpp" line="25912"/>
-        <location filename="../widgets/mainwindow.cpp" line="25935"/>
+        <location filename="../widgets/mainwindow.cpp" line="26897"/>
+        <location filename="../widgets/mainwindow.cpp" line="26909"/>
+        <location filename="../widgets/mainwindow.cpp" line="26932"/>
         <source>Unable to open file</source>
         <translation>Impossibile aprire il file</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25971"/>
+        <location filename="../widgets/mainwindow.cpp" line="26968"/>
         <source>Download QSLs from LOTW succeeded.</source>
         <translation>Il download delle QSL da LOTW è riuscito.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25978"/>
+        <location filename="../widgets/mainwindow.cpp" line="26975"/>
         <source>Download QSLs from LOTW failed.</source>
         <translation>Il download delle QSL da LOTW non è riuscito.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25999"/>
+        <location filename="../widgets/mainwindow.cpp" line="26996"/>
         <source>No QSOs to upload to LOTW</source>
         <translation>Nessun QSO da caricare su LOTW</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26043"/>
+        <location filename="../widgets/mainwindow.cpp" line="27040"/>
         <source>Upload to LOTW Error</source>
         <translation>Errore caricamento su LOTW</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26051"/>
+        <location filename="../widgets/mainwindow.cpp" line="27048"/>
         <source>Uploading to LOTW...</source>
         <translation>Caricamento su LOTW...</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26148"/>
+        <location filename="../widgets/mainwindow.cpp" line="27145"/>
         <source>LOTW process error</source>
         <translation>Errore di processo LOTW</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26219"/>
+        <location filename="../widgets/mainwindow.cpp" line="27216"/>
         <source>Network Error - Refusing redirect for credentialed LOTW request:
 &apos;%1&apos;</source>
         <translation>Errore di rete: rifiuto del reindirizzamento per la richiesta LOTW con credenziali:
 &apos;%1&apos;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26228"/>
+        <location filename="../widgets/mainwindow.cpp" line="27225"/>
         <source>Network Error - SSL/TLS support not installed, cannot fetch:
 &apos;%1&apos;</source>
         <translation>Errore di rete: il supporto SSL/TLS non è installato, impossibile recuperare:
 &apos;%1&apos;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26238"/>
+        <location filename="../widgets/mainwindow.cpp" line="27235"/>
         <source>Network Error - Too many redirects:
 &apos;%1&apos;</source>
         <translation>Errore di rete: troppi reindirizzamenti:
 &apos;%1&apos;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26252"/>
+        <location filename="../widgets/mainwindow.cpp" line="27249"/>
         <source>Network Error:
 %1</source>
         <translation>Errore di rete:
 %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26259"/>
+        <location filename="../widgets/mainwindow.cpp" line="27256"/>
         <source>File System Error - Cannot commit changes to:
 &quot;%1&quot;</source>
         <translation>Errore del file system - Impossibile eseguire il commit delle modifiche a:
 &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26288"/>
+        <location filename="../widgets/mainwindow.cpp" line="27285"/>
         <source>File System Error - Cannot open file:
 &quot;%1&quot;
 Error(%2): %3</source>
@@ -8229,7 +8237,7 @@ Error(%2): %3</source>
 Errore (%2):%3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26296"/>
+        <location filename="../widgets/mainwindow.cpp" line="27293"/>
         <source>File System Error - Cannot write to file:
 &quot;%1&quot;
 Error(%2): %3</source>
@@ -8238,292 +8246,292 @@ Error(%2): %3</source>
 Errore (%2):%3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26360"/>
+        <location filename="../widgets/mainwindow.cpp" line="27357"/>
         <source>Unable to open incremental log file</source>
         <translation>Impossibile aprire il file di registro incrementale</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26516"/>
+        <location filename="../widgets/mainwindow.cpp" line="27513"/>
         <source>Remote waterfall stream enabled</source>
         <translation>Flusso a cascata remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26517"/>
+        <location filename="../widgets/mainwindow.cpp" line="27514"/>
         <source>Remote waterfall stream disabled</source>
         <translation>Flusso a cascata remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26583"/>
+        <location filename="../widgets/mainwindow.cpp" line="27580"/>
         <source>Remote FT2 caller queued: %1</source>
         <translation>Chiamante remoto FT2 in coda: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26596"/>
+        <location filename="../widgets/mainwindow.cpp" line="27593"/>
         <source>Remote mode request ignored: RTTY is hidden in this release</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26602"/>
+        <location filename="../widgets/mainwindow.cpp" line="27599"/>
         <source>Remote mode set: %1</source>
         <translation>Modalità remota impostata: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26648"/>
+        <location filename="../widgets/mainwindow.cpp" line="27645"/>
         <source>Remote band ignored: invalid band &quot;%1&quot;</source>
         <translation>Banda remota ignorata: banda non valida &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26652"/>
+        <location filename="../widgets/mainwindow.cpp" line="27649"/>
         <source>Remote band set: 160m</source>
         <translation>Set banda remota: 160 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26653"/>
+        <location filename="../widgets/mainwindow.cpp" line="27650"/>
         <source>Remote band set: 80m</source>
         <translation>Set banda remota: 80 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26654"/>
+        <location filename="../widgets/mainwindow.cpp" line="27651"/>
         <source>Remote band set: 60m</source>
         <translation>Set banda remota: 60 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26655"/>
+        <location filename="../widgets/mainwindow.cpp" line="27652"/>
         <source>Remote band set: 40m</source>
         <translation>Set banda remota: 40 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26656"/>
+        <location filename="../widgets/mainwindow.cpp" line="27653"/>
         <source>Remote band set: 30m</source>
         <translation>Set banda remota: 30 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26657"/>
+        <location filename="../widgets/mainwindow.cpp" line="27654"/>
         <source>Remote band set: 20m</source>
         <translation>Set banda remota: 20 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26658"/>
+        <location filename="../widgets/mainwindow.cpp" line="27655"/>
         <source>Remote band set: 17m</source>
         <translation>Set banda remota: 17 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26659"/>
+        <location filename="../widgets/mainwindow.cpp" line="27656"/>
         <source>Remote band set: 15m</source>
         <translation>Set banda remota: 15 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26660"/>
+        <location filename="../widgets/mainwindow.cpp" line="27657"/>
         <source>Remote band set: 12m</source>
         <translation>Set banda remota: 12 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26661"/>
+        <location filename="../widgets/mainwindow.cpp" line="27658"/>
         <source>Remote band set: 10m</source>
         <translation>Set banda remota: 10 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26662"/>
+        <location filename="../widgets/mainwindow.cpp" line="27659"/>
         <source>Remote band set: 6m</source>
         <translation>Set banda remota: 6 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26663"/>
+        <location filename="../widgets/mainwindow.cpp" line="27660"/>
         <source>Remote band set: 2m</source>
         <translation>Set banda remota: 2 m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26664"/>
+        <location filename="../widgets/mainwindow.cpp" line="27661"/>
         <source>Remote band set: 70cm</source>
         <translation>Set banda remota: 70 cm</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26666"/>
+        <location filename="../widgets/mainwindow.cpp" line="27663"/>
         <source>Remote band ignored: unsupported band &quot;%1&quot;</source>
         <translation>Banda remota ignorata: banda non supportata &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26684"/>
+        <location filename="../widgets/mainwindow.cpp" line="27681"/>
         <source>Remote Rx frequency set: %1 Hz</source>
         <translation>Frequenza Rx remota impostata: %1 Hz</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26702"/>
+        <location filename="../widgets/mainwindow.cpp" line="27699"/>
         <source>Remote Tx frequency set: %1 Hz</source>
         <translation>Frequenza Tx remota impostata: %1 Hz</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26734"/>
+        <location filename="../widgets/mainwindow.cpp" line="27731"/>
         <source>Remote TX enabled</source>
         <translation>TX remota abilitata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26734"/>
+        <location filename="../widgets/mainwindow.cpp" line="27731"/>
         <source>Remote TX disabled</source>
         <translation>TX remota disabilitata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26751"/>
+        <location filename="../widgets/mainwindow.cpp" line="27748"/>
         <source>Remote Auto CQ enabled</source>
         <translation>CQ automatico remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26751"/>
+        <location filename="../widgets/mainwindow.cpp" line="27748"/>
         <source>Remote Auto CQ disabled</source>
         <translation>CQ automatico remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26777"/>
+        <location filename="../widgets/mainwindow.cpp" line="27774"/>
         <source>Remote AutoSpot enabled</source>
         <translation>AutoSpot remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26777"/>
+        <location filename="../widgets/mainwindow.cpp" line="27774"/>
         <source>Remote AutoSpot disabled</source>
         <translation>AutoSpot remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26778"/>
+        <location filename="../widgets/mainwindow.cpp" line="27775"/>
         <source>AutoSpot enabled</source>
         <translation>AutoSpot abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26778"/>
+        <location filename="../widgets/mainwindow.cpp" line="27775"/>
         <source>AutoSpot disabled</source>
         <translation>Individuazione automatica disabilitata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26796"/>
+        <location filename="../widgets/mainwindow.cpp" line="27793"/>
         <source>Remote Monitoring ignored: cannot enable while transmitting</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26804"/>
+        <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring enabled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26804"/>
+        <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring disabled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26816"/>
+        <location filename="../widgets/mainwindow.cpp" line="27813"/>
         <source>Remote Async L2 ignored: not in FT2 mode</source>
         <translation>Remote Async L2 ignorato: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26824"/>
+        <location filename="../widgets/mainwindow.cpp" line="27821"/>
         <source>Remote Async L2 ignored: mandatory in FT2 mode</source>
         <translation>Remote Async L2 ignorato: obbligatorio in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26828"/>
+        <location filename="../widgets/mainwindow.cpp" line="27825"/>
         <source>Remote Async L2 enabled (mandatory in FT2)</source>
         <translation>Remote Async L2 abilitato (obbligatorio in FT2)</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26840"/>
+        <location filename="../widgets/mainwindow.cpp" line="27837"/>
         <source>Remote Dual Carrier ignored: not in FT2 mode</source>
         <translation>Doppia portante remota ignorata: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26844"/>
+        <location filename="../widgets/mainwindow.cpp" line="27841"/>
         <source>Remote Dual Carrier enabled</source>
         <translation>Doppia portante remota abilitata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26844"/>
+        <location filename="../widgets/mainwindow.cpp" line="27841"/>
         <source>Remote Dual Carrier disabled</source>
         <translation>Doppia portante remota disabilitata</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26856"/>
+        <location filename="../widgets/mainwindow.cpp" line="27853"/>
         <source>Remote Alt 1/2 ignored: not available in FT2 mode</source>
         <translation>Alt 1/2 remoto ignorato: non disponibile in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26860"/>
+        <location filename="../widgets/mainwindow.cpp" line="27857"/>
         <source>Remote Alt 1/2 enabled</source>
         <translation>Alt 1/2 remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26860"/>
+        <location filename="../widgets/mainwindow.cpp" line="27857"/>
         <source>Remote Alt 1/2 disabled</source>
         <translation>Alt 1/2 remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26872"/>
+        <location filename="../widgets/mainwindow.cpp" line="27869"/>
         <source>Remote Manual TX ignored: not in FT2 mode</source>
         <translation>Manual TX remoto ignorato: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26876"/>
+        <location filename="../widgets/mainwindow.cpp" line="27873"/>
         <source>Remote Manual TX enabled</source>
         <translation>Manual TX remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26876"/>
+        <location filename="../widgets/mainwindow.cpp" line="27873"/>
         <source>Remote Manual TX disabled</source>
         <translation>Manual TX remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26888"/>
+        <location filename="../widgets/mainwindow.cpp" line="27885"/>
         <source>Remote Speedy ignored: not in FT2 mode</source>
         <translation>Speedy remoto ignorato: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26892"/>
+        <location filename="../widgets/mainwindow.cpp" line="27889"/>
         <source>Remote Speedy enabled</source>
         <translation>Speedy remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26892"/>
+        <location filename="../widgets/mainwindow.cpp" line="27889"/>
         <source>Remote Speedy disabled</source>
         <translation>Speedy remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26904"/>
+        <location filename="../widgets/mainwindow.cpp" line="27901"/>
         <source>Remote D-CW ignored: not in FT2 mode</source>
         <translation>D-CW remoto ignorato: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26908"/>
+        <location filename="../widgets/mainwindow.cpp" line="27905"/>
         <source>Remote D-CW enabled</source>
         <translation>D-CW remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26908"/>
+        <location filename="../widgets/mainwindow.cpp" line="27905"/>
         <source>Remote D-CW disabled</source>
         <translation>D-CW remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26920"/>
+        <location filename="../widgets/mainwindow.cpp" line="27917"/>
         <source>Remote Quick QSO ignored: not in FT2 mode</source>
         <translation>Quick QSO remoto ignorato: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26924"/>
+        <location filename="../widgets/mainwindow.cpp" line="27921"/>
         <source>Remote Quick QSO enabled</source>
         <translation>Quick QSO remoto abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26924"/>
+        <location filename="../widgets/mainwindow.cpp" line="27921"/>
         <source>Remote Quick QSO disabled</source>
         <translation>Quick QSO remoto disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26936"/>
+        <location filename="../widgets/mainwindow.cpp" line="27933"/>
         <source>Remote QSO profile ignored: not in FT2 mode</source>
         <translation>Profilo QSO remoto ignorato: non in modalità FT2</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26947"/>
+        <location filename="../widgets/mainwindow.cpp" line="27944"/>
         <source>Remote QSO profile ignored: unsupported FT2 count %1</source>
         <translation>Profilo QSO remoto ignorato: conteggio FT2 %1 non supportato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="26952"/>
+        <location filename="../widgets/mainwindow.cpp" line="27949"/>
         <source>Remote QSO profile set to %1 msg</source>
         <translation>Profilo QSO remoto impostato a %1 msg</translation>
     </message>
@@ -8532,29 +8540,29 @@ Errore (%2):%3</translation>
         <translation type="vanished">Sei sicuro di voler cancellare il file wsjtx_log.adi?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19278"/>
+        <location filename="../widgets/mainwindow.cpp" line="20137"/>
         <source>Are you sure you want to erase the WSPR hashtable?</source>
         <translation>Sei sicuro di voler cancellare la tabella hash WSPR?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19297"/>
+        <location filename="../widgets/mainwindow.cpp" line="20156"/>
         <source>ChronoGPS not found</source>
         <translation>CronoGPS non trovato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19298"/>
+        <location filename="../widgets/mainwindow.cpp" line="20157"/>
         <source>ChronoGPS.exe was not found in the application directory.
 Please ensure ChronoGPS.exe is in the same folder as Decodium.</source>
         <translation>ChronoGPS.exe non è stato trovato nella directory dell&apos;applicazione.
 Assicurarsi che ChronoGPS.exe si trovi nella stessa cartella di Decodium.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19737"/>
+        <location filename="../widgets/mainwindow.cpp" line="20596"/>
         <source>%1 W</source>
         <translation>%1 W</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19756"/>
+        <location filename="../widgets/mainwindow.cpp" line="20615"/>
         <source>SWR &gt; 2.5 !!!
 
 Transmission was stopped
@@ -8567,111 +8575,111 @@ La trasmissione è stata interrotta
 Controlla l&apos;antenna</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="19861"/>
+        <location filename="../widgets/mainwindow.cpp" line="20720"/>
         <source>CAT disconnected, reconnecting (%1/3)...</source>
         <translation>CAT disconnesso, riconnessione (%1/3)...</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="20253"/>
+        <location filename="../widgets/mainwindow.cpp" line="21131"/>
         <source>Tune digital gain </source>
         <translation>Ottimizza il guadagno digitale </translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="20255"/>
+        <location filename="../widgets/mainwindow.cpp" line="21133"/>
         <source>Transmit digital gain </source>
         <translation>Trasmetti Guadagno digitale </translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="20279"/>
+        <location filename="../widgets/mainwindow.cpp" line="21157"/>
         <source>Prefixes</source>
         <translation>Prefissi</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21270"/>
+        <location filename="../widgets/mainwindow.cpp" line="22148"/>
         <source>Network Error</source>
         <translation>Errore di Rete</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21271"/>
+        <location filename="../widgets/mainwindow.cpp" line="22149"/>
         <source>Error: %1
 UDP server %2:%3</source>
         <translation>Errore:%1
 Server UDP%2:%3</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21434"/>
+        <location filename="../widgets/mainwindow.cpp" line="22325"/>
         <source>File Error</source>
         <translation>Errore File</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21727"/>
+        <location filename="../widgets/mainwindow.cpp" line="22618"/>
         <source>Phase Training Disabled</source>
         <translation>Fase di Allenamento Disabilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21730"/>
+        <location filename="../widgets/mainwindow.cpp" line="22621"/>
         <source>Phase Training Enabled</source>
         <translation>Fase di allenamento abilitato</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21872"/>
+        <location filename="../widgets/mainwindow.cpp" line="22763"/>
         <source> WD:0m </source>
         <translation> WD: 0m </translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21875"/>
+        <location filename="../widgets/mainwindow.cpp" line="22766"/>
         <source> Runaway Tx watchdog </source>
         <translation> Tx.watchdog.Sfuggito </translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21892"/>
+        <location filename="../widgets/mainwindow.cpp" line="22783"/>
         <source> WD:%1m </source>
         <translation> WD:%1m </translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="22143"/>
-        <location filename="../widgets/mainwindow.cpp" line="22146"/>
+        <location filename="../widgets/mainwindow.cpp" line="23033"/>
+        <location filename="../widgets/mainwindow.cpp" line="23036"/>
         <source>Free Text Message</source>
         <translation>Messaggio di testo libero</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="22144"/>
-        <location filename="../widgets/mainwindow.cpp" line="22147"/>
+        <location filename="../widgets/mainwindow.cpp" line="23034"/>
+        <location filename="../widgets/mainwindow.cpp" line="23037"/>
         <source>Message:</source>
         <translation>Messaggio:</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="22165"/>
+        <location filename="../widgets/mainwindow.cpp" line="23055"/>
         <source>Directional calls not yet supported in SuperFox mode</source>
         <translation>Le chiamate direzionali non sono ancora supportate in modalità SuperFox</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="22184"/>
+        <location filename="../widgets/mainwindow.cpp" line="23074"/>
         <source>TOTP: No seed entered in fox configuration to generate verification code.</source>
         <translation>TOTP: Nessun seed inserito nella configurazione Fox per generare il codice di verifica.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="23878"/>
+        <location filename="../widgets/mainwindow.cpp" line="24963"/>
         <source>TOTP SF: seed not long enough.</source>
         <translation>TOTP SF: seed non abbastanza lungo.</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="24099"/>
+        <location filename="../widgets/mainwindow.cpp" line="25096"/>
         <source>Unable to open log file</source>
         <translation>Impossibile aprire il file di registro</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25510"/>
+        <location filename="../widgets/mainwindow.cpp" line="26507"/>
         <source>Are you sure you want to erase the Tx Log?</source>
         <translation>Sei sicuro di voler cancellare il registro Tx?</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25535"/>
+        <location filename="../widgets/mainwindow.cpp" line="26532"/>
         <source>&quot;%1&quot; added to Ignore List</source>
         <translation>&quot;%1&quot; aggiunto all&apos;elenco degli ignorati</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="25556"/>
+        <location filename="../widgets/mainwindow.cpp" line="26553"/>
         <source>Are you sure you want to erase the Ignore List?</source>
         <translation>Sei sicuro di voler cancellare l&apos;elenco degli ignorati?</translation>
     </message>
@@ -8680,13 +8688,13 @@ Server UDP%2:%3</translation>
         <translation type="vanished">WD:%1m</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="21957"/>
-        <location filename="../widgets/mainwindow.cpp" line="23155"/>
+        <location filename="../widgets/mainwindow.cpp" line="22847"/>
+        <location filename="../widgets/mainwindow.cpp" line="24045"/>
         <source>Log File Error</source>
         <translation>Errore file di Log</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="22133"/>
+        <location filename="../widgets/mainwindow.cpp" line="23023"/>
         <source>Are you sure you want to clear the QSO queues?</source>
         <translation>Sei sicuro di voler cancellare le code QSO?</translation>
     </message>
@@ -9390,32 +9398,32 @@ Server UDP%2:%3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17304"/>
+        <location filename="../widgets/mainwindow.cpp" line="18093"/>
         <source>timeout waiting for cluster response</source>
         <translation>timeout in attesa della risposta del cluster</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17305"/>
+        <location filename="../widgets/mainwindow.cpp" line="18094"/>
         <source>timeout waiting for cluster response: %1</source>
         <translation>timeout attesa risposta cluster: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17445"/>
+        <location filename="../widgets/mainwindow.cpp" line="18234"/>
         <source>node accepted the command but the spot is not visible in show/dx</source>
         <translation>node ha accettato il comando ma lo spot non è visibile in show/dx</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17449"/>
+        <location filename="../widgets/mainwindow.cpp" line="18238"/>
         <source>node accepted the command but the spot is not visible in show/dx: %1</source>
         <translation>nodo ha accettato il comando ma lo spot non è visibile in show/dx: %1</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17462"/>
+        <location filename="../widgets/mainwindow.cpp" line="18251"/>
         <source>connection closed before cluster confirmation</source>
         <translation>connessione chiusa prima della conferma del cluster</translation>
     </message>
     <message>
-        <location filename="../widgets/mainwindow.cpp" line="17463"/>
+        <location filename="../widgets/mainwindow.cpp" line="18252"/>
         <source>connection closed before cluster confirmation: %1</source>
         <translation>connessione chiusa prima della conferma del cluster: %1</translation>
     </message>
@@ -13561,47 +13569,43 @@ per valutare la propagazione e le prestazioni del sistema.</translation>
 <context>
     <name>main</name>
     <message>
-        <location filename="../main.cpp" line="286"/>
+        <location filename="../main.cpp" line="282"/>
         <source>Failed to create a temporary directory</source>
         <translation>Impossibile creare una directory temporanea</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="287"/>
-        <location filename="../main.cpp" line="295"/>
+        <location filename="../main.cpp" line="283"/>
+        <location filename="../main.cpp" line="291"/>
         <source>Path: &quot;%1&quot;</source>
         <translation>Percorso: &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="293"/>
+        <location filename="../main.cpp" line="289"/>
         <source>Failed to create a usable temporary directory</source>
         <translation>Impossibile creare una directory temporanea utilizzabile</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="294"/>
+        <location filename="../main.cpp" line="290"/>
         <source>Another application may be locking the directory</source>
         <translation>Un&apos;altra applicazione potrebbe bloccare la directory</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="310"/>
+        <location filename="../main.cpp" line="306"/>
         <source>Failed to create data directory</source>
         <translation>Impossibile creare la directory dei dati</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="311"/>
+        <location filename="../main.cpp" line="307"/>
         <source>path: &quot;%1&quot;</source>
         <translation>percorso: &quot;%1&quot;</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="438"/>
-        <location filename="../main.cpp" line="458"/>
         <source>Shared memory error</source>
-        <translation>Errore di memoria condivisa</translation>
+        <translation type="vanished">Errore di memoria condivisa</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="439"/>
-        <location filename="../main.cpp" line="459"/>
         <source>Unable to create shared memory segment</source>
-        <translation>Impossibile creare il segmento di memoria condivisa</translation>
+        <translation type="vanished">Impossibile creare il segmento di memoria condivisa</translation>
     </message>
     <message>
         <source>Sub-process error</source>

@@ -1,28 +1,30 @@
-# Decodium - Fork 9H1SR 1.5.5
+# Decodium - Fork 9H1SR 1.5.6
 
-This repository contains the macOS and Linux AppImage fork of Decodium, focused on FT2 plus FT4/FT8 decoder parity, macOS/Linux packaging, UI hardening, and release engineering maintained in this tree.
+This repository contains the maintained macOS and Linux AppImage fork of Decodium, focused on FT2 and on native C++ promoted-runtime migration for FT8, FT4, FT2, and Q65, plus packaging, build hardening, and release engineering.
 
 - Upstream base: `iu8lmc/Decodium-3.0-Codename-Raptor`
-- Current fork release: `1.5.5`
-- Update cycle: `1.5.4 -> 1.5.5`
+- Current fork release: `1.5.6`
+- Update cycle: `1.5.5 -> 1.5.6`
 - Upstream sync baseline: `2603182239`
 - App bundle/executable on macOS: `ft2.app` / `ft2`
 - Licence: GPLv3
 
-## Release Highlights (`1.5.4 -> 1.5.5`)
+## Release Highlights (`1.5.5 -> 1.5.6`)
 
-- macOS Preferences handling:
-- fixed the native macOS app-menu routing so `Preferences...` always opens real `Settings`, regardless of UI language.
-- macOS Settings usability:
-- the `Settings` dialog now wraps tab pages in scroll areas on macOS too, so `OK` stays reachable even with extended General-tab content.
-- FT2 decoder diagnostics:
-- added persistent `jt9_subprocess.log`, richer stdout/stderr capture, and clearer shared-memory failure reporting for FT2 decoder subprocess crashes.
-- ADIF alignment:
-- FT2 logging is now standardized as `MODE=MFSK` with `SUBMODE=FT2`, and older `MODE=FT2` entries are migrated automatically with backup preservation.
-- Audio recovery:
-- improved startup/monitor audio reopening and health checks so audio streams recover without requiring a manual round-trip through `Settings > Audio`.
-- UI release hygiene:
-- the experimental RTTY UI has been withdrawn from public access in `1.5.5` pending further validation.
+- Native promoted runtime:
+- completed the active C++ runtime migration for FT8, FT4, FT2, and Q65, so the promoted decode path no longer depends on mode-specific Fortran orchestration for those modes.
+- Worker architecture:
+- expanded the in-process worker model across promoted FTX modes and removed the old `jt9` shared-memory bootstrap from main app startup for those paths.
+- Native tools and utilities:
+- promoted native C++ frontends and helpers for `jt9` / `jt9a`, `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65`, and `rtty_spec`.
+- TX stability:
+- hardened FT2/FT4/Fox/SuperFox transmit handling with precomputed-wave snapshots, safer lead-in timing, and additional `debug.txt` tracing.
+- Build and packaging:
+- fixed GNU `ld` static-library cycles, GCC 15 / Qt5 / C++11 compatibility issues, and kept the macOS bundle layout already validated by the previous successful deploy.
+- Validation:
+- expanded parity and regression coverage with `ft8_stage_compare`, `ft4_stage_compare`, `ft2_stage_compare`, `ft2_equalized_compare`, `q65_stage_compare`, `ft2_make_test_wav`, and broader `test_qt_helpers` coverage.
+- Public release hygiene:
+- the experimental/public RTTY user path remains hidden pending dedicated validation.
 
 ## Release Targets
 
@@ -34,20 +36,20 @@ This repository contains the macOS and Linux AppImage fork of Decodium, focused 
 
 ## Release Assets
 
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.5-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.5-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
 
 No `.pkg` installers are produced in this fork release line.
 
@@ -60,15 +62,15 @@ Hardware:
 - 4 GB RAM minimum (8 GB recommended)
 - at least 500 MB free disk space
 - 1280x800 display or better recommended
-- radio/CAT/audio hardware according to your station setup
+- audio/CAT hardware suitable for amateur-radio weak-signal operation
 
 Software:
 
 - Linux `x86_64` with `glibc >= 2.35`
-- `libfuse2` / FUSE2 support for AppImage mounting
+- `libfuse2` / FUSE2 support if you want to mount the AppImage directly
 - ALSA, PulseAudio, or PipeWire audio stack
 - a desktop session capable of running Qt5 AppImages
-- network access recommended for NTP, DX Cluster, PSK Reporter, updater, and online station workflows
+- network access recommended for NTP, PSK Reporter, DX Cluster, updater, and online station workflows
 
 ## Linux Local Build Note
 
@@ -114,9 +116,9 @@ cd squashfs-root
 - English README: [README.en-GB.md](README.en-GB.md)
 - Italian README: [README.it.md](README.it.md)
 - Spanish README: [README.es.md](README.es.md)
-- Release notes (EN/IT/ES): [RELEASE_NOTES_1.5.5.md](RELEASE_NOTES_1.5.5.md)
+- Release notes (EN/IT/ES): [RELEASE_NOTES_1.5.6.md](RELEASE_NOTES_1.5.6.md)
 - Changelog (EN/IT/ES): [CHANGELOG.md](CHANGELOG.md)
-- GitHub release body (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_1.5.5.md](doc/GITHUB_RELEASE_BODY_1.5.5.md)
+- GitHub release body (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_1.5.6.md](doc/GITHUB_RELEASE_BODY_1.5.6.md)
 - Docs index (EN): [doc/README.en-GB.md](doc/README.en-GB.md)
 - Docs index (IT): [doc/README.it.md](doc/README.it.md)
 - Docs index (ES): [doc/README.es.md](doc/README.es.md)

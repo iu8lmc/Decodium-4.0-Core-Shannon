@@ -7,7 +7,6 @@
 
 #ifdef __cplusplus
 #include <cstdbool>
-#include <QString>
 #else
 #include <stdbool.h>
 #endif
@@ -16,14 +15,7 @@
    * This structure is shared with Fortran code, it MUST be kept in
    * sync with lib/jt9com.f90
    */
-typedef struct dec_data {
-  int   ipc[3];
-  float ss[184*NSMAX];
-  float savg[NSMAX];
-  float sred[5760];
-  short int d2[NTMAX*RX_SAMPLE_RATE];
-  struct
-  {
+typedef struct params_block {
     int nutc;                   //UTC as integer, HHMM
     bool ndiskdat;              //true ==> data read from *.wav file
     int ntrperiod;              //TR period (seconds)
@@ -84,7 +76,6 @@ typedef struct dec_data {
     int ndelay;            //=m_delay; (mainwindow.cpp)
     int nmt;               //=m_ft8threads; (mainwindow.cpp)
     int nft8rxfsens;       //=m_nFT8RXfSens; unless hound mode (mainwindow.cpp)
-    int nft4depth;         //=m_nFT4depth; (mainwindow.cpp)
     int nsecbandchanged;   //=m_nsecBandChanged; (mainwindow.cpp)
     bool nagainfil;        //=0; (mainwindow.cpp)
     bool nstophint;        //=1;  (mainwindow.cpp)
@@ -107,7 +98,15 @@ typedef struct dec_data {
     bool lmultinst;        //=m_multInst ? 1 : 0; (mainwindow.cpp)
     bool lskiptx1;         //=m_skipTx1 ? 1 : 0; (mainwindow.cpp)
     int ndecoderstart;      //=m_FT8DecoderStart; (mainwindow.cpp)
-  } params;
+} params_block_t;
+
+typedef struct dec_data {
+  int   ipc[3];
+  float ss[184*NSMAX];
+  float savg[NSMAX];
+  float sred[5760];
+  short int d2[NTMAX*RX_SAMPLE_RATE];
+  params_block_t params;
 } dec_data_t;
 
 #ifdef __cplusplus

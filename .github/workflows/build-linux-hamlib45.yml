@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Experimental version (e.g. 1.5.5-hamlib45)"
+        description: "Experimental version (e.g. 1.5.6-hamlib45)"
         required: true
-        default: "1.5.5-hamlib45"
+        default: "1.5.6-hamlib45"
 
 permissions:
   contents: read

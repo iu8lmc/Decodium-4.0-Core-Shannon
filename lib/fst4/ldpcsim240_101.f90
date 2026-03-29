@@ -2,7 +2,8 @@ program ldpcsim240_101
 
 ! End-to-end test of the (240,101)/crc24 encoder and decoders.
 
-   use packjt77
+   use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_pack, &
+        ftx_pack77_unpack
 
    parameter(N=240, K=101, M=N-K)
    character*8 arg
@@ -41,7 +42,8 @@ program ldpcsim240_101
    read(arg,*) Keff
    msg0='K9AN K1JT FN20                       '
    if(nargs.eq.6) call getarg(6,msg0)
-   call pack77(msg0,i3,n3,c77)
+   call ftx_pack77_reset_context()
+   call ftx_pack77_pack(msg0,i3,n3,c77,msg,unpk77_success,0)
 
    rate=real(Keff)/real(N)
 
@@ -123,7 +125,7 @@ write(*,'(24i1)') msgbits(78:101)
       if(first) then
          write(c77,'(77i1)') message101(1:77)
 write(*,'(101i1)') message101
-         call unpack77(c77,0,msg,unpk77_success)
+         call ftx_pack77_unpack(c77,0,msg,unpk77_success)
          if(unpk77_success) then
             write(*,1100) msg(1:37)
 1100        format('Decoded message: ',a37)

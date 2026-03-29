@@ -35,10 +35,7 @@ set (libm65_FSRCS
   four2a.f90
   ftninit.f90
   ftnquit.f90
-  q65b.f90
   gen65.f90
-  gen_q65_cwave.f90
-  gen_q65_wave.f90
   geocentric.f90
   getdphi.f90
   getpfx1.f90
@@ -134,7 +131,7 @@ target_link_libraries (m65impl wsjt_fort wsjt_cxx Qt5::Core)
 add_executable (m65 m65.f90 m65a.f90)
 target_link_libraries (m65 m65impl ${FFTW3_LIBRARIES})
 
-add_executable (mapsim mapsim.f90)
+add_executable (mapsim mapsim.cpp)
 target_link_libraries (mapsim m65impl ${FFTW3_LIBRARIES})
 
 #add_executable (synctest synctest.f90)

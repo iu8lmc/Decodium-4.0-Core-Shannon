@@ -7,23 +7,17 @@ set (libq65_FSRCS
   astrosub.f90
   chkstat.f90
   dcoord.f90
-  decode0.f90
   dot.f90
   fchisq0.f90
   fftbig.f90
   ftninit.f90
 #  ftnquit.f90
   geocentric.f90
-  getcand2.f90
   grid2deg.f90
   indexx.f90
   lorentzian.f90
   moon2.f90
   moondop.f90
-  q65b.f90
-  q65c.f90
-  q65_sync.f90
-  qmapa.f90
   read_qm.f90
   recvpkt.f90
   save_qm.f90
@@ -54,4 +48,3 @@ set_property (SOURCE ${libq65_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CM
 #
 add_library (qmap_impl STATIC ${libq65_FSRCS} ${libq65_CSRCS} ${libq65_CXXSRCS})
 target_link_libraries (qmap_impl wsjt_fort wsjt_cxx Qt5::Core)
-

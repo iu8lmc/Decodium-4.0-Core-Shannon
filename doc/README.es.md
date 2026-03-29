@@ -1,37 +1,37 @@
-# Notas de Documentacion (Espanol) - 1.5.5
+# Notas de Documentacion (Espanol) - 1.5.6
 
 Este indice agrupa la documentacion de release del ciclo actual del fork.
 
-- Release actual: `1.5.5`
-- Ciclo de actualizacion: `1.5.4 -> 1.5.5`
-- Foco principal: fiabilidad de Preferencias en macOS para todas las lenguas UI, `Settings` con scroll en macOS, diagnostica del subprocess FT2, migracion ADIF FT2, recuperacion de audio al arranque y retirada de la UI RTTY experimental del camino publico.
+- Release actual: `1.5.6`
+- Ciclo de actualizacion: `1.5.5 -> 1.5.6`
+- Foco principal: finalizacion del runtime promovido nativo C++ para FT8/FT4/FT2/Q65, decodificacion in-process con workers, hardening TX/build, validacion de paridad y packaging macOS/Linux alineado.
 
-## Cambios Tecnicos Principales (`1.5.4 -> 1.5.5`)
+## Cambios Tecnicos Principales (`1.5.5 -> 1.5.6`)
 
-- corregido el enrutado de roles nativos de menu en macOS para que solo las entradas previstas usen roles especiales, sin depender del idioma traducido.
-- hechas scrollables tambien en macOS las paginas de `Settings`, manteniendo accesible `OK`.
-- anadido `jt9_subprocess.log` con trazas persistentes de arranque/errores/finalizacion del decoder FT2 y popups diagnosticos mas ricos.
-- sustituidos los fallos opacos de FT2 por rutas de reporte mas claras para shared memory y stdout/stderr.
-- llevado el ADIF FT2 al estilo ADIF 3.17 `MODE=MFSK` + `SUBMODE=FT2`, con migracion automatica del historico y backup.
-- mejorada la recuperacion del audio al arrancar y al activar monitor mediante reopen estilo Settings mas health checks.
-- retirada de la ruta de usuario la UI RTTY incompleta para esta release publica.
+- FT8, FT4, FT2 y Q65 usan ahora el runtime promovido nativo C++ sin orquestacion Fortran especifica en el camino activo de decode.
+- los entrypoints `jt9` / `jt9a` y varias utilidades Q65/offline son nativos C++ en este arbol.
+- el arranque principal ya no reserva el viejo bootstrap `jt9` basado en shared memory para la ruta worker FTX promovida.
+- el TX FT2/FT4/Fox conserva snapshots de ondas precomputadas, lead-in mas conservador y trazas mas ricas en `debug.txt`.
+- el build Linux/macOS ha sido endurecido frente a ciclos de librerias estaticas GNU `ld`, strictness de GCC 15, constructores Qt5 y huecos de compatibilidad C++11.
+- la cobertura de paridad/regresion crece con nuevos stage-compare y tests helper mas amplios.
+- se mantiene el layout macOS ya validado en el ultimo deploy correcto para Tahoe, Sequoia e Intel.
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.5-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.5-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.5-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.5-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.5-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.5-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
@@ -65,6 +65,6 @@ cd squashfs-root
 - [README.en-GB.md](../README.en-GB.md)
 - [README.it.md](../README.it.md)
 - [README.es.md](../README.es.md)
-- [RELEASE_NOTES_1.5.5.md](../RELEASE_NOTES_1.5.5.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.5.md](./GITHUB_RELEASE_BODY_1.5.5.md)
+- [RELEASE_NOTES_1.5.6.md](../RELEASE_NOTES_1.5.6.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.6.md](./GITHUB_RELEASE_BODY_1.5.6.md)
 - [CHANGELOG.md](../CHANGELOG.md)

@@ -11,7 +11,8 @@ subroutine genfst4(msg0,ichk,msgsent,msgbits,i4tone,iwspr)
 ! Frame structure:
 ! s8 d30 s8 d30 s8 d30 s8 d30 s8
 
-   use packjt77
+   use ftx_pack77_c_api, only: ftx_pack77_reset_context,           &
+        ftx_pack77_pack
    include 'fst4_params.f90'
    character*37 msg0
    character*37 message                    !Message to be generated
@@ -48,8 +49,8 @@ subroutine genfst4(msg0,ichk,msgsent,msgbits,i4tone,iwspr)
       i3=0
       n3=6
    endif
-   call pack77(message,i3,n3,c77)
-   call unpack77(c77,0,msgsent,unpk77_success) !Unpack to get msgsent
+   call ftx_pack77_reset_context()
+   call ftx_pack77_pack(message,i3,n3,c77,msgsent,unpk77_success,0)
    msgbits=0
    iwspr=0
    if(i3.eq.0.and.n3.eq.6) then

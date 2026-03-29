@@ -10,7 +10,7 @@ subroutine deep4(sym0,neme,flip,mycall,hiscall,hisgrid,decoded,qual)
   character mycall0*12,hiscall0*12,hisgrid0*6
   character*22 decoded
   character*22 testmsg(2*MAXCALLS + 2 + MAXRPT)
-  character*15 callgrid(MAXCALLS)
+  character*15, allocatable :: callgrid(:)
   character*180 line
   character*4 rpt(MAXRPT)
   integer ncode(206)
@@ -31,6 +31,8 @@ subroutine deep4(sym0,neme,flip,mycall,hiscall,hisgrid,decoded,qual)
            'R-26','R-27','R-28','R-29','R-30',     &
            'RO','RRR','73'/
   save mycall0,hiscall0,hisgrid0,neme0,ntot,code,testmsg
+
+  allocate(callgrid(MAXCALLS))
 
   sym=sym0
   if(mycall.eq.mycall0 .and. hiscall.eq.hiscall0 .and.         &

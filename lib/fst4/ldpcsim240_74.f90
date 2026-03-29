@@ -2,11 +2,11 @@ program ldpcsim240_74
 
 ! End-to-end test of the (240,74)/crc24 encoder and decoders.
 
-   use packjt77
+   use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_pack
 
    parameter(N=240, NN=120)
    character*8 arg
-   character*37 msg0
+   character*37 msg0,msgsent
    character*77 c77
    character*24 c24
    integer*1 msgbits(101)
@@ -24,7 +24,7 @@ program ldpcsim240_74
    complex c1(4,8),c2(16,4),c4(256,2),cs(0:3,NN)
    real s2(0:65535)
    logical one(0:65535,0:15)    ! 65536 8-symbol sequences, 16 bits
-   logical first
+   logical first,unpk77_success
    data first/.true./
    data graymap/0,1,3,2/
 
@@ -60,7 +60,8 @@ program ldpcsim240_74
    call getarg(8,arg)
 
    msg0='K9AN EN50 20                       '
-   call pack77(msg0,i3,n3,c77)
+   call ftx_pack77_reset_context()
+   call ftx_pack77_pack(msg0,i3,n3,c77,msgsent,unpk77_success,0)
 
    rate=real(Keff)/real(N)
 

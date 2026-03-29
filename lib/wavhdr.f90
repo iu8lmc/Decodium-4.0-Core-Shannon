@@ -1,4 +1,6 @@
 module wavhdr
+  use wsjtx_wav_catalog, only: NBANDS, NMODES, NPERIODS, WSJTX_BANDS, &
+       WSJTX_MODES, WSJTX_PERIODS
   type hdr
      character*4 ariff
      integer*4 lenfile
@@ -37,17 +39,12 @@ module wavhdr
 
     subroutine set_wsjtx_wav_params(fMHz,mode,nsubmode,ntrperiod,id2)
 
-      parameter (NBANDS=23,NMODES=13)
-      character*8 mode,modes(NMODES)
+      character*8 mode
       integer*2 id2(4)
-      integer iperiod(8)
       real fband(NBANDS)
       data fband/0.137,0.474,1.8,3.5,5.1,7.0,10.14,14.0,18.1,21.0,24.9,  &
            28.0,50.0,144.0,222.0,432.0,902.0,1296.0,2304.0,3400.0,       &
            5760.0,10368.0,24048.0/
-      data modes/'Echo','FSK441','ISCAT','JT4','JT65','JT6M','JT9',      &
-           'JT9+JT65','JTMS','JTMSK','WSPR','FT8','FT2'/
-      data iperiod/5,10,15,30,60,120,900,0/
 
       dmin=1.e30
       iband=0
@@ -60,12 +57,12 @@ module wavhdr
 
       imode=0
       do i=1,NMODES
-         if(mode.eq.modes(i)) imode=i
+         if(mode.eq.WSJTX_MODES(i)) imode=i
       enddo
 
       ip=0
-      do i=1,8
-         if(ntrperiod.eq.iperiod(i)) ip=i
+      do i=1,NPERIODS
+         if(ntrperiod.eq.WSJTX_PERIODS(i)) ip=i
       enddo
 
       id2(1)=iband
@@ -78,30 +75,22 @@ module wavhdr
 
     subroutine get_wsjtx_wav_params(id2,band,mode,nsubmode,ntrperiod,ok)
 
-      parameter (NBANDS=23,NMODES=13)
-      character*8 mode,modes(NMODES)
-      character*6 band,bands(NBANDS)
+      character*8 mode
+      character*6 band
       integer*2 id2(4)
-      integer iperiod(8)
       logical ok
-      data modes/'Echo','FSK441','ISCAT','JT4','JT65','JT6M','JT9',    &
-           'JT9+JT65','JTMS','JTMSK','WSPR','FT8','FT2'/
-      data iperiod/5,10,15,30,60,120,900,0/
-      data bands/'2190m','630m','160m','80m','60m','40m','30m','20m',  &
-           '17m','15m','12m','10m','6m','2m','1.25m','70cm','33cm',    &
-           '23cm','13cm','9cm','6cm','3cm','1.25cm'/
 
       ok=.true.
       if(id2(1).lt.1 .or. id2(1).gt.NBANDS) ok=.false.
       if(id2(2).lt.1 .or. id2(2).gt.NMODES) ok=.false.
       if(id2(3).lt.1 .or. id2(3).gt.8) ok=.false.
-      if(id2(4).lt.1 .or. id2(4).gt.8) ok=.false.
+      if(id2(4).lt.1 .or. id2(4).gt.NPERIODS) ok=.false.
 
       if(ok) then
-         band=bands(id2(1))
-         mode=modes(id2(2))
+         band=WSJTX_BANDS(id2(1))
+         mode=WSJTX_MODES(id2(2))
          nsubmode=id2(3)
-         ntrperiod=iperiod(id2(4))
+         ntrperiod=WSJTX_PERIODS(id2(4))
       endif
 
       return

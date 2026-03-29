@@ -3,7 +3,7 @@ subroutine foxgen2(nslots,cmsg,line,foxcall)
 ! Parse old-style Fox messages to extract the necessary pieces for a SuperFox
 ! transmission.
 
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_split77
   character*120 line
   character*40 cmsg(5)                !Old-style Fox messages are here
   character*37 msg
@@ -31,7 +31,7 @@ subroutine foxgen2(nslots,cmsg,line,foxcall)
      rpt1=''
      rpt2=''
      msg=cmsg(i)(1:37)
-     call split77(msg,nwords,nw,w)
+     call ftx_pack77_split77(msg,nwords,nw,w)
      ntype=0
      if(msg(1:3).eq.'CQ ') then
         ntype=1

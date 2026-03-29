@@ -3,7 +3,6 @@ subroutine msk144spd(cbig,n,ntol,nsuccess,msgreceived,fc,fret,tret,navg,ct,   &
 
 ! MSK144 short-ping-decoder
 
-  use packjt77
   use timer_module, only: timer
 
   parameter (NSPM=864, MAXSTEPS=100, NFFT=NSPM, MAXCAND=5, NPATTERNS=6)

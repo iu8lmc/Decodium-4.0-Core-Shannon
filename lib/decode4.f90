@@ -1,16 +1,19 @@
 subroutine decode4(dat,npts,dtx,nfreq,flip,mode4,ndepth,neme,minw,           &
-     mycall,hiscall,hisgrid,decoded,nfano,deepbest,qbest,ichbest)
+     mycall,hiscall,hisgrid,decoded,nfano,deepbest,qbest,ichbest,           &
+     rsymbol_out,ich1_out,ich2_out)
 
 ! Decodes JT4 data, assuming that DT and DF have already been determined.
 ! Input dat(npts) has already been downsampled by 2: rate = 11025/2.
 ! ### NB: this initial downsampling should be removed in WSJT-X, since
 ! it restricts the useful bandwidth to < 2.7 kHz.
 
-  use jt4
+  use jt4, only: nch, npr
   real dat(npts)                        !Raw data
   character decoded*22,deepmsg*22,deepbest*22
   character*12 mycall,hiscall
   character*6 hisgrid
+  real, intent(out) :: rsymbol_out(207,7)
+  integer, intent(out) :: ich1_out, ich2_out
   real*8 dt,df,phi,f0,dphi,twopi,phi1,dphi1
   complex*16 cz,cz1,c0,c1
   real*4 sym(207)
@@ -32,12 +35,14 @@ subroutine decode4(dat,npts,dtx,nfreq,flip,mode4,ndepth,neme,minw,           &
   phi=0.d0
   phi1=0.d0
 
-  ich1=minw+1
+  rsymbol_out=0.0
+  ich1_out=minw+1
+  ich2_out=ich1_out
   do ich=1,7
-     if(nch(ich).le.mode4) ich2=ich
+     if(nch(ich).le.mode4) ich2_out=ich
   enddo
 
-  do ich=ich1,ich2
+  do ich=ich1_out,ich2_out
      nchips=min(nch(ich),70)
      nspchip=1260/nchips
      k=istart
@@ -79,7 +84,7 @@ subroutine decode4(dat,npts,dtx,nfreq,flip,mode4,ndepth,neme,minw,           &
         sq1=fac2*sq1
         rsym=amp*(sq1-sq0)
         if(j.ge.1) then
-           rsymbol(j,ich)=rsym
+           rsymbol_out(j,ich)=rsym
            sym(j)=rsym
         endif
      enddo

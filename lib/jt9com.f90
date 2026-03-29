@@ -66,7 +66,6 @@
      integer(c_int) :: ndelay
      integer(c_int) :: nmt
      integer(c_int) :: nft8rxfsens
-     integer(c_int) :: nft4depth
      integer(c_int) :: nsecbandchanged
      logical(c_bool) :: nagainfil
      logical(c_bool) :: nstophint

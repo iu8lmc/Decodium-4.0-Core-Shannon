@@ -2,19 +2,29 @@ subroutine sfrx_sub(nyymmdd,nutc,nfqso,ntol,iwave)
 
   use sfox_mod
   use julian
+  use, intrinsic :: iso_c_binding, only: c_float, c_int
 
   integer*2 iwave(NMAX)
   integer*8 secday,ntime8
   integer*1 xdec(0:49)
   character*13 foxcall
-  complex c0(NMAX)                    !Complex form of signal as received
-  real dd(NMAX)
+  complex, allocatable :: c0(:)       !Complex form of signal as received
+  real, allocatable :: dd(:)
   logical crc_ok
   data secday/86400/
+
+  interface
+     subroutine ftx_sfox_remove_ft8_c(dd,npts) bind(C,name="ftx_sfox_remove_ft8_c")
+       import :: c_float, c_int
+       real(c_float) :: dd(*)
+       integer(c_int), value :: npts
+     end subroutine ftx_sfox_remove_ft8_c
+  end interface
 
   fsync=nfqso
   ftol=ntol
   fsample=12000.0
+  allocate(c0(NMAX), dd(NMAX))
   call sfox_init(7,127,50,'no',fspread,delay,fsample,24)
   npts=15*12000
 
@@ -32,7 +42,7 @@ subroutine sfrx_sub(nyymmdd,nutc,nfqso,ntol,iwave)
   endif
 
   dd=iwave
-  call sfox_remove_ft8(dd,npts)
+  call ftx_sfox_remove_ft8_c(dd,npts)
 
   call sfox_ana(dd,npts,c0,npts)
 

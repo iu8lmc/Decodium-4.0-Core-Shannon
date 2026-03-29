@@ -3,7 +3,8 @@ program ldpcsim128_90
 ! Simulate the performance of the (128,90) code that is used in
 ! the second incarnation of MSK144.
 
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_pack,   &
+       ftx_pack77_unpack
   integer, parameter:: N=128, K=90, M=N-K
 !  character*12 recent_calls(NRECENT)
   character*37 msg,msgsent,msgreceived
@@ -18,9 +19,6 @@ program ldpcsim128_90
   real*8 rxdata(N), rxavgd(N)
   real llr(N),llra(N)
 
-  do i=1,MAXNRECENT
-    recent_calls(i)='            '
-  enddo
   nerrtot=0
   nerrdec=0
 
@@ -49,8 +47,9 @@ program ldpcsim128_90
   msg="K1ABC RR73; W9XYZ <KH1/KH7Z> -12"
   i3=0
   n3=1
-  call pack77(msg,i3,n3,c77)
-  call unpack77(c77,0,msgsent,unpk77_success)
+  call ftx_pack77_reset_context()
+  call ftx_pack77_pack(msg,i3,n3,c77,msgsent,unpk77_success,0)
+  call ftx_pack77_unpack(c77,0,msgsent,unpk77_success)
   read(c77,'(77i1)') msgbits
 
   write(*,*) "message sent ",msgsent
@@ -115,7 +114,7 @@ program ldpcsim128_90
 ! If the decoder finds a valid codeword, nharderrors will be .ge. 0.
       if( nharderrors .ge. 0 ) then
         write(c77,'(77i1)') message77
-        call unpack77(c77,1,msgreceived,unpk77_success)
+        call ftx_pack77_unpack(c77,1,msgreceived,unpk77_success)
         nhw=count(cw.ne.codeword)
         if(nhw.eq.0) then ! this is a good decode
           ngood=ngood+1

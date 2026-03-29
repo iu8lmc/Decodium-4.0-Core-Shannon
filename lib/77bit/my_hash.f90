@@ -1,11 +1,12 @@
 subroutine my_hash(mycall)
 
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_save_hash_call
   character*(*) mycall
   character*13 c13
 
   c13=mycall//'          '
-  call save_hash_call(c13,n10,n12,n22)
+  call ftx_pack77_reset_context()
+  call ftx_pack77_save_hash_call(c13,n10,n12,n22)
   
   return
 end subroutine my_hash

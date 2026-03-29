@@ -29,7 +29,7 @@ contains
       nfa,nfb,nsubmode,ndeep,ntrperiod,nexp_decode,ntol)
 
    use timer_module, only: timer
-   use packjt77
+   use ftx_pack77_c_api, only: ftx_pack77_unpack
    include 'fst280/fst280_params.f90'
    parameter (MAXCAND=100)
    class(fst280_decoder), intent(inout) :: this
@@ -331,11 +331,11 @@ contains
             if(nharderrors .ge.0) then
                if(iwspr.eq.0) then
                   write(c77,'(77i1)') message101(1:77)
-                  call unpack77(c77,0,msg,unpk77_success)
+                  call ftx_pack77_unpack(c77,0,msg,unpk77_success)
                else
                   write(c77,'(50i1)') message74(1:50)
                   c77(51:77)='000000000000000000000110000'
-                  call unpack77(c77,0,msg,unpk77_success)
+                  call ftx_pack77_unpack(c77,0,msg,unpk77_success)
                endif
                if(unpk77_success) then
                   idupe=0

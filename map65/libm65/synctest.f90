@@ -1,8 +1,7 @@
 program synctest
 
-  ! Program to test an algorithm for detecting sync signals for both
-  ! JT65 and Q65-60x signals and rejecting birdies in MAP65 data.
-  ! The important work is done in module wideband_sync.
+  ! Program to test the JT65 wideband sync detector used by MAP65.
+  ! The native FTX candidate search now lives in C++.
 
   use timer_module, only: timer
   use timer_impl, only: init_timer, fini_timer
@@ -14,9 +13,9 @@ program synctest
   type(candidate) :: cand(MAX_CANDIDATES)
   
   nargs=iargc()
-  if(nargs.ne.5) then
-     print*,'Usage:   synctest iutc nfa nfb nts_jt65 nts_q65'
-     print*,'Example: synctest 1814  23  83      2        1'
+  if(nargs.ne.4) then
+     print*,'Usage:   synctest iutc nfa nfb nts_jt65'
+     print*,'Example: synctest 1814  23  83      2'
      go to 999
   endif
   call getarg(1,arg)
@@ -27,9 +26,6 @@ program synctest
   read (arg,*) nfb
   call getarg(4,arg)
   read (arg,*) nts_jt65
-  call getarg(5,arg)
-  read (arg,*) nts_q65
-
   open(50,file='50.a',form='unformatted',status='old')
   do ifile=1,9999
      read(50,end=998) nutc,npol,ss(1:npol,:,:),savg(1:npol,:)
@@ -41,7 +37,7 @@ program synctest
   call timer('synctest',0)
 
   call timer('get_cand',0)
-  call  get_candidates(ss,savg,302,.true.,nfa,nfb,nts_jt65,nts_q65,cand,ncand)
+  call  get_candidates(ss,savg,.true.,302,nfa,nfb,nts_jt65,cand,ncand)
   call timer('get_cand',1)
 
   do k=1,ncand

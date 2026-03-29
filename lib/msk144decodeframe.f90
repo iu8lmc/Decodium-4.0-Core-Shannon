@@ -1,6 +1,6 @@
 subroutine msk144decodeframe(c,softbits,msgreceived,nsuccess)
 !  use timer_module, only: timer
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_unpack
   parameter (NSPM=864)
   character*37 msgreceived
   character*77 c77
@@ -103,7 +103,7 @@ subroutine msk144decodeframe(c,softbits,msgreceived,nsuccess)
     if( (i3.eq.0.and.(n3.eq.1 .or. n3.eq.3 .or. n3.eq.4 .or. n3.gt.5)) .or. i3.eq.3 .or. i3.gt.5 ) then
         nsuccess=0 
     else 
-        call unpack77(c77,1,msgreceived,unpk77_success)
+        call ftx_pack77_unpack(c77,1,msgreceived,unpk77_success)
         if(.not.unpk77_success) nsuccess=0
     endif
   endif

@@ -18,16 +18,20 @@ function stdmsg(msg0)
 
   use iso_c_binding, only: c_bool
   use packjt
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_reset_context,             &
+       ftx_pack77_pack
 
   character*37 msg0,msg1
   character*77 c77
+  character*37 msgsent
   logical(c_bool) :: stdmsg
+  logical ok
 
   msg1=msg0
   i3=-1
   n3=-1
-  call pack77(msg1,i3,n3,c77)
+  call ftx_pack77_reset_context()
+  call ftx_pack77_pack(msg1,i3,n3,c77,msgsent,ok,0)
   stdmsg=(i3.gt.0 .or. n3.gt.0)
 
 !###

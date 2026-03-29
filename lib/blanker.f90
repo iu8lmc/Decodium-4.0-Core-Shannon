@@ -2,8 +2,10 @@ subroutine blanker(iwave,nz,ndropmax,npct,c_bigfft)
 
   integer*2 iwave(nz)
   complex c_bigfft(0:nz/2)
-  integer hist(0:32768)
+  integer, allocatable :: hist(:)
   real fblank                     !Fraction of points to be blanked
+
+  allocate(hist(0:32768))
 
   fblank=0.01*npct
   hist=0

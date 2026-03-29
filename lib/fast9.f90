@@ -1,28 +1,62 @@
+module fast9_contexts
+  implicit none
+
+  integer, parameter :: FAST9_NSAVE=500
+  integer, parameter :: FAST9_S1_SIZE=720000
+
+  type fast9_state
+     logical :: initialized=.false.
+     integer :: nsubmode0=-1
+     integer :: ntot=0
+     real :: s1(FAST9_S1_SIZE)
+  end type fast9_state
+
+  type(fast9_state), save, target :: shared_fast9_state
+
+contains
+
+  subroutine init_fast9_state(state)
+    type(fast9_state), intent(inout) :: state
+
+    if(state%initialized) return
+
+    state%s1=0.0
+    state%nsubmode0=-1
+    state%ntot=0
+    state%initialized=.true.
+  end subroutine init_fast9_state
+
+end module fast9_contexts
+
 subroutine fast9(id2,narg,line)
 
 ! Decoder for "fast9" modes, JT9E to JT9H.
 
-  parameter (NMAX=30*12000,NSAVE=500)
+  use fast9_contexts, only: fast9_state, shared_fast9_state, init_fast9_state,  &
+       FAST9_NSAVE
+
+  parameter (NMAX=30*12000)
   integer*2 id2(0:NMAX)
   integer narg(0:14)
   integer*1 i1SoftSymbols(207)
-  integer*1 i1save(207,NSAVE)
-  integer indx(NSAVE)
+  integer*1, allocatable :: i1save(:,:)
+  integer indx(FAST9_NSAVE)
   integer*8 count0,count1,clkfreq
-  real s1(720000)                      !To reserve space.  Logically s1(nq,jz)
-  real s2(240,340)                     !Symbol spectra at quarter-symbol steps
+  real, allocatable :: s2(:,:)         !Symbol spectra at quarter-symbol steps
   real ss2(0:8,85)                     !Folded symbol spectra
   real ss3(0:7,69)                     !Folded spectra without sync symbols
   real s(1500)
-  real ccfsave(NSAVE)
-  real t0save(NSAVE)
-  real t1save(NSAVE)
-  real freqSave(NSAVE)
+  real ccfsave(FAST9_NSAVE)
+  real t0save(FAST9_NSAVE)
+  real t1save(FAST9_NSAVE)
+  real freqSave(FAST9_NSAVE)
   real t(6)
   character*22 msg                     !Decoded message
   character*80 line(100)
-  data nsubmode0/-1/,ntot/0/
-  save s1,nsubmode0,ntot
+  type(fast9_state), pointer :: state
+
+  state => shared_fast9_state
+  call init_fast9_state(state)
 
 ! Parameters from GUI are in narg():
   nutc=narg(0)                         !UTC
@@ -42,6 +76,9 @@ subroutine fast9(id2,narg,line)
   tmid=npts*0.5/12000.0
   line(1:100)(1:1)=char(0)
   s=0
+  allocate(i1save(207,FAST9_NSAVE))
+  allocate(s2(240,340))
+  i1save=0
   s2=0
   nsps=60 * 2**(7-nsubmode)            !Samples per sysbol
   nfft=2*nsps                          !FFT size
@@ -56,14 +93,14 @@ subroutine fast9(id2,narg,line)
   nline=0
   t=0.
 
-  if(newdat.eq.1 .or. nsubmode.ne.nsubmode0) then
+  if(newdat.eq.1 .or. nsubmode.ne.state%nsubmode0) then
      call system_clock(count0,clkfreq)
-     call spec9f(id2,npts,nsps,s1,jz,nq)          !Compute symbol spectra, s1 
+     call spec9f(id2,npts,nsps,state%s1,jz,nq)     !Compute symbol spectra, s1
      call system_clock(count1,clkfreq)
      t(1)=t(1)+float(count1-count0)/float(clkfreq)
   endif
 
-  nsubmode0=nsubmode
+  state%nsubmode0=nsubmode
   tmsg=nsps*85.0/12000.0
   limit=2000
   nlen0=0
@@ -84,7 +121,7 @@ subroutine fast9(id2,narg,line)
      do ja=1,jz-jlen,jstep
         jb=ja+jlen-1
         call system_clock(count0,clkfreq)
-        call foldspec9f(s1,nq,jz,ja,jb,s2)        !Fold symbol spectra into s2
+        call foldspec9f(state%s1,nq,jz,ja,jb,s2)   !Fold symbol spectra into s2
         call system_clock(count1,clkfreq)
         t(2)=t(2)+float(count1-count0)/float(clkfreq)
 
@@ -126,7 +163,6 @@ subroutine fast9(id2,narg,line)
   ccfsave(1:nsaved)=-ccfsave(1:nsaved)
 
   do iter=1,2
-!     do isave=1,nsaved
      do isave=1,50
         i2=indx(isave)
         if(i2.lt.1 .or. i2.gt.nsaved) cycle      !### Why needed? ###
@@ -160,10 +196,6 @@ subroutine fast9(id2,narg,line)
         nsnr=-20
         if(snr.gt.0.0) nsnr=nint(db(snr))
 
-!        write(72,3002) nutc,iter,isave,nlen,tmid,t0,t1,ccfbest,   &
-!             nint(freq),nlim,msg
-!3002    format(i6.6,i1,i4,i3,4f6.1,i5,i7,1x,a22)
-
         if(msg.ne.'                      ') then
 
 ! Display multiple decodes only if they differ:
@@ -174,9 +206,7 @@ subroutine fast9(id2,narg,line)
            nline=nline+1
            write(line(nline),1000) nutc,nsnr,t0,nint(freq),msg,char(0)
 1000       format(i6.6,i4,f5.1,i5,1x,'@ ',1x,a22,a1)
-           ntot=ntot+1
-!           write(70,5001) nsaved,isave,nline,maxlines,ntot,nutc,msg
-!5001       format(5i5,i7.6,1x,a22)
+           state%ntot=state%ntot+1
            if(nline.ge.maxlines) go to 900
         endif
 100     continue
@@ -184,8 +214,8 @@ subroutine fast9(id2,narg,line)
   enddo
 
 900 continue
-!  write(*,6001) t,t(6)/sum(t)
-!6001 format(7f10.3)
+  if(allocated(i1save)) deallocate(i1save)
+  if(allocated(s2)) deallocate(s2)
 
   return
 end subroutine fast9

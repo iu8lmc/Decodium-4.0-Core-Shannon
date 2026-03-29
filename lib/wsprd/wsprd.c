@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
+#include <stdarg.h>
 #include <fftw3.h>
 #include <errno.h>
 
@@ -42,6 +43,7 @@
 #include "nhash.h"
 #include "wsprd_utils.h"
 #include "wsprsim_utils.h"
+#include "wsprd_embedded.h"
 
 #define max(x,y) ((x) > (y) ? (x) : (y))
 
@@ -65,6 +67,35 @@ unsigned char pr3[162]=
 
 int printdata=0;
 
+static wsprd_output_callback_t wsprd_output_callback = NULL;
+static void * wsprd_output_context = NULL;
+
+void wsprd_set_output_callback (wsprd_output_callback_t callback, void * context)
+{
+    wsprd_output_callback = callback;
+    wsprd_output_context = context;
+}
+
+static void wsprd_emit_formatted (int is_error, char const * format, ...)
+{
+    va_list ap;
+    char buffer[4096];
+    FILE * stream;
+
+    va_start(ap, format);
+    vsnprintf(buffer, sizeof buffer, format, ap);
+    va_end(ap);
+
+    if (wsprd_output_callback != NULL) {
+        wsprd_output_callback(wsprd_output_context, buffer, is_error);
+        return;
+    }
+
+    stream = is_error ? stderr : stdout;
+    fputs(buffer, stream);
+    fflush(stream);
+}
+
 //***************************************************************************
 unsigned long readc2file(char *ptr_to_infile, float *idat, float *qdat,
                          double *freq, int *wspr_type)
@@ -78,7 +109,7 @@ unsigned long readc2file(char *ptr_to_infile, float *idat, float *qdat,
     
     fp = fopen(ptr_to_infile,"rb");
     if (fp == NULL) {
-        fprintf(stderr, "Cannot open data file '%s': %s\n", ptr_to_infile, strerror(errno));
+        wsprd_emit_formatted(1, "Cannot open data file '%s': %s\n", ptr_to_infile, strerror(errno));
         return 1;
     }
     nr=fread(c2file,sizeof(char),14,fp);
@@ -126,7 +157,7 @@ unsigned long readwavfile(char *ptr_to_infile, int ntrmin, float *idat, float *q
         i0=(1500.0+112.5)/df+0.5;
         npoints=8*114*12000;
     } else {
-        fprintf(stderr,"This should not happen\n");
+        wsprd_emit_formatted(1, "This should not happen\n");
         return 1;
     }
     
@@ -138,7 +169,7 @@ unsigned long readwavfile(char *ptr_to_infile, int ntrmin, float *idat, float *q
     
     fp = fopen(ptr_to_infile,"rb");
     if (fp == NULL) {
-        fprintf(stderr, "Cannot open data file '%s'\n", ptr_to_infile);
+        wsprd_emit_formatted(1, "Cannot open data file '%s'\n", ptr_to_infile);
         return 1;
     }
     
@@ -148,7 +179,7 @@ unsigned long readwavfile(char *ptr_to_infile, int ntrmin, float *idat, float *q
     fclose(fp);
     if( nr == 0 ) {
         free(buf2);
-        fprintf(stderr, "No data in file '%s'\n", ptr_to_infile);
+        wsprd_emit_formatted(1, "No data in file '%s'\n", ptr_to_infile);
         return 1;
     }	
     
@@ -665,7 +696,7 @@ unsigned long writec2file(char *c2filename, int trmin, double freq
     
     fp = fopen(c2filename,"wb");
     if( fp == NULL ) {
-        fprintf(stderr, "Could not open c2 file '%s'\n", c2filename);
+        wsprd_emit_formatted(1, "Could not open c2 file '%s'\n", c2filename);
         return 0;
     }
     unsigned long nwrite = fwrite(c2filename,sizeof(char),14,fp);
@@ -707,35 +738,38 @@ unsigned int count_hard_errors( unsigned char *symbols, unsigned char *channel_s
 //***************************************************************************
 void usage(void)
 {
-    printf("Usage: wsprd [options...] infile\n");
-    printf("       infile must have suffix .wav or .c2\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("       -a <path> path to writeable data files, default=\".\"\n");
-    printf("       -B disable block demodulation - use single-symbol noncoherent demod\n");
-    printf("       -c write .c2 file at the end of the first pass\n");
-    printf("       -C maximum number of decoder cycles per bit, default 10000\n");
-    printf("       -d deeper search. Slower, a few more decodes\n");
-    printf("       -e x (x is transceiver dial frequency error in Hz)\n");
-    printf("       -f x (x is transceiver dial frequency in MHz)\n");
-    printf("       -H do not use (or update) the hash table\n");
-    printf("       -J use the stack decoder instead of Fano decoder\n");
-    printf("       -m decode wspr-15 .wav file\n");
-    printf("       -o n (0<=n<=5), decoding depth for OSD, default is disabled\n");
-    printf("       -q quick mode - doesn't dig deep for weak signals\n");
-    printf("       -s single pass mode, no subtraction (same as original wsprd)\n");
-    printf("       -v verbose mode (shows dupes)\n");
-    printf("       -w wideband mode - decode signals within +/- 150 Hz of center\n");
-    printf("       -z x (x is fano metric table bias, default is 0.45)\n");
+    wsprd_emit_formatted(0, "Usage: wsprd [options...] infile\n");
+    wsprd_emit_formatted(0, "       infile must have suffix .wav or .c2\n");
+    wsprd_emit_formatted(0, "\n");
+    wsprd_emit_formatted(0, "Options:\n");
+    wsprd_emit_formatted(0, "       -a <path> path to writeable data files, default=\".\"\n");
+    wsprd_emit_formatted(0, "       -B disable block demodulation - use single-symbol noncoherent demod\n");
+    wsprd_emit_formatted(0, "       -c write .c2 file at the end of the first pass\n");
+    wsprd_emit_formatted(0, "       -C maximum number of decoder cycles per bit, default 10000\n");
+    wsprd_emit_formatted(0, "       -d deeper search. Slower, a few more decodes\n");
+    wsprd_emit_formatted(0, "       -e x (x is transceiver dial frequency error in Hz)\n");
+    wsprd_emit_formatted(0, "       -f x (x is transceiver dial frequency in MHz)\n");
+    wsprd_emit_formatted(0, "       -H do not use (or update) the hash table\n");
+    wsprd_emit_formatted(0, "       -J use the stack decoder instead of Fano decoder\n");
+    wsprd_emit_formatted(0, "       -m decode wspr-15 .wav file\n");
+    wsprd_emit_formatted(0, "       -o n (0<=n<=5), decoding depth for OSD, default is disabled\n");
+    wsprd_emit_formatted(0, "       -q quick mode - doesn't dig deep for weak signals\n");
+    wsprd_emit_formatted(0, "       -s single pass mode, no subtraction (same as original wsprd)\n");
+    wsprd_emit_formatted(0, "       -v verbose mode (shows dupes)\n");
+    wsprd_emit_formatted(0, "       -w wideband mode - decode signals within +/- 150 Hz of center\n");
+    wsprd_emit_formatted(0, "       -z x (x is fano metric table bias, default is 0.45)\n");
 }
 
 //***************************************************************************
-int main(int argc, char *argv[])
+int wsprd_run(int argc, char *argv[])
 {
     char cr[] = "(C) 2018, Steven Franke - K9AN";
     (void)cr;
     extern char *optarg;
     extern int optind;
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    extern int optreset;
+#endif
     int i,j,k;
     unsigned char *symbols, *decdata, *channel_symbols, *apmask, *cw;
     signed char message[]={-9,13,-35,123,57,-39,64,0,0,0,0};
@@ -818,6 +852,15 @@ int main(int argc, char *argv[])
     
     idat=calloc(maxpts,sizeof(float));
     qdat=calloc(maxpts,sizeof(float));
+
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    optreset=1;
+#endif
+#if defined(__GLIBC__) || defined(__linux__)
+    optind=0;
+#else
+    optind=1;
+#endif
     
     while ( (c = getopt(argc, argv, "a:BcC:de:f:HJmo:qstwvz:")) !=-1 ) {
         switch (c) {
@@ -879,7 +922,7 @@ int main(int argc, char *argv[])
     }
     
     if( access(data_dir, R_OK | W_OK)) {
-      fprintf(stderr, "Error: inaccessible data directory: '%s'\n", data_dir);
+      wsprd_emit_formatted(1, "Error: inaccessible data directory: '%s'\n", data_dir);
       usage();
       return EXIT_FAILURE;
     }
@@ -934,7 +977,7 @@ int main(int argc, char *argv[])
         int nr=fscanf(ftimer,"%f %f %f %f %f %f %f %f",
                &treadwav,&tcandidates,&tsync0,&tsync1,&tsync2,&tfano,&tosd,&ttotal);
         fclose(ftimer);
-        if(nr == 0) fprintf(stderr, "Empty timer file: '%s'\n", timer_fname);
+        if(nr == 0) wsprd_emit_formatted(1, "Empty timer file: '%s'\n", timer_fname);
     }
     ftimer=fopen(timer_fname,"w");
     
@@ -957,8 +1000,8 @@ int main(int argc, char *argv[])
         }
         dialfreq -= (dialfreq_error*1.0e-06);
     } else {
-        printf("Error: Failed to open %s\n",ptr_to_infile);
-        printf("WSPR file must have suffix .wav or .c2\n");
+        wsprd_emit_formatted(1, "Error: Failed to open %s\n",ptr_to_infile);
+        wsprd_emit_formatted(1, "WSPR file must have suffix .wav or .c2\n");
         return 1;
     }
     
@@ -1484,7 +1527,7 @@ int main(int argc, char *argv[])
             double carrierfreq=dialfreq;
             int wsprtype=2;
             strcpy(c2filename,"000000_0001.c2");
-            printf("Writing %s\n",c2filename);
+            wsprd_emit_formatted(0, "Writing %s\n",c2filename);
             writec2file(c2filename, wsprtype, carrierfreq, idat, qdat);
         }
     }
@@ -1502,9 +1545,9 @@ int main(int argc, char *argv[])
     }
     
     for (i=0; i<uniques; i++) {
-        printf("%4s %3.0f %4.1f %10.6f %2d  %-s \n",
-               decodes[i].time, decodes[i].snr,decodes[i].dt, decodes[i].freq,
-               (int)decodes[i].drift, decodes[i].message);
+        wsprd_emit_formatted(0, "%4s %3.0f %4.1f %10.6f %2d  %-s \n",
+                             decodes[i].time, decodes[i].snr,decodes[i].dt, decodes[i].freq,
+                             (int)decodes[i].drift, decodes[i].message);
         fprintf(fall_wspr,
                 "%6s %4s %3.0f %5.2f %11.7f  %-22s %2d %5.2f %2d %2d %4d %2d %3d %5u %5d\n",
                 decodes[i].date, decodes[i].time, decodes[i].snr,
@@ -1521,7 +1564,7 @@ int main(int argc, char *argv[])
                 decodes[i].jitter);
         
     }
-    printf("<DecodeFinished>\n");
+    wsprd_emit_formatted(0, "<DecodeFinished>\n");
     
     fftwf_free(fftin);
     fftwf_free(fftout);
@@ -1577,6 +1620,13 @@ int main(int argc, char *argv[])
     free(idat);
     free(qdat);
     free(stack);
-    
+
     return 0;
 }
+
+#ifndef WSPRD_EMBEDDED_ONLY
+int main(int argc, char *argv[])
+{
+    return wsprd_run(argc, argv);
+}
+#endif

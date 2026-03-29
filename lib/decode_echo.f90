@@ -10,17 +10,18 @@ subroutine decode_echo(id2,searching,rxcall)
   integer itone(6)         !Tone offsets corresponding to ransmitted callsign
   integer ipk(1)
   logical searching
-  complex c0(0:NZ)         !Analytic data, 12000 Hz sample rate
-  complex c1(0:NSPS-1)     !Data for a single echo character
-  complex c2(0:NZ)         !Analytic data with shifted tone freqs
+  complex, allocatable :: c0(:)         !Analytic data, 12000 Hz sample rate
+  complex, allocatable :: c1(:)         !Data for a single echo character
+  complex, allocatable :: c2(:)         !Analytic data with shifted tone freqs
   character*6 rxcall       !The recovered callsign
-  real s(0:NSPS-1)         !Spectrum for one received character
-  real p(0:NSPS-1,6)       !Summed spectra for all six received characters
+  real, allocatable :: s(:)             !Spectrum for one received character
+  real, allocatable :: p(:,:)           !Summed spectra for all six received characters
   real a(3)
   character*37 c
   common/echocom/nclearave,nsum,blue(4096),red(4096)
   equivalence (ipk1,ipk(1))
   data c/' 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'/
+  allocate(c0(0:NZ), c1(0:NSPS-1), c2(0:NZ), s(0:NSPS-1), p(0:NSPS-1,6))
 
 ! Retrieve params known at time of transmission and saved in id2
   call save_echo_params(nDop,nDopAudio,nfrit,f1,fspread,ndf,itone,id2,-1)

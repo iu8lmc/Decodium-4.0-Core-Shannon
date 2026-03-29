@@ -1,7 +1,25 @@
 module jt4_decode
+  use jt4, only: MAXAVE, nch
   type :: jt4_decoder
      procedure(jt4_decode_callback), pointer :: decode_callback => null ()
      procedure(jt4_average_callback), pointer :: average_callback => null ()
+     logical :: wsjt4_initialized=.false.
+     logical :: avg4_initialized=.false.
+     integer :: avg_last_utc=-999
+     integer :: avg_last_freq=-999999
+     integer :: listutc(10)=0
+     integer :: nlist=0
+     integer :: nsave=0
+     integer :: ich1=1
+     integer :: ich2=1
+     integer :: avg_iutc(MAXAVE)=-1
+     integer :: avg_nfsave(MAXAVE)=0
+     real :: avg_ppsave(207,7,MAXAVE)=0.0
+     real :: rsymbol(207,7)=0.0
+     real :: avg_dtsave(MAXAVE)=0.0
+     real :: avg_syncsave(MAXAVE)=0.0
+     real :: avg_flipsave(MAXAVE)=0.0
+     real :: zz(1260,65,7)=0.0
    contains
      procedure :: decode
      procedure, private :: wsjt4, avg4
@@ -49,7 +67,6 @@ contains
        dttol,nagain,ndepth,nclearave,minsync,minw,nsubmode,mycall,hiscall,    &
        hisgrid,nlist0,listutc0,average_callback)
 
-    use jt4
     use timer_module, only: timer
 
     class(jt4_decoder), intent(inout) :: this
@@ -62,8 +79,10 @@ contains
     character(len=6), intent(in) :: hisgrid
     procedure(jt4_average_callback), optional :: average_callback
 
-    real*4 dat(30*11025)
+    real*4, allocatable :: dat(:)
     character*6 cfile6
+
+    allocate(dat(30*11025))
 
     this%decode_callback => decode_callback
     if (present (average_callback)) then
@@ -74,8 +93,8 @@ contains
     neme=0
     lumsg=6                         !### temp ? ###
     ndiag=1
-    nlist=nlist0
-    listutc=listutc0
+    this%nlist=nlist0
+    this%listutc=listutc0
 
     ! Lowpass filter and decimate by 2
     call timer('lpf1    ',0)
@@ -91,6 +110,7 @@ contains
          minw,mycall,hiscall,hisgrid,nfqso,NAgain,ndepth,neme)
     call timer('wsjt4   ',1)
 
+    deallocate(dat)
     return
   end subroutine decode
 
@@ -101,7 +121,6 @@ contains
 ! always operates as if in "Single Decode" mode; it looks for only one 
 ! decodable signal in the FTol range.
 
-    use jt4
     use timer_module, only: timer
 
     class(jt4_decoder), intent(inout) :: this
@@ -111,22 +130,20 @@ contains
     character(len=12), intent(in) :: mycall,hiscall
     character(len=6), intent(in) :: hisgrid
     real, intent(in) :: dat(npts) !Raw data
-    logical first,prtavg
+    logical prtavg
     character decoded*22,special*5
     character*22 avemsg,deepmsg,deepave,blank,deepmsg0,deepave1
     character csync*1
-    data first/.true./,nutc0/-999/,nfreq0/-999999/
-    save
 
-    if(first) then
-       nsave=0
-       first=.false.
-       blank='                      '
+    blank='                      '
+    if(.not.this%wsjt4_initialized) then
+       this%nsave=0
+       this%wsjt4_initialized=.true.
 ! Silence compiler warnings
        if(dttol.eq.-99.0 .and. emedelay.eq.-99.0 .and. nagain) stop
     endif
 
-    zz=0.
+    this%zz=0.
 !    syncmin=3.0 + minsync
     syncmin=1.0+minsync
     naggressive=0
@@ -135,16 +152,19 @@ contains
     nq2=6
     if(naggressive.eq.1) nq1=1
     if(NClearAve) then
-       nsave=0
-       iutc=-1
-       nfsave=0.
-       listutc=0
-       ppsave=0.
-       rsymbol=0.
-       dtsave=0.
-       syncsave=0.
+       this%nsave=0
+       this%avg_iutc=-1
+       this%avg_nfsave=0
+       this%listutc=0
+       this%avg_ppsave=0.
+       this%rsymbol=0.
+       this%avg_dtsave=0.
+       this%avg_syncsave=0.
+       this%avg_flipsave=0.
        nfanoave=0
        ndeepave=0
+       this%avg_last_utc=-999
+       this%avg_last_freq=-999999
     endif
 
 ! Attempt to synchronize: look for sync pattern, get DF and DT.
@@ -186,7 +206,8 @@ contains
 ! Attempt a single-sequence decode, including deep4 if Fano fails.
        call timer('decode4 ',0)
        call decode4(dat,npts,dtx,nfreq,flip,mode4,ndepth,neme,minw,           &
-            mycall,hiscall,hisgrid,decoded,nfano,deepmsg,qual,ich)
+            mycall,hiscall,hisgrid,decoded,nfano,deepmsg,qual,ich,            &
+            this%rsymbol,this%ich1,this%ich2)
        call timer('decode4 ',1)
 
        if(nfano.gt.0) then
@@ -213,12 +234,12 @@ contains
        qave=0.
 ! If we're doing averaging, call avg4
        if(iand(ndepth,16).eq.16 .and. (.not.prtavg)) then
-          if(nutc.ne.nutc0 .or. abs(nfreq-nfreq0).gt.ntol) then
+          if(nutc.ne.this%avg_last_utc .or. abs(nfreq-this%avg_last_freq).gt.ntol) then
 ! This is a new minute or a new frequency, so call avg4.
-             nutc0=nutc                                   !Try decoding average
-             nfreq0=nfreq
-             nsave=nsave+1
-             nsave=mod(nsave-1,64)+1
+             this%avg_last_utc=nutc                                   !Try decoding average
+             this%avg_last_freq=nfreq
+             this%nsave=this%nsave+1
+             this%nsave=mod(this%nsave-1,64)+1
              call timer('avg4    ',0)
              call this%avg4(nutc,sync,dtx,flip,nfreq,mode4,ntol,ndepth,neme,  &
                   mycall,hiscall,hisgrid,nfanoave,avemsg,qave,deepave,ich,    &
@@ -239,7 +260,7 @@ contains
                 dtx1=dtx
                 nfreq1=nfreq
                 deepave1=deepave
-                ich1=ich
+                this%ich1=ich
                 qabest=qave
              endif
           endif
@@ -266,7 +287,7 @@ contains
     dtx=dtx1
     nfreq=nfreq1
     deepave=deepave1
-    ich=ich1
+    ich=this%ich1
     qave=qabest
 
     if (associated (this%decode_callback) .and. ndeepave.ge.2) then
@@ -284,7 +305,6 @@ contains
 
 ! Decodes averaged JT4 data
 
-    use jt4
     class(jt4_decoder), intent(inout) :: this
 
     character*22 avemsg,deepave,deepbest
@@ -292,29 +312,24 @@ contains
     character*1 csync,cused(64)
     real sym(207,7)
     integer iused(64)
-    logical first
-    data first/.true./
-    save
-
-    if(first) then
-       iutc=-1
-       nfsave=0
+    if(.not.this%avg4_initialized) then
+       this%avg_iutc=-1
+       this%avg_nfsave=0
        dtdiff=0.2
-       first=.false.
-       nsave=1        ! ### Should this be here? ###
+       this%avg4_initialized=.true.
     endif
 
     do i=1,64
-       if(nutc.eq.iutc(i) .and. abs(nfreq-nfsave(i)).le.ntol) go to 10
+       if(nutc.eq.this%avg_iutc(i) .and. abs(nfreq-this%avg_nfsave(i)).le.ntol) go to 10
     enddo
 
 ! Save data for message averaging
-    iutc(nsave)=nutc
-    syncsave(nsave)=snrsync
-    dtsave(nsave)=dtxx
-    nfsave(nsave)=nfreq
-    flipsave(nsave)=flip
-    ppsave(1:207,1:7,nsave)=rsymbol(1:207,1:7)
+    this%avg_iutc(this%nsave)=nutc
+    this%avg_syncsave(this%nsave)=snrsync
+    this%avg_dtsave(this%nsave)=dtxx
+    this%avg_nfsave(this%nsave)=nfreq
+    this%avg_flipsave(this%nsave)=flip
+    this%avg_ppsave(1:207,1:7,this%nsave)=this%rsymbol(1:207,1:7)
 
 10  sym=0.
     syncsum=0.
@@ -324,15 +339,15 @@ contains
 
     do i=1,64
        cused(i)='.'
-       if(iutc(i).lt.0) cycle
-       if(mod(iutc(i),2).ne.mod(nutc,2)) cycle  !Use only same sequence
-       if(abs(dtxx-dtsave(i)).gt.dtdiff) cycle  !DT must match
-       if(abs(nfreq-nfsave(i)).gt.ntol) cycle   !Freq must match
-       if(flip.ne.flipsave(i)) cycle            !Sync (*/#) must match
-       sym(1:207,1:7)=sym(1:207,1:7) +  ppsave(1:207,1:7,i)
-       syncsum=syncsum + syncsave(i)
-       dtsum=dtsum + dtsave(i)
-       nfsum=nfsum + nfsave(i)
+       if(this%avg_iutc(i).lt.0) cycle
+       if(mod(this%avg_iutc(i),2).ne.mod(nutc,2)) cycle  !Use only same sequence
+       if(abs(dtxx-this%avg_dtsave(i)).gt.dtdiff) cycle  !DT must match
+       if(abs(nfreq-this%avg_nfsave(i)).gt.ntol) cycle   !Freq must match
+       if(flip.ne.this%avg_flipsave(i)) cycle            !Sync (*/#) must match
+       sym(1:207,1:7)=sym(1:207,1:7) +  this%avg_ppsave(1:207,1:7,i)
+       syncsum=syncsum + this%avg_syncsave(i)
+       dtsum=dtsum + this%avg_dtsave(i)
+       nfsum=nfsum + this%avg_nfsave(i)
        cused(i)='$'
        nsum=nsum+1
        iused(nsum)=i
@@ -349,12 +364,13 @@ contains
        fave=float(nfsum)/nsum
     endif
 
-    do i=1,nsave
+    do i=1,this%nsave
        csync='*'
-       if(flipsave(i).lt.0.0) csync='#'
+       if(this%avg_flipsave(i).lt.0.0) csync='#'
        if (associated (this%average_callback)) then
-          call this%average_callback(cused(i) .eq. '$',iutc(i),               &
-               syncsave(i),dtsave(i),nfsave(i),flipsave(i).lt.0.)
+          call this%average_callback(cused(i) .eq. '$',this%avg_iutc(i),      &
+               this%avg_syncsave(i),this%avg_dtsave(i),this%avg_nfsave(i),    &
+               this%avg_flipsave(i).lt.0.)
        end if
     enddo
 
@@ -364,9 +380,9 @@ contains
        i=iused(j)
        if(i.eq.0) exit
        csync='*'
-       if(flipsave(i).lt.0.0) csync='#'
-       sqt=sqt + (dtsave(i)-dtave)**2
-       sqf=sqf + (nfsave(i)-fave)**2
+       if(this%avg_flipsave(i).lt.0.0) csync='#'
+       sqt=sqt + (this%avg_dtsave(i)-dtave)**2
+       sqf=sqf + (this%avg_nfsave(i)-fave)**2
     enddo
     rmst=0.
     rmsf=0.
@@ -374,8 +390,8 @@ contains
        rmst=sqrt(sqt/(nsum-1))
        rmsf=sqrt(sqf/(nsum-1))
     endif
-    kbest=ich1
-    do k=ich1,ich2
+    kbest=this%ich1
+    do k=this%ich1,this%ich2
        call extract4(sym(1,k),ncount,avemsg)     !Do the Fano decode
        nfanoave=0
        if(ncount.ge.0) then
@@ -393,7 +409,7 @@ contains
     if(iand(ndepth,32).eq.32) then
        flipx=1.0                     !Normal flip not relevant for ave msg
        qbest=0.
-       do k=ich1,ich2
+       do k=this%ich1,this%ich2
           call deep4(sym(2,k),neme,flipx,mycall,hiscall,hisgrid,deepave,qave)
           if(qave.gt.qbest) then
              qbest=qave

@@ -1,6 +1,7 @@
 program encode77
 
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_reset_context,             &
+       ftx_pack77_pack, ftx_pack77_split77
   
   character*80 msg0
   character msg*37,cerr*1
@@ -36,14 +37,14 @@ program encode77
      msg0=adjustl(msg0)
      i3=-1
      n3=-1
-     call pack77(msg0(1:37),i3,n3,c77)
-     call unpack77(c77,1,msg,unpk77_success)
+     call ftx_pack77_reset_context()
+     call ftx_pack77_pack(msg0(1:37),i3,n3,c77,msg,unpk77_success,1)
      cerr=' '
      if(msg.ne.msg0(1:37)) cerr='*'
      if(i3.eq.0 .and.n3.ne.6) write(*,1004) i3,n3,cerr,msg0(1:37),msg
 1004 format(i2,'.',i1,4x,a1,1x,a37,1x,a37)
      if(i3.eq.0 .and.n3.eq.6) then
-        call split77(msg,nwords,nw,w)
+        call ftx_pack77_split77(msg,nwords,nw,w)
         j2=0
         if(nwords.eq.2 .and. len(trim(w(2))).le.2) j2=1
         if(nwords.eq.2 .and. len(trim(w(2))).eq.6) j2=2

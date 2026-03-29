@@ -4,15 +4,17 @@ subroutine sfox_remove_tone(c0,fsync)
    parameter (NFILT=8000)
    complex c0(NMAX)
    complex cwindow(15*12000)
-   complex cref(NMAX)
-   complex cfilt(NMAX)
+   complex, allocatable :: cref(:)
+   complex, allocatable :: cfilt(:)
    real window(-NFILT/2:NFILT/2)
 !  real endcorrection(NFILT/2+1)
-   real s(NMAX/4)
+   real, allocatable :: s(:)
    integer ipk(1)
    logical first
    data first/.true./
    save cwindow,first,pi
+
+   allocate(cref(NMAX), cfilt(NMAX), s(NMAX/4))
 
    if(fsync.gt.1400.0) return     !Avoid a potential bounds error
 

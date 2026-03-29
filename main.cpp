@@ -43,7 +43,6 @@
 #include "revision_utils.hpp"
 #include "MetaDataRegistry.hpp"
 #include "qt_helpers.hpp"
-#include "SharedMemorySegment.hpp"
 #include "L10nLoader.hpp"
 #include "SettingsGroup.hpp"
 //#include "TraceFile.hpp"
@@ -123,9 +122,6 @@ int main(int argc, char *argv[])
   // make the Qt type magic happen
   Radio::register_types ();
   register_types ();
-
-  // Multiple instances communicate with jt9 via this
-  SharedMemorySegment mem_jt9;
 
   // Read optional file to disable highDPI scaling
   QFile f("DisableHighDpiScaling");
@@ -391,88 +387,6 @@ int main(int argc, char *argv[])
               sys_lg.push_record (boost::move (rec));
             }
 
-          // Create and initialize shared memory segment
-          // Multiple instances: use rig_name as shared memory key
-          mem_jt9.setKey (a.applicationName ());
-
-          // try and shut down any orphaned jt9 process
-          for (int i = 3; i; --i) // three tries to close old jt9
-            {
-              if (mem_jt9.attach ()) // shared memory presence implies
-                                     // orphaned jt9 sub-process
-                {
-                  dec_data_t * dd = reinterpret_cast<dec_data_t *> (mem_jt9.data());
-                  if (mem_jt9.lock (200))
-                    {
-                      dd->ipc[1] = 999; // tell jt9 to shut down
-                      mem_jt9.unlock ();
-                    }
-                  mem_jt9.detach (); // start again
-                }
-              else
-                {
-                  break;        // good to go
-                }
-              // Poll briefly for shutdown so we can proceed as soon as IPC is released.
-              QElapsedTimer wait_timer;
-              wait_timer.start ();
-              while (wait_timer.elapsed () < 1000)
-                {
-                  if (!mem_jt9.attach ())
-                    {
-                      break;
-                    }
-                  mem_jt9.detach ();
-                  QThread::msleep (25);
-                }
-            }
-          if (!mem_jt9.attach ())
-            {
-              if (!mem_jt9.create (sizeof (dec_data)))
-                {
-                  auto const key = mem_jt9.nativeKey ().isEmpty () ? mem_jt9.key () : mem_jt9.nativeKey ();
-                  auto reason = mem_jt9.errorString ();
-                  LOG_ERROR ("Unable to create shared memory segment; key=" << key
-                            << ", size=" << sizeof (dec_data)
-                            << ", error=" << reason);
-                  MessageBox::critical_message (nullptr, a.translate ("main", "Shared memory error"),
-                                                a.translate ("main", "Unable to create shared memory segment")
-                                                + "\n\nKey: " + key
-                                                + "\nReason: " + reason);
-                  throw std::runtime_error {("Shared memory error: " + reason).toStdString ()};
-                }
-              LOG_INFO ("shmem size: " << mem_jt9.size ());
-            }
-          else
-            {
-              // On some systems an old shared-memory segment may persist
-              // even after jt9 has exited. Reuse it instead of aborting.
-              LOG_WARN ("Shared memory segment already present after orphan shutdown attempts; reusing existing segment");
-              if (mem_jt9.size () < static_cast<int> (sizeof (dec_data)))
-                {
-                  auto const key = mem_jt9.nativeKey ().isEmpty () ? mem_jt9.key () : mem_jt9.nativeKey ();
-                  auto reason = "Existing segment is smaller than required: size="
-                    + QString::number (mem_jt9.size ())
-                    + " bytes, required=" + QString::number (sizeof (dec_data)) + " bytes";
-                  LOG_ERROR ("Shared memory segment size mismatch; key=" << key << ", error=" << reason);
-                  MessageBox::critical_message (nullptr, a.translate ("main", "Shared memory error"),
-                                                a.translate ("main", "Unable to create shared memory segment")
-                                                + "\n\nKey: " + key
-                                                + "\nReason: " + reason);
-                  throw std::runtime_error {("Shared memory error: " + reason).toStdString ()};
-                }
-              LOG_INFO ("shmem size: " << mem_jt9.size ());
-            }
-          if (!mem_jt9.lock (500))
-            {
-              throw std::runtime_error {"Shared memory error: unable to lock IPC segment"};
-            }
-          if (auto * shared = reinterpret_cast<dec_data_t *> (mem_jt9.data ()))
-            {
-              *shared = dec_data_t {};
-            }
-          mem_jt9.unlock ();
-
           unsigned downSampleFactor;
           {
             SettingsGroup {multi_settings.settings (), "Tune"};
@@ -493,7 +407,7 @@ int main(int argc, char *argv[])
           QDir::setCurrent(qApp->applicationDirPath()); //This helps to find the SF executables
 
           // run the application UI
-          MainWindow w(temp_dir, multiple, &multi_settings, &mem_jt9, downSampleFactor, nullptr, env);
+          MainWindow w(temp_dir, multiple, &multi_settings, downSampleFactor, nullptr, env);
           w.show();
           QObject::connect (&a, SIGNAL (lastWindowClosed()), &a, SLOT (quit()));
           result = a.exec();

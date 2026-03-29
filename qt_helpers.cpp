@@ -87,3 +87,13 @@ QDateTime qt_truncate_date_time_to (QDateTime dt, int milliseconds)
   dt.setMSecsSinceEpoch (dt.toMSecsSinceEpoch () / milliseconds * milliseconds);
   return dt;
 }
+
+bool ft2_allow_assisted_directed_reply_context (bool transmitting,
+                                                bool calling_cq,
+                                                bool auto_reply,
+                                                bool has_active_partner)
+{
+  Q_UNUSED (auto_reply);
+  return has_active_partner
+      || (transmitting && !calling_cq);
+}

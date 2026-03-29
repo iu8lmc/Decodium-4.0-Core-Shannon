@@ -3,10 +3,12 @@ program msk144code
 ! Provides examples of message packing, bit and symbol ordering,
 ! LDPC encoding, and other necessary details of the MSK144 protocol.
 
-  use packjt77
+  use ftx_pack77_c_api, only: ftx_pack77_reset_context,            &
+       ftx_pack77_pack
   character*77 c77
-  character msg*37,msgsent*37,bad*1,msgtype*18
+  character msg*37,msgsent*37,msgchk*37,bad*1,msgtype*18
   integer*4 i4tone(144)
+  logical ok
   include 'msk144_testmsg.f90'
 
   nargs=iargc()
@@ -36,7 +38,8 @@ program msk144code
      call genmsk_128_90(msg,ichk,msgsent,i4tone,itype)
      i3=-1
      n3=-1
-     call pack77(msg,i3,n3,c77)
+     call ftx_pack77_reset_context()
+     call ftx_pack77_pack(msg,i3,n3,c77,msgchk,ok,0)
      msgtype=""
      if(i3.eq.0) then
         if(n3.eq.0) msgtype="Free text"

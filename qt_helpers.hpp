@@ -91,6 +91,14 @@ QDateTime qt_round_date_time_to (QDateTime dt, int milliseconds);
 // truncate a QDateTime to an integral interval of milliseconds
 QDateTime qt_truncate_date_time_to (QDateTime dt, int milliseconds);
 
+// FT2 assisted directed decodes should only be trusted when we have a real
+// reply/QSO context with an active partner, not merely because AutoReply/CQ
+// state was armed.
+bool ft2_allow_assisted_directed_reply_context (bool transmitting,
+                                                bool calling_cq,
+                                                bool auto_reply,
+                                                bool has_active_partner);
+
 template <class T>
 class VPtr
 {

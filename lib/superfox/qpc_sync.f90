@@ -2,14 +2,16 @@ subroutine qpc_sync(crcvd0,fsample,isync,fsync,ftol,f2,t2,snrsync)
 
   parameter(N9SEC=9*12000,NMAX=15*12000,NDOWN=16,NZ=N9SEC/NDOWN)
   complex crcvd0(NMAX)                   !Signal as received
-  complex c0(0:N9SEC-1)                  !For long FFT
-  complex c1(0:NZ-1)
-  complex c1sum(0:NZ-1)
+  complex, allocatable :: c0(:)          !For long FFT
+  complex, allocatable :: c1(:)
+  complex, allocatable :: c1sum(:)
   complex z
-  real s(N9SEC/4)
-  real p(-1125:1125)
+  real, allocatable :: s(:)
+  real, allocatable :: p(:)
   integer ipk(1)
   integer isync(24)
+
+  allocate(c0(0:N9SEC-1), c1(0:NZ-1), c1sum(0:NZ-1), s(N9SEC/4), p(-1125:1125))
 
   baud=12000.0/1024.0
   df2=fsample/N9SEC
