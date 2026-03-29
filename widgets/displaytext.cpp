@@ -118,7 +118,9 @@ void DisplayText::setContentFont(QFont const& font)
 void DisplayText::mouseDoubleClickEvent(QMouseEvent *e)
 {
   // Force cursor to the exact clicked block before emitting selection.
-  setTextCursor(cursorForPosition(e->pos()));
+  auto cursor = cursorForPosition(e->pos());
+  cursor.select(QTextCursor::WordUnderCursor);
+  setTextCursor(cursor);
   Q_EMIT selectCallsign(e->modifiers ());
   e->accept();
 }

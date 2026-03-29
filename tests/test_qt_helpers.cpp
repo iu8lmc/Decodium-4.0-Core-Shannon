@@ -626,6 +626,7 @@ private:
     QVERIFY (check (QStringLiteral ("CQ GB13COL")));
     QVERIFY (check (QStringLiteral ("VP2V/GM4WJS K1ABC RR73")));
     QVERIFY (check (QStringLiteral ("CQ EA8/GM4WJS")));
+    QVERIFY (check (QStringLiteral ("TNX BOB 73 GL")));
 
     QVERIFY (!check (QStringLiteral ("CQ CAYOBTYZCV0")));
     QVERIFY (!check (QStringLiteral ("CQ 3K6TLT33XGQ")));
@@ -633,6 +634,8 @@ private:
     QVERIFY (!check (QStringLiteral ("<...> T2XY0X08FWW 73")));
     QVERIFY (!check (QStringLiteral ("CQ 6PWE9JEL80E")));
     QVERIFY (!check (QStringLiteral ("CQ 5MWF1/NLQ5X")));
+    QVERIFY (!check (QStringLiteral ("M9B ZNWF6WH7V")));
+    QVERIFY (!check (QStringLiteral ("M9B ZNWF6WH7V RR73")));
   }
 
   Q_SLOT void ft2_assisted_directed_reply_context_rejects_cq_only_state ()

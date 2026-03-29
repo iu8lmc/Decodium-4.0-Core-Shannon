@@ -180,15 +180,37 @@ create_dmg_from_staged_root() {
   local out_dmg="$2"
   local vol_name="$3"
   local tmp_dmg="${out_dmg}.tmp.dmg"
+  local staging_parent=""
+  local staging_copy=""
+  local attempt=0
+  local create_status=0
+
+  staging_parent="$(mktemp -d "${TMPDIR:-/tmp}/decodium-dmg.XXXXXX")"
+  staging_copy="${staging_parent}/src"
+  ditto "${staged_root}" "${staging_copy}"
 
   rm -f "${out_dmg}" "${tmp_dmg}"
-  hdiutil create \
-    -volname "${vol_name}" \
-    -srcfolder "${staged_root}" \
-    -fs HFS+ \
-    -format UDZO \
-    "${tmp_dmg}" >/dev/null
-  mv -f "${tmp_dmg}" "${out_dmg}"
+  for attempt in 1 2 3; do
+    if hdiutil create \
+      -volname "${vol_name}" \
+      -srcfolder "${staging_copy}" \
+      -fs HFS+ \
+      -format UDZO \
+      "${tmp_dmg}" >/dev/null; then
+      mv -f "${tmp_dmg}" "${out_dmg}"
+      rm -rf "${staging_parent}"
+      return 0
+    fi
+
+    create_status=$?
+    echo "warning: hdiutil create failed on attempt ${attempt}/3 (status ${create_status}); retrying..."
+    rm -f "${tmp_dmg}"
+    sync || true
+    sleep 3
+  done
+
+  rm -rf "${staging_parent}"
+  return "${create_status}"
 }
 
 detach_mountpoint_if_present() {

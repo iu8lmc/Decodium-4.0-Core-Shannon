@@ -9,19 +9,23 @@ Release focused on FT2 decode sanity, reliable FT2 Band Activity operator workfl
 #### Added
 
 - Added an FT2 type-4 plausibility filter that rejects clearly impossible callsign-like payloads before they enter the accepted decode path.
+- Added FT2 ghost filtering for implausible free-text decodes that masquerade as callsign pairs while preserving legitimate operator free text.
 - Added targeted `test_qt_helpers` regression coverage for valid slash/special-event FT2 forms and invalid garbage examples.
 
 #### Changed
 
 - FT2 Band Activity double-click on standard `CQ` / `QRZ` lines now directly arms the selected caller instead of relying on the older generic path.
+- FT2 Band Activity double-click now also follows the clicked callsign token inside FT2 rows, matching the map-style station-centric selection flow.
 - Local version metadata, workflow defaults, readmes, docs, release notes, and GitHub release body are aligned to semantic version `1.5.7`.
 - macOS packaging continues with the folder/layout already validated by the previous successful deploy.
+- macOS DMG packaging now stages from an isolated temporary copy and retries `hdiutil create` to survive transient `Resource busy` failures.
 
 #### Fixed
 
-- Fixed bogus FT2 decodes such as `CAYOBTYZCV0`, `7SVPAYTXTIK`, and similar noise-derived payloads being shown as meaningful traffic.
-- Fixed FT2 Band Activity cases where valid callers like `D2UY` and `K1RZ` did not arm reliably on double-click even on standard `CQ` lines.
+- Fixed bogus FT2 decodes such as `CAYOBTYZCV0`, `7SVPAYTXTIK`, `M9B ZNWF6WH7V`, and similar noise-derived payloads being shown as meaningful traffic.
+- Fixed FT2 Band Activity cases where valid callers like `D2UY`, `K1RZ`, `KL7J`, and `N7XR` did not arm reliably on double-click from Band Activity.
 - Fixed Linux release/AppImage workflow breakage by restoring the `wsprd` build target to the published binary set.
+- Fixed transient Monterey Intel macOS release failures where `hdiutil create` aborted with `Resource busy` during DMG asset generation.
 
 ### Italiano
 
@@ -30,19 +34,23 @@ Release focalizzata sulla sanita' del decode FT2, sul workflow operatore FT2 aff
 #### Aggiunto
 
 - Aggiunto un filtro di plausibilita' FT2 type-4 che rigetta payload chiaramente impossibili simili a nominativi prima che entrino nel path decode accettato.
+- Aggiunto filtraggio FT2 per ghost free-text implausibili che si mascherano da coppie di nominativi, preservando pero' il free-text operatore legittimo.
 - Aggiunta copertura di regressione mirata in `test_qt_helpers` per forme FT2 valide con slash/special-event e per esempi garbage non validi.
 
 #### Modificato
 
 - Il doppio click FT2 nella Band Activity sui messaggi standard `CQ` / `QRZ` arma ora direttamente il caller selezionato invece di affidarsi al vecchio path generico.
+- Il doppio click FT2 nella Band Activity segue ora anche il nominativo cliccato dentro le righe FT2, allineandosi al flusso station-centric gia' usato dalla mappa.
 - Metadati versione locali, default workflow, readme, documentazione, note release e body GitHub sono allineati alla semver `1.5.7`.
 - Il packaging macOS continua a usare il layout/cartelle gia' validati dal precedente deploy riuscito.
+- Il packaging DMG macOS usa ora staging temporaneo isolato e retry di `hdiutil create` per resistere a fallimenti transitori `Resource busy`.
 
 #### Corretto
 
-- Corretti decode FT2 fasulli come `CAYOBTYZCV0`, `7SVPAYTXTIK` e payload simili derivati dal rumore che venivano mostrati come traffico significativo.
-- Corretti casi FT2 nella Band Activity in cui caller validi come `D2UY` e `K1RZ` non si armavano in modo affidabile al doppio click pur essendo su righe `CQ` standard.
+- Corretti decode FT2 fasulli come `CAYOBTYZCV0`, `7SVPAYTXTIK`, `M9B ZNWF6WH7V` e payload simili derivati dal rumore che venivano mostrati come traffico significativo.
+- Corretti casi FT2 nella Band Activity in cui caller validi come `D2UY`, `K1RZ`, `KL7J` e `N7XR` non si armavano in modo affidabile al doppio click dalla Band Activity.
 - Corretto il blocco dei workflow Linux release/AppImage ripristinando il target `wsprd` nel set binario pubblicato.
+- Corretto il fallimento transitorio della release macOS Monterey Intel in cui `hdiutil create` abortiva con `Resource busy` durante la generazione del DMG.
 
 ### Espanol
 
@@ -51,19 +59,23 @@ Release centrada en la cordura del decode FT2, en un workflow operativa FT2 fiab
 #### Anadido
 
 - Anadido un filtro de plausibilidad FT2 type-4 que rechaza payloads claramente imposibles con aspecto de nominativo antes de entrar en el camino de decode aceptado.
+- Anadido filtrado FT2 para ghost free-text implausibles disfrazados de pares de indicativos, preservando al mismo tiempo el free-text legitimo del operador.
 - Anadida cobertura de regresion dirigida en `test_qt_helpers` para formas FT2 validas con slash/special-event y para ejemplos garbage no validos.
 
 #### Cambios
 
 - El doble click FT2 en Band Activity sobre mensajes estandar `CQ` / `QRZ` arma ahora directamente el caller seleccionado en lugar de apoyarse en el viejo camino generico.
+- El doble click FT2 en Band Activity sigue ahora tambien el indicativo clicado dentro de las lineas FT2, alineandose con el flujo station-centric ya usado por el mapa.
 - Metadatos locales de version, defaults de workflow, readmes, documentacion, notas release y body GitHub quedan alineados con la semver `1.5.7`.
 - El packaging macOS continua usando el layout/carpetas ya validados por el deploy correcto anterior.
+- El packaging DMG macOS usa ahora staging temporal aislado y reintentos de `hdiutil create` para resistir fallos transitorios `Resource busy`.
 
 #### Corregido
 
-- Corregidos decodes FT2 falsos como `CAYOBTYZCV0`, `7SVPAYTXTIK` y payloads similares derivados del ruido que se mostraban como trafico significativo.
-- Corregidos casos FT2 en Band Activity donde callers validos como `D2UY` y `K1RZ` no se armaban de manera fiable al doble click aun estando en lineas `CQ` estandar.
+- Corregidos decodes FT2 falsos como `CAYOBTYZCV0`, `7SVPAYTXTIK`, `M9B ZNWF6WH7V` y payloads similares derivados del ruido que se mostraban como trafico significativo.
+- Corregidos casos FT2 en Band Activity donde callers validos como `D2UY`, `K1RZ`, `KL7J` y `N7XR` no se armaban de manera fiable al doble click desde Band Activity.
 - Corregido el bloqueo de los workflows Linux release/AppImage restaurando el target `wsprd` en el conjunto binario publicado.
+- Corregido el fallo transitorio de la release macOS Monterey Intel donde `hdiutil create` abortaba con `Resource busy` durante la generacion del DMG.
 
 ## [1.5.6] - 2026-03-29
 

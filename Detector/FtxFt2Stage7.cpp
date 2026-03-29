@@ -236,6 +236,42 @@ bool is_ft2_ack_token (QString const& token)
       || token == QStringLiteral ("73");
 }
 
+bool looks_like_ft2_free_text_callsign_ghost (QStringList const& words)
+{
+  static QRegularExpression const alnum_slash_re {
+      QStringLiteral ("^[A-Z0-9/]+$")
+  };
+
+  int callsignish_tokens = 0;
+  int implausible_callsignish_tokens = 0;
+  for (QString const& raw_word : words)
+    {
+      QString const word = normalize_ft2_token (raw_word);
+      if (word.isEmpty () || is_ft2_ack_token (word))
+        {
+          continue;
+        }
+
+      if (!alnum_slash_re.match (word).hasMatch ())
+        {
+          return false;
+        }
+
+      if (!word.contains (QRegularExpression {QStringLiteral ("[0-9/]")}))
+        {
+          return false;
+        }
+
+      ++callsignish_tokens;
+      if (!is_plausible_ft2_callsignish (word))
+        {
+          ++implausible_callsignish_tokens;
+        }
+    }
+
+  return callsignish_tokens >= 2 && implausible_callsignish_tokens > 0;
+}
+
 // FT2 type-4 decodes can map arbitrary base38 payloads into callsign-looking
 // text. That is useful for genuine long/special calls, but it also lets random
 // noise surface as bogus callsigns like "CAYOBTYZCV0". Reject only the clearly
@@ -256,12 +292,17 @@ bool is_plausible_ft2_decoded_message (QByteArray const& decoded)
       return false;
     }
 
+  QStringList const words = message.split (QLatin1Char (' '), Qt::SkipEmptyParts);
+  if (encoded.i3 == 0 && encoded.n3 == 0)
+    {
+      return !looks_like_ft2_free_text_callsign_ghost (words);
+    }
+
   if (encoded.i3 != 4)
     {
       return true;
     }
 
-  QStringList const words = message.split (QLatin1Char (' '), Qt::SkipEmptyParts);
   if (words.size () == 2 && words[0] == QStringLiteral ("CQ"))
     {
       return is_plausible_ft2_callsignish (words[1]);

@@ -14600,6 +14600,16 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
   } else {
     cursor=ui->decodedTextBrowser2->textCursor();
   }
+  auto normalizeClickedCall = [] (QString token)
+    {
+      token = token.trimmed ().toUpper ();
+      token.remove ('<');
+      token.remove ('>');
+      token.remove (';');
+      token.remove (',');
+      return token;
+    };
+  QString const clickedWord = normalizeClickedCall (cursor.selectedText ());
   QString clickedLine = cursor.block().text().trimmed().remove("TU; ");
   QString parsedLine = clickedLine;
   // DisplayText appends country/zone/distance metadata after a NBSP marker.
@@ -14628,7 +14638,7 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
   QString clickedCall;
   QString clickedGrid;
   message.deCallAndGrid(clickedCall, clickedGrid);
-  auto directSelectFt2Caller = [this](QString const& dxCall, QString const& dxGrid, bool startTxNow)
+  auto directSelectFt2Caller = [this](QString const& dxCall, QString const& dxGrid, int rxFrequency, bool startTxNow)
     {
       auto const mapCall = dxCall.trimmed ().toUpper ();
       auto const mapGrid = dxGrid.trimmed ().toUpper ();
@@ -14648,10 +14658,30 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
         {
           ui->dxGridEntry->setText (mapGrid.left (6));
         }
-      m_bDoubleClicked = previousDoubleClick;
 
       on_dxCallEntry_editingFinished ();
       on_genStdMsgsPushButton_clicked ();
+
+      // Mirror the normal CQ reaction path so FT2 double-clicks always arm
+      // a reply message instead of inheriting a stale Tx selection.
+      if (ui->tx1->isEnabled ())
+        {
+          setTxMsg (1);
+          m_QSOProgress = REPLYING;
+        }
+      else
+        {
+          setTxMsg (2);
+          m_QSOProgress = REPORT;
+        }
+
+      if (ui->RxFreqSpinBox->isEnabled () && m_mode != "MSK144")
+        {
+          ui->RxFreqSpinBox->setValue (rxFrequency);
+        }
+      lookup ();
+      m_hisGrid = ui->dxGridEntry->text ();
+      m_bDoubleClicked = previousDoubleClick;
 
       if (!startTxNow || m_mode == "WSPR" || m_mode == "FST4W")
         {
@@ -14677,7 +14707,23 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
     {
       // FT2 caller selection from Band Activity is more reliable when we
       // bypass the legacy processMessage path and directly arm the selected CQ.
-      directSelectFt2Caller (clickedCall, clickedGrid, m_config.quick_call ());
+      directSelectFt2Caller (clickedCall, clickedGrid, message.frequencyOffset (), m_config.quick_call ());
+      return;
+    }
+  bool const isFt2BandActivityWordCallDoubleClick =
+      fromBandActivityWindow
+      && m_mode == "FT2"
+      && modifiers == Qt::NoModifier
+      && !clickedWord.isEmpty ()
+      && clickedWord != "CQ"
+      && clickedWord != "QRZ"
+      && Radio::is_callsign (clickedWord);
+  if (isFt2BandActivityWordCallDoubleClick)
+    {
+      // The map is station-centric; Band Activity is row-centric. When the user
+      // double-clicks directly on a callsign token inside an FT2 row, prefer the
+      // clicked callsign so non-CQ rows can still be armed like map selections.
+      directSelectFt2Caller (clickedWord, QString {}, message.frequencyOffset (), m_config.quick_call ());
       return;
     }
   bool const fromRxWindow = !fromBandActivityWindow;
