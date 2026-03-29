@@ -1,20 +1,18 @@
-# Decodium (Fork macOS/Linux) - 1.5.6
+# Decodium (Fork macOS/Linux) - 1.5.7
 
 Questo repository contiene il fork Decodium mantenuto per macOS e Linux AppImage.
 
-- Release stabile corrente: `1.5.6`
-- Ciclo aggiornamento: `1.5.5 -> 1.5.6`
+- Release stabile corrente: `1.5.7`
+- Ciclo aggiornamento: `1.5.6 -> 1.5.7`
 
-## Novita' 1.5.6 (`1.5.5 -> 1.5.6`)
+## Novita' 1.5.7 (`1.5.6 -> 1.5.7`)
 
-- completata la migrazione del runtime promosso nativo C++ per FT8, FT4, FT2 e Q65, eliminando dal path attivo l'orchestrazione Fortran specifica di quei modi.
-- estesa l'architettura in-process a worker e rimosso dal bootstrap principale il vecchio shared-memory bootstrap di `jt9` per i modi FTX promossi.
-- promossi tool/front-end nativi C++ per `jt9`, `jt9a`, `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65` e `rtty_spec`.
-- irrobustito il TX FT2/FT4/Fox con snapshot delle wave precompute, lead-in piu' prudente e tracing aggiuntivo in `debug.txt`.
-- corretti problemi di build su GNU `ld`, GCC 15, Qt5 e C++11 nei bridge, nei tool e nei test.
-- ampliata la copertura di parita'/regressione con nuovi stage-compare e un `test_qt_helpers` molto piu' esteso.
-- mantenuto il layout/cartelle macOS gia' validato nell'ultimo deploy riuscito, allineando le release Tahoe, Sequoia, Intel Sequoia, Monterey e Linux AppImage.
-- la UI RTTY pubblica resta nascosta in attesa di validazione dedicata.
+- aggiunto un filtro di plausibilita' FT2 type-4 che evita la comparsa in Band Activity di payload rumorosi trasformati in nominativi senza senso.
+- corretto il doppio click FT2 nella Band Activity per i messaggi standard `CQ` / `QRZ`, cosi' nominativi validi come `D2UY`, `K1RZ` e `KL7J` si armano in modo affidabile.
+- aggiunta copertura mirata in `test_qt_helpers` per forme valide special-event/slash e per output FT2 garbage da rigettare.
+- ripristinato il target Linux `wsprd`, cosi' i job Linux/AppImage tornano a pubblicare il set binario atteso.
+- allineati metadati versione locali, default workflow, documentazione release e note GitHub alla semver `1.5.7`.
+- mantenuto il layout/cartelle macOS gia' validato nell'ultimo deploy riuscito.
 
 ## Target Release
 
@@ -26,20 +24,20 @@ Questo repository contiene il fork Decodium mantenuto per macOS e Linux AppImage
 
 ## Asset Release
 
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/sperimentale, se generato)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/sperimentale, se generato)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/sperimentale, se generato)*
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.dmg` *(best effort/sperimentale, se generato)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.zip` *(best effort/sperimentale, se generato)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64-sha256.txt` *(best effort/sperimentale, se generato)*
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisiti Minimi Linux
 
@@ -79,6 +77,6 @@ cd squashfs-root
 
 ## Documentazione Collegata
 
-- [RELEASE_NOTES_1.5.6.md](RELEASE_NOTES_1.5.6.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.6.md](doc/GITHUB_RELEASE_BODY_1.5.6.md)
+- [RELEASE_NOTES_1.5.7.md](RELEASE_NOTES_1.5.7.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.7.md](doc/GITHUB_RELEASE_BODY_1.5.7.md)
 - [CHANGELOG.md](CHANGELOG.md)

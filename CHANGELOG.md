@@ -1,5 +1,70 @@
 # Changelog / Registro Modifiche
 
+## [1.5.7] - 2026-03-30
+
+### English
+
+Release focused on FT2 decode sanity, reliable FT2 Band Activity operator workflow, and keeping Linux release publishing intact while aligning the release surface to semantic version `1.5.7`.
+
+#### Added
+
+- Added an FT2 type-4 plausibility filter that rejects clearly impossible callsign-like payloads before they enter the accepted decode path.
+- Added targeted `test_qt_helpers` regression coverage for valid slash/special-event FT2 forms and invalid garbage examples.
+
+#### Changed
+
+- FT2 Band Activity double-click on standard `CQ` / `QRZ` lines now directly arms the selected caller instead of relying on the older generic path.
+- Local version metadata, workflow defaults, readmes, docs, release notes, and GitHub release body are aligned to semantic version `1.5.7`.
+- macOS packaging continues with the folder/layout already validated by the previous successful deploy.
+
+#### Fixed
+
+- Fixed bogus FT2 decodes such as `CAYOBTYZCV0`, `7SVPAYTXTIK`, and similar noise-derived payloads being shown as meaningful traffic.
+- Fixed FT2 Band Activity cases where valid callers like `D2UY` and `K1RZ` did not arm reliably on double-click even on standard `CQ` lines.
+- Fixed Linux release/AppImage workflow breakage by restoring the `wsprd` build target to the published binary set.
+
+### Italiano
+
+Release focalizzata sulla sanita' del decode FT2, sul workflow operatore FT2 affidabile dalla Band Activity, e sul mantenimento integro della pubblicazione release Linux, allineando al tempo stesso la superficie release alla semver `1.5.7`.
+
+#### Aggiunto
+
+- Aggiunto un filtro di plausibilita' FT2 type-4 che rigetta payload chiaramente impossibili simili a nominativi prima che entrino nel path decode accettato.
+- Aggiunta copertura di regressione mirata in `test_qt_helpers` per forme FT2 valide con slash/special-event e per esempi garbage non validi.
+
+#### Modificato
+
+- Il doppio click FT2 nella Band Activity sui messaggi standard `CQ` / `QRZ` arma ora direttamente il caller selezionato invece di affidarsi al vecchio path generico.
+- Metadati versione locali, default workflow, readme, documentazione, note release e body GitHub sono allineati alla semver `1.5.7`.
+- Il packaging macOS continua a usare il layout/cartelle gia' validati dal precedente deploy riuscito.
+
+#### Corretto
+
+- Corretti decode FT2 fasulli come `CAYOBTYZCV0`, `7SVPAYTXTIK` e payload simili derivati dal rumore che venivano mostrati come traffico significativo.
+- Corretti casi FT2 nella Band Activity in cui caller validi come `D2UY` e `K1RZ` non si armavano in modo affidabile al doppio click pur essendo su righe `CQ` standard.
+- Corretto il blocco dei workflow Linux release/AppImage ripristinando il target `wsprd` nel set binario pubblicato.
+
+### Espanol
+
+Release centrada en la cordura del decode FT2, en un workflow operativa FT2 fiable desde Band Activity, y en mantener intacta la publicacion release Linux mientras se alinea la superficie release con la semver `1.5.7`.
+
+#### Anadido
+
+- Anadido un filtro de plausibilidad FT2 type-4 que rechaza payloads claramente imposibles con aspecto de nominativo antes de entrar en el camino de decode aceptado.
+- Anadida cobertura de regresion dirigida en `test_qt_helpers` para formas FT2 validas con slash/special-event y para ejemplos garbage no validos.
+
+#### Cambios
+
+- El doble click FT2 en Band Activity sobre mensajes estandar `CQ` / `QRZ` arma ahora directamente el caller seleccionado en lugar de apoyarse en el viejo camino generico.
+- Metadatos locales de version, defaults de workflow, readmes, documentacion, notas release y body GitHub quedan alineados con la semver `1.5.7`.
+- El packaging macOS continua usando el layout/carpetas ya validados por el deploy correcto anterior.
+
+#### Corregido
+
+- Corregidos decodes FT2 falsos como `CAYOBTYZCV0`, `7SVPAYTXTIK` y payloads similares derivados del ruido que se mostraban como trafico significativo.
+- Corregidos casos FT2 en Band Activity donde callers validos como `D2UY` y `K1RZ` no se armaban de manera fiable al doble click aun estando en lineas `CQ` estandar.
+- Corregido el bloqueo de los workflows Linux release/AppImage restaurando el target `wsprd` en el conjunto binario publicado.
+
 ## [1.5.6] - 2026-03-29
 
 ### English

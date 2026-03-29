@@ -1,20 +1,18 @@
-# Decodium (macOS/Linux Fork) - 1.5.6
+# Decodium (macOS/Linux Fork) - 1.5.7
 
 This repository carries the maintained macOS and Linux AppImage fork of Decodium.
 
-- Current stable release: `1.5.6`
-- Update cycle: `1.5.5 -> 1.5.6`
+- Current stable release: `1.5.7`
+- Update cycle: `1.5.6 -> 1.5.7`
 
-## Changes in 1.5.6 (`1.5.5 -> 1.5.6`)
+## Changes in 1.5.7 (`1.5.6 -> 1.5.7`)
 
-- completed the promoted native C++ runtime migration for FT8, FT4, FT2, and Q65, removing mode-specific Fortran orchestration from the active path for those modes.
-- expanded the in-process worker architecture and removed the old `jt9` shared-memory bootstrap from main-app startup for promoted FTX modes.
-- promoted native C++ tools/frontends for `jt9`, `jt9a`, `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65`, and `rtty_spec`.
-- hardened FT2/FT4/Fox transmit handling with precomputed-wave snapshots, safer lead-in timing, and extra `debug.txt` tracing.
-- fixed GNU `ld` static-library cycle issues plus GCC 15 / Qt5 / C++11 compatibility breaks in tools, tests, and bridge code.
-- expanded parity/regression validation with new stage-compare utilities and broader `test_qt_helpers` coverage.
-- kept the macOS folder/layout changes already validated by the last successful deploy and aligned Tahoe, Sequoia, Intel Sequoia, Monterey, and Linux AppImage release targets.
-- the incomplete public RTTY user path remains hidden pending dedicated validation.
+- added an FT2 type-4 plausibility filter so nonsense callsign-like payloads no longer leak into Band Activity as bogus decodes.
+- fixed FT2 Band Activity double-click handling for standard `CQ` / `QRZ` messages, so valid callers such as `D2UY`, `K1RZ`, and `KL7J` can be armed reliably.
+- added focused `test_qt_helpers` regression coverage for valid special-event/slash forms and invalid garbage FT2 outputs.
+- restored the Linux `wsprd` target so Linux/AppImage release jobs can publish the expected binary set again.
+- aligned local version metadata, workflow defaults, release docs, and GitHub release notes to semantic version `1.5.7`.
+- kept the macOS folder/layout changes already validated by the last successful deploy.
 
 ## Release Targets
 
@@ -26,20 +24,20 @@ This repository carries the maintained macOS and Linux AppImage fork of Decodium
 
 ## Release Assets
 
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage.sha256.txt`
 
 ## Linux Minimum Requirements
 
@@ -79,6 +77,6 @@ cd squashfs-root
 
 ## Related Documentation
 
-- [RELEASE_NOTES_1.5.6.md](RELEASE_NOTES_1.5.6.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.6.md](doc/GITHUB_RELEASE_BODY_1.5.6.md)
+- [RELEASE_NOTES_1.5.7.md](RELEASE_NOTES_1.5.7.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.7.md](doc/GITHUB_RELEASE_BODY_1.5.7.md)
 - [CHANGELOG.md](CHANGELOG.md)

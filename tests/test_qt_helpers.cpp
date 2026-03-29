@@ -240,6 +240,7 @@ extern "C" void ftx_ft2_decode_candidate_stage7_c (float const* llra, float cons
                                                    int* nharderror_out, float* dmin_out,
                                                    int* maxosd_out, signed char* message77_out,
                                                    char* decoded_out);
+extern "C" int ftx_ft2_message_is_plausible_c (char const decoded37[37]);
 extern "C" void ftx_ft2_cpp_dsp_rollout_stage_override_c (int stage);
 extern "C" void ftx_ft2_cpp_dsp_rollout_stage_reset_c ();
 extern "C" void ftx_ft2_stage7_clravg_c ();
@@ -610,6 +611,30 @@ class TestQtHelpers
 public:
 
 private:
+  Q_SLOT void ft2_message_plausibility_filter_rejects_garbage_type4_decodes ()
+  {
+    auto check = [] (QString const& message) {
+      QByteArray fixed = message.left (37).toLatin1 ();
+      if (fixed.size () < 37)
+        {
+          fixed.append (QByteArray (37 - fixed.size (), ' '));
+        }
+      return ftx_ft2_message_is_plausible_c (fixed.constData ()) != 0;
+    };
+
+    QVERIFY (check (QStringLiteral ("CQ TEST K1ABC FN42")));
+    QVERIFY (check (QStringLiteral ("CQ GB13COL")));
+    QVERIFY (check (QStringLiteral ("VP2V/GM4WJS K1ABC RR73")));
+    QVERIFY (check (QStringLiteral ("CQ EA8/GM4WJS")));
+
+    QVERIFY (!check (QStringLiteral ("CQ CAYOBTYZCV0")));
+    QVERIFY (!check (QStringLiteral ("CQ 3K6TLT33XGQ")));
+    QVERIFY (!check (QStringLiteral ("<...> 7SVPAYTXTIK RR73")));
+    QVERIFY (!check (QStringLiteral ("<...> T2XY0X08FWW 73")));
+    QVERIFY (!check (QStringLiteral ("CQ 6PWE9JEL80E")));
+    QVERIFY (!check (QStringLiteral ("CQ 5MWF1/NLQ5X")));
+  }
+
   Q_SLOT void ft2_assisted_directed_reply_context_rejects_cq_only_state ()
   {
     QVERIFY (!ft2_allow_assisted_directed_reply_context (false, true, false, false));

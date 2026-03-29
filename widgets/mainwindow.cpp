@@ -14628,6 +14628,58 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
   QString clickedCall;
   QString clickedGrid;
   message.deCallAndGrid(clickedCall, clickedGrid);
+  auto directSelectFt2Caller = [this](QString const& dxCall, QString const& dxGrid, bool startTxNow)
+    {
+      auto const mapCall = dxCall.trimmed ().toUpper ();
+      auto const mapGrid = dxGrid.trimmed ().toUpper ();
+      if (mapCall.isEmpty ())
+        {
+          return;
+        }
+
+      static QRegularExpression const grid_regexp {
+        "\\A(?![Rr]{2}73)[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2}){0,1}\\z"
+      };
+
+      bool const previousDoubleClick = m_bDoubleClicked;
+      m_bDoubleClicked = true;
+      ui->dxCallEntry->setText (mapCall);
+      if (mapGrid.contains (grid_regexp))
+        {
+          ui->dxGridEntry->setText (mapGrid.left (6));
+        }
+      m_bDoubleClicked = previousDoubleClick;
+
+      on_dxCallEntry_editingFinished ();
+      on_genStdMsgsPushButton_clicked ();
+
+      if (!startTxNow || m_mode == "WSPR" || m_mode == "FST4W")
+        {
+          return;
+        }
+      if (!m_auto)
+        {
+          auto_tx_mode (true);
+        }
+      if (m_transmitting)
+        {
+          m_restart = true;
+        }
+    };
+  bool const isFt2BandActivityCqDoubleClick =
+      fromBandActivityWindow
+      && m_mode == "FT2"
+      && modifiers == Qt::NoModifier
+      && message.isStandardMessage ()
+      && (message.call () == "CQ" || message.call () == "QRZ")
+      && !clickedCall.isEmpty ();
+  if (isFt2BandActivityCqDoubleClick)
+    {
+      // FT2 caller selection from Band Activity is more reliable when we
+      // bypass the legacy processMessage path and directly arm the selected CQ.
+      directSelectFt2Caller (clickedCall, clickedGrid, m_config.quick_call ());
+      return;
+    }
   bool const fromRxWindow = !fromBandActivityWindow;
   if (fromRxWindow && m_mode == "FT2" && ui->cbAsyncDecode->isChecked())
     {

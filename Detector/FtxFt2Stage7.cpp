@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <QByteArray>
+#include <QRegularExpression>
 #include <QString>
 
 #include "commons.h"
@@ -118,6 +119,179 @@ QByteArray fixed_from_chars (char const* data, int width)
 QString qt_trimmed_string (char const* data, int width)
 {
   return QString::fromLatin1 (trim_right_spaces (fixed_from_chars (data, width)));
+}
+
+bool is_ft2_ascii_digit (QChar const c)
+{
+  return c >= QLatin1Char ('0') && c <= QLatin1Char ('9');
+}
+
+bool is_ft2_ascii_letter (QChar const c)
+{
+  return c >= QLatin1Char ('A') && c <= QLatin1Char ('Z');
+}
+
+QString normalize_ft2_token (QString const& token)
+{
+  QString normalized = token.trimmed ().toUpper ();
+  if (normalized.startsWith (QLatin1Char ('<')) && normalized.endsWith (QLatin1Char ('>'))
+      && normalized.size () >= 3)
+    {
+      normalized = normalized.mid (1, normalized.size () - 2).trimmed ();
+    }
+  return normalized;
+}
+
+bool is_bracket_hash_token (QString const& token)
+{
+  QString const normalized = token.trimmed ().toUpper ();
+  return normalized.startsWith (QLatin1Char ('<')) && normalized.endsWith (QLatin1Char ('>'))
+      && normalized.size () >= 3;
+}
+
+bool is_plausible_ft2_call_no_slash (QString const& token)
+{
+  static QRegularExpression const call_re {
+      QStringLiteral (
+          "^(?:[A-Z]{1,4}[0-9]{1,4}[A-Z]{1,4}|[0-9]{1,2}[A-Z]{1,4}[0-9]{1,4}[A-Z]{1,4})$")
+  };
+  QString const normalized = normalize_ft2_token (token);
+  return !normalized.isEmpty ()
+      && normalized.size () >= 3
+      && normalized.size () <= 11
+      && call_re.match (normalized).hasMatch ();
+}
+
+bool is_short_ft2_affix (QString const& token)
+{
+  QString const normalized = normalize_ft2_token (token);
+  if (normalized.isEmpty () || normalized.size () > 4)
+    {
+      return false;
+    }
+
+  bool has_letter = false;
+  for (QChar const c : normalized)
+    {
+      if (!is_ft2_ascii_letter (c) && !is_ft2_ascii_digit (c))
+        {
+          return false;
+        }
+      has_letter = has_letter || is_ft2_ascii_letter (c);
+    }
+  return has_letter;
+}
+
+bool is_plausible_ft2_callsignish (QString const& token)
+{
+  if (is_bracket_hash_token (token))
+    {
+      return true;
+    }
+
+  QString const normalized = normalize_ft2_token (token);
+  if (normalized.isEmpty ())
+    {
+      return false;
+    }
+
+  int const slash = normalized.indexOf (QLatin1Char ('/'));
+  if (slash < 0)
+    {
+      return is_plausible_ft2_call_no_slash (normalized);
+    }
+  if (slash != normalized.lastIndexOf (QLatin1Char ('/')))
+    {
+      return false;
+    }
+
+  QString const left = normalized.left (slash);
+  QString const right = normalized.mid (slash + 1);
+  if (left.isEmpty () || right.isEmpty ())
+    {
+      return false;
+    }
+
+  bool const left_call = is_plausible_ft2_call_no_slash (left);
+  bool const right_call = is_plausible_ft2_call_no_slash (right);
+  if (left_call && right_call)
+    {
+      return true;
+    }
+  if (left_call && is_short_ft2_affix (right))
+    {
+      return true;
+    }
+  if (right_call && is_short_ft2_affix (left))
+    {
+      return true;
+    }
+  return false;
+}
+
+bool is_ft2_ack_token (QString const& token)
+{
+  return token == QStringLiteral ("RRR")
+      || token == QStringLiteral ("RR73")
+      || token == QStringLiteral ("73");
+}
+
+// FT2 type-4 decodes can map arbitrary base38 payloads into callsign-looking
+// text. That is useful for genuine long/special calls, but it also lets random
+// noise surface as bogus callsigns like "CAYOBTYZCV0". Reject only the clearly
+// implausible type-4 forms so standard, contest, and hash-assisted traffic
+// continue to pass untouched.
+bool is_plausible_ft2_decoded_message (QByteArray const& decoded)
+{
+  QString const message = QString::fromLatin1 (decoded).trimmed ().toUpper ();
+  if (message.isEmpty ())
+    {
+      return false;
+    }
+
+  decodium::txmsg::EncodedMessage const encoded =
+      decodium::txmsg::encodeFt2 (message, true);
+  if (!encoded.ok)
+    {
+      return false;
+    }
+
+  if (encoded.i3 != 4)
+    {
+      return true;
+    }
+
+  QStringList const words = message.split (QLatin1Char (' '), Qt::SkipEmptyParts);
+  if (words.size () == 2 && words[0] == QStringLiteral ("CQ"))
+    {
+      return is_plausible_ft2_callsignish (words[1]);
+    }
+
+  if (words.size () == 2 || words.size () == 3)
+    {
+      if (!is_plausible_ft2_callsignish (words[0])
+          || !is_plausible_ft2_callsignish (words[1]))
+        {
+          return false;
+        }
+      if (words.size () == 3 && !is_ft2_ack_token (words[2]))
+        {
+          return false;
+        }
+      return true;
+    }
+
+  return false;
+}
+
+extern "C" int ftx_ft2_message_is_plausible_c (char const decoded37[37])
+{
+  if (!decoded37)
+    {
+      return 0;
+    }
+
+  return is_plausible_ft2_decoded_message (QByteArray {decoded37, kFt2DecodedChars}) ? 1 : 0;
 }
 
 void fill_fixed_chars (char* dest, int width, QByteArray const& source)
@@ -1385,6 +1559,14 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
         {
           stage7_debug_logf ("pass=%d unpack failed after nharderror=%d", ipass, nharderror);
           break;
+        }
+
+      if (!is_plausible_ft2_decoded_message (decoded))
+        {
+          stage7_debug_logf ("pass=%d rejected implausible decode=\"%s\"",
+                             ipass, decoded.constData ());
+          result.stop_candidate = false;
+          continue;
         }
 
       stage7_debug_logf ("pass=%d decoded=\"%s\" nharderror=%d dmin=%.3f",

@@ -1,37 +1,35 @@
-# Note di Documentazione (Italiano) - 1.5.6
+# Note di Documentazione (Italiano) - 1.5.7
 
 Questo indice raccoglie la documentazione di rilascio del ciclo corrente del fork.
 
-- Release corrente: `1.5.6`
-- Ciclo aggiornamento: `1.5.5 -> 1.5.6`
-- Focus principale: completamento del runtime promosso nativo C++ per FT8/FT4/FT2/Q65, decoder worker in-process, hardening TX/build, validazione di parita', e packaging macOS/Linux allineato.
+- Release corrente: `1.5.7`
+- Ciclo aggiornamento: `1.5.6 -> 1.5.7`
+- Focus principale: filtro di sanita' decode FT2, selezione affidabile del caller FT2 dalla Band Activity, continuita' della release Linux, e metadati release allineati.
 
-## Cambi Tecnici Principali (`1.5.5 -> 1.5.6`)
+## Cambi Tecnici Principali (`1.5.6 -> 1.5.7`)
 
-- FT8, FT4, FT2 e Q65 usano ora il runtime promosso nativo C++ senza orchestrazione Fortran specifica nel path di decode attivo.
-- gli entrypoint `jt9` / `jt9a` e diversi tool Q65/offline sono nativi C++ in questo tree.
-- l'avvio dell'app principale non alloca piu' il vecchio bootstrap `jt9` basato su shared memory per il path worker FTX promosso.
-- il TX FT2/FT4/Fox conserva snapshot delle wave precompute, lead-in piu' conservativo e tracing piu' ricco in `debug.txt`.
-- il build Linux/macOS e' stato irrobustito contro cicli di librerie statiche GNU `ld`, strictness GCC 15, costruttori Qt5 e gap di compatibilita' C++11.
-- la copertura di parita'/regressione cresce con nuovi stage-compare e test helper piu' ampi.
-- viene mantenuto il layout macOS gia' validato nell'ultimo deploy riuscito per i target Tahoe, Sequoia e Intel.
+- gli output FT2 type-4 passano ora in un filtro di plausibilita' prima di essere accettati nel path di decode attivo.
+- `tests/test_qt_helpers.cpp` valida ora pattern special-event/slash ammessi e casi garbage FT2 da rigettare.
+- il doppio click FT2 nella Band Activity sui messaggi standard `CQ` / `QRZ` arma ora direttamente il caller selezionato invece di dipendere dal vecchio path generico.
+- il packaging Linux release include di nuovo il target `wsprd` ripristinato per la pubblicazione AppImage/release.
+- metadati versione, default workflow, documenti release e note GitHub sono allineati a `1.5.7`.
 
 ## Artifact Release
 
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/sperimentale, se generato)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/sperimentale, se generato)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/sperimentale, se generato)*
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.dmg` *(best effort/sperimentale, se generato)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.zip` *(best effort/sperimentale, se generato)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64-sha256.txt` *(best effort/sperimentale, se generato)*
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisiti Minimi Linux
 
@@ -67,6 +65,6 @@ cd squashfs-root
 - [README.en-GB.md](../README.en-GB.md)
 - [README.it.md](../README.it.md)
 - [README.es.md](../README.es.md)
-- [RELEASE_NOTES_1.5.6.md](../RELEASE_NOTES_1.5.6.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.6.md](./GITHUB_RELEASE_BODY_1.5.6.md)
+- [RELEASE_NOTES_1.5.7.md](../RELEASE_NOTES_1.5.7.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.7.md](./GITHUB_RELEASE_BODY_1.5.7.md)
 - [CHANGELOG.md](../CHANGELOG.md)

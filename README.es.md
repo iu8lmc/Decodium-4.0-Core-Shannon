@@ -1,20 +1,18 @@
-# Decodium (Fork macOS/Linux) - 1.5.6
+# Decodium (Fork macOS/Linux) - 1.5.7
 
 Este repositorio contiene el fork mantenido de Decodium para macOS y Linux AppImage.
 
-- Release estable actual: `1.5.6`
-- Ciclo de actualizacion: `1.5.5 -> 1.5.6`
+- Release estable actual: `1.5.7`
+- Ciclo de actualizacion: `1.5.6 -> 1.5.7`
 
-## Cambios en 1.5.6 (`1.5.5 -> 1.5.6`)
+## Cambios en 1.5.7 (`1.5.6 -> 1.5.7`)
 
-- completada la migracion del runtime promovido nativo C++ para FT8, FT4, FT2 y Q65, eliminando del camino activo la orquestacion Fortran especifica de esos modos.
-- ampliada la arquitectura in-process con workers y retirada del bootstrap principal la antigua shared memory de `jt9` para los modos FTX promovidos.
-- promovidas herramientas/frontends nativos C++ para `jt9`, `jt9a`, `q65sim`, `q65code`, `q65_ftn_test`, `q65params`, `test_q65` y `rtty_spec`.
-- endurecido el TX FT2/FT4/Fox con snapshots de ondas precomputadas, lead-in mas prudente y trazas extra en `debug.txt`.
-- corregidos fallos de compilacion/enlazado en GNU `ld`, GCC 15, Qt5 y C++11 dentro de bridges, herramientas y tests.
-- ampliada la validacion de paridad/regresion con nuevos stage-compare y cobertura reforzada en `test_qt_helpers`.
-- mantenido el layout/carpetas macOS ya validado en el ultimo deploy correcto, alineando las releases Tahoe, Sequoia, Intel Sequoia, Monterey y Linux AppImage.
-- la UI publica de RTTY sigue oculta a la espera de validacion dedicada.
+- anadido un filtro de plausibilidad FT2 type-4 que evita que payloads ruidosos aparezcan en Band Activity como falsos nominativos.
+- corregido el doble click FT2 en Band Activity para mensajes estandar `CQ` / `QRZ`, de forma que llamadas validas como `D2UY`, `K1RZ` y `KL7J` se armen de manera fiable.
+- anadida cobertura dirigida en `test_qt_helpers` para formas validas special-event/slash y para salidas FT2 garbage que deben rechazarse.
+- restaurado el target Linux `wsprd`, de modo que los jobs Linux/AppImage vuelvan a publicar el conjunto binario esperado.
+- alineados metadatos locales de version, defaults de workflow, documentacion release y notas GitHub con la semver `1.5.7`.
+- mantenido el layout/carpetas macOS ya validado en el ultimo deploy correcto.
 
 ## Targets Release
 
@@ -26,20 +24,20 @@ Este repositorio contiene el fork mantenido de Decodium para macOS y Linux AppIm
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.6-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.6-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.6-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.7-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.7-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.7-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
@@ -79,6 +77,6 @@ cd squashfs-root
 
 ## Documentacion Relacionada
 
-- [RELEASE_NOTES_1.5.6.md](RELEASE_NOTES_1.5.6.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.6.md](doc/GITHUB_RELEASE_BODY_1.5.6.md)
+- [RELEASE_NOTES_1.5.7.md](RELEASE_NOTES_1.5.7.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.7.md](doc/GITHUB_RELEASE_BODY_1.5.7.md)
 - [CHANGELOG.md](CHANGELOG.md)
