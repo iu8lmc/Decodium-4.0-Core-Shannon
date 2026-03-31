@@ -28,6 +28,7 @@
 #include <fstream>
 #include <iterator>
 #include <algorithm>
+#include <numeric>
 #include <fftw3.h>
 #include <thread> // TCI
 #include <QApplication>
@@ -473,9 +474,6 @@ extern "C" {
   void gen9_(char* msg, int* ichk, char* msgsent, int itone[],
                int* itext, fortran_charlen_t, fortran_charlen_t);
 
-  void genmsk_128_90_(char* msg, int* ichk, char* msgsent, int itone[], int* itype,
-                      fortran_charlen_t, fortran_charlen_t);
-
   void gen65(char* msg, int* ichk, char msgsent[], int itone[], int* itext);
 
   void gen_cw_wave_(char* msg, int* ifreq, float wave[], fortran_charlen_t);
@@ -484,10 +482,6 @@ extern "C" {
               int* i3, int* n3, fortran_charlen_t, fortran_charlen_t);
 
   void genwspr_(char* msg, char* msgsent, int itone[], fortran_charlen_t, fortran_charlen_t);
-
-  void azdist_(char* MyGrid, char* HisGrid, double* utch, int* nAz, int* nEl,
-               int* nDmiles, int* nDkm, int* nHotAz, int* nHotABetter,
-               fortran_charlen_t, fortran_charlen_t);
 
   void morse_(char* msg, int* icw, int* ncw, fortran_charlen_t);
 
@@ -1981,6 +1975,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_autoButtonState {false}   //avt 10/2/25
 {
   ui->setupUi(this);
+  refreshWriteableDataDirCache ();
 #if defined(Q_OS_MAC)
   // Disable Qt text-heuristic menu-role guessing on macOS for every action
   // except the native app-menu entries we want explicitly.
@@ -3601,6 +3596,14 @@ void MainWindow::handle_leavingSettings ()
   inSettings = false;
 }
 
+void MainWindow::refreshWriteableDataDirCache ()
+{
+  m_writeableDataDirPath = m_config.writeable_data_dir ().absolutePath ();
+  m_writeableDataDirNativePath = QDir::toNativeSeparators (m_writeableDataDirPath).toLocal8Bit ();
+  m_refspecNativePath =
+    QDir::toNativeSeparators (QDir {m_writeableDataDirPath}.absoluteFilePath ("refspec.dat")).toLocal8Bit ();
+}
+
 void MainWindow::initialize_fonts ()
 {
   set_application_font (m_config.text_font ());
@@ -4693,14 +4696,19 @@ void MainWindow::dataSink(qint64 frames)
     return;
   }
 
-  if (frames > 0)
+  int k = clamp_frames_to_d2 (frames, "MainWindow::dataSink");
+  if (k <= 0)
+    {
+      return;
+    }
+
+  if (k > 0)
     {
       m_last_audio_frame_ms = QDateTime::currentMSecsSinceEpoch ();
     }
 
   static float s[NSMAX];
   char line[80];
-  int k(frames);
 
   // Async FT2: fill ring buffer with latest audio
   if (m_mode == "FT2" && ui->cbAsyncDecode->isChecked() && k > 0) {
@@ -4718,7 +4726,10 @@ void MainWindow::dataSink(qint64 frames)
       m_rttyDetector->processAudio(pcm.data(), k);
   }
 
-  auto fname {QDir::toNativeSeparators(m_config.writeable_data_dir ().absoluteFilePath ("refspec.dat")).toLocal8Bit ()};
+  if (m_refspecNativePath.isEmpty ())
+    {
+      refreshWriteableDataDirCache ();
+    }
 
   if(m_diskData) {
     dec_data.params.ndiskdat=1;
@@ -4728,9 +4739,13 @@ void MainWindow::dataSink(qint64 frames)
   }
 
   m_bUseRef=m_wideGraph->useRef();
-  if(!m_diskData) {
-    refspectrum_(&dec_data.d2[k-m_nsps/2],&m_bClearRefSpec,&m_bRefSpec,
-                 &m_bUseRef, fname.constData (), (FCL)fname.size ());
+  if(!m_diskData && k >= m_nsps/2) {
+    // refspectrum_ reads NFFT/2 = 3456 input samples from the start pointer.
+    int constexpr refSpectrumInputSamples {3456};
+    int const maxRefStart = qMax (0, kDecDataSampleCount - refSpectrumInputSamples);
+    int const refStart = qBound (0, k - m_nsps / 2, maxRefStart);
+    refspectrum_(&dec_data.d2[refStart],&m_bClearRefSpec,&m_bRefSpec,
+                 &m_bUseRef, m_refspecNativePath.constData (), (FCL)m_refspecNativePath.size ());
   }
   m_bClearRefSpec=false;
 
@@ -5073,7 +5088,11 @@ QString MainWindow::save_wave_file (QString const& name, short const * data, int
 //-------------------------------------------------------------- fastSink()
 void MainWindow::fastSink(qint64 frames)
 {
-  int k (frames);
+  int k = clamp_frames_to_d2 (frames, "MainWindow::fastSink");
+  if (k <= 0)
+    {
+      return;
+    }
   bool decodeNow=false;
   filtered = false;
   ignored = false;
@@ -5106,14 +5125,19 @@ void MainWindow::fastSink(qint64 frames)
   QString hisCall {ui->dxCallEntry->text ()};
   bool bshmsg=ui->cbShMsgs->isChecked();
   bool bswl=ui->cbSWL->isChecked();
+  bool bmsk144_hspec = false;
 //  ::memcpy(dec_data.params.hiscall,(Radio::base_callsign (hisCall) +  "            ").toLatin1 ().constData (), sizeof dec_data.params.hiscall);
   ::memcpy(dec_data.params.hiscall,(hisCall + "            ").toLatin1 ().constData (), sizeof dec_data.params.hiscall);
   ::memcpy(dec_data.params.mygrid, (m_config.my_grid()+"      ").toLatin1(), sizeof dec_data.params.mygrid);
-  auto data_dir {m_config.writeable_data_dir ().absolutePath ().toLocal8Bit ()};
+  if (m_writeableDataDirNativePath.isEmpty ())
+    {
+      refreshWriteableDataDirCache ();
+    }
+  auto const& data_dir = m_writeableDataDirNativePath;
   float pxmax = 0;
   float rmsNoGain = 0;
   int ftol = ui->sbFtol->value ();
-  hspec_(dec_data.d2,&k,&nutc0,&nTRpDepth,&RxFreq,&ftol,&bmsk144,
+  hspec_(dec_data.d2,&k,&nutc0,&nTRpDepth,&RxFreq,&ftol,&bmsk144_hspec,
       &m_bTrain,m_phaseEqCoefficients.constData(),&m_inGain,&dec_data.params.mycall[0],
       &dec_data.params.hiscall[0],&bshmsg,&bswl,
       data_dir.constData (),fast_green,fast_s,&fast_jh,&pxmax,&rmsNoGain,&line[0],(FCL)12,
@@ -5123,6 +5147,49 @@ void MainWindow::fastSink(qint64 frames)
   t = t.asprintf(" Rx noise: %5.1f ",px);
   ui->signal_meter_widget->setValue(rmsNoGain,pxmax); // Update thermometer
   m_fastGraph->plotSpec(m_diskData,m_UTCdisk);
+
+  if (bmsk144 && k >= 7168) {
+    int const block_start = k - 7168;
+    float const tt1 = std::accumulate (dec_data.d2 + block_start,
+                                       dec_data.d2 + block_start + 3584,
+                                       0.0f,
+                                       [] (float sum, short value) {
+                                         return sum + std::abs (static_cast<float> (value));
+                                       });
+    float const tt2 = std::accumulate (dec_data.d2 + block_start + 3584,
+                                       dec_data.d2 + block_start + 7168,
+                                       0.0f,
+                                       [] (float sum, short value) {
+                                         return sum + std::abs (static_cast<float> (value));
+                                       });
+    if (tt1 != 0.0f && tt2 != 0.0f) {
+      decodium::msk144::RealtimeDecodeRequest request;
+      request.audio = dec_data.d2 + block_start;
+      request.nutc = nutc0;
+      request.tsec = static_cast<float> (block_start) / 12000.0f;
+      request.rxfreq = RxFreq;
+      request.ftol = ftol;
+      request.aggressive = m_config.aggressive ();
+      request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
+      request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
+      request.shorthandEnabled = bshmsg;
+      request.trainingEnabled = m_bTrain;
+      request.swlEnabled = bswl;
+      request.trainingEnabledState = &m_bTrain;
+      request.dataDir = QString::fromLocal8Bit (data_dir);
+      for (size_t i = 0; i < request.phaseEqCoefficients.size (); ++i) {
+        request.phaseEqCoefficients[i] =
+            i < static_cast<size_t> (m_phaseEqCoefficients.size ())
+              ? m_phaseEqCoefficients.at (static_cast<int> (i))
+              : 0.0;
+      }
+      QByteArray const native_line = decodium::msk144::decodeMsk144RealtimeBlock (request).toLatin1 ();
+      if (!native_line.isEmpty ()) {
+        std::memcpy (line, native_line.constData (), std::min<int> (native_line.size (), 79));
+        line[std::min<int> (native_line.size (), 79)] = '\0';
+      }
+    }
+  }
 
   if(bmsk144 and (line[0]!=0)) {
     QString message {QString::fromLatin1 (line)};
@@ -5543,12 +5610,8 @@ void MainWindow::fastSink(qint64 frames)
              (pounce && text.contains(" CQ ") && !txLog.contains(deCall) && m_config.Wait_features_enabled()) or
              (m_bCallingCQ && text.contains(" " + m_config.my_callsign() + " ") && !text.contains("73 "))
                                                                     )) {
-            double utch=0.0;
-            int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
-            azdist_(const_cast <char *> ((m_config.my_grid () + "      ").left (6).toLatin1().constData()),
-                    const_cast <char *> ((deGrid + "      ").left (6).toLatin1().constData()),&utch,
-                    &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,6,6);
-            Dpoints=nDkm;
+            GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), deGrid, 0.0);
+            Dpoints=geo.km;
             if (!deGrid.contains(grid_regexp)) Dpoints=1;
             if(Dpoints>maxDPoints) {
                 maxDPoints=Dpoints;
@@ -5638,24 +5701,20 @@ void MainWindow::fastSink(qint64 frames)
         QString deGrid;
         decodedtext.deCallAndGrid(deCall,deGrid);
         if ((m_config.showDistance() || m_config.showAzimuth()) && deGrid.contains(grid_regexp)) {
-            double utch=0.0;
-            int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
             QString my_Grid = m_config.my_grid();
             if (my_Grid.length() < 5) my_Grid = m_config.my_grid().left(4)+"mm";
             QString de_Grid= deGrid.left(4)+"mm";
-            azdist_(const_cast <char *> (my_Grid.toLatin1().constData()),
-                    const_cast <char *> (de_Grid.toLatin1().constData()),&utch,
-                    &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+            GeoDistanceInfo const geo = geo_distance (my_Grid, de_Grid, 0.0);
             if (m_config.showDistance()) {
-                int nd=nDkm;
-                if(m_config.miles()) nd=nDmiles;
+                int nd=geo.km;
+                if(m_config.miles()) nd=geo.miles;
                 distance = QString::number(nd);
                 if(m_config.miles()) distance += " mi";
                 if(!m_config.miles()) distance += " km";
             }
             if (m_config.showAzimuth()) {
                 if (distance.length()) distance += " / ";
-                distance += QString::number(nAz) + "°";
+                distance += QString::number(geo.az) + "°";
             }
         }
 
@@ -6298,6 +6357,7 @@ void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settin
   SpecOp nContest0=m_specOp;
   auto psk_on = m_config.spot_to_psk_reporter ();
   if (QDialog::Accepted == m_config.exec ()) {
+    refreshWriteableDataDirCache ();
     checkMSK144ContestType();
     if (m_config.my_callsign () != callsign) {
       m_baseCall = Radio::base_callsign (m_config.my_callsign ());
@@ -10062,20 +10122,16 @@ void MainWindow::ARRL_Digi_Update(DecodedText dt)
        // Transmitting station's call is not already in QMap "m_activeCall", or grid has changed.
        // Insert the call, grid, and associated fixed data into the list.
 
-       double utch=0.0;
-       int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
        QString my_Grid = m_config.my_grid();
        if (my_Grid.length() < 5) my_Grid = m_config.my_grid().left(4)+"mm";
        QString de_Grid= deGrid.left(4)+"mm";
-       azdist_(const_cast <char *> (my_Grid.toLatin1().constData()),
-               const_cast <char *> (de_Grid.toLatin1().constData()),&utch,
-               &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
-       int points=nDkm/500;
-       if(nDkm > 500*points) points += 1;
+       GeoDistanceInfo const geo = geo_distance (my_Grid, de_Grid, 0.0);
+       int points=geo.km/500;
+       if(geo.km > 500*points) points += 1;
        points += 1;
        ac.grid4=deGrid;
        ac.bands=".......";
-       ac.az=nAz;
+       ac.az=geo.az;
        ac.points=points;
        m_activeCall[deCall]=ac;
      }
@@ -10571,6 +10627,7 @@ void MainWindow::requestInProcessFst4Decode ()
   request.ntrperiod = qBound (15, int (dec_data.params.ntrperiod), 1800);
   request.audio.resize (request.ntrperiod * RX_SAMPLE_RATE);
   std::copy_n (dec_data.d2, request.audio.size (), request.audio.begin ());
+  request.dataDir = m_config.writeable_data_dir ().absolutePath ().toLocal8Bit ();
   request.nutc = qMax (0, int (dec_data.params.nutc));
   request.nqsoprogress = qBound (0, int (dec_data.params.nQSOProgress), 6);
   request.nfqso = qBound (0, int (dec_data.params.nfqso), 5000);
@@ -10681,7 +10738,6 @@ void MainWindow::requestInProcessJt9FastDecode ()
   request.trperiod = m_TRperiod;
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
   request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
-
   narg[0] = request.nutc;
   narg[1] = request.kdone;
   narg[2] = request.nsubmode;
@@ -10764,15 +10820,6 @@ void MainWindow::requestInProcessMsk144Decode ()
     return;
   }
 
-  if (!m_msk144DecodeWorker || !m_msk144DecodeThread.isRunning ()) {
-    static short int d2b[360000];
-    memcpy (d2b, dec_data.d2, 2 * 360000);
-    watcher3.setFuture (QtConcurrent::run (std::bind (fast_decode_, &d2b[0],
-        &narg[0], &m_TRperiod, &m_msg[0][0], dec_data.params.mycall,
-        dec_data.params.hiscall, (FCL)8000, (FCL)12, (FCL)12)));
-    return;
-  }
-
   decodium::msk144::DecodeRequest request;
   request.serial = ++m_msk144DecodeSerial;
   request.audio.resize (360000);
@@ -10808,6 +10855,11 @@ void MainWindow::requestInProcessMsk144Decode ()
   narg[12] = 0;
   narg[13] = -1;
   narg[14] = request.aggressive;
+
+  if (!m_msk144DecodeWorker || !m_msk144DecodeThread.isRunning ()) {
+    processFastDecodedRows (decodium::msk144::decodeMsk144Rows (request));
+    return;
+  }
 
   m_msk144DecodePending = true;
 
@@ -11813,24 +11865,20 @@ void MainWindow::readFromStdout()                             //readFromStdout
           QString deGrid;
           decodedtext.deCallAndGrid(deCall,deGrid);
           if ((m_config.showDistance() || m_config.showAzimuth()) && deGrid.contains(grid_regexp)) {
-            double utch=0.0;
-            int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
             QString my_Grid = m_config.my_grid();
             if (my_Grid.length() < 5) my_Grid = m_config.my_grid().left(4)+"mm";
             QString de_Grid= deGrid.left(4)+"mm";
-            azdist_(const_cast <char *> (my_Grid.toLatin1().constData()),
-                    const_cast <char *> (de_Grid.toLatin1().constData()),&utch,
-                    &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+            GeoDistanceInfo const geo = geo_distance (my_Grid, de_Grid, 0.0);
             if (m_config.showDistance()) {
-                int nd=nDkm;
-                if(m_config.miles()) nd=nDmiles;
+                int nd=geo.km;
+                if(m_config.miles()) nd=geo.miles;
                 distance = QString::number(nd);
                 if(m_config.miles()) distance += " mi";
                 if(!m_config.miles()) distance += " km";
             }
             if (m_config.showAzimuth()) {
                 if (distance.length()) distance += " / ";
-                distance += QString::number(nAz) + "°";
+                distance += QString::number(geo.az) + "°";
             }
           }
 
@@ -11972,12 +12020,8 @@ void MainWindow::readFromStdout()                             //readFromStdout
               (pounce && text.contains(" CQ ") && !txLog.contains(deCall) && m_config.Wait_features_enabled()) or
               (autoCqDirectedReplyAllowed && !text.contains("73 "))
                )) {
-            double utch=0.0;
-            int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
-            azdist_(const_cast <char *> ((m_config.my_grid () + "      ").left (6).toLatin1().constData()),
-                    const_cast <char *> ((deGrid + "      ").left (6).toLatin1().constData()),&utch,
-                    &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,6,6);
-            Dpoints=nDkm;
+            GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), deGrid, 0.0);
+            Dpoints=geo.km;
             if (!deGrid.contains(grid_regexp)) Dpoints=1;
             if(Dpoints>maxDPoints) {
                 maxDPoints=Dpoints;
@@ -13439,11 +13483,14 @@ void MainWindow::guiUpdate()
         QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
 
         if(m_mode=="MSK144") {
-          genmsk_128_90_(message, &ichk, msgsent, const_cast<int *> (itone),
-                         &m_currentMessageType, (FCL)37, (FCL)37);
+          auto const encoded = decodium::txmsg::encodeMsk144 (QString::fromLatin1 (message));
+          copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 144);
+          m_currentMessageType = encoded.messageType;
           if(m_restart) {
             int nsym=144;
-            if(itone[40]==-40) nsym=40;
+            if (encoded.messageType == 7 && encoded.tones.size () > 40 && encoded.tones.at (40) == -40) {
+              nsym=40;
+            }
             m_modulator->set_nsym(nsym);
           }
         }
@@ -13613,18 +13660,14 @@ void MainWindow::guiUpdate()
           }
         }
         if(m_mode=="FST4" or m_mode=="FST4W") {
-          int ichk=0;
-          int iwspr=0;
-          char fst4msgbits[101];
-          QString wmsg;
+          QString fst4Message = QString::fromLatin1 (message, 37);
           if(m_mode=="FST4W") {
-            iwspr = 1;
-            wmsg=WSPR_message();
-            ba=wmsg.toLatin1();
+            fst4Message = WSPR_message();
+            ba=fst4Message.toLatin1();
             ba2msg(ba,message);
           }
-          genfst4_(message,&ichk,msgsent,const_cast<char *> (fst4msgbits),
-                   const_cast<int *>(itone), &iwspr, (FCL)37, (FCL)37);
+          auto const encoded = decodium::txmsg::encodeFst4 (fst4Message);
+          copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 160);
           int hmod=1;
           if(m_config.x2ToneSpacing()) hmod=2;
           if(m_config.x4ToneSpacing()) hmod=4;
@@ -13641,10 +13684,11 @@ void MainWindow::guiUpdate()
           float dfreq=hmod*fsample/nsps;
           float f0=ui->TxFreqSpinBox->value() - m_XIT + 1.5*dfreq;
           if(m_mode=="FST4W") f0=ui->WSPRfreqSpinBox->value() - m_XIT + 1.5*dfreq;
-          int nwave=(nsym+2)*nsps;
-          int icmplx=0;
-          gen_fst4wave_(const_cast<int *>(itone),&nsym,&nsps,&nwave,
-                        &fsample,&hmod,&f0,&icmplx,foxcom_.wave,foxcom_.wave);
+          auto const wave = decodium::txwave::generateFst4Wave (itone, nsym, nsps, fsample, hmod, f0);
+          std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+          std::copy_n (wave.constBegin (), qMin (wave.size (),
+                                                 static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]))),
+                       foxcom_.wave);
 
           QString t = QString::fromStdString(message).trimmed();
         }
@@ -14901,11 +14945,9 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
       int nAz = -1;
       int nDkm = -1;
       if (grid.contains(grid_regexp)) {
-        double utch=0.0;
-        int nEl,nDmiles,nHotAz,nHotABetter;
-        azdist_(const_cast <char *> ((m_config.my_grid () + "      ").left (6).toLatin1 ().constData ()),
-          const_cast <char *> ((grid + "      ").left(6).toLatin1 ().constData ()),&utch,
-          &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+        GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), grid, 0.0);
+        nAz = geo.az;
+        nDkm = geo.km;
       }
 
       //DX defined as not same continent
@@ -17689,18 +17731,15 @@ void MainWindow::on_dxGridEntry_textChanged (QString const& grid)
     }
     qint64 nsec = (QDateTime::currentMSecsSinceEpoch()/1000) % 86400;
     double utch=nsec/3600.0;
-    int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
-    azdist_(const_cast <char *> ((m_config.my_grid () + "      ").left (6).toLatin1().constData()),
-            const_cast <char *> ((m_hisGrid + "      ").left (6).toLatin1().constData()),&utch,
-            &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+    GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), m_hisGrid, utch);
     QString t;
-    int nd=nDkm;
-    if(m_config.miles()) nd=nDmiles;
+    int nd=geo.km;
+    if(m_config.miles()) nd=geo.miles;
     if(m_mode=="MSK144") {
-      if(nHotABetter==0)t = t.asprintf("Az: %d   B: %d   El: %d   %d",nAz,nHotAz,nEl,nd);
-      if(nHotABetter!=0)t = t.asprintf("Az: %d   A: %d   El: %d   %d",nAz,nHotAz,nEl,nd);
+      if(!geo.hotABetter)t = t.asprintf("Az: %d   B: %d   El: %d   %d",geo.az,geo.hotAz,geo.el,nd);
+      if(geo.hotABetter)t = t.asprintf("Az: %d   A: %d   El: %d   %d",geo.az,geo.hotAz,geo.el,nd);
     } else {
-      t = t.asprintf("Az: %d        %d",nAz,nd);
+      t = t.asprintf("Az: %d        %d",geo.az,nd);
     }
     if(m_config.miles()) t += " mi";
     if(!m_config.miles()) t += " km";
@@ -22350,11 +22389,9 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
     int nAz = -1;
     int nDkm = -1;
     if (grid.contains(grid_regexp)) {
-      double utch=0.0;
-      int nEl,nDmiles,nHotAz,nHotABetter;
-      azdist_(const_cast <char *> ((m_config.my_grid () + "      ").left (6).toLatin1 ().constData ()),
-          const_cast <char *> ((grid + "      ").left(6).toLatin1 ().constData ()),&utch,
-          &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+      GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), grid, 0.0);
+      nAz = geo.az;
+      nDkm = geo.km;
     }
 
     //DX defined as not same continent
@@ -22486,16 +22523,12 @@ void MainWindow::processWsprDecoderLine (QString const& inputLine)
       rxLine = t;
   }
   if(grid!="") {
-    double utch=0.0;
-    int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
-    azdist_(const_cast <char *> ((m_config.my_grid () + "      ").left (6).toLatin1 ().constData ()),
-            const_cast <char *> ((grid + "      ").left (6).toLatin1 ().constData ()),&utch,
-            &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+    GeoDistanceInfo const geo = geo_distance (m_config.my_grid (), grid, 0.0);
     QString t1;
     if(m_config.miles()) {
-      t1 = t1.asprintf("%7d",nDmiles);
+      t1 = t1.asprintf("%7d",geo.miles);
     } else {
-      t1 = t1.asprintf("%7d",nDkm);
+      t1 = t1.asprintf("%7d",geo.km);
     }
     rxLine += t1;
   }
@@ -25229,7 +25262,6 @@ void MainWindow::on_echoButton_clicked()
 }
 
 void MainWindow::sfox_tx() {
-  auto fname{QDir::toNativeSeparators(m_config.writeable_data_dir().absoluteFilePath("sfox_1.dat")).toLocal8Bit()};
   QString ckey{"OTP:000000"};
   LOG_INFO(QString("sfox_tx: OTP code is %1").arg(foxOTPcode()));
 #ifdef FOX_OTP
@@ -25256,8 +25288,11 @@ void MainWindow::sfox_tx() {
       }
   }
 #endif
-  sftx_sub_(ckey.toLatin1().constData(), (FCL)ckey.size());
-  sfox_wave_gfsk_();
+  if (!decodium::txwave::generateSuperFoxTx (ckey))
+    {
+      showStatusMessage (tr ("SuperFox TX generation failed."));
+      LOG_INFO(QStringLiteral("SuperFox TX generation failed for %1").arg (ckey));
+    }
 }
 
 void MainWindow::on_pb15A_clicked()

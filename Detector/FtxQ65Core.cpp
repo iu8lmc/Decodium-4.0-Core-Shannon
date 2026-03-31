@@ -3,20 +3,30 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <vector>
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
+extern "C"
+{
+#include "lib/qra/q65/q65.h"
+#include "lib/qra/q65/qra15_65_64_irr_e23.h"
+}
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 extern "C"
 {
 void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
 void ftx_q65_ap_c (int* nqsoprogress, int* ipass, int* ncontest, int* lapcqonly,
                    int apsym0[], int aph10[], int apmask[], int apsymbols[], int* iaptype);
-void q65_intrinsics_ff_ (float s3[], int* submode, float* b90ts,
-                         int* fading_model, float s3prob[]);
-void q65_dec_ (float s3[], float s3prob[], int apmask[], int apsymbols[],
-               int* maxiters, float* esnodb, int xdec[], int* rc);
-void q65_dec_fullaplist_ (float s3[], float s3prob[], int codewords[],
-                          int* ncw, float* esnodb, int xdec[], float* plog, int* rc);
 void legacy_pack77_unpack_c (char const c77[77], int received, char msgsent[37], bool* success);
 }
 
@@ -36,6 +46,26 @@ constexpr int kQ65ApPacked {13};
 constexpr int kQ65SpecMaxFft {20736};
 constexpr int kQ65SpecSyncCount {22};
 constexpr float kQ65TwoPi {6.28318530717958647692f};
+
+q65_codec_ds& shared_q65_codec ()
+{
+  static q65_codec_ds codec {};
+  static std::once_flag once;
+  std::call_once (once, [] {
+    if (q65_init (&codec, &qra15_65_64_irr_e23) < 0)
+      {
+        std::fprintf (stderr, "error in q65_init()\n");
+        std::abort ();
+      }
+  });
+  return codec;
+}
+
+std::mutex& shared_q65_codec_mutex ()
+{
+  static std::mutex mutex;
+  return mutex;
+}
 
 inline float db_scale (float value)
 {
@@ -267,6 +297,77 @@ void spec64_impl (std::complex<float> const* c0, int npts, int nsps, int mode_q6
         }
     }
 }
+
+}
+
+extern "C" void q65_enc_ (int x[], int y[])
+{
+  std::lock_guard<std::mutex> lock {shared_q65_codec_mutex ()};
+  q65_codec_ds& codec = shared_q65_codec ();
+  q65_encode (&codec, y, x);
+}
+
+extern "C" void q65_intrinsics_ff_ (float s3[], int* submode, float* b90ts,
+                                    int* fading_model, float s3prob[])
+{
+  std::lock_guard<std::mutex> lock {shared_q65_codec_mutex ()};
+  q65_codec_ds& codec = shared_q65_codec ();
+  if (q65_intrinsics_fastfading (&codec, s3prob, s3, *submode, *b90ts, *fading_model) < 0)
+    {
+      std::fprintf (stderr, "error in q65_intrinsics()\n");
+      std::abort ();
+    }
+}
+
+extern "C" void q65_dec_ (float s3[], float s3prob[], int apmask[], int apsymbols[],
+                          int* maxiters, float* esnodb, int xdec[], int* rc)
+{
+  std::lock_guard<std::mutex> lock {shared_q65_codec_mutex ()};
+  q65_codec_ds& codec = shared_q65_codec ();
+  int ydec[kQ65PayloadColumns] {};
+  float esnodb_local = 0.0f;
+
+  *rc = q65_decode (&codec, ydec, xdec, s3prob, apmask, apsymbols, *maxiters);
+  *esnodb = 0.0f;
+  if (*rc < 0)
+    {
+      return;
+    }
+
+  if (q65_esnodb_fastfading (&codec, &esnodb_local, ydec, s3) < 0)
+    {
+      std::fprintf (stderr, "error in q65_esnodb_fastfading()\n");
+      std::abort ();
+    }
+  *esnodb = esnodb_local;
+}
+
+extern "C" void q65_dec_fullaplist_ (float s3[], float s3prob[], int codewords[],
+                                     int* ncw, float* esnodb, int xdec[], float* plog, int* rc)
+{
+  std::lock_guard<std::mutex> lock {shared_q65_codec_mutex ()};
+  q65_codec_ds& codec = shared_q65_codec ();
+  int ydec[kQ65PayloadColumns] {};
+  float esnodb_local = 0.0f;
+
+  *rc = q65_decode_fullaplist (&codec, ydec, xdec, s3prob, codewords, *ncw);
+  *plog = q65_llh;
+  *esnodb = 0.0f;
+  if (*rc < 0)
+    {
+      return;
+    }
+
+  if (q65_esnodb_fastfading (&codec, &esnodb_local, ydec, s3) < 0)
+    {
+      std::fprintf (stderr, "error in q65_esnodb_fastfading()\n");
+      std::abort ();
+    }
+  *esnodb = esnodb_local;
+}
+
+namespace
+{
 }
 
 extern "C" void ftx_q65_bzap_c (float s3[], int* ll)

@@ -29,7 +29,6 @@ contains
       nfa,nfb,nsubmode,ndeep,ntrperiod,nexp_decode,ntol)
 
    use timer_module, only: timer
-   use ftx_pack77_c_api, only: ftx_pack77_unpack
    include 'fst280/fst280_params.f90'
    parameter (MAXCAND=100)
    class(fst280_decoder), intent(inout) :: this

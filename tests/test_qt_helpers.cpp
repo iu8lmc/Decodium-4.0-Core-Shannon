@@ -2,29 +2,43 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QtEndian>
 #include <array>
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstring>
 #include <random>
 #include <vector>
 
 #include <fftw3.h>
 
+#include "Detector/FST4DecodeWorker.hpp"
+#include "Detector/MSK144DecodeWorker.hpp"
 #include "Modulator/FtxMessageEncoder.hpp"
 #include "Modulator/FtxWaveformGenerator.hpp"
 #include "commons.h"
+#include "helper_functions.h"
 #include "otpgenerator.h"
 #include "qt_helpers.hpp"
+
+using fortran_charlen_t_local = size_t;
 
 extern "C" void ftx_ft8_prepare_pass_c (int ndepth, int ipass, int ndecodes,
                                          float* syncmin, int* imetric,
                                          int* lsubtract, int* run_pass);
+extern "C" void genmsk_128_90_ (char* msg, int* ichk, char* msgsent, int* itone, int* itype,
+                                 size_t, size_t);
+extern "C" void ana64_ (short iwave[], int* npts, std::complex<float> c0[]);
+extern "C" void azdist_ (char* myGrid, char* hisGrid, double* utch, int* nAz, int* nEl,
+                         int* nDmiles, int* nDkm, int* nHotAz, int* nHotABetter,
+                         size_t, size_t);
 extern "C" void ftx_ft8_plan_decode_stage_c (int ndepth, int nzhsym, int ndec_early,
                                               int nagain, int* action_out, int* refine_out);
 extern "C" int ftx_ft8_should_bail_by_tseq_c (int ldiskdat, double tseq, double limit);
@@ -116,6 +130,37 @@ extern "C" void genft2_ (char* msg, int* ichk, char* msgsent, signed char* msgbi
 extern "C" void gen_ft2wave_ (int* itone, int* nsym, int* nsps, float* fsample, float* f0,
                                std::complex<float>* cwave, float* wave, int* icmplx, int* nwave);
 extern "C" void foxgenft2_ ();
+extern "C" void foxgen_ (bool* bSuperFox, char const* fname, fortran_charlen_t_local len);
+extern "C" void sftx_sub_ (char const* otp_key, fortran_charlen_t_local len);
+extern "C" void sfox_wave_gfsk_ ();
+extern "C" void sfox_ana_ (float* dd, int* npts, std::complex<float>* c0, int* npts2);
+extern "C" void sfox_remove_tone_ (std::complex<float>* c0, float* fsync);
+extern "C" void sfox_gen_gfsk_ (int* idat, float* f0, int* isync, int* itone, std::complex<float>* cdat);
+extern "C" void qpc_sync_ (std::complex<float>* crcvd0, float* fsample, int* isync, float* fsync,
+                           float* ftol, float* f2, float* t2, float* snrsync);
+extern "C" void qpc_likelihoods2_ (float* py, float* s3, float* EsNo, float* No);
+extern "C" void qpc_snr_ (float* s3, signed char* y, float* snr);
+extern "C" void qpc_encode (unsigned char* y, unsigned char const* x);
+extern "C" int ftx_superfox_unpack_lines_c (unsigned char const* xdec, int use_otp,
+                                            char* lines_out, int line_stride, int max_lines);
+extern "C" int ftx_superfox_analytic_c (float const* dd, int npts, float* real_out, float* imag_out);
+extern "C" int ftx_superfox_remove_tone_c (float* real_io, float* imag_io, int npts, float fsync);
+extern "C" int ftx_superfox_qpc_sync_c (float const* real_in, float const* imag_in, int npts,
+                                        float fsync, float ftol, float* f2_out, float* t2_out,
+                                        float* snrsync_out);
+extern "C" int ftx_superfox_qpc_likelihoods2_c (float const* s3, int rows, int cols,
+                                                float EsNo, float No, float* py_out);
+extern "C" int ftx_superfox_qpc_snr_c (float const* s3, int rows, int cols,
+                                       unsigned char const* y, float* snr_out);
+extern "C" int ftx_superfox_qpc_decode2_c (float const* real_in, float const* imag_in, int npts,
+                                           float fsync, float ftol, int ndepth, float dth, float damp,
+                                           unsigned char* xdec_out, int* crc_ok_out,
+                                           float* snrsync_out, float* fbest_out,
+                                           float* tbest_out, float* snr_out);
+extern "C" int ftx_superfox_decode_lines_c (short const* iwave, int nfqso, int ntol,
+                                            char* lines_out, int line_stride, int max_lines,
+                                            int* nsnr_out, float* freq_out, float* dt_out);
+extern "C" int ftx_q65_ana64_c (short const* iwave, int npts, float* real_out, float* imag_out);
 extern "C" int ftx_encode174_91_message77_c (signed char const* message77,
                                              signed char* codeword_out);
 extern "C" void ftx_ft8a7_measure_candidate_c (float const* s8, int rows, int cols,
@@ -202,11 +247,61 @@ extern "C" void ftx_ft4_bitmetrics_c (std::complex<float> const* cd, float* bitm
                                       int* badsync);
 extern "C" void ftx_ft4_bitmetrics_ref_c (std::complex<float> const* cd, float* bitmetrics,
                                           int* badsync);
-using fortran_charlen_t_local = size_t;
 extern "C" void genft4_ (char* msg, int* ichk, char* msgsent, signed char msgbits[],
                          int itone[], fortran_charlen_t_local, fortran_charlen_t_local);
 extern "C" void gen_ft4wave_ (int itone[], int* nsym, int* nsps, float* fsample, float* f0,
                               std::complex<float>* cwave, float wave[], int* icmplx, int* nwave);
+extern "C" void genfst4_ (char* msg, int* ichk, char* msgsent, signed char msgbits[],
+                          int itone[], int* iwspr, fortran_charlen_t_local, fortran_charlen_t_local);
+extern "C" void gen_fst4wave_ (int itone[], int* nsym, int* nsps, int* nwave, float* fsample,
+                               int* hmod, float* f0, int* icmplx, std::complex<float>* cwave,
+                               float wave[]);
+extern "C" void get_crc24_ (signed char mc[], int* len, int* ncrc);
+extern "C" void fst4_async_decode_ (short iwave[], int* nutc, int* nqsoprogress, int* nfa, int* nfb,
+                                    int* nfqso, int* ndepth, int* ntrperiod, int* nexp_decode,
+                                    int* ntol, float* emedelay, int* nagain, int* lapcqonly,
+                                    char mycall[], char hiscall[], int* iwspr, int* lprinthash22,
+                                    int snrs[], float dts[], float freqs[], int naps[], float quals[],
+                                    signed char bits77[], char decodeds[], float fmids[],
+                                    float w50s[], int* nout,
+                                    fortran_charlen_t_local, fortran_charlen_t_local,
+                                    fortran_charlen_t_local);
+extern "C" void blanker_ (short iwave[], int* nz, int* ndropmax, int* npct, std::complex<float> c_bigfft[]);
+extern "C" void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
+extern "C" void pctile_ (float x[], int* npts, int* npct, float* xpct);
+extern "C" void polyfit_ (double x[], double y[], double sigmay[], int* npts, int* nterms, int* mode,
+                          double a[], double* chisqr);
+extern "C" void __fst4_decode_MOD_get_candidates_fst4 (std::complex<float> c_bigfft[], int* nfft1,
+                                                        int* nsps, int* hmod, float* fs, float* fa, float* fb,
+                                                        int* nfa, int* nfb, float* minsync,
+                                                        int* ncand, float candidates[]);
+extern "C" void __fst4_decode_MOD_fst4_downsample (std::complex<float> c_bigfft[], int* nfft1,
+                                                    int* ndown, float* f0, float* sigbw,
+                                                    std::complex<float> c1[]);
+extern "C" void __fst4_decode_MOD_fst4_sync_search (std::complex<float> c2[], int* nfft2,
+                                                     int* hmod, float* fs2, int* nss, int* ntrperiod,
+                                                     int* nsyncoh, float* emedelay,
+                                                     float* sbest, float* fcbest, int* isbest);
+extern "C" void ftx_fst4_decode_and_emit_params_c (short const* iwave, params_block_t const* params,
+                                                   char const* temp_dir, int* decoded_count);
+extern "C" int ftx_fst4_get_candidates_c (std::complex<float> const* bigfft, int nfft1, int nsps,
+                                          float fs, float fa, float fb, int nfa, int nfb,
+                                          float minsync, float* candidates_out, int max_candidates);
+extern "C" int ftx_fst4_downsample_c (std::complex<float> const* bigfft, int nfft1, int ndown,
+                                      int nsps, float fs, float f0, std::complex<float>* out,
+                                      int out_size);
+extern "C" int ftx_fst4_sync_search_c (std::complex<float> const* c2, int nfft2, int nsps,
+                                       int ndown, int ntrperiod, float emedelay,
+                                       float* sbest_out, float* fcbest_out, int* isbest_out);
+extern "C" int ftx_fst4_debug_first_candidate_c (short const* audio, int audio_size,
+                                                 int ntrperiod, int ndepth,
+                                                 int nfa_in, int nfb_in, int nfqso,
+                                                 int ntol, float emedelay,
+                                                 char const* mycall_in, char const* hiscall_in,
+                                                 int* stage_out, int* badsync_out,
+                                                 int* nharderrors_out, int* iaptype_out,
+                                                 char msg_out[37]);
+extern "C" void ftx_fst4_reset_runtime_state_c ();
 extern "C" void ftx_ft4_decode_c (short const* iwave, int* nqsoprogress, int* nfqso, int* nfa, int* nfb,
                                   int* ndepth, int* lapcqonly, int* ncontest,
                                   char const* mycall, char const* hiscall,
@@ -223,6 +318,11 @@ extern "C" void ft2_async_decode_ (short iwave[], int* nqsoprogress, int* nfqso,
                                    signed char bits77[], char decodeds[], int* nout,
                                    fortran_charlen_t_local, fortran_charlen_t_local,
                                    fortran_charlen_t_local);
+extern "C" void mskrtd_ (short id2[], int* nutc0, float* tsec, int* ntol, int* nrxfreq, int* ndepth,
+                         char* mycall, char* hiscall, bool* bshmsg, bool* btrain,
+                         double const pcoeffs[], bool* bswl, char* datadir, char* line,
+                         fortran_charlen_t_local, fortran_charlen_t_local,
+                         fortran_charlen_t_local, fortran_charlen_t_local);
 extern "C" void ft2_triggered_decode_ (short iwave[], int* nqsoprogress, int* nfqso, int* nfa, int* nfb,
                                        int* ndepth, int* ncontest, char const* mycall, char const* hiscall,
                                        char outlines[], int* nout,
@@ -253,6 +353,532 @@ constexpr int kFt2Codeword {174};
 constexpr int kFt2Bits {77};
 constexpr int kFt2DecodedChars {37};
 constexpr int kFt2MaxLines {100};
+constexpr int kFst4DecodedChars {37};
+constexpr int kFst4MaxLines {200};
+constexpr int kSuperFoxSampleCount {15 * 12000};
+constexpr int kMsk144BlockSize {7168};
+constexpr int kMsk144StepSize {kMsk144BlockSize / 2};
+constexpr int kMsk144SampleRate {12000};
+constexpr int kMsk144MaxLines {50};
+
+struct WavFixture
+{
+  int sampleRate {0};
+  QVector<short> samples;
+};
+
+QByteArray to_fortran_field_local (QByteArray value, int width);
+QString build_fst4_row_reference (int nutc, int snr, float dt, float freq,
+                                  int nap, float qual, char const* decodeds, int index,
+                                  int ntrperiod, float fmid, float w50);
+
+WavFixture read_pcm16_mono_wav (QString const& fileName)
+{
+  QFile file {fileName};
+  if (!file.open (QIODevice::ReadOnly))
+    {
+      return {};
+    }
+
+  QByteArray const blob = file.readAll ();
+  if (blob.size () < 12 || blob.mid (0, 4) != "RIFF" || blob.mid (8, 4) != "WAVE")
+    {
+      return {};
+    }
+
+  bool haveFmt = false;
+  bool haveData = false;
+  quint16 audioFormat = 0;
+  quint16 channels = 0;
+  quint32 sampleRate = 0;
+  quint16 bitsPerSample = 0;
+  QByteArray dataChunk;
+
+  int pos = 12;
+  while (pos + 8 <= blob.size ())
+    {
+      QByteArray const chunkId = blob.mid (pos, 4);
+      quint32 const chunkSize = qFromLittleEndian<quint32> (
+          reinterpret_cast<uchar const*> (blob.constData () + pos + 4));
+      pos += 8;
+      if (pos + static_cast<int> (chunkSize) > blob.size ())
+        {
+          return {};
+        }
+
+      if (chunkId == "fmt ")
+        {
+          if (chunkSize < 16)
+            {
+              return {};
+            }
+          auto const* fmt = reinterpret_cast<uchar const*> (blob.constData () + pos);
+          audioFormat = qFromLittleEndian<quint16> (fmt);
+          channels = qFromLittleEndian<quint16> (fmt + 2);
+          sampleRate = qFromLittleEndian<quint32> (fmt + 4);
+          bitsPerSample = qFromLittleEndian<quint16> (fmt + 14);
+          haveFmt = true;
+        }
+      else if (chunkId == "data")
+        {
+          dataChunk = blob.mid (pos, static_cast<int> (chunkSize));
+          haveData = true;
+        }
+
+      pos += static_cast<int> ((chunkSize + 1u) & ~1u);
+    }
+
+  if (!haveFmt || !haveData || audioFormat != 1u || channels != 1u || bitsPerSample != 16u)
+    {
+      return {};
+    }
+
+  int const sampleCount = dataChunk.size () / 2;
+  QVector<short> samples (sampleCount);
+  auto const* raw = reinterpret_cast<uchar const*> (dataChunk.constData ());
+  for (int i = 0; i < sampleCount; ++i)
+    {
+      samples[i] = static_cast<short> (qFromLittleEndian<qint16> (raw + 2 * i));
+    }
+
+  WavFixture fixture;
+  fixture.sampleRate = static_cast<int> (sampleRate);
+  fixture.samples = std::move (samples);
+  return fixture;
+}
+
+QVector<short> render_fst4_pcm_reference (QString const& message, int tr_seconds, bool wspr_hint)
+{
+  int nsps = 0;
+  if (tr_seconds == 15) nsps = 720;
+  if (tr_seconds == 30) nsps = 1680;
+  if (tr_seconds == 60) nsps = 3888;
+  if (tr_seconds == 120) nsps = 8200;
+  if (tr_seconds == 300) nsps = 21504;
+  if (tr_seconds == 900) nsps = 66560;
+  if (tr_seconds == 1800) nsps = 134400;
+  if (nsps == 0)
+    {
+      return {};
+    }
+
+  QByteArray fixed = message.leftJustified (37, QLatin1Char {' '}, true).left (37).toLatin1 ();
+  std::array<char, 38> msg {};
+  std::array<char, 38> msgsent {};
+  std::array<signed char, 101> msgbits {};
+  std::array<int, 160> tones {};
+  std::copy_n (fixed.constData (), 37, msg.data ());
+  int ichk = 0;
+  int iwspr = wspr_hint ? 1 : 0;
+  genfst4_ (msg.data (), &ichk, msgsent.data (), msgbits.data (), tones.data (), &iwspr,
+            static_cast<fortran_charlen_t_local> (37), static_cast<fortran_charlen_t_local> (37));
+
+  int nsym = 160;
+  int nwave = (nsym + 2) * nsps;
+  int hmod = 1;
+  int icmplx = 0;
+  float fsample = 12000.0f;
+  float baud = fsample / static_cast<float> (nsps);
+  float f0 = 1500.0f + 1.5f * static_cast<float> (hmod) * baud;
+  QVector<float> wave (nwave, 0.0f);
+  gen_fst4wave_ (tones.data (), &nsym, &nsps, &nwave, &fsample, &hmod, &f0, &icmplx,
+                 nullptr, wave.data ());
+
+  int const nmax = tr_seconds * 12000;
+  QVector<float> shifted (nmax, 0.0f);
+  int const offset = (tr_seconds == 15) ? 6000 : 12000;
+  int const copy = qMax (0, qMin (wave.size (), shifted.size () - offset));
+  for (int i = 0; i < copy; ++i)
+    {
+      shifted[offset + i] = wave.at (i);
+    }
+
+  float peak = 0.0f;
+  for (float sample : shifted)
+    {
+      peak = std::max (peak, std::fabs (sample));
+    }
+  if (peak <= 0.0f)
+    {
+      return QVector<short> (nmax, 0);
+    }
+
+  float const scale = 32766.9f / peak;
+  QVector<short> pcm (nmax, 0);
+  for (int i = 0; i < nmax; ++i)
+    {
+      pcm[i] = static_cast<short> (std::lround (scale * shifted.at (i)));
+    }
+  return pcm;
+}
+
+QStringList decode_fst4_rows_async_export_reference (decodium::fst4::DecodeRequest const& request)
+{
+  QVector<short> audio = request.audio;
+  if (audio.isEmpty ())
+    {
+      return {};
+    }
+
+  std::array<int, kFst4MaxLines> snrs {};
+  std::array<float, kFst4MaxLines> dts {};
+  std::array<float, kFst4MaxLines> freqs {};
+  std::array<int, kFst4MaxLines> naps {};
+  std::array<float, kFst4MaxLines> quals {};
+  std::array<signed char, 77 * kFst4MaxLines> bits77 {};
+  std::array<char, kFst4DecodedChars * kFst4MaxLines> decodeds {};
+  std::array<float, kFst4MaxLines> fmids {};
+  std::array<float, kFst4MaxLines> w50s {};
+
+  int nutc = request.nutc;
+  int nqsoprogress = request.nqsoprogress;
+  int nfa = request.nfa;
+  int nfb = request.nfb;
+  int nfqso = request.nfqso;
+  int ndepth = request.ndepth;
+  int ntrperiod = request.ntrperiod;
+  int nexp_decode = request.nexp_decode;
+  int ntol = request.ntol;
+  float emedelay = request.emedelay;
+  int nagain = request.nagain;
+  int lapcqonly = request.lapcqonly;
+  int iwspr = request.iwspr;
+  int lprinthash22 = request.lprinthash22;
+  int nout = 0;
+
+  QByteArray mycall = to_fortran_field_local (request.mycall, 12);
+  QByteArray hiscall = to_fortran_field_local (request.hiscall, 12);
+  fst4_async_decode_ (audio.data (), &nutc, &nqsoprogress, &nfa, &nfb, &nfqso, &ndepth, &ntrperiod,
+                      &nexp_decode, &ntol, &emedelay, &nagain, &lapcqonly, mycall.data (),
+                      hiscall.data (), &iwspr, &lprinthash22, snrs.data (), dts.data (),
+                      freqs.data (), naps.data (), quals.data (), bits77.data (), decodeds.data (),
+                      fmids.data (), w50s.data (), &nout,
+                      static_cast<fortran_charlen_t_local> (12),
+                      static_cast<fortran_charlen_t_local> (12),
+                      static_cast<fortran_charlen_t_local> (kFst4DecodedChars * kFst4MaxLines));
+
+  QStringList rows;
+  for (int i = 0; i < qBound (0, nout, kFst4MaxLines); ++i)
+    {
+      rows << build_fst4_row_reference (request.nutc, snrs[static_cast<size_t> (i)],
+                                        dts[static_cast<size_t> (i)], freqs[static_cast<size_t> (i)],
+                                        naps[static_cast<size_t> (i)], quals[static_cast<size_t> (i)],
+                                        decodeds.data (), i, request.ntrperiod,
+                                        fmids[static_cast<size_t> (i)], w50s[static_cast<size_t> (i)]);
+    }
+  return rows;
+}
+
+QByteArray to_fortran_field_local (QByteArray value, int width)
+{
+  value = value.left (width);
+  if (value.size () < width)
+    {
+      value.append (QByteArray (width - value.size (), ' '));
+    }
+  return value;
+}
+
+QString trim_fortran_line_local (char const* data, int width)
+{
+  QByteArray field {data, width};
+  while (!field.isEmpty () && (field.back () == ' ' || field.back () == '\0'))
+    {
+      field.chop (1);
+    }
+  return QString::fromLatin1 (field);
+}
+
+QString build_fst4_row_reference (int nutc, int snr, float dt, float freq,
+                                  int nap, float qual, char const* decodeds, int index,
+                                  int ntrperiod, float fmid, float w50)
+{
+  QByteArray decoded {decodeds + index * kFst4DecodedChars, kFst4DecodedChars};
+  while (!decoded.isEmpty () && (decoded.back () == ' ' || decoded.back () == '\0'))
+    {
+      decoded.chop (1);
+    }
+  QString text = QString::fromLatin1 (decoded.constData (), decoded.size ());
+  if (text.size () < kFst4DecodedChars)
+    {
+      text = text.leftJustified (kFst4DecodedChars, QLatin1Char {' '});
+    }
+  text = text.left (kFst4DecodedChars);
+  if (nap != 0 && qual < 0.17f && !text.isEmpty ())
+    {
+      text[kFst4DecodedChars - 1] = QLatin1Char {'?'};
+    }
+
+  QString const utcPrefix = nutc > 0
+      ? QString::number (nutc).rightJustified (nutc > 9999 ? 6 : 4, QLatin1Char {'0'})
+      : QString {};
+  QString const annot = nap != 0
+      ? QStringLiteral ("a%1").arg (nap).leftJustified (2, QLatin1Char {' '})
+      : QStringLiteral ("  ");
+  QString row = QStringLiteral ("%1%2%3 `  %4 %5")
+      .arg (snr, 4)
+      .arg (dt, 5, 'f', 1)
+      .arg (qRound (freq), 5)
+      .arg (text)
+      .arg (annot);
+  if (ntrperiod >= 60 && fmid != -999.0f)
+    {
+      row += QStringLiteral ("%1").arg (w50, 6, 'f', w50 < 0.95f ? 3 : 2);
+    }
+  if (!utcPrefix.isEmpty ())
+    {
+      row.prepend (utcPrefix);
+    }
+  return row;
+}
+
+bool msk144_row_in_pick_window_local (QString const& row, decodium::msk144::DecodeRequest const& request)
+{
+  if (request.npick <= 0)
+    {
+      return true;
+    }
+  if (row.size () < 15)
+    {
+      return false;
+    }
+
+  bool ok = false;
+  double const tdec = row.mid (10, 5).trimmed ().toDouble (&ok);
+  if (!ok)
+    {
+      return false;
+    }
+
+  double const t0 = std::max (0, request.t0_ms) * 0.001;
+  double const t1 = std::max (request.t0_ms, request.t1_ms) * 0.001;
+  return tdec >= t0 && tdec <= t1;
+}
+
+QVector<short> make_clean_msk144_wave (QString const& message, int npts, float freq = 1500.0f)
+{
+  if (npts <= 0)
+    {
+      return {};
+    }
+
+  decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeMsk144 (message);
+  if (!encoded.ok || encoded.tones.isEmpty ())
+    {
+      return {};
+    }
+
+  int nsym = 144;
+  if (encoded.tones.size () > 40 && encoded.tones.at (40) < 0)
+    {
+      nsym = 40;
+    }
+  if (nsym <= 0)
+    {
+      return {};
+    }
+
+  constexpr double kTwoPi = 6.28318530717958647692;
+  constexpr double kBaud = 2000.0;
+  constexpr int kNsps = 6;
+  double const dphi0 = kTwoPi * (static_cast<double> (freq) - 0.25 * kBaud) / kMsk144SampleRate;
+  double const dphi1 = kTwoPi * (static_cast<double> (freq) + 0.25 * kBaud) / kMsk144SampleRate;
+  double phi = 0.0;
+
+  QVector<short> wave (npts, 0);
+  int const nreps = npts / (nsym * kNsps);
+  int index = 0;
+  for (int rep = 0; rep < nreps; ++rep)
+    {
+      for (int symbol = 0; symbol < nsym; ++symbol)
+        {
+          double const dphi = encoded.tones.at (symbol) == 0 ? dphi0 : dphi1;
+          for (int j = 0; j < kNsps && index < npts; ++j)
+            {
+              wave[index++] =
+                  static_cast<short> (qBound (-32767, qRound (30000.0 * std::cos (phi)), 32767));
+              phi = std::fmod (phi + dphi, kTwoPi);
+              if (phi < 0.0)
+                {
+                  phi += kTwoPi;
+                }
+            }
+        }
+    }
+  return wave;
+}
+
+QStringList decode_msk144_rows_fortran_reference (decodium::msk144::DecodeRequest const& request)
+{
+  QStringList rows;
+  if (request.audio.size () < kMsk144BlockSize)
+    {
+      return rows;
+    }
+
+  int sample_count = request.audio.size ();
+  if (request.kdone > 0)
+    {
+      sample_count = std::min (sample_count, request.kdone);
+    }
+  if (request.trperiod > 0.0)
+    {
+      int const tr_samples = qMax (0, qRound (request.trperiod * kMsk144SampleRate));
+      if (tr_samples > 0)
+        {
+          sample_count = std::min (sample_count, tr_samples);
+        }
+    }
+  if (sample_count < kMsk144BlockSize)
+    {
+      return rows;
+    }
+
+  QByteArray mycall = to_fortran_field_local (request.mycall, 12);
+  QByteArray hiscall = to_fortran_field_local (request.hiscall, 12);
+  QByteArray datadir = QDir::currentPath ().toLocal8Bit ();
+  if (datadir.isEmpty ())
+    {
+      datadir = QByteArrayLiteral (".");
+    }
+  std::array<double, 5> pcoeffs {{0.0, 0.0, 0.0, 0.0, 0.0}};
+  bool const bshmsg = request.shorthandEnabled;
+  bool const btrain = request.trainingEnabled;
+  bool const bswl = request.swlEnabled;
+  int const max_lines = qBound (1, request.maxlines, kMsk144MaxLines);
+  int const ntol = qMax (0, request.ftol);
+  int const nrxfreq = qBound (0, request.rxfreq, 5000);
+  int const ndepth = qBound (0, request.aggressive, 10);
+
+  for (int offset = 0; offset + kMsk144BlockSize <= sample_count && rows.size () < max_lines;
+       offset += kMsk144StepSize)
+    {
+      std::array<short, kMsk144BlockSize> block {};
+      std::copy_n (request.audio.constData () + offset, block.size (), block.begin ());
+      std::array<char, 80> line {};
+      int nutc = request.nutc;
+      float tsec = static_cast<float> (offset) / static_cast<float> (kMsk144SampleRate);
+      int ntol_local = ntol;
+      int nrxfreq_local = nrxfreq;
+      int ndepth_local = ndepth;
+      bool bshmsg_local = bshmsg;
+      bool btrain_local = btrain;
+      bool bswl_local = bswl;
+      mskrtd_ (block.data (), &nutc, &tsec, &ntol_local, &nrxfreq_local, &ndepth_local,
+               mycall.data (), hiscall.data (), &bshmsg_local, &btrain_local,
+               pcoeffs.data (), &bswl_local, datadir.data (), line.data (),
+               static_cast<fortran_charlen_t_local> (mycall.size ()),
+               static_cast<fortran_charlen_t_local> (hiscall.size ()),
+               static_cast<fortran_charlen_t_local> (datadir.size ()),
+               static_cast<fortran_charlen_t_local> (line.size ()));
+      QString const row = trim_fortran_line_local (line.data (), static_cast<int> (line.size ()));
+      if (!row.isEmpty () && msk144_row_in_pick_window_local (row, request))
+        {
+          rows << row;
+        }
+    }
+
+  return rows;
+}
+
+QStringList decode_msk144_rows_native_realtime (decodium::msk144::DecodeRequest const& request)
+{
+  QStringList rows;
+  if (request.audio.size () < kMsk144BlockSize)
+    {
+      return rows;
+    }
+
+  int sample_count = request.audio.size ();
+  if (request.kdone > 0)
+    {
+      sample_count = std::min (sample_count, request.kdone);
+    }
+  if (request.trperiod > 0.0)
+    {
+      int const tr_samples = qMax (0, qRound (request.trperiod * kMsk144SampleRate));
+      if (tr_samples > 0)
+        {
+          sample_count = std::min (sample_count, tr_samples);
+        }
+    }
+  if (sample_count < kMsk144BlockSize)
+    {
+      return rows;
+    }
+
+  QString const data_dir = QDir::currentPath ().isEmpty () ? QStringLiteral (".") : QDir::currentPath ();
+  int const max_lines = qBound (1, request.maxlines, kMsk144MaxLines);
+  decodium::msk144::resetMsk144DecoderState ();
+
+  for (int offset = 0; offset + kMsk144BlockSize <= sample_count && rows.size () < max_lines;
+       offset += kMsk144StepSize)
+    {
+      decodium::msk144::RealtimeDecodeRequest live;
+      live.audio = request.audio.constData () + offset;
+      live.nutc = request.nutc;
+      live.tsec = static_cast<float> (offset) / static_cast<float> (kMsk144SampleRate);
+      live.rxfreq = request.rxfreq;
+      live.ftol = request.ftol;
+      live.aggressive = request.aggressive;
+      live.mycall = request.mycall;
+      live.hiscall = request.hiscall;
+      live.shorthandEnabled = request.shorthandEnabled;
+      live.trainingEnabled = request.trainingEnabled;
+      live.swlEnabled = request.swlEnabled;
+      live.dataDir = data_dir;
+      QString const row = decodium::msk144::decodeMsk144RealtimeBlock (live);
+      if (!row.isEmpty () && msk144_row_in_pick_window_local (row, request))
+        {
+          rows << row;
+        }
+    }
+
+  return rows;
+}
+
+std::vector<short> make_clean_superfox_wave (QString const& line, QString const& otpKey)
+{
+  std::array<unsigned char, 50> xin {};
+  if (!decodium::txwave::packSuperFoxMessage (line, otpKey, false, false, QString {}, &xin))
+    {
+      return {};
+    }
+
+  std::array<unsigned char, 128> y {};
+  qpc_encode (y.data (), xin.data ());
+  std::rotate (y.begin (), y.begin () + 1, y.end ());
+  y.back () = 0;
+
+  std::array<int, 127> chansym {};
+  for (int i = 0; i < 127; ++i)
+    {
+      chansym[static_cast<size_t> (i)] = y[static_cast<size_t> (i)];
+    }
+
+  std::array<int, 24> isync {{
+      1, 2, 4, 7, 11, 16, 22, 29, 37, 39, 42, 43,
+      45, 48, 52, 57, 63, 70, 78, 80, 83, 84, 86, 89}};
+  std::array<int, 151> itone {};
+  std::vector<std::complex<float>> cdat (kSuperFoxSampleCount, std::complex<float> {});
+  float f0 = 750.0f;
+  sfox_gen_gfsk_ (chansym.data (), &f0, isync.data (), itone.data (), cdat.data ());
+
+  int const shift = 6000;
+  std::vector<short> iwave (kSuperFoxSampleCount);
+  for (int i = 0; i < kSuperFoxSampleCount; ++i)
+    {
+      int src = i - shift;
+      if (src < 0)
+        {
+          src += kSuperFoxSampleCount;
+        }
+      float const sample = std::imag (cdat[static_cast<size_t> (src)]);
+      iwave[static_cast<size_t> (i)] = static_cast<short> (std::lround (32767.0f * sample));
+    }
+
+  return iwave;
+}
 
 QByteArray trim_fortran_field_local (char const* data, int width)
 {
@@ -611,6 +1237,921 @@ class TestQtHelpers
 public:
 
 private:
+  Q_SLOT void azdist_cpp_matches_fortran_reference ()
+  {
+    struct Case
+    {
+      QString myGrid;
+      QString hisGrid;
+      double utch;
+
+      Case (QString my_grid, QString his_grid, double utc_hours)
+        : myGrid {std::move (my_grid)}
+        , hisGrid {std::move (his_grid)}
+        , utch {utc_hours}
+      {
+      }
+    };
+
+    std::array<Case, 5> const cases {{
+        {QStringLiteral ("JM75FV"), QStringLiteral ("FM19"), 22.25},
+        {QStringLiteral ("JM75FV"), QStringLiteral ("CN88"), 5.75},
+        {QStringLiteral ("FN42"), QStringLiteral ("FN31"), 12.0},
+        {QStringLiteral ("QF56"), QStringLiteral ("BP40"), 9.5},
+        {QStringLiteral ("FN42"), QStringLiteral ("FN42"), 0.0},
+    }};
+
+    for (Case const& item : cases)
+      {
+        QByteArray my = item.myGrid.leftJustified (6, QLatin1Char {' '}, true).left (6).toLatin1 ();
+        QByteArray his = item.hisGrid.leftJustified (6, QLatin1Char {' '}, true).left (6).toLatin1 ();
+        double utch = item.utch;
+        int naz = -1;
+        int nel = -1;
+        int ndmiles = -1;
+        int ndkm = -1;
+        int nhotaz = -1;
+        int nhotabetter = -1;
+
+        azdist_ (my.data (), his.data (), &utch, &naz, &nel, &ndmiles, &ndkm, &nhotaz, &nhotabetter,
+                 static_cast<size_t> (6), static_cast<size_t> (6));
+
+        GeoDistanceInfo const geo = geo_distance (item.myGrid, item.hisGrid, item.utch);
+        QString const context = QStringLiteral ("%1 -> %2 @ %3h")
+                                    .arg (item.myGrid, item.hisGrid)
+                                    .arg (item.utch, 0, 'f', 2);
+        QVERIFY2 (geo.az == naz, qPrintable (QStringLiteral ("az mismatch: %1").arg (context)));
+        QVERIFY2 (geo.el == nel, qPrintable (QStringLiteral ("el mismatch: %1").arg (context)));
+        QVERIFY2 (geo.miles == ndmiles, qPrintable (QStringLiteral ("miles mismatch: %1").arg (context)));
+        QVERIFY2 (geo.km == ndkm, qPrintable (QStringLiteral ("km mismatch: %1").arg (context)));
+        if (ndkm >= 500)
+          {
+            QVERIFY2 (geo.hotAz == nhotaz,
+                      qPrintable (QStringLiteral ("hotAz mismatch: %1 cpp=%2 fort=%3")
+                                      .arg (context)
+                                      .arg (geo.hotAz)
+                                      .arg (nhotaz)));
+            QVERIFY2 (geo.hotABetter == (nhotabetter != 0),
+                      qPrintable (QStringLiteral ("hotABetter mismatch: %1").arg (context)));
+          }
+      }
+  }
+
+  Q_SLOT void msk144_encoder_matches_fortran_for_standard_and_free_text ()
+  {
+    auto compare = [] (QString const& message) {
+      QByteArray fixed = message.left (37).toLatin1 ();
+      if (fixed.size () < 37)
+        {
+          fixed.append (QByteArray (37 - fixed.size (), ' '));
+        }
+
+      std::array<char, 38> msg {};
+      std::array<char, 38> msgsent_fortran {};
+      std::array<int, 144> tones_fortran {};
+      int ichk = 0;
+      int itype = -1;
+      std::copy_n (fixed.constData (), 37, msg.data ());
+
+      genmsk_128_90_ (msg.data (), &ichk, msgsent_fortran.data (), tones_fortran.data (), &itype,
+                      static_cast<fortran_charlen_t_local> (37),
+                      static_cast<fortran_charlen_t_local> (37));
+
+      decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeMsk144 (message);
+      QVERIFY (encoded.ok);
+      QCOMPARE (encoded.messageType, 1);
+      QCOMPARE (encoded.msgsent, QByteArray (msgsent_fortran.data (), 37));
+      QCOMPARE (encoded.tones.size (), 144);
+      for (int i = 0; i < 144; ++i)
+        {
+          QCOMPARE (encoded.tones.at (i), tones_fortran[static_cast<size_t> (i)]);
+        }
+      QCOMPARE (itype, 1);
+    };
+
+    compare (QStringLiteral ("CQ K1ABC FN42"));
+    compare (QStringLiteral ("K1ABC W9XYZ -10"));
+    compare (QStringLiteral ("TNX BOB 73 GL"));
+
+    {
+      QString const message = QStringLiteral ("<K1ABC W9XYZ> R+03");
+      QByteArray fixed = message.left (37).toLatin1 ();
+      if (fixed.size () < 37)
+        {
+          fixed.append (QByteArray (37 - fixed.size (), ' '));
+        }
+
+      std::array<char, 38> msg {};
+      std::array<char, 38> msgsent_fortran {};
+      std::array<int, 144> tones_fortran {};
+      int ichk = 0;
+      int itype = -1;
+      std::copy_n (fixed.constData (), 37, msg.data ());
+      genmsk_128_90_ (msg.data (), &ichk, msgsent_fortran.data (), tones_fortran.data (), &itype,
+                      static_cast<size_t> (37), static_cast<size_t> (37));
+
+      decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeMsk144 (message);
+      QVERIFY (encoded.ok);
+      QCOMPARE (encoded.messageType, 7);
+      QCOMPARE (itype, 7);
+      QVERIFY2 (tones_fortran[40] == -40,
+                qPrintable (QStringLiteral ("expected shorthand marker at tone 40, got %1")
+                                .arg (tones_fortran[40])));
+      QCOMPARE (encoded.msgsent, QByteArray (msgsent_fortran.data (), 37));
+      QCOMPARE (encoded.tones.size (), 144);
+      for (int i = 0; i < 41; ++i)
+        {
+          QVERIFY2 (encoded.tones.at (i) == tones_fortran[static_cast<size_t> (i)],
+                    qPrintable (QStringLiteral ("shorthand tone mismatch at %1 cpp=%2 fort=%3")
+                                    .arg (i)
+                                    .arg (encoded.tones.at (i))
+                                    .arg (tones_fortran[static_cast<size_t> (i)])));
+        }
+    }
+
+    {
+      decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeMsk144 (QStringLiteral ("@1500"));
+      QVERIFY (encoded.ok);
+      QCOMPARE (encoded.messageType, 1);
+      QCOMPARE (encoded.tones.size (), 144);
+      QCOMPARE (encoded.tones.at (0), 1500);
+      for (int i = 1; i < encoded.tones.size (); ++i)
+        {
+          QCOMPARE (encoded.tones.at (i), 0);
+        }
+    }
+  }
+
+  Q_SLOT void fst4_encoder_matches_frozen_reference ()
+  {
+    auto check = [] (QString const& message, bool wspr_hint, QByteArray const& expected_msgsent,
+                     QByteArray const& expected_bits, QByteArray const& expected_tones) {
+      QByteArray fixed = message.leftJustified (37, QLatin1Char {' '}, true).left (37).toLatin1 ();
+      std::array<char, 38> msg {};
+      std::array<char, 38> msgsent {};
+      std::array<signed char, 101> msgbits {};
+      std::array<int, 160> tones {};
+      std::copy_n (fixed.constData (), 37, msg.data ());
+
+      int ichk = 0;
+      int iwspr = wspr_hint ? 1 : 0;
+      genfst4_ (msg.data (), &ichk, msgsent.data (), msgbits.data (), tones.data (), &iwspr,
+                static_cast<fortran_charlen_t_local> (37),
+                static_cast<fortran_charlen_t_local> (37));
+
+      QCOMPARE (QByteArray (msgsent.data (), 37), expected_msgsent);
+      QCOMPARE (iwspr, wspr_hint ? 1 : 0);
+      for (int i = 0; i < expected_tones.size (); ++i)
+        {
+          QCOMPARE (tones[static_cast<size_t> (i)], expected_tones.at (i) - '0');
+        }
+
+      decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeFst4 (message);
+      QVERIFY (encoded.ok);
+      QCOMPARE (encoded.msgsent, expected_msgsent);
+      QCOMPARE ((encoded.i3 == 0 && encoded.n3 == 6) ? 1 : 0, wspr_hint ? 1 : 0);
+      QCOMPARE (encoded.tones.size (), expected_tones.size ());
+      for (int i = 0; i < encoded.msgbits.size (); ++i)
+        {
+          QCOMPARE (encoded.msgbits.at (i), msgbits[static_cast<size_t> (i)] != 0 ? '\1' : '\0');
+        }
+      for (int i = 0; i < expected_tones.size (); ++i)
+        {
+          QCOMPARE (encoded.tones.at (i), expected_tones.at (i) - '0');
+        }
+      if (wspr_hint)
+        {
+          for (int i = 0; i < expected_bits.size (); ++i)
+            {
+              QCOMPARE (msgbits[static_cast<size_t> (i)],
+                        static_cast<signed char> (expected_bits.at (i) == '1'));
+            }
+          for (int i = expected_bits.size (); i < 101; ++i)
+            {
+              QCOMPARE (msgbits[static_cast<size_t> (i)], static_cast<signed char> (0));
+            }
+        }
+    };
+
+    check (QStringLiteral ("CQ K1ABC FN42"),
+           false,
+           QByteArrayLiteral ("CQ K1ABC FN42                        "),
+           QByteArrayLiteral (""),
+           QByteArrayLiteral ("0132102310331123303131102221131113022123103201223312331102103331311303320301013210233211322021033021030322331110002310320102320213022232310312132211310101321023"));
+
+    check (QStringLiteral ("K1ABC FN42 33"),
+           true,
+           QByteArrayLiteral ("K1ABC FN42 33                        "),
+           QByteArrayLiteral ("00001001101111011110001101010101000011001100101000011000110100111011110111"),
+           QByteArrayLiteral ("0132102300313221230211110020203301302123103201023221202011201333110020111321013210230223212312101133033221030333312310320101230013010112103132030110312101321023"));
+  }
+
+  Q_SLOT void fst4_waveform_matches_frozen_reference ()
+  {
+    struct Case
+    {
+      QString message;
+      int trSeconds;
+      bool wsprHint;
+      int offset;
+      std::array<short, 32> samples;
+    };
+
+    std::array<Case, 2> const cases {{
+      {QStringLiteral ("CQ K1ABC FN42"), 15, false, 6000,
+       {{0, 2, 10, 16, 0, -44, -90, -86, 0, 143, 249, 213, 0, -297, -487, -395,
+         0, 506, 802, 631, 0, -769, -1193, -921, 0, 1085, 1658, 1263, 0, -1452, -2195, -1655}}},
+      {QStringLiteral ("K1ABC FN42 33"), 120, true, 12000,
+       {{0, 0, 0, 0, 0, 0, -1, -1, 0, 1, 2, 2, 0, -2, -4, -3,
+         0, 4, 6, 5, 0, -6, -9, -7, 0, 9, 13, 10, 0, -11, -17, -13}}},
+    }};
+
+    for (Case const& item : cases)
+      {
+        QVector<short> const pcm = render_fst4_pcm_reference (item.message, item.trSeconds, item.wsprHint);
+        QVERIFY2 (pcm.size () >= item.offset + static_cast<int> (item.samples.size ()),
+                  qPrintable (QStringLiteral ("FST4 PCM too short for %1").arg (item.message)));
+        for (int i = 0; i < static_cast<int> (item.samples.size ()); ++i)
+          {
+            short const actual = pcm.at (item.offset + i);
+            short const expected = item.samples[static_cast<size_t> (i)];
+            QVERIFY2 (std::abs (int {actual} - int {expected}) <= 1,
+                      qPrintable (QStringLiteral ("FST4 PCM mismatch at %1 for %2: actual=%3 expected=%4")
+                                      .arg (i)
+                                      .arg (item.message)
+                                      .arg (actual)
+                                      .arg (expected)));
+          }
+      }
+  }
+
+  Q_SLOT void fst4_search_primitives_match_fortran_reference ()
+  {
+    QVector<short> audio = render_fst4_pcm_reference (QStringLiteral ("CQ K1ABC FN42"), 15, false);
+    QVERIFY (!audio.isEmpty ());
+
+    int nfft1 = 15 * RX_SAMPLE_RATE;
+    int nsps = 720;
+    int ndown = 18;
+    int nfft2 = nfft1 / ndown;
+    int nss = nsps / ndown;
+    int hmod = 1;
+    int ntrperiod = 15;
+    float fs = static_cast<float> (RX_SAMPLE_RATE);
+    float fs2 = fs / ndown;
+    float baud = fs / nsps;
+    float sigbw = 4.0f * baud;
+    float fa = 1500.0f + 1.5f * baud - 20.0f;
+    float fb = 1500.0f + 1.5f * baud + 20.0f;
+    int nfa = 1500 - 20 - 100;
+    int nfb = 1500 + 20 + 100;
+    float minsync = 1.15f;
+
+    std::vector<std::complex<float>> bigfft (static_cast<size_t> (nfft1 / 2 + 1));
+    int nz = nfft1;
+    int ndropmax = 1;
+    int npct = 0;
+    blanker_ (audio.data (), &nz, &ndropmax, &npct, bigfft.data ());
+    int ndim = 1;
+    int isign = -1;
+    int iform = 0;
+    four2a_ (bigfft.data (), &nfft1, &ndim, &isign, &iform);
+
+    std::array<float, 200 * 5> cand_ref {};
+    std::array<float, 200 * 5> cand_cpp {};
+    int ncand_ref = 0;
+    __fst4_decode_MOD_get_candidates_fst4 (bigfft.data (), &nfft1, &nsps,
+                                           &hmod, &fs, &fa, &fb,
+                                           &nfa, &nfb, &minsync,
+                                           &ncand_ref, cand_ref.data ());
+    int const ncand_cpp = ftx_fst4_get_candidates_c (bigfft.data (), nfft1, nsps, fs, fa, fb,
+                                                     nfa, nfb, minsync, cand_cpp.data (), 200);
+
+    QVERIFY (ncand_ref > 0);
+    QCOMPARE (ncand_cpp, ncand_ref);
+    for (int i = 0; i < std::min (ncand_ref, 3); ++i)
+      {
+        float const fc_ref = cand_ref[static_cast<size_t> (i)];
+        float const det_ref = cand_ref[static_cast<size_t> (i + 200)];
+        float const base_ref = cand_ref[static_cast<size_t> (i + 800)];
+        float const fc_cpp = cand_cpp[static_cast<size_t> (5 * i + 0)];
+        float const det_cpp = cand_cpp[static_cast<size_t> (5 * i + 1)];
+        float const base_cpp = cand_cpp[static_cast<size_t> (5 * i + 4)];
+        QVERIFY (std::fabs (fc_cpp - fc_ref) <= 1.0e-4f);
+        QVERIFY (std::fabs (det_cpp - det_ref) <= 1.0e-4f);
+        QVERIFY (std::fabs (base_cpp - base_ref) <= std::max (1.0e-3f, 0.05f * std::fabs (base_ref)));
+      }
+
+    float const f0 = cand_ref[0];
+    std::vector<std::complex<float>> c2_ref (static_cast<size_t> (nfft2));
+    std::vector<std::complex<float>> c2_cpp (static_cast<size_t> (nfft2));
+    float f0_arg = f0;
+    __fst4_decode_MOD_fst4_downsample (bigfft.data (), &nfft1, &ndown,
+                                       &f0_arg, &sigbw, c2_ref.data ());
+    QCOMPARE (ftx_fst4_downsample_c (bigfft.data (), nfft1, ndown, nsps, fs, f0, c2_cpp.data (), nfft2), nfft2);
+    float max_real_diff = 0.0f;
+    float max_imag_diff = 0.0f;
+    int max_index = -1;
+    for (int i = 0; i < nfft2; i += 97)
+      {
+        float const real_diff = std::fabs (c2_cpp[static_cast<size_t> (i)].real () - c2_ref[static_cast<size_t> (i)].real ());
+        float const imag_diff = std::fabs (c2_cpp[static_cast<size_t> (i)].imag () - c2_ref[static_cast<size_t> (i)].imag ());
+        if (real_diff > max_real_diff || imag_diff > max_imag_diff)
+          {
+            max_real_diff = std::max (max_real_diff, real_diff);
+            max_imag_diff = std::max (max_imag_diff, imag_diff);
+            max_index = i;
+          }
+      }
+    QVERIFY2 (max_real_diff <= 0.2f && max_imag_diff <= 0.2f,
+              qPrintable (QStringLiteral ("FST4 downsample mismatch at %1: cpp=(%2,%3) ref=(%4,%5) d=(%6,%7)")
+                              .arg (max_index)
+                              .arg (c2_cpp[static_cast<size_t> (max_index)].real (), 0, 'g', 9)
+                              .arg (c2_cpp[static_cast<size_t> (max_index)].imag (), 0, 'g', 9)
+                              .arg (c2_ref[static_cast<size_t> (max_index)].real (), 0, 'g', 9)
+                              .arg (c2_ref[static_cast<size_t> (max_index)].imag (), 0, 'g', 9)
+                              .arg (max_real_diff, 0, 'g', 9)
+                              .arg (max_imag_diff, 0, 'g', 9)));
+
+    int nsyncoh = 8;
+    float emedelay = 0.0f;
+    float sbest_ref = 0.0f;
+    float fcbest_ref = 0.0f;
+    int isbest_ref = 0;
+    __fst4_decode_MOD_fst4_sync_search (c2_ref.data (), &nfft2,
+                                        &hmod, &fs2,
+                                        &nss, &ntrperiod,
+                                        &nsyncoh, &emedelay, &sbest_ref, &fcbest_ref, &isbest_ref);
+
+    float sbest_cpp = 0.0f;
+    float fcbest_cpp = 0.0f;
+    int isbest_cpp = 0;
+    QVERIFY (ftx_fst4_sync_search_c (c2_cpp.data (), nfft2, nsps, ndown, ntrperiod,
+                                     emedelay, &sbest_cpp, &fcbest_cpp, &isbest_cpp) != 0);
+    QVERIFY2 (std::fabs (sbest_cpp - sbest_ref) <= 0.5f,
+              qPrintable (QStringLiteral ("FST4 sync strength mismatch: cpp=%1 ref=%2")
+                              .arg (sbest_cpp, 0, 'g', 9)
+                              .arg (sbest_ref, 0, 'g', 9)));
+    QVERIFY2 (std::fabs (fcbest_cpp - fcbest_ref) <= 1.0e-4f,
+              qPrintable (QStringLiteral ("FST4 sync freq mismatch: cpp=%1 ref=%2")
+                              .arg (fcbest_cpp, 0, 'g', 9)
+                              .arg (fcbest_ref, 0, 'g', 9)));
+    QCOMPARE (isbest_cpp, isbest_ref);
+  }
+
+  Q_SLOT void shared_dsp_pctile_matches_expected_values ()
+  {
+    float values[] {9.0f, 1.0f, 7.0f, 3.0f, 5.0f};
+    int npts = 5;
+    int npct = 50;
+    float xpct = 0.0f;
+    pctile_ (values, &npts, &npct, &xpct);
+    QCOMPARE (xpct, 5.0f);
+
+    npct = 0;
+    pctile_ (values, &npts, &npct, &xpct);
+    QCOMPARE (xpct, 1.0f);
+
+    npts = -1;
+    npct = 10;
+    xpct = 0.0f;
+    pctile_ (values, &npts, &npct, &xpct);
+    QCOMPARE (xpct, 1.0f);
+  }
+
+  Q_SLOT void shared_dsp_polyfit_recovers_known_quadratic ()
+  {
+    double x[] {0.0, 1.0, 2.0, 3.0, 4.0};
+    double y[] {1.0, 6.0, 15.0, 28.0, 45.0};
+    double sigmay[] {1.0, 1.0, 1.0, 1.0, 1.0};
+    int npts = 5;
+    int nterms = 3;
+    int mode = 0;
+    double coeffs[] {0.0, 0.0, 0.0};
+    double chisqr = -1.0;
+
+    polyfit_ (x, y, sigmay, &npts, &nterms, &mode, coeffs, &chisqr);
+
+    QVERIFY (std::fabs (coeffs[0] - 1.0) <= 1.0e-9);
+    QVERIFY (std::fabs (coeffs[1] - 3.0) <= 1.0e-9);
+    QVERIFY (std::fabs (coeffs[2] - 2.0) <= 1.0e-9);
+    QVERIFY (std::fabs (chisqr) <= 1.0e-9);
+  }
+
+  Q_SLOT void shared_dsp_blanker_zeroes_expected_samples ()
+  {
+    short samples[] {1, 2, 100, 3, 4, 5, 6, 7};
+    int nz = 8;
+    int ndropmax = 1;
+    int npct = 25;
+    std::complex<float> bigfft[5];
+
+    blanker_ (samples, &nz, &ndropmax, &npct, bigfft);
+
+    QVERIFY (std::fabs (bigfft[0].real () - 1.0f) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[0].imag () - 2.0f) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[1].real ()) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[1].imag ()) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[2].real () - 4.0f) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[2].imag () - 5.0f) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[3].real () - 6.0f) <= 1.0e-6f);
+    QVERIFY (std::fabs (bigfft[3].imag () - 7.0f) <= 1.0e-6f);
+  }
+
+  Q_SLOT void shared_dsp_four2a_matches_expected_fft_shapes ()
+  {
+    {
+      std::complex<float> values[] {
+          {1.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}
+      };
+      int nfft = 4;
+      int ndim = 1;
+      int isign = -1;
+      int iform = 1;
+      four2a_ (values, &nfft, &ndim, &isign, &iform);
+      for (auto const& value : values)
+        {
+          QVERIFY (std::fabs (value.real () - 1.0f) <= 1.0e-6f);
+          QVERIFY (std::fabs (value.imag ()) <= 1.0e-6f);
+        }
+
+      isign = 1;
+      four2a_ (values, &nfft, &ndim, &isign, &iform);
+      QVERIFY (std::fabs (values[0].real () - 4.0f) <= 1.0e-5f);
+      QVERIFY (std::fabs (values[0].imag ()) <= 1.0e-5f);
+      for (int i = 1; i < 4; ++i)
+        {
+          QVERIFY (std::fabs (values[i].real ()) <= 1.0e-5f);
+          QVERIFY (std::fabs (values[i].imag ()) <= 1.0e-5f);
+        }
+    }
+
+    {
+      std::complex<float> values[3] {};
+      auto* real_values = reinterpret_cast<float*> (values);
+      real_values[0] = 1.0f;
+      real_values[1] = 2.0f;
+      real_values[2] = 3.0f;
+      real_values[3] = 4.0f;
+
+      int nfft = 4;
+      int ndim = 1;
+      int isign = -1;
+      int iform = 0;
+      four2a_ (values, &nfft, &ndim, &isign, &iform);
+      QVERIFY (std::fabs (values[0].real () - 10.0f) <= 1.0e-5f);
+      QVERIFY (std::fabs (values[0].imag ()) <= 1.0e-5f);
+      QVERIFY (std::fabs (values[1].real () + 2.0f) <= 1.0e-5f);
+      QVERIFY (std::fabs (values[1].imag () - 2.0f) <= 1.0e-5f);
+      QVERIFY (std::fabs (values[2].real () + 2.0f) <= 1.0e-5f);
+      QVERIFY (std::fabs (values[2].imag ()) <= 1.0e-5f);
+
+      isign = 1;
+      iform = -1;
+      four2a_ (values, &nfft, &ndim, &isign, &iform);
+      QVERIFY (std::fabs (real_values[0] - 4.0f) <= 1.0e-4f);
+      QVERIFY (std::fabs (real_values[1] - 8.0f) <= 1.0e-4f);
+      QVERIFY (std::fabs (real_values[2] - 12.0f) <= 1.0e-4f);
+      QVERIFY (std::fabs (real_values[3] - 16.0f) <= 1.0e-4f);
+    }
+
+    int cleanup_nfft = -1;
+    int cleanup_ndim = 1;
+    int cleanup_isign = 1;
+    int cleanup_iform = 1;
+    four2a_ (nullptr, &cleanup_nfft, &cleanup_ndim, &cleanup_isign, &cleanup_iform);
+  }
+
+  Q_SLOT void fst4_crc24_matches_frozen_reference ()
+  {
+    auto bits_from_pattern = [] (char const* pattern) {
+      std::vector<signed char> bits;
+      int const size = static_cast<int> (std::strlen (pattern));
+      bits.reserve (size);
+      for (int i = 0; i < size; ++i)
+        {
+          bits.push_back (pattern[i] == '1' ? 1 : 0);
+        }
+      return bits;
+    };
+
+    auto append_crc = [] (std::vector<signed char> bits, int crc) {
+      Q_ASSERT (bits.size () >= 24);
+      int const start = static_cast<int> (bits.size ()) - 24;
+      for (int i = 0; i < 24; ++i)
+        {
+          bits[static_cast<size_t> (start + i)] = (crc >> (23 - i)) & 1;
+        }
+      return bits;
+    };
+
+    struct Case
+    {
+      char const* bits;
+      int expected;
+    };
+
+    std::array<Case, 4> const cases {{
+      {"10110100101101110010011010101001100101101000110100000000000000000000000000", 1339986},
+      {"11111111111111111111111111111111111111111111111111000000000000000000000000", 5552799},
+      {"11001010111100010100101100110101001011110000101001011001101010010111100001010000000000000000000000000", 14357504},
+      {"11000110001110001100011100011000111000110001110001100011100011000111000110001000000000000000000000000", 6417775},
+    }};
+
+    for (Case const& item : cases)
+      {
+        std::vector<signed char> bits = bits_from_pattern (item.bits);
+        int len = static_cast<int> (bits.size ());
+        int crc = -1;
+        get_crc24_ (bits.data (), &len, &crc);
+        QCOMPARE (crc, item.expected);
+
+        std::vector<signed char> checked = append_crc (bits, crc);
+        int check_crc = -1;
+        get_crc24_ (checked.data (), &len, &check_crc);
+        QCOMPARE (check_crc, 0);
+      }
+  }
+
+  Q_SLOT void fst4_async_export_matches_native_worker_on_clean_waveforms ()
+  {
+    struct Case
+    {
+      QString message;
+      int trSeconds;
+      bool wsprHint;
+      int nfqso;
+      int ntol;
+      int ndepth;
+    };
+
+    std::array<Case, 2> const cases {{
+      {QStringLiteral ("CQ K1ABC FN42"), 15, false, 1500, 20, 2},
+      {QStringLiteral ("K1ABC FN42 33"), 120, true, 1500, 20, 3},
+    }};
+
+    for (Case const& item : cases)
+      {
+        decodium::fst4::DecodeRequest request;
+        request.serial = 1;
+        request.mode = item.wsprHint ? QStringLiteral ("FST4W") : QStringLiteral ("FST4");
+        request.audio = render_fst4_pcm_reference (item.message, item.trSeconds, item.wsprHint);
+        request.nutc = 0;
+        request.nqsoprogress = 0;
+        request.nfa = item.nfqso - item.ntol;
+        request.nfb = item.nfqso + item.ntol;
+        request.nfqso = item.nfqso;
+        request.ndepth = item.ndepth;
+        request.ntrperiod = item.trSeconds;
+        request.nexp_decode = 0;
+        request.ntol = item.ntol;
+        request.emedelay = 0.0f;
+        request.nagain = 0;
+        request.lapcqonly = 0;
+        request.mycall = QByteArrayLiteral ("K1ABC       ");
+        request.hiscall = QByteArrayLiteral ("W9XYZ       ");
+        request.iwspr = item.wsprHint ? 1 : 0;
+        request.lprinthash22 = 0;
+
+        QTemporaryDir native_dir;
+        QVERIFY (native_dir.isValid ());
+        QTemporaryDir reference_dir;
+        QVERIFY (reference_dir.isValid ());
+
+        decodium::fst4::DecodeRequest native_request = request;
+        native_request.dataDir = native_dir.path ().toLocal8Bit ();
+        decodium::fst4::DecodeRequest reference_request = request;
+        reference_request.dataDir = reference_dir.path ().toLocal8Bit ();
+
+        ftx_fst4_reset_runtime_state_c ();
+        QStringList const native = decodium::fst4::decodeFst4Rows (native_request);
+        ftx_fst4_reset_runtime_state_c ();
+        QStringList const reference = decode_fst4_rows_async_export_reference (reference_request);
+        QCOMPARE (reference.size (), native.size ());
+        for (int rowIndex = 0; rowIndex < reference.size (); ++rowIndex)
+          {
+            QString const& refRow = reference.at (rowIndex);
+            QString const& nativeRow = native.at (rowIndex);
+            if (refRow == nativeRow)
+              {
+                continue;
+              }
+
+            QVERIFY2 (item.wsprHint,
+                      qPrintable (QStringLiteral ("Unexpected FST4 row mismatch at index %1: ref='%2' native='%3'")
+                                      .arg (rowIndex)
+                                      .arg (refRow)
+                                      .arg (nativeRow)));
+            QVERIFY2 (refRow.size () >= 4 && nativeRow.size () >= 4,
+                      qPrintable (QStringLiteral ("Malformed FST4W row at index %1: ref='%2' native='%3'")
+                                      .arg (rowIndex)
+                                      .arg (refRow)
+                                      .arg (nativeRow)));
+            bool refOk = false;
+            bool nativeOk = false;
+            int const refSnr = refRow.leftRef (4).toString ().trimmed ().toInt (&refOk);
+            int const nativeSnr = nativeRow.leftRef (4).toString ().trimmed ().toInt (&nativeOk);
+            QVERIFY2 (refOk && nativeOk && refRow.mid (4) == nativeRow.mid (4)
+                          && std::abs (refSnr - nativeSnr) <= 4,
+                      qPrintable (QStringLiteral ("FST4W row mismatch exceeds tolerance at index %1: ref='%2' native='%3'")
+                                      .arg (rowIndex)
+                                      .arg (refRow)
+                                      .arg (nativeRow)));
+          }
+        if (native.isEmpty () && !item.wsprHint)
+          {
+            int stage = 0;
+            int badsync = 0;
+            int nharderrors = 0;
+            int iaptype = 0;
+            std::array<char, 37> msg_debug {};
+            int const ok = ftx_fst4_debug_first_candidate_c (native_request.audio.constData (), native_request.audio.size (),
+                                                             native_request.ntrperiod, native_request.ndepth,
+                                                             native_request.nfa, native_request.nfb, native_request.nfqso,
+                                                             native_request.ntol, native_request.emedelay,
+                                                             native_request.mycall.constData (), native_request.hiscall.constData (),
+                                                             &stage, &badsync, &nharderrors, &iaptype,
+                                                             msg_debug.data ());
+            QVERIFY2 (stage >= 5,
+                      qPrintable (QStringLiteral ("FST4 native worker stalled too early; debug ok=%1 stage=%2 badsync=%3 nhard=%4 iaptype=%5 msg='%6'")
+                                      .arg (ok)
+                                      .arg (stage)
+                                      .arg (badsync)
+                                      .arg (nharderrors)
+                                      .arg (iaptype)
+                                      .arg (QString::fromLatin1 (msg_debug.data (), 37).trimmed ())));
+          }
+      }
+  }
+
+  Q_SLOT void fst4_native_emit_bridge_writes_decoded_output ()
+  {
+    params_block_t params {};
+    params.nutc = 123456;
+    params.ntrperiod = 15;
+    params.nQSOProgress = 0;
+    params.nfqso = 1500;
+    params.nfa = 1480;
+    params.nfb = 1520;
+    params.ntol = 20;
+    params.ndepth = 2;
+    params.nexp_decode = 0;
+    params.nmode = 240;
+    std::memcpy (params.mycall, "K1ABC       ", 12);
+    std::memcpy (params.hiscall, "W9XYZ       ", 12);
+
+    QVector<short> const audio = render_fst4_pcm_reference (QStringLiteral ("CQ K1ABC FN42"), 15, false);
+
+    QTemporaryDir temp_dir;
+    QVERIFY (temp_dir.isValid ());
+    QByteArray temp_dir_bytes = temp_dir.path ().toLocal8Bit ();
+    temp_dir_bytes.append ('\0');
+
+    int decoded_count = 0;
+    ftx_fst4_reset_runtime_state_c ();
+    ftx_fst4_decode_and_emit_params_c (audio.constData (), &params, temp_dir_bytes.constData (), &decoded_count);
+
+    decodium::fst4::DecodeRequest request;
+    request.serial = 1;
+    request.mode = QStringLiteral ("FST4");
+    request.audio = audio;
+    request.dataDir = QDir::currentPath ().toLocal8Bit ();
+    request.nutc = params.nutc;
+    request.nqsoprogress = params.nQSOProgress;
+    request.nfa = params.nfa;
+    request.nfb = params.nfb;
+    request.nfqso = params.nfqso;
+    request.ndepth = params.ndepth;
+    request.ntrperiod = params.ntrperiod;
+    request.nexp_decode = params.nexp_decode;
+    request.ntol = params.ntol;
+    request.emedelay = params.emedelay;
+    request.nagain = params.nagain ? 1 : 0;
+    request.lapcqonly = params.lapcqonly ? 1 : 0;
+    request.mycall = QByteArray {params.mycall, static_cast<int> (sizeof (params.mycall))};
+    request.hiscall = QByteArray {params.hiscall, static_cast<int> (sizeof (params.hiscall))};
+    request.iwspr = 0;
+    request.lprinthash22 = 0;
+    ftx_fst4_reset_runtime_state_c ();
+    QStringList const native_rows = decodium::fst4::decodeFst4Rows (request);
+
+    QVERIFY (!native_rows.isEmpty ());
+    QCOMPARE (decoded_count, native_rows.size ());
+    QFile decoded_file {temp_dir.filePath (QStringLiteral ("decoded.txt"))};
+    QVERIFY (decoded_file.exists ());
+    QVERIFY (decoded_file.open (QIODevice::ReadOnly | QIODevice::Text));
+    QString const decoded_text = QString::fromUtf8 (decoded_file.readAll ());
+    int const tick = native_rows.first ().indexOf (QLatin1Char {'`'});
+    QVERIFY (tick >= 0);
+    QString const decoded_field = native_rows.first ().mid (tick + 4, 37).trimmed ();
+    QVERIFY (!decoded_field.isEmpty ());
+    QVERIFY2 (decoded_text.contains (decoded_field),
+              qPrintable (decoded_text));
+  }
+
+  Q_SLOT void msk144_cli_decodes_sample_wav_without_fast_decode_crash ()
+  {
+    QString const bin_dir = QCoreApplication::applicationDirPath ();
+    QString const jt9_path = QFileInfo {bin_dir + QStringLiteral ("/../jt9")}.absoluteFilePath ();
+    QString const wav_path = QFileInfo {QDir {bin_dir}.absoluteFilePath (
+        QStringLiteral ("../MSK144.wav"))}.absoluteFilePath ();
+    if (!QFileInfo::exists (jt9_path) || !QFileInfo::exists (wav_path))
+      {
+        QSKIP (qPrintable (QStringLiteral ("MSK144 CLI fixture not available (%1, %2)")
+                               .arg (jt9_path, wav_path)));
+      }
+
+    QProcess decode;
+    decode.start (jt9_path, {QStringLiteral ("-k"), wav_path});
+    QVERIFY2 (decode.waitForFinished (180000), qPrintable (decode.errorString ()));
+    QCOMPARE (decode.exitStatus (), QProcess::NormalExit);
+    QCOMPARE (decode.exitCode (), 0);
+
+    QString const output = QString::fromLocal8Bit (decode.readAllStandardOutput ())
+                         + QString::fromLocal8Bit (decode.readAllStandardError ());
+    QVERIFY2 (!output.contains (QStringLiteral ("Fortran runtime error")), qPrintable (output));
+    QVERIFY2 (output.contains (QStringLiteral ("K1JT WA4CQG EM72")), qPrintable (output));
+    QVERIFY2 (output.contains (QStringLiteral ("<DecodeFinished>")), qPrintable (output));
+  }
+
+  Q_SLOT void msk144_native_runner_matches_fortran_reference_on_sample_wav ()
+  {
+    QString const bin_dir = QCoreApplication::applicationDirPath ();
+    QString const wav_path = QFileInfo {QDir {bin_dir}.absoluteFilePath (
+        QStringLiteral ("../MSK144.wav"))}.absoluteFilePath ();
+    if (!QFileInfo::exists (wav_path))
+      {
+        QSKIP (qPrintable (QStringLiteral ("MSK144 fixture not available (%1)").arg (wav_path)));
+      }
+
+    WavFixture const wav = read_pcm16_mono_wav (wav_path);
+    QVERIFY2 (wav.sampleRate == kMsk144SampleRate, qPrintable (QStringLiteral ("unexpected sample rate %1")
+                                                                    .arg (wav.sampleRate)));
+    QVERIFY (!wav.samples.isEmpty ());
+
+    decodium::msk144::DecodeRequest request;
+    request.serial = 1;
+    request.audio = wav.samples;
+    request.nutc = 123456;
+    request.kdone = wav.samples.size ();
+    request.npick = 0;
+    request.t0_ms = 0;
+    request.t1_ms = wav.samples.size () * 1000 / kMsk144SampleRate;
+    request.maxlines = kMsk144MaxLines;
+    request.rxfreq = 1500;
+    request.ftol = 20;
+    request.aggressive = 0;
+    request.trperiod = 60.0;
+
+    QStringList const reference = decode_msk144_rows_fortran_reference (request);
+    decodium::msk144::resetMsk144DecoderState ();
+    QStringList const native = decodium::msk144::decodeMsk144Rows (request);
+
+    QCOMPARE (native, reference);
+    QVERIFY2 (native.contains (QStringLiteral ("123456   8  8.7 1488 &  K1JT WA4CQG EM72")),
+              qPrintable (native.join (QStringLiteral ("\n"))));
+  }
+
+  Q_SLOT void msk144_realtime_runner_matches_fortran_reference_on_sample_wav ()
+  {
+    QString const bin_dir = QCoreApplication::applicationDirPath ();
+    QString const wav_path = QFileInfo {QDir {bin_dir}.absoluteFilePath (
+        QStringLiteral ("../MSK144.wav"))}.absoluteFilePath ();
+    if (!QFileInfo::exists (wav_path))
+      {
+        QSKIP (qPrintable (QStringLiteral ("MSK144 fixture not available (%1)").arg (wav_path)));
+      }
+
+    WavFixture const wav = read_pcm16_mono_wav (wav_path);
+    QVERIFY2 (wav.sampleRate == kMsk144SampleRate, qPrintable (QStringLiteral ("unexpected sample rate %1")
+                                                                    .arg (wav.sampleRate)));
+    QVERIFY (!wav.samples.isEmpty ());
+
+    decodium::msk144::DecodeRequest request;
+    request.serial = 1;
+    request.audio = wav.samples;
+    request.nutc = 123456;
+    request.kdone = wav.samples.size ();
+    request.npick = 0;
+    request.t0_ms = 0;
+    request.t1_ms = wav.samples.size () * 1000 / kMsk144SampleRate;
+    request.maxlines = kMsk144MaxLines;
+    request.rxfreq = 1500;
+    request.ftol = 20;
+    request.aggressive = 0;
+    request.trperiod = 60.0;
+
+    QStringList const reference = decode_msk144_rows_fortran_reference (request);
+    QStringList const live_native = decode_msk144_rows_native_realtime (request);
+
+    QCOMPARE (live_native, reference);
+    QVERIFY2 (live_native.contains (QStringLiteral ("123456   8  8.7 1488 &  K1JT WA4CQG EM72")),
+              qPrintable (live_native.join (QStringLiteral ("\n"))));
+  }
+
+  Q_SLOT void msk144_shorthand_runner_matches_fortran_reference_on_generated_waveform ()
+  {
+    decodium::msk144::DecodeRequest request;
+    request.serial = 1;
+    request.audio = make_clean_msk144_wave (QStringLiteral ("<K1JT WA4CQG> RRR"), kMsk144BlockSize);
+    QVERIFY2 (!request.audio.isEmpty (), "Failed to synthesize clean MSK144 shorthand waveform");
+    request.nutc = 123456;
+    request.kdone = request.audio.size ();
+    request.npick = 0;
+    request.t0_ms = 0;
+    request.t1_ms = request.audio.size () * 1000 / kMsk144SampleRate;
+    request.maxlines = kMsk144MaxLines;
+    request.rxfreq = 1500;
+    request.ftol = 20;
+    request.aggressive = 0;
+    request.trperiod = 60.0;
+    request.mycall = QByteArrayLiteral ("K1JT");
+    request.hiscall = QByteArrayLiteral ("WA4CQG");
+    request.shorthandEnabled = true;
+
+    QStringList const reference = decode_msk144_rows_fortran_reference (request);
+    decodium::msk144::resetMsk144DecoderState ();
+    QStringList const batch_native = decodium::msk144::decodeMsk144Rows (request);
+    QStringList const live_native = decode_msk144_rows_native_realtime (request);
+
+    QCOMPARE (batch_native, reference);
+    QCOMPARE (live_native, reference);
+    QVERIFY2 (!reference.isEmpty (), "Fortran reference produced no MSK144 shorthand decode");
+    QVERIFY2 (reference.join (QStringLiteral ("\n")).contains (QStringLiteral ("<K1JT WA4CQG> RRR")),
+              qPrintable (reference.join (QStringLiteral ("\n"))));
+  }
+
+  Q_SLOT void msk144_swl_runner_matches_fortran_reference_on_repeated_generated_waveform ()
+  {
+    QVector<short> const block = make_clean_msk144_wave (QStringLiteral ("<K1JT WA4CQG> RRR"), kMsk144BlockSize);
+    QVERIFY2 (!block.empty (), "Failed to synthesize clean MSK144 SWL shorthand waveform");
+
+    decodium::msk144::DecodeRequest request;
+    request.serial = 1;
+    request.audio.resize (2 * kMsk144BlockSize);
+    std::copy (block.begin (), block.end (), request.audio.begin ());
+    std::copy (block.begin (), block.end (), request.audio.begin () + kMsk144BlockSize);
+    request.nutc = 123456;
+    request.kdone = request.audio.size ();
+    request.npick = 0;
+    request.t0_ms = 0;
+    request.t1_ms = request.audio.size () * 1000 / kMsk144SampleRate;
+    request.maxlines = kMsk144MaxLines;
+    request.rxfreq = 1500;
+    request.ftol = 20;
+    request.aggressive = 0;
+    request.trperiod = 60.0;
+    request.swlEnabled = true;
+
+    QStringList const reference = decode_msk144_rows_fortran_reference (request);
+    decodium::msk144::resetMsk144DecoderState ();
+    QStringList const batch_native = decodium::msk144::decodeMsk144Rows (request);
+    QStringList const live_native = decode_msk144_rows_native_realtime (request);
+
+    QCOMPARE (batch_native, reference);
+    QCOMPARE (live_native, reference);
+  }
+
+  Q_SLOT void q65_ana64_cpp_matches_fortran_reference ()
+  {
+    constexpr int kQ65Ana64Npts = 12000;
+    constexpr float kSampleRate = 12000.0f;
+    constexpr float kTwoPi = 6.28318530717958647692f;
+
+    std::vector<short> audio (kQ65Ana64Npts);
+    for (int i = 0; i < kQ65Ana64Npts; ++i)
+      {
+        float const t = static_cast<float> (i) / kSampleRate;
+        float const sample = 14000.0f * std::sin (kTwoPi * 713.0f * t)
+                           + 7000.0f * std::sin (kTwoPi * 1234.0f * t + 0.35f)
+                           + 2500.0f * std::sin (kTwoPi * 41.0f * t);
+        int const clipped = std::max (-32767, std::min (32767, qRound (sample)));
+        audio[static_cast<size_t> (i)] = static_cast<short> (clipped);
+      }
+
+    int npts = kQ65Ana64Npts;
+    std::vector<std::complex<float>> reference (kQ65Ana64Npts);
+    ana64_ (audio.data (), &npts, reference.data ());
+
+    std::vector<float> real_out (kQ65Ana64Npts / 2);
+    std::vector<float> imag_out (kQ65Ana64Npts / 2);
+    QVERIFY (ftx_q65_ana64_c (audio.data (), kQ65Ana64Npts, real_out.data (), imag_out.data ()) != 0);
+
+    float max_error = 0.0f;
+    float mean_error = 0.0f;
+    for (int i = 0; i < kQ65Ana64Npts / 2; ++i)
+      {
+        std::complex<float> const native {real_out[static_cast<size_t> (i)], imag_out[static_cast<size_t> (i)]};
+        float const error = std::abs (native - reference[static_cast<size_t> (i)]);
+        max_error = std::max (max_error, error);
+        mean_error += error;
+      }
+    mean_error /= static_cast<float> (kQ65Ana64Npts / 2);
+
+    QVERIFY2 (max_error <= 1.0e-5f,
+              qPrintable (QStringLiteral ("max ana64 error %1 mean %2").arg (max_error).arg (mean_error)));
+  }
+
   Q_SLOT void ft2_message_plausibility_filter_rejects_garbage_type4_decodes ()
   {
     auto check = [] (QString const& message) {
@@ -1732,6 +3273,505 @@ private:
     QVERIFY2 (non_zero > 0, "foxgenft2_ produced an all-zero FT2 Fox waveform");
     QVERIFY2 (peak > 0.0f, "foxgenft2_ peak stayed at zero");
     QVERIFY2 (peak <= 1.0001f, "foxgenft2_ waveform is not normalized");
+  }
+
+  Q_SLOT void superfox_tx_native_matches_fortran_reference ()
+  {
+    struct Case
+    {
+      std::array<QString, 5> messages;
+      int nslots;
+      bool moreCqs;
+      bool sendMsg;
+      QString freeText;
+    };
+
+    struct Capture
+    {
+      std::array<int, 151> tones {};
+      std::vector<float> wave;
+    };
+
+    constexpr int kSuperFoxWaveSamples = (151 + 2) * 4 * 1024;
+    auto clear_state = [] {
+      std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+      std::fill_n (&foxcom_.cmsg[0][0], static_cast<int> (sizeof (foxcom_.cmsg)), ' ');
+      std::fill_n (foxcom_.textMsg, static_cast<int> (sizeof (foxcom_.textMsg)), ' ');
+      std::fill_n (foxcom3_.itone3, 151, 0);
+      std::fill_n (&foxcom3_.cmsg2[0][0], static_cast<int> (sizeof (foxcom3_.cmsg2)), ' ');
+      foxcom_.nslots = 0;
+      foxcom_.nfreq = 750;
+      foxcom_.bMoreCQs = false;
+      foxcom_.bSendMsg = false;
+    };
+
+    auto setup_case = [&clear_state] (Case const& item) {
+      clear_state ();
+      foxcom_.nslots = item.nslots;
+      foxcom_.nfreq = 750;
+      foxcom_.bMoreCQs = item.moreCqs;
+      foxcom_.bSendMsg = item.sendMsg;
+      QByteArray const free_text = item.freeText.leftJustified (26, QLatin1Char {' '}, true).left (26).toLatin1 ();
+      std::copy_n (free_text.constData (), 26, foxcom_.textMsg);
+      for (int slot = 0; slot < item.nslots; ++slot)
+        {
+          QByteArray const message = item.messages[static_cast<size_t> (slot)].leftJustified (
+              40, QLatin1Char {' '}, true).left (40).toLatin1 ();
+          std::copy_n (message.constData (), 40, foxcom_.cmsg[slot]);
+        }
+    };
+
+    auto capture = [] {
+      Capture captured;
+      captured.wave.resize (kSuperFoxWaveSamples, 0.0f);
+      for (int i = 0; i < 151; ++i)
+        {
+          captured.tones[static_cast<size_t> (i)] = foxcom3_.itone3[i];
+        }
+      std::copy_n (foxcom_.wave, kSuperFoxWaveSamples, captured.wave.begin ());
+      return captured;
+    };
+
+    std::array<Case, 1> const cases {{
+        {{{QStringLiteral ("CQ K1ABC FN42"), QString {}, QString {}, QString {}, QString {}}}, 1, false, false, QString {}},
+    }};
+
+    for (int index = 0; index < static_cast<int> (cases.size ()); ++index)
+      {
+        Case const& item = cases[static_cast<size_t> (index)];
+
+        setup_case (item);
+        bool superfox = true;
+        foxgen_ (&superfox, "", 0);
+        QByteArray const otp = QByteArray {"OTP:000000"};
+        sftx_sub_ (otp.constData (), static_cast<fortran_charlen_t_local> (otp.size ()));
+        sfox_wave_gfsk_ ();
+        Capture const reference = capture ();
+
+        setup_case (item);
+        QVERIFY2 (decodium::txwave::generateSuperFoxTx (QStringLiteral ("OTP:000000")),
+                  qPrintable (QStringLiteral ("native SuperFox TX failed on case %1").arg (index)));
+        Capture const native = capture ();
+
+        for (int i = 0; i < 151; ++i)
+          {
+            QCOMPARE (native.tones[static_cast<size_t> (i)], reference.tones[static_cast<size_t> (i)]);
+          }
+
+        float max_diff = 0.0f;
+        for (int i = 0; i < kSuperFoxWaveSamples; ++i)
+          {
+            max_diff = std::max (max_diff, std::fabs (native.wave[static_cast<size_t> (i)]
+                                                       - reference.wave[static_cast<size_t> (i)]));
+          }
+        QVERIFY2 (max_diff <= 1.0e-5f,
+                  qPrintable (QStringLiteral ("SuperFox wave mismatch on case %1, max diff %2")
+                                  .arg (index)
+                                  .arg (max_diff, 0, 'g', 8)));
+      }
+  }
+
+  Q_SLOT void superfox_tx_native_supports_sendmsg_and_morecqs ()
+  {
+    constexpr int kSuperFoxWaveSamples = (151 + 2) * 4 * 1024;
+    std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+    std::fill_n (&foxcom_.cmsg[0][0], static_cast<int> (sizeof (foxcom_.cmsg)), ' ');
+    std::fill_n (foxcom_.textMsg, static_cast<int> (sizeof (foxcom_.textMsg)), ' ');
+    foxcom_.nslots = 1;
+    foxcom_.nfreq = 750;
+    foxcom_.bMoreCQs = true;
+    foxcom_.bSendMsg = true;
+
+    QByteArray const message = QByteArray {"CQ K1ABC FN42"}.leftJustified (40, ' ', true);
+    QByteArray const free_text = QByteArray {"TNX BOB 73 GL"}.leftJustified (26, ' ', true);
+    std::copy_n (message.constData (), 40, foxcom_.cmsg[0]);
+    std::copy_n (free_text.constData (), 26, foxcom_.textMsg);
+
+    QVERIFY (decodium::txwave::generateSuperFoxTx (QStringLiteral ("OTP:000000")));
+
+    int non_zero_tones = 0;
+    for (int i = 0; i < 151; ++i)
+      {
+        QVERIFY2 (foxcom3_.itone3[i] >= 0 && foxcom3_.itone3[i] <= 128,
+                  qPrintable (QStringLiteral ("invalid SuperFox tone %1 at index %2")
+                                  .arg (foxcom3_.itone3[i])
+                                  .arg (i)));
+        if (foxcom3_.itone3[i] != 0)
+          {
+            ++non_zero_tones;
+          }
+      }
+    QVERIFY (non_zero_tones > 0);
+
+    float peak = 0.0f;
+    int non_zero_samples = 0;
+    for (int i = 0; i < kSuperFoxWaveSamples; ++i)
+      {
+        float const sample = foxcom_.wave[i];
+        peak = std::max (peak, std::fabs (sample));
+        if (std::fabs (sample) > 1.0e-6f)
+          {
+            ++non_zero_samples;
+          }
+      }
+    QVERIFY (non_zero_samples > 0);
+    QVERIFY (peak > 0.0f);
+    QVERIFY (peak <= 1.0001f);
+  }
+
+  Q_SLOT void superfox_analytic_cpp_matches_fortran_reference ()
+  {
+    constexpr int kNpts = 4096;
+    constexpr float kTwoPi = 6.28318530717958647692f;
+    std::array<float, kNpts> dd {};
+    for (int i = 0; i < kNpts; ++i)
+      {
+        float const phase0 = kTwoPi * 321.5f * float (i) / 12000.0f;
+        float const phase1 = kTwoPi * 987.25f * float (i) / 12000.0f;
+        dd[static_cast<size_t> (i)] =
+            12000.0f * std::sin (phase0) + 4000.0f * std::cos (phase1);
+      }
+
+    int npts = kNpts;
+    std::array<std::complex<float>, kNpts> reference {};
+    sfox_ana_ (dd.data (), &npts, reference.data (), &npts);
+
+    std::array<float, kNpts> real_out {};
+    std::array<float, kNpts> imag_out {};
+    QVERIFY (ftx_superfox_analytic_c (dd.data (), kNpts, real_out.data (), imag_out.data ()) != 0);
+
+    float max_diff = 0.0f;
+    for (int i = 0; i < kNpts; ++i)
+      {
+        max_diff = std::max (max_diff,
+                             std::fabs (real_out[static_cast<size_t> (i)] - reference[static_cast<size_t> (i)].real ()));
+        max_diff = std::max (max_diff,
+                             std::fabs (imag_out[static_cast<size_t> (i)] - reference[static_cast<size_t> (i)].imag ()));
+      }
+    QVERIFY2 (max_diff <= 1.0e-4f,
+              qPrintable (QStringLiteral ("SuperFox analytic mismatch, max diff %1")
+                              .arg (max_diff, 0, 'g', 8)));
+  }
+
+  Q_SLOT void superfox_remove_tone_cpp_matches_fortran_reference ()
+  {
+    constexpr int kNpts = 15 * 12000;
+    constexpr float kSampleRate = 12000.0f;
+    constexpr float kTwoPi = 6.28318530717958647692f;
+
+    std::vector<std::complex<float>> signal (static_cast<size_t> (kNpts));
+    for (int i = 0; i < kNpts; ++i)
+      {
+        float const t = static_cast<float> (i + 1) / kSampleRate;
+        float const tone0 = kTwoPi * 1117.25f * t;
+        float const tone1 = kTwoPi * 1462.50f * t;
+        float const tone2 = kTwoPi * (760.0f + 0.005f * static_cast<float> (i)) * t;
+        signal[static_cast<size_t> (i)] =
+            std::complex<float> {std::cos (tone0), std::sin (tone0)}
+            + 0.18f * std::complex<float> {std::cos (tone1), std::sin (tone1)}
+            + 0.03f * std::complex<float> {std::cos (tone2), std::sin (tone2)};
+      }
+
+    std::vector<std::complex<float>> reference = signal;
+    float fsync = 750.0f;
+    sfox_remove_tone_ (reference.data (), &fsync);
+
+    std::vector<float> real_out (static_cast<size_t> (kNpts));
+    std::vector<float> imag_out (static_cast<size_t> (kNpts));
+    for (int i = 0; i < kNpts; ++i)
+      {
+        real_out[static_cast<size_t> (i)] = signal[static_cast<size_t> (i)].real ();
+        imag_out[static_cast<size_t> (i)] = signal[static_cast<size_t> (i)].imag ();
+      }
+
+    QVERIFY (ftx_superfox_remove_tone_c (real_out.data (), imag_out.data (), kNpts, fsync) != 0);
+
+    float max_diff = 0.0f;
+    for (int i = 0; i < kNpts; ++i)
+      {
+        max_diff = std::max (max_diff,
+                             std::fabs (real_out[static_cast<size_t> (i)]
+                                        - reference[static_cast<size_t> (i)].real ()));
+        max_diff = std::max (max_diff,
+                             std::fabs (imag_out[static_cast<size_t> (i)]
+                                        - reference[static_cast<size_t> (i)].imag ()));
+      }
+    QVERIFY2 (max_diff <= 5.0e-4f,
+              qPrintable (QStringLiteral ("SuperFox remove-tone mismatch, max diff %1")
+                              .arg (max_diff, 0, 'g', 8)));
+  }
+
+  Q_SLOT void superfox_qpc_sync_cpp_matches_fortran_reference ()
+  {
+    constexpr int kNpts = 15 * 12000;
+    constexpr float kSampleRate = 12000.0f;
+    constexpr float kTwoPi = 6.28318530717958647692f;
+    std::array<int, 24> const isync {{
+        1, 2, 4, 7, 11, 16, 22, 29, 37, 39, 42, 43,
+        45, 48, 52, 57, 63, 70, 78, 80, 83, 84, 86, 89}};
+
+    std::vector<std::complex<float>> signal (static_cast<size_t> (kNpts), std::complex<float> {});
+    float const fsignal = 1117.25f;
+    for (int symbol : isync)
+      {
+        int const start = 6000 + (symbol - 1) * 1024;
+        for (int i = 0; i < 1024; ++i)
+          {
+            int const sample_index = start + i;
+            float const phase = kTwoPi * fsignal * static_cast<float> (sample_index + 1) / kSampleRate;
+            signal[static_cast<size_t> (sample_index)] =
+                std::complex<float> {std::cos (phase), std::sin (phase)};
+          }
+      }
+
+    float fsample = kSampleRate;
+    float fsync = 750.0f;
+    float ftol = 200.0f;
+    float f2_ref = 0.0f;
+    float t2_ref = 0.0f;
+    float snrsync_ref = 0.0f;
+    std::array<int, 24> isync_mutable = isync;
+    qpc_sync_ (signal.data (), &fsample, isync_mutable.data (), &fsync, &ftol,
+               &f2_ref, &t2_ref, &snrsync_ref);
+
+    std::vector<float> real_in (static_cast<size_t> (kNpts));
+    std::vector<float> imag_in (static_cast<size_t> (kNpts));
+    for (int i = 0; i < kNpts; ++i)
+      {
+        real_in[static_cast<size_t> (i)] = signal[static_cast<size_t> (i)].real ();
+        imag_in[static_cast<size_t> (i)] = signal[static_cast<size_t> (i)].imag ();
+      }
+
+    float f2_cpp = 0.0f;
+    float t2_cpp = 0.0f;
+    float snrsync_cpp = 0.0f;
+    QVERIFY (ftx_superfox_qpc_sync_c (real_in.data (), imag_in.data (), kNpts,
+                                      fsync, ftol, &f2_cpp, &t2_cpp, &snrsync_cpp) != 0);
+
+    QVERIFY (std::fabs (f2_cpp - f2_ref) <= 1.0e-4f);
+    QVERIFY (std::fabs (t2_cpp - t2_ref) <= 1.0e-5f);
+    QVERIFY (std::fabs (snrsync_cpp - snrsync_ref) <= 1.0e-4f);
+  }
+
+  Q_SLOT void superfox_qpc_likelihoods_cpp_matches_fortran_reference ()
+  {
+    constexpr int kRows = 128;
+    constexpr int kCols = 128;
+    std::vector<float> s3 (static_cast<size_t> (kRows * kCols));
+    for (int col = 0; col < kCols; ++col)
+      {
+        for (int row = 0; row < kRows; ++row)
+          {
+            int const index = row + kRows * col;
+            s3[static_cast<size_t> (index)] =
+                0.1f + 0.01f * float ((row * 17 + col * 13) % 19)
+                + 0.001f * float ((row + col) % 7);
+          }
+      }
+
+    float EsNo = 3.16f;
+    float No = 1.0f;
+    std::vector<float> py_ref (static_cast<size_t> (kRows * kCols));
+    qpc_likelihoods2_ (py_ref.data (), s3.data (), &EsNo, &No);
+
+    std::vector<float> py_cpp (static_cast<size_t> (kRows * kCols));
+    QVERIFY (ftx_superfox_qpc_likelihoods2_c (s3.data (), kRows, kCols, EsNo, No, py_cpp.data ()) != 0);
+
+    float max_diff = 0.0f;
+    for (size_t i = 0; i < py_cpp.size (); ++i)
+      {
+        max_diff = std::max (max_diff, std::fabs (py_cpp[i] - py_ref[i]));
+      }
+    QVERIFY2 (max_diff <= 1.0e-6f,
+              qPrintable (QStringLiteral ("SuperFox qpc_likelihoods mismatch, max diff %1")
+                              .arg (max_diff, 0, 'g', 8)));
+  }
+
+  Q_SLOT void superfox_qpc_snr_cpp_matches_fortran_reference ()
+  {
+    constexpr int kRows = 128;
+    constexpr int kCols = 128;
+    std::vector<float> s3 (static_cast<size_t> (kRows * kCols));
+    for (int col = 0; col < kCols; ++col)
+      {
+        for (int row = 0; row < kRows; ++row)
+          {
+            int const index = row + kRows * col;
+            s3[static_cast<size_t> (index)] =
+                0.2f + 0.005f * float ((row * 5 + col * 11) % 23);
+          }
+      }
+
+    std::array<signed char, 128> y_ref {};
+    std::array<unsigned char, 128> y_cpp {};
+    for (int col = 0; col < kCols; ++col)
+      {
+        int const value = (3 * col + 7) % kRows;
+        y_ref[static_cast<size_t> (col)] = static_cast<signed char> (value);
+        y_cpp[static_cast<size_t> (col)] = static_cast<unsigned char> (value);
+      }
+
+    float snr_ref = 0.0f;
+    qpc_snr_ (s3.data (), y_ref.data (), &snr_ref);
+
+    float snr_cpp = 0.0f;
+    QVERIFY (ftx_superfox_qpc_snr_c (s3.data (), kRows, kCols, y_cpp.data (), &snr_cpp) != 0);
+    QVERIFY (std::fabs (snr_cpp - snr_ref) <= 1.0e-6f);
+  }
+
+  Q_SLOT void superfox_qpc_decode2_cpp_decodes_clean_generated_payload ()
+  {
+    std::array<unsigned char, 50> packed {};
+    QVERIFY (decodium::txwave::packSuperFoxMessage (QStringLiteral ("CQ K1ABC FN42"),
+                                                    QStringLiteral ("OTP:000000"),
+                                                    false, false, QString {}, &packed));
+
+    std::array<unsigned char, 50> expected = packed;
+    std::reverse (expected.begin (), expected.end ());
+
+    std::vector<short> const iwave = make_clean_superfox_wave (QStringLiteral ("CQ K1ABC FN42"),
+                                                               QStringLiteral ("OTP:000000"));
+    QVERIFY (!iwave.empty ());
+
+    std::vector<float> dd (iwave.size ());
+    for (size_t i = 0; i < iwave.size (); ++i)
+      {
+        dd[i] = static_cast<float> (iwave[i]);
+      }
+
+    std::vector<float> real_in (iwave.size ());
+    std::vector<float> imag_in (iwave.size ());
+    QVERIFY (ftx_superfox_analytic_c (dd.data (), kSuperFoxSampleCount,
+                                      real_in.data (), imag_in.data ()) != 0);
+    QVERIFY (ftx_superfox_remove_tone_c (real_in.data (), imag_in.data (),
+                                         kSuperFoxSampleCount, 750.0f) != 0);
+
+    std::array<unsigned char, 50> xdec_cpp {};
+    int crc_ok_cpp = 0;
+    float snrsync_cpp = 0.0f;
+    float fbest_cpp = 0.0f;
+    float tbest_cpp = 0.0f;
+    float snr_cpp = 0.0f;
+    QVERIFY (ftx_superfox_qpc_decode2_c (real_in.data (), imag_in.data (), kSuperFoxSampleCount,
+                                         750.0f, 200.0f, 3, 0.5f, 1.0f,
+                                         xdec_cpp.data (), &crc_ok_cpp, &snrsync_cpp,
+                                         &fbest_cpp, &tbest_cpp, &snr_cpp) != 0);
+
+    QCOMPARE (crc_ok_cpp, 1);
+    for (int i = 0; i < 50; ++i)
+      {
+        QCOMPARE (xdec_cpp[static_cast<size_t> (i)], expected[static_cast<size_t> (i)]);
+      }
+
+    QVERIFY (snrsync_cpp > 0.0f);
+    QVERIFY (snr_cpp > -16.5f);
+  }
+
+  Q_SLOT void superfox_unpack_native_roundtrips_packed_payload ()
+  {
+    constexpr int kMaxLines = 16;
+    constexpr int kLineStride = 64;
+
+    auto unpack_lines = [kMaxLines] (std::array<unsigned char, 50> const& xin) {
+      std::array<unsigned char, 50> payload = xin;
+      std::reverse (payload.begin (), payload.end ());
+      std::array<char, kMaxLines * kLineStride> raw {};
+      std::fill (raw.begin (), raw.end (), ' ');
+      int const count =
+          ftx_superfox_unpack_lines_c (payload.data (), 1, raw.data (), kLineStride, kMaxLines);
+      QStringList lines;
+      for (int i = 0; i < std::min (count, kMaxLines); ++i)
+        {
+          QByteArray const line {raw.data () + i * kLineStride, kLineStride};
+          lines << QString::fromLatin1 (line).trimmed ();
+        }
+      return lines;
+    };
+
+    struct Case
+    {
+      QString line;
+      bool moreCqs;
+      bool sendMsg;
+      QString freeText;
+      QStringList expected;
+    };
+
+    std::array<Case, 2> const cases {{
+        {QStringLiteral ("CQ K1ABC FN42"), false, false, QString {},
+         QStringList {QStringLiteral ("CQ K1ABC FN42"), QStringLiteral ("$VERIFY$ K1ABC 000000")}},
+        {QStringLiteral ("CQ K1ABC FN42"), false, true, QStringLiteral ("TNX BOB 73 GL"),
+         QStringList {QStringLiteral ("TNX BOB 73 GL"), QStringLiteral ("$VERIFY$ K1ABC 000000")}},
+    }};
+
+    for (Case const& item : cases)
+      {
+        std::array<unsigned char, 50> xin {};
+        QVERIFY2 (decodium::txwave::packSuperFoxMessage (item.line, QStringLiteral ("OTP:000000"),
+                                                         item.moreCqs, item.sendMsg, item.freeText, &xin),
+                  qPrintable (item.line));
+
+        QStringList const lines = unpack_lines (xin);
+        for (QString const& expected : item.expected)
+          {
+            QVERIFY2 (lines.contains (expected),
+                      qPrintable (QStringLiteral ("missing SuperFox line '%1' in [%2]")
+                                      .arg (expected, lines.join (QStringLiteral (" | ")))));
+          }
+      }
+  }
+
+  Q_SLOT void superfox_decode_helper_rejects_null_input ()
+  {
+    constexpr int kMaxLines = 16;
+    constexpr int kLineStride = 64;
+
+    std::array<char, kMaxLines * kLineStride> raw {};
+    std::fill (raw.begin (), raw.end (), ' ');
+    int nsnr = 0;
+    float freq = 0.0f;
+    float dt = 0.0f;
+    int const count =
+        ftx_superfox_decode_lines_c (nullptr, 750, 200,
+                                     raw.data (), kLineStride, kMaxLines,
+                                     &nsnr, &freq, &dt);
+    QCOMPARE (count, 0);
+    QCOMPARE (nsnr, 0);
+    QCOMPARE (freq, 0.0f);
+    QCOMPARE (dt, 0.0f);
+  }
+
+  Q_SLOT void superfox_decode_helper_decodes_clean_generated_waveform ()
+  {
+    constexpr int kMaxLines = 16;
+    constexpr int kLineStride = 64;
+
+    std::vector<short> const iwave = make_clean_superfox_wave (QStringLiteral ("CQ K1ABC FN42"),
+                                                               QStringLiteral ("OTP:000000"));
+    QVERIFY (!iwave.empty ());
+
+    std::array<char, kMaxLines * kLineStride> raw {};
+    std::fill (raw.begin (), raw.end (), ' ');
+    int nsnr = 0;
+    float freq = 0.0f;
+    float dt = 0.0f;
+    int const count =
+        ftx_superfox_decode_lines_c (iwave.data (), 750, 200,
+                                     raw.data (), kLineStride, kMaxLines,
+                                     &nsnr, &freq, &dt);
+    QVERIFY (count > 0);
+
+    QStringList lines;
+    for (int i = 0; i < std::min (count, kMaxLines); ++i)
+      {
+        QByteArray const line (raw.data () + i * kLineStride, kLineStride);
+        lines << QString::fromLatin1 (line).trimmed ();
+      }
+
+    QVERIFY2 (lines.contains (QStringLiteral ("CQ K1ABC FN42")),
+              qPrintable (lines.join (QStringLiteral (" | "))));
+    QVERIFY2 (lines.contains (QStringLiteral ("$VERIFY$ K1ABC 000000")),
+              qPrintable (lines.join (QStringLiteral (" | "))));
   }
 
   Q_SLOT void ft2_legacy_gen_exports_match_native ()

@@ -507,6 +507,7 @@ private slots:
   void handle_transceiver_update (Transceiver::TransceiverState const&);
   void handle_transceiver_failure (QString const& reason);
   void handle_leavingSettings();
+  void refreshWriteableDataDirCache();
   void on_actionAstronomical_data_toggled (bool);
   void on_actionQSYMessage_Creator_triggered();
   void on_actionQSY_Monitor_triggered();
@@ -691,6 +692,9 @@ private:
   QMetaObject::Connection m_tciFramesWrittenConnection;
 
   Configuration m_config;
+  QString m_writeableDataDirPath;
+  QByteArray m_writeableDataDirNativePath;
+  QByteArray m_refspecNativePath;
   bool m_logbookRead;          //avt 9/23/25
   LogBook m_logBook;            // must be after Configuration construction
   Cloudlog m_cloudlog;

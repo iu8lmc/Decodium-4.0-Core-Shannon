@@ -251,6 +251,7 @@ set (wsjt_qt_CXXSRCS
   widgets/SplashScreen.cpp
   EqualizationToolsDialog.cpp
   Detector/FtxFt8Stage4.cpp
+  Detector/FST4DecodeWorker.cpp
   widgets/DoubleClickablePushButton.cpp
   widgets/DoubleClickableRadioButton.cpp
   Network/LotWUsers.cpp
@@ -300,7 +301,6 @@ set (wsjtx_CXXSRCS
   Detector/Detector.cpp
   Detector/FT2DecodeWorker.cpp
   Detector/FT4DecodeWorker.cpp
-  Detector/FST4DecodeWorker.cpp
   Detector/FT8DecodeWorker.cpp
   Detector/JT9FastDecodeWorker.cpp
   Detector/LegacyJtDecodeWorker.cpp
@@ -371,6 +371,9 @@ set (wsjt_CXXSRCS
   Detector/FtxBaseline.cpp
   Detector/FtxCandidates.cpp
   Detector/FtxBitmetrics.cpp
+  Detector/FtxSharedDsp.cpp
+  Detector/FtxFst4Core.cpp
+  Detector/FtxFst4Ldpc.cpp
   Detector/FtxDecodeBookkeeping.cpp
   Detector/FtxFt4Decoder.cpp
   Detector/FtxFt4Rollout.cpp
@@ -408,29 +411,22 @@ set (wsjt_FSRCS
   lib/jt65_decode.f90
   lib/jt65_mod.f90
   lib/jt65_mod6.f90 #ft8md
-  lib/fst4_decode.f90
   lib/get_q3list.f90
   lib/jt9_decode.f90
   lib/options.f90
   lib/packjt.f90
   lib/normalizebmet.f90
-  lib/ftx_pack77_c_api.f90
   lib/readwav.f90
   lib/wsjtx_wav_catalog.f90
   lib/timer_C_wrapper.f90
   lib/timer_impl.f90
   lib/timer_module.f90
   lib/wavhdr.f90
-  lib/superfox/sfox_mod.f90
-  lib/superfox/julian.f90
-  lib/superfox/popen_module.f90
-  lib/superfox/qpc/qpc_mod.f90
 
   # remaining non-module sources
   lib/addit.f90
   lib/afc65b.f90
   lib/afc9.f90
-  lib/ana64.f90
   lib/ana932.f90
   lib/analytic.f90
   lib/astro.f90
@@ -439,7 +435,6 @@ set (wsjt_FSRCS
   lib/avecho.f90
   lib/averms.f90
   lib/azdist.f90
-  lib/blanker.f90
   lib/bpdecode40.f90
   lib/bpdecode128_90.f90
   lib/baddata.f90
@@ -464,15 +459,12 @@ set (wsjt_FSRCS
   lib/deg2grid.f90
   lib/degrade_snr.f90
   lib/demod64a.f90
-  lib/determ.f90
   lib/downsam9.f90
   lib/echosim.f90
   lib/echo_snr.f90
   lib/encode232.f90
   lib/encode4.f90
-  lib/encode_msk40.f90
   lib/encode_128_90.f90
-  lib/77bit/pack77_c.f90
   lib/entail.f90
   lib/ephem.f90
   lib/extract.f90
@@ -498,7 +490,6 @@ set (wsjt_FSRCS
   lib/flat65.f90
   lib/fmtmsg.f90
   lib/foldspec9f.f90
-  lib/four2a.f90
   lib/fspread_lorentz.f90
 #  lib/ft8/foxgen_wrap.f90
   lib/freqcal.f90
@@ -508,8 +499,6 @@ set (wsjt_FSRCS
   lib/gen_cw_wave.f90
   lib/gen_echocall.f90
   lib/genwave.f90
-  lib/genmsk_128_90.f90
-  lib/genmsk40.f90
   lib/genwspr.f90
   lib/geodist.f90
   lib/getlags.f90
@@ -532,44 +521,26 @@ set (wsjt_FSRCS
   lib/jt9fano.f90
   lib/libration.f90
   lib/lorentzian.f90
-  lib/fst4/lorentzian_fading.f90
   lib/lpf1.f90
   lib/mixlpf.f90
   lib/makepings.f90
   lib/moondopjpl.f90
   lib/morse.f90
   lib/move.f90
-  lib/msk40decodeframe.f90
-  lib/msk144decodeframe.f90
-  lib/msk40spd.f90
-  lib/msk144spd.f90
-  lib/msk40sync.f90
-  lib/msk144sync.f90
-  lib/msk40_freq_search.f90
-  lib/msk144_freq_search.f90
-  lib/mskrtd.f90
-  lib/msk144signalquality.f90
-  lib/msk144sim.f90
-  lib/mskrtd.f90
   lib/nuttal_window.f90
-  lib/decode_msk144.f90
-  lib/fst4/fst4_async_decode.f90
   lib/legacy_jt_async_decode.f90
   lib/77bit/my_hash.f90
   lib/wsprd/osdwspr.f90
   lib/osd128_90.f90
-  lib/pctile.f90
   lib/peakdt9.f90
   lib/peakup.f90
   lib/plotsave.f90
   lib/platanh.f90
   lib/pltanh.f90
-  lib/polyfit.f90
   lib/prog_args.f90
   lib/ps4.f90
   lib/refspectrum.f90
   lib/savec2.f90
-  lib/save_dxbase.f90
   lib/save_echo_params.f90
   lib/sec0.f90
   lib/sec_midn.f90
@@ -584,9 +555,7 @@ set (wsjt_FSRCS
   lib/softsym.f90
   lib/softsym9f.f90
   lib/softsym9w.f90
-  lib/shell.f90
   lib/spec9f.f90
-  lib/stdmsg.f90
   lib/subtract65.f90
   lib/sun.f90
   lib/symspec.f90
@@ -603,7 +572,6 @@ set (wsjt_FSRCS
   lib/twkfreq.f90
   lib/twkfreq65.f90
   lib/update_recent_calls.f90
-  lib/update_msk40_hasharray.f90
   lib/wav11.f90
   lib/wav12.f90
   lib/xcor.f90
@@ -612,48 +580,7 @@ set (wsjt_FSRCS
   lib/wqencode.f90
   lib/wspr_downsample.f90
   lib/zplot9.f90
-  lib/fst4/decode240_101.f90
-  lib/fst4/decode240_74.f90
-  lib/fst4/encode240_101.f90
-  lib/fst4/encode240_74.f90
-  lib/fst4/gen_fst4wave.f90
-  lib/fst4/genfst4.f90
-  lib/fst4/get_fst4_bitmetrics.f90
-  lib/fst4/get_fst4_bitmetrics2.f90
-  lib/fst4/osd240_101.f90
-  lib/fst4/osd240_74.f90
-  lib/fst4/fastosd240_74.f90
-  lib/fst4/get_crc24.f90
-  lib/fst4/fst4_baseline.f90
-  lib/superfox/foxgen2.f90
-  lib/superfox/qpc_decode2.f90
-  lib/superfox/qpc_likelihoods2.f90
-  lib/superfox/qpc_snr.f90
-  lib/superfox/qpc_sync.f90
-  lib/superfox/sfox_ana.f90
-  lib/superfox/sfox_assemble.f90
-  lib/superfox/sfox_demod.f90
-  lib/superfox/sfox_pack.f90
-  lib/superfox/sfox_remove_tone.f90
-  lib/superfox/sfox_unpack.f90
-  lib/superfox/sfox_wave.f90
-  lib/superfox/sfox_wave_gfsk.f90
-  lib/superfox/sfrx_sub.f90
-  lib/superfox/sftx_sub.f90
-  lib/superfox/twkfreq2.f90
-  lib/superfox/sfox_gen_gfsk.f90
-  lib/superfox/ran1.f90
-  lib/superfox/sfoxsim.f90
   )
-
-if (WSJT_BUILD_UTILS)
-  list (APPEND wsjt_FSRCS
-    lib/fst4/fst4sim.f90
-    lib/fst4/ldpcsim240_101.f90
-    lib/fst4/ldpcsim240_74.f90
-    lib/77bit/hash22calc.f90
-    )
-endif ()
 
 # temporary workaround for a gfortran v7.3 ICE on Fedora 27 64-bit
 set_source_files_properties (lib/slasubs.f PROPERTIES COMPILE_FLAGS -O2)
@@ -674,7 +601,6 @@ set (qra_CSRCS
   lib/qra/q65/normrnd.c
   lib/qra/q65/qra15_65_64_irr_e23.c
   lib/qra/q65/q65.c
-  lib/qra/q65/q65_subs.c
   )
 
 set (wsjt_CSRCS
@@ -1299,11 +1225,11 @@ target_link_libraries (jt9code wsjt_fort wsjt_cxx)
 add_executable (wsprcode lib/wsprcode/wsprcode.f90 lib/wsprcode/nhash.c)
 target_link_libraries (wsprcode wsjt_fort wsjt_cxx)
 	       
-add_executable (encode77 lib/77bit/encode77.f90)
-target_link_libraries (encode77 wsjt_fort wsjt_cxx)
+add_executable (encode77 utils/encode77.cpp)
+link_wsjtx_cycle_group (encode77 wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (hash22calc lib/77bit/hash22calc.f90)
-target_link_libraries (hash22calc wsjt_fort wsjt_cxx)
+add_executable (hash22calc utils/hash22calc.cpp)
+link_wsjtx_cycle_group (hash22calc wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (wsprsim ${wsprsim_CSRCS})
 target_link_libraries (wsprsim ${LIBM_LIBRARIES})
@@ -1311,8 +1237,8 @@ target_link_libraries (wsprsim ${LIBM_LIBRARIES})
 add_executable (jt4code lib/jt4code.f90)
 target_link_libraries (jt4code wsjt_fort wsjt_cxx)
 
-add_executable (msk144code lib/msk144code.f90)
-target_link_libraries (msk144code wsjt_fort wsjt_cxx)
+add_executable (msk144code utils/msk144code.cpp)
+link_wsjtx_cycle_group (msk144code wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (ft8code utils/ft8code.cpp)
 link_wsjtx_cycle_group (ft8code wsjt_qt wsjt_cxx wsjt_fort)
@@ -1326,17 +1252,17 @@ target_link_libraries (echosim wsjt_fort wsjt_cxx)
 add_executable (ft8sim utils/ft8sim.cpp)
 link_wsjtx_cycle_group (ft8sim wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (sfoxsim lib/superfox/sfoxsim.f90)
-target_link_libraries (sfoxsim wsjt_fort wsjt_cxx)
+add_executable (sfoxsim utils/sfoxsim.cpp)
+link_wsjtx_cycle_group (sfoxsim wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (sfrx lib/superfox/sfrx.f90)
-target_link_libraries (sfrx wsjt_fort wsjt_cxx)
+add_executable (sfrx utils/sfrx.cpp)
+link_wsjtx_cycle_group (sfrx wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (sftx lib/superfox/sftx.f90)
-target_link_libraries (sftx wsjt_fort wsjt_cxx)
+add_executable (sftx utils/sftx.cpp)
+link_wsjtx_cycle_group (sftx wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (msk144sim lib/msk144sim.f90)
-target_link_libraries (msk144sim wsjt_fort wsjt_cxx)
+add_executable (msk144sim utils/msk144sim.cpp)
+link_wsjtx_cycle_group (msk144sim wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (ft4sim utils/ft4sim.cpp)
 link_wsjtx_cycle_group (ft4sim wsjt_qt wsjt_cxx wsjt_fort)
@@ -1344,19 +1270,19 @@ link_wsjtx_cycle_group (ft4sim wsjt_qt wsjt_cxx wsjt_fort)
 add_executable (ft4sim_mult utils/ft4sim_mult.cpp)
 link_wsjtx_cycle_group (ft4sim_mult wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (fst4sim lib/fst4/fst4sim.f90)
-target_link_libraries (fst4sim wsjt_fort wsjt_cxx)
+add_executable (fst4sim utils/fst4sim.cpp)
+link_wsjtx_cycle_group (fst4sim wsjt_qt wsjt_cxx wsjt_fort)
 if (WIN32)
   set_target_properties (fst4sim PROPERTIES
     LINK_FLAGS -Wl,--stack,0x4000000,--heap,0x6000000
     )
 endif ()
 
-add_executable (ldpcsim240_101 lib/fst4/ldpcsim240_101.f90)
-target_link_libraries (ldpcsim240_101 wsjt_fort wsjt_cxx)
+add_executable (ldpcsim240_101 utils/ldpcsim240_101.cpp)
+target_link_libraries (ldpcsim240_101 wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (ldpcsim240_74 lib/fst4/ldpcsim240_74.f90)
-target_link_libraries (ldpcsim240_74 wsjt_fort wsjt_cxx)
+add_executable (ldpcsim240_74 utils/ldpcsim240_74.cpp)
+target_link_libraries (ldpcsim240_74 wsjt_qt wsjt_cxx wsjt_fort)
 
 endif(WSJT_BUILD_UTILS)
 
@@ -1520,12 +1446,13 @@ if (WIN32)
   target_link_libraries (wsjt_qt Qt5::AxContainer Qt5::AxBase)
 endif (WIN32)
 
-# The shared pack77 C ABI is implemented in the Qt-side encoder code.
-# Export wsjt_qt transitively so optional CLI utilities that link wsjt_fort
-# can still resolve those symbols when WSJT_BUILD_UTILS is enabled.
-target_link_libraries (wsjt_fort wsjt_qt)
+# Several legacy Fortran utilities now resolve migrated compatibility exports
+# from both the Qt-side encoder code and the shared C++ DSP/Q65 helpers.
+# Export both transitively so tools that still link only wsjt_fort continue to
+# resolve the native replacements when WSJT_BUILD_UTILS is enabled.
+target_link_libraries (wsjt_fort wsjt_qt wsjt_cxx)
 if (TARGET wsjt_fort_omp)
-  target_link_libraries (wsjt_fort_omp wsjt_qt)
+  target_link_libraries (wsjt_fort_omp wsjt_qt wsjt_cxx)
 endif ()
 # build a library of package Qt functionality used in Fortran utilities
 add_library (fort_qt STATIC ${fort_qt_CXXSRCS})
@@ -1537,7 +1464,9 @@ target_link_libraries (wsjt_qtmm Qt5::Multimedia)
 
 add_executable (jt9 utils/jt9.cpp)
 target_sources (jt9 PRIVATE
-  Detector/FST4DecodeWorker.cpp
+  Detector/FT2DecodeWorker.cpp
+  Detector/FT4DecodeWorker.cpp
+  Detector/FT8DecodeWorker.cpp
   Detector/LegacyJtDecodeWorker.cpp
   Detector/MSK144DecodeWorker.cpp
   Detector/Q65DecodeWorker.cpp
@@ -1546,7 +1475,9 @@ link_wsjtx_cycle_group (jt9 wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (jt9a utils/jt9.cpp)
 target_sources (jt9a PRIVATE
-  Detector/FST4DecodeWorker.cpp
+  Detector/FT2DecodeWorker.cpp
+  Detector/FT4DecodeWorker.cpp
+  Detector/FT8DecodeWorker.cpp
   Detector/LegacyJtDecodeWorker.cpp
   Detector/MSK144DecodeWorker.cpp
   Detector/Q65DecodeWorker.cpp

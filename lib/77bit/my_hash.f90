@@ -1,6 +1,5 @@
 subroutine my_hash(mycall)
 
-  use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_save_hash_call
   character*(*) mycall
   character*13 c13
 

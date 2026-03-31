@@ -25,7 +25,6 @@ namespace
 {
 constexpr int kNsym = 103;
 constexpr int kNsps = 576;
-constexpr int kNwave = (kNsym + 2) * kNsps;
 constexpr int kNzz = 72576;
 constexpr int kSampleRate = 12000;
 constexpr int kBitsPerSample = 16;

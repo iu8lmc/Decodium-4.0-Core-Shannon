@@ -1,7 +1,5 @@
 program test28
 
-  use ftx_pack77_c_api, only: ftx_pack77_pack28, ftx_pack77_unpack28,   &
-       ftx_pack77_save_hash_call
   parameter (NTOKENS=2063592,MAX22=4194304)
   character*13 arg,call_00,call_0,call_1
   character*1 cerr

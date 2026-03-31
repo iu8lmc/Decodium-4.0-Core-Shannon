@@ -35,6 +35,7 @@
 
 static int	_q65_crc6(int *x, int sz);
 static void _q65_crc12(int *y, int *x, int sz);
+static void _q65_mask(const qracode *pcode, float *ix, const int *mask, const int *x);
 
 float q65_llh;
 

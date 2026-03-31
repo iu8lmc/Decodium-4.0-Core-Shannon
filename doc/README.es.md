@@ -1,44 +1,47 @@
-# Notas de Documentacion (Espanol) - 1.5.7
+# Notas de Documentacion (Espanol) - 1.5.8
 
 Este indice agrupa la documentacion de release del ciclo actual del fork.
 
-- Release actual: `1.5.7`
-- Ciclo de actualizacion: `1.5.6 -> 1.5.7`
-- Foco principal: filtro de cordura FT2, seleccion fiable del caller FT2 desde Band Activity, continuidad de la release Linux y metadatos release alineados.
+- Release actual: `1.5.8`
+- Ciclo de actualizacion: `1.5.7 -> 1.5.8`
+- Foco principal: cierre completo del runtime promovido nativo C++ para la familia FTX, estabilidad macOS al cerrar/ruta de datos, endurecimiento Linux/GCC y metadatos release alineados.
 
-## Cambios Tecnicos Principales (`1.5.6 -> 1.5.7`)
+## Cambios Tecnicos Principales (`1.5.7 -> 1.5.8`)
 
-- las salidas FT2 type-4 pasan ahora por un filtro de plausibilidad antes de aceptarse en el camino activo de decode.
-- `tests/test_qt_helpers.cpp` valida ahora patrones special-event/slash aceptados y casos FT2 garbage que deben rechazarse.
-- el doble click FT2 en Band Activity sobre mensajes estandar `CQ` / `QRZ` arma ahora directamente el caller seleccionado en lugar de depender del viejo camino generico.
-- el packaging Linux release vuelve a incluir el target `wsprd` restaurado para la publicacion AppImage/release.
-- metadatos de version, defaults de workflow, documentos release y notas GitHub quedan alineados a `1.5.7`.
+- FT8, FT4, FT2, Q65, MSK144, SuperFox y FST4/FST4W usan ahora el runtime promovido nativo C++ sin residuos Fortran especificos del modo en el camino activo.
+- la cadena residual FST4/FST4W de decode-core, LDPC, helpers DSP compartidos y referencia/simulador es ahora nativa C++.
+- los residuos tree-only de los modos promovidos (`ana64`, `q65_subs`, snapshots MSK144/MSK40, subtree SuperFox Fortran) se eliminaron tras la promocion nativa.
+- las utilidades nativas ahora cubren `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx`, `sftx`, `fst4sim`, `ldpcsim240_101` y `ldpcsim240_74`.
+- se corrigieron el crash FFTW al cerrar en macOS y las rutas fragiles de `MainWindow::dataSink` / `fastSink`.
+- se corrigieron problemas Linux/GCC 15 alrededor de `_q65_mask`, `pack28`, enlazado a simbolos migrados e indexacion de frames MSK40.
+- metadatos de version, defaults de workflow, documentos release y notas GitHub quedan alineados a `1.5.8`.
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.7-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.7-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.7-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.7-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.7-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.7-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.7-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.7-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.7-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.7-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.7-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.7-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.7-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.8-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.8-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.8-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.8-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.8-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.8-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.8-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.8-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.8-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.8-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.8-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.8-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
-- `x86_64`, dual-core 2.0 GHz+
-- 4 GB RAM minima (8 GB recomendados)
+- `x86_64` con SSE2, dual-core 2.0 GHz+
+- minimo 4 GB RAM (8 GB recomendados)
 - 500 MB libres en disco
 - `glibc >= 2.35`
-- `libfuse2` / FUSE2
+- `libfuse2` / FUSE2 si se quiere montar la AppImage directamente
 - ALSA, PulseAudio o PipeWire
+- sesion de escritorio X11 o Wayland capaz de ejecutar AppImages Qt5
 
 ## Guia de Arranque
 
@@ -63,6 +66,6 @@ cd squashfs-root
 - [README.en-GB.md](../README.en-GB.md)
 - [README.it.md](../README.it.md)
 - [README.es.md](../README.es.md)
-- [RELEASE_NOTES_1.5.7.md](../RELEASE_NOTES_1.5.7.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.7.md](./GITHUB_RELEASE_BODY_1.5.7.md)
+- [RELEASE_NOTES_1.5.8.md](../RELEASE_NOTES_1.5.8.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.8.md](./GITHUB_RELEASE_BODY_1.5.8.md)
 - [CHANGELOG.md](../CHANGELOG.md)

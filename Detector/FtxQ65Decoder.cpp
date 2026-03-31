@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include <fftw3.h>
+
 #include <QByteArray>
 #include <QMutexLocker>
 #include <QString>
@@ -24,7 +26,6 @@ extern "C"
 {
   void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
   void smo121_ (float x[], int* nz);
-  void ana64_ (short iwave[], int* npts, std::complex<float> c0[]);
   void ftx_prepare_ft8_ap_c (char const mycall[12], char const hiscall[12], int ncontest,
                              int apsym[58], int aph10[10]);
   void ftx_q65_set_list_c (char const mycall[12], char const hiscall[12],
@@ -79,6 +80,92 @@ namespace
   constexpr int kQ65MaxHistory {100};
   constexpr int kTempPathChars {500};
   constexpr float kDbFloor {1.259e-10f};
+
+  struct Ana64Workspace
+  {
+    ~Ana64Workspace ()
+    {
+      if (forward)
+        {
+          fftwf_destroy_plan (forward);
+        }
+      if (inverse)
+        {
+          fftwf_destroy_plan (inverse);
+        }
+    }
+
+    void ensure (int npts)
+    {
+      if (npts == nfft1)
+        {
+          return;
+        }
+      if (forward)
+        {
+          fftwf_destroy_plan (forward);
+          forward = nullptr;
+        }
+      if (inverse)
+        {
+          fftwf_destroy_plan (inverse);
+          inverse = nullptr;
+        }
+      nfft1 = npts;
+      nfft2 = npts / 2;
+      buffer.assign (static_cast<size_t> (std::max (1, npts)), std::complex<float> {});
+      auto* base = reinterpret_cast<fftwf_complex*> (buffer.data ());
+      forward = fftwf_plan_dft_1d (nfft1, base, base, FFTW_FORWARD, FFTW_ESTIMATE);
+      inverse = fftwf_plan_dft_1d (nfft2, base, base, FFTW_BACKWARD, FFTW_ESTIMATE);
+    }
+
+    int nfft1 {0};
+    int nfft2 {0};
+    std::vector<std::complex<float>> buffer;
+    fftwf_plan forward {nullptr};
+    fftwf_plan inverse {nullptr};
+  };
+
+  Ana64Workspace& ana64_workspace ()
+  {
+    static thread_local Ana64Workspace workspace;
+    return workspace;
+  }
+
+  bool ana64_native (short const* iwave, int npts, std::vector<std::complex<float>>& c0)
+  {
+    if (!iwave || npts <= 0)
+      {
+        return false;
+      }
+
+    Ana64Workspace& workspace = ana64_workspace ();
+    workspace.ensure (npts);
+    int const nfft1 = workspace.nfft1;
+    int const nfft2 = workspace.nfft2;
+    float const fac = 2.0f / (32767.0f * static_cast<float> (nfft1));
+
+    std::fill (workspace.buffer.begin (), workspace.buffer.end (), std::complex<float> {});
+    for (int i = 0; i < npts; ++i)
+      {
+        workspace.buffer[static_cast<size_t> (i)] = {fac * static_cast<float> (iwave[i]), 0.0f};
+      }
+
+    fftwf_execute (workspace.forward);
+    for (int i = nfft2 / 2 + 1; i < nfft2; ++i)
+      {
+        workspace.buffer[static_cast<size_t> (i)] = {};
+      }
+    workspace.buffer[0] *= 0.5f;
+    fftwf_execute (workspace.inverse);
+
+    if (static_cast<int> (c0.size ()) < nfft2)
+      {
+        c0.resize (static_cast<size_t> (nfft2));
+      }
+    std::copy_n (workspace.buffer.begin (), nfft2, c0.begin ());
+    return true;
+  }
 
   struct Q65Candidate
   {
@@ -1374,73 +1461,75 @@ namespace
                 jpk0 = static_cast<int> ((dec0.xdt + 0.5f) * 6000.0f);
               }
             jpk0 = std::max (0, jpk0);
-            std::vector<std::complex<float>> c00 (static_cast<size_t> (std::max (1, ntrperiod * 12000)));
+            std::vector<std::complex<float>> c00 (static_cast<size_t> (std::max (1, ntrperiod * 6000)));
             int npts = ntrperiod * 12000;
-            ana64_ (const_cast<short*> (audio.data ()), &npts, c00.data ());
-            int passes = lapcqonly ? 1 : npasses;
-            for (int ipass = 0; ipass <= passes; ++ipass)
+            if (ana64_native (audio.data (), npts, c00))
               {
-                int apmask_bits[kQ65ApBits] {};
-                int apsymbols_bits[kQ65ApBits] {};
-                int apmask[kQ65ApPacked] {};
-                int apsymbols[kQ65ApPacked] {};
-                int iaptype = 0;
-                if (ipass >= 1)
+                int passes = lapcqonly ? 1 : npasses;
+                for (int ipass = 0; ipass <= passes; ++ipass)
                   {
-                    int lapcq_int = lapcqonly ? 1 : 0;
-                    int qso = nqsoprogress;
-                    int contest = ncontest;
-                    ftx_q65_ap_c (&qso, &ipass, &contest, &lapcq_int, state.apsym0.data (),
-                                  state.aph10.data (), apmask_bits, apsymbols_bits, &iaptype);
-                    pack_q65_ap_bits (apmask_bits, apmask);
-                    pack_q65_ap_bits (apsymbols_bits, apsymbols);
-                  }
-                float xdt1 = dec0.xdt;
-                float f1 = dec0.f0;
-                float snr2 = 0.0f;
-                std::array<int, kQ65PayloadSymbols> dat4 {};
-                int idec = -1;
-                int idfbest = 0;
-                int idtbest = 0;
-                int ndistbest = 0;
-                int ibw = 0;
-                int nrc = -2;
-                int npts2 = npts / 2;
-                int nsps2 = nsps / 2;
-                int nsubmode_local = nsubmode;
-                int ndepth_local = ndepth;
-                int mode_local = mode_q65;
-                int ibwa_local = ibwa;
-                int ibwb_local = ibwb;
-                float drift = dec0.drift;
-                int maxiters_local = maxiters;
-                ftx_q65_loops_c (c00.data (), &npts2, &nsps2, &nsubmode_local, &ndepth_local,
-                                 &jpk0, &dec0.xdt, &dec0.f0, &iaptype, &mode_local,
-                                 &ibwa_local, &ibwb_local, &drift, apmask, apsymbols,
-                                 &maxiters_local, &xdt1, &f1, &snr2, dat4.data (),
-                                 &idec, &idfbest, &idtbest, &ndistbest, &ibw, &nrc);
-                if (idec >= 0)
-                  {
-                    char decoded_chars[kQ65DecodedChars] {};
-                    bool success = false;
-                    std::array<signed char, kQ65Bits> bits {};
-                    dat4_to_bits77 (dat4, bits);
-                    char c77[kQ65Bits];
-                    for (int i = 0; i < kQ65Bits; ++i)
+                    int apmask_bits[kQ65ApBits] {};
+                    int apsymbols_bits[kQ65ApBits] {};
+                    int apmask[kQ65ApPacked] {};
+                    int apsymbols[kQ65ApPacked] {};
+                    int iaptype = 0;
+                    if (ipass >= 1)
                       {
-                        c77[i] = bits[static_cast<size_t> (i)] != 0 ? '1' : '0';
+                        int lapcq_int = lapcqonly ? 1 : 0;
+                        int qso = nqsoprogress;
+                        int contest = ncontest;
+                        ftx_q65_ap_c (&qso, &ipass, &contest, &lapcq_int, state.apsym0.data (),
+                                      state.aph10.data (), apmask_bits, apsymbols_bits, &iaptype);
+                        pack_q65_ap_bits (apmask_bits, apmask);
+                        pack_q65_ap_bits (apsymbols_bits, apsymbols);
                       }
-                    legacy_pack77_unpack_c (c77, 0, decoded_chars, &success);
-                    if (success)
+                    float xdt1 = dec0.xdt;
+                    float f1 = dec0.f0;
+                    float snr2 = 0.0f;
+                    std::array<int, kQ65PayloadSymbols> dat4 {};
+                    int idec = -1;
+                    int idfbest = 0;
+                    int idtbest = 0;
+                    int ndistbest = 0;
+                    int ibw = 0;
+                    int nrc = -2;
+                    int npts2 = npts / 2;
+                    int nsps2 = nsps / 2;
+                    int nsubmode_local = nsubmode;
+                    int ndepth_local = ndepth;
+                    int mode_local = mode_q65;
+                    int ibwa_local = ibwa;
+                    int ibwb_local = ibwb;
+                    float drift = dec0.drift;
+                    int maxiters_local = maxiters;
+                    ftx_q65_loops_c (c00.data (), &npts2, &nsps2, &nsubmode_local, &ndepth_local,
+                                     &jpk0, &dec0.xdt, &dec0.f0, &iaptype, &mode_local,
+                                     &ibwa_local, &ibwb_local, &drift, apmask, apsymbols,
+                                     &maxiters_local, &xdt1, &f1, &snr2, dat4.data (),
+                                     &idec, &idfbest, &idtbest, &ndistbest, &ibw, &nrc);
+                    if (idec >= 0)
                       {
-                        Q65Dec0Result loop_dec;
-                        loop_dec.snr1 = dec0.snr1;
-                        loop_dec.snr2 = snr2;
-                        loop_dec.dat4 = dat4;
-                        std::copy_n (decoded_chars, kQ65DecodedChars, loop_dec.decoded.begin ());
-                        emit_decode (loop_dec, xdt1, f1, idec, nused);
-                        nqf.assign (20, 0);
-                        return;
+                        char decoded_chars[kQ65DecodedChars] {};
+                        bool success = false;
+                        std::array<signed char, kQ65Bits> bits {};
+                        dat4_to_bits77 (dat4, bits);
+                        char c77[kQ65Bits];
+                        for (int i = 0; i < kQ65Bits; ++i)
+                          {
+                            c77[i] = bits[static_cast<size_t> (i)] != 0 ? '1' : '0';
+                          }
+                        legacy_pack77_unpack_c (c77, 0, decoded_chars, &success);
+                        if (success)
+                          {
+                            Q65Dec0Result loop_dec;
+                            loop_dec.snr1 = dec0.snr1;
+                            loop_dec.snr2 = snr2;
+                            loop_dec.dat4 = dat4;
+                            std::copy_n (decoded_chars, kQ65DecodedChars, loop_dec.decoded.begin ());
+                            emit_decode (loop_dec, xdt1, f1, idec, nused);
+                            nqf.assign (20, 0);
+                            return;
+                          }
                       }
                   }
               }
@@ -1514,9 +1603,12 @@ namespace
             jpk0 = static_cast<int> ((candidate.xdt + 0.5f) * 6000.0f);
           }
         jpk0 = std::max (0, jpk0);
-        std::vector<std::complex<float>> c00 (static_cast<size_t> (std::max (1, ntrperiod * 12000)));
+        std::vector<std::complex<float>> c00 (static_cast<size_t> (std::max (1, ntrperiod * 6000)));
         int npts = ntrperiod * 12000;
-        ana64_ (const_cast<short*> (audio.data ()), &npts, c00.data ());
+        if (!ana64_native (audio.data (), npts, c00))
+          {
+            continue;
+          }
         prepare_q65_ap0 (state, mycall, hiscall, ncontest);
         int passes = lapcqonly ? 1 : ((nqsoprogress == 5) ? 3 : 2);
         for (int ipass = 0; ipass <= passes; ++ipass)
@@ -1709,6 +1801,46 @@ namespace
                             ncontest, lapcqonly, syncsnrs, snrs, dts, freqs, idecs,
                             nuseds, bits77, decodeds, nout);
   }
+}
+
+extern "C" int ftx_q65_ana64_c (short const* iwave, int npts, float* real_out, float* imag_out)
+{
+  if (!iwave || npts <= 0 || (npts & 1) != 0 || !real_out || !imag_out)
+    {
+      return 0;
+    }
+
+  std::vector<std::complex<float>> c0;
+  if (!ana64_native (iwave, npts, c0))
+    {
+      return 0;
+    }
+
+  int const count = npts / 2;
+  for (int i = 0; i < count; ++i)
+    {
+      std::complex<float> const value = c0[static_cast<size_t> (i)];
+      real_out[i] = value.real ();
+      imag_out[i] = value.imag ();
+    }
+  return 1;
+}
+
+extern "C" void ana64_ (short iwave[], int* npts, std::complex<float> c0[])
+{
+  if (!iwave || !npts || *npts <= 0 || (*npts & 1) != 0 || !c0)
+    {
+      return;
+    }
+
+  std::vector<std::complex<float>> analytic;
+  if (!ana64_native (iwave, *npts, analytic))
+    {
+      return;
+    }
+
+  int const count = *npts / 2;
+  std::copy_n (analytic.begin (), count, c0);
 }
 
 extern "C" void ftx_q65_async_decode_c (short const* iwave,

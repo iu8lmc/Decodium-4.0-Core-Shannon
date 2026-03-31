@@ -126,7 +126,7 @@ extern struct {
   float red[4096];
 } echocom_;
 
-extern struct {
+typedef struct foxcom_block {
   float wave[(160+2)*134400*4]; /* (nsym+2)*nsps scaled up to 48kHz */
   int   nslots;
   int   nfreq;
@@ -136,7 +136,16 @@ extern struct {
   char  textMsg[26];
   bool  bMoreCQs;
   bool  bSendMsg;
-} foxcom_;
+} foxcom_block_t;
+
+typedef struct foxcom3_block {
+  int nslots2;
+  char cmsg2[5][40];
+  int itone3[151];
+} foxcom3_block_t;
+
+extern foxcom_block_t foxcom_;
+extern foxcom3_block_t foxcom3_;
 
 #ifdef __cplusplus
 }

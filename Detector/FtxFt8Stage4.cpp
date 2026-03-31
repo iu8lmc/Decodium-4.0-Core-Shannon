@@ -1,22 +1,29 @@
 // -*- Mode: C++ -*-
 #include "wsjtx_config.h"
 #include "commons.h"
+#include "helper_functions.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include <fftw3.h>
+
+#include "lib/superfox/qpc/np_qpc.h"
+
+extern "C" uint32_t nhash2 (void const* key, uint64_t length, uint32_t initval);
 
 namespace
 {
@@ -164,9 +171,16 @@ extern "C"
                              float xbase, int nagain, int nsync, float* xsnr_out);
   void legacy_pack77_reset_context_c ();
   void legacy_pack77_set_context_c (char const mycall[13], char const hiscall[13]);
+  void legacy_pack77_unpack28_c (int n28, char c13[13], bool* success);
+  void legacy_pack77_unpacktext77_c (char const c71[71], char c13[13], bool* success);
   int legacy_pack77_unpack77bits_c (signed char const* message77, int received,
                                     char msgsent[37], int* quirky_out);
   int ftx_ft8_message77_to_itone_c (signed char const* message77, int* itone_out);
+  void ftx_sfox_remove_ft8_c (float* dd, int npts);
+  void sfox_remove_tone_ (std::complex<float>* c0, float* fsync);
+  void qpc_decode2_ (std::complex<float>* c0, float* fsync, float* ftol,
+                     signed char* xdec, int* ndepth, float* dth, float* damp,
+                     int* crc_ok, float* snrsync, float* fbest, float* tbest, float* snr);
   void __ft8_a7_MOD_ft8_a7d (float* dd0, int* newdat, char* call_1, char* call_2,
                              char* grid4, float* xdt, float* f1, float* xbase,
                              int* nharderrors, float* dmin, char* msg37, float* xsnr,
@@ -175,10 +189,6 @@ extern "C"
                  float* f1a, float* xdt, float* fbest, float* xsnr,
                  float* plog, char* msgbest,
                  size_t, size_t, size_t, size_t);
-  void azdist_ (char* MyGrid, char* HisGrid, double* utch, int* nAz, int* nEl,
-                int* nDmiles, int* nDkm, int* nHotAz, int* nHotABetter,
-                fortran_charlen_t, fortran_charlen_t);
-  void sfrx_sub_ (int* nyymmdd, int* nutc, int* nfqso, int* ntol, short* iwave);
 }
 
 template <size_t N>
@@ -516,6 +526,1431 @@ std::string format_ft8_decoded_file_line (int nutc, float sync, int snr, float d
   return line.str ();
 }
 
+constexpr int kSuperFoxPackedSymbols {50};
+constexpr int kSuperFoxMaxDecodeLines {16};
+constexpr int kSuperFoxNqu1Rks {203514677};
+constexpr int kSuperFoxNFilt {8000};
+constexpr int kSuperFoxToneFrameSamples {50 * 3456};
+constexpr int kSuperFoxQpcRows {128};
+constexpr int kSuperFoxQpcCols {128};
+constexpr int kSuperFoxDemodSymbols {151};
+constexpr int kSuperFoxDemodNsps {1024};
+constexpr int kSuperFoxDemodSpectrumCols {kSuperFoxDemodSymbols + 1};
+constexpr int kSuperFoxQpcSearchCount {100};
+constexpr int kSuperFoxSyncSamples {9 * 12000};
+constexpr int kSuperFoxSyncDown {16};
+constexpr int kSuperFoxSyncNz {kSuperFoxSyncSamples / kSuperFoxSyncDown};
+constexpr int kSuperFoxSyncSymbols {24};
+constexpr std::array<int, kSuperFoxSyncSymbols> kSuperFoxIsync {
+    1, 2, 4, 7, 11, 16, 22, 29, 37, 39, 42, 43,
+    45, 48, 52, 57, 63, 70, 78, 80, 83, 84, 86, 89};
+constexpr std::array<int, 8> kSuperFoxMaxDither {
+    20, 50, 100, 200, 500, 1000, 2000, 5000};
+constexpr std::array<int, kSuperFoxQpcSearchCount> kSuperFoxIdf {
+    0,  0, -1,  0, -1,  1,  0, -1,  1, -2,  0, -1,  1, -2,  2,
+    0, -1,  1, -2,  2, -3,  0, -1,  1, -2,  2, -3,  3,  0, -1,
+    1, -2,  2, -3,  3, -4,  0, -1,  1, -2,  2, -3,  3, -4,  4,
+    0, -1,  1, -2,  2, -3,  3, -4,  4, -5, -1,  1, -2,  2, -3,
+    3, -4,  4, -5,  1, -2,  2, -3,  3, -4,  4, -5, -2,  2, -3,
+    3, -4,  4, -5,  2, -3,  3, -4,  4, -5, -3,  3, -4,  4, -5,
+    3, -4,  4, -5, -4,  4, -5,  4, -5, -5};
+constexpr std::array<int, kSuperFoxQpcSearchCount> kSuperFoxIdt {
+    0, -1,  0,  1, -1,  0, -2,  1, -1,  0,  2, -2,  1, -1,  0,
+   -3,  2, -2,  1, -1,  0,  3, -3,  2, -2,  1, -1,  0, -4,  3,
+   -3,  2, -2,  1, -1,  0,  4, -4,  3, -3,  2, -2,  1, -1,  0,
+   -5,  4, -4,  3, -3,  2, -2,  1, -1,  0, -5,  4, -4,  3, -3,
+    2, -2,  1, -1, -5,  4, -4,  3, -3,  2, -2,  1, -5,  4, -4,
+    3, -3,  2, -2, -5,  4, -4,  3, -3,  2, -5,  4, -4,  3, -3,
+   -5,  4, -4,  3, -5,  4, -4, -5,  4, -5};
+constexpr char kSuperFoxBase38[] {" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/"};
+
+struct SuperFoxComplexFft
+{
+  SuperFoxComplexFft ()
+    : data (reinterpret_cast<fftwf_complex*> (fftwf_malloc (sizeof (fftwf_complex) * kFt8NMax))),
+      forward (nullptr),
+      inverse (nullptr)
+  {
+    if (data)
+      {
+        forward = fftwf_plan_dft_1d (kFt8NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        inverse = fftwf_plan_dft_1d (kFt8NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
+      }
+  }
+
+  ~SuperFoxComplexFft ()
+  {
+    if (forward)
+      {
+        fftwf_destroy_plan (forward);
+      }
+    if (inverse)
+      {
+        fftwf_destroy_plan (inverse);
+      }
+    if (data)
+      {
+        fftwf_free (data);
+      }
+  }
+
+  bool valid () const
+  {
+    return data && forward && inverse;
+  }
+
+  std::complex<float>* values ()
+  {
+    return reinterpret_cast<std::complex<float>*> (data);
+  }
+
+  fftwf_complex* data;
+  fftwf_plan forward;
+  fftwf_plan inverse;
+};
+
+SuperFoxComplexFft& superfox_fft ()
+{
+  static SuperFoxComplexFft fft;
+  return fft;
+}
+
+struct SuperFoxSyncFft
+{
+  SuperFoxSyncFft ()
+    : data (reinterpret_cast<fftwf_complex*> (fftwf_malloc (sizeof (fftwf_complex) * kSuperFoxSyncSamples))),
+      forward (nullptr)
+  {
+    if (data)
+      {
+        forward = fftwf_plan_dft_1d (kSuperFoxSyncSamples, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+      }
+  }
+
+  ~SuperFoxSyncFft ()
+  {
+    if (forward)
+      {
+        fftwf_destroy_plan (forward);
+      }
+    if (data)
+      {
+        fftwf_free (data);
+      }
+  }
+
+  bool valid () const
+  {
+    return data && forward;
+  }
+
+  std::complex<float>* values ()
+  {
+    return reinterpret_cast<std::complex<float>*> (data);
+  }
+
+  fftwf_complex* data;
+  fftwf_plan forward;
+};
+
+SuperFoxSyncFft& superfox_sync_fft ()
+{
+  static SuperFoxSyncFft fft;
+  return fft;
+}
+
+struct SuperFoxDemodFft
+{
+  SuperFoxDemodFft ()
+    : data (reinterpret_cast<fftwf_complex*> (
+          fftwf_malloc (sizeof (fftwf_complex) * kSuperFoxDemodNsps))),
+      forward (nullptr)
+  {
+    if (data)
+      {
+        forward = fftwf_plan_dft_1d (kSuperFoxDemodNsps, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+      }
+  }
+
+  ~SuperFoxDemodFft ()
+  {
+    if (forward)
+      {
+        fftwf_destroy_plan (forward);
+      }
+    if (data)
+      {
+        fftwf_free (data);
+      }
+  }
+
+  bool valid () const
+  {
+    return data && forward;
+  }
+
+  std::complex<float>* values ()
+  {
+    return reinterpret_cast<std::complex<float>*> (data);
+  }
+
+  fftwf_complex* data;
+  fftwf_plan forward;
+};
+
+SuperFoxDemodFft& superfox_demod_fft ()
+{
+  static SuperFoxDemodFft fft;
+  return fft;
+}
+
+std::vector<std::complex<float>> const& superfox_smoothing_window ()
+{
+  static std::vector<std::complex<float>> cwindow = [] {
+    std::vector<std::complex<float>> filter (static_cast<size_t> (kFt8NMax));
+    SuperFoxComplexFft& fft = superfox_fft ();
+    if (!fft.valid ())
+      {
+        return filter;
+      }
+
+    std::complex<float>* scratch = fft.values ();
+    std::fill_n (scratch, kFt8NMax, std::complex<float> {});
+
+    float sumw = 0.0f;
+    std::array<float, kSuperFoxNFilt + 1> window {};
+    for (int j = -kSuperFoxNFilt / 2; j <= kSuperFoxNFilt / 2; ++j)
+      {
+        float const value = std::pow (std::cos ((0.5f * kFt8TwoPi) * static_cast<float> (j)
+                                                / static_cast<float> (kSuperFoxNFilt)), 2.0f);
+        window[static_cast<size_t> (j + kSuperFoxNFilt / 2)] = value;
+        sumw += value;
+      }
+
+    int const shift = kSuperFoxNFilt / 2 + 1;
+    for (int src = 0; src <= kSuperFoxNFilt; ++src)
+      {
+        int dst = src - shift;
+        if (dst < 0)
+          {
+            dst += kFt8NMax;
+          }
+        scratch[static_cast<size_t> (dst)] =
+            std::complex<float> {window[static_cast<size_t> (src)] / sumw, 0.0f};
+      }
+
+    fftwf_execute (fft.forward);
+
+    float const fac = 1.0f / static_cast<float> (kFt8NMax);
+    for (int i = 0; i < kFt8NMax; ++i)
+      {
+        filter[static_cast<size_t> (i)] = scratch[static_cast<size_t> (i)] * fac;
+      }
+    return filter;
+  }();
+  return cwindow;
+}
+
+bool superfox_analytic_signal (float const* dd, int npts, std::complex<float>* c0)
+{
+  if (!dd || !c0 || npts <= 0)
+    {
+      return false;
+    }
+
+  std::vector<std::complex<float>> spectrum (static_cast<size_t> (npts));
+  float const scale = 2.0f / (32767.0f * static_cast<float> (npts));
+  for (int i = 0; i < npts; ++i)
+    {
+      spectrum[static_cast<size_t> (i)] = std::complex<float> {scale * dd[i], 0.0f};
+    }
+
+  auto* fft_data = reinterpret_cast<fftwf_complex*> (spectrum.data ());
+  fftwf_plan const forward =
+      fftwf_plan_dft_1d (npts, fft_data, fft_data, FFTW_FORWARD, FFTW_ESTIMATE);
+  fftwf_plan const inverse =
+      fftwf_plan_dft_1d (npts, fft_data, fft_data, FFTW_BACKWARD, FFTW_ESTIMATE);
+  if (!forward || !inverse)
+    {
+      if (forward)
+        {
+          fftwf_destroy_plan (forward);
+        }
+      if (inverse)
+        {
+          fftwf_destroy_plan (inverse);
+        }
+      return false;
+    }
+
+  fftwf_execute (forward);
+  for (int i = npts / 2 + 1; i < npts; ++i)
+    {
+      spectrum[static_cast<size_t> (i)] = std::complex<float> {};
+    }
+  spectrum[0] *= 0.5f;
+  fftwf_execute (inverse);
+
+  for (int i = 0; i < npts; ++i)
+    {
+      c0[static_cast<size_t> (i)] = spectrum[static_cast<size_t> (i)];
+    }
+
+  fftwf_destroy_plan (forward);
+  fftwf_destroy_plan (inverse);
+  return true;
+}
+
+bool superfox_remove_tone (std::complex<float>* c0, float fsync)
+{
+  if (!c0)
+    {
+      return false;
+    }
+
+  if (fsync > 1400.0f)
+    {
+      return true;
+    }
+
+  SuperFoxComplexFft& fft = superfox_fft ();
+  if (!fft.valid ())
+    {
+      return false;
+    }
+
+  std::vector<std::complex<float>> const& cwindow = superfox_smoothing_window ();
+  if (cwindow.empty ())
+    {
+      return false;
+    }
+
+  constexpr float kSampleRate = 12000.0f;
+  float const baud = kSampleRate / 1024.0f;
+  float const df = kSampleRate / static_cast<float> (kFt8NMax);
+  float const fac = 1.0f / static_cast<float> (kFt8NMax);
+  int const nbaud = static_cast<int> (std::lround (baud / df));
+
+  std::vector<std::complex<float>> cref (static_cast<size_t> (kFt8NMax));
+  std::vector<float> s (static_cast<size_t> (kFt8NMax / 4));
+  std::complex<float>* cfilt = fft.values ();
+
+  for (int i = 0; i < kFt8NMax; ++i)
+    {
+      cfilt[static_cast<size_t> (i)] = c0[static_cast<size_t> (i)] * fac;
+    }
+  fftwf_execute (fft.forward);
+
+  for (int i = 1; i <= kFt8NMax / 4; ++i)
+    {
+      s[static_cast<size_t> (i - 1)] = std::norm (cfilt[static_cast<size_t> (i - 1)]);
+    }
+
+  int ia = static_cast<int> (std::lround ((fsync - 50.0f) / df));
+  int ib = static_cast<int> (std::lround ((fsync + 1550.0f) / df));
+  ia = std::max (1, ia);
+  ib = std::min (kFt8NMax / 4, ib);
+  if (ia > ib)
+    {
+      return true;
+    }
+
+  int i0 = ia;
+  float peak = s[static_cast<size_t> (ia - 1)];
+  for (int i = ia + 1; i <= ib; ++i)
+    {
+      float const value = s[static_cast<size_t> (i - 1)];
+      if (value > peak)
+        {
+          peak = value;
+          i0 = i;
+        }
+    }
+
+  ia = std::max (1, i0 - nbaud);
+  ib = std::min (kFt8NMax / 4, i0 + nbaud);
+
+  float s0 = 0.0f;
+  float s1 = 0.0f;
+  for (int i = ia; i <= ib; ++i)
+    {
+      float const value = s[static_cast<size_t> (i - 1)];
+      s0 += value;
+      s1 += static_cast<float> (i - i0) * value;
+    }
+  if (s0 <= 0.0f)
+    {
+      return true;
+    }
+
+  float const delta = s1 / s0;
+  i0 = static_cast<int> (std::lround (static_cast<float> (i0) + delta));
+  float const f2 = static_cast<float> (i0) * df;
+
+  ia = std::max (1, i0 - nbaud);
+  ib = std::min (kFt8NMax / 4, i0 + nbaud);
+
+  float s2 = 0.0f;
+  for (int i = ia; i <= ib; ++i)
+    {
+      float const delta_i = static_cast<float> (i - i0);
+      s2 += s[static_cast<size_t> (i - 1)] * delta_i * delta_i;
+    }
+
+  float const sigma = std::sqrt (s2 / s0) * df;
+  if (sigma > 2.5f)
+    {
+      return true;
+    }
+
+  float const dt = 1.0f / kSampleRate;
+  for (int i = 0; i < kFt8NMax; ++i)
+    {
+      float const arg = kFt8TwoPi * f2 * static_cast<float> (i + 1) * dt;
+      cref[static_cast<size_t> (i)] = std::complex<float> {std::cos (arg), std::sin (arg)};
+      cfilt[static_cast<size_t> (i)] = c0[static_cast<size_t> (i)] * std::conj (cref[static_cast<size_t> (i)]);
+    }
+
+  fftwf_execute (fft.forward);
+  for (int i = 0; i < kFt8NMax; ++i)
+    {
+      cfilt[static_cast<size_t> (i)] *= cwindow[static_cast<size_t> (i)];
+    }
+  fftwf_execute (fft.inverse);
+
+  int const nframe = std::min (kSuperFoxToneFrameSamples, kFt8NMax);
+  for (int i = 0; i < nframe; ++i)
+    {
+      std::complex<float> const tone = cfilt[static_cast<size_t> (i)] * cref[static_cast<size_t> (i)];
+      c0[static_cast<size_t> (i)] -= tone;
+    }
+
+  return true;
+}
+
+float db_compat (float x)
+{
+  if (x <= 1.259e-10f)
+    {
+      return -99.0f;
+    }
+  return 10.0f * std::log10 (x);
+}
+
+void smooth_121 (float* values, int count)
+{
+  if (!values || count <= 2)
+    {
+      return;
+    }
+
+  float x0 = values[0];
+  for (int i = 1; i < count - 1; ++i)
+    {
+      float const x1 = values[i];
+      values[i] = 0.5f * values[i] + 0.25f * (x0 + values[i + 1]);
+      x0 = x1;
+    }
+}
+
+float superfox_percentile (float const* values, int count, int percentile)
+{
+  if (!values || count <= 0 || percentile < 0 || percentile > 100)
+    {
+      return 1.0f;
+    }
+
+  std::vector<float> sorted (values, values + count);
+  int const one_based = std::max (1, std::min (count,
+                                               static_cast<int> (std::lround (
+                                                   static_cast<double> (count) * 0.01
+                                                   * static_cast<double> (percentile)))));
+  std::nth_element (sorted.begin (), sorted.begin () + (one_based - 1), sorted.end ());
+  return sorted[static_cast<size_t> (one_based - 1)];
+}
+
+void superfox_twkfreq2 (std::complex<float> const* c3, std::complex<float>* c4,
+                        int npts, float fsample, float fshift)
+{
+  if (!c3 || !c4 || npts <= 0 || fsample <= 0.0f)
+    {
+      return;
+    }
+
+  std::complex<float> w {1.0f, 0.0f};
+  float const dphi = fshift * kFt8TwoPi / fsample;
+  std::complex<float> const wstep {std::cos (dphi), std::sin (dphi)};
+  for (int i = 0; i < npts; ++i)
+    {
+      w *= wstep;
+      c4[static_cast<size_t> (i)] = w * c3[static_cast<size_t> (i)];
+    }
+}
+
+void smooth_121a (float* values, int count, float a, float b)
+{
+  if (!values || count <= 2)
+    {
+      return;
+    }
+
+  float const fac = 1.0f / (a + 2.0f * b);
+  float x0 = values[0];
+  for (int i = 1; i < count - 1; ++i)
+    {
+      float const x1 = values[i];
+      values[i] = fac * (a * values[i] + b * (x0 + values[i + 1]));
+      x0 = x1;
+    }
+}
+
+bool superfox_demod (std::complex<float> const* crcvd, float f, float t,
+                     float* s2_out, float* s3_out)
+{
+  if (!crcvd || !s2_out || !s3_out)
+    {
+      return false;
+    }
+
+  SuperFoxDemodFft& fft = superfox_demod_fft ();
+  if (!fft.valid ())
+    {
+      return false;
+    }
+
+  std::fill_n (s2_out, kSuperFoxQpcRows * kSuperFoxDemodSpectrumCols, 0.0f);
+  std::fill_n (s3_out, kSuperFoxQpcRows * kSuperFoxQpcCols, 0.0f);
+
+  int const j0 = static_cast<int> (std::lround (12000.0f * (t + 0.5f)));
+  float const df = 12000.0f / static_cast<float> (kSuperFoxDemodNsps);
+  int const i0 = static_cast<int> (std::lround (f / df)) - kSuperFoxQpcRows / 2;
+  if (i0 < 0 || i0 + kSuperFoxQpcRows > kSuperFoxDemodNsps)
+    {
+      return false;
+    }
+
+  std::complex<float>* spectrum = fft.values ();
+  int k2 = 0;
+  for (int n = 1; n <= kSuperFoxDemodSymbols; ++n)
+    {
+      int const jb = n * kSuperFoxDemodNsps + j0;
+      int const ja = jb - kSuperFoxDemodNsps + 1;
+      ++k2;
+      if (ja < 1 || jb > kFt8NMax)
+        {
+          continue;
+        }
+
+      std::copy_n (crcvd + (ja - 1), kSuperFoxDemodNsps, spectrum);
+      fftwf_execute (fft.forward);
+      for (int row = 0; row < kSuperFoxQpcRows; ++row)
+        {
+          s2_out[row + kSuperFoxQpcRows * k2] =
+              std::norm (spectrum[static_cast<size_t> (i0 + row)]);
+        }
+    }
+
+  float const base2 = superfox_percentile (s2_out, kSuperFoxQpcRows * kSuperFoxDemodSymbols, 50);
+  if (base2 > 0.0f)
+    {
+      float const inv = 1.0f / base2;
+      for (int i = 0; i < kSuperFoxQpcRows * kSuperFoxDemodSpectrumCols; ++i)
+        {
+          s2_out[i] *= inv;
+        }
+    }
+
+  std::array<int, kSuperFoxQpcRows> hist1 {};
+  std::array<int, kSuperFoxQpcRows> hist2 {};
+  for (int col = 0; col <= kSuperFoxDemodSymbols; ++col)
+    {
+      int best_row = 1;
+      float best = s2_out[1 + kSuperFoxQpcRows * col];
+      for (int row = 2; row < kSuperFoxQpcRows; ++row)
+        {
+          float const value = s2_out[row + kSuperFoxQpcRows * col];
+          if (value > best)
+            {
+              best = value;
+              best_row = row;
+            }
+        }
+      ++hist1[static_cast<size_t> (best_row - 1)];
+    }
+
+  hist1[0] = 0;
+  for (int i = 0; i <= 123; ++i)
+    {
+      hist2[static_cast<size_t> (i)] = hist1[static_cast<size_t> (i)]
+                                       + hist1[static_cast<size_t> (i + 1)]
+                                       + hist1[static_cast<size_t> (i + 2)]
+                                       + hist1[static_cast<size_t> (i + 3)];
+    }
+
+  int i1 = 0;
+  int m1 = hist1[0];
+  for (int i = 1; i < kSuperFoxQpcRows; ++i)
+    {
+      if (hist1[static_cast<size_t> (i)] > m1)
+        {
+          m1 = hist1[static_cast<size_t> (i)];
+          i1 = i;
+        }
+    }
+  (void) i1;
+
+  int i2 = 0;
+  int m2 = hist2[0];
+  for (int i = 1; i < kSuperFoxQpcRows; ++i)
+    {
+      if (hist2[static_cast<size_t> (i)] > m2)
+        {
+          m2 = hist2[static_cast<size_t> (i)];
+          i2 = i;
+        }
+    }
+
+  if (m1 > 12)
+    {
+      for (int row = 0; row < kSuperFoxQpcRows; ++row)
+        {
+          if (hist1[static_cast<size_t> (row)] > 12)
+            {
+              for (int col = 0; col <= kSuperFoxDemodSymbols; ++col)
+                {
+                  s2_out[row + kSuperFoxQpcRows * col] = 1.0f;
+                }
+            }
+        }
+    }
+
+  if (m2 > 20)
+    {
+      if (i2 >= 1)
+        {
+          --i2;
+        }
+      if (i2 > 120)
+        {
+          i2 = 120;
+        }
+      for (int row = i2; row <= i2 + 7; ++row)
+        {
+          for (int col = 0; col <= kSuperFoxDemodSymbols; ++col)
+            {
+              s2_out[row + kSuperFoxQpcRows * col] = 1.0f;
+            }
+        }
+    }
+
+  int k3 = 0;
+  for (int n = 1; n <= kSuperFoxDemodSymbols; ++n)
+    {
+      if (std::find (kSuperFoxIsync.begin (), kSuperFoxIsync.end (), n) != kSuperFoxIsync.end ())
+        {
+          continue;
+        }
+      ++k3;
+      for (int row = 0; row < kSuperFoxQpcRows; ++row)
+        {
+          s3_out[row + kSuperFoxQpcRows * k3] = s2_out[row + kSuperFoxQpcRows * n];
+        }
+    }
+
+  float const base3 = superfox_percentile (s3_out, kSuperFoxQpcRows * kSuperFoxQpcCols, 50);
+  if (base3 > 0.0f)
+    {
+      float const inv = 1.0f / base3;
+      for (int i = 0; i < kSuperFoxQpcRows * kSuperFoxQpcCols; ++i)
+        {
+          s3_out[i] *= inv;
+        }
+    }
+
+  return true;
+}
+
+struct SuperFoxQpcDecodeResult
+{
+  std::array<unsigned char, kSuperFoxPackedSymbols> xdec {};
+  bool crc_ok {false};
+  float snrsync {0.0f};
+  float fbest {0.0f};
+  float tbest {0.0f};
+  float snr {0.0f};
+};
+
+bool superfox_qpc_sync (std::complex<float> const* crcvd0, float fsample, float fsync, float ftol,
+                        float& f2, float& t2, float& snrsync);
+void superfox_qpc_likelihoods (float const* s3, int rows, int cols, float EsNo, float No,
+                               float* py_out);
+float superfox_qpc_snr (float const* s3, int rows, int cols, unsigned char const* y);
+
+bool superfox_qpc_decode2 (std::complex<float> const* c0, float fsync, float ftol,
+                           int ndepth, float dth, float damp,
+                           SuperFoxQpcDecodeResult& result)
+{
+  if (!c0)
+    {
+      return false;
+    }
+
+  float f2 = 0.0f;
+  float t2 = 0.0f;
+  if (!superfox_qpc_sync (c0, 12000.0f, fsync, ftol, f2, t2, result.snrsync))
+    {
+      return false;
+    }
+
+  float const baud = 12000.0f / 1024.0f;
+  float const f00 = 1500.0f + f2;
+  float const t00 = t2;
+  result.fbest = f00;
+  result.tbest = t00;
+  result.crc_ok = false;
+  result.snr = 0.0f;
+  result.xdec.fill (0);
+
+  int maxd = 1;
+  if (ndepth > 0)
+    {
+      int const depth_index = std::max (0, std::min (ndepth - 1,
+                                                     static_cast<int> (kSuperFoxMaxDither.size ()) - 1));
+      maxd = kSuperFoxMaxDither[static_cast<size_t> (depth_index)];
+    }
+
+  int maxft = kSuperFoxQpcSearchCount;
+  if (result.snrsync < 4.0f || ndepth <= 0)
+    {
+      maxft = 1;
+    }
+
+  std::vector<std::complex<float>> shifted (static_cast<size_t> (kFt8NMax));
+  std::vector<float> py (static_cast<size_t> (kSuperFoxQpcRows * kSuperFoxQpcCols));
+  std::vector<float> py0 (static_cast<size_t> (kSuperFoxQpcRows * kSuperFoxQpcCols));
+  std::vector<float> pyd (static_cast<size_t> (kSuperFoxQpcRows * kSuperFoxQpcCols));
+  std::vector<float> s2 (static_cast<size_t> (kSuperFoxQpcRows * kSuperFoxDemodSpectrumCols));
+  std::vector<float> s3 (static_cast<size_t> (kSuperFoxQpcRows * kSuperFoxQpcCols));
+  std::array<unsigned char, kSuperFoxPackedSymbols> xdec {};
+  std::array<unsigned char, kSuperFoxQpcCols> ydec {};
+
+  constexpr std::array<int, 33> kSeed {
+      321278106,  -658879006,  1239150429,  -941466001, -698554454,
+      1136210962,  1633585627,  1261915021, -1134191465, -487888229,
+      2131958895, -1429290834, -1802468092,  1801346659, 1966248904,
+      402671397, -1961400750, -1567227835,  1895670987, -286583128,
+      -595933665, -1699285543,  1518291336,  1338407128,  838354404,
+      -2081343776, -1449416716,  1236537391,  -133197638,  337355509,
+      -460640480,  1592689606,          0};
+  std::array<uint32_t, kSeed.size ()> seed_data {};
+  for (size_t i = 0; i < kSeed.size (); ++i)
+    {
+      seed_data[i] = static_cast<uint32_t> (kSeed[i]);
+    }
+
+  constexpr uint32_t kMask21 = (1u << 21) - 1u;
+  for (int idith = 1; idith <= maxft; ++idith)
+    {
+      if (idith >= 2)
+        {
+          maxd = 1;
+        }
+
+      float const deltaf = static_cast<float> (kSuperFoxIdf[static_cast<size_t> (idith - 1)]) * 0.5f;
+      float const deltat = static_cast<float> (kSuperFoxIdt[static_cast<size_t> (idith - 1)])
+                           * 8.0f / 1024.0f;
+      float const f = f00 + deltaf;
+      float const t = t00 + deltat;
+      float const fshift = 1500.0f - (f + baud);
+      superfox_twkfreq2 (c0, shifted.data (), kFt8NMax, 12000.0f, fshift);
+
+      float const a = 1.0f;
+      for (int kk = 1; kk <= 4; ++kk)
+        {
+          float b = 0.0f;
+          if (kk == 2)
+            {
+              b = 0.4f;
+            }
+          else if (kk == 3)
+            {
+              b = 0.5f;
+            }
+          else if (kk == 4)
+            {
+              b = 0.6f;
+            }
+
+          if (!superfox_demod (shifted.data (), 1500.0f, t, s2.data (), s3.data ()))
+            {
+              return false;
+            }
+
+          if (b > 0.0f)
+            {
+              for (int col = 0; col < kSuperFoxQpcCols; ++col)
+                {
+                  smooth_121a (s3.data () + kSuperFoxQpcRows * col, kSuperFoxQpcRows, a, b);
+                }
+            }
+
+          float const base3 = superfox_percentile (s3.data (), kSuperFoxQpcRows * kSuperFoxQpcCols, 50);
+          if (base3 > 0.0f)
+            {
+              float const inv = 1.0f / base3;
+              for (float& value : s3)
+                {
+                  value *= inv;
+                }
+            }
+
+          constexpr float kEsNoDec = 3.16f;
+          constexpr float kNo = 1.0f;
+          py0 = s3;
+          superfox_qpc_likelihoods (s3.data (), kSuperFoxQpcRows, kSuperFoxQpcCols, kEsNoDec, kNo,
+                                    py.data ());
+
+          std::seed_seq seed_seq (seed_data.begin (), seed_data.end ());
+          std::mt19937 engine (seed_seq);
+          std::uniform_real_distribution<float> uniform (0.0f, 1.0f);
+          for (int kkk = 1; kkk <= maxd; ++kkk)
+            {
+              if (kkk == 1)
+                {
+                  pyd = py0;
+                }
+              else
+                {
+                  std::fill (pyd.begin (), pyd.end (), 0.0f);
+                  if (kkk > 2)
+                    {
+                      for (float& value : pyd)
+                        {
+                          value = 2.0f * (uniform (engine) - 0.5f);
+                        }
+                    }
+                  for (size_t i = 0; i < pyd.size (); ++i)
+                    {
+                      if (py[i] > dth)
+                        {
+                          pyd[i] = 0.0f;
+                        }
+                    }
+                  for (size_t i = 0; i < pyd.size (); ++i)
+                    {
+                      pyd[i] = py[i] * (1.0f + damp * pyd[i]);
+                    }
+                }
+
+              for (int col = 0; col < kSuperFoxQpcCols; ++col)
+                {
+                  float ss = 0.0f;
+                  for (int row = 0; row < kSuperFoxQpcRows; ++row)
+                    {
+                      ss += pyd[static_cast<size_t> (row + kSuperFoxQpcRows * col)];
+                    }
+                  if (ss > 0.0f)
+                    {
+                      float const inv = 1.0f / ss;
+                      for (int row = 0; row < kSuperFoxQpcRows; ++row)
+                        {
+                          pyd[static_cast<size_t> (row + kSuperFoxQpcRows * col)] *= inv;
+                        }
+                    }
+                  else
+                    {
+                      for (int row = 0; row < kSuperFoxQpcRows; ++row)
+                        {
+                          pyd[static_cast<size_t> (row + kSuperFoxQpcRows * col)] = 0.0f;
+                        }
+                    }
+                }
+
+              qpc_decode (xdec.data (), ydec.data (), pyd.data ());
+              std::reverse (xdec.begin (), xdec.end ());
+
+              uint32_t const crc_chk = nhash2 (xdec.data (), 47, 571u) & kMask21;
+              uint32_t const crc_sent =
+                  (static_cast<uint32_t> (xdec[47]) << 14)
+                  | (static_cast<uint32_t> (xdec[48]) << 7)
+                  | static_cast<uint32_t> (xdec[49]);
+              result.crc_ok = crc_chk == crc_sent;
+              if (result.crc_ok)
+                {
+                  result.snr = superfox_qpc_snr (s3.data (), kSuperFoxQpcRows,
+                                                 kSuperFoxQpcCols, ydec.data ());
+                  result.xdec = xdec;
+                  result.fbest = f;
+                  result.tbest = t;
+                  if (result.snr < -16.5f)
+                    {
+                      result.crc_ok = false;
+                    }
+                  return true;
+                }
+            }
+        }
+    }
+
+  return true;
+}
+
+bool superfox_qpc_sync (std::complex<float> const* crcvd0, float fsample, float fsync, float ftol,
+                        float& f2, float& t2, float& snrsync)
+{
+  if (!crcvd0)
+    {
+      return false;
+    }
+
+  SuperFoxSyncFft& fft = superfox_sync_fft ();
+  if (!fft.valid ())
+    {
+      return false;
+    }
+
+  constexpr int kSpectrumBins = kSuperFoxSyncSamples / 4;
+  float const baud = 12000.0f / 1024.0f;
+  float const df2 = fsample / static_cast<float> (kSuperFoxSyncSamples);
+  float const fac = 1.0f / static_cast<float> (kSuperFoxSyncSamples);
+  std::complex<float>* c0 = fft.values ();
+  for (int i = 0; i < kSuperFoxSyncSamples; ++i)
+    {
+      c0[static_cast<size_t> (i)] = crcvd0[static_cast<size_t> (i)] * fac;
+    }
+  fftwf_execute (fft.forward);
+
+  std::vector<float> s (static_cast<size_t> (kSpectrumBins));
+  for (int i = 1; i <= kSpectrumBins; ++i)
+    {
+      s[static_cast<size_t> (i - 1)] = std::norm (c0[static_cast<size_t> (i)]);
+    }
+
+  for (int i = 0; i < 4; ++i)
+    {
+      smooth_121 (s.data (), kSpectrumBins);
+    }
+
+  int ia = static_cast<int> (std::lround ((fsync - ftol) / df2));
+  int ib = static_cast<int> (std::lround ((fsync + ftol) / df2));
+  ia = std::max (1, ia);
+  ib = std::min (kSpectrumBins, ib);
+  if (ia > ib)
+    {
+      return false;
+    }
+
+  int i0 = ia;
+  float peak = s[static_cast<size_t> (ia - 1)];
+  for (int i = ia + 1; i <= ib; ++i)
+    {
+      float const value = s[static_cast<size_t> (i - 1)];
+      if (value > peak)
+        {
+          peak = value;
+          i0 = i;
+        }
+    }
+  f2 = df2 * static_cast<float> (i0) - 750.0f;
+
+  ia = static_cast<int> (std::lround (static_cast<float> (i0) - baud / df2));
+  ib = static_cast<int> (std::lround (static_cast<float> (i0) + baud / df2));
+  ia = std::max (1, ia);
+  ib = std::min (kSpectrumBins, ib);
+
+  float s1 = 0.0f;
+  float s0 = 0.0f;
+  for (int i = ia; i <= ib; ++i)
+    {
+      float const value = s[static_cast<size_t> (i - 1)];
+      s0 += value;
+      s1 += static_cast<float> (i - i0) * value;
+    }
+  if (s0 <= 0.0f)
+    {
+      return false;
+    }
+
+  float const delta = s1 / s0;
+  i0 = static_cast<int> (std::lround (static_cast<float> (i0) + delta));
+  f2 = static_cast<float> (i0) * df2 - 750.0f;
+
+  std::vector<std::complex<float>> c1 (static_cast<size_t> (kSuperFoxSyncNz), std::complex<float> {});
+  ia = static_cast<int> (std::lround (static_cast<float> (i0) - baud / df2));
+  ib = static_cast<int> (std::lround (static_cast<float> (i0) + baud / df2));
+  ia = std::max (0, ia);
+  ib = std::min (kSuperFoxSyncSamples - 1, ib);
+  for (int i = ia; i <= ib; ++i)
+    {
+      int const j = i - i0;
+      int const dst = j >= 0 ? j : j + kSuperFoxSyncNz;
+      if (dst >= 0 && dst < kSuperFoxSyncNz)
+        {
+          c1[static_cast<size_t> (dst)] = c0[static_cast<size_t> (i)];
+        }
+    }
+
+  fftwf_plan inverse = fftwf_plan_dft_1d (kSuperFoxSyncNz,
+                                          reinterpret_cast<fftwf_complex*> (c1.data ()),
+                                          reinterpret_cast<fftwf_complex*> (c1.data ()),
+                                          FFTW_BACKWARD, FFTW_ESTIMATE);
+  if (!inverse)
+    {
+      return false;
+    }
+  fftwf_execute (inverse);
+  fftwf_destroy_plan (inverse);
+
+  std::vector<std::complex<float>> c1sum (static_cast<size_t> (kSuperFoxSyncNz));
+  c1sum[0] = c1[0];
+  for (int i = 1; i < kSuperFoxSyncNz; ++i)
+    {
+      c1sum[static_cast<size_t> (i)] = c1sum[static_cast<size_t> (i - 1)] + c1[static_cast<size_t> (i)];
+    }
+
+  int const nspsd = 1024 / kSuperFoxSyncDown;
+  float const dt = static_cast<float> (kSuperFoxSyncDown) / 12000.0f;
+  int const lagmax = static_cast<int> (1.5f / dt);
+  int const nominal_start = static_cast<int> (std::lround (0.5f * fsample / kSuperFoxSyncDown));
+  std::vector<float> p (static_cast<size_t> (2 * lagmax + 1));
+  float pmax = 0.0f;
+  int lagpk = 0;
+  for (int lag = -lagmax; lag <= lagmax; ++lag)
+    {
+      float sp = 0.0f;
+      for (int j = 0; j < kSuperFoxSyncSymbols; ++j)
+        {
+          int const i1 = nominal_start + (kSuperFoxIsync[static_cast<size_t> (j)] - 1) * nspsd + lag;
+          int const i2 = i1 + nspsd;
+          if (i1 < 0 || i1 > kSuperFoxSyncNz - 1 || i2 < 0 || i2 > kSuperFoxSyncNz - 1)
+            {
+              continue;
+            }
+          std::complex<float> const z = c1sum[static_cast<size_t> (i2)] - c1sum[static_cast<size_t> (i1)];
+          sp += std::norm (z);
+        }
+      if (sp > pmax)
+        {
+          pmax = sp;
+          lagpk = lag;
+        }
+      p[static_cast<size_t> (lag + lagmax)] = sp;
+    }
+
+  t2 = static_cast<float> (lagpk) * dt;
+  float sp = 0.0f;
+  float sq = 0.0f;
+  int nsum = 0;
+  float const tsym = 1024.0f / 12000.0f;
+  for (int lag = -lagmax; lag <= lagmax; ++lag)
+    {
+      float const t = static_cast<float> (lag - lagpk) * dt;
+      if (std::fabs (t) < tsym)
+        {
+          continue;
+        }
+      float const value = p[static_cast<size_t> (lag + lagmax)];
+      ++nsum;
+      sp += value;
+      sq += value * value;
+    }
+  if (nsum <= 0)
+    {
+      return false;
+    }
+
+  float const ave = sp / static_cast<float> (nsum);
+  float const variance = std::max (0.0f, sq / static_cast<float> (nsum) - ave * ave);
+  float const rms = std::sqrt (variance);
+  snrsync = rms > 0.0f ? (pmax - ave) / rms : 0.0f;
+  return true;
+}
+
+void superfox_qpc_likelihoods (float const* s3, int rows, int cols, float EsNo, float No,
+                               float* py_out)
+{
+  float const norm = (EsNo / (EsNo + 1.0f)) / No;
+  for (int col = 0; col < cols; ++col)
+    {
+      float normpwrmax = 0.0f;
+      for (int row = 0; row < rows; ++row)
+        {
+          int const index = row + rows * col;
+          float const normpwr = norm * s3[index];
+          py_out[index] = normpwr;
+          normpwrmax = std::max (normpwrmax, normpwr);
+        }
+      float pynorm = 0.0f;
+      for (int row = 0; row < rows; ++row)
+        {
+          int const index = row + rows * col;
+          py_out[index] = std::exp (py_out[index] - normpwrmax);
+          pynorm += py_out[index];
+        }
+      if (pynorm > 0.0f)
+        {
+          for (int row = 0; row < rows; ++row)
+            {
+              int const index = row + rows * col;
+              py_out[index] /= pynorm;
+            }
+        }
+    }
+}
+
+float superfox_qpc_snr (float const* s3, int rows, int cols, unsigned char const* y)
+{
+  float p = 0.0f;
+  for (int col = 1; col < cols; ++col)
+    {
+      int const row = y[col];
+      if (row >= 0 && row < rows)
+        {
+          p += s3[row + rows * col];
+        }
+    }
+  return db_compat (p / 127.0f) - db_compat (127.0f) - 4.0f;
+}
+
+std::string format_superfox_stdout_line (int nutc, int snr, float dt, float freq,
+                                         std::string const& decoded)
+{
+  std::ostringstream line;
+  line << std::setfill ('0') << std::setw (6) << nutc
+       << std::setfill (' ') << std::setw (4) << snr
+       << std::fixed << std::setprecision (1) << std::setw (5) << dt
+       << std::setw (5) << static_cast<int> (std::lround (freq))
+       << " ~  " << decoded;
+  return line.str ();
+}
+
+std::uint64_t superfox_read_bits (std::array<unsigned char, kSuperFoxPackedSymbols> const& xdec,
+                                  int bit_offset, int bit_count)
+{
+  std::uint64_t value = 0;
+  for (int i = 0; i < bit_count; ++i)
+    {
+      int const bit_index = bit_offset + i;
+      int const symbol = bit_index / 7;
+      int const shift = 6 - (bit_index % 7);
+      value = (value << 1)
+              | ((static_cast<std::uint64_t> (xdec[static_cast<size_t> (symbol)]) >> shift) & 1u);
+    }
+  return value;
+}
+
+std::string superfox_unpack_text71 (std::array<unsigned char, kSuperFoxPackedSymbols> const& xdec,
+                                    int bit_offset)
+{
+  std::array<char, 71> bits {};
+  for (int i = 0; i < 71; ++i)
+    {
+      bits[static_cast<size_t> (i)] =
+          superfox_read_bits (xdec, bit_offset + i, 1) != 0 ? '1' : '0';
+    }
+
+  std::array<char, 13> unpacked {};
+  bool success = false;
+  legacy_pack77_unpacktext77_c (bits.data (), unpacked.data (), &success);
+  return success ? trim_block (unpacked.data (), static_cast<int> (unpacked.size ())) : std::string {};
+}
+
+std::string superfox_unpack_call28 (int n28)
+{
+  std::array<char, 13> unpacked {};
+  bool success = false;
+  legacy_pack77_unpack28_c (n28, unpacked.data (), &success);
+  return success ? trim_block (unpacked.data (), static_cast<int> (unpacked.size ())) : std::string {};
+}
+
+std::string superfox_unpack_grid15 (int n15)
+{
+  constexpr int kGridBase = 180 * 180;
+  if (n15 < 0)
+    {
+      return {};
+    }
+  if (n15 < 32400)
+    {
+      int const dlat = (n15 % 180) - 90;
+      int const dlong = (n15 / 180) * 2 - 180 + 2;
+      int const nlong = static_cast<int> (60.0 * (180.0 - static_cast<double> (dlong)) / 5.0);
+      int const long_a = nlong / 240;
+      int const long_b = (nlong - 240 * long_a) / 24;
+      int const nlat = static_cast<int> (60.0 * (static_cast<double> (dlat) + 90.0) / 2.5);
+      int const lat_a = nlat / 240;
+      int const lat_b = (nlat - 240 * lat_a) / 24;
+      std::string grid (4, ' ');
+      grid[0] = static_cast<char> ('A' + long_a);
+      grid[1] = static_cast<char> ('A' + lat_a);
+      grid[2] = static_cast<char> ('0' + long_b);
+      grid[3] = static_cast<char> ('0' + lat_b);
+      if (grid.rfind ("KA", 0) == 0 || grid.rfind ("LA", 0) == 0)
+        {
+          bool const prefixed = grid[0] == 'L';
+          int value = std::stoi (grid.substr (2, 2)) - 50;
+          std::ostringstream report;
+          if (prefixed)
+            {
+              report << 'R';
+            }
+          if (value >= 0)
+            {
+              report << '+';
+            }
+          report << std::setw (2) << std::setfill ('0') << std::abs (value);
+          return report.str ();
+        }
+      return grid;
+    }
+
+  int value = n15 - kGridBase - 1;
+  std::ostringstream report;
+  if (value >= 1 && value <= 30)
+    {
+      report << '-' << std::setw (2) << std::setfill ('0') << value;
+      return report.str ();
+    }
+  if (value >= 31 && value <= 60)
+    {
+      report << "R-" << std::setw (2) << std::setfill ('0') << (value - 30);
+      return report.str ();
+    }
+  if (value == 61)
+    {
+      return "RO";
+    }
+  if (value == 62)
+    {
+      return "RRR";
+    }
+  if (value == 63)
+    {
+      return "73";
+    }
+  return {};
+}
+
+std::string superfox_decode_compound_call (std::uint64_t n58)
+{
+  std::array<char, 13> foxcall {};
+  foxcall.fill (' ');
+  for (int i = 10; i >= 0; --i)
+    {
+      std::uint64_t const index = (n58 % 38u);
+      foxcall[static_cast<size_t> (i)] = kSuperFoxBase38[index];
+      n58 /= 38u;
+    }
+  return trim_block (foxcall.data (), static_cast<int> (foxcall.size ()));
+}
+
+std::string superfox_trim_period_padding (std::string text)
+{
+  for (int i = static_cast<int> (text.size ()) - 1; i >= 0; --i)
+    {
+      if (text[static_cast<size_t> (i)] != '.')
+        {
+          break;
+        }
+      text[static_cast<size_t> (i)] = ' ';
+    }
+  while (!text.empty () && text.back () == ' ')
+    {
+      text.pop_back ();
+    }
+  return text;
+}
+
+std::string superfox_format_report (int raw)
+{
+  if (raw == 31)
+    {
+      return "RR73";
+    }
+
+  int const value = raw - 18;
+  std::ostringstream report;
+  report << (value >= 0 ? '+' : '-')
+         << std::setw (2) << std::setfill ('0') << std::abs (value);
+  return report.str ();
+}
+
+std::vector<std::string> superfox_unpack_lines (
+    std::array<unsigned char, kSuperFoxPackedSymbols> const& xdec, bool use_otp)
+{
+  std::vector<std::string> lines;
+  lines.reserve (kSuperFoxMaxDecodeLines);
+
+  int const i3 = static_cast<int> (superfox_read_bits (xdec, 326, 3));
+  std::string foxcall = superfox_unpack_call28 (static_cast<int> (superfox_read_bits (xdec, 0, 28)));
+  int ncq = 0;
+
+  if (i3 == 2)
+    {
+      std::string free_text = superfox_unpack_text71 (xdec, 160);
+      free_text += superfox_unpack_text71 (xdec, 231);
+      lines.push_back (superfox_trim_period_padding (free_text));
+    }
+  else if (i3 == 3)
+    {
+      foxcall = superfox_decode_compound_call (superfox_read_bits (xdec, 0, 58));
+      std::string const grid4 = superfox_unpack_grid15 (static_cast<int> (superfox_read_bits (xdec, 58, 15)));
+      lines.push_back ("CQ " + foxcall + (grid4.empty () ? std::string {} : " " + grid4));
+
+      std::uint64_t const n32 = superfox_read_bits (xdec, 73, 32);
+      if (static_cast<int> (n32) != kSuperFoxNqu1Rks)
+        {
+          std::string free_text = superfox_unpack_text71 (xdec, 73);
+          free_text += superfox_unpack_text71 (xdec, 144);
+          free_text = superfox_trim_period_padding (free_text);
+          if (!free_text.empty ())
+            {
+              lines.push_back (free_text);
+            }
+        }
+    }
+
+  if (i3 != 3)
+    {
+      int report_offset = (i3 == 2) ? 140 : 280;
+      int report_count = 4;
+      std::array<std::string, 5> reports {};
+      for (int i = 0; i < report_count; ++i)
+        {
+          reports[static_cast<size_t> (i)] =
+              superfox_format_report (static_cast<int> (superfox_read_bits (xdec, report_offset + 5 * i, 5)));
+        }
+
+      int const max_calls = (i3 == 2 || i3 == 3) ? 4 : 9;
+      for (int i = 0; i < max_calls; ++i)
+        {
+          int const n28 = static_cast<int> (superfox_read_bits (xdec, 28 * i, 28));
+          if (n28 == 0 || n28 == kSuperFoxNqu1Rks)
+            {
+              continue;
+            }
+
+          std::string const hound = superfox_unpack_call28 (n28);
+          if (hound.empty ())
+            {
+              continue;
+            }
+
+          std::string message = hound + " " + foxcall;
+          bool const is_cq = message.rfind ("CQ ", 0) == 0;
+          if (is_cq)
+            {
+              ++ncq;
+            }
+          else if (i3 == 2)
+            {
+              message += " " + reports[static_cast<size_t> (i)];
+            }
+          else if (i < 5)
+            {
+              message += " RR73";
+            }
+          else
+            {
+              message += " " + reports[static_cast<size_t> (i - 5)];
+            }
+
+          if (ncq <= 1 || !is_cq)
+            {
+              lines.push_back (message);
+            }
+        }
+
+      if (superfox_read_bits (xdec, 305, 1) != 0 && ncq < 1)
+        {
+          lines.push_back ("CQ " + foxcall);
+        }
+    }
+
+  if (use_otp)
+    {
+      int const signature = static_cast<int> (superfox_read_bits (xdec, 306, 20));
+      std::ostringstream verify;
+      verify << "$VERIFY$ " << foxcall << ' '
+             << std::setfill ('0') << std::setw (6) << signature;
+      lines.push_back (verify.str ());
+    }
+
+  return lines;
+}
+
+bool superfox_decode_lines_from_wave (short const* iwave, int nfqso, int ntol,
+                                      std::vector<std::string>& lines_out,
+                                      int& nsnr_out, float& freq_out, float& dt_out)
+{
+  lines_out.clear ();
+  nsnr_out = 0;
+  freq_out = 0.0f;
+  dt_out = 0.0f;
+
+  if (!iwave)
+    {
+      return false;
+    }
+
+  std::array<float, kFt8NMax> dd {};
+  for (int i = 0; i < kFt8NMax; ++i)
+    {
+      dd[static_cast<size_t> (i)] = static_cast<float> (iwave[i]);
+    }
+  ftx_sfox_remove_ft8_c (dd.data (), kFt8NMax);
+
+  std::array<std::complex<float>, kFt8NMax> c0 {};
+  if (!superfox_analytic_signal (dd.data (), kFt8NMax, c0.data ()))
+    {
+      return false;
+    }
+
+  float fsync = static_cast<float> (nfqso);
+  if (!superfox_remove_tone (c0.data (), fsync))
+    {
+      return false;
+    }
+
+  SuperFoxQpcDecodeResult decode;
+  if (!superfox_qpc_decode2 (c0.data (), fsync, static_cast<float> (ntol),
+                             3, 0.5f, 1.0f, decode)
+      || !decode.crc_ok)
+    {
+      return false;
+    }
+
+  std::array<unsigned char, kSuperFoxPackedSymbols> payload {};
+  for (int i = 0; i < kSuperFoxPackedSymbols; ++i)
+    {
+      payload[static_cast<size_t> (i)] = decode.xdec[static_cast<size_t> (i)];
+    }
+
+  lines_out = superfox_unpack_lines (payload, true);
+  nsnr_out = static_cast<int> (std::lround (decode.snr));
+  freq_out = decode.fbest - 750.0f;
+  dt_out = decode.tbest;
+  return !lines_out.empty ();
+}
+
+void copy_superfox_lines (std::vector<std::string> const& lines, char* lines_out,
+                          int line_stride, int max_lines)
+{
+  if (!lines_out || line_stride <= 0 || max_lines <= 0)
+    {
+      return;
+    }
+
+  int const count = std::min (max_lines, static_cast<int> (lines.size ()));
+  for (int i = 0; i < count; ++i)
+    {
+      char* destination = lines_out + i * line_stride;
+      std::fill_n (destination, line_stride, ' ');
+      std::string const& line = lines[static_cast<size_t> (i)];
+      std::copy_n (line.data (), std::min (line_stride, static_cast<int> (line.size ())), destination);
+    }
+}
+
 struct Ft8FoxEntry
 {
   FixedChars<12> callsign {blank_fixed<12> ()};
@@ -606,25 +2041,9 @@ int grid_distance_km (FixedChars<6> const& mygrid, FixedChars<4> const& hisgrid4
 
   FixedChars<6> hisgrid = blank_fixed<6> ();
   std::copy_n (hisgrid4.begin (), 4, hisgrid.begin ());
-  int nAz = 0;
-  int nEl = 0;
-  int nDmiles = 0;
-  int nDkm = 9999;
-  int nHotAz = 0;
-  int nHotABetter = 0;
-  double utch = 0.0;
-  azdist_ (const_cast<char*> (mygrid.data ()),
-           hisgrid.data (),
-           &utch,
-           &nAz,
-           &nEl,
-           &nDmiles,
-           &nDkm,
-           &nHotAz,
-           &nHotABetter,
-           static_cast<fortran_charlen_t> (mygrid.size ()),
-           static_cast<fortran_charlen_t> (hisgrid.size ()));
-  return nDkm;
+  QString const my_grid = QString::fromLatin1 (mygrid.data (), static_cast<int> (mygrid.size ()));
+  QString const his_grid = QString::fromLatin1 (hisgrid.data (), static_cast<int> (hisgrid.size ()));
+  return geo_distance (my_grid, his_grid, 0.0).km;
 }
 
 void write_houndcallers_file (std::string const& path, Ft8EmitState& state,
@@ -2170,6 +3589,328 @@ extern "C" void ftx_ft8_emit_results_c (int* nutc, int* ncontest, int* nagain,
     }
 }
 
+extern "C" int ftx_superfox_unpack_lines_c (unsigned char const* xdec,
+                                            int use_otp,
+                                            char* lines_out,
+                                            int line_stride,
+                                            int max_lines)
+{
+  if (!xdec)
+    {
+      return 0;
+    }
+
+  std::array<unsigned char, kSuperFoxPackedSymbols> payload {};
+  std::copy_n (xdec, kSuperFoxPackedSymbols, payload.data ());
+  std::vector<std::string> const lines = superfox_unpack_lines (payload, use_otp != 0);
+  copy_superfox_lines (lines, lines_out, line_stride, max_lines);
+  return static_cast<int> (lines.size ());
+}
+
+extern "C" int ftx_superfox_analytic_c (float const* dd,
+                                        int npts,
+                                        float* real_out,
+                                        float* imag_out)
+{
+  if (!dd || !real_out || !imag_out || npts <= 0)
+    {
+      return 0;
+    }
+
+  std::vector<std::complex<float>> analytic (static_cast<size_t> (npts));
+  if (!superfox_analytic_signal (dd, npts, analytic.data ()))
+    {
+      return 0;
+    }
+
+  for (int i = 0; i < npts; ++i)
+    {
+      real_out[i] = analytic[static_cast<size_t> (i)].real ();
+      imag_out[i] = analytic[static_cast<size_t> (i)].imag ();
+    }
+  return 1;
+}
+
+extern "C" int ftx_superfox_remove_tone_c (float* real_io,
+                                           float* imag_io,
+                                           int npts,
+                                           float fsync)
+{
+  if (!real_io || !imag_io || npts != kFt8NMax)
+    {
+      return 0;
+    }
+
+  std::vector<std::complex<float>> c0 (static_cast<size_t> (npts));
+  for (int i = 0; i < npts; ++i)
+    {
+      c0[static_cast<size_t> (i)] =
+          std::complex<float> {real_io[i], imag_io[i]};
+    }
+
+  if (!superfox_remove_tone (c0.data (), fsync))
+    {
+      return 0;
+    }
+
+  for (int i = 0; i < npts; ++i)
+    {
+      real_io[i] = c0[static_cast<size_t> (i)].real ();
+      imag_io[i] = c0[static_cast<size_t> (i)].imag ();
+  }
+  return 1;
+}
+
+extern "C" int ftx_superfox_qpc_sync_c (float const* real_in,
+                                        float const* imag_in,
+                                        int npts,
+                                        float fsync,
+                                        float ftol,
+                                        float* f2_out,
+                                        float* t2_out,
+                                        float* snrsync_out)
+{
+  if (!real_in || !imag_in || !f2_out || !t2_out || !snrsync_out || npts != kFt8NMax)
+    {
+      return 0;
+    }
+
+  std::vector<std::complex<float>> c0 (static_cast<size_t> (npts));
+  for (int i = 0; i < npts; ++i)
+    {
+      c0[static_cast<size_t> (i)] = std::complex<float> {real_in[i], imag_in[i]};
+    }
+
+  float f2 = 0.0f;
+  float t2 = 0.0f;
+  float snrsync = 0.0f;
+  if (!superfox_qpc_sync (c0.data (), 12000.0f, fsync, ftol, f2, t2, snrsync))
+    {
+      return 0;
+    }
+
+  *f2_out = f2;
+  *t2_out = t2;
+  *snrsync_out = snrsync;
+  return 1;
+}
+
+extern "C" int ftx_superfox_qpc_likelihoods2_c (float const* s3,
+                                                int rows,
+                                                int cols,
+                                                float EsNo,
+                                                float No,
+                                                float* py_out)
+{
+  if (!s3 || !py_out || rows <= 0 || cols <= 0)
+    {
+      return 0;
+    }
+
+  superfox_qpc_likelihoods (s3, rows, cols, EsNo, No, py_out);
+  return 1;
+}
+
+extern "C" int ftx_superfox_qpc_snr_c (float const* s3,
+                                       int rows,
+                                       int cols,
+                                       unsigned char const* y,
+                                       float* snr_out)
+{
+  if (!s3 || !y || !snr_out || rows <= 0 || cols <= 0)
+    {
+      return 0;
+    }
+
+  *snr_out = superfox_qpc_snr (s3, rows, cols, y);
+  return 1;
+}
+
+extern "C" int ftx_superfox_qpc_decode2_c (float const* real_in,
+                                           float const* imag_in,
+                                           int npts,
+                                           float fsync,
+                                           float ftol,
+                                           int ndepth,
+                                           float dth,
+                                           float damp,
+                                           unsigned char* xdec_out,
+                                           int* crc_ok_out,
+                                           float* snrsync_out,
+                                           float* fbest_out,
+                                           float* tbest_out,
+                                           float* snr_out)
+{
+  if (!real_in || !imag_in || !xdec_out || !crc_ok_out
+      || !snrsync_out || !fbest_out || !tbest_out || !snr_out
+      || npts != kFt8NMax)
+    {
+      return 0;
+    }
+
+  std::vector<std::complex<float>> c0 (static_cast<size_t> (npts));
+  for (int i = 0; i < npts; ++i)
+    {
+      c0[static_cast<size_t> (i)] = std::complex<float> {real_in[i], imag_in[i]};
+    }
+
+  SuperFoxQpcDecodeResult result;
+  if (!superfox_qpc_decode2 (c0.data (), fsync, ftol, ndepth, dth, damp, result))
+    {
+      return 0;
+    }
+
+  std::copy (result.xdec.begin (), result.xdec.end (), xdec_out);
+  *crc_ok_out = result.crc_ok ? 1 : 0;
+  *snrsync_out = result.snrsync;
+  *fbest_out = result.fbest;
+  *tbest_out = result.tbest;
+  *snr_out = result.snr;
+  return 1;
+}
+
+extern "C" int ftx_superfox_decode_lines_c (short const* iwave,
+                                            int nfqso,
+                                            int ntol,
+                                            char* lines_out,
+                                            int line_stride,
+                                            int max_lines,
+                                            int* nsnr_out,
+                                            float* freq_out,
+                                            float* dt_out)
+{
+  std::vector<std::string> lines;
+  int nsnr = 0;
+  float freq = 0.0f;
+  float dt = 0.0f;
+  if (!superfox_decode_lines_from_wave (iwave, nfqso, ntol, lines, nsnr, freq, dt))
+    {
+      if (nsnr_out)
+        {
+          *nsnr_out = 0;
+        }
+      if (freq_out)
+        {
+          *freq_out = 0.0f;
+        }
+      if (dt_out)
+        {
+          *dt_out = 0.0f;
+        }
+      return 0;
+    }
+
+  copy_superfox_lines (lines, lines_out, line_stride, max_lines);
+  if (nsnr_out)
+    {
+      *nsnr_out = nsnr;
+    }
+  if (freq_out)
+    {
+      *freq_out = freq;
+    }
+  if (dt_out)
+    {
+      *dt_out = dt;
+    }
+  return static_cast<int> (lines.size ());
+}
+
+extern "C" void sfox_ana_ (float* dd, int* npts, std::complex<float>* c0, int* npts2)
+{
+  if (!dd || !npts || !c0)
+    {
+      return;
+    }
+  int const count = *npts;
+  if (npts2)
+    {
+      *npts2 = count;
+    }
+  superfox_analytic_signal (dd, count, c0);
+}
+
+extern "C" void sfox_remove_tone_ (std::complex<float>* c0, float* fsync)
+{
+  if (!c0 || !fsync)
+    {
+      return;
+    }
+  superfox_remove_tone (c0, *fsync);
+}
+
+extern "C" void qpc_sync_ (std::complex<float>* crcvd0, float* fsample, int* /*isync*/, float* fsync,
+                           float* ftol, float* f2, float* t2, float* snrsync)
+{
+  if (!crcvd0 || !fsync || !ftol || !f2 || !t2 || !snrsync)
+    {
+      return;
+    }
+
+  float f2_local = 0.0f;
+  float t2_local = 0.0f;
+  float snr_local = 0.0f;
+  if (!superfox_qpc_sync (crcvd0, fsample ? *fsample : 12000.0f, *fsync, *ftol,
+                          f2_local, t2_local, snr_local))
+    {
+      return;
+    }
+  *f2 = f2_local;
+  *t2 = t2_local;
+  *snrsync = snr_local;
+}
+
+extern "C" void qpc_likelihoods2_ (float* py, float* s3, float* EsNo, float* No)
+{
+  if (!py || !s3 || !EsNo || !No)
+    {
+      return;
+    }
+  superfox_qpc_likelihoods (s3, kSuperFoxQpcRows, kSuperFoxQpcCols, *EsNo, *No, py);
+}
+
+extern "C" void qpc_snr_ (float* s3, signed char* y, float* snr)
+{
+  if (!s3 || !y || !snr)
+    {
+      return;
+    }
+  std::array<unsigned char, kSuperFoxQpcCols> symbols {};
+  for (int i = 0; i < kSuperFoxQpcCols; ++i)
+    {
+      symbols[static_cast<size_t> (i)] = static_cast<unsigned char> (std::max<int> (0, y[i]));
+    }
+  *snr = superfox_qpc_snr (s3, kSuperFoxQpcRows, kSuperFoxQpcCols, symbols.data ());
+}
+
+extern "C" void qpc_decode2_ (std::complex<float>* c0, float* fsync, float* ftol,
+                              signed char* xdec, int* ndepth, float* dth, float* damp,
+                              int* crc_ok, float* snrsync, float* fbest, float* tbest, float* snr)
+{
+  if (!c0 || !fsync || !ftol || !xdec || !ndepth || !dth || !damp
+      || !crc_ok || !snrsync || !fbest || !tbest || !snr)
+    {
+      return;
+    }
+
+  SuperFoxQpcDecodeResult result;
+  if (!superfox_qpc_decode2 (c0, *fsync, *ftol, *ndepth, *dth, *damp, result))
+    {
+      *crc_ok = 0;
+      return;
+    }
+
+  for (int i = 0; i < kSuperFoxPackedSymbols; ++i)
+    {
+      xdec[i] = static_cast<signed char> (result.xdec[static_cast<size_t> (i)]);
+    }
+  *crc_ok = result.crc_ok ? 1 : 0;
+  *snrsync = result.snrsync;
+  *fbest = result.fbest;
+  *tbest = result.tbest;
+  *snr = result.snr;
+}
+
 extern "C" void ftx_ft8_decode_and_emit_params_c (short const* iwave,
                                                   params_block_t const* params,
                                                   char const* temp_dir,
@@ -2189,11 +3930,20 @@ extern "C" void ftx_ft8_decode_and_emit_params_c (short const* iwave,
     {
       if (params->nzhsym >= 50)
         {
-          int yymmdd = params->yymmdd;
-          int nutc = params->nutc;
-          int nfqso = params->nfqso;
-          int ntol = params->ntol;
-          sfrx_sub_ (&yymmdd, &nutc, &nfqso, &ntol, const_cast<short*> (iwave));
+          std::vector<std::string> lines;
+          int nsnr = 0;
+          float freq = 0.0f;
+          float dt = 0.0f;
+          if (superfox_decode_lines_from_wave (iwave, params->nfqso, params->ntol,
+                                               lines, nsnr, freq, dt))
+            {
+              for (std::string const& line : lines)
+                {
+                  std::cout << format_superfox_stdout_line (params->nutc, nsnr, dt, freq, line)
+                            << '\n';
+                }
+              std::cout.flush ();
+            }
         }
       if (decoded_count)
         {
@@ -2253,6 +4003,10 @@ extern "C" void ftx_q65_decode_and_emit_params_c (short const* iwave,
                                                   params_block_t const* params,
                                                   char const* temp_dir,
                                                   int* decoded_count);
+extern "C" void ftx_fst4_decode_and_emit_params_c (short const* iwave,
+                                                   params_block_t const* params,
+                                                   char const* temp_dir,
+                                                   int* decoded_count);
 
 extern "C" void ftx_native_decode_and_emit_params_c (short const* iwave,
                                                      params_block_t const* params,
@@ -2281,6 +4035,11 @@ extern "C" void ftx_native_decode_and_emit_params_c (short const* iwave,
       break;
     case 66:
       ftx_q65_decode_and_emit_params_c (iwave, params, temp_dir, decoded_count);
+      break;
+    case 240:
+    case 241:
+    case 242:
+      ftx_fst4_decode_and_emit_params_c (iwave, params, temp_dir, decoded_count);
       break;
     default:
       break;

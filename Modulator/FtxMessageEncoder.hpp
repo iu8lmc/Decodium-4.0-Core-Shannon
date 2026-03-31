@@ -19,6 +19,7 @@ struct EncodedMessage
   QVector<int> tones;
   int i3 {-1};
   int n3 {-1};
+  int messageType {-1};
 };
 
 struct DecodedMessage
@@ -78,7 +79,10 @@ Decode77Context& sharedDecode77Context ();
 
 EncodedMessage encodeFt2 (QString const& message, bool check_only = false);
 EncodedMessage encodeFt4 (QString const& message, bool check_only = false);
+EncodedMessage encodeFst4 (QString const& message, bool check_only = false);
+EncodedMessage encodeFst4WithHint (QString const& message, bool wspr_hint, bool check_only = false);
 EncodedMessage encodeFt8 (QString const& message);
+EncodedMessage encodeMsk144 (QString const& message, bool check_only = false);
 DecodedMessage decode77 (QByteArray const& msgbits, Decode77Context* context, bool received = false);
 DecodedMessage decode77 (QByteArray const& msgbits, int i3, int n3, Decode77Context* context, bool received = false);
 DecodedMessage decode77 (QByteArray const& msgbits, int i3, int n3);

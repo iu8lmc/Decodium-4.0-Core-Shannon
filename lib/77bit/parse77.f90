@@ -1,6 +1,5 @@
 subroutine parse77(msg,i3,n3)
 
-  use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_pack
   character msg*37,c77*77
   character msgsent*37
   logical ok

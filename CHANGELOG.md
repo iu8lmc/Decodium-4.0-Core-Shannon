@@ -1,5 +1,79 @@
 # Changelog / Registro Modifiche
 
+## [1.5.8] - 2026-03-31
+
+### English
+
+Release focused on completing the promoted native C++ runtime for the FTX family, removing the remaining FST4/Q65/MSK144/SuperFox Fortran residues, hardening macOS shutdown/data-path stability, and fixing Linux GCC/Ubuntu release builds.
+
+#### Added
+
+- Added native C++ FST4/FST4W core/LDPC/shared-DSP pipeline coverage plus native helper/simulator tools such as `fst4sim`, `ldpcsim240_101`, and `ldpcsim240_74`.
+- Added native utility/front-end replacements for `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx`, and `sftx`.
+- Added broader `test_qt_helpers` and utility smoke coverage for shared DSP, FST4 parity/oracle behavior, and native Q65 compatibility entry points.
+
+#### Changed
+
+- FT8, FT4, FT2, Q65, MSK144, SuperFox, and FST4/FST4W now ship from the promoted native C++ runtime path without mode-specific Fortran active/runtime residues.
+- The remaining promoted FST4 decode helpers (`blanker`, `four2a`, `pctile`, `polyfit`) now resolve to native C++ implementations.
+- The old promoted-mode trees for `ana64`, `q65_subs`, MSK144/MSK40 snapshots, and the historical SuperFox Fortran subtree have been removed after native promotion.
+- Local version metadata, workflow defaults, readmes, docs, release notes, and GitHub release body are aligned to semantic version `1.5.8`.
+
+#### Fixed
+
+- Fixed macOS shutdown crashes triggered by premature global FFTW cleanup while thread-local FFTW plans were still finalizing.
+- Fixed `MainWindow::dataSink` / `fastSink` frame clamping and writable-data-dir handling to avoid crash-prone invalid indices and hot-path `QDir` reconstruction.
+- Fixed Linux/GCC 15 build breaks involving `_q65_mask`, `pack28`, legacy tool linkage to migrated symbols such as `four2a_`, and the MSK40 off-by-one bug in `decodeframe40_native`.
+- Fixed full-build regressions by keeping legacy tools/tests linked against the migrated C++ runtime symbols.
+
+### Italiano
+
+Release focalizzata sul completamento del runtime promosso nativo C++ per la famiglia FTX, sulla rimozione degli ultimi residui Fortran FST4/Q65/MSK144/SuperFox, sull'hardening della stabilita' macOS in chiusura/percorso dati e sulla correzione delle build Linux GCC/Ubuntu.
+
+#### Aggiunto
+
+- Aggiunta copertura nativa C++ per la pipeline FST4/FST4W core/LDPC/DSP condiviso e per gli helper/simulatori `fst4sim`, `ldpcsim240_101` e `ldpcsim240_74`.
+- Aggiunti i sostituti utility/front-end nativi per `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx` e `sftx`.
+- Aggiunta copertura piu' ampia in `test_qt_helpers` e smoke-test utility per DSP condiviso, parity/oracle FST4 e punti di compatibilita' Q65 nativi.
+
+#### Modificato
+
+- FT8, FT4, FT2, Q65, MSK144, SuperFox e FST4/FST4W vengono ora distribuiti dal runtime promosso nativo C++ senza residui Fortran specifici del modo nel path attivo/runtime.
+- Gli ultimi helper decode promossi FST4 (`blanker`, `four2a`, `pctile`, `polyfit`) risolvono ora su implementazioni native C++.
+- I vecchi tree promossi per `ana64`, `q65_subs`, snapshot MSK144/MSK40 e storico subtree SuperFox Fortran sono stati rimossi dopo la promozione nativa.
+- Metadati versione locali, default workflow, readme, documentazione, note release e body GitHub sono allineati alla semver `1.5.8`.
+
+#### Corretto
+
+- Corretto il crash macOS in chiusura causato dal cleanup FFTW globale prematuro mentre i piani FFTW thread-local erano ancora in finalizzazione.
+- Corretti `MainWindow::dataSink` / `fastSink` nel clamp dei frame e nella gestione della writable-data-dir per evitare indici invalidi e ricostruzioni `QDir` nel path caldo.
+- Corretti i fallimenti Linux/GCC 15 relativi a `_q65_mask`, `pack28`, link dei tool legacy verso simboli C++ migrati come `four2a_`, e il bug off-by-one MSK40 in `decodeframe40_native`.
+- Corrette regressioni di full-build mantenendo tool/test legacy linkati ai simboli del runtime C++ migrato.
+
+### Espanol
+
+Release centrada en completar el runtime promovido nativo C++ para la familia FTX, eliminar los ultimos residuos Fortran FST4/Q65/MSK144/SuperFox, endurecer la estabilidad macOS al cerrar/ruta de datos y corregir las builds Linux GCC/Ubuntu.
+
+#### Anadido
+
+- Anadida cobertura nativa C++ para la pipeline FST4/FST4W core/LDPC/DSP compartido y para los helpers/simuladores `fst4sim`, `ldpcsim240_101` y `ldpcsim240_74`.
+- Anadidos reemplazos utility/front-end nativos para `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx` y `sftx`.
+- Anadida cobertura mas amplia en `test_qt_helpers` y smoke-tests de utilidades para DSP compartido, parity/oracle FST4 y puntos de compatibilidad Q65 nativos.
+
+#### Cambios
+
+- FT8, FT4, FT2, Q65, MSK144, SuperFox y FST4/FST4W se distribuyen ahora desde el runtime promovido nativo C++ sin residuos Fortran especificos del modo en el camino activo/runtime.
+- Los ultimos helpers decode promovidos FST4 (`blanker`, `four2a`, `pctile`, `polyfit`) resuelven ahora a implementaciones nativas C++.
+- Los viejos arboles promovidos para `ana64`, `q65_subs`, snapshots MSK144/MSK40 y el historico subtree SuperFox Fortran se han eliminado tras la promocion nativa.
+- Metadatos locales de version, defaults de workflow, readmes, documentacion, notas release y body GitHub quedan alineados a la semver `1.5.8`.
+
+#### Corregido
+
+- Corregido el crash macOS al cerrar causado por el cleanup FFTW global prematuro mientras los planes FFTW thread-local seguian finalizandose.
+- Corregidos `MainWindow::dataSink` / `fastSink` en el clamping de frames y en el manejo de writable-data-dir para evitar indices invalidos y reconstrucciones `QDir` en la ruta caliente.
+- Corregidos los fallos Linux/GCC 15 relacionados con `_q65_mask`, `pack28`, enlace de herramientas legacy con simbolos C++ migrados como `four2a_`, y el bug off-by-one MSK40 en `decodeframe40_native`.
+- Corregidas regresiones de full-build manteniendo herramientas/tests legacy enlazados con los simbolos del runtime C++ migrado.
+
 ## [1.5.7] - 2026-03-30
 
 ### English

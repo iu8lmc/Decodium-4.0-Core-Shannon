@@ -18,8 +18,6 @@ function stdmsg(msg0)
 
   use iso_c_binding, only: c_bool
   use packjt
-  use ftx_pack77_c_api, only: ftx_pack77_reset_context,             &
-       ftx_pack77_pack
 
   character*37 msg0,msg1
   character*77 c77

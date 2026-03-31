@@ -1,6 +1,6 @@
 # FTX C++ Migration Status
 
-This document records the actual migration state of FT8, FT4, FT2 and Q65.
+This document records the actual migration state of FT8, FT4, FT2, Q65, MSK144, SuperFox and the adjacent FST4/FST4W cleanup.
 
 The rule is simple:
 
@@ -19,7 +19,7 @@ Current default:
 What is still Fortran in the active FT8 path:
 
 - the app/runtime decoder path no longer depends on the old `ft8var`, `ft8_core`, or `lib/decoder.f90` FT8 wrapper path
-- `lib/ftx_pack77_c_api.f90` remains as a shared Fortran compatibility layer for pack/unpack helpers used across multiple modes, but the FT8-specific short-message wrapper has been removed
+- no FT8-specific Fortran remains on the promoted runtime path
 - `lib/rtty_spec.f90` is no longer part of the build and has been replaced by `utils/rtty_spec.cpp`
 
 Already removed from the active FT8 path:
@@ -35,8 +35,8 @@ Already removed from the active FT8 path:
 
 Migration still required for FT8:
 
-- finish replacing shared pack/unpack compatibility layers where FT8 still reaches them indirectly from legacy paths
-- demote any remaining FT8-related Fortran to explicit reference wrappers only, then delete it from the production tree
+- optional cleanup only outside the active runtime path:
+  - finish retiring shared compatibility bridges that are now only used by non-FTX legacy/oracle code
 
 ## FT4
 
@@ -51,14 +51,13 @@ Current default:
 What is still Fortran in the active FT4 path:
 
 - no FT4-specific Fortran remains on the promoted runtime decode/TX path
-- the remaining shared Fortran compatibility layers are not FT4-specific:
-  - `lib/ftx_pack77_c_api.f90` still exists as a shared pack/unpack bridge used across multiple modes
+- no FT4-specific or shared Fortran bridge remains on the promoted FT4 runtime path
 - the only remaining FT4 mentions in `.f90` files are nominal strings/comments in shared utility code, not active decode/TX logic
 
 Migration still required for FT4:
 
 - optional cleanup only:
-  - decide whether shared compatibility layers such as `lib/ftx_pack77_c_api.f90` should eventually be replaced with native C++ for all modes
+  - decide whether to retire the remaining non-FTX Fortran compatibility/oracle layers globally
   - keep parity/reference tests for FT4 as long as they remain useful, but they are no longer required for the active FT4 runtime path
 
 ## FT2
@@ -84,7 +83,7 @@ Migration still required for FT2:
 
 - optional cleanup only:
   - decide whether compatibility exports such as `ft2_async_decode_` and `ft2_triggered_decode_` should remain for external callers or be retired once every caller uses the native C ABI directly
-  - decide whether shared pack/unpack compatibility layers such as `lib/ftx_pack77_c_api.f90` should eventually be replaced with pure C++ for all modes
+  - decide whether to retire the remaining non-FTX compatibility/oracle layers globally
 
 ## Q65
 
@@ -95,13 +94,12 @@ Current default:
   - `Detector/FtxQ65Decoder.cpp` now owns the active orchestration previously carried by `lib/q65_decode.f90`, `lib/qra/q65/q65.f90` and `lib/qra/q65/q65_loops.f90`
 - the active build no longer compiles `lib/qra/q65/q65.f90`
 - `lib/decoder.f90` no longer carries a Q65 decoder path; native FTX dispatch covers Q65 alongside FT8/FT4/FT2
-- the active shared Q65 helpers used by the native decoder are now C/C++:
-  - `Detector/FtxQ65Core.cpp` carries the former `spec64/twkfreq/pctile` helper logic locally
-  - `lib/qra/q65/q65_subs.c` provides `q65_enc_`, `q65_intrinsics_ff_`, `q65_dec_` and `q65_dec_fullaplist_`
+- the active shared Q65 helpers used by the native decoder are now native C++ in `Detector/FtxQ65Core.cpp`
 
 What is still Fortran in or around the active Q65 path:
 
 - no Q65-specific Fortran remains on the active decode path
+- `Detector/FtxQ65Decoder.cpp` now also owns the old `ana64_` compatibility entrypoint, and `lib/ana64.f90` has been removed from the tree
 - `qmap` no longer uses Q65-specific Fortran frontend code:
   - `qmap/libqmap/q65c.f90`, `decode0.f90`, `qmapa.f90`, `q65b.f90`, `q65_sync.f90` and `getcand2.f90` have been removed from the tree and replaced by native code in `Detector/FtxQ65Frontend.cpp`
 - the active Map65-side Q65 path is now native/generic:
@@ -124,23 +122,92 @@ Migration still required for Q65:
   - remove nominal/comment-only Q65 strings from shared legacy Fortran files if a zero-string audit is desired
   - decide whether dead compatibility aliases such as the old `ftx_map65_q65_*` C exports should remain for external callers
 
+## MSK144
+
+Current default:
+
+- the production decode path is native C++ in `Detector/MSK144DecodeWorker.cpp`
+- the `jt9 -k` offline decode path dispatches to the native MSK144 runner in `utils/jt9.cpp`
+- the encoder and helper tools are native:
+  - `utils/msk144code.cpp`
+  - `utils/msk144sim.cpp`
+
+What is still Fortran in the active MSK144 path:
+
+- none
+
+Migration still required for MSK144:
+
+- none in the dedicated MSK/MSK144 subtree:
+  - the remaining work is broader repository cleanup outside the shipped MSK144 path
+
+## SuperFox
+
+Current default:
+
+- the production RX helper path is native in `Detector/FtxFt8Stage4.cpp`
+- the production TX/helper path is native in `Modulator/FtxWaveformGenerator.cpp`
+- the helper tools are native:
+  - `utils/sfoxsim.cpp`
+  - `utils/sfrx.cpp`
+  - `utils/sftx.cpp`
+
+What is still Fortran in the active SuperFox path:
+
+- none
+
+Migration still required for SuperFox:
+
+- none in the dedicated SuperFox subtree:
+  - the remaining work is broader repository cleanup outside the shipped SuperFox path
+
+## FST4 / FST4W
+
+Current default:
+
+- the production TX/message path is native C++:
+  - `Modulator/FtxMessageEncoder.cpp` now owns `genfst4_` and `get_fst4_tones_from_bits_`
+  - `Modulator/FtxWaveformGenerator.cpp` now owns `gen_fst4wave_`
+  - `widgets/mainwindow.cpp` uses the native FST4 encoder/wave generator path
+- the `fst4sim` helper is now native C++ in `utils/fst4sim.cpp`
+- the `ldpcsim240_101` and `ldpcsim240_74` helpers are now native C++ in `utils/ldpcsim240_101.cpp` and `utils/ldpcsim240_74.cpp`
+
+What is still Fortran in the active FST4 path:
+
+- no active FST4/FST4W runtime Fortran remains:
+  - `Detector/FST4DecodeWorker.cpp` owns the active worker orchestration and the compatibility export `fst4_async_decode_`
+  - `Detector/FST4DecodeWorker.cpp` also owns the native emit bridge `ftx_fst4_decode_and_emit_params_c` used by the legacy `multimode_decoder`
+  - candidate search, de-duplication, downsample, sync search, async collection and the FST4-specific baseline helper are native in `Detector/FST4DecodeWorker.cpp`
+  - shared FST4 decode-side helpers `get_crc24`, `get_fst4_bitmetrics` and `get_fst4_bitmetrics2` are native in `Detector/FtxFst4Core.cpp`
+  - the FST4 LDPC/OSD decode core, the legacy `decode240_*`/`osd*` compatibility exports, and the Doppler-spread helper are native in `Detector/FtxFst4Ldpc.cpp`
+  - the last shared DSP helpers (`blanker`, `four2a`, `pctile`, `polyfit`) are now native in `Detector/FtxSharedDsp.cpp`
+
+Migration still required for FST4:
+
+- none in the FST4/FST4W subtree:
+  - the remaining work is broader non-FTX cleanup outside the shipped FST4 path
+
+Residual generic legacy files still present:
+
+- `lib/wavhdr.f90` is still built for legacy non-FTX simulator/utilities
+
 ## Recommended Order
 
-1. Shared compatibility layer cleanup
+1. FST4 / FST4W decode core
 
-- `lib/ftx_pack77_c_api.f90` and related compatibility modules are now the main remaining Fortran bridge in the FTX area
-- removing or containing them would finish the shared-language cleanup after the mode-specific ports
+- the active FST4/FST4W runtime path is now fully native
+- the next cleanup is tree-only helper/oracle residue, not user-facing runtime code
 
 2. Non-FTX modes and utilities
 
-- JT/JT65/MSK/WSPR/FST4 cleanup is now separate from the completed FT8/FT4/FT2/Q65 migration
+- JT/JT65/MSK/WSPR/FST4 cleanup is now separate from the completed FT8/FT4/FT2/Q65/MSK144/SuperFox migration
 - those modes can be handled independently without reopening the FTX decoder architecture
 
 ## Definition Of Done
 
 Migration is complete only when all of the following are true:
 
-- the production decode worker for FT8, FT4, FT2 and Q65 enters through native C++ only
+- the production decode worker for FT8, FT4, FT2, Q65, MSK144 and SuperFox enters through native C++ only
 - no promoted runtime path calls a Fortran decode/orchestration/downsample/subtract/LDPC routine
 - any remaining Fortran code is isolated to shared compatibility layers or non-FTX modes
 - stage-compare and real-recording parity tests pass against the final C++ path

@@ -17,6 +17,7 @@ struct DecodeRequest
   quint64 serial {0};
   QString mode;
   QVector<short> audio;
+  QByteArray dataDir;
   int nutc {0};
   int nqsoprogress {0};
   int nfa {0};
@@ -47,6 +48,8 @@ public:
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
 };
+
+QStringList decodeFst4Rows (DecodeRequest const& request);
 
 }
 }

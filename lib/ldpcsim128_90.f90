@@ -3,8 +3,6 @@ program ldpcsim128_90
 ! Simulate the performance of the (128,90) code that is used in
 ! the second incarnation of MSK144.
 
-  use ftx_pack77_c_api, only: ftx_pack77_reset_context, ftx_pack77_pack,   &
-       ftx_pack77_unpack
   integer, parameter:: N=128, K=90, M=N-K
 !  character*12 recent_calls(NRECENT)
   character*37 msg,msgsent,msgreceived

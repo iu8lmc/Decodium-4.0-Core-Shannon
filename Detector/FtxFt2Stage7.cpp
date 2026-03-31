@@ -18,6 +18,7 @@
 #include <QString>
 
 #include "commons.h"
+#include "helper_functions.h"
 #include "Modulator/FtxMessageEncoder.hpp"
 
 namespace
@@ -81,9 +82,6 @@ extern "C"
                        float const* a, Complex* cb);
   int ftx_ft2_message77_to_itone_c (signed char const* message77, int* itone_out);
   int ftx_encode174_91_message77_c (signed char const* message77, signed char* codeword_out);
-  void azdist_ (char* MyGrid, char* HisGrid, double* utch, int* nAz, int* nEl,
-                int* nDmiles, int* nDkm, int* nHotAz, int* nHotABetter,
-                fortran_charlen_t, fortran_charlen_t);
 }
 
 template <typename T>
@@ -933,23 +931,9 @@ int grid_distance_km (std::string const& mygrid, std::string const& hisgrid4)
       return 9999;
     }
 
-  char mygrid_fixed[6] {' ', ' ', ' ', ' ', ' ', ' '};
-  char hisgrid_fixed[6] {' ', ' ', ' ', ' ', ' ', ' '};
-  std::copy_n (mygrid.data (), std::min<size_t> (mygrid.size (), 6), mygrid_fixed);
-  std::copy_n (hisgrid4.data (), 4, hisgrid_fixed);
-
-  double utch = 0.0;
-  int nAz = 0;
-  int nEl = 0;
-  int nDmiles = 0;
-  int nDkm = 9999;
-  int nHotAz = 0;
-  int nHotABetter = 0;
-  azdist_ (mygrid_fixed, hisgrid_fixed, &utch, &nAz, &nEl, &nDmiles, &nDkm,
-           &nHotAz, &nHotABetter,
-           static_cast<fortran_charlen_t> (6),
-           static_cast<fortran_charlen_t> (6));
-  return nDkm;
+  QString const my_grid = QString::fromStdString (mygrid);
+  QString const his_grid = QString::fromStdString (hisgrid4);
+  return geo_distance (my_grid, his_grid, 0.0).km;
 }
 
 bool should_collect_ft2_fox_entry (std::string const& decoded,

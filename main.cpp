@@ -426,8 +426,10 @@ int main(int argc, char *argv[])
         // free FFT plan resources
         four2a_ (nullptr, &nfft, &ndim, &isign, &iform, 0);
       }
-      fftwf_forget_wisdom ();
-      fftwf_cleanup ();
+      // Do not call global FFTW cleanup here. Several decode paths keep
+      // thread_local FFTW plans whose destructors run later during TLS
+      // finalization at process exit; tearing down FFTW first can crash on
+      // macOS when those destructors call fftwf_destroy_plan().
 
       temp_dir.removeRecursively (); // clean up temp files
       return result;

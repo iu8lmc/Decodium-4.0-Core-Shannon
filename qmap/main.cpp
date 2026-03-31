@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     four2a_ (nullptr, &nfft, &ndim, &isign, &iform, 0);
     fftbig_(nullptr, &nfft);
   }
-  fftwf_forget_wisdom ();
-  fftwf_cleanup ();
+  // Avoid global FFTW teardown before thread_local FFT plans are finalized.
+  // Their destructors may still call fftwf_destroy_plan() during process exit.
   return result;
 }

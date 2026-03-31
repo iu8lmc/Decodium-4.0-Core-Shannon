@@ -2,6 +2,8 @@
 #ifndef MSK144DECODEWORKER_HPP
 #define MSK144DECODEWORKER_HPP
 
+#include <array>
+
 #include <QObject>
 #include <QByteArray>
 #include <QStringList>
@@ -31,6 +33,27 @@ struct DecodeRequest
   double trperiod {15.0};
   QByteArray mycall;
   QByteArray hiscall;
+  bool shorthandEnabled {false};
+  bool trainingEnabled {false};
+  bool swlEnabled {false};
+};
+
+struct RealtimeDecodeRequest
+{
+  short const* audio {nullptr};
+  int nutc {0};
+  float tsec {0.0f};
+  int rxfreq {1500};
+  int ftol {50};
+  int aggressive {0};
+  QByteArray mycall;
+  QByteArray hiscall;
+  bool shorthandEnabled {false};
+  bool trainingEnabled {false};
+  bool swlEnabled {false};
+  bool* trainingEnabledState {nullptr};
+  std::array<double, 5> phaseEqCoefficients {{0.0, 0.0, 0.0, 0.0, 0.0}};
+  QString dataDir;
 };
 
 class MSK144DecodeWorker final : public QObject
@@ -45,6 +68,10 @@ public:
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
 };
+
+QStringList decodeMsk144Rows (DecodeRequest const& request);
+QString decodeMsk144RealtimeBlock (RealtimeDecodeRequest const& request);
+void resetMsk144DecoderState ();
 
 }
 }

@@ -19,6 +19,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMetaObject>
@@ -31,6 +32,7 @@
 
 #include "SharedMemorySegment.hpp"
 #include "Detector/FST4DecodeWorker.hpp"
+#include "Detector/FT2DecodeWorker.hpp"
 #include "Detector/FT4DecodeWorker.hpp"
 #include "Detector/FT8DecodeWorker.hpp"
 #include "Detector/LegacyJtDecodeWorker.hpp"
@@ -39,10 +41,6 @@
 
 extern "C"
 {
-  void ftx_native_decode_and_emit_params_c (short const* iwave,
-                                            params_block_t const* params,
-                                            char const* temp_dir,
-                                            int* decoded_count);
   void symspec_ (dec_data_t* shared_data, int* k, double* trperiod, int* nsps,
                  int* ingain, signed char* low_sidelobes, int* nminw,
                  float* pxdb, float* spectrum, float* df3, int* ihsym,
@@ -55,7 +53,6 @@ namespace
   constexpr int kFt4Samples {21 * 3456};
   constexpr int kShmemWaitMs {10};
   constexpr int kShmemRetryCount {200};
-  constexpr int kMaxTempPath {500};
   constexpr int kJt9Nsps {6912};
   constexpr int kJt9KStep {kJt9Nsps / 2};
   constexpr int kJt9SpectrumSize {184 * NSMAX};
@@ -126,16 +123,6 @@ namespace
       {
         value.append (QByteArray (width - value.size (), ' '));
       }
-    return value;
-  }
-
-  std::array<char, kMaxTempPath> to_c_path_field (QString const& path)
-  {
-    std::array<char, kMaxTempPath> value {};
-    value.fill (' ');
-    QByteArray const latin = path.toLocal8Bit ();
-    std::copy_n (latin.constData (), std::min (latin.size (), static_cast<int> (value.size ())),
-                 value.data ());
     return value;
   }
 
@@ -762,7 +749,7 @@ namespace
     return rows;
   }
 
-  QStringList decode_q65_mode (params_block_t const& params, QVector<short> const& audio)
+	  QStringList decode_q65_mode (params_block_t const& params, QVector<short> const& audio)
   {
     decodium::q65::Q65DecodeWorker worker;
     decodium::q65::DecodeRequest request;
@@ -789,16 +776,81 @@ namespace
     request.nqsoprogress = params.nQSOProgress;
     request.ncontest = params.nexp_decode & 7;
     request.lapcqonly = params.lapcqonly ? 1 : 0;
-    return run_worker (worker, &decodium::q65::Q65DecodeWorker::decodeReady, request);
-  }
+	    return run_worker (worker, &decodium::q65::Q65DecodeWorker::decodeReady, request);
+	  }
 
-  QStringList decode_fst4_mode (params_block_t const& params, QVector<short> const& audio)
-  {
+	  QStringList decode_ft2_mode (params_block_t const& params, QVector<short> const& audio)
+	  {
+	    decodium::ft2::FT2DecodeWorker worker;
+	    decodium::ft2::DecodeRequest request;
+	    request.serial = 1;
+	    request.audio = audio;
+	    request.nutc = qMax (0, int (params.nutc));
+	    request.nqsoprogress = qBound (0, int (params.nQSOProgress), 6);
+	    request.nfqso = qBound (0, int (params.nfqso), 5000);
+	    request.nfa = qBound (0, int (params.nfa), 5000);
+	    request.nfb = qMax (request.nfa + 50, qBound (0, int (params.nfb), 5000));
+	    request.ndepth = qMax (1, int (params.ndepth));
+	    request.ncontest = qBound (0, int (params.nexp_decode & 7), 16);
+	    request.mycall = QByteArray {params.mycall, 12};
+	    request.hiscall = QByteArray {params.hiscall, 12};
+	    worker.markLatestDecodeSerial (request.serial);
+	    return run_worker (worker, &decodium::ft2::FT2DecodeWorker::decodeReady, request);
+	  }
+
+	  QStringList decode_ft4_mode (params_block_t const& params, QVector<short> const& audio)
+	  {
+	    decodium::ft4::FT4DecodeWorker worker;
+	    decodium::ft4::DecodeRequest request;
+	    request.serial = 1;
+	    request.audio = audio;
+	    request.nutc = qMax (0, int (params.nutc));
+	    request.nqsoprogress = qBound (0, int (params.nQSOProgress), 6);
+	    request.nfqso = qBound (0, int (params.nfqso), 5000);
+	    request.nfa = qBound (0, int (params.nfa), 5000);
+	    request.nfb = qMax (request.nfa + 50, qBound (0, int (params.nfb), 5000));
+	    request.ndepth = qBound (1, int (params.ndepth), 4);
+	    request.ncontest = qBound (0, int (params.nexp_decode & 7), 16);
+	    request.mycall = QByteArray {params.mycall, 12};
+	    request.hiscall = QByteArray {params.hiscall, 12};
+	    return run_worker (worker, &decodium::ft4::FT4DecodeWorker::decodeReady, request);
+	  }
+
+	  QStringList decode_ft8_mode (params_block_t const& params, QVector<short> const& audio)
+	  {
+	    decodium::ft8::FT8DecodeWorker worker;
+	    decodium::ft8::DecodeRequest request;
+	    request.serial = 1;
+	    request.audio = audio;
+	    request.nqsoprogress = qBound (0, int (params.nQSOProgress), 6);
+	    request.nfqso = qBound (0, int (params.nfqso), 5000);
+	    request.nftx = qBound (0, int (params.nftx), 5000);
+	    request.nutc = qMax (0, int (params.nutc));
+	    request.nfa = qBound (0, int (params.nfa), 5000);
+	    request.nfb = qMax (request.nfa + 50, qBound (0, int (params.nfb), 5000));
+	    request.nzhsym = qBound (41, int (params.nzhsym), 50);
+	    request.ndepth = qBound (1, int (params.ndepth), 4);
+	    request.emedelay = params.emedelay;
+	    request.ncontest = qBound (0, int (params.nexp_decode & 7), 16);
+	    request.nagain = params.nagain ? 1 : 0;
+	    request.lft8apon = params.lft8apon ? 1 : 0;
+	    request.lapcqonly = params.lapcqonly ? 1 : 0;
+	    request.napwid = qBound (0, int (params.napwid), 200);
+	    request.ldiskdat = params.ndiskdat ? 1 : 0;
+	    request.mycall = QByteArray {params.mycall, 12};
+	    request.hiscall = QByteArray {params.hiscall, 12};
+	    request.hisgrid = QByteArray {params.hisgrid, 6};
+	    return run_worker (worker, &decodium::ft8::FT8DecodeWorker::decodeReady, request);
+	  }
+
+	  QStringList decode_fst4_mode (params_block_t const& params, QVector<short> const& audio)
+	  {
     decodium::fst4::FST4DecodeWorker worker;
     decodium::fst4::DecodeRequest request;
     request.serial = 1;
     request.mode = params.nmode == 240 ? QStringLiteral ("FST4") : QStringLiteral ("FST4W");
     request.audio = audio;
+    request.dataDir = QDir::currentPath ().toLocal8Bit ();
     request.nutc = params.nutc;
     request.nqsoprogress = params.nQSOProgress;
     request.nfa = params.nfa;
@@ -842,38 +894,49 @@ namespace
     return run_worker (worker, &decodium::msk144::MSK144DecodeWorker::decodeReady, request);
   }
 
-  int run_native_ftx (params_block_t params, QVector<short> const& audio,
-                      QString const& tempDir, bool quiet)
-  {
-    int decodedCount = 0;
-    auto tempPath = to_c_path_field (tempDir);
+	  int run_native_ftx (params_block_t params, QVector<short> const& audio,
+	                      QString const& tempDir, bool quiet)
+	  {
+	    Q_UNUSED (tempDir);
+	    QStringList rows;
 
-    if (params.nmode == 8 && params.ndiskdat && !params.nagain)
-      {
-        QVector<short> early = audio;
-        for (int nearly : {41, 47})
+	    if (params.nmode == 8 && params.ndiskdat && !params.nagain)
+	      {
+	        QVector<short> early = audio;
+	        for (int nearly : {41, 47})
           {
             params_block_t earlyParams = params;
             earlyParams.nzhsym = nearly;
             int const keep = nearly * 3456;
-            if (keep < early.size ())
-              {
-                std::fill (early.begin () + keep, early.end (), 0);
-              }
-            int ignored = 0;
-            ftx_native_decode_and_emit_params_c (early.constData (), &earlyParams, tempPath.data (),
-                                                 &ignored);
-            early = audio;
-          }
-      }
+	            if (keep < early.size ())
+	              {
+	                std::fill (early.begin () + keep, early.end (), 0);
+	              }
+	            rows << decode_ft8_mode (earlyParams, early);
+	            early = audio;
+	          }
+	      }
 
-    ftx_native_decode_and_emit_params_c (audio.constData (), &params, tempPath.data (), &decodedCount);
-    if (!quiet)
-      {
-        emit_finished (decodedCount);
-      }
-    return decodedCount;
-  }
+	    switch (params.nmode)
+	      {
+	      case 2:
+	        rows << decode_ft2_mode (params, audio);
+	        break;
+	      case 5:
+	        rows << decode_ft4_mode (params, audio);
+	        break;
+	      case 8:
+	        rows << decode_ft8_mode (params, audio);
+	        break;
+	      case 66:
+	        rows << decode_q65_mode (params, audio);
+	        break;
+	      default:
+	        fail (QStringLiteral ("unsupported native FTX mode %1").arg (params.nmode));
+	      }
+	    emit_rows (rows, quiet);
+	    return rows.size ();
+	  }
 
   QStringList decode_via_workers (params_block_t const& params, QVector<short> const& audio,
                                   QVector<float> const& spectra, QString const& tempDir)

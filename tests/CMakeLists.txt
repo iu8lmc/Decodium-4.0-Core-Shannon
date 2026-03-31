@@ -18,7 +18,10 @@ endif ()
 set (CMAKE_AUTOMOC ON)
 include_directories (${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_SOURCE_DIR})
 
-add_executable (test_qt_helpers test_qt_helpers.cpp)
+add_executable (test_qt_helpers
+  test_qt_helpers.cpp
+  ../Detector/MSK144DecodeWorker.cpp)
+target_include_directories (test_qt_helpers PRIVATE ${PROJECT_BINARY_DIR})
 target_link_libraries (test_qt_helpers wsjt_qt wsjt_cxx wsjt_fort Qt5::Test)
 add_test (NAME test_qt_helpers COMMAND $<TARGET_FILE:test_qt_helpers>)
 
@@ -62,4 +65,34 @@ if (WSJT_BUILD_UTILS)
 
   add_test (NAME testEchoCall_usage COMMAND $<TARGET_FILE:testEchoCall>)
   set_tests_properties (testEchoCall_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME encode77_usage COMMAND $<TARGET_FILE:encode77>)
+  set_tests_properties (encode77_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME hash22calc_usage COMMAND $<TARGET_FILE:hash22calc>)
+  set_tests_properties (hash22calc_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:|Given a valid callsign")
+
+  add_test (NAME msk144code_usage COMMAND $<TARGET_FILE:msk144code>)
+  set_tests_properties (msk144code_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME msk144sim_usage COMMAND $<TARGET_FILE:msk144sim>)
+  set_tests_properties (msk144sim_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME fst4sim_usage COMMAND $<TARGET_FILE:fst4sim>)
+  set_tests_properties (fst4sim_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME ldpcsim240_101_usage COMMAND $<TARGET_FILE:ldpcsim240_101>)
+  set_tests_properties (ldpcsim240_101_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME ldpcsim240_74_usage COMMAND $<TARGET_FILE:ldpcsim240_74>)
+  set_tests_properties (ldpcsim240_74_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME sfoxsim_usage COMMAND $<TARGET_FILE:sfoxsim>)
+  set_tests_properties (sfoxsim_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME sfrx_usage COMMAND $<TARGET_FILE:sfrx>)
+  set_tests_properties (sfrx_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+
+  add_test (NAME sftx_usage COMMAND $<TARGET_FILE:sftx>)
+  set_tests_properties (sftx_usage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
 endif ()

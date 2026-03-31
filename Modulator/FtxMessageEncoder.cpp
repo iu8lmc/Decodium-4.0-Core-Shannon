@@ -1,4 +1,5 @@
 #include "FtxMessageEncoder.hpp"
+#include "FtxFst4LdpcData.hpp"
 
 #include <array>
 #include <algorithm>
@@ -12,20 +13,41 @@
 
 extern "C"
 {
+short crc13 (unsigned char const * data, int length);
 short crc14 (unsigned char const * data, int length);
-void pack77_tx_c (char const msg0[37], int* i3, int* n3, signed char bits77[77],
-                  char msgsent[38], bool* success);
+std::uint32_t nhash (void const* key, size_t length, std::uint32_t initval);
 void q65_enc_ (int x[], int y[]);
+void legacy_pack77_reset_context_c ();
 void legacy_pack77_pack_c (char const msg0[37], int* i3, int* n3,
                            char c77[77], char msgsent[37], bool* success, int received);
+void legacy_pack77_unpack_c (char const c77[77], int received,
+                             char msgsent[37], bool* success);
+void legacy_pack77_save_hash_call_c (char const c13[13], int* n10, int* n12, int* n22);
+int legacy_pack77_hash_call_bits_c (char const c13[13], int bits, int* hash_out);
+void legacy_pack77_pack28_c (char const c13[13], int* n28, bool* success);
+void legacy_pack77_unpack28_c (int n28, char c13[13], bool* success);
+void legacy_pack77_split77_c (char const msg[37], int* nwords, int nw[19], char words[247]);
+void legacy_pack77_packtext77_c (char const c13[13], char c71[71], bool* success);
+void legacy_pack77_unpacktext77_c (char const c71[71], char c13[13], bool* success);
 }
 
 namespace
 {
 using MessageBits77 = std::array<unsigned char, 77>;
+using MessageBits74 = std::array<unsigned char, 74>;
+using MessageBits101 = std::array<unsigned char, 101>;
+using MessageBits90 = std::array<unsigned char, 90>;
 using Codeword174 = std::array<unsigned char, 174>;
+using Codeword128 = std::array<unsigned char, 128>;
+using Codeword240 = std::array<unsigned char, 240>;
 using GeneratorRow = std::array<unsigned char, 91>;
 using GeneratorMatrix = std::array<GeneratorRow, 83>;
+using GeneratorRow128_90 = std::array<unsigned char, 90>;
+using GeneratorMatrix128_90 = std::array<GeneratorRow128_90, 38>;
+using GeneratorRow240_101 = std::array<unsigned char, 101>;
+using GeneratorMatrix240_101 = std::array<GeneratorRow240_101, 139>;
+using GeneratorRow240_74 = std::array<unsigned char, 74>;
+using GeneratorMatrix240_74 = std::array<GeneratorRow240_74, 166>;
 using Uint71 = std::array<unsigned char, 9>;
 
 constexpr int kNumTokens = 2063592;
@@ -38,6 +60,9 @@ constexpr int kQ65ChannelSymbols = 85;
 std::array<int, 22> const kQ65SyncPositions = {{
   1, 9, 12, 13, 15, 22, 23, 26, 27, 33, 35, 38, 46, 50, 55, 60, 62, 66, 69, 74, 76, 85
 }};
+
+std::array<int, 8> const kFst4SyncWord1 = {{0, 1, 3, 2, 1, 0, 2, 3}};
+std::array<int, 8> const kFst4SyncWord2 = {{2, 3, 1, 0, 3, 2, 0, 1}};
 
 std::array<char const*, 83> const kLdpcGeneratorHex = {{
   "8329ce11bf31eaf509f27fc", "761c264e25c259335493132", "dc265902fb277c6410a1bdc",
@@ -68,6 +93,32 @@ std::array<char const*, 83> const kLdpcGeneratorHex = {{
   "f11f106848780fc9ecdd80a", "1fbb5364fb8d2c9d730d5ba", "fcb86bc70a50c9d02a5d034",
   "a534433029eac15f322e34c", "c989d9c7c3d3b8c55d75130", "7bb38b2f0186d46643ae962",
   "2644ebadeb44b9467d1f42c", "608cc857594bfbb55d69600"
+}};
+
+std::array<char const*, 38> const kMsk144LdpcGeneratorHex = {{
+  "a08ea80879050a5e94da994", "59f3b48040ca089c81ee880", "e4070262802e31b7b17d3dc",
+  "95cbcbaf032dc3d960bacc8", "c4d79b5dcc21161a254ffbc", "93fde9cdbf2622a70868424",
+  "e73b888bb1b01167379ba28", "45a0d0a0f39a7ad2439949c", "759acef19444bcad79c4964",
+  "71eb4dddf4f5ed9e2ea17e0", "80f0ad76fb247d6b4ca8d38", "184fff3aa1b82dc66640104",
+  "ca4e320bb382ed14cbb1094", "52514447b90e25b9e459e28", "dd10c1666e071956bd0df38",
+  "99c332a0b792a2da8ef1ba8", "7bd9f688e7ed402e231aaac", "00fcad76eb647d6a0ca8c38",
+  "6ac8d0499c43b02eed78d70", "2c2c764baf795b4788db010", "0e907bf9e280d2624823dd0",
+  "b857a6e315afd8c1c925e64", "8deb58e22d73a141cae3778", "22d3cb80d92d6ac132dfe08",
+  "754763877b28c187746855c", "1d1bb7cf6953732e04ebca4", "2c65e0ea4466ab9f5e1deec",
+  "6dc530ca37fc916d1f84870", "49bccbbee152355be7ac984", "e8387f3f4367cf45a150448",
+  "8ce25e03d67d51091c81884", "b798012ffa40a93852752c8", "2e43307933adfca37adc3c8",
+  "ca06e0a42ca1ec782d6c06c", "c02b762927556a7039e638c", "4a3e9b7d08b6807f8619fac",
+  "45e8030f68997bb68544424", "7e79362c16773efc6482e30"
+}};
+
+std::array<unsigned short, 16> const kMsk40GeneratorHex = {{
+  0x4428, 0x5a6b, 0x1b04, 0x2c12, 0x60c4, 0x1071, 0xbe6a, 0x36dd,
+  0xc580, 0xad9a, 0xeca2, 0x7843, 0x332e, 0xa685, 0x5906, 0x1efe
+}};
+
+std::array<int, 32> const kMsk40ColumnOrder = {{
+  4, 1, 2, 3, 0, 8, 6, 10, 13, 28, 20, 23, 17, 15, 27, 25,
+  16, 12, 18, 19, 7, 21, 22, 11, 24, 5, 26, 14, 9, 29, 30, 31
 }};
 
 std::array<unsigned char, 77> const kFt2Ft4Rvec = {{
@@ -102,6 +153,77 @@ GeneratorMatrix const& generator_matrix ()
       }
     return result;
   }();
+  return matrix;
+}
+
+GeneratorMatrix128_90 const& msk144_generator_matrix ()
+{
+  static GeneratorMatrix128_90 matrix = [] {
+    GeneratorMatrix128_90 result {};
+    for (size_t row = 0; row < kMsk144LdpcGeneratorHex.size (); ++row)
+      {
+        for (int nibble_index = 0; nibble_index < 23; ++nibble_index)
+          {
+            char const ch = kMsk144LdpcGeneratorHex[row][nibble_index];
+            unsigned value = 0;
+            if (ch >= '0' && ch <= '9') value = static_cast<unsigned> (ch - '0');
+            else if (ch >= 'a' && ch <= 'f') value = static_cast<unsigned> (10 + ch - 'a');
+            else if (ch >= 'A' && ch <= 'F') value = static_cast<unsigned> (10 + ch - 'A');
+            int const max_bits = (nibble_index == 22) ? 2 : 4;
+            for (int bit_index = 0; bit_index < max_bits; ++bit_index)
+              {
+                int const column = nibble_index * 4 + bit_index;
+                if (value & (1u << (3 - bit_index)))
+                  {
+                    result[row][column] = 1u;
+                  }
+              }
+          }
+      }
+    return result;
+  }();
+  return matrix;
+}
+
+template <typename Matrix, size_t Rows>
+Matrix build_hex_generator_matrix (std::array<char const*, Rows> const& hex_rows, int tail_bits)
+{
+  Matrix result {};
+  for (size_t row = 0; row < hex_rows.size (); ++row)
+    {
+      int const nibble_count = static_cast<int> (std::strlen (hex_rows[row]));
+      for (int nibble_index = 0; nibble_index < nibble_count; ++nibble_index)
+        {
+          char const ch = hex_rows[row][nibble_index];
+          unsigned value = 0;
+          if (ch >= '0' && ch <= '9') value = static_cast<unsigned> (ch - '0');
+          else if (ch >= 'a' && ch <= 'f') value = static_cast<unsigned> (10 + ch - 'a');
+          else if (ch >= 'A' && ch <= 'F') value = static_cast<unsigned> (10 + ch - 'A');
+          int const max_bits = (nibble_index == nibble_count - 1) ? tail_bits : 4;
+          for (int bit_index = 0; bit_index < max_bits; ++bit_index)
+            {
+              int const column = nibble_index * 4 + bit_index;
+              if (value & (1u << (3 - bit_index)))
+                {
+                  result[row][column] = 1u;
+                }
+            }
+        }
+    }
+  return result;
+}
+
+GeneratorMatrix240_101 const& fst4_generator_matrix_240_101 ()
+{
+  static GeneratorMatrix240_101 matrix =
+      build_hex_generator_matrix<GeneratorMatrix240_101> (kFst4Ldpc240_101Hex, 1);
+  return matrix;
+}
+
+GeneratorMatrix240_74 const& fst4_generator_matrix_240_74 ()
+{
+  static GeneratorMatrix240_74 matrix =
+      build_hex_generator_matrix<GeneratorMatrix240_74> (kFst4Ldpc240_74Hex, 2);
   return matrix;
 }
 
@@ -2136,13 +2258,71 @@ Maybe<PackedMessage> pack_message77_cpp (QString const& message)
   return {};
 }
 
-PackedMessage pack_message77 (QString const& message, bool strip_leading_blanks)
+PackedMessage pack_message77_with_hint (QString const& message, bool strip_leading_blanks,
+                                        int i3_hint, int n3_hint)
 {
   Maybe<PackedMessage> cpp_packed = pack_message77_cpp (QString::fromLatin1 (trim_or_pad_37 (message, strip_leading_blanks)));
   if (cpp_packed.ok)
     {
+      if (i3_hint == 0 && n3_hint == 6 && !(cpp_packed.value.i3 == 0 && cpp_packed.value.n3 == 6))
+        {
+          // Fall through to the legacy path, which still understands the explicit WSPR tie-break hint.
+        }
+      else
+        {
       return cpp_packed.value;
+        }
     }
+
+  auto pack77_tx_cpp = [] (char const msg0[37], int* i3, int* n3, signed char bits77[77],
+                           char msgsent[38], bool* success) {
+    if (i3)
+      {
+        *i3 = -1;
+      }
+    if (n3)
+      {
+        *n3 = -1;
+      }
+    if (bits77)
+      {
+        std::fill_n (bits77, 77, static_cast<signed char> (0));
+      }
+    if (msgsent)
+      {
+        std::fill_n (msgsent, 38, '\0');
+      }
+    if (success)
+      {
+        *success = false;
+      }
+    if (!msg0 || !i3 || !n3 || !bits77 || !msgsent || !success)
+      {
+        return;
+      }
+
+    std::array<char, 77> c77 {};
+    std::array<char, 37> unpacked {};
+    std::fill (c77.begin (), c77.end (), '0');
+    std::fill (unpacked.begin (), unpacked.end (), ' ');
+
+    legacy_pack77_reset_context_c ();
+    bool pack_ok = false;
+    legacy_pack77_pack_c (msg0, i3, n3, c77.data (), unpacked.data (), &pack_ok, 0);
+    *success = pack_ok;
+    if (!pack_ok)
+      {
+        return;
+      }
+
+    for (int i = 0; i < 77; ++i)
+      {
+        bits77[i] = c77[static_cast<size_t> (i)] == '1' ? static_cast<signed char> (1)
+                                                         : static_cast<signed char> (0);
+      }
+    std::copy_n (unpacked.data (), 37, msgsent);
+    msgsent[37] = '\0';
+  };
 
   PackedMessage packed;
   QByteArray input = trim_or_pad_37 (message, strip_leading_blanks);
@@ -2152,7 +2332,9 @@ PackedMessage pack_message77 (QString const& message, bool strip_leading_blanks)
   std::array<signed char, 77> bits {};
   std::array<char, 38> msgsent {};
   bool success = false;
-  pack77_tx_c (msg.data (), &packed.i3, &packed.n3, bits.data (), msgsent.data (), &success);
+  packed.i3 = i3_hint;
+  packed.n3 = n3_hint;
+  pack77_tx_cpp (msg.data (), &packed.i3, &packed.n3, bits.data (), msgsent.data (), &success);
 
   packed.ok = success;
   packed.msgsent = QByteArray (msgsent.data ());
@@ -2161,6 +2343,159 @@ PackedMessage pack_message77 (QString const& message, bool strip_leading_blanks)
       packed.bits[i] = static_cast<unsigned char> (bits[i] != 0);
     }
   return packed;
+}
+
+PackedMessage pack_message77 (QString const& message, bool strip_leading_blanks)
+{
+  return pack_message77_with_hint (message, strip_leading_blanks, -1, -1);
+}
+
+template <size_t N>
+int compute_crc24_cpp (std::array<unsigned char, N> const& message)
+{
+  static std::array<unsigned char, 25> const polynomial {{
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,0,1,1,0,1,1
+  }};
+
+  std::array<unsigned char, 25> remainder {};
+  std::copy_n (message.begin (), 25, remainder.begin ());
+  for (size_t i = 0; i <= N - 25; ++i)
+    {
+      remainder[24] = message[i + 24];
+      unsigned char const lead = remainder[0];
+      for (size_t j = 0; j < remainder.size (); ++j)
+        {
+          remainder[j] = static_cast<unsigned char> ((remainder[j] + lead * polynomial[j]) & 0x1u);
+        }
+      std::rotate (remainder.begin (), remainder.begin () + 1, remainder.end ());
+    }
+
+  int crc = 0;
+  for (int i = 0; i < 24; ++i)
+    {
+      crc = (crc << 1) | remainder[static_cast<size_t> (i)];
+    }
+  return crc;
+}
+
+template <size_t K, size_t M, typename Matrix>
+std::array<unsigned char, K + M> encode_linear_block_code (std::array<unsigned char, K> const& message,
+                                                           Matrix const& generator)
+{
+  std::array<unsigned char, K + M> codeword {};
+  std::copy (message.begin (), message.end (), codeword.begin ());
+  for (size_t row = 0; row < M; ++row)
+    {
+      unsigned parity = 0;
+      for (size_t col = 0; col < K; ++col)
+        {
+          parity ^= (message[col] & generator[row][col]);
+        }
+      codeword[K + row] = static_cast<unsigned char> (parity & 0x1u);
+    }
+  return codeword;
+}
+
+Codeword240 encode240_101_cpp (MessageBits101 const& bits)
+{
+  return encode_linear_block_code<101, 139> (bits, fst4_generator_matrix_240_101 ());
+}
+
+Codeword240 encode240_74_cpp (MessageBits74 const& bits)
+{
+  return encode_linear_block_code<74, 166> (bits, fst4_generator_matrix_240_74 ());
+}
+
+QVector<int> map_fst4_tones_from_codeword (Codeword240 const& codeword)
+{
+  QVector<int> tones (160, 0);
+  std::array<int, 120> payload_tones {};
+  for (int i = 0; i < 120; ++i)
+    {
+      int const symbol = codeword[static_cast<size_t> (2 * i + 1)]
+                       + 2 * codeword[static_cast<size_t> (2 * i)];
+      payload_tones[static_cast<size_t> (i)] =
+          symbol <= 1 ? symbol : (symbol == 2 ? 3 : 2);
+    }
+
+  std::copy (kFst4SyncWord1.begin (), kFst4SyncWord1.end (), tones.begin () + 0);
+  std::copy (payload_tones.begin () + 0, payload_tones.begin () + 30, tones.begin () + 8);
+  std::copy (kFst4SyncWord2.begin (), kFst4SyncWord2.end (), tones.begin () + 38);
+  std::copy (payload_tones.begin () + 30, payload_tones.begin () + 60, tones.begin () + 46);
+  std::copy (kFst4SyncWord1.begin (), kFst4SyncWord1.end (), tones.begin () + 76);
+  std::copy (payload_tones.begin () + 60, payload_tones.begin () + 90, tones.begin () + 84);
+  std::copy (kFst4SyncWord2.begin (), kFst4SyncWord2.end (), tones.begin () + 114);
+  std::copy (payload_tones.begin () + 90, payload_tones.begin () + 120, tones.begin () + 122);
+  std::copy (kFst4SyncWord1.begin (), kFst4SyncWord1.end (), tones.begin () + 152);
+  return tones;
+}
+
+decodium::txmsg::EncodedMessage build_bad_fst4_message ()
+{
+  decodium::txmsg::EncodedMessage encoded;
+  encoded.ok = false;
+  encoded.msgsent = QByteArray ("*** bad message ***                  ");
+  encoded.msgbits = QByteArray (101, '\0');
+  encoded.tones = QVector<int> (160, 0);
+  return encoded;
+}
+
+decodium::txmsg::EncodedMessage encode_fst4_cpp (QString const& message, bool check_only,
+                                                 bool wspr_hint)
+{
+  auto const packed = pack_message77_with_hint (message, true, wspr_hint ? 0 : -1, wspr_hint ? 6 : -1);
+  if (!packed.ok)
+    {
+      return build_bad_fst4_message ();
+    }
+
+  decodium::txmsg::EncodedMessage encoded;
+  encoded.ok = true;
+  encoded.msgsent = packed.msgsent;
+  encoded.i3 = packed.i3;
+  encoded.n3 = packed.n3;
+  encoded.messageType = (packed.i3 == 0 && packed.n3 == 6) ? 1 : 0;
+  encoded.msgbits = QByteArray (101, '\0');
+
+  if (encoded.messageType == 1)
+    {
+      MessageBits74 bits {};
+      for (int i = 0; i < 50; ++i)
+        {
+          bits[static_cast<size_t> (i)] = packed.bits[static_cast<size_t> (i)];
+          encoded.msgbits[i] = static_cast<char> (bits[static_cast<size_t> (i)]);
+        }
+      int const crc24 = compute_crc24_cpp (bits);
+      for (int i = 0; i < 24; ++i)
+        {
+          bits[static_cast<size_t> (50 + i)] = static_cast<unsigned char> ((crc24 >> (23 - i)) & 0x1);
+          encoded.msgbits[50 + i] = static_cast<char> (bits[static_cast<size_t> (50 + i)]);
+        }
+      if (!check_only)
+        {
+          encoded.tones = map_fst4_tones_from_codeword (encode240_74_cpp (bits));
+        }
+      return encoded;
+    }
+
+  MessageBits101 bits {};
+  for (int i = 0; i < 77; ++i)
+    {
+      bits[static_cast<size_t> (i)] =
+          static_cast<unsigned char> ((packed.bits[static_cast<size_t> (i)] + kFt2Ft4Rvec[static_cast<size_t> (i)]) & 0x1u);
+      encoded.msgbits[i] = static_cast<char> (bits[static_cast<size_t> (i)]);
+    }
+  int const crc24 = compute_crc24_cpp (bits);
+  for (int i = 0; i < 24; ++i)
+    {
+      bits[static_cast<size_t> (77 + i)] = static_cast<unsigned char> ((crc24 >> (23 - i)) & 0x1);
+      encoded.msgbits[77 + i] = static_cast<char> (bits[static_cast<size_t> (77 + i)]);
+    }
+  if (!check_only)
+    {
+      encoded.tones = map_fst4_tones_from_codeword (encode240_101_cpp (bits));
+    }
+  return encoded;
 }
 
 Codeword174 encode174_91_cpp (MessageBits77 const& message77)
@@ -2260,6 +2595,255 @@ QVector<int> map_ft8_tones (MessageBits77 const& bits)
       tones[k] = graymap[index];
     }
   return tones;
+}
+
+bool is_msk144_special_tone_request (QString const& message)
+{
+  QByteArray const fixed = trim_or_pad_37 (message, true);
+  return !fixed.isEmpty () && fixed.front () == '@';
+}
+
+bool is_msk144_shorthand_request (QString const& message)
+{
+  QString const trimmed = QString::fromLatin1 (trim_or_pad_37 (message, true)).trimmed ();
+  if (!trimmed.startsWith (QLatin1Char ('<')))
+    {
+      return false;
+    }
+  int const closing = trimmed.indexOf (QLatin1Char ('>'));
+  if (closing <= 0)
+    {
+      return false;
+    }
+  return trimmed.left (closing + 1).indexOf (QLatin1Char (' ')) > 0;
+}
+
+std::array<unsigned char, 12> msk144_crc13_input (MessageBits77 const& bits)
+{
+  std::array<unsigned char, 12> bytes {};
+  for (int bit = 0; bit < 77; ++bit)
+    {
+      if (bits[static_cast<size_t> (bit)] != 0)
+        {
+          bytes[static_cast<size_t> (bit / 8)] |=
+              static_cast<unsigned char> (1u << (7 - (bit % 8)));
+        }
+    }
+  return bytes;
+}
+
+Codeword128 encode128_90_cpp (MessageBits77 const& bits)
+{
+  MessageBits90 message90 {};
+  std::copy_n (bits.begin (), bits.size (), message90.begin ());
+
+  std::array<unsigned char, 12> const crc_input = msk144_crc13_input (bits);
+  unsigned short const crc = static_cast<unsigned short> (crc13 (crc_input.data (),
+                                                                  static_cast<int> (crc_input.size ())));
+  for (int i = 0; i < 13; ++i)
+    {
+      int const shift = 12 - i;
+      message90[77 + i] = static_cast<unsigned char> ((crc >> shift) & 0x1u);
+    }
+
+  Codeword128 codeword {};
+  std::copy_n (message90.begin (), message90.size (), codeword.begin ());
+
+  GeneratorMatrix128_90 const& generator = msk144_generator_matrix ();
+  for (size_t row = 0; row < generator.size (); ++row)
+    {
+      int parity = 0;
+      for (size_t col = 0; col < message90.size (); ++col)
+        {
+          parity ^= (message90[col] & generator[row][col]);
+        }
+      codeword[90 + static_cast<int> (row)] = static_cast<unsigned char> (parity & 0x1);
+    }
+  return codeword;
+}
+
+QVector<int> map_msk144_tones (MessageBits77 const& bits)
+{
+  static std::array<unsigned char, 8> const sync_word = {{0, 1, 1, 1, 0, 0, 1, 0}};
+
+  Codeword128 const codeword = encode128_90_cpp (bits);
+  std::array<int, 144> bipolar {};
+  for (int i = 0; i < 8; ++i)
+    {
+      bipolar[i] = sync_word[static_cast<size_t> (i)] ? 1 : -1;
+      bipolar[56 + i] = sync_word[static_cast<size_t> (i)] ? 1 : -1;
+    }
+  for (int i = 0; i < 48; ++i)
+    {
+      bipolar[8 + i] = codeword[static_cast<size_t> (i)] ? 1 : -1;
+    }
+  for (int i = 0; i < 80; ++i)
+    {
+      bipolar[64 + i] = codeword[static_cast<size_t> (48 + i)] ? 1 : -1;
+    }
+
+  QVector<int> tones (144, 0);
+  for (int symbol = 0; symbol < 72; ++symbol)
+    {
+      int const even_bit = bipolar[2 * symbol + 1];
+      int const odd_bit = bipolar[2 * symbol];
+      int const next_odd = bipolar[(2 * symbol + 2) % 144];
+      int const odd_tone = (even_bit * odd_bit + 1) / 2;
+      int const even_tone = -(even_bit * next_odd - 1) / 2;
+      tones[2 * symbol] = 1 - odd_tone;
+      tones[2 * symbol + 1] = 1 - even_tone;
+    }
+  return tones;
+}
+
+Maybe<int> parse_msk40_report_index (QString const& token)
+{
+  static std::array<QString, 16> const reports = {{
+    QStringLiteral ("-03"), QStringLiteral ("+00"), QStringLiteral ("+03"), QStringLiteral ("+06"),
+    QStringLiteral ("+10"), QStringLiteral ("+13"), QStringLiteral ("+16"), QStringLiteral ("R-03"),
+    QStringLiteral ("R+00"), QStringLiteral ("R+03"), QStringLiteral ("R+06"), QStringLiteral ("R+10"),
+    QStringLiteral ("R+13"), QStringLiteral ("R+16"), QStringLiteral ("RRR"), QStringLiteral ("73")
+  }};
+
+  QString const normalized = token.trimmed ().toUpper ();
+  for (int i = 0; i < static_cast<int> (reports.size ()); ++i)
+    {
+      if (normalized == reports[static_cast<size_t> (i)])
+        {
+          return {true, i};
+        }
+    }
+  return {};
+}
+
+std::array<unsigned char, 32> encode_msk40_codeword_cpp (std::array<unsigned char, 16> const& message)
+{
+  std::array<unsigned char, 16> pchecks {};
+  for (size_t row = 0; row < kMsk40GeneratorHex.size (); ++row)
+    {
+      int sum = 0;
+      for (int bit = 0; bit < 16; ++bit)
+        {
+          if ((kMsk40GeneratorHex[row] >> (15 - bit)) & 0x1u)
+            {
+              sum += message[static_cast<size_t> (bit)];
+            }
+        }
+      pchecks[row] = static_cast<unsigned char> (sum & 0x1);
+    }
+
+  std::array<unsigned char, 32> interleaved {};
+  for (int i = 0; i < 16; ++i)
+    {
+      interleaved[i] = pchecks[static_cast<size_t> (i)];
+      interleaved[16 + i] = message[static_cast<size_t> (i)];
+    }
+
+  std::array<unsigned char, 32> codeword {};
+  for (int i = 0; i < 32; ++i)
+    {
+      codeword[static_cast<size_t> (kMsk40ColumnOrder[static_cast<size_t> (i)])] =
+          interleaved[static_cast<size_t> (i)];
+    }
+  return codeword;
+}
+
+decodium::txmsg::EncodedMessage encode_msk144_bad_message ()
+{
+  decodium::txmsg::EncodedMessage encoded;
+  encoded.ok = false;
+  encoded.msgsent = QByteArray ("*** bad message ***                  ");
+  encoded.msgbits = QByteArray (77, '\0');
+  encoded.tones = QVector<int> (144, 0);
+  return encoded;
+}
+
+decodium::txmsg::EncodedMessage encode_msk144_shorthand_cpp (QString const& message, bool check_only)
+{
+  QString const trimmed = QString::fromLatin1 (trim_or_pad_37 (message, true)).trimmed ();
+  int const closing = trimmed.indexOf (QLatin1Char ('>'));
+  if (!trimmed.startsWith (QLatin1Char ('<')) || closing < 0)
+    {
+      return encode_msk144_bad_message ();
+    }
+
+  QString const hashText = trimmed.mid (1, closing - 1).trimmed ();
+  Maybe<int> const reportIndex = parse_msk40_report_index (trimmed.mid (closing + 1).trimmed ());
+  if (hashText.isEmpty () || !reportIndex.ok)
+    {
+      return encode_msk144_bad_message ();
+    }
+
+  QByteArray hashBytes (37, ' ');
+  QByteArray const hashField = hashText.left (37).toLatin1 ();
+  std::copy (hashField.begin (), hashField.end (), hashBytes.begin ());
+  std::uint32_t const hashValue =
+      nhash (hashBytes.constData (), static_cast<size_t> (hashBytes.size ()), 146u) & 0x0fffu;
+  int const payload = static_cast<int> (16u * hashValue) + reportIndex.value;
+
+  std::array<unsigned char, 16> messageBits {};
+  for (int i = 0; i < 16; ++i)
+    {
+      messageBits[static_cast<size_t> (i)] =
+          static_cast<unsigned char> ((payload >> i) & 0x1);
+    }
+  std::array<unsigned char, 32> const codeword = encode_msk40_codeword_cpp (messageBits);
+
+  static std::array<unsigned char, 8> const sync_word = {{1, 0, 1, 1, 0, 0, 0, 1}};
+  std::array<int, 40> bipolar {};
+  for (int i = 0; i < 8; ++i)
+    {
+      bipolar[i] = sync_word[static_cast<size_t> (i)] ? 1 : -1;
+    }
+  for (int i = 0; i < 32; ++i)
+    {
+      bipolar[8 + i] = codeword[static_cast<size_t> (i)] ? 1 : -1;
+    }
+
+  decodium::txmsg::EncodedMessage encoded;
+  encoded.ok = true;
+  encoded.msgsent = to_fixed_37 (normalize_message77 (message));
+  encoded.msgbits = QByteArray (77, '\0');
+  encoded.messageType = 7;
+  if (!check_only)
+    {
+      encoded.tones = QVector<int> (144, 0);
+      for (int symbol = 0; symbol < 20; ++symbol)
+        {
+          int const even_bit = bipolar[2 * symbol + 1];
+          int const odd_bit = bipolar[2 * symbol];
+          int const next_odd = bipolar[(2 * symbol + 2) % 40];
+          int const odd_tone = (even_bit * odd_bit + 1) / 2;
+          int const even_tone = -(even_bit * next_odd - 1) / 2;
+          encoded.tones[2 * symbol] = 1 - odd_tone;
+          encoded.tones[2 * symbol + 1] = 1 - even_tone;
+        }
+      encoded.tones[40] = -40;
+    }
+  return encoded;
+}
+
+decodium::txmsg::EncodedMessage encode_msk144_fixed_tone_cpp (QString const& message, bool check_only)
+{
+  QString const trimmed = QString::fromLatin1 (trim_or_pad_37 (message, true)).trimmed ();
+  bool ok = false;
+  int tone = trimmed.mid (1, 4).toInt (&ok);
+  if (!ok)
+    {
+      tone = 1000;
+    }
+
+  decodium::txmsg::EncodedMessage encoded;
+  encoded.ok = true;
+  encoded.msgsent = to_fixed_37 (trimmed);
+  encoded.msgbits = QByteArray (77, '\0');
+  encoded.messageType = 1;
+  if (!check_only)
+    {
+      encoded.tones = QVector<int> (144, 0);
+      encoded.tones[0] = tone;
+    }
+  return encoded;
 }
 
 decodium::txmsg::EncodedMessage build_bad_message (int tone_count)
@@ -2564,9 +3148,54 @@ EncodedMessage encodeFt4 (QString const& message, bool check_only)
   return encode_ftx_common (message, true, 103, false, check_only);
 }
 
+EncodedMessage encodeFst4 (QString const& message, bool check_only)
+{
+  return encode_fst4_cpp (message, check_only, false);
+}
+
+EncodedMessage encodeFst4WithHint (QString const& message, bool wspr_hint, bool check_only)
+{
+  return encode_fst4_cpp (message, check_only, wspr_hint);
+}
+
 EncodedMessage encodeFt8 (QString const& message)
 {
   return encode_ftx_common (message, false, 79, true, false);
+}
+
+EncodedMessage encodeMsk144 (QString const& message, bool check_only)
+{
+  if (is_msk144_special_tone_request (message))
+    {
+      return encode_msk144_fixed_tone_cpp (message, check_only);
+    }
+  if (is_msk144_shorthand_request (message))
+    {
+      return encode_msk144_shorthand_cpp (message, check_only);
+    }
+
+  auto const packed = pack_message77 (message, true);
+  if (!packed.ok)
+    {
+      return build_bad_message (144);
+    }
+
+  EncodedMessage encoded;
+  encoded.ok = true;
+  encoded.msgsent = packed.msgsent;
+  encoded.msgbits.resize (77);
+  for (int i = 0; i < 77; ++i)
+    {
+      encoded.msgbits[i] = static_cast<char> (packed.bits[i]);
+    }
+  encoded.i3 = packed.i3;
+  encoded.n3 = packed.n3;
+  encoded.messageType = 1;
+  if (!check_only)
+    {
+      encoded.tones = map_msk144_tones (packed.bits);
+    }
+  return encoded;
 }
 
 DecodedMessage decode77 (QByteArray const& msgbits, int i3, int n3)
@@ -3058,6 +3687,209 @@ void legacy_pack77_set_dxbase_c (char const value[6])
   g_legacy_pack77_dxbase = from_fixed_chars (value, 6).trimmed ();
 }
 
+namespace
+{
+
+void copy_fortran_input_chars (char const* src, fortran_charlen_t len, char* dst, int width)
+{
+  if (!dst || width <= 0)
+    {
+      return;
+    }
+  std::fill_n (dst, width, ' ');
+  if (!src || len <= 0)
+    {
+      return;
+    }
+  std::copy_n (src, std::min<size_t> (static_cast<size_t> (width), static_cast<size_t> (len)), dst);
+}
+
+void copy_fixed_to_fortran_output (char const* src, int src_width, char* dst, fortran_charlen_t len)
+{
+  if (!dst || len <= 0)
+    {
+      return;
+    }
+  std::fill_n (dst, static_cast<size_t> (len), ' ');
+  if (!src || src_width <= 0)
+    {
+      return;
+    }
+  std::copy_n (src, std::min<size_t> (static_cast<size_t> (src_width), static_cast<size_t> (len)), dst);
+}
+
+void copy_int_words_to_fortran_output (char const* src, int word_width, int word_count,
+                                       char* dst, fortran_charlen_t len)
+{
+  if (!dst || len <= 0)
+    {
+      return;
+    }
+  std::fill_n (dst, static_cast<size_t> (word_count) * static_cast<size_t> (len), ' ');
+  if (!src || word_width <= 0)
+    {
+      return;
+    }
+  for (int i = 0; i < word_count; ++i)
+    {
+      std::copy_n (src + i * word_width,
+                   std::min<size_t> (static_cast<size_t> (word_width), static_cast<size_t> (len)),
+                   dst + static_cast<size_t> (i) * static_cast<size_t> (len));
+    }
+}
+
+void set_fortran_logical (int* value, bool state)
+{
+  if (value)
+    {
+      *value = state ? 1 : 0;
+    }
+}
+
+}  // namespace
+
+extern "C" void ftx_pack77_reset_context_ ()
+{
+  legacy_pack77_reset_context_c ();
+}
+
+extern "C" void ftx_pack77_set_context_ (char const* mycall, char const* hiscall,
+                                         fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  char mycall_fixed[13] {};
+  char hiscall_fixed[13] {};
+  copy_fortran_input_chars (mycall, len1, mycall_fixed, 13);
+  copy_fortran_input_chars (hiscall, len2, hiscall_fixed, 13);
+  legacy_pack77_set_context_c (mycall_fixed, hiscall_fixed);
+}
+
+extern "C" void ftx_pack77_set_dxbase_ (char const* value, fortran_charlen_t len)
+{
+  char fixed[6] {};
+  copy_fortran_input_chars (value, len, fixed, 6);
+  legacy_pack77_set_dxbase_c (fixed);
+}
+
+extern "C" void ftx_pack77_pack_ (char const* msg0, int* i3, int* n3, char* c77,
+                                  char* msgsent, int* success, int* received,
+                                  fortran_charlen_t len1, fortran_charlen_t len2,
+                                  fortran_charlen_t len3)
+{
+  char msg0_fixed[37] {};
+  char c77_fixed[77] {};
+  char msgsent_fixed[37] {};
+  bool ok = false;
+  int received_value = received ? *received : 1;
+
+  copy_fortran_input_chars (msg0, len1, msg0_fixed, 37);
+  legacy_pack77_pack_c (msg0_fixed, i3, n3, c77_fixed, msgsent_fixed, &ok, received_value);
+  copy_fixed_to_fortran_output (c77_fixed, 77, c77, len2);
+  copy_fixed_to_fortran_output (msgsent_fixed, 37, msgsent, len3);
+  set_fortran_logical (success, ok);
+}
+
+extern "C" void ftx_pack77_unpack_ (char const* c77, int* received, char* msgsent, int* success,
+                                    fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  char c77_fixed[77] {};
+  char msgsent_fixed[37] {};
+  bool ok = false;
+  copy_fortran_input_chars (c77, len1, c77_fixed, 77);
+  legacy_pack77_unpack_c (c77_fixed, received ? *received : 1, msgsent_fixed, &ok);
+  copy_fixed_to_fortran_output (msgsent_fixed, 37, msgsent, len2);
+  set_fortran_logical (success, ok);
+}
+
+extern "C" void ftx_pack77_save_hash_call_ (char const* c13, int* n10, int* n12, int* n22,
+                                            fortran_charlen_t len)
+{
+  char fixed[13] {};
+  copy_fortran_input_chars (c13, len, fixed, 13);
+  legacy_pack77_save_hash_call_c (fixed, n10, n12, n22);
+}
+
+extern "C" int ftx_pack77_hash_call_ (char const* c13, int* bits, fortran_charlen_t len)
+{
+  char fixed[13] {};
+  int hash_out = -1;
+  copy_fortran_input_chars (c13, len, fixed, 13);
+  if (!bits)
+    {
+      return -1;
+    }
+  return legacy_pack77_hash_call_bits_c (fixed, *bits, &hash_out) ? hash_out : -1;
+}
+
+extern "C" void ftx_pack77_pack28_ (char const* c13, int* n28, fortran_charlen_t len)
+{
+  char fixed[13] {};
+  bool success = false;
+  copy_fortran_input_chars (c13, len, fixed, 13);
+  legacy_pack77_pack28_c (fixed, n28, &success);
+}
+
+extern "C" void ftx_pack77_unpack28_ (int* n28, char* c13, int* success, fortran_charlen_t len)
+{
+  char fixed[13] {};
+  bool ok = false;
+  legacy_pack77_unpack28_c (n28 ? *n28 : 0, fixed, &ok);
+  copy_fixed_to_fortran_output (fixed, 13, c13, len);
+  set_fortran_logical (success, ok);
+}
+
+extern "C" void ftx_pack77_split77_ (char const* msg, int* nwords, int* nw, char* w,
+                                     fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  char msg_fixed[37] {};
+  int local_nwords = 0;
+  int local_nw[19] {};
+  char local_w[19 * 13] {};
+  copy_fortran_input_chars (msg, len1, msg_fixed, 37);
+  legacy_pack77_split77_c (msg_fixed, &local_nwords, local_nw, local_w);
+  if (nwords)
+    {
+      *nwords = local_nwords;
+    }
+  if (nw)
+    {
+      std::copy_n (local_nw, 19, nw);
+    }
+  copy_int_words_to_fortran_output (local_w, 13, 19, w, len2);
+}
+
+extern "C" void ftx_pack77_packtext77_ (char const* c13, char* c71,
+                                        fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  char c13_fixed[13] {};
+  char c71_fixed[71] {};
+  bool success = false;
+  copy_fortran_input_chars (c13, len1, c13_fixed, 13);
+  legacy_pack77_packtext77_c (c13_fixed, c71_fixed, &success);
+  copy_fixed_to_fortran_output (c71_fixed, 71, c71, len2);
+}
+
+extern "C" void ftx_pack77_unpacktext77_ (char const* c71, char* c13,
+                                          fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  char c71_fixed[71] {};
+  char c13_fixed[13] {};
+  bool success = false;
+  copy_fortran_input_chars (c71, len1, c71_fixed, 71);
+  legacy_pack77_unpacktext77_c (c71_fixed, c13_fixed, &success);
+  copy_fixed_to_fortran_output (c13_fixed, 13, c13, len2);
+}
+
+extern "C" void save_dxbase_ (char* dxbase, fortran_charlen_t len)
+{
+  char fixed[6] {};
+  std::fill_n (fixed, 6, ' ');
+  if (dxbase && len > 0)
+    {
+      std::copy_n (dxbase, std::min<size_t> (6, len), fixed);
+    }
+  legacy_pack77_set_dxbase_c (fixed);
+}
+
 void legacy_pack77_pack_c (char const msg0[37], int* i3, int* n3,
                            char c77[77], char msgsent[37], bool* success, int received)
 {
@@ -3086,6 +3918,26 @@ void legacy_pack77_pack_c (char const msg0[37], int* i3, int* n3,
   if (success) *success = true;
 }
 
+extern "C" bool stdmsg_ (char const* msg0, fortran_charlen_t len)
+{
+  char fixed_msg[37] {};
+  char c77[77] {};
+  char msgsent[37] {};
+  int i3 = -1;
+  int n3 = -1;
+  bool success = false;
+
+  std::fill_n (fixed_msg, 37, ' ');
+  if (msg0 && len > 0)
+    {
+      std::copy_n (msg0, std::min<size_t> (37, len), fixed_msg);
+    }
+
+  legacy_pack77_reset_context_c ();
+  legacy_pack77_pack_c (fixed_msg, &i3, &n3, c77, msgsent, &success, 0);
+  return i3 > 0 || n3 > 0;
+}
+
 void legacy_pack77_unpack_c (char const c77[77], int received,
                              char msgsent[37], bool* success)
 {
@@ -3103,6 +3955,54 @@ void legacy_pack77_unpack_c (char const c77[77], int received,
 
   if (msgsent) to_fixed_chars (decoded.msgsent, msgsent, 37);
   if (success) *success = true;
+}
+
+extern "C" void genmsk_128_90_ (char* msg0, int* ichk, char* msgsent, int* i4tone, int* itype,
+                                fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  if (msgsent)
+    {
+      std::fill_n (msgsent, static_cast<size_t> (len2), ' ');
+    }
+  if (i4tone)
+    {
+      std::fill_n (i4tone, 144, 0);
+    }
+  if (itype)
+    {
+      *itype = -1;
+    }
+
+  QString const message = QString::fromLatin1 (msg0 ? msg0 : "", static_cast<int> (len1));
+  bool const check_only = ichk && *ichk == 1;
+  decodium::txmsg::EncodedMessage const encoded = decodium::txmsg::encodeMsk144 (message, check_only);
+  if (!encoded.ok)
+    {
+      if (msgsent)
+        {
+          QByteArray const bad = QByteArrayLiteral ("*** bad message ***                  ");
+          std::copy_n (bad.constData (), std::min<size_t> (bad.size (), len2), msgsent);
+        }
+      return;
+    }
+
+  if (itype)
+    {
+      *itype = encoded.messageType;
+    }
+  if (msgsent)
+    {
+      QByteArray fixed = encoded.msgsent.leftJustified (static_cast<int> (len2), ' ', true);
+      std::copy_n (fixed.constData (), std::min<size_t> (fixed.size (), len2), msgsent);
+    }
+  if (i4tone && !encoded.tones.isEmpty ())
+    {
+      int const tone_count = std::min (144, encoded.tones.size ());
+      for (int i = 0; i < tone_count; ++i)
+        {
+          i4tone[i] = encoded.tones.at (i);
+        }
+    }
 }
 
 namespace
@@ -5570,6 +6470,80 @@ void genft8_ (char* msg, int* i3, int* n3, char* msgsent, signed char* msgbits, 
     }
 }
 
+void genfst4_ (char* msg, int* ichk, char* msgsent, signed char* msgbits, int* itone, int* iwspr,
+               fortran_charlen_t len1, fortran_charlen_t len2)
+{
+  bool const check_only = ichk && *ichk == 1;
+  if (msgsent) std::fill_n (msgsent, static_cast<size_t> (len2), ' ');
+  if (msgbits) std::fill_n (msgbits, 101, static_cast<signed char> (0));
+  if (itone) std::fill_n (itone, 160, 0);
+  if (iwspr) *iwspr = 0;
+  if (!msg || !msgsent || !msgbits || !itone)
+    {
+      return;
+    }
+
+  QString const message = QString::fromLatin1 (msg, static_cast<int> (len1));
+  auto const encoded = decodium::txmsg::encodeFst4 (message, check_only);
+  to_fixed_chars (encoded.msgsent, msgsent, static_cast<int> (len2));
+  if (iwspr)
+    {
+      *iwspr = (encoded.i3 == 0 && encoded.n3 == 6) ? 1 : 0;
+    }
+
+  if (check_only || !encoded.ok)
+    {
+      return;
+    }
+
+  for (int idx = 0; idx < 101 && idx < encoded.msgbits.size (); ++idx)
+    {
+      msgbits[idx] = static_cast<signed char> (encoded.msgbits.at (idx) != 0);
+    }
+  for (int idx = 0; idx < 160 && idx < encoded.tones.size (); ++idx)
+    {
+      itone[idx] = encoded.tones.at (idx);
+    }
+}
+
+void get_fst4_tones_from_bits_ (signed char* msgbits, int* i4tone, int* iwspr)
+{
+  if (i4tone)
+    {
+      std::fill_n (i4tone, 160, 0);
+    }
+  if (!msgbits || !i4tone)
+    {
+      return;
+    }
+
+  bool const wspr = iwspr && *iwspr != 0;
+  QVector<int> tones;
+  if (wspr)
+    {
+      MessageBits74 bits {};
+      for (int i = 0; i < 74; ++i)
+        {
+          bits[static_cast<size_t> (i)] = static_cast<unsigned char> (msgbits[i] != 0);
+        }
+      tones = map_fst4_tones_from_codeword (encode240_74_cpp (bits));
+    }
+  else
+    {
+      MessageBits101 bits {};
+      for (int i = 0; i < 101; ++i)
+        {
+          bits[static_cast<size_t> (i)] = static_cast<unsigned char> (msgbits[i] != 0);
+        }
+      tones = map_fst4_tones_from_codeword (encode240_101_cpp (bits));
+    }
+
+  for (int i = 0; i < 160 && i < tones.size (); ++i)
+    {
+      i4tone[i] = tones.at (i);
+    }
+}
+
 void genft4_ (char* msg, int* ichk, char* msgsent, signed char* msgbits, int* itone)
 {
   bool const check_only = ichk && *ichk == 1;
@@ -5655,18 +6629,45 @@ void legacy_pack77_save_hash_call_c (char const c13[13], int* n10, int* n12, int
   if (n22 && h22.ok) *n22 = h22.value;
 }
 
+int legacy_pack77_hash_call_bits_c (char const c13[13], int bits, int* hash_out)
+{
+  if (hash_out) *hash_out = -1;
+  if (bits != 10 && bits != 12 && bits != 22)
+    {
+      return 0;
+    }
+
+  QString const call = normalized_call_from_fixed (c13, 13);
+  CheckedCall const checked = check_call (call);
+  if (!checked.ok)
+    {
+      return 0;
+    }
+
+  Maybe<int> hash = ihashcall_cpp (call, bits);
+  if (!hash.ok)
+    {
+      return 0;
+    }
+
+  if (hash_out) *hash_out = hash.value;
+  return 1;
+}
+
 void legacy_pack77_pack28_c (char const c13[13], int* n28, bool* success)
 {
   if (n28) *n28 = -1;
   if (success) *success = false;
 
-  Maybe<int> packed = pack28_cpp (from_fixed_chars (c13, 13).trimmed ());
+  QString const token = from_fixed_chars (c13, 13).trimmed ();
+  Maybe<int> const packed = pack28_cpp (token);
   if (!packed.ok)
     {
       return;
     }
 
-  if (n28) *n28 = packed.value;
+  int const packed_value = packed.value;
+  if (n28) *n28 = packed_value;
   if (success) *success = true;
 }
 

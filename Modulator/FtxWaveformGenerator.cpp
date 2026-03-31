@@ -3,10 +3,14 @@
 #include "FtxMessageEncoder.hpp"
 #include "commons.h"
 
+#include <QStringList>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -15,14 +19,13 @@
 #include "wsjtx_config.h"
 
 extern "C" {
-struct FoxCom3
-{
-  int nslots2;
-  char cmsg2[5][40];
-  int itone3[151];
-};
-
-extern FoxCom3 foxcom3_;
+void legacy_pack77_pack28_c (char const c13[13], int* n28, bool* success);
+void legacy_pack77_split77_c (char const msg[37], int* nwords, int nw[19], char words[247]);
+void legacy_pack77_packtext77_c (char const c13[13], char c71[71], bool* success);
+std::uint32_t nhash2 (void const* key, std::uint64_t length, std::uint32_t initval);
+void qpc_encode (unsigned char* y, unsigned char const* x);
+foxcom_block_t foxcom_ {};
+foxcom3_block_t foxcom3_ {};
 }
 
 namespace
@@ -36,6 +39,29 @@ constexpr int kFt8FoxNsym = 79;
 constexpr int kFt8FoxNsps = 4 * 1920;
 constexpr int kFt8FoxNwave = kFt8FoxNsym * kFt8FoxNsps;
 constexpr int kFt8FoxNfft = 614400;
+constexpr int kSuperFoxNsym = 151;
+constexpr int kSuperFoxNsps = 4 * 1024;
+constexpr int kSuperFoxWaveSamples = (kSuperFoxNsym + 2) * kSuperFoxNsps;
+constexpr int kSuperFoxNqu1Rks = 203514677;
+constexpr char kSuperFoxBase38[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/";
+
+std::array<int, 24> const kSuperFoxSyncPositions = {{
+  1, 2, 4, 7, 11, 16, 22, 29, 37, 39, 42, 43, 45, 48,
+  52, 57, 63, 70, 78, 80, 83, 84, 86, 89
+}};
+
+struct Split77Words
+{
+  int nwords {0};
+  std::array<int, 19> lengths {};
+  std::array<std::array<char, 13>, 19> words {};
+};
+
+struct SuperFoxAssembled
+{
+  QString line;
+  QString foxCall;
+};
 
 int clamp_int (int value, int low, int high)
 {
@@ -64,6 +90,798 @@ double wrap_phase (double phase)
       phase += kTwoPi;
     }
   return phase;
+}
+
+QByteArray to_fixed_latin (QString const& text, int width)
+{
+  QByteArray latin = text.left (width).toLatin1 ();
+  if (latin.size () < width)
+    {
+      latin.append (QByteArray (width - latin.size (), ' '));
+    }
+  return latin;
+}
+
+Split77Words split77_words (QString const& message)
+{
+  Split77Words result {};
+  std::array<char, 37> fixed_message {};
+  std::fill (fixed_message.begin (), fixed_message.end (), ' ');
+  QByteArray const latin = to_fixed_latin (message, 37);
+  std::copy_n (latin.constData (), 37, fixed_message.data ());
+  legacy_pack77_split77_c (fixed_message.data (), &result.nwords, result.lengths.data (),
+                           reinterpret_cast<char*> (result.words.data ()));
+  result.nwords = clamp_int (result.nwords, 0, 19);
+  return result;
+}
+
+QString split_word (Split77Words const& words, int index)
+{
+  if (index < 0 || index >= words.nwords)
+    {
+      return {};
+    }
+  int const length = clamp_int (words.lengths[static_cast<size_t> (index)], 0, 13);
+  return QString::fromLatin1 (words.words[static_cast<size_t> (index)].data (), length);
+}
+
+bool is_signed_report_word (QString const& word)
+{
+  return !word.isEmpty () && (word.at (0) == QLatin1Char {'+'} || word.at (0) == QLatin1Char {'-'});
+}
+
+int base38_index (QChar ch)
+{
+  ushort const code = ch.toLatin1 ();
+  for (int i = 0; kSuperFoxBase38[i] != '\0'; ++i)
+    {
+      if (ushort (kSuperFoxBase38[i]) == code)
+        {
+          return i;
+        }
+    }
+  return 0;
+}
+
+std::uint64_t pack_base38_11 (QString const& text)
+{
+  QString padded = text.leftJustified (11, QLatin1Char {' '}, true).left (11);
+  std::uint64_t value = 0;
+  for (QChar const ch : padded)
+    {
+      value = value * 38u + static_cast<std::uint64_t> (base38_index (ch));
+    }
+  return value;
+}
+
+void write_integer_bits (std::array<unsigned char, 329>& bits, int start, int width, std::uint64_t value)
+{
+  for (int i = 0; i < width; ++i)
+    {
+      int const shift = width - 1 - i;
+      bits[static_cast<size_t> (start + i)] = static_cast<unsigned char> ((value >> shift) & 1u);
+    }
+}
+
+std::uint64_t read_integer_bits (std::array<unsigned char, 329> const& bits, int start, int width)
+{
+  std::uint64_t value = 0;
+  for (int i = 0; i < width; ++i)
+    {
+      value = (value << 1u) | bits[static_cast<size_t> (start + i)];
+    }
+  return value;
+}
+
+bool pack28_local (QString const& call, int* value_out)
+{
+  if (value_out)
+    {
+      *value_out = 0;
+    }
+  std::array<char, 13> fixed_call {};
+  std::fill (fixed_call.begin (), fixed_call.end (), ' ');
+  QByteArray const latin = to_fixed_latin (call, 13);
+  std::copy_n (latin.constData (), 13, fixed_call.data ());
+  bool success = false;
+  int value = 0;
+  legacy_pack77_pack28_c (fixed_call.data (), &value, &success);
+  if (!success)
+    {
+      return false;
+    }
+  if (value_out)
+    {
+      *value_out = value;
+    }
+  return true;
+}
+
+bool packtext13_local (QString const& text, std::array<unsigned char, 71>* bits_out)
+{
+  if (!bits_out)
+    {
+      return false;
+    }
+  bits_out->fill (0);
+  std::array<char, 13> fixed_text {};
+  std::fill (fixed_text.begin (), fixed_text.end (), ' ');
+  QByteArray const latin = to_fixed_latin (text, 13);
+  std::copy_n (latin.constData (), 13, fixed_text.data ());
+  std::array<char, 71> packed {};
+  bool success = false;
+  legacy_pack77_packtext77_c (fixed_text.data (), packed.data (), &success);
+  if (!success)
+    {
+      return false;
+    }
+  for (int i = 0; i < 71; ++i)
+    {
+      (*bits_out)[static_cast<size_t> (i)] = packed[static_cast<size_t> (i)] == '1' ? 1u : 0u;
+    }
+  return true;
+}
+
+int packgrid_superfox (QString const& grid_in, bool* text_out)
+{
+  if (text_out)
+    {
+      *text_out = false;
+    }
+
+  constexpr int kNgBase = 180 * 180;
+  QString grid = grid_in.leftJustified (4, QLatin1Char {' '}, true).left (4).toUpper ();
+  if (grid == QStringLiteral ("    "))
+    {
+      return kNgBase + 1;
+    }
+
+  if (grid.startsWith (QLatin1Char {'-'}))
+    {
+      bool ok = false;
+      int const report = grid.mid (1, 2).toInt (&ok);
+      if (ok && report >= 1 && report <= 30)
+        {
+          return kNgBase + 1 + report;
+        }
+    }
+  else if (grid.startsWith (QStringLiteral ("R-")))
+    {
+      bool ok = false;
+      int const report = grid.mid (2, 2).toInt (&ok);
+      if (ok && report >= 1 && report <= 30)
+        {
+          return kNgBase + 31 + report;
+        }
+    }
+  else if (grid == QStringLiteral ("RO  "))
+    {
+      return kNgBase + 62;
+    }
+  else if (grid == QStringLiteral ("RRR "))
+    {
+      return kNgBase + 63;
+    }
+  else if (grid == QStringLiteral ("73  "))
+    {
+      return kNgBase + 64;
+    }
+
+  {
+    bool ok = false;
+    int report = grid.toInt (&ok);
+    QChar const c1 = grid.at (0);
+    if (!ok)
+      {
+        report = grid.mid (1, 3).toInt (&ok);
+      }
+    if (ok && report >= -50 && report <= 49)
+      {
+        return packgrid_superfox ((c1 == QLatin1Char {'R'})
+                                    ? QStringLiteral ("LA%1").arg (report + 50, 2, 10, QLatin1Char {'0'})
+                                    : QStringLiteral ("KA%1").arg (report + 50, 2, 10, QLatin1Char {'0'}),
+                                  text_out);
+      }
+  }
+
+  bool text = false;
+  text = text || grid.at (0) < QLatin1Char {'A'} || grid.at (0) > QLatin1Char {'R'};
+  text = text || grid.at (1) < QLatin1Char {'A'} || grid.at (1) > QLatin1Char {'R'};
+  text = text || grid.at (2) < QLatin1Char {'0'} || grid.at (2) > QLatin1Char {'9'};
+  text = text || grid.at (3) < QLatin1Char {'0'} || grid.at (3) > QLatin1Char {'9'};
+  if (text)
+    {
+      if (text_out)
+        {
+          *text_out = true;
+        }
+      return 0;
+    }
+
+  char const g1 = grid.at (0).toLatin1 ();
+  char const g2 = grid.at (1).toLatin1 ();
+  char const g3 = grid.at (2).toLatin1 ();
+  char const g4 = grid.at (3).toLatin1 ();
+  float const dlong = float (180 - 20 * (g1 - 'A')) - float (2 * (g3 - '0')) - (5.0f * (12.0f + 0.5f)) / 60.0f;
+  float const dlat = float (-90 + 10 * (g2 - 'A') + (g4 - '0')) + (2.5f * (12.0f + 0.5f)) / 60.0f;
+  int const longitude = static_cast<int> (dlong);
+  int const latitude = static_cast<int> (dlat + 90.0f);
+  return ((longitude + 180) / 2) * 180 + latitude;
+}
+
+void copy_bits (std::array<unsigned char, 329>& dst, int start, std::array<unsigned char, 71> const& src)
+{
+  for (int i = 0; i < 71; ++i)
+    {
+      dst[static_cast<size_t> (start + i)] = src[static_cast<size_t> (i)];
+    }
+}
+
+QString normalize_free_text26 (QString const& text)
+{
+  QString normalized = text.leftJustified (26, QLatin1Char {' '}, true).left (26);
+  int last_non_space = -1;
+  for (int i = 0; i < normalized.size (); ++i)
+    {
+      if (normalized.at (i) != QLatin1Char {' '})
+        {
+          last_non_space = i;
+        }
+    }
+  for (int i = last_non_space + 1; i < normalized.size (); ++i)
+    {
+      normalized[i] = QLatin1Char {'.'};
+    }
+  return normalized;
+}
+
+void append_superfox_piece (int ntype, QString const& msg26, QString const& mycall0, QString const& mygrid0,
+                            int* nmsg, int* nbits, int* nb_mycall, QString* mycall, QString* mygrid,
+                            QString* msg1, std::array<QString, 10>* hiscall, std::array<QString, 5>* rpt2)
+{
+  if (!mycall0.trimmed ().isEmpty ())
+    {
+      *mycall = mycall0.leftJustified (13, QLatin1Char {' '}, true).left (13);
+    }
+  if (!mygrid0.trimmed ().isEmpty ())
+    {
+      *mygrid = mygrid0.leftJustified (4, QLatin1Char {' '}, true).left (4);
+    }
+  if (ntype >= 1)
+    {
+      *nb_mycall = 28;
+    }
+
+  if (ntype == 0)
+    {
+      if (*nbits + *nb_mycall <= 191)
+        {
+          ++nmsg[0];
+          *nbits += 142;
+        }
+      return;
+    }
+
+  if (ntype == 1)
+    {
+      if (*nbits + *nb_mycall <= 318)
+        {
+          ++nmsg[1];
+          *nbits += 15;
+          *msg1 = msg26;
+        }
+      return;
+    }
+
+  QString const trimmed_msg = msg26.trimmed ();
+  int const first_space = trimmed_msg.indexOf (QLatin1Char {' '});
+  QString const first_word = first_space > 0 ? trimmed_msg.left (first_space) : trimmed_msg;
+  if (ntype == 2)
+    {
+      if (*nbits + *nb_mycall <= 305)
+        {
+          ++nmsg[2];
+          *nbits += 28;
+          int const index = nmsg[2] - 1;
+          (*hiscall)[static_cast<size_t> (index + 5)] = first_word.left (6);
+        }
+      return;
+    }
+
+  if (ntype == 3)
+    {
+      if (*nbits + *nb_mycall <= 300)
+        {
+          ++nmsg[3];
+          *nbits += 33;
+          int const index = nmsg[3] - 1;
+          (*hiscall)[static_cast<size_t> (index)] = first_word.left (6);
+          int const plus_index = trimmed_msg.lastIndexOf (QLatin1Char {'+'});
+          int const minus_index = trimmed_msg.lastIndexOf (QLatin1Char {'-'});
+          int const report_index = std::max (plus_index, minus_index);
+          if (report_index >= 0)
+            {
+              (*rpt2)[static_cast<size_t> (index)] = trimmed_msg.mid (report_index, 4).leftJustified (
+                  4, QLatin1Char {' '}, true);
+            }
+        }
+    }
+}
+
+SuperFoxAssembled assemble_superfox_message ()
+{
+  int const slots = clamp_int (foxcom_.nslots, 0, 5);
+  int nmsg[4] {0, 0, 0, 0};
+  int nbits = 0;
+  int nb_mycall = 0;
+  QString mycall;
+  QString mygrid;
+  QString msg1;
+  std::array<QString, 10> hiscall {};
+  std::array<QString, 5> rpt2 {};
+
+  for (int slot = 0; slot < slots; ++slot)
+    {
+      QString const msg37 = QString::fromLatin1 (foxcom_.cmsg[slot], 40).left (37);
+      Split77Words const split = split77_words (msg37);
+      QString const w1 = split_word (split, 0);
+      QString const w2 = split_word (split, 1);
+      QString const w3 = split_word (split, 2);
+      QString const w4 = split_word (split, 3);
+      QString const w5 = split_word (split, 4);
+
+      if (msg37.startsWith (QStringLiteral ("CQ ")))
+        {
+          append_superfox_piece (1, msg37.left (26), w2.left (12), w3.left (4), nmsg, &nbits,
+                                 &nb_mycall, &mycall, &mygrid, &msg1, &hiscall, &rpt2);
+          continue;
+        }
+
+      if (msg37.contains (QLatin1Char {';'}))
+        {
+          QString const bracket_call = (w4.startsWith (QLatin1Char {'<'}) && w4.endsWith (QLatin1Char {'>'})
+                                        && w4.size () >= 2)
+                                           ? w4.mid (1, w4.size () - 2)
+                                           : w4;
+          QString const msg_rr73 = QStringLiteral ("%1 %2 RR73").arg (w1.left (6), bracket_call);
+          append_superfox_piece (2, msg_rr73.left (26), bracket_call.left (12), QString {}, nmsg,
+                                 &nbits, &nb_mycall, &mycall, &mygrid, &msg1, &hiscall, &rpt2);
+          QString const msg_report = QStringLiteral ("%1 %2 %3").arg (w3.left (6), bracket_call, w5.left (3));
+          append_superfox_piece (3, msg_report.left (26), bracket_call.left (12), QString {}, nmsg,
+                                 &nbits, &nb_mycall, &mycall, &mygrid, &msg1, &hiscall, &rpt2);
+          continue;
+        }
+
+      if (msg37.contains (QStringLiteral (" RR73")))
+        {
+          append_superfox_piece (2, msg37.left (26), w2.left (12), QString {}, nmsg, &nbits,
+                                 &nb_mycall, &mycall, &mygrid, &msg1, &hiscall, &rpt2);
+          continue;
+        }
+
+      if (split.nwords == 3 && split.lengths[2] == 3 && is_signed_report_word (w3))
+        {
+          append_superfox_piece (3, msg37.left (26), w2.left (12), QString {}, nmsg, &nbits,
+                                 &nb_mycall, &mycall, &mygrid, &msg1, &hiscall, &rpt2);
+          continue;
+        }
+
+      append_superfox_piece (0, msg37.left (26), QString {}, QString {}, nmsg, &nbits, &nb_mycall,
+                             &mycall, &mygrid, &msg1, &hiscall, &rpt2);
+    }
+
+  nbits += nb_mycall;
+  QString line;
+  if (nmsg[1] >= 1)
+    {
+      line = msg1.trimmed ();
+    }
+  else
+    {
+      line = mycall.trimmed ();
+      for (int i = 0; i < nmsg[3]; ++i)
+        {
+          line = line.trimmed () + QStringLiteral ("  %1 %2")
+                                     .arg (hiscall[static_cast<size_t> (i)].trimmed (),
+                                           rpt2[static_cast<size_t> (i)]);
+        }
+      for (int i = 0; i < nmsg[2]; ++i)
+        {
+          line = line.trimmed () + QStringLiteral ("  %1")
+                                     .arg (hiscall[static_cast<size_t> (i + 5)].trimmed ());
+        }
+    }
+
+  SuperFoxAssembled result;
+  result.line = line.left (120);
+  result.foxCall = mycall.left (11);
+  return result;
+}
+
+bool pack_superfox_message (QString const& line_in, QString const& ckey_in, bool bMoreCQs, bool bSendMsg,
+                            QString const& freeTextMsg_in, std::array<unsigned char, 50>* xin_out)
+{
+  if (!xin_out)
+    {
+      return false;
+    }
+
+  xin_out->fill (0);
+  std::array<unsigned char, 329> msgbits {};
+  QString const line = line_in.left (120);
+  QStringList words = line.split (QLatin1Char {' '}, Qt::SkipEmptyParts);
+  if (words.size () > 16)
+    {
+      words = words.mid (0, 16);
+    }
+
+  QString const ckey = ckey_in.leftJustified (10, QLatin1Char {' '}, true).left (10);
+  bool otp_ok = false;
+  int const otp = ckey.mid (4, 6).trimmed ().toInt (&otp_ok);
+  write_integer_bits (msgbits, 306, 20, otp_ok ? static_cast<std::uint64_t> (otp) : 0u);
+
+  int i3 = 0;
+  int nh1 = 0;
+  int nh2 = 0;
+
+  if (line.startsWith (QStringLiteral ("CQ ")) && words.size () >= 3)
+    {
+      i3 = 3;
+      write_integer_bits (msgbits, 0, 58, pack_base38_11 (words.at (1)));
+      bool grid_is_text = false;
+      int const packed_grid = packgrid_superfox (words.at (2).left (4), &grid_is_text);
+      if (grid_is_text)
+        {
+          return false;
+        }
+      write_integer_bits (msgbits, 58, 15, static_cast<std::uint64_t> (packed_grid));
+      write_integer_bits (msgbits, 326, 3, 3u);
+    }
+  else
+    {
+      if (words.isEmpty ())
+        {
+          return false;
+        }
+      int fox_call = 0;
+      if (!pack28_local (words.at (0), &fox_call))
+        {
+          return false;
+        }
+      write_integer_bits (msgbits, 0, 28, static_cast<std::uint64_t> (fox_call));
+
+      if (bSendMsg)
+        {
+          std::fill_n (msgbits.begin () + 140, 20, 1u);
+        }
+
+      int bit_offset = 28;
+      for (int i = 1; i < words.size (); ++i)
+        {
+          if (is_signed_report_word (words.at (i)))
+            {
+              continue;
+            }
+          int const next_index = std::min (i + 1, words.size () - 1);
+          if (next_index > i && is_signed_report_word (words.at (next_index)))
+            {
+              continue;
+            }
+          int packed_call = 0;
+          if (!pack28_local (words.at (i), &packed_call))
+            {
+              return false;
+            }
+          write_integer_bits (msgbits, bit_offset, 28, static_cast<std::uint64_t> (packed_call));
+          bit_offset += 28;
+          ++nh1;
+          if (nh1 >= 5)
+            {
+              break;
+            }
+        }
+
+      int call_bit_offset = 168;
+      int report_bit_offset = 280;
+      if (bSendMsg)
+        {
+          i3 = 2;
+          call_bit_offset = 28 + 28 * nh1;
+          report_bit_offset = 140 + 5 * nh1;
+        }
+
+      for (int i = 1; i + 1 < words.size (); ++i)
+        {
+          if (!is_signed_report_word (words.at (i + 1)))
+            {
+              continue;
+            }
+          int packed_call = 0;
+          if (!pack28_local (words.at (i), &packed_call))
+            {
+              return false;
+            }
+          write_integer_bits (msgbits, call_bit_offset, 28, static_cast<std::uint64_t> (packed_call));
+          bool ok = false;
+          int report = words.at (i + 1).toInt (&ok);
+          if (!ok)
+            {
+              report = 0;
+            }
+          report = clamp_int (report, -18, 12);
+          write_integer_bits (msgbits, report_bit_offset, 5, static_cast<std::uint64_t> (report + 18));
+          ++nh2;
+          if (nh2 >= 4 || nh1 + nh2 >= 9)
+            {
+              break;
+            }
+          call_bit_offset += 28;
+          report_bit_offset += 5;
+        }
+    }
+
+  if (bSendMsg)
+    {
+      QString const free_text = normalize_free_text26 (freeTextMsg_in);
+      std::array<unsigned char, 71> bits_a {};
+      std::array<unsigned char, 71> bits_b {};
+      if (!packtext13_local (free_text.left (13), &bits_a) || !packtext13_local (free_text.mid (13, 13), &bits_b))
+        {
+          return false;
+        }
+      if (i3 == 3)
+        {
+          copy_bits (msgbits, 73, bits_a);
+          copy_bits (msgbits, 144, bits_b);
+        }
+      else if (i3 == 2)
+        {
+          copy_bits (msgbits, 160, bits_a);
+          copy_bits (msgbits, 231, bits_b);
+        }
+      write_integer_bits (msgbits, 326, 3, static_cast<std::uint64_t> (i3));
+    }
+
+  if (bMoreCQs)
+    {
+      msgbits[305] = 1u;
+    }
+
+  i3 = static_cast<int> (read_integer_bits (msgbits, 326, 3));
+  if (i3 == 0)
+    {
+      for (int i = 0; i < 9; ++i)
+        {
+          int const offset = 28 + i * 28;
+          if (read_integer_bits (msgbits, offset, 28) == 0u)
+            {
+              write_integer_bits (msgbits, offset, 28, static_cast<std::uint64_t> (kSuperFoxNqu1Rks));
+            }
+        }
+    }
+  else if (i3 == 3)
+    {
+      bool all_zero = true;
+      for (int i = 0; i < 7; ++i)
+        {
+          if (read_integer_bits (msgbits, 73 + i * 32, 32) != 0u)
+            {
+              all_zero = false;
+              break;
+            }
+        }
+      if (all_zero)
+        {
+          for (int i = 0; i < 7; ++i)
+            {
+              write_integer_bits (msgbits, 73 + i * 32, 32, static_cast<std::uint64_t> (kSuperFoxNqu1Rks));
+            }
+        }
+    }
+
+  for (int i = 0; i < 47; ++i)
+    {
+      (*xin_out)[static_cast<size_t> (i)] = static_cast<unsigned char> (read_integer_bits (msgbits, i * 7, 7));
+    }
+
+  std::uint32_t const crc21 = nhash2 (xin_out->data (), 47u, 571u) & ((1u << 21) - 1u);
+  (*xin_out)[47] = static_cast<unsigned char> (crc21 / 16384u);
+  (*xin_out)[48] = static_cast<unsigned char> ((crc21 / 128u) & 127u);
+  (*xin_out)[49] = static_cast<unsigned char> (crc21 & 127u);
+  std::reverse (xin_out->begin (), xin_out->end ());
+  return true;
+}
+
+void build_superfox_channel_symbols (std::array<unsigned char, 50> const& xin, int tones[151])
+{
+  std::array<unsigned char, 128> codeword {};
+  qpc_encode (codeword.data (), xin.data ());
+  std::rotate (codeword.begin (), codeword.begin () + 1, codeword.end ());
+  codeword[127] = 0u;
+
+  int sync_index = 0;
+  int data_index = 0;
+  for (int symbol = 1; symbol <= kSuperFoxNsym; ++symbol)
+    {
+      if (sync_index < static_cast<int> (kSuperFoxSyncPositions.size ())
+          && symbol == kSuperFoxSyncPositions[static_cast<size_t> (sync_index)])
+        {
+          tones[symbol - 1] = 0;
+          if (sync_index + 1 < static_cast<int> (kSuperFoxSyncPositions.size ()))
+            {
+              ++sync_index;
+            }
+        }
+      else
+        {
+          tones[symbol - 1] = static_cast<int> (codeword[static_cast<size_t> (data_index)]) + 1;
+          ++data_index;
+        }
+    }
+}
+
+void generate_superfox_waveform (int const* itone, float* wave, int wave_capacity)
+{
+  if (!itone || !wave || wave_capacity <= 0)
+    {
+      return;
+    }
+
+  std::fill_n (wave, wave_capacity, 0.0f);
+  std::vector<double> dphi (kSuperFoxWaveSamples, 0.0);
+  std::array<double, 3 * kSuperFoxNsps> pulse {};
+  double const dphi_peak = kTwoPi / double (kSuperFoxNsps);
+
+  for (int i = 0; i < 3 * kSuperFoxNsps; ++i)
+    {
+      double const tt = (double (i + 1) - 1.5 * double (kSuperFoxNsps)) / double (kSuperFoxNsps);
+      pulse[static_cast<size_t> (i)] = gfsk_pulse (8.0, tt);
+    }
+
+  for (int j = 0; j < kSuperFoxNsym; ++j)
+    {
+      int const ib = j * kSuperFoxNsps;
+      for (int i = 0; i < 3 * kSuperFoxNsps; ++i)
+        {
+          dphi[static_cast<size_t> (ib + i)] += dphi_peak * pulse[static_cast<size_t> (i)]
+              * double (itone[j]);
+        }
+    }
+
+  for (int i = 0; i < 2 * kSuperFoxNsps; ++i)
+    {
+      dphi[static_cast<size_t> (i)] += dphi_peak * double (itone[0])
+          * pulse[static_cast<size_t> (kSuperFoxNsps + i)];
+      dphi[static_cast<size_t> (kSuperFoxNsym * kSuperFoxNsps + i)] += dphi_peak
+          * double (itone[kSuperFoxNsym - 1]) * pulse[static_cast<size_t> (i)];
+    }
+
+  double const carrier_step = kTwoPi * 750.0 / 48000.0;
+  for (double& value : dphi)
+    {
+      value += carrier_step;
+    }
+
+  double phi = 0.0;
+  int const generated = std::min (wave_capacity, kSuperFoxWaveSamples);
+  for (int sample = 0; sample < generated - 1; ++sample)
+    {
+      wave[sample] = static_cast<float> (std::sin (phi));
+      phi += dphi[static_cast<size_t> (sample + 1)];
+    }
+
+  int const nramp = kSuperFoxNsps / 8;
+  for (int i = 0; i < kSuperFoxNsps - nramp && i < generated; ++i)
+    {
+      wave[i] = 0.0f;
+    }
+  for (int i = 0; i < nramp && (kSuperFoxNsps - nramp + i) < generated; ++i)
+    {
+      double const env = 0.5 * (1.0 - std::cos (kTwoPi * double (i) / (2.0 * double (nramp))));
+      int const index = kSuperFoxNsps - nramp + i;
+      wave[index] = static_cast<float> (wave[index] * env);
+    }
+
+  int const tail_start = (kSuperFoxNsym + 1) * kSuperFoxNsps;
+  for (int i = 0; i < nramp && (tail_start + i) < generated; ++i)
+    {
+      double const env = 0.5 * (1.0 + std::cos (kTwoPi * double (i) / (2.0 * double (nramp))));
+      wave[tail_start + i] = static_cast<float> (wave[tail_start + i] * env);
+    }
+  for (int i = tail_start + nramp; i < generated; ++i)
+    {
+      wave[i] = 0.0f;
+    }
+}
+
+void generate_superfox_complex_waveform (int const* idat, float f0, int const* isync,
+                                         int* itone_out, std::complex<float>* cdat, int capacity)
+{
+  if (!idat || !isync || !itone_out || !cdat || capacity <= 0)
+    {
+      return;
+    }
+
+  std::fill_n (itone_out, kSuperFoxNsym, 0);
+  std::fill_n (cdat, capacity, std::complex<float> {});
+
+  int sync_index = 0;
+  int data_index = 0;
+  for (int symbol = 1; symbol <= kSuperFoxNsym; ++symbol)
+    {
+      if (sync_index < 24 && symbol == isync[sync_index])
+        {
+          itone_out[symbol - 1] = 0;
+          if (sync_index + 1 < 24)
+            {
+              ++sync_index;
+            }
+        }
+      else
+        {
+          itone_out[symbol - 1] = idat[data_index] + 1;
+          ++data_index;
+        }
+    }
+
+  constexpr int kComplexNsps = 1024;
+  constexpr int kComplexNpts = (kSuperFoxNsym + 2) * kComplexNsps;
+  std::vector<double> dphi (static_cast<size_t> (kComplexNpts), 0.0);
+  std::array<double, 3 * kComplexNsps> pulse {};
+  double const dphi_peak = kTwoPi / double (kComplexNsps);
+  for (int i = 0; i < static_cast<int> (pulse.size ()); ++i)
+    {
+      double const tt = (double (i + 1) - 1.5 * double (kComplexNsps)) / double (kComplexNsps);
+      pulse[static_cast<size_t> (i)] = gfsk_pulse (8.0, tt);
+    }
+
+  for (int j = 0; j < kSuperFoxNsym; ++j)
+    {
+      int const ib = j * kComplexNsps;
+      for (int i = 0; i < static_cast<int> (pulse.size ()); ++i)
+        {
+          dphi[static_cast<size_t> (ib + i)] += dphi_peak * pulse[static_cast<size_t> (i)]
+              * double (itone_out[j]);
+        }
+    }
+  for (int i = 0; i < 2 * kComplexNsps; ++i)
+    {
+      dphi[static_cast<size_t> (i)] += dphi_peak * double (itone_out[0])
+          * pulse[static_cast<size_t> (kComplexNsps + i)];
+      dphi[static_cast<size_t> (kSuperFoxNsym * kComplexNsps + i)] += dphi_peak
+          * double (itone_out[kSuperFoxNsym - 1]) * pulse[static_cast<size_t> (i)];
+    }
+
+  double phi = 0.0;
+  double const carrier_step = kTwoPi * double (f0) / 12000.0;
+  int const generated = std::min (capacity, kComplexNpts);
+  for (int sample = 0; sample < generated - 1; ++sample)
+    {
+      cdat[sample] = std::complex<float> {float (std::cos (phi)), float (std::sin (phi))};
+      phi += dphi[static_cast<size_t> (sample + 1)] + carrier_step;
+    }
+
+  int const nramp = kComplexNsps / 8;
+  for (int i = 0; i < kComplexNsps - nramp && i < generated; ++i)
+    {
+      cdat[i] = std::complex<float> {};
+    }
+  for (int i = 0; i < nramp && (kComplexNsps - nramp + i) < generated; ++i)
+    {
+      double const env = 0.5 * (1.0 - std::cos (kTwoPi * double (i) / (2.0 * double (nramp))));
+      cdat[kComplexNsps - nramp + i] *= float (env);
+    }
+
+  int const tail_start = (kSuperFoxNsym + 1) * kComplexNsps;
+  for (int i = 0; i < nramp && (tail_start + i) < generated; ++i)
+    {
+      double const env = 0.5 * (1.0 + std::cos (kTwoPi * double (i) / (2.0 * double (nramp))));
+      cdat[tail_start + i] *= float (env);
+    }
+  for (int i = tail_start + nramp; i < generated; ++i)
+    {
+      cdat[i] = std::complex<float> {};
+    }
 }
 
 QVector<float> generate_ft2_ft4_wave (int const* itone, int nsym, int nsps, float fsample, float f0)
@@ -432,6 +1250,122 @@ void ft2_fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, flo
       wave[i] = time_domain[static_cast<size_t> (i)] * scale;
     }
 }
+
+bool fst4_shaping_enabled ()
+{
+  static bool const enabled = [] {
+    char const* value = std::getenv ("FST4_NOSHAPING");
+    return !(value && value[0] == '1');
+  }();
+  return enabled;
+}
+
+std::array<std::complex<float>, 65536> const& fst4_ctab ()
+{
+  static std::array<std::complex<float>, 65536> table = [] {
+    std::array<std::complex<float>, 65536> result {};
+    for (size_t i = 0; i < result.size (); ++i)
+      {
+        double const phi = static_cast<double> (i) * kTwoPi / static_cast<double> (result.size ());
+        result[i] = std::complex<float> {static_cast<float> (std::cos (phi)),
+                                         static_cast<float> (std::sin (phi))};
+      }
+    return result;
+  }();
+  return table;
+}
+
+void generate_fst4_wave_internal (int const* itone, int nsym, int nsps, float fsample, int hmod, float f0,
+                                  std::complex<float>* cwave, float* wave, int icmplx, int nwave)
+{
+  if (!itone || nsym <= 0 || nsps <= 0 || fsample <= 0.0f || nwave <= 0)
+    {
+      return;
+    }
+
+  std::vector<float> pulse (static_cast<size_t> (3 * nsps), 0.0f);
+  for (int i = 0; i < 3 * nsps; ++i)
+    {
+      double const tt = (static_cast<double> (i) + 1.0 - 1.5 * static_cast<double> (nsps))
+                      / static_cast<double> (nsps);
+      pulse[static_cast<size_t> (i)] = static_cast<float> (gfsk_pulse (2.0, tt));
+    }
+
+  std::vector<double> dphi (static_cast<size_t> ((nsym + 2) * nsps), 0.0);
+  double const dphi_peak = kTwoPi * static_cast<double> (hmod) / static_cast<double> (nsps);
+  for (int j = 0; j < nsym; ++j)
+    {
+      int const start = j * nsps;
+      for (int i = 0; i < 3 * nsps; ++i)
+        {
+          dphi[static_cast<size_t> (start + i)] += dphi_peak
+              * static_cast<double> (pulse[static_cast<size_t> (i)])
+              * static_cast<double> (itone[j]);
+        }
+    }
+
+  double const tsym = static_cast<double> (nsps) / static_cast<double> (fsample);
+  double const dt = 1.0 / static_cast<double> (fsample);
+  double const carrier_step =
+      kTwoPi * (static_cast<double> (f0) - 1.5 * static_cast<double> (hmod) / tsym) * dt;
+
+  auto const& table = fst4_ctab ();
+  double phi = 0.0;
+  int k = 0;
+  int const limit = std::min (nwave, nsym * nsps);
+  for (int j = nsps; j < (nsym + 1) * nsps && k < limit; ++j)
+    {
+      int index = static_cast<int> (phi * static_cast<double> (table.size ()) / kTwoPi);
+      index &= static_cast<int> (table.size () - 1);
+      if (icmplx == 0)
+        {
+          if (wave) wave[k] = table[static_cast<size_t> (index)].imag ();
+        }
+      else
+        {
+          if (cwave) cwave[k] = table[static_cast<size_t> (index)];
+        }
+      ++k;
+      phi = wrap_phase (phi + dphi[static_cast<size_t> (j)] + carrier_step);
+    }
+
+  if (!fst4_shaping_enabled ())
+    {
+      return;
+    }
+
+  int const rise = std::min (limit, nsps / 4);
+  for (int i = 0; i < rise; ++i)
+    {
+      double const env = (1.0 - std::cos (kTwoPi * static_cast<double> (i)
+                                          / static_cast<double> (nsps / 2))) / 2.0;
+      if (icmplx == 0)
+        {
+          if (wave) wave[i] = static_cast<float> (wave[i] * env);
+        }
+      else
+        {
+          if (cwave) cwave[i] *= static_cast<float> (env);
+        }
+    }
+
+  int const tail_start = (nsym - 1) * nsps + 3 * nsps / 4;
+  int const tail_count = std::min (nsps / 4 + 1, std::max (0, limit - tail_start));
+  for (int i = 0; i < tail_count; ++i)
+    {
+      double const env = (1.0 + std::cos (kTwoPi * static_cast<double> (i)
+                                          / static_cast<double> (nsps / 2))) / 2.0;
+      int const index = tail_start + i;
+      if (icmplx == 0)
+        {
+          if (wave) wave[index] = static_cast<float> (wave[index] * env);
+        }
+      else
+        {
+          if (cwave) cwave[index] *= static_cast<float> (env);
+        }
+    }
+}
 }
 
 namespace decodium
@@ -452,6 +1386,54 @@ QVector<float> generateFt4Wave (int const* itone, int nsym, int nsps, float fsam
 QVector<float> generateFt8Wave (int const* itone, int nsym, int nsps, float bt, float fsample, float f0)
 {
   return generate_ft8_wave (itone, nsym, nsps, bt, fsample, f0);
+}
+
+QVector<float> generateFst4Wave (int const* itone, int nsym, int nsps, float fsample, int hmod, float f0)
+{
+  int const output_samples = std::max (0, (nsym + 2) * nsps);
+  QVector<float> wave (output_samples, 0.0f);
+  if (output_samples == 0)
+    {
+      return wave;
+    }
+  generate_fst4_wave_internal (itone, nsym, nsps, fsample, hmod, f0, nullptr, wave.data (), 0, output_samples);
+  return wave;
+}
+
+bool packSuperFoxMessage (QString const& line, QString const& otpKey, bool bMoreCQs, bool bSendMsg,
+                          QString const& freeTextMsg, std::array<unsigned char, 50>* xinOut)
+{
+  return pack_superfox_message (line, otpKey, bMoreCQs, bSendMsg, freeTextMsg, xinOut);
+}
+
+bool generateSuperFoxTx (QString const& otpKey)
+{
+  std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+  std::fill_n (foxcom3_.itone3, kSuperFoxNsym, 0);
+  foxcom3_.nslots2 = clamp_int (foxcom_.nslots, 0, 5);
+  std::memset (foxcom3_.cmsg2, ' ', sizeof (foxcom3_.cmsg2));
+  for (int slot = 0; slot < foxcom3_.nslots2; ++slot)
+    {
+      std::memcpy (foxcom3_.cmsg2[slot], foxcom_.cmsg[slot], 40);
+    }
+
+  SuperFoxAssembled const assembled = assemble_superfox_message ();
+  if (assembled.line.trimmed ().isEmpty ())
+    {
+      return false;
+    }
+
+  std::array<unsigned char, 50> xin {};
+  QString const free_text = QString::fromLatin1 (foxcom_.textMsg, 26);
+  if (!packSuperFoxMessage (assembled.line, otpKey, foxcom_.bMoreCQs, foxcom_.bSendMsg, free_text, &xin))
+    {
+      return false;
+    }
+
+  build_superfox_channel_symbols (xin, foxcom3_.itone3);
+  generate_superfox_waveform (foxcom3_.itone3, foxcom_.wave,
+                              static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])));
+  return true;
 }
 
 }
@@ -605,6 +1587,23 @@ extern "C" void foxgen_ (bool* bSuperFox, char const* /*fname*/, fortran_charlen
     }
 }
 
+extern "C" void sftx_sub_ (char const* otp_key, fortran_charlen_t len)
+{
+  QString const otp = QString::fromLatin1 (otp_key ? otp_key : "", static_cast<int> (len)).trimmed ();
+  decodium::txwave::generateSuperFoxTx (otp);
+}
+
+extern "C" void sfox_wave_gfsk_ ()
+{
+  generate_superfox_waveform (foxcom3_.itone3, foxcom_.wave,
+                              static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])));
+}
+
+extern "C" void sfox_gen_gfsk_ (int* idat, float* f0, int* isync, int* itone, std::complex<float>* cdat)
+{
+  generate_superfox_complex_waveform (idat, f0 ? *f0 : 750.0f, isync, itone, cdat, 15 * 12000);
+}
+
 extern "C" void foxgenft2_ ()
 {
   QVector<float> wave (kFt2FoxNwave, 0.0f);
@@ -747,6 +1746,38 @@ extern "C" void gen_ft4wave_ (int* itone, int* nsym, int* nsps, float* fsample, 
     {
       wave[i] = generated.at (i);
     }
+}
+
+extern "C" void gen_fst4wave_ (int* itone, int* nsym, int* nsps, int* nwave, float* fsample,
+                                int* hmod, float* f0, int* icmplx,
+                                std::complex<float>* cwave, float* wave)
+{
+  int const symbol_count = nsym ? *nsym : 0;
+  int const samples_per_symbol = nsps ? *nsps : 0;
+  int const output_samples = nwave ? *nwave : 0;
+  int const modulation_index = hmod ? *hmod : 1;
+  int const complex_output = icmplx ? *icmplx : 0;
+  if (output_samples <= 0)
+    {
+      return;
+    }
+
+  if (wave)
+    {
+      std::fill_n (wave, output_samples, 0.0f);
+    }
+  if (cwave)
+    {
+      std::fill_n (cwave, output_samples, std::complex<float> {0.0f, 0.0f});
+    }
+  if (!itone || !nsym || !nsps || !fsample || !f0)
+    {
+      return;
+    }
+
+  generate_fst4_wave_internal (itone, symbol_count, samples_per_symbol, *fsample,
+                               modulation_index, *f0, cwave, wave, complex_output,
+                               output_samples);
 }
 
 extern "C" void gen_ft2wave_ (int* itone, int* nsym, int* nsps, float* fsample, float* f0,
