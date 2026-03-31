@@ -253,6 +253,16 @@ void store_precomputed_tx_wave (QString const& mode, QVector<float> const& wave,
     }
 }
 
+bool precomputed_wave_missing_or_silent (QVector<float> const& wave)
+{
+  if (wave.isEmpty ())
+    {
+      return true;
+    }
+
+  return waveform_peak (wave.constData (), wave.size ()) < 1.0e-6;
+}
+
 bool write_debug_wave_file (QString const& file_path,
                             QVector<float> const& wave,
                             int sample_rate)
@@ -1075,7 +1085,11 @@ namespace
   auto quint32_max = std::numeric_limits<quint32>::max ();
   constexpr int N_WIDGETS {38};
   constexpr int default_rx_audio_buffer_frames {-1}; // lets Qt decide
-  constexpr int default_tx_audio_buffer_frames {16384}; // ~341ms @ 48kHz, prevents underrun on Windows
+#if defined(Q_OS_LINUX)
+  constexpr int default_tx_audio_buffer_frames {1024}; // ~21ms @ 48kHz; FT2/FT4 need a much smaller Linux TX queue
+#else
+  constexpr int default_tx_audio_buffer_frames {16384}; // ~341ms @ 48kHz, prevents underrun on Windows/macOS
+#endif
   constexpr bool kEnableAutoCqCallerQueue {true};
   constexpr int kRecentDuplicateLogWindowSeconds {90};
   // In AutoCQ, keep RR73/73 on air up to 5 cycles before forced close.
@@ -2230,6 +2244,17 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (m_soundOutput, &SoundOutput::error, &m_config, &Configuration::invalidate_audio_output_device);
   connect (m_soundOutput, &SoundOutput::status, this, [this] (QString const& status) {
     debugToFile (QString {"audioOutSt  %1"}.arg (status));
+#if defined(Q_OS_LINUX)
+    if (!m_tci_audio
+        && (m_mode == "FT2" || m_mode == "FT4")
+        && status == tr ("Idle")
+        && g_iptt == 1
+        && m_transmitting)
+      {
+        debugToFile (QString {"txAudioDone  mode:%1 status:%2"}.arg (m_mode, status));
+        stopTx ();
+      }
+#endif
   });
   qRegisterMetaType<QVector<float>> ("QVector<float>");
   connect (this, &MainWindow::outAttenuationChanged, m_soundOutput, &SoundOutput::setAttenuation);
@@ -2242,6 +2267,22 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (this, &MainWindow::tune, m_modulator, &Modulator::tune);
   connect (this, &MainWindow::sendPrecomputedWave, m_modulator, &Modulator::setPrecomputedWave);
   connect (this, &MainWindow::sendMessage, m_modulator, &Modulator::start);
+  connect (m_modulator, &Modulator::stateChanged, this, [this] (Modulator::ModulatorState state) {
+#if defined(Q_OS_LINUX)
+    if (!m_tci_audio
+        && (m_mode == "FT2" || m_mode == "FT4")
+        && state == Modulator::Idle
+        && g_iptt == 1
+        && m_transmitting)
+      {
+        debugToFile (QString {"txModDone    mode:%1"}.arg (m_mode));
+        stopTx ();
+      }
+#else
+    static_cast<void> (this);
+    Q_UNUSED (state);
+#endif
+  });
   connect (&m_audioThread, &QThread::finished, m_modulator, &QObject::deleteLater);
 
   // hook up the audio input stream signals, slots and disposal
@@ -3684,6 +3725,35 @@ MainWindow::~MainWindow()
   if(m_QSYMessageCreatorWidget) m_QSYMessageCreatorWidget.reset ();
   if(m_QSYMessageWidget) m_QSYMessageWidget.reset ();
   if(m_qsymonitorWidget) m_qsymonitorWidget.reset ();
+  if (auto * bar = statusBar ())
+    {
+      auto detach_status_widget = [bar] (QWidget& widget)
+        {
+          if (widget.parentWidget () == bar)
+            {
+              bar->removeWidget (&widget);
+            }
+          widget.hide ();
+          widget.setParent (nullptr);
+        };
+
+      detach_status_widget (tx_status_label);
+      detach_status_widget (config_label);
+      detach_status_widget (mode_label);
+      detach_status_widget (last_tx_label);
+      detach_status_widget (auto_tx_label);
+      detach_status_widget (band_hopping_label);
+      detach_status_widget (ndecodes_label);
+      detach_status_widget (dt_correction_label);
+      detach_status_widget (decodium_cert_label);
+      detach_status_widget (progressBar);
+      detach_status_widget (watchdog_label);
+      detach_status_widget (ntp_checkbox);
+      detach_status_widget (ntp_server_edit);
+      detach_status_widget (ntp_status_label);
+    }
+  m_optimizingProgress.hide ();
+  m_optimizingProgress.setParent (nullptr);
   auto fname {QDir::toNativeSeparators(m_config.writeable_data_dir ().absoluteFilePath ("decodium_wisdom.dat"))};
   fftwf_export_wisdom_to_filename (fname.toLocal8Bit ());
   m_audioThread.quit ();
@@ -13378,6 +13448,23 @@ void MainWindow::guiUpdate()
       m_config.transceiver_ptt (true); //Assert the PTT
       m_tx_when_ready = true;
 
+#if defined(Q_OS_LINUX)
+      if (!m_tci_audio && (m_mode == "FT2" || m_mode == "FT4"))
+        {
+          int const fallback_ms = qMax (static_cast<int> (1000.0 * m_config.txDelay ()), 120);
+          QTimer::singleShot (fallback_ms, this, [this, fallback_ms] () {
+            if (m_tx_when_ready && g_iptt == 1 && !m_tci_audio && (m_mode == "FT2" || m_mode == "FT4"))
+              {
+                debugToFile (QString {"txFallback  startTx2 without CAT PTT confirm mode:%1 after:%2ms"}
+                                 .arg (m_mode)
+                                 .arg (fallback_ms));
+                startTx2 ();
+                m_tx_when_ready = false;
+              }
+          });
+        }
+#endif
+
       // Async FT2: force TX stop when waveform is expected to be complete.
       if (asyncBypass && !m_tune) {
         QTimer::singleShot (3400, this, [this] () {
@@ -13388,7 +13475,19 @@ void MainWindow::guiUpdate()
       }
     }
 //    if(!m_bTxTime and !m_tune and m_mode!="FT4") m_btxok=false;       //Time to stop transmitting
+#if defined(Q_OS_LINUX)
+    bool const defer_slot_stop_to_audio_completion =
+        !m_tci_audio
+        && !m_tune
+        && !asyncBypass
+        && (m_mode == "FT2" || m_mode == "FT4")
+        && g_iptt == 1
+        && m_transmitting
+        && m_modulator->isActive ();
+    if(!m_bTxTime and !m_tune && !asyncBypass && !defer_slot_stop_to_audio_completion) m_btxok=false;
+#else
     if(!m_bTxTime and !m_tune && !asyncBypass) m_btxok=false;       //Time to stop transmitting
+#endif
   }
 
   if((m_mode=="WSPR" or m_mode=="FST4W") and
@@ -13477,12 +13576,12 @@ void MainWindow::guiUpdate()
                                     (FCL)22, (FCL)22);
       if(m_mode=="MSK144" or m_mode=="FT8" or m_mode=="FT2" or m_mode=="FT4"
          or m_mode=="FST4" or m_mode=="FST4W" || "Q65" == m_mode) {
-        // The legacy FTx encoder still relies on shared Fortran state.
-        // Serialize TX waveform generation against the in-process decode
-        // workers so foxcom_.wave/itone state cannot be clobbered mid-TX.
-        QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
-
+        // Standard FT8/FT2/FT4 TX generation is C++ only and should not queue
+        // behind decoder-side Fortran runtime users on slower Linux hosts.
+        // Only the branches that still touch legacy shared Fortran state take
+        // the runtime mutex locally.
         if(m_mode=="MSK144") {
+          QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
           auto const encoded = decodium::txmsg::encodeMsk144 (QString::fromLatin1 (message));
           copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 144);
           m_currentMessageType = encoded.messageType;
@@ -13508,13 +13607,16 @@ void MainWindow::guiUpdate()
             auto const wave = decodium::txwave::generateFt8Wave (itone, nsym, nsps, bt, fsample, f0);
             store_precomputed_tx_wave (QStringLiteral ("FT8"), wave, true);
           } else if(m_bDXpedMode) {
+            QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
             if(!dxpedTxSequencer()) m_btxok=false;
           } else if(SpecOp::FOX==m_specOp and ui->tabWidget->currentIndex()==1) {
+            QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
             foxTxSequencer();
           } else {
             auto const encoded = decodium::txmsg::encodeFt8 (QString::fromLatin1 (message));
             copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 79);
             if (SpecOp::FOX == m_specOp) {
+              QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
               int nsym=79;
               int nsps=4*1920;
               float fsample=48000.0;
@@ -13564,8 +13666,11 @@ void MainWindow::guiUpdate()
             auto const wave = decodium::txwave::generateFt2Wave (itone, nsym, nsps, fsample, f0);
               {
                 store_precomputed_tx_wave (QStringLiteral ("FT2"), wave, true);
-                write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft2_tx_debug.wav"),
-                                       current_precomputed_tx_wave (QStringLiteral ("FT2")), 48000);
+                if (m_debugLog)
+                  {
+                    write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft2_tx_debug.wav"),
+                                           current_precomputed_tx_wave (QStringLiteral ("FT2")), 48000);
+                  }
                 debugToFile (QString {"ft2wave cq peak:%1 samples:%2 ntx:%3 msg:%4"}
                                .arg (waveform_peak (wave.constData (), wave.size ()), 0, 'f', 6)
                                .arg (wave.size ())
@@ -13573,21 +13678,27 @@ void MainWindow::guiUpdate()
                                .arg (QString::fromLatin1 (msgsent).trimmed ()));
             }
           } else if(m_bDXpedMode) {
+            QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
             if(!dxpedTxSequencer()) m_btxok=false;
           } else if(SpecOp::FOX==m_specOp and ui->tabWidget->currentIndex()==1) {
+            QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
             foxTxSequencer();
           } else {
             auto const encoded = decodium::txmsg::encodeFt2 (QString::fromLatin1 (message));
             copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 103);
             if (SpecOp::FOX == m_specOp) {
+              QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
               int nsym=103;
               int nsps=4*288;    // 1152 at 48000 Hz TX
               float fsample=48000.0;
               float f0=ui->TxFreqSpinBox->value() - m_XIT;
               auto const wave = decodium::txwave::generateFt2Wave (itone, nsym, nsps, fsample, f0);
               store_precomputed_tx_wave (QStringLiteral ("FT2"), wave, false);
-              write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft2_tx_debug.wav"),
-                                     wave, 48000);
+              if (m_debugLog)
+                {
+                  write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft2_tx_debug.wav"),
+                                         wave, 48000);
+                }
               //Fox must generate the full Tx waveform, not just an itone[] array.
               QString fm = QString::fromStdString(message).trimmed();
               foxGenWaveform(0,fm);
@@ -13604,6 +13715,7 @@ void MainWindow::guiUpdate()
                 foxgenft2_();
               }
             } else if (ui->cbDualCarrier->isChecked()) {
+              QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
               // Dual-carrier: stesso messaggio su 2 sub-portanti a +500 Hz
               QString fm = QString::fromLatin1(msgsent).trimmed()
                            .leftJustified(40, ' ').left(40);
@@ -13629,8 +13741,11 @@ void MainWindow::guiUpdate()
               auto const wave = decodium::txwave::generateFt2Wave (itone, nsym, nsps, fsample, f0);
               {
                 store_precomputed_tx_wave (QStringLiteral ("FT2"), wave, true);
-                write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft2_tx_debug.wav"),
-                                       current_precomputed_tx_wave (QStringLiteral ("FT2")), 48000);
+                if (m_debugLog)
+                  {
+                    write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft2_tx_debug.wav"),
+                                           current_precomputed_tx_wave (QStringLiteral ("FT2")), 48000);
+                  }
                 debugToFile (QString {"ft2wave peak:%1 samples:%2 ntx:%3 msg:%4"}
                                  .arg (waveform_peak (wave.constData (), wave.size ()), 0, 'f', 6)
                                  .arg (wave.size ())
@@ -13650,8 +13765,11 @@ void MainWindow::guiUpdate()
           auto const wave = decodium::txwave::generateFt4Wave (itone, nsym, nsps, fsample, f0);
           {
             store_precomputed_tx_wave (QStringLiteral ("FT4"), wave, true);
-            write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft4_tx_debug.wav"),
-                                   current_precomputed_tx_wave (QStringLiteral ("FT4")), 48000);
+            if (m_debugLog)
+              {
+                write_debug_wave_file (m_config.writeable_data_dir ().absoluteFilePath ("ft4_tx_debug.wav"),
+                                       current_precomputed_tx_wave (QStringLiteral ("FT4")), 48000);
+              }
             debugToFile (QString {"ft4wave peak:%1 samples:%2 ntx:%3 msg:%4"}
                              .arg (waveform_peak (wave.constData (), wave.size ()), 0, 'f', 6)
                              .arg (wave.size ())
@@ -13660,6 +13778,7 @@ void MainWindow::guiUpdate()
           }
         }
         if(m_mode=="FST4" or m_mode=="FST4W") {
+          QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
           QString fst4Message = QString::fromLatin1 (message, 37);
           if(m_mode=="FST4W") {
             fst4Message = WSPR_message();
@@ -13693,6 +13812,7 @@ void MainWindow::guiUpdate()
           QString t = QString::fromStdString(message).trimmed();
         }
         if(m_mode=="Q65") {
+          QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
           int i3=-1;
           int n3=-1;
           genq65_(message, &ichk,msgsent, const_cast<int *>(itone), &i3, &n3, (FCL)37, (FCL)37);
@@ -13879,6 +13999,24 @@ void MainWindow::guiUpdate()
       m_sentFirst73 = false;
     }
   }
+
+#if defined(Q_OS_LINUX)
+  if (g_iptt == 1
+      && m_iptt0 == 0
+      && m_tx_when_ready
+      && !m_tci_audio
+      && (m_mode == "FT2" || m_mode == "FT4"))
+    {
+      m_tx_when_ready = false;
+      debugToFile (QString {"txImmediate mode:%1 startTx2 after waveform prep"}.arg (m_mode));
+      QTimer::singleShot (0, this, [this] {
+        if (g_iptt == 1 && !m_tci_audio && (m_mode == "FT2" || m_mode == "FT4"))
+          {
+            startTx2 ();
+          }
+      });
+    }
+#endif
 
   if (g_iptt == 1 && m_iptt0 == 0) {
     m_asyncL2PinnedCall.clear();
@@ -14317,7 +14455,17 @@ void MainWindow::startTx2()
   if (tci_active) modulator_active=m_tci_mod_active;
   else if (m_mode == "RTTY" && m_rttyModulator) modulator_active = m_rttyModulator->isActive ();
   else modulator_active=m_modulator->isActive ();
-    if (!modulator_active) { // TODO - not thread safe
+  bool const force_low_latency_ftx =
+#if defined(Q_OS_LINUX)
+      !tci_active && (m_mode == "FT2" || m_mode == "FT4");
+#else
+      false;
+#endif
+  if (force_low_latency_ftx && modulator_active) {
+    debugToFile (QString {"txStart2    forcing restart mode:%1 despite stale-active modulator state"}
+                     .arg (m_mode));
+  }
+    if (force_low_latency_ftx || !modulator_active) { // TODO - not thread safe
     double fSpread=0.0;
     double snr=99.0;
     QString t=ui->tx5->currentText();
@@ -21109,7 +21257,33 @@ void MainWindow::transmit (double snr)
              288.0,ui->TxFreqSpinBox->value()-m_XIT,
              toneSpacing,true,false,snr,m_TRperiod);
     } else {
-      Q_EMIT sendPrecomputedWave (m_mode, current_precomputed_tx_wave (m_mode));
+      QVector<float> wave = current_precomputed_tx_wave (m_mode);
+      if (precomputed_wave_missing_or_silent (wave)
+          && SpecOp::FOX != m_specOp
+          && !ui->cbDualCarrier->isChecked ())
+        {
+          int constexpr nsym = 103;
+          int constexpr nsps = 4 * 288;
+          float constexpr fsample = 48000.0f;
+          float const f0 = static_cast<float> (ui->TxFreqSpinBox->value () - m_XIT);
+          wave = decodium::txwave::generateFt2Wave (itone, nsym, nsps, fsample, f0);
+          if (!precomputed_wave_missing_or_silent (wave))
+            {
+              store_precomputed_tx_wave (QStringLiteral ("FT2"), wave, true);
+              debugToFile (QString {"ft2wave regen peak:%1 samples:%2 ntx:%3 msg:%4"}
+                               .arg (waveform_peak (wave.constData (), wave.size ()), 0, 'f', 6)
+                               .arg (wave.size ())
+                               .arg (m_ntx)
+                               .arg (m_currentMessage.trimmed ()));
+            }
+          else
+            {
+              debugToFile (QString {"ft2wave regen failed ntx:%1 msg:%2"}
+                               .arg (m_ntx)
+                               .arg (m_currentMessage.trimmed ()));
+            }
+        }
+      Q_EMIT sendPrecomputedWave (m_mode, wave);
       debugToFile (QString {"ft2txstart freq:%1 xit:%2 txFreq:%3 tone:%4 tr:%5 ntx:%6 msg:%7"}
                        .arg (m_freqNominal)
                        .arg (m_XIT)
@@ -21133,7 +21307,31 @@ void MainWindow::transmit (double snr)
              576.0,ui->TxFreqSpinBox->value()-m_XIT,
              toneSpacing,true,false,snr,m_TRperiod);
     } else {
-      Q_EMIT sendPrecomputedWave (m_mode, current_precomputed_tx_wave (m_mode));
+      QVector<float> wave = current_precomputed_tx_wave (m_mode);
+      if (precomputed_wave_missing_or_silent (wave))
+        {
+          int constexpr nsym = 103;
+          int constexpr nsps = 4 * 576;
+          float constexpr fsample = 48000.0f;
+          float const f0 = static_cast<float> (ui->TxFreqSpinBox->value () - m_XIT);
+          wave = decodium::txwave::generateFt4Wave (itone, nsym, nsps, fsample, f0);
+          if (!precomputed_wave_missing_or_silent (wave))
+            {
+              store_precomputed_tx_wave (QStringLiteral ("FT4"), wave, true);
+              debugToFile (QString {"ft4wave regen peak:%1 samples:%2 ntx:%3 msg:%4"}
+                               .arg (waveform_peak (wave.constData (), wave.size ()), 0, 'f', 6)
+                               .arg (wave.size ())
+                               .arg (m_ntx)
+                               .arg (m_currentMessage.trimmed ()));
+            }
+          else
+            {
+              debugToFile (QString {"ft4wave regen failed ntx:%1 msg:%2"}
+                               .arg (m_ntx)
+                               .arg (m_currentMessage.trimmed ()));
+            }
+        }
+      Q_EMIT sendPrecomputedWave (m_mode, wave);
       debugToFile (QString {"ft4txstart freq:%1 xit:%2 txFreq:%3 tone:%4 tr:%5 ntx:%6 msg:%7"}
                        .arg (m_freqNominal)
                        .arg (m_XIT)
@@ -26650,12 +26848,10 @@ void MainWindow::check_button_color()
       //keep_last_tx_label = false;      //avt 10/4/25
       ui->pbBandHopping->setStyleSheet("QPushButton {background-color: #ff0000; color: #ffffff; border-style: outset; border-width: 1px; border-radius: 5px; border-color: black; min-width: 5em; padding: 3px;}");
       //last_tx_label.setText(" Band Hopping On ");   //avt 10/4/25
-      last_tx_label.setStyleSheet ("QLabel{color: #ffffff; background-color: #ff0000}");
       ui->genStdMsgsPushButton->setStyleSheet("QPushButton {background-color: #ffff00; color: #000000; border-style: outset; border-width: 1px; border-radius: 5px; border-color: black; min-width: 5em; padding: 3px;}");
     } else {
       ui->pbBandHopping->setStyleSheet ("");
       //if (!keep_last_tx_label) last_tx_label.setText ("");   //avt 10/4/25
-      last_tx_label.setStyleSheet ("");
       ui->genStdMsgsPushButton->setStyleSheet ("");
     }
 }

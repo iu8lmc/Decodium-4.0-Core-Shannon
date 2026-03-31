@@ -1,20 +1,22 @@
-# Decodium (macOS/Linux Fork) - 1.5.8
+# Decodium (macOS/Linux Fork) - 1.5.9
 
 This repository carries the maintained macOS and Linux AppImage fork of Decodium.
 
-- Current stable release: `1.5.8`
-- Update cycle: `1.5.7 -> 1.5.8`
+- Current stable release: `1.5.9`
+- Update cycle: `1.5.8 -> 1.5.9`
 
-## Changes in 1.5.8 (`1.5.7 -> 1.5.8`)
+## Changes in 1.5.9 (`1.5.8 -> 1.5.9`)
 
-- completed the promoted native C++ runtime for FT8, FT4, FT2, Q65, MSK144, SuperFox, and FST4/FST4W without mode-specific Fortran residues on the active path.
-- migrated the remaining FST4/FST4W decode-core, LDPC, shared-DSP helpers, and reference/simulator chain to native C++.
-- removed the old promoted-mode tree residues such as `ana64`, `q65_subs`, MSK144/MSK40 legacy snapshots, and the historical SuperFox Fortran subtree once their native replacements were promoted.
-- promoted native utility replacements for `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx`, `sftx`, `fst4sim`, `ldpcsim240_101`, and `ldpcsim240_74`.
-- fixed the macOS close-time FFTW crash and hardened `MainWindow::dataSink` / `fastSink`.
-- fixed Linux/GCC 15 build failures around `_q65_mask`, `pack28`, legacy tool linkage to migrated symbols, and the MSK40 off-by-one bug in `decodeframe40_native`.
-- added broader `test_qt_helpers` and utility smoke coverage for shared DSP, FST4 parity/oracle behavior, and native Q65 compatibility.
-- aligned local version metadata, workflow defaults, release docs, and GitHub release notes to semantic version `1.5.8`.
+- fixed intermittent Linux FT2/FT4 cases where the radio entered TX but the payload started much later, sometimes near the end of the transmit window.
+- removed standard FT2/FT4 Linux TX generation from unnecessary global Fortran runtime contention, so slow decode activity no longer delays the outgoing payload path.
+- added immediate post-waveform TX start and CAT/PTT fallback start on Linux FT2/FT4 when rig state feedback is late.
+- reduced Linux TX audio queue latency, selected a lower-latency audio category, and set Linux FT2 startup alignment to zero extra delay/lead-in on the standard waveform path.
+- changed Linux FT2/FT4 stop behavior so transmit completion follows real audio/modulator completion instead of theoretical slot timing only.
+- limited FT2/FT4 debug waveform dump writes to sessions where debug logging is enabled, reducing normal TX-path disk I/O.
+- fixed a macOS close-time crash caused by Qt widget ownership/destruction ordering in `MainWindow`.
+- fixed the `Band Hopping` UI so `QSOs to upload` no longer turns red together with the `Band Hopping` button.
+- refreshed the FT2 launcher icon set for macOS and Linux artifacts.
+- aligned local version metadata, workflow defaults, release docs, and GitHub release notes to semantic version `1.5.9`.
 
 ## Release Targets
 
@@ -26,20 +28,20 @@ This repository carries the maintained macOS and Linux AppImage fork of Decodium
 
 ## Release Assets
 
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.8-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.8-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.9-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.9-linux-x86_64.AppImage.sha256.txt`
 
 ## Linux Minimum Requirements
 
@@ -82,6 +84,6 @@ cd squashfs-root
 
 ## Related Documentation
 
-- [RELEASE_NOTES_1.5.8.md](RELEASE_NOTES_1.5.8.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.8.md](doc/GITHUB_RELEASE_BODY_1.5.8.md)
+- [RELEASE_NOTES_1.5.9.md](RELEASE_NOTES_1.5.9.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.9.md](doc/GITHUB_RELEASE_BODY_1.5.9.md)
 - [CHANGELOG.md](CHANGELOG.md)

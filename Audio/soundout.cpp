@@ -114,11 +114,21 @@ void SoundOutput::restart (QIODevice * source)
     }
   else
     {
+#if defined(Q_OS_LINUX)
+      // Linux FT2/FT4 benefit from a much smaller TX queue; large Qt/PulseAudio
+      // buffers push the payload deep into the transmit window.
+      m_stream->setBufferSize (m_stream->format().bytesForFrames (1024));
+#else
       // Default: 16384 frames (~341ms @ 48kHz) — prevents underrun
-      // on Windows where Qt's automatic buffer sizing is too small
+      // on Windows/macOS where Qt's automatic buffer sizing can be too small.
       m_stream->setBufferSize (m_stream->format().bytesForFrames (16384));
+#endif
     }
+#if defined(Q_OS_LINUX)
+  m_stream->setCategory ("game");
+#else
   m_stream->setCategory ("production");
+#endif
   m_stream->start (source);
 //  LOG_DEBUG ("Selected buffer size (bytes): " << m_stream->bufferSize () << " period size: " << m_stream->periodSize ());
 }

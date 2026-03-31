@@ -1,5 +1,79 @@
 # Changelog / Registro Modifiche
 
+## [1.5.9] - 2026-04-01
+
+### English
+
+Release focused on eliminating the remaining practical Linux FT2/FT4 transmit-latency issues on older Ubuntu hosts, hardening macOS shutdown/UI behavior, refreshing FT2 branding, and aligning the release surface to semantic version `1.5.9`.
+
+#### Added
+
+- Added immediate post-waveform TX start plus CAT/PTT fallback start for Linux FT2/FT4 when rig-state confirmation arrives late.
+- Added lower-latency Linux TX audio defaults through smaller output queue sizing and low-latency audio category selection.
+- Added refreshed FT2 launcher/app icon assets for macOS and Linux release outputs.
+
+#### Changed
+
+- Standard Linux FT2/FT4 TX generation no longer waits behind unnecessary global Fortran runtime mutex contention on the normal native C++ waveform path.
+- Linux FT2 now uses zero extra delay and zero extra lead-in on the standard precomputed-wave path.
+- Linux FT2/FT4 stop logic now follows real modulator/audio completion instead of slot timing only.
+- FT2/FT4 debug waveform dumps are only written when debug logging is enabled.
+- Local version metadata, workflow defaults, readmes, docs, release notes, and GitHub release body are aligned to semantic version `1.5.9`.
+
+#### Fixed
+
+- Fixed intermittent Ubuntu/Linux cases where FT2/FT4 keyed the radio on time but started the payload much later or near the end of the slot.
+- Fixed a macOS close-time crash caused by `MainWindow` status-bar/member-widget ownership and destruction ordering.
+- Fixed the `Band Hopping` UI regression that incorrectly painted `QSOs to upload` red.
+
+### Italiano
+
+Release focalizzata nell'eliminare i problemi pratici residui di latenza TX Linux FT2/FT4 sui sistemi Ubuntu piu' vecchi, nel rafforzare il comportamento macOS in chiusura/UI, nell'aggiornare il branding FT2 e nell'allineare la superficie release alla semver `1.5.9`.
+
+#### Aggiunto
+
+- Aggiunti start immediato post-waveform e fallback CAT/PTT per Linux FT2/FT4 quando la conferma dello stato rig arriva in ritardo.
+- Aggiunti default audio TX Linux a latenza piu' bassa tramite coda output piu' piccola e categoria audio low-latency.
+- Aggiunti asset icona/launcher FT2 aggiornati per gli output release macOS e Linux.
+
+#### Modificato
+
+- Il TX standard Linux FT2/FT4 non aspetta piu' il contenzioso inutile del mutex globale Fortran sul normale path waveform nativo C++.
+- FT2 Linux usa ora zero ritardo extra e zero lead-in extra sul path precomputato standard.
+- La logica di stop Linux FT2/FT4 segue ora la fine reale di modulator/audio e non solo il timing dello slot.
+- I dump waveform FT2/FT4 vengono scritti solo quando il debug log e' attivo.
+- Metadati versione locali, default workflow, readme, documentazione, note release e body GitHub sono allineati alla semver `1.5.9`.
+
+#### Corretto
+
+- Corretti i casi Ubuntu/Linux intermittenti in cui FT2/FT4 mettevano in TX la radio in orario ma iniziavano il payload molto piu' tardi o quasi a fine slot.
+- Corretto un crash macOS in chiusura causato dall'ordine di ownership/distruzione dei widget status-bar/member in `MainWindow`.
+- Corretta la regressione UI `Band Hopping` che colorava in rosso `QSOs to upload`.
+
+### Espanol
+
+Release centrada en eliminar los problemas practicos restantes de latencia TX Linux FT2/FT4 en sistemas Ubuntu antiguos, reforzar el comportamiento macOS al cerrar/UI, actualizar el branding FT2 y alinear la superficie release con la semver `1.5.9`.
+
+#### Anadido
+
+- Anadidos arranque inmediato post-waveform y fallback CAT/PTT para Linux FT2/FT4 cuando la confirmacion del estado del equipo llega tarde.
+- Anadidos defaults de audio TX Linux de menor latencia mediante cola de salida mas pequena y categoria de audio low-latency.
+- Anadidos assets icono/launcher FT2 actualizados para las salidas release macOS y Linux.
+
+#### Cambios
+
+- El TX estandar Linux FT2/FT4 ya no espera el bloqueo innecesario del mutex global Fortran en el camino waveform nativo C++ normal.
+- FT2 Linux usa ahora cero retraso extra y cero lead-in extra en el camino precomputado estandar.
+- La logica de stop Linux FT2/FT4 sigue ahora la finalizacion real de modulator/audio y no solo el timing del slot.
+- Los dumps waveform FT2/FT4 se escriben solo cuando el debug log esta activo.
+- Metadatos locales de version, defaults de workflow, readmes, documentacion, notas release y body GitHub quedan alineados a la semver `1.5.9`.
+
+#### Corregido
+
+- Corregidos los casos Ubuntu/Linux intermitentes donde FT2/FT4 ponian la radio en TX a tiempo pero iniciaban el payload mucho mas tarde o casi al final del slot.
+- Corregido un crash macOS al cerrar causado por el orden de ownership/destruccion de widgets status-bar/member en `MainWindow`.
+- Corregida la regresion UI `Band Hopping` que pintaba `QSOs to upload` de rojo.
+
 ## [1.5.8] - 2026-03-31
 
 ### English

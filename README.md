@@ -1,32 +1,34 @@
-# Decodium - Fork 9H1SR 1.5.8
+# Decodium - Fork 9H1SR 1.5.9
 
-This repository contains the maintained macOS and Linux AppImage fork of Decodium, focused on promoted native C++ runtime coverage for the FTX family, operator workflow reliability, and release engineering for macOS and Linux.
+This repository contains the maintained macOS and Linux AppImage fork of Decodium, focused on FT2/FT4 operator workflow reliability, low-latency Linux transmit behavior, macOS stability, and reproducible macOS/Linux release engineering.
 
 - Upstream base: `iu8lmc/Decodium-3.0-Codename-Raptor`
-- Current fork release: `1.5.8`
-- Update cycle: `1.5.7 -> 1.5.8`
+- Current fork release: `1.5.9`
+- Update cycle: `1.5.8 -> 1.5.9`
 - Upstream sync baseline: `2603182239`
 - App bundle/executable on macOS: `ft2.app` / `ft2`
 - Licence: GPLv3
 
-## Release Highlights (`1.5.7 -> 1.5.8`)
+## Release Highlights (`1.5.8 -> 1.5.9`)
 
-- Native runtime closure:
-- FT8, FT4, FT2, Q65, MSK144, SuperFox, and FST4/FST4W now ship from the promoted native C++ runtime path without mode-specific Fortran active/runtime residues.
-- FST4 family promotion:
-- migrated the remaining FST4/FST4W decode-core, LDPC, shared-DSP helpers, and reference/simulator chain to native C++, replacing the old `fst4_decode`, `decode240_*`, `osd*`, `fst4sim`, and `ldpcsim240_*` Fortran path.
-- Q65/MSK144/SuperFox cleanup:
-- removed the last promoted-mode tree residues such as `ana64`, `q65_subs`, MSK144/MSK40 legacy snapshots, and the historical SuperFox Fortran subtree after their native replacements were promoted.
-- New native utilities:
-- promoted native replacements for `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx`, `sftx`, `fst4sim`, `ldpcsim240_101`, and `ldpcsim240_74`.
-- macOS stability:
-- fixed the close-time crash caused by premature global `fftwf_cleanup()` while thread-local FFTW plans were still finalizing, and hardened `MainWindow::dataSink` / `fastSink`.
-- Linux/GCC hardening:
-- fixed Ubuntu/GCC build failures around `_q65_mask`, `pack28`, legacy tool linkage to migrated C++ symbols, and the MSK40 off-by-one bug in `decodeframe40_native`.
-- Regression coverage:
-- expanded `test_qt_helpers` and utility smoke coverage for shared DSP, FST4 parity/oracle behavior, native Q65 `ana64` compatibility, and promoted helper paths.
+- Linux FT2/FT4 TX timing:
+- fixed the intermittent "carrier first, payload much later" behavior seen on older Ubuntu systems by removing standard FT2/FT4 TX generation from unnecessary decoder-side Fortran runtime contention.
+- Linux low-latency TX path:
+- added immediate post-waveform TX start for FT2/FT4 on Linux, CAT/PTT fallback start when rig feedback is late, lower-latency audio queue defaults, and Linux-specific low-latency audio category selection.
+- FT2 startup alignment:
+- Linux FT2 now uses zero artificial `delay_ms` and zero extra lead-in on the standard precomputed-wave path, so payload starts as soon as the radio/audio path is ready.
+- TX completion hardening:
+- FT2/FT4 on Linux now stop on actual modulator/audio completion instead of relying only on theoretical slot expiry, preventing truncated or half-muted transmissions.
+- Reduced TX-path overhead:
+- FT2/FT4 debug waveform dumps are now written only when the debug log is enabled, removing unnecessary disk I/O during normal transmit cycles.
+- macOS shutdown stability:
+- fixed a close-time crash caused by Qt widget ownership/destruction ordering in `MainWindow`, especially around status-bar widgets and progress controls.
+- UI polish:
+- fixed `Band Hopping` so the `QSOs to upload` field no longer turns red together with the `Band Hopping` button.
+- New launcher branding:
+- updated the FT2 application icon set for macOS and Linux release artifacts.
 - Release alignment:
-- local version metadata, workflow defaults, README/doc sets, changelog, release notes, and GitHub release body are aligned to semantic version `1.5.8`.
+- local version metadata, README/doc sets, changelog, release notes, and GitHub release body are aligned to semantic version `1.5.9`.
 
 ## Release Targets
 
@@ -38,20 +40,20 @@ This repository contains the maintained macOS and Linux AppImage fork of Decodiu
 
 ## Release Assets
 
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
-- `decodium3-ft2-1.5.8-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.8-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64.dmg` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64.zip` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, if generated)*
+- `decodium3-ft2-1.5.9-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.9-linux-x86_64.AppImage.sha256.txt`
 
 No `.pkg` installers are produced in this fork release line.
 
@@ -103,7 +105,7 @@ If macOS blocks startup, run:
 sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ```
 
-Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l’AppImage e poi eseguendo il programma dalla cartella estratta.
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.
 
 Eseguire i seguenti comandi nel terminale:
 
@@ -119,9 +121,9 @@ cd squashfs-root
 - English README: [README.en-GB.md](README.en-GB.md)
 - Italian README: [README.it.md](README.it.md)
 - Spanish README: [README.es.md](README.es.md)
-- Release notes (EN/IT/ES): [RELEASE_NOTES_1.5.8.md](RELEASE_NOTES_1.5.8.md)
+- Release notes (EN/IT/ES): [RELEASE_NOTES_1.5.9.md](RELEASE_NOTES_1.5.9.md)
 - Changelog (EN/IT/ES): [CHANGELOG.md](CHANGELOG.md)
-- GitHub release body (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_1.5.8.md](doc/GITHUB_RELEASE_BODY_1.5.8.md)
+- GitHub release body (EN/IT/ES): [doc/GITHUB_RELEASE_BODY_1.5.9.md](doc/GITHUB_RELEASE_BODY_1.5.9.md)
 - Docs index (EN): [doc/README.en-GB.md](doc/README.en-GB.md)
 - Docs index (IT): [doc/README.it.md](doc/README.it.md)
 - Docs index (ES): [doc/README.es.md](doc/README.es.md)

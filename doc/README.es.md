@@ -1,37 +1,39 @@
-# Notas de Documentacion (Espanol) - 1.5.8
+# Notas de Documentacion (Espanol) - 1.5.9
 
 Este indice agrupa la documentacion de release del ciclo actual del fork.
 
-- Release actual: `1.5.8`
-- Ciclo de actualizacion: `1.5.7 -> 1.5.8`
-- Foco principal: cierre completo del runtime promovido nativo C++ para la familia FTX, estabilidad macOS al cerrar/ruta de datos, endurecimiento Linux/GCC y metadatos release alineados.
+- Release actual: `1.5.9`
+- Ciclo de actualizacion: `1.5.8 -> 1.5.9`
+- Foco principal: fiabilidad TX Linux FT2/FT4 de baja latencia, estabilidad macOS al cerrar/UI, nueva iconografia FT2 y metadatos release alineados.
 
-## Cambios Tecnicos Principales (`1.5.7 -> 1.5.8`)
+## Cambios Tecnicos Principales (`1.5.8 -> 1.5.9`)
 
-- FT8, FT4, FT2, Q65, MSK144, SuperFox y FST4/FST4W usan ahora el runtime promovido nativo C++ sin residuos Fortran especificos del modo en el camino activo.
-- la cadena residual FST4/FST4W de decode-core, LDPC, helpers DSP compartidos y referencia/simulador es ahora nativa C++.
-- los residuos tree-only de los modos promovidos (`ana64`, `q65_subs`, snapshots MSK144/MSK40, subtree SuperFox Fortran) se eliminaron tras la promocion nativa.
-- las utilidades nativas ahora cubren `encode77`, `hash22calc`, `msk144code`, `msk144sim`, `sfoxsim`, `sfrx`, `sftx`, `fst4sim`, `ldpcsim240_101` y `ldpcsim240_74`.
-- se corrigieron el crash FFTW al cerrar en macOS y las rutas fragiles de `MainWindow::dataSink` / `fastSink`.
-- se corrigieron problemas Linux/GCC 15 alrededor de `_q65_mask`, `pack28`, enlazado a simbolos migrados e indexacion de frames MSK40.
-- metadatos de version, defaults de workflow, documentos release y notas GitHub quedan alineados a `1.5.8`.
+- el TX estandar Linux FT2/FT4 ya no queda en cola detras del bloqueo innecesario del runtime Fortran del lado decode en el camino waveform C++ normal.
+- Linux FT2/FT4 usa ahora arranque inmediato post-waveform, fallback CAT, cola de audio TX mas pequena y categoria de audio de baja latencia.
+- FT2 Linux funciona ahora con cero retraso extra y cero lead-in extra en el camino waveform precomputado estandar.
+- Linux FT2/FT4 termina con la finalizacion real de modulator/audio y no solo con el timing teorico del slot.
+- los dumps waveform FT2/FT4 se escriben solo cuando el debug log esta activo.
+- corregido el orden de ownership/destruccion de widgets `MainWindow` al cerrar en macOS.
+- el boton `Band Hopping` ya no pinta en rojo el campo `QSOs to upload`.
+- actualizada la iconografia FT2 para launcher/artefactos macOS y Linux.
+- metadatos de version, defaults de workflow, documentos release y notas GitHub quedan alineados a `1.5.9`.
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.8-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.8-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.8-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.8-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.8-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.8-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.5.9-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.5.9-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.5.9-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.9-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.5.9-linux-x86_64.AppImage`
+- `decodium3-ft2-1.5.9-linux-x86_64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
@@ -51,7 +53,7 @@ Cuarentena macOS:
 sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ```
 
-Flujo Linux AppImage extract-run:
+Para evitar problemas debidos al sistema de archivos de solo lectura de las AppImage, se recomienda iniciar Decodium extrayendo primero la AppImage y ejecutando despues el programa desde la carpeta extraida.
 
 ```bash
 chmod +x /path/to/Decodium.AppImage
@@ -66,6 +68,6 @@ cd squashfs-root
 - [README.en-GB.md](../README.en-GB.md)
 - [README.it.md](../README.it.md)
 - [README.es.md](../README.es.md)
-- [RELEASE_NOTES_1.5.8.md](../RELEASE_NOTES_1.5.8.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.8.md](./GITHUB_RELEASE_BODY_1.5.8.md)
+- [RELEASE_NOTES_1.5.9.md](../RELEASE_NOTES_1.5.9.md)
+- [doc/GITHUB_RELEASE_BODY_1.5.9.md](./GITHUB_RELEASE_BODY_1.5.9.md)
 - [CHANGELOG.md](../CHANGELOG.md)

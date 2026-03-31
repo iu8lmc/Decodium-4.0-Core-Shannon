@@ -203,7 +203,13 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
   if((mode=="FT8" and m_nsps==1024)) delay_ms=400;            //SuperFox Qary Polar Code transmission
   if(mode=="Q65" and m_nsps<=3600) delay_ms=500;              //Q65-15 and Q65-30
   if(mode=="FT4") delay_ms=300;                               //FT4
-  if(mode=="FT2") delay_ms=300;                               //FT2 needs a less aggressive audio start on some rigs/macOS setups
+  if(mode=="FT2") {
+#if defined(Q_OS_LINUX)
+    delay_ms=0;                                               //Linux FT2: start payload immediately after PTT
+#else
+    delay_ms=300;                                             //macOS/other rigs need a less aggressive audio start
+#endif
+  }
 
 // noise generator parameters
   if (m_addNoise) {
@@ -227,8 +233,18 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
           // longer to guarantee a small lead-in after PTT.
           if (ft2_precomputed_wave || ft4_precomputed_wave)
             {
-              unsigned constexpr kFtxLeadInMs = 450;
-              m_silentFrames = qMax<qint64> (m_silentFrames, (kFtxLeadInMs * m_frameRate) / 1000);
+              unsigned lead_in_ms = 450;
+#if defined(Q_OS_LINUX)
+              if (ft2_precomputed_wave)
+                {
+                  lead_in_ms = 0;                              //Linux FT2: no extra lead-in, payload should start immediately
+                }
+              else if (ft4_precomputed_wave)
+                {
+                  lead_in_ms = 300;
+                }
+#endif
+              m_silentFrames = qMax<qint64> (m_silentFrames, (lead_in_ms * m_frameRate) / 1000);
             }
 
           // adjust for late starts (only when synchronized to period)
