@@ -70,10 +70,12 @@ QString revision (QString const& scs_rev_string)
 QString version (bool include_patch)
 {
 #if defined (CMAKE_BUILD)
-  QString v {TO_STRING__ (PROJECT_VERSION_MAJOR) "." TO_STRING__ (PROJECT_VERSION_MINOR)};
-  if (include_patch)
+  auto const release_version = fork_release_version ();
+  auto const parts = release_version.split ('.');
+  QString v {release_version};
+  if (!include_patch && parts.size () >= 2)
     {
-      v += "." TO_STRING__ (PROJECT_VERSION_PATCH) + QString {BUILD_TYPE_REVISION};
+      v = parts.at (0) + "." + parts.at (1);
     }
 #else
   QString v {"Not for Release"};

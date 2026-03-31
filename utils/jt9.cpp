@@ -38,6 +38,7 @@
 #include "Detector/LegacyJtDecodeWorker.hpp"
 #include "Detector/MSK144DecodeWorker.hpp"
 #include "Detector/Q65DecodeWorker.hpp"
+#include "revision_utils.hpp"
 
 extern "C"
 {
@@ -1120,7 +1121,7 @@ try
 {
   QCoreApplication app {argc, argv};
   app.setApplicationName (QStringLiteral ("jt9"));
-  app.setApplicationVersion (QStringLiteral ("3.0.0"));
+  app.setApplicationVersion (fork_release_version ());
 
   Options const options = parse_options (app);
   if (options.readFiles)
