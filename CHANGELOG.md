@@ -24,6 +24,8 @@ Release focused on promoting the legacy JT runtime further into native C++, fixi
 - Fixed replies to non-standard or special-event callsigns that were incorrectly rejected with `*** bad message ***`.
 - Fixed the GCC 14 false-positive `stringop-overflow` build break in `LegacyDspIoHelpers.cpp` without regressing macOS Clang.
 - Fixed GCC/libstdc++ portability failures in `jt9_wide_stage_compare.cpp` and `legacy_wsprio_compare.cpp`.
+- Fixed ADIF/QRZ upload regressions caused by exporting a free-text `operator` value that did not match `station_callsign`; `operator` is now emitted only when it is a valid distinct callsign.
+- Fixed decode-pane double-click behavior so `RR73`, `73`, `RRR`, `R`, `TU`, `OOO`, and Maidenhead locators no longer arm TX as if they were radio callsigns.
 
 ### Italiano
 
@@ -47,6 +49,8 @@ Release focalizzata nel promuovere ulteriormente il runtime JT legacy verso il C
 - Corrette le risposte verso callsign non standard o special-event che venivano rigettate con `*** bad message ***`.
 - Corretto il falso positivo GCC 14 `stringop-overflow` in `LegacyDspIoHelpers.cpp` senza regressioni su macOS Clang.
 - Corrette le rotture di portabilita' GCC/libstdc++ in `jt9_wide_stage_compare.cpp` e `legacy_wsprio_compare.cpp`.
+- Corretta la regressione ADIF/QRZ causata dall'esportazione di un valore `operator` testuale che non corrispondeva a `station_callsign`; `operator` viene ora scritto solo se e' un nominativo valido e distinto.
+- Corretto il doppio click nelle finestre decode: `RR73`, `73`, `RRR`, `R`, `TU`, `OOO` e i locator Maidenhead non armano piu' il TX come se fossero callsign radioamatoriali.
 
 ### Espanol
 
@@ -70,6 +74,8 @@ Release centrada en promover aun mas el runtime JT legacy hacia C++ nativo, corr
 - Corregidas las respuestas a indicativos no estandar o special-event que se rechazaban con `*** bad message ***`.
 - Corregido el falso positivo GCC 14 `stringop-overflow` en `LegacyDspIoHelpers.cpp` sin romper macOS Clang.
 - Corregidos los fallos de portabilidad GCC/libstdc++ en `jt9_wide_stage_compare.cpp` y `legacy_wsprio_compare.cpp`.
+- Corregida la regresion ADIF/QRZ causada por exportar un valor `operator` de texto libre que no coincidia con `station_callsign`; `operator` ahora solo se emite si es un indicativo valido y distinto.
+- Corregido el doble click en las ventanas de decode: `RR73`, `73`, `RRR`, `R`, `TU`, `OOO` y los localizadores Maidenhead ya no arman TX como si fueran indicativos de radio.
 
 ## [1.5.9] - 2026-04-01
 

@@ -1178,6 +1178,27 @@ namespace
     return token.trimmed ();
   }
 
+  bool ignored_double_click_token (QString const& token)
+  {
+    auto normalized = token.trimmed ().toUpper ();
+    if (normalized.isEmpty ()) {
+      return false;
+    }
+
+    if (normalized == "73"
+        || normalized == "RR73"
+        || normalized == "RRR"
+        || normalized == "R"
+        || normalized == "TU"
+        || normalized == "TU;"
+        || normalized == "OOO") {
+      return true;
+    }
+
+    return grid_regexp.match (normalized).hasMatch ()
+        && !Radio::is_callsign (normalized);
+  }
+
   bool ghost_filter_known_token (QString const& token)
   {
     if (token.isEmpty ()) {
@@ -14750,6 +14771,11 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
       return token;
     };
   QString const clickedWord = normalizeClickedCall (cursor.selectedText ());
+  if (ignored_double_click_token (clickedWord))
+    {
+      debugToFile (QString {"doubleClick  ignored token:%1"}.arg (clickedWord));
+      return;
+    }
   QString clickedLine = cursor.block().text().trimmed().remove("TU; ");
   QString parsedLine = clickedLine;
   // DisplayText appends country/zone/distance metadata after a NBSP marker.

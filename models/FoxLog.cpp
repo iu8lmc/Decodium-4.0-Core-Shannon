@@ -13,6 +13,7 @@
 #include <QDebug>
 #include "Logger.hpp"
 #include "Configuration.hpp"
+#include "Radio.hpp"
 #include "qt_db_helpers.hpp"
 #include "pimpl_impl.hpp"
 
@@ -48,6 +49,27 @@ public:
 
 namespace 
 {
+  QString exportable_operator_call (QString const& operator_call, QString const& station_call)
+  {
+    auto const safeOperator = operator_call.trimmed ().toUpper ();
+    auto const safeStation = station_call.trimmed ().toUpper ();
+    if (safeOperator.isEmpty ()) {
+      return {};
+    }
+
+    auto const operatorBase = Radio::base_callsign (safeOperator).trimmed ().toUpper ();
+    auto const stationBase = Radio::base_callsign (safeStation).trimmed ().toUpper ();
+    if (operatorBase.isEmpty () || !Radio::is_callsign (operatorBase)) {
+      return {};
+    }
+
+    if (!stationBase.isEmpty () && operatorBase == stationBase) {
+      return {};
+    }
+
+    return safeOperator;
+  }
+
   QString const fox_log_ddl {
                              "CREATE %1 TABLE fox_log%2 ("
                              "	id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
@@ -332,6 +354,8 @@ void FoxLog::export_qsos (QTextStream& out) const
   while (m_->export_query_.next ())
     {
       auto when = QDateTime::fromMSecsSinceEpoch (m_->export_query_.value (when_index).toULongLong () * 1000ull, Qt::UTC);
+      auto const opCall = exportable_operator_call (m_->configuration_->opCall (),
+                                                    m_->configuration_->my_callsign ());
       out << '\n'
           << ADIF_field {"band", m_->export_query_.value (band_index).toString ()}
           << ADIF_field {"mode", "FT8"}
@@ -342,9 +366,12 @@ void FoxLog::export_qsos (QTextStream& out) const
           << ADIF_field {"rst_sent", m_->export_query_.value (sent_index).toString ()}
           << ADIF_field {"rst_rcvd", m_->export_query_.value (rcvd_index).toString ()}
           << ADIF_field {"station_callsign", m_->configuration_->my_callsign ()}
-          << ADIF_field {"my_gridsquare", m_->configuration_->my_grid ()}
-          << ADIF_field {"operator", m_->configuration_->opCall ()}
-          << "<eor>";
+          << ADIF_field {"my_gridsquare", m_->configuration_->my_grid ()};
+      if (!opCall.isEmpty ())
+        {
+          out << ADIF_field {"operator", opCall};
+        }
+      out << "<eor>";
     }
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
   out << endl;

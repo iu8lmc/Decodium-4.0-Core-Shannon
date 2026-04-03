@@ -6,6 +6,7 @@
 #include <QRegularExpression>
 #include "Configuration.hpp"
 #include "AD1CCty.hpp"
+#include "Radio.hpp"
 #include "Multiplier.hpp"
 #include "logbook/AD1CCty.hpp"
 #include "models/CabrilloLog.hpp"
@@ -31,6 +32,27 @@ QString sanitize_adif_value (QString const& in, bool preserve_spaces = true)
         }
     }
   return out.trimmed ();
+}
+
+QString exportable_operator_call (QString const& operator_call, QString const& station_call)
+{
+  auto const safeOperator = sanitize_adif_value (operator_call, false).trimmed ().toUpper ();
+  auto const safeStation = sanitize_adif_value (station_call, false).trimmed ().toUpper ();
+  if (safeOperator.isEmpty ()) {
+    return {};
+  }
+
+  auto const operatorBase = Radio::base_callsign (safeOperator).trimmed ().toUpper ();
+  auto const stationBase = Radio::base_callsign (safeStation).trimmed ().toUpper ();
+  if (operatorBase.isEmpty () || !Radio::is_callsign (operatorBase)) {
+    return {};
+  }
+
+  if (!stationBase.isEmpty () && operatorBase == stationBase) {
+    return {};
+  }
+
+  return safeOperator;
 }
 }
 
@@ -167,7 +189,7 @@ QByteArray LogBook::QSOToADIF (QString const& hisCall, QString const& hisGrid, Q
   auto const safeMyCall = sanitize_adif_value (myCall, false);
   auto const safeMyGrid = sanitize_adif_value (myGrid, false);
   auto const safeTxPower = sanitize_adif_value (txPower, false);
-  auto const safeOperator = sanitize_adif_value (operator_call, false);
+  auto const safeOperator = exportable_operator_call (operator_call, myCall);
   auto const safeXSent = sanitize_adif_value (xSent, true);
   auto const safeXRcvd = sanitize_adif_value (xRcvd, true);
   auto const safePropmode = sanitize_adif_value (propmode, false);

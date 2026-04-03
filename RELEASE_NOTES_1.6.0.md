@@ -16,6 +16,8 @@ Scope: update cycle from `1.5.9` to `1.6.0`.
 - permanently excluded `build-arm-output/` from git tracking.
 - fixed the GCC 14 false-positive `stringop-overflow` issue in `LegacyDspIoHelpers.cpp` without breaking macOS Clang builds.
 - fixed GCC/libstdc++ portability regressions in `jt9_wide_stage_compare.cpp` and `legacy_wsprio_compare.cpp`.
+- fixed ADIF/QRZ upload failures caused by exporting a free-text `operator` field that QRZ interpreted as `my_call`; `operator` is now written only when it is a valid distinct callsign.
+- fixed decode-window double-click behavior so signoff/control tokens (`RR73`, `73`, `RRR`, `R`, `TU`, `OOO`) and Maidenhead locators no longer trigger TX as if they were a station callsign.
 - aligned local version metadata, workflow defaults, readmes, docs, changelog, release notes, package description, and GitHub release body to `1.6.0`.
 
 ### Release Targets
@@ -77,6 +79,8 @@ cd squashfs-root
 - esclusa in modo permanente da git la cartella `build-arm-output/`.
 - corretto il falso positivo GCC 14 `stringop-overflow` in `LegacyDspIoHelpers.cpp` senza rompere le build macOS Clang.
 - corrette le regressioni di portabilita' GCC/libstdc++ in `jt9_wide_stage_compare.cpp` e `legacy_wsprio_compare.cpp`.
+- corretti i fallimenti upload ADIF/QRZ causati dall'esportazione di un campo `operator` testuale che QRZ interpretava come `my_call`; `operator` viene ora scritto solo se e' un nominativo valido e distinto.
+- corretto il comportamento del doppio click nelle finestre decode: token di signoff/controllo (`RR73`, `73`, `RRR`, `R`, `TU`, `OOO`) e locator Maidenhead non mandano piu' in TX come se fossero il callsign di una stazione.
 - allineati a `1.6.0` metadati versione locali, default workflow, readme, documentazione, changelog, note release, package description e body GitHub.
 
 ### Target Release
@@ -138,6 +142,8 @@ cd squashfs-root
 - excluida permanentemente de git la carpeta `build-arm-output/`.
 - corregido el falso positivo GCC 14 `stringop-overflow` en `LegacyDspIoHelpers.cpp` sin romper builds macOS Clang.
 - corregidas las regresiones de portabilidad GCC/libstdc++ en `jt9_wide_stage_compare.cpp` y `legacy_wsprio_compare.cpp`.
+- corregidos los fallos de subida ADIF/QRZ causados por exportar un campo `operator` de texto libre que QRZ interpretaba como `my_call`; `operator` ahora solo se escribe si es un indicativo valido y distinto.
+- corregido el comportamiento del doble click en las ventanas de decode: tokens de cierre/control (`RR73`, `73`, `RRR`, `R`, `TU`, `OOO`) y localizadores Maidenhead ya no disparan TX como si fueran el indicativo de una estacion.
 - alineados con `1.6.0` los metadatos locales de version, defaults de workflow, readmes, documentacion, changelog, notas release, package description y body GitHub.
 
 ### Targets Release

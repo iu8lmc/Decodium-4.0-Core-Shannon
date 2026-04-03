@@ -10,6 +10,8 @@ Release highlights (`1.5.9 -> 1.6.0`):
 - added Linux `aarch64` AppImage release support using a Debian Trixie ARM64 build path and GitHub Actions ARM runner.
 - made `build-arm.sh` version-aware, CI-friendly, and permanently excluded `build-arm-output/` from git tracking.
 - fixed GCC 14 `stringop-overflow` false positives and GCC/libstdc++ compare-tool portability issues.
+- fixed ADIF/QRZ log upload failures caused by exporting a free-text `operator` value instead of a valid operator callsign.
+- fixed decode-window double-click handling so `RR73`, `73`, `RRR`, `R`, `TU`, `OOO`, and Maidenhead locators no longer start TX as if they were a callsign.
 - aligned local version metadata, workflow defaults, readmes, docs, changelog, release notes, package description, and GitHub release body to semantic version `1.6.0`.
 
 Release assets:
@@ -69,6 +71,8 @@ Punti principali (`1.5.9 -> 1.6.0`):
 - aggiunto supporto release Linux AppImage `aarch64` tramite build path ARM64 Debian Trixie e runner GitHub Actions ARM.
 - reso `build-arm.sh` sensibile alla versione, adatto alla CI, ed esclusa permanentemente da git `build-arm-output/`.
 - corretti falsi positivi GCC 14 `stringop-overflow` e problemi di portabilita' GCC/libstdc++ nelle utility compare.
+- corretti i fallimenti di upload ADIF/QRZ causati dall'esportazione di un valore `operator` testuale invece di un nominativo operatore valido.
+- corretto il doppio click nelle finestre decode: `RR73`, `73`, `RRR`, `R`, `TU`, `OOO` e i locator Maidenhead non avviano piu' il TX come se fossero un callsign.
 - allineati alla semver `1.6.0` metadati versione locali, default workflow, readme, documentazione, changelog, note release, package description e body GitHub.
 
 Asset release:
@@ -128,6 +132,8 @@ Resumen (`1.5.9 -> 1.6.0`):
 - anadido soporte release Linux AppImage `aarch64` mediante camino de build ARM64 Debian Trixie y runner ARM de GitHub Actions.
 - hecho `build-arm.sh` sensible a la version, apto para CI, y excluida permanentemente de git `build-arm-output/`.
 - corregidos falsos positivos GCC 14 `stringop-overflow` y problemas de portabilidad GCC/libstdc++ en las utilidades compare.
+- corregidos los fallos de subida ADIF/QRZ causados por exportar un valor `operator` de texto libre en lugar de un indicativo de operador valido.
+- corregido el doble click en las ventanas de decode: `RR73`, `73`, `RRR`, `R`, `TU`, `OOO` y los localizadores Maidenhead ya no inician TX como si fueran un indicativo.
 - alineados con la semver `1.6.0` metadatos locales de version, defaults de workflow, readmes, documentacion, changelog, notas release, package description y body GitHub.
 
 Artefactos release:
