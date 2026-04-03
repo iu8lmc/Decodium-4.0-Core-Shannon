@@ -6,8 +6,8 @@ Release highlights (`1.5.4 -> 1.5.5`):
 
 - fixed macOS `Preferences...` routing across all UI languages by forcing explicit menu roles and disabling Qt text heuristics for other actions.
 - fixed macOS `Settings` height overflow by making the pages scrollable, so the confirm buttons remain reachable.
-- added persistent `jt9_subprocess.log` plus richer FT2 subprocess stdout/stderr diagnostics for decoder crash analysis.
-- improved FT2 shared-memory failure reporting and removed opaque subprocess failure paths.
+- migrated FT2 to the in-process decoder path, replacing the older subprocess/shared-memory boundary with worker-based execution and clearer diagnostics.
+- removed the older opaque FT2 failure paths in favour of in-process decode reporting.
 - standardized FT2 ADIF output to `MODE=MFSK` + `SUBMODE=FT2` and automatically migrate old `MODE=FT2` records with backup preservation.
 - improved startup/monitor audio recovery so reopening `Settings > Audio` is no longer required to wake the stream.
 - removed the incomplete experimental RTTY UI from the public release path pending further validation.
@@ -61,8 +61,8 @@ Punti principali (`1.5.4 -> 1.5.5`):
 
 - corretta la rotta di `Preferenze...` su macOS in tutte le lingue UI, forzando ruoli menu espliciti e disattivando le euristiche testuali di Qt per le altre azioni.
 - corretto lo sforamento verticale di `Settings` su macOS rendendo scrollabili le pagine, cosi' i pulsanti finali restano raggiungibili.
-- aggiunto `jt9_subprocess.log` persistente e una diagnostica stdout/stderr piu' ricca per analizzare i crash del decoder FT2.
-- migliorato il reporting dei fallimenti shared-memory FT2 ed eliminati i path di fallimento opachi del subprocess.
+- migrato FT2 sul path decoder in-process, sostituendo il vecchio boundary subprocess/shared memory con esecuzione a worker e diagnostica piu' chiara.
+- eliminati i vecchi path opachi di fallimento FT2 a favore del reporting in-process.
 - standardizzato l'output ADIF FT2 in `MODE=MFSK` + `SUBMODE=FT2`, con migrazione automatica dei vecchi record `MODE=FT2` e backup.
 - migliorato il recupero audio in avvio/monitor, cosi' non serve piu' riaprire `Settings > Audio` per risvegliare lo stream.
 - rimossa dal percorso pubblico della release la UI RTTY sperimentale incompleta, in attesa di ulteriore validazione.
@@ -116,8 +116,8 @@ Resumen (`1.5.4 -> 1.5.5`):
 
 - corregida la ruta de `Preferencias...` en macOS para todas las lenguas UI, forzando roles de menu explicitos y desactivando las heuristicas textuales de Qt para las demas acciones.
 - corregido el desbordamiento vertical de `Settings` en macOS haciendo scrollables las paginas, de modo que los botones finales sigan accesibles.
-- anadido `jt9_subprocess.log` persistente y una diagnostica stdout/stderr mas rica para analizar fallos del decoder FT2.
-- mejorado el reporting de fallos shared-memory FT2 y eliminadas las rutas opacas de fallo del subprocess.
+- migrado FT2 al camino de decoder in-process, sustituyendo el antiguo boundary subprocess/shared memory por ejecucion con workers y diagnostica mas clara.
+- eliminadas las antiguas rutas opacas de fallo FT2 en favor del reporting in-process.
 - estandarizado el output ADIF FT2 a `MODE=MFSK` + `SUBMODE=FT2`, con migracion automatica de los viejos registros `MODE=FT2` y backup.
 - mejorada la recuperacion de audio al arrancar/monitor, de forma que ya no hace falta reabrir `Settings > Audio` para despertar el stream.
 - retirada del camino publico de release la UI RTTY experimental e incompleta, a la espera de validacion adicional.

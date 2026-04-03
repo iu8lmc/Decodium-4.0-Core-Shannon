@@ -201,6 +201,9 @@ namespace
       {
         fail (QStringLiteral ("WAV file \"%1\" is not RIFF/WAVE").arg (fileName));
       }
+    quint32 const riffSize =
+        qFromLittleEndian<quint32> (reinterpret_cast<uchar const*> (blob.constData () + 4));
+    int const riffEnd = std::min<int> (blob.size (), static_cast<int> (riffSize) + 8);
 
     bool haveFmt = false;
     bool haveData = false;
@@ -211,13 +214,13 @@ namespace
     QByteArray dataChunk;
 
     int pos = 12;
-    while (pos + 8 <= blob.size ())
+    while (pos + 8 <= riffEnd)
       {
         QByteArray const chunkId = blob.mid (pos, 4);
         quint32 const chunkSize = qFromLittleEndian<quint32> (
             reinterpret_cast<uchar const*> (blob.constData () + pos + 4));
         pos += 8;
-        if (pos + static_cast<int> (chunkSize) > blob.size ())
+        if (pos + static_cast<int> (chunkSize) > riffEnd)
           {
             fail (QStringLiteral ("WAV file \"%1\" has a truncated %2 chunk")
                       .arg (fileName, QString::fromLatin1 (chunkId)));
@@ -284,7 +287,6 @@ namespace
   LegacySpectra compute_jt9_spectra (QVector<short> const& audio, double trPeriod)
   {
     std::unique_ptr<dec_data_t> shared {new dec_data_t {}};
-    std::memset (shared.get (), 0, sizeof (dec_data_t));
     shared->params.ndiskdat = true;
 
     int const copyCount = std::min (audio.size (), NTMAX * RX_SAMPLE_RATE);

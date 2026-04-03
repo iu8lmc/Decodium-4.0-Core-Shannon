@@ -1,69 +1,67 @@
-# Decodium (Fork macOS/Linux) - 1.5.9
+# Decodium (Fork macOS/Linux) - 1.6.0
 
-Este repositorio contiene el fork mantenido de Decodium para macOS y Linux AppImage.
+- Release estable actual: `1.6.0`
+- Ciclo de actualizacion: `1.5.9 -> 1.6.0`
 
-- Release estable actual: `1.5.9`
-- Ciclo de actualizacion: `1.5.8 -> 1.5.9`
+## Cambios en 1.6.0 (`1.5.9 -> 1.6.0`)
 
-## Cambios en 1.5.9 (`1.5.8 -> 1.5.9`)
-
-- corregido el comportamiento intermitente Linux FT2/FT4 donde la radio entraba en TX pero el payload arrancaba mucho mas tarde, a veces casi al final de la ventana de transmision.
-- eliminado en el camino TX estandar FT2/FT4 Linux el bloqueo innecesario con el mutex global del runtime Fortran, de modo que un decode lento ya no retrasa la salida del payload.
-- anadidos arranque inmediato post-waveform y fallback CAT/PTT en Linux FT2/FT4 cuando el feedback del equipo llega tarde.
-- reducida la latencia de la cola de audio TX Linux, seleccionada una categoria de audio de baja latencia, y llevado FT2 Linux a cero retraso/cero lead-in extra en el camino waveform estandar.
-- cambiado el stop Linux FT2/FT4 para seguir la finalizacion real de audio/modulator en lugar de depender solo del fin teorico del slot.
-- limitada la escritura de dumps waveform FT2/FT4 a sesiones con debug log activo, reduciendo I/O en disco durante TX normales.
-- corregido un crash de cierre en macOS causado por el orden de ownership/destruccion de widgets Qt en `MainWindow`.
-- corregido el color de la UI `Band Hopping`: `QSOs to upload` ya no se vuelve rojo junto con el boton `Band Hopping`.
-- actualizada la nueva iconografia FT2 para los artefactos macOS y Linux.
-- alineados metadatos locales de version, defaults de workflow, documentacion release y notas GitHub con la semver `1.5.9`.
+- promovido a C++ nativo el camino runtime activo JT65, incluyendo orquestacion de decode, helpers DSP/IO JT65 y eliminacion del build de las viejas fuentes Fortran JT65 del camino activo.
+- anadidos bloques nativos JT9 fast/wide y una cobertura mas amplia de helpers legacy DSP/IO y compare/regression para el trabajo restante de migracion JT.
+- corregidas las respuestas a indicativos no estandar o special-event que se rechazaban como `*** bad message ***`.
+- anadido soporte release Linux AppImage `aarch64` con camino de build ARM64 basado en Debian Trixie y runners ARM de GitHub Actions.
+- hecho `build-arm.sh` sensible a la version, mas apto para CI, y excluida permanentemente de git la carpeta `build-arm-output/`.
+- corregido el falso positivo GCC 14 `stringop-overflow` en `LegacyDspIoHelpers.cpp` sin romper builds macOS Clang.
+- corregidas regresiones de portabilidad GCC/libstdc++ en `jt9_wide_stage_compare.cpp` y `legacy_wsprio_compare.cpp`.
+- alineados metadatos locales de version, defaults de workflow, documentacion release y notas GitHub con la semver `1.6.0`.
 
 ## Targets Release
 
 - Apple Silicon Tahoe
 - Apple Silicon Sequoia
 - Apple Intel Sequoia
-- Apple Intel Monterey (best effort / experimental)
+- Apple Intel Monterey *(best effort / experimental)*
 - Linux x86_64 AppImage
+- Linux aarch64 AppImage *(baseline Debian Trixie)*
 
 ## Artefactos Release
 
-- `decodium3-ft2-1.5.9-macos-tahoe-arm64.dmg`
-- `decodium3-ft2-1.5.9-macos-tahoe-arm64.zip`
-- `decodium3-ft2-1.5.9-macos-tahoe-arm64-sha256.txt`
-- `decodium3-ft2-1.5.9-macos-sequoia-arm64.dmg`
-- `decodium3-ft2-1.5.9-macos-sequoia-arm64.zip`
-- `decodium3-ft2-1.5.9-macos-sequoia-arm64-sha256.txt`
-- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.dmg`
-- `decodium3-ft2-1.5.9-macos-sequoia-x86_64.zip`
-- `decodium3-ft2-1.5.9-macos-sequoia-x86_64-sha256.txt`
-- `decodium3-ft2-1.5.9-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.9-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.9-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
-- `decodium3-ft2-1.5.9-linux-x86_64.AppImage`
-- `decodium3-ft2-1.5.9-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.6.0-macos-tahoe-arm64.dmg`
+- `decodium3-ft2-1.6.0-macos-tahoe-arm64.zip`
+- `decodium3-ft2-1.6.0-macos-tahoe-arm64-sha256.txt`
+- `decodium3-ft2-1.6.0-macos-sequoia-arm64.dmg`
+- `decodium3-ft2-1.6.0-macos-sequoia-arm64.zip`
+- `decodium3-ft2-1.6.0-macos-sequoia-arm64-sha256.txt`
+- `decodium3-ft2-1.6.0-macos-sequoia-x86_64.dmg`
+- `decodium3-ft2-1.6.0-macos-sequoia-x86_64.zip`
+- `decodium3-ft2-1.6.0-macos-sequoia-x86_64-sha256.txt`
+- `decodium3-ft2-1.6.0-macos-monterey-x86_64.dmg` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.6.0-macos-monterey-x86_64.zip` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.6.0-macos-monterey-x86_64-sha256.txt` *(best effort/experimental, si se genera)*
+- `decodium3-ft2-1.6.0-linux-x86_64.AppImage`
+- `decodium3-ft2-1.6.0-linux-x86_64.AppImage.sha256.txt`
+- `decodium3-ft2-1.6.0-linux-aarch64.AppImage`
+- `decodium3-ft2-1.6.0-linux-aarch64.AppImage.sha256.txt`
 
 ## Requisitos Minimos Linux
 
 Hardware:
 
-- CPU `x86_64` con soporte SSE2
-- dual-core 2.0 GHz o superior
+- CPU `x86_64` con SSE2, o CPU `aarch64` / ARM64 64-bit
+- dual-core 2.0 GHz o mejor, o SoC ARM64 moderno equivalente
 - minimo 4 GB RAM (8 GB recomendados)
 - al menos 500 MB libres en disco
-- pantalla 1280x800 o superior recomendada
-- hardware de audio/CAT/serial/USB adecuado para operacion weak-signal de radioaficion
+- hardware de audio/CAT/serie/USB adecuado para weak-signal
 
 Software:
 
-- Linux `x86_64` con `glibc >= 2.35`
-- `libfuse2` / soporte FUSE2 si se quiere montar directamente la AppImage
+- sesion de escritorio X11 o Wayland capaz de ejecutar AppImage Qt5
+- AppImage Linux `x86_64`: `glibc >= 2.35`
+- AppImage Linux `aarch64`: `glibc >= 2.38` *(baseline Debian Trixie)*
+- `libfuse2` / FUSE2 para montar directamente la AppImage
 - ALSA, PulseAudio o PipeWire
-- sesion de escritorio X11 o Wayland capaz de ejecutar AppImages Qt5
-- permisos de acceso a dispositivos serie/USB (`dialout`, `uucp` o equivalente de la distro) si se usa CAT o radio externa
-- acceso de red recomendado para NTP, PSK Reporter, DX Cluster, updater y flujos online
+- permisos de acceso serie/USB para CAT o dispositivos externos
 
-## Arranque
+## Guia de Arranque
 
 Si macOS bloquea el inicio:
 
@@ -71,9 +69,9 @@ Si macOS bloquea el inicio:
 sudo xattr -r -d com.apple.quarantine /Applications/ft2.app
 ```
 
-Para evitar problemas debidos al sistema de archivos de solo lectura de las AppImage, se recomienda iniciar Decodium extrayendo primero la AppImage y ejecutando despues el programa desde la carpeta extraida.
+Per evitare problemi dovuti al filesystem in sola lettura delle AppImage, si consiglia di avviare Decodium estraendo prima l'AppImage e poi eseguendo il programma dalla cartella estratta.
 
-Ejecutar los siguientes comandos en la terminal:
+Eseguire i seguenti comandi nel terminale:
 
 ```bash
 chmod +x /path/to/Decodium.AppImage
@@ -82,8 +80,10 @@ cd squashfs-root
 ./AppRun
 ```
 
-## Documentacion Relacionada
+## Archivos Relacionados
 
-- [RELEASE_NOTES_1.5.9.md](RELEASE_NOTES_1.5.9.md)
-- [doc/GITHUB_RELEASE_BODY_1.5.9.md](doc/GITHUB_RELEASE_BODY_1.5.9.md)
-- [CHANGELOG.md](CHANGELOG.md)
+- [README.md](README.md)
+- [README.en-GB.md](README.en-GB.md)
+- [README.it.md](README.it.md)
+- [RELEASE_NOTES_1.6.0.md](RELEASE_NOTES_1.6.0.md)
+- [doc/GITHUB_RELEASE_BODY_1.6.0.md](doc/GITHUB_RELEASE_BODY_1.6.0.md)

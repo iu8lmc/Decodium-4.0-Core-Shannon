@@ -7,6 +7,7 @@
 #include <QPen>
 #include <QMouseEvent>
 #include <QDebug>
+#include "PlotLegacyHelpers.hpp"
 #include "qt_helpers.hpp"
 #include "commons.h"
 #include "moc_plotter.cpp"
@@ -14,11 +15,6 @@
 #include <iostream>
 
 #define MAX_SCREENSIZE 8192
-
-extern "C" {
-  void flat4_(float swide[], int* iz, int* nflatten);
-  void plotsave_(float swide[], int* m_w , int* m_h1, int* irow);
-}
 
 extern dec_data dec_data;
 
@@ -194,8 +190,8 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
   int jz=iz*m_binsPerPixel;
   m_fMax=FreqfromX(iz);
   if(bScroll and swide[0]<1.e29) {
-    flat4_(swide,&iz,&m_Flatten);
-    if(!m_bReplot) flat4_(&dec_data.savg[j0],&jz,&m_Flatten);
+    decodium::plot::flat4_inplace (swide, iz, m_Flatten);
+    if(!m_bReplot) decodium::plot::flat4_inplace (&dec_data.savg[j0], jz, m_Flatten);
   }
 
   ymin=1.e30;
@@ -204,7 +200,7 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
   if(!m_bReplot) {
     m_j=0;
     int irow=-1;
-    plotsave_(swide,&m_w,&m_h1,&irow);
+    decodium::plot::plotsave_row (swide, m_w, m_h1, irow);
   }
   ymin = 0;
   QByteArray rowLevels;
@@ -392,7 +388,7 @@ void CPlotter::replot()
   m_bReplot=true;
   for(int irow=0; irow<m_h1; irow++) {
     m_j=irow;
-    plotsave_(swide,&m_w,&m_h1,&irow);
+    decodium::plot::plotsave_row (swide, m_w, m_h1, irow);
     draw(swide,false,false);
   }
   if(m_mode=="Q65" and m_bQ65_Sync) {

@@ -42,6 +42,8 @@ constexpr int kFt8FoxNfft = 614400;
 constexpr int kSuperFoxNsym = 151;
 constexpr int kSuperFoxNsps = 4 * 1024;
 constexpr int kSuperFoxWaveSamples = (kSuperFoxNsym + 2) * kSuperFoxNsps;
+constexpr int kEchoCallToneCount = 6;
+constexpr int kEchoCwMaxSamples = 98304;
 constexpr int kSuperFoxNqu1Rks = 203514677;
 constexpr char kSuperFoxBase38[] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/";
 
@@ -90,6 +92,294 @@ double wrap_phase (double phase)
       phase += kTwoPi;
     }
   return phase;
+}
+
+QVector<float> generate_tone_wave (int const* itone, int nsym, int nsps, float fsample,
+                                   float tone_spacing, float f0)
+{
+  if (!itone || nsym <= 0 || nsps <= 0 || fsample <= 0.0f)
+    {
+      return {};
+    }
+
+  QVector<float> wave (nsym * nsps, 0.0f);
+  double const dt = 1.0 / static_cast<double> (fsample);
+  double phi = 0.0;
+  int k = 0;
+  for (int j = 0; j < nsym; ++j)
+    {
+      double const freq = static_cast<double> (f0)
+                        + static_cast<double> (itone[j]) * static_cast<double> (tone_spacing);
+      double const dphi = kTwoPi * freq * dt;
+      for (int i = 0; i < nsps; ++i)
+        {
+          wave[k++] = static_cast<float> (std::sin (phi));
+          phi += dphi;
+          if (phi > kTwoPi)
+            {
+              phi -= kTwoPi;
+            }
+        }
+    }
+
+  return wave;
+}
+
+char const* morse_pattern_for_char (char ch)
+{
+  switch (ch)
+    {
+    case '0': return "-----";
+    case '1': return ".----";
+    case '2': return "..---";
+    case '3': return "...--";
+    case '4': return "....-";
+    case '5': return ".....";
+    case '6': return "-....";
+    case '7': return "--...";
+    case '8': return "---..";
+    case '9': return "----.";
+    case 'A': return ".-";
+    case 'B': return "-...";
+    case 'C': return "-.-.";
+    case 'D': return "-..";
+    case 'E': return ".";
+    case 'F': return "..-.";
+    case 'G': return "--.";
+    case 'H': return "....";
+    case 'I': return "..";
+    case 'J': return ".---";
+    case 'K': return "-.-";
+    case 'L': return ".-..";
+    case 'M': return "--";
+    case 'N': return "-.";
+    case 'O': return "---";
+    case 'P': return ".--.";
+    case 'Q': return "--.-";
+    case 'R': return ".-.";
+    case 'S': return "...";
+    case 'T': return "-";
+    case 'U': return "..-";
+    case 'V': return "...-";
+    case 'W': return ".--";
+    case 'X': return "-..-";
+    case 'Y': return "-.--";
+    case 'Z': return "--..";
+    case '/': return "-..-.";
+    case ' ': return "";
+    default: return "";
+    }
+}
+
+int morse_code_length (char const* pattern)
+{
+  int length = 0;
+  for (char const* p = pattern; p && *p; ++p)
+    {
+      length += (*p == '.') ? 2 : 4;
+    }
+  return length;
+}
+
+int encode_morse_bits (QString const& message, std::array<int, 250>* bits_out)
+{
+  if (!bits_out)
+    {
+      return 0;
+    }
+
+  bits_out->fill (0);
+  int n = 6;
+  QByteArray latin = message.toLatin1 ();
+  for (char ch : latin)
+    {
+      unsigned char uch = static_cast<unsigned char> (ch);
+      if (uch >= 'a' && uch <= 'z')
+        {
+          ch = static_cast<char> (uch - 32);
+        }
+      char const* pattern = morse_pattern_for_char (ch);
+      int const nmax = (ch == ' ') ? 2 : morse_code_length (pattern);
+      if (n + nmax + 4 > static_cast<int> (bits_out->size ()))
+        {
+          break;
+        }
+
+      if (ch == ' ')
+        {
+          (*bits_out)[static_cast<size_t> (n++)] = 0;
+          (*bits_out)[static_cast<size_t> (n++)] = 0;
+        }
+      else
+        {
+          for (char const* p = pattern; p && *p; ++p)
+            {
+              if (*p == '.')
+                {
+                  (*bits_out)[static_cast<size_t> (n++)] = 1;
+                  (*bits_out)[static_cast<size_t> (n++)] = 0;
+                }
+              else
+                {
+                  (*bits_out)[static_cast<size_t> (n++)] = 1;
+                  (*bits_out)[static_cast<size_t> (n++)] = 1;
+                  (*bits_out)[static_cast<size_t> (n++)] = 1;
+                  (*bits_out)[static_cast<size_t> (n++)] = 0;
+                }
+            }
+        }
+
+      (*bits_out)[static_cast<size_t> (n++)] = 0;
+      (*bits_out)[static_cast<size_t> (n++)] = 0;
+    }
+
+  for (int j = 0; j < 4 && n <= static_cast<int> (bits_out->size ()); ++j)
+    {
+      (*bits_out)[static_cast<size_t> (n++)] = 0;
+    }
+
+  return n;
+}
+
+void smooth_fortran_style (std::vector<float>& x, std::vector<float>& y, int nadd)
+{
+  int const npts = static_cast<int> (x.size ());
+  int const nh = nadd / 2;
+  for (int i = nh; i < (npts - nh); ++i)
+    {
+      float sum = 0.0f;
+      for (int j = -nh; j <= nh; ++j)
+        {
+          sum += x[static_cast<size_t> (i + j)];
+        }
+      y[static_cast<size_t> (i)] = sum;
+    }
+
+  x = y;
+  if (nh > 0)
+    {
+      std::fill_n (x.begin (), std::min (nh, npts), 0.0f);
+      std::fill_n (x.end () - std::min (nh, npts), std::min (nh, npts), 0.0f);
+    }
+}
+
+QVector<float> generate_cw_wave (QString const& message, int ifreq)
+{
+  QVector<float> wave (kEchoCwMaxSamples, 0.0f);
+
+  std::array<int, 250> icw {};
+  int ncw = encode_morse_bits (message, &icw);
+  int i1 = 0;
+  int i2 = 0;
+  for (int i = 0; i < ncw; ++i)
+    {
+      if (i1 == 0 && icw[static_cast<size_t> (i)] == 1)
+        {
+          i1 = i + 1;
+        }
+      if (icw[static_cast<size_t> (i)] == 1)
+        {
+          i2 = i + 2;
+        }
+    }
+
+  if (i1 < 1 || i2 > 200)
+    {
+      return wave;
+    }
+
+  ncw = i2 - i1 + 1;
+  std::array<int, 250> trimmed {};
+  for (int i = 0; i < ncw; ++i)
+    {
+      trimmed[static_cast<size_t> (i)] = icw[static_cast<size_t> (i1 - 1 + i)];
+    }
+
+  double constexpr fsample = 48000.0;
+  double const nspd = 2.048 * fsample / static_cast<double> (ncw);
+  double const dt = 1.0 / fsample;
+  double const tdit = nspd * dt;
+  double const dphi = kTwoPi * static_cast<double> (ifreq) * dt;
+
+  std::vector<float> x (kEchoCwMaxSamples, 0.0f);
+  std::vector<float> y (kEchoCwMaxSamples, 0.0f);
+  std::vector<float> z (kEchoCwMaxSamples, 0.0f);
+
+  double phi = 0.0;
+  double t = 0.0;
+  for (int i = 0; i < kEchoCwMaxSamples; ++i)
+    {
+      t += dt;
+      int const j = static_cast<int> (t / tdit) + 1;
+      phi += dphi;
+      if (phi > kTwoPi)
+        {
+          phi -= kTwoPi;
+        }
+      x[static_cast<size_t> (i)] = (j >= 1 && j <= static_cast<int> (trimmed.size ()))
+          ? static_cast<float> (trimmed[static_cast<size_t> (j - 1)])
+          : 0.0f;
+      z[static_cast<size_t> (i)] = static_cast<float> (std::sin (phi));
+    }
+
+  int const nadd = static_cast<int> (0.002 / dt);
+  smooth_fortran_style (x, y, nadd);
+  smooth_fortran_style (y, x, nadd);
+  smooth_fortran_style (x, y, nadd);
+
+  int const tail_start = std::max (0, kEchoCwMaxSamples - 3 * nadd - 1);
+  std::fill (y.begin () + tail_start, y.end (), 0.0f);
+
+  float max_abs = 0.0f;
+  for (float value : y)
+    {
+      max_abs = std::max (max_abs, std::fabs (value));
+    }
+  if (max_abs <= 0.0f)
+    {
+      return wave;
+    }
+
+  float const fac = 0.99999f / max_abs;
+  for (int i = 0; i < kEchoCwMaxSamples; ++i)
+    {
+      wave[i] = fac * y[static_cast<size_t> (i)] * z[static_cast<size_t> (i)];
+    }
+
+  return wave;
+}
+
+std::array<int, kEchoCallToneCount> encode_echo_call_tones (QString const& callsign)
+{
+  std::array<int, kEchoCallToneCount> tones {};
+  QByteArray const latin = callsign.leftJustified (kEchoCallToneCount, QLatin1Char {' '}, true)
+                               .left (kEchoCallToneCount)
+                               .toLatin1 ();
+
+  int length = latin.size ();
+  while (length > 0 && latin.at (length - 1) == ' ')
+    {
+      --length;
+    }
+
+  for (int i = 0; i < length && i < kEchoCallToneCount; ++i)
+    {
+      unsigned char const ch = static_cast<unsigned char> (latin.at (i));
+      if (ch >= '0' && ch <= '9')
+        {
+          tones[static_cast<size_t> (i)] = static_cast<int> (ch) - 47;
+        }
+      else if (ch >= 'A' && ch <= 'Z')
+        {
+          tones[static_cast<size_t> (i)] = static_cast<int> (ch) - 54;
+        }
+      else if (ch >= 'a' && ch <= 'z')
+        {
+          tones[static_cast<size_t> (i)] = static_cast<int> (ch) - 86;
+        }
+    }
+
+  return tones;
 }
 
 QByteArray to_fixed_latin (QString const& text, int width)
@@ -1386,6 +1676,33 @@ QVector<float> generateFt4Wave (int const* itone, int nsym, int nsps, float fsam
 QVector<float> generateFt8Wave (int const* itone, int nsym, int nsps, float bt, float fsample, float f0)
 {
   return generate_ft8_wave (itone, nsym, nsps, bt, fsample, f0);
+}
+
+QVector<float> generateToneWave (int const* itone, int nsym, int nsps, float fsample,
+                                 float toneSpacing, float f0)
+{
+  return generate_tone_wave (itone, nsym, nsps, fsample, toneSpacing, f0);
+}
+
+QVector<float> generateCwWave (QString const& message, int ifreq)
+{
+  return generate_cw_wave (message, ifreq);
+}
+
+std::array<int, 250> encodeMorseBits (QString const& message, int* symbolCount)
+{
+  std::array<int, 250> bits {};
+  int const count = encode_morse_bits (message, &bits);
+  if (symbolCount)
+    {
+      *symbolCount = count;
+    }
+  return bits;
+}
+
+std::array<int, 6> encodeEchoCallTones (QString const& callsign)
+{
+  return encode_echo_call_tones (callsign);
 }
 
 QVector<float> generateFst4Wave (int const* itone, int nsym, int nsps, float fsample, int hmod, float f0)

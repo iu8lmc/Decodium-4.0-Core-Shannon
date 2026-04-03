@@ -5,9 +5,9 @@ hide footbox
 participant Detector
 participant MainWindow
 participant SHM
-participant jt9.f90
-participant decoder.f90
-participant ft8_decode.f90
+participant "LegacyJtDecodeWorker.cpp" as LegacyWorker
+participant "legacy_jt_async_decode.f90" as AsyncJT
+participant "jt9_decode.f90" as JT9Decode
 
 Detector -> MainWindow : dataSink()
 
@@ -16,16 +16,19 @@ MainWindow -> MainWindow : decode()
 MainWindow -> MainWindow : decodeBusy()
 
 MainWindow -> SHM : memcpy()
-MainWindow -> jt9.f90 : doorbell
+MainWindow -> LegacyWorker : queued decode(request)
 deactivate MainWindow
 
-activate jt9.f90
-jt9.f90 -> decoder.f90 : multimode_decoder()
+activate LegacyWorker
+LegacyWorker -> AsyncJT : legacy_jt_async_decode()
 
-decoder.f90 -> ft8_decode.f90 : decode()
-ft8_decode.f90 -> decoder.f90 : ft8_decoded()
-decoder.f90 -> jt9.f90
+activate AsyncJT
+AsyncJT -> JT9Decode : jt9_decoder%decode()
+JT9Decode -> AsyncJT : decoded lines
+AsyncJT -> LegacyWorker : collected rows
+deactivate AsyncJT
 
-jt9.f90 -> MainWindow : readFromStdout()
+LegacyWorker -> MainWindow : decodeReady()
+deactivate LegacyWorker
 
 @enduml

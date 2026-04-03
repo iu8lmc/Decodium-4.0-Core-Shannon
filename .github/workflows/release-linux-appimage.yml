@@ -1,4 +1,4 @@
-name: Release Linux AppImage
+name: Release Linux AppImage (x86_64 + aarch64)
 
 on:
   workflow_dispatch:
@@ -21,8 +21,8 @@ env:
   HAMLIB_VERSION: "4.7.0"
 
 jobs:
-  build:
-    name: Build Linux AppImage
+  build-x86_64:
+    name: Build Linux AppImage x86_64
     runs-on: ubuntu-22.04
     timeout-minutes: 90
 
@@ -195,9 +195,50 @@ jobs:
             decodium3-ft2-${{ env.VERSION }}-linux-x86_64.AppImage
             decodium3-ft2-${{ env.VERSION }}-linux-x86_64.AppImage.sha256.txt
 
+  build-aarch64:
+    name: Build Linux AppImage aarch64 (Debian Trixie)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select version
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ -f fork_release_version.txt ]]; then
+            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          else
+            VERSION="0.0.0-ci-${GITHUB_SHA::7}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Using version: ${VERSION}"
+
+      - name: Check Docker availability
+        run: |
+          docker version
+
+      - name: Build ARM64 AppImage via Debian Trixie container
+        run: |
+          chmod +x build-arm.sh
+          OUTPUT_DIR="${RUNNER_TEMP}/build-arm-output" VERSION="${VERSION}" ./build-arm.sh
+          ls -lh "${RUNNER_TEMP}/build-arm-output"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium3-ft2-${{ env.VERSION }}-linux-aarch64
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/build-arm-output/decodium3-ft2-${{ env.VERSION }}-linux-aarch64.AppImage
+            ${{ runner.temp }}/build-arm-output/decodium3-ft2-${{ env.VERSION }}-linux-aarch64.AppImage.sha256.txt
+
   publish:
     name: Publish AppImage to GitHub release
-    needs: [build]
+    needs: [build-x86_64, build-aarch64]
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true'
     runs-on: ubuntu-latest
 
@@ -216,7 +257,8 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: decodium3-ft2-${{ steps.version.outputs.version }}-linux-x86_64
+          pattern: decodium3-ft2-${{ steps.version.outputs.version }}-linux-*
+          merge-multiple: true
           path: release-assets
 
       - name: Validate assets
@@ -225,6 +267,8 @@ jobs:
           ls -lh release-assets
           test -f "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage"
           test -f "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+          test -f "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage"
+          test -f "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
 
       - name: Publish assets
         env:
@@ -235,6 +279,8 @@ jobs:
           ASSETS=(
             "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage"
             "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+            "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage"
+            "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
           )
 
           if gh release view "${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
@@ -247,7 +293,7 @@ jobs:
             elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
               cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
             else
-              printf "# Decodium 3 FT2 %s (Linux AppImage)\n\nLinux x86_64 AppImage release.\n" "${VERSION}" > "${NOTES_FILE}"
+              printf "# Decodium 3 FT2 %s\n\nLinux x86_64 and aarch64 AppImage release.\n" "${VERSION}" > "${NOTES_FILE}"
             fi
             gh release create "${VERSION}" "${ASSETS[@]}" \
               --repo "${REPO}" \

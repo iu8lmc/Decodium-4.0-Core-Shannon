@@ -89,10 +89,4 @@ private:
   bool    m_paintEventBusy;
 
 };
-
-extern "C" {
-//--------------------------------------------------- C and Fortran routines
-
-void smo121_(float x[], int* npts);
-}
 #endif // EPLOTTER_H

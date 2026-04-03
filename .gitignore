@@ -28,6 +28,7 @@ dist_64bit/
 Decodium3_FT2_x64/
 Decodium_3.0_*/
 docker-output/
+build-arm-output/
 
 # Installer and archive artifacts
 *.exe

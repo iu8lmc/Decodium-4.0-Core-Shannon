@@ -1,6 +1,5 @@
 module legacy_jt_async_mod
   use jt4_decode
-  use jt65_decode
   use jt9_decode
   implicit none
   include 'constants.f90'
@@ -16,11 +15,6 @@ module legacy_jt_async_mod
   end type
 
   type, extends(jt4_decoder) :: async_jt4_dec
-     type(async_result_collector) :: collector
-     real, allocatable :: cached_dd(:)
-  end type
-
-  type, extends(jt65_decoder) :: async_jt65_dec
      type(async_result_collector) :: collector
      real, allocatable :: cached_dd(:)
   end type
@@ -130,113 +124,6 @@ contains
 1000 format(a1,i5.4,f6.1,f6.2,i6,1x,a1)
   end subroutine async_jt4_average
 
-  subroutine async_jt65_callback(this,sync,snr,dt,freq,drift,nflip,width,decoded0,ft,qual,nsmo,nsum,minsync)
-    class(jt65_decoder), intent(inout) :: this
-    real, intent(in) :: sync
-    integer, intent(in) :: snr
-    real, intent(in) :: dt
-    integer, intent(in) :: freq
-    integer, intent(in) :: drift
-    integer, intent(in) :: nflip
-    real, intent(in) :: width
-    character(len=22), intent(in) :: decoded0
-    integer, intent(in) :: ft
-    integer, intent(in) :: qual
-    integer, intent(in) :: nsmo
-    integer, intent(in) :: nsum
-    integer, intent(in) :: minsync
-
-    integer :: i, nap, n
-    logical :: is_deep, is_average
-    character(len=22) :: decoded
-    character(len=2) :: csync
-    character(len=3) :: cflags
-    character(len=80) :: line
-
-    decoded = decoded0
-    cflags = '   '
-    is_deep = ft.eq.2
-
-    if(ft.eq.0 .and. minsync.ge.0 .and. int(sync).lt.minsync) then
-       select type(this)
-       type is (async_jt65_dec)
-          write(line,1011) this%collector%nutc,snr,dt,freq
-       class default
-          return
-       end select
-1011   format(i4.4,i4,f5.1,i5)
-       select type(this)
-       type is (async_jt65_dec)
-          call append_async_line(this%collector, line)
-       end select
-       return
-    endif
-
-    is_average=nsum.ge.2
-    select type(this)
-    type is (async_jt65_dec)
-       if(this%collector%bvhf .and. ft.gt.0) then
-       cflags='f  '
-       if(is_deep) then
-          cflags='d  '
-          write(cflags(2:2),'(i1)') min(qual,9)
-          if(qual.ge.10) cflags(2:2)='*'
-          if(qual.lt.3) decoded(22:22)='?'
-       endif
-       if(is_average) then
-          write(cflags(3:3),'(i1)') min(nsum,9)
-          if(nsum.ge.10) cflags(3:3)='*'
-       endif
-       nap=ishft(ft,-2)
-       if(nap.ne.0) then
-          if(nsum.lt.2) write(cflags(1:3),'(a1,i1," ")') 'a',nap
-          if(nsum.ge.2) write(cflags(1:3),'(a1,2i1)') 'a',nap,min(nsum,9)
-       endif
-       endif
-    class default
-       return
-    end select
-
-    csync='# '
-    i=0
-    select type(this)
-    type is (async_jt65_dec)
-       if(this%collector%bvhf .and. nflip.ne.0 .and. sync.ge.max(0.0,float(this%collector%minsync))) then
-       csync='#*'
-       if(nflip.eq.-1) then
-          csync='##'
-          if(decoded.ne.'                      ') then
-             do i=22,1,-1
-                if(decoded(i:i).ne.' ') exit
-             enddo
-             if(i.gt.18) i=18
-             decoded(i+2:i+4)='OOO'
-          endif
-       endif
-       endif
-    class default
-       return
-    end select
-    n=len(trim(decoded))
-    if(n.eq.2 .or. n.eq.3) csync='# '
-    if(cflags(1:1).eq.'f') then
-       cflags(2:2)=cflags(3:3)
-       cflags(3:3)=' '
-    endif
-    select type(this)
-    type is (async_jt65_dec)
-       write(line,1010) this%collector%nutc,snr,dt,freq,csync,decoded,cflags
-    class default
-       return
-    end select
-1010 format(i4.4,i4,f5.1,i5,1x,a2,1x,a22,1x,a3)
-
-    select type(this)
-    type is (async_jt65_dec)
-       call append_async_line(this%collector, line)
-    end select
-  end subroutine async_jt65_callback
-
   subroutine async_jt9_callback(this, sync, snr, dt, freq, drift, decoded)
     class(jt9_decoder), intent(inout) :: this
     real, intent(in) :: sync
@@ -285,7 +172,6 @@ subroutine legacy_jt_async_decode(nmode, ss, id2, npts8, nzhsym, nutc, nfqso, nt
   character*80 outlines(MAX_ASYNC_LINES)
 
   type(async_jt4_dec), allocatable :: jt4dec
-  type(async_jt65_dec), allocatable :: jt65dec
   type(async_jt9_dec), allocatable :: jt9dec
   integer i
   integer jz
@@ -294,22 +180,18 @@ subroutine legacy_jt_async_decode(nmode, ss, id2, npts8, nzhsym, nutc, nfqso, nt
   logical lnagain
   logical lnclearave
   logical lnrobust
-  logical ljt65ap
 
   outlines = ' '
   listutc_dummy = 0
-  allocate(jt4dec, jt65dec, jt9dec)
+  allocate(jt4dec, jt9dec)
   lnewdat = newdat .ne. 0
   lnagain = nagain .ne. 0
   lnclearave = nclearave .ne. 0
   lnrobust = nrobust .ne. 0
-  ljt65ap = ljt65apon .ne. 0
-
   call reset_async_results(jt4dec%collector, nutc, minsync, iand(nexp_decode,64).ne.0)
-  call reset_async_results(jt65dec%collector, nutc, minsync, iand(nexp_decode,64).ne.0)
   call reset_async_results(jt9dec%collector, nutc, minsync, iand(nexp_decode,64).ne.0)
 
-  if(nmode.eq.4 .or. nmode.eq.65) then
+  if(nmode.eq.4) then
      open(14,file=trim(temp_dir)//'/avemsg.txt',status='unknown')
   endif
 
@@ -325,22 +207,12 @@ subroutine legacy_jt_async_decode(nmode, ss, id2, npts8, nzhsym, nutc, nfqso, nt
           lnagain,ndepth,lnclearave,minsync,minw,nsubmode,mycall,hiscall,hisgrid, &
           0,listutc_dummy,async_jt4_average)
 
-  else if(nmode.eq.65) then
-     if(.not. allocated(jt65dec%cached_dd)) allocate(jt65dec%cached_dd(60*12000))
-     if(lnewdat) then
-        jt65dec%cached_dd = 0.0
-        jt65dec%cached_dd(1:52*12000)=id2(1:52*12000)
-     endif
-     call jt65dec%decode(async_jt65_callback,jt65dec%cached_dd,52*12000,lnewdat,nutc,nfa,nfb,nfqso, &
-          ntol,nsubmode,minsync,lnagain,n2pass,lnrobust,ntrials,naggressive,ndepth, &
-          emedelay,lnclearave,mycall,hiscall,hisgrid,nexp_decode,nqsoprogress,ljt65ap)
-
   else if(nmode.eq.9) then
      call jt9dec%decode(async_jt9_callback,ss,id2,nfqso,lnewdat,npts8,nfa,nfsplit,nfb, &
           ntol,nzhsym,lnagain,ndepth,nmode,nsubmode,nexp_decode)
   endif
 
-  if(nmode.eq.4 .or. nmode.eq.65) then
+  if(nmode.eq.4) then
      close(14)
   endif
 
@@ -350,11 +222,6 @@ subroutine legacy_jt_async_decode(nmode, ss, id2, npts8, nzhsym, nutc, nfqso, nt
      do i = 1, nout
         outlines(i) = jt4dec%collector%results(i)
      enddo
-  else if(nmode.eq.65) then
-     nout = jt65dec%collector%nasync_lines
-     do i = 1, nout
-        outlines(i) = jt65dec%collector%results(i)
-     enddo
   else if(nmode.eq.9) then
      nout = jt9dec%collector%nasync_lines
      do i = 1, nout
@@ -363,8 +230,7 @@ subroutine legacy_jt_async_decode(nmode, ss, id2, npts8, nzhsym, nutc, nfqso, nt
   endif
 
   if(allocated(jt4dec%cached_dd)) deallocate(jt4dec%cached_dd)
-  if(allocated(jt65dec%cached_dd)) deallocate(jt65dec%cached_dd)
-  deallocate(jt4dec, jt65dec, jt9dec)
+  deallocate(jt4dec, jt9dec)
 
   return
 end subroutine legacy_jt_async_decode

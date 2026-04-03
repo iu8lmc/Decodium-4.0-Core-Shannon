@@ -12,6 +12,7 @@
 #include "Detector/WSPRDecodeWorker.hpp"
 #include "Detector/FortranRuntimeGuard.hpp"
 #include "Detector/RTTYDetector.hpp"
+#include "Detector/LegacyDspIoHelpers.hpp"
 #include "Modulator/RTTYModulator.hpp"
 #include "Decoder/BaudotDecoder.hpp"
 
@@ -116,6 +117,8 @@
 #include "echograph.h"
 #include "fastplot.h"
 #include "fastgraph.h"
+#include "LegacyUiHelpers.hpp"
+#include "PlotLegacyHelpers.hpp"
 #include "otpgenerator.h"
 #include "about.h"
 #include "messageaveraging.h"
@@ -456,78 +459,11 @@ QString localized_utc_display (QDateTime const& utcDateTime, QSettings const * s
 
 extern "C" {
   //----------------------------------------------------- C and Fortran routines
-  void symspec_(struct dec_data *, int* k, double* trperiod, int* nsps, int* ingain,
-                bool* bLowSidelobes, int* minw, float* px, float s[], float* df3,
-                int* nhsym, int* npts8, float *m_pxmax, int* npct);
-
-  void hspec_(short int d2[], int* k, int* nutc0, int* ntrperiod, int* nrxfreq, int* ntol,
-              bool* bmsk144, bool* btrain, double const pcoeffs[], int* ingain,
-              char const * mycall, char const * hiscall, bool* bshmsg, bool* bswl,
-              char const * ddir, float green[],
-              float s[], int* jh, float *pxmax, float *rmsNoGain, char line[],
-              fortran_charlen_t, fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
-
-  void gen_echocall_(char* basecall, int itone[], fortran_charlen_t);
-
-  void genfst4_(char* msg, int* ichk, char* msgsent, char fst4msgbits[],
-                 int itone[], int* iwspr, fortran_charlen_t, fortran_charlen_t);
-
-  void gen_fst4wave_(int itone[], int* nsym, int* nsps, int* nwave, float* fsample,
-                       int* hmod, float* f0, int* icmplx, float xjunk[], float wave[]);
-
-  void genwave_(int itone[], int* nsym, int* nsps, int* nwave, float* fsample,
-                double* toneSpacing, float* f0, int* icmplx, float xjunk[], float wave[]);
-
-  void gen4_(char* msg, int* ichk, char* msgsent, int itone[],
-               int* itext, fortran_charlen_t, fortran_charlen_t);
-
-  void gen9_(char* msg, int* ichk, char* msgsent, int itone[],
-               int* itext, fortran_charlen_t, fortran_charlen_t);
-
-  void gen65(char* msg, int* ichk, char msgsent[], int itone[], int* itext);
-
-  void gen_cw_wave_(char* msg, int* ifreq, float wave[], fortran_charlen_t);
-
-  void genq65_(char* msg, int* ichk, char* msgsent, int itone[],
-              int* i3, int* n3, fortran_charlen_t, fortran_charlen_t);
-
-  void genwspr_(char* msg, char* msgsent, int itone[], fortran_charlen_t, fortran_charlen_t);
-
-  void morse_(char* msg, int* icw, int* ncw, fortran_charlen_t);
-
-  void wspr_downsample_(short int d2[], int* k);
-
-  int savec2_(char const * fname, int* TR_seconds, double* dial_freq, fortran_charlen_t);
-
-  void save_echo_params_(int* ndoptotal, int* ndop, int* nfrit, float* f1, float* fspread,
-                         int* toneSpacing, volatile int itone[], short id2[], int* idir);
-
-  void avecho_( short id2[], int* dop, int* nfrit, int* nauto, int* ndf, int* navg,
-                int* nqual, float* f1, float* level, float* sigdb, float* snr, float* dfreq,
-                float* width, bool* bDiskData, bool* bEchoCall, char const * txcall,
-                char rxcall[], float* xdt, FCL len1, FCL len2);
-
-  void fast_decode_(short id2[], int narg[], double * trperiod,
-                    char msg[], char mycall[], char hiscall[],
-                    fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
-  void degrade_snr_(short d2[], int* n, float* db, float* bandwidth);
-
   void ft2_triggered_decode_(short iwave[], int* nqsoprogress, int* nfqso,
                              int* nfa, int* nfb, int* ndepth, int* ncontest,
                              char mycall[], char hiscall[],
                              char outlines[], int* nout,
                              fortran_charlen_t, fortran_charlen_t, fortran_charlen_t);
-
-  void wav12_(short d2[], short d1[], int* nbytes, short* nbitsam2);
-
-  void refspectrum_(short int d2[], bool* bclearrefspec,
-                    bool* brefspec, bool* buseref, const char* c_fname, fortran_charlen_t);
-
-  void freqcal_(short d2[], int* k, int* nkhz,int* noffset, int* ntol,
-                char line[], fortran_charlen_t);
-
-  void calibrate_(char const * data_dir, int* iz, double* a, double* b, double* rms,
-                  double* sigmaa, double* sigmab, int* irc, fortran_charlen_t);
 
   void foxgen_(bool* bSuperFox, char const * fname, FCL len);
   void foxgenft2_();
@@ -536,13 +472,9 @@ extern "C" {
 
   void sftx_sub_(char const * otp_key, FCL len1);
 
-  void plotsave_(float swide[], int* m_w , int* m_h1, int* irow);
-
   void chk_samples_(int* m_ihsym,int* k, int* m_hsymStop);
 
   void save_dxbase_(char* dxbase, FCL len);
-
-  void indexx_(float arr[], int* n, int indx[]);
 
   void get_q3list_(char* fname, bool* bDiskData, int* nlist, char* list, FCL len1, FCL len2);
 
@@ -3436,8 +3368,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   bool vhf {m_config.enable_VHF_features ()};
 
   ui->txFirstCheckBox->setChecked(m_txFirst);
-  morse_(const_cast<char *> (m_config.my_callsign ().toLatin1().constData()),
-         const_cast<int *> (icw), &m_ncw, (FCL)m_config.my_callsign().length());
+  auto const startupMorse = decodium::txwave::encodeMorseBits (m_config.my_callsign (), &m_ncw);
+  std::copy_n (startupMorse.cbegin (), startupMorse.size (), icw);
   on_actionWide_Waterfall_triggered();
   ui->cbShMsgs->setChecked(m_bShMsgs);
   ui->cbSWL->setChecked(m_bSWL);
@@ -4778,7 +4710,6 @@ void MainWindow::dataSink(qint64 frames)
     }
 
   static float s[NSMAX];
-  char line[80];
 
   // Async FT2: fill ring buffer with latest audio
   if (m_mode == "FT2" && ui->cbAsyncDecode->isChecked() && k > 0) {
@@ -4810,12 +4741,12 @@ void MainWindow::dataSink(qint64 frames)
 
   m_bUseRef=m_wideGraph->useRef();
   if(!m_diskData && k >= m_nsps/2) {
-    // refspectrum_ reads NFFT/2 = 3456 input samples from the start pointer.
+    // refspectrum reads NFFT/2 = 3456 input samples from the start pointer.
     int constexpr refSpectrumInputSamples {3456};
     int const maxRefStart = qMax (0, kDecDataSampleCount - refSpectrumInputSamples);
     int const refStart = qBound (0, k - m_nsps / 2, maxRefStart);
-    refspectrum_(&dec_data.d2[refStart],&m_bClearRefSpec,&m_bRefSpec,
-                 &m_bUseRef, m_refspecNativePath.constData (), (FCL)m_refspecNativePath.size ());
+    decodium::legacy::refspectrum_update (&dec_data.d2[refStart], m_bClearRefSpec, m_bRefSpec,
+                                          m_bUseRef, QString::fromLocal8Bit (m_refspecNativePath));
   }
   m_bClearRefSpec=false;
 
@@ -4837,9 +4768,10 @@ void MainWindow::dataSink(qint64 frames)
   bool bLowSidelobes=m_config.lowSidelobes();
   int npct=0;
   if(m_mode.startsWith("FST4")) npct=ui->sbNB->value();
-  symspec_(&dec_data,&k,&m_TRperiod,&nsps,&m_inGain,&bLowSidelobes,&nsmo,&m_px,s,
-           &m_df3,&m_ihsym,&m_npts8,&m_pxmax,&npct);
-  if(m_mode=="WSPR" or m_mode=="FST4W") wspr_downsample_(dec_data.d2,&k);
+  (void) npct;
+  decodium::legacy::symspec_update (&dec_data, k, nsps, m_inGain, bLowSidelobes, nsmo, &m_px,
+                                    s, &m_df3, &m_ihsym, &m_npts8, &m_pxmax);
+  if(m_mode=="WSPR" or m_mode=="FST4W") decodium::legacy::wspr_downsample_update (dec_data.d2, k);
   if(m_ihsym <=0) return;
   if(ui) ui->signal_meter_widget->setValue(m_px,m_pxmax); // Update thermometer
   if(m_monitoring || m_diskData) {
@@ -4855,8 +4787,7 @@ void MainWindow::dataSink(qint64 frames)
     int RxFreq=ui->RxFreqSpinBox->value ();
     int nkhz=(m_freqNominal+RxFreq)/1000;
     int ftol = ui->sbFtol->value ();
-    freqcal_(&dec_data.d2[0], &k, &nkhz, &RxFreq, &ftol, &line[0], (FCL)80);
-    QString t=QString::fromLatin1(line);
+    QString t = decodium::legacy::freqcal_line (&dec_data.d2[0], k, nkhz, RxFreq, ftol);
     DecodedText decodedtext {t};
     ui->decodedTextBrowser->displayDecodedText (decodedtext, m_config.my_callsign(),
           m_mode, m_config.DXCC(), m_logBook, m_currentBand, m_config.ppfx());
@@ -4956,26 +4887,30 @@ void MainWindow::dataSink(qint64 frames)
       int nDopTotal=m_fDop;
       int navg=ui->sbEchoAvg->value();
       int ndf=0;
-      int idir=1;
       if(!ui->rbFixedTone->isChecked() and !m_diskData) {
         ndf=ui->sbToneSpacing->value();
-        save_echo_params_(&nDopTotal,&nDop,&nfrit,&f1,&width,&ndf,&itone[0],dec_data.d2,&idir);
+        decodium::legacy::save_echo_params_inplace (nDopTotal, nDop, nfrit, f1, width, ndf,
+                                                    itone, dec_data.d2);
       }
       if(m_diskData) {
-        idir=-1;
-        save_echo_params_(&nDopTotal,&nDop,&nfrit,&f1,&width,&ndf,&itone[0],dec_data.d2,&idir);
+        decodium::legacy::load_echo_params (dec_data.d2, &nDopTotal, &nDop, &nfrit, &f1, &width,
+                                            &ndf, itone);
         if(ndf==0 and ui->rbEchoMessage->isChecked()) ui->rbFixedTone->setChecked(true);
       }
 
       bool bEchoCall=ui->rbEchoMessage->isChecked();
       QString txcall=ui->leEchoMessage->text();
-      static char crxcall[7];
-      float xdt=0.0;
-      avecho_(dec_data.d2,&nDop,&nfrit,&nauto,&ndf,&navg,&nqual,&f1,&xlevel,&sigdb,
-          &dBerr,&dfreq,&width,&m_diskData,&bEchoCall,txcall.toLatin1().constData(),
-          &crxcall[0],&xdt,(FCL)6,(FCL)6);
-      crxcall[6]=0;
-      QString rxcall {QString::fromLatin1(crxcall)};
+      auto const echo_result = decodium::legacy::avecho_update (dec_data.d2, nDop, nfrit, nauto,
+                                                                ndf, navg, f1, width, m_diskData,
+                                                                bEchoCall, txcall);
+      nqual = echo_result.nqual;
+      xlevel = echo_result.xlevel;
+      sigdb = echo_result.sigdb;
+      dBerr = echo_result.db_err;
+      dfreq = echo_result.dfreq;
+      width = echo_result.width;
+      QString rxcall {echo_result.rxcall};
+      float xdt = echo_result.xdt;
 
       //Don't restart Monitor after an Echo transmission
       if(m_bEchoTxed and !m_auto) {
@@ -5017,8 +4952,8 @@ void MainWindow::dataSink(qint64 frames)
       if(m_echoGraph->isVisible()) m_echoGraph->plotSpec();
       if(m_saveAll and !m_diskData) {
         if(ui->rbEchoMessage->isChecked()) ndf=ui->sbToneSpacing->value();
-        int idir=1;
-        save_echo_params_(&m_fDop,&nDop,&nfrit,&f1,&width,&ndf,&itone[0],dec_data.d2,&idir);
+        decodium::legacy::save_echo_params_inplace (m_fDop, nDop, nfrit, f1, width, ndf, itone,
+                                                    dec_data.d2);
         m_fSpread=width;
       }
       m_nclearave=0;
@@ -5075,7 +5010,7 @@ void MainWindow::dataSink(qint64 frames)
         int nsec=120;
         int nbfo=1500;
         double f0m1500=m_freqNominal/1000000.0 + nbfo - 1500;
-        int err = savec2_(c2name.constData (),&nsec,&f0m1500, (FCL)c2name.size());
+        int err = decodium::legacy::savec2_file (QString::fromLocal8Bit (c2name), nsec, f0m1500);
         if (err!=0) MessageBox::warning_message (this, tr ("Error saving c2 file"), c2name);
       }
     }
@@ -5207,11 +5142,13 @@ void MainWindow::fastSink(qint64 frames)
   float pxmax = 0;
   float rmsNoGain = 0;
   int ftol = ui->sbFtol->value ();
-  hspec_(dec_data.d2,&k,&nutc0,&nTRpDepth,&RxFreq,&ftol,&bmsk144_hspec,
-      &m_bTrain,m_phaseEqCoefficients.constData(),&m_inGain,&dec_data.params.mycall[0],
-      &dec_data.params.hiscall[0],&bshmsg,&bswl,
-      data_dir.constData (),fast_green,fast_s,&fast_jh,&pxmax,&rmsNoGain,&line[0],(FCL)12,
-      (FCL)12,(FCL)data_dir.size (),(FCL)80);
+  (void) ftol;
+  (void) bmsk144_hspec;
+  (void) bshmsg;
+  (void) bswl;
+  (void) data_dir;
+  decodium::legacy::hspec_update (dec_data.d2, k, nTRpDepth, m_inGain, fast_green, fast_s,
+                                  &fast_jh, &pxmax, &rmsNoGain);
   float px = fast_green[fast_jh];
   QString t;
   t = t.asprintf(" Rx noise: %5.1f ",px);
@@ -6432,8 +6369,8 @@ void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settin
     if (m_config.my_callsign () != callsign) {
       m_baseCall = Radio::base_callsign (m_config.my_callsign ());
       ui->tx1->setEnabled (elide_tx1_not_allowed () || ui->tx1->isEnabled ());
-      morse_(const_cast<char *> (m_config.my_callsign ().toLatin1().constData()),
-             const_cast<int *> (icw), &m_ncw, (FCL)m_config.my_callsign().length());
+      auto const callsignMorse = decodium::txwave::encodeMorseBits (m_config.my_callsign (), &m_ncw);
+      std::copy_n (callsignMorse.cbegin (), callsignMorse.size (), icw);
     }
     if (m_config.my_callsign () != callsign || m_config.my_grid () != my_grid) {
       statusUpdate ();
@@ -8280,11 +8217,7 @@ void MainWindow::closeEvent(QCloseEvent * e)
   m_mouseCmnds.reset ();
   m_colorHighlighting.reset ();
   if(m_mode!="MSK144" and m_mode!="FT8") killFile();
-  float sw=0.0;
-  int nw=400;
-  int nh=100;
-  int irow=-99;
-  plotsave_(&sw,&nw,&nh,&irow);
+  decodium::plot::clear_saved_waterfall ();
   Q_EMIT finished ();
   QMainWindow::closeEvent (e);
 }
@@ -8448,9 +8381,14 @@ void MainWindow::on_actionFast_Graph_triggered()
 void MainWindow::on_actionSolve_FreqCal_triggered()
 {
   auto data_dir {QDir::toNativeSeparators(m_config.writeable_data_dir().absolutePath()).toLocal8Bit ()};
-  int iz,irc;
-  double a,b,rms,sigmaa,sigmab;
-  calibrate_(data_dir.constData(), &iz, &a, &b, &rms, &sigmaa, &sigmab, &irc, (FCL)data_dir.size());
+  auto const calibration = decodium::legacy::calibrate_freqcal_directory (QString::fromLocal8Bit (data_dir));
+  int const iz = calibration.iz;
+  int const irc = calibration.irc;
+  double const a = calibration.a;
+  double const b = calibration.b;
+  double const rms = calibration.rms;
+  double const sigmaa = calibration.sigmaa;
+  double const sigmab = calibration.sigmab;
   QString t2;
   if(irc==-1) t2="Cannot open " + data_dir + "/fmt.all";
   if(irc==-2) t2="Cannot open " + data_dir + "/fcal2.out";
@@ -9133,7 +9071,7 @@ void MainWindow::read_wav_file (QString const& fname)
       std::memset(&dec_data.d2[frames_read],0,max_bytes - n);
       if (11025 == file.format ().sampleRate ()) {
         short sample_size = file.format ().sampleSize ();
-        wav12_ (dec_data.d2, dec_data.d2, &frames_read, &sample_size);
+        decodium::legacy::wav12_inplace (dec_data.d2, &frames_read, sample_size);
       }
       dec_data.params.kin = frames_read;
       dec_data.params.newdat = 1;
@@ -9191,7 +9129,7 @@ void MainWindow::diskDat()                                   //diskDat()
     m_diskData=true;
     float db=m_config.degrade();
     float bw=m_config.RxBandwidth();
-    if(db > 0.0) degrade_snr_(dec_data.d2,&dec_data.params.kin,&db,&bw);
+    if(db > 0.0) decodium::legacy::degrade_snr_inplace (dec_data.d2, dec_data.params.kin, db, bw);
     for(int n=1; n<=m_hsymStop; n++) {                      // Do the waterfall spectra
 //      k=(n+1)*kstep;           //### Why was this (n+1) ??? ###
       k=n*kstep;
@@ -10307,7 +10245,7 @@ void MainWindow::ARRL_Digi_Display()
   int jz=i;
   m_ActiveStationsWidget->setClickOK(false);
   int maxRecent=qMin(i,m_ActiveStationsWidget->maxRecent());
-  indexx_(pts,&jz,indx);
+  decodium::legacy::index_sort_ascending (pts, jz, indx);
   QString t;
   i=0;
   for(int j=jz-1; j>=0; j--) {
@@ -10780,15 +10718,6 @@ void MainWindow::requestInProcessJt9FastDecode ()
     return;
   }
 
-  if (!m_jt9FastDecodeWorker || !m_jt9FastDecodeThread.isRunning ()) {
-    static short int d2b[360000];
-    memcpy (d2b, dec_data.d2, 2 * 360000);
-    watcher3.setFuture (QtConcurrent::run (std::bind (fast_decode_, &d2b[0],
-        &narg[0], &m_TRperiod, &m_msg[0][0], dec_data.params.mycall,
-        dec_data.params.hiscall, (FCL)8000, (FCL)12, (FCL)12)));
-    return;
-  }
-
   decodium::jt9fast::DecodeRequest request;
   request.serial = ++m_jt9FastDecodeSerial;
   request.audio.resize (360000);
@@ -10827,6 +10756,15 @@ void MainWindow::requestInProcessJt9FastDecode ()
   m_jt9FastDecodePending = true;
 
   auto * worker = m_jt9FastDecodeWorker;
+  if (!worker)
+    {
+      return;
+    }
+  if (!m_jt9FastDecodeThread.isRunning ())
+    {
+      worker->decode (request);
+      return;
+    }
   QMetaObject::invokeMethod (m_jt9FastDecodeWorker,
                              [worker, request] () {
                                worker->decode (request);
@@ -13549,7 +13487,6 @@ void MainWindow::guiUpdate()
     }
 
     ba2msg(ba,message);
-    int ichk=0;
     if (m_lastMessageSent != m_currentMessage
         || m_lastMessageType != m_currentMessageType)
       {
@@ -13561,19 +13498,33 @@ void MainWindow::guiUpdate()
       itone[0]=0;
       if(ui->rbEchoMessage->isChecked() or ui->rbEchoCW->isChecked()) {
         QString echoMsg=(ui->leEchoMessage->text()+"      ").left(6);
-        gen_echocall_(const_cast <char *> (echoMsg.toLatin1().constData()),const_cast<int *>(itone),(FCL)6);
+        auto const echoTones = decodium::txwave::encodeEchoCallTones (echoMsg);
+        std::fill_n (const_cast<int *> (itone), echoTones.size (), 0);
+        std::copy_n (echoTones.cbegin (), echoTones.size (), const_cast<int *> (itone));
       }
     } else {
       if(m_QSOProgress==REPORT || m_QSOProgress==ROGER_REPORT) m_bSentReport=true;
       if(m_bSentReport and (m_QSOProgress<REPORT or m_QSOProgress>ROGER_REPORT)) m_bSentReport=false;
-      if(m_mode=="JT4") gen4_(message, &ichk , msgsent, const_cast<int *> (itone),
-                                &m_currentMessageType, (FCL)22, (FCL)22);
-      if(m_mode=="JT9") gen9_(message, &ichk, msgsent, const_cast<int *> (itone),
-                                &m_currentMessageType, (FCL)22, (FCL)22);
-      if(m_mode=="JT65") gen65(message, &ichk, msgsent, const_cast<int *> (itone),
-                                  &m_currentMessageType);
-      if(m_mode=="WSPR") genwspr_(message, msgsent, const_cast<int *> (itone),
-                                    (FCL)22, (FCL)22);
+      if(m_mode=="JT4") {
+        auto const encoded = decodium::txmsg::encodeJt4 (QString::fromLatin1 (message, 22));
+        copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 206);
+        m_currentMessageType = encoded.messageType;
+      }
+      if(m_mode=="JT9") {
+        auto const encoded = decodium::txmsg::encodeJt9 (QString::fromLatin1 (message, 22));
+        copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 85);
+        m_currentMessageType = encoded.messageType;
+      }
+      if(m_mode=="JT65") {
+        auto const encoded = decodium::txmsg::encodeJt65 (QString::fromLatin1 (message, 22));
+        copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 126);
+        m_currentMessageType = encoded.messageType;
+      }
+      if(m_mode=="WSPR") {
+        auto const encoded = decodium::txmsg::encodeWspr (QString::fromLatin1 (message, 22));
+        copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 162);
+        m_currentMessageType = encoded.messageType;
+      }
       if(m_mode=="MSK144" or m_mode=="FT8" or m_mode=="FT2" or m_mode=="FT4"
          or m_mode=="FST4" or m_mode=="FST4W" || "Q65" == m_mode) {
         // Standard FT8/FT2/FT4 TX generation is C++ only and should not queue
@@ -13778,7 +13729,6 @@ void MainWindow::guiUpdate()
           }
         }
         if(m_mode=="FST4" or m_mode=="FST4W") {
-          QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
           QString fst4Message = QString::fromLatin1 (message, 37);
           if(m_mode=="FST4W") {
             fst4Message = WSPR_message();
@@ -13812,10 +13762,9 @@ void MainWindow::guiUpdate()
           QString t = QString::fromStdString(message).trimmed();
         }
         if(m_mode=="Q65") {
-          QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
-          int i3=-1;
-          int n3=-1;
-          genq65_(message, &ichk,msgsent, const_cast<int *>(itone), &i3, &n3, (FCL)37, (FCL)37);
+          auto const encoded = decodium::txmsg::encodeQ65 (QString::fromLatin1 (message, 37));
+          copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 85);
+          m_currentMessageType = encoded.messageType;
           int nsps=1800;
           if(m_TRperiod==30) nsps=3600;
           if(m_TRperiod==60) nsps=7200;
@@ -13824,12 +13773,11 @@ void MainWindow::guiUpdate()
           int nsps4=4*nsps;                           //48000 Hz sampling
           int nsym=85;
           float fsample=48000.0;
-          int nwave=(nsym+2)*nsps4;
-          int icmplx=0;
           float f0=ui->TxFreqSpinBox->value()-m_XIT;
-          double toneSpacing=fsample/nsps4;
-          genwave_(const_cast<int *>(itone),&nsym,&nsps4,&nwave,
-                   &fsample,&toneSpacing,&f0,&icmplx,foxcom_.wave,foxcom_.wave);
+          float const toneSpacing = fsample / nsps4;
+          auto const wave = decodium::txwave::generateToneWave (itone, nsym, nsps4, fsample,
+                                                                toneSpacing, f0);
+          store_precomputed_tx_wave (QStringLiteral ("Q65"), wave, false);
         }
 
         if(SpecOp::EU_VHF==m_specOp) {
@@ -17395,9 +17343,46 @@ void MainWindow::msgtype(QString t, QLineEdit* tx)               //msgtype()
   char msgsent[38];
   QByteArray s=t.toUpper().toLocal8Bit();
   ba2msg(s,message);
-  int ichk=1,itype=0;
-  gen65(message, &ichk,msgsent, const_cast<int*>(itone0), &itype);
-  msgsent[22]=0;
+  int itype=0;
+  auto apply_check_result = [&] (decodium::txmsg::EncodedMessage const& encoded) {
+    if (!encoded.ok)
+      {
+        std::fill_n (msgsent, 38, ' ');
+        msgsent[37] = '\0';
+        itype = 0;
+        return;
+      }
+
+    copy_encoded_ftx_message (encoded, msgsent, const_cast<int*>(itone0), 0);
+    itype = encoded.messageType;
+  };
+  if (m_mode == "JT4") {
+    apply_check_result (decodium::txmsg::encodeJt4 (QString::fromLatin1 (message, 22), true));
+  } else if (m_mode == "JT9") {
+    apply_check_result (decodium::txmsg::encodeJt9 (QString::fromLatin1 (message, 22), true));
+  } else if (m_mode == "JT65") {
+    apply_check_result (decodium::txmsg::encodeJt65 (QString::fromLatin1 (message, 22), true));
+  } else if (m_mode == "WSPR") {
+    apply_check_result (decodium::txmsg::encodeWspr (QString::fromLatin1 (message, 22), true));
+  } else if (m_mode == "FT8") {
+    apply_check_result (decodium::txmsg::encodeFt8 (QString::fromLatin1 (message)));
+  } else if (m_mode == "FT2") {
+    apply_check_result (decodium::txmsg::encodeFt2 (QString::fromLatin1 (message), true));
+  } else if (m_mode == "FT4") {
+    apply_check_result (decodium::txmsg::encodeFt4 (QString::fromLatin1 (message), true));
+  } else if (m_mode == "FST4" || m_mode == "FST4W") {
+    apply_check_result (decodium::txmsg::encodeFst4 (QString::fromLatin1 (message, 37), true));
+  } else if (m_mode == "MSK144") {
+    apply_check_result (decodium::txmsg::encodeMsk144 (QString::fromLatin1 (message), true));
+  } else if (m_mode == "Q65") {
+    apply_check_result (decodium::txmsg::encodeQ65 (QString::fromLatin1 (message, 37), true));
+  } else {
+    std::fill_n (msgsent, 38, ' ');
+    int const copy_length = std::min (37, static_cast<int> (std::strlen (message)));
+    std::copy_n (message, copy_length, msgsent);
+    msgsent[37] = '\0';
+    itype = 0;
+  }
   bool text=false;
   bool shortMsg=false;
   if(itype==6) text=true;
@@ -21520,19 +21505,17 @@ void MainWindow::transmit (double snr)
       if(ui->rbEchoCW->isChecked()) {
         freq=1500.0;
         int ifreq=freq;
-        int n=ui->leEchoMessage->text().length();
-        gen_cw_wave_(const_cast<char *> (ui->leEchoMessage->text().toLatin1().constData()), &ifreq,
-                   foxcom_.wave, (FCL)n);
+        auto const wave = decodium::txwave::generateCwWave (ui->leEchoMessage->text(), ifreq);
+        store_precomputed_tx_wave (QStringLiteral ("Echo"), wave, false);
       } else {
         toneSpacing=ui->sbToneSpacing->value();
         int nsps4=4*framesPerSymbol;                           //48000 Hz sampling
         int nsym=numEchoSymbols;
         float fsample=48000.0;
-        int nwave=nsym*nsps4;
-        int icmplx=0;
         float f0=freq;
-        genwave_(const_cast<int *>(itone),&nsym,&nsps4,&nwave,
-             &fsample,&toneSpacing,&f0,&icmplx,foxcom_.wave,foxcom_.wave);
+        auto const wave = decodium::txwave::generateToneWave (itone, nsym, nsps4, fsample,
+                                                              toneSpacing, f0);
+        store_precomputed_tx_wave (QStringLiteral ("Echo"), wave, false);
       }
       toneSpacing=-5.0;  //Flag Modulator to use precomputed foxcom_.wave[].
     }
@@ -23439,7 +23422,7 @@ void MainWindow::readWidebandDecodes()
   if(k>0) {
     t1="";
     int kz=k;
-    indexx_(f,&kz,indx);
+    decodium::legacy::index_sort_ascending (f, kz, indx);
     for(int k=0; k<kz; k++) {
       int j=indx[k]-1;
       t1=t1.asprintf("%2d. ",k+1);

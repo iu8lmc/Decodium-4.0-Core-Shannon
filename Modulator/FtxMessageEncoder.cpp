@@ -1,5 +1,6 @@
 #include "FtxMessageEncoder.hpp"
 #include "FtxFst4LdpcData.hpp"
+#include "LegacyJtEncoder.hpp"
 
 #include <array>
 #include <algorithm>
@@ -812,18 +813,26 @@ Maybe<int> pack28_cpp (QString const& token)
     {
       return special;
     }
-  if (trimmed.contains (QLatin1Char ('<')))
+
+  bool const bracketed = trimmed.startsWith (QLatin1Char ('<'))
+      && trimmed.endsWith (QLatin1Char ('>')) && trimmed.size () >= 3;
+  if (bracketed)
+    {
+      Maybe<int> n22 = ihashcall_cpp (trimmed, 22);
+      if (!n22.ok)
+        {
+          return {};
+        }
+      return {true, kNumTokens + n22.value};
+    }
+
+  if (trimmed.contains (QLatin1Char ('<')) || trimmed.contains (QLatin1Char ('>')))
     {
       return {};
     }
 
   CheckedCall checked = check_call (trimmed);
-  if (!checked.ok)
-    {
-      return {};
-    }
-
-  QString callsign = checked.base;
+  QString callsign = checked.ok ? checked.base : trimmed;
   if (trimmed.startsWith (QStringLiteral ("3DA0")) && trimmed.size () >= 7)
     {
       callsign = QStringLiteral ("3D0") + trimmed.mid (4, 3);
@@ -831,6 +840,16 @@ Maybe<int> pack28_cpp (QString const& token)
   if (trimmed.startsWith (QStringLiteral ("3X")) && trimmed.size () >= 6 && is_ascii_letter (trimmed[2]))
     {
       callsign = QStringLiteral ("Q") + trimmed.mid (2, 4);
+    }
+
+  if (!checked.ok)
+    {
+      Maybe<int> n22 = ihashcall_cpp (callsign, 22);
+      if (!n22.ok)
+        {
+          return {};
+        }
+      return {true, kNumTokens + n22.value};
     }
 
   int area = -1;
@@ -1123,15 +1142,51 @@ Maybe<PackedStandard> pack_standard_cpp (QString const& message)
           return {};
         }
     }
-  if (words[0].startsWith (QLatin1Char ('<')) || words[1].startsWith (QLatin1Char ('<')))
+
+  bool const hashed1 = words[0].startsWith (QLatin1Char ('<'))
+      && words[0].contains (QLatin1Char ('>'));
+  bool const hashed2 = words[1].startsWith (QLatin1Char ('<'))
+      && words[1].contains (QLatin1Char ('>'));
+
+  CheckedCall checked1 = check_call (words[0]);
+  CheckedCall checked2 = check_call (words[1]);
+  bool ok1 = checked1.ok;
+  bool ok2 = checked2.ok;
+
+  if (words[0] == QStringLiteral ("DE")
+      || words[0] == QStringLiteral ("QRZ")
+      || words[0] == QStringLiteral ("CQ")
+      || words[0].startsWith (QStringLiteral ("CQ_")))
+    {
+      ok1 = true;
+    }
+  if (hashed1 && words[0].indexOf (QLatin1Char ('>')) >= 4)
+    {
+      ok1 = true;
+    }
+  if (hashed2 && words[1].indexOf (QLatin1Char ('>')) >= 4)
+    {
+      ok2 = true;
+    }
+
+  if (!ok1 || !ok2)
     {
       return {};
     }
-  if (!has_supported_standard_compound (words[0]) || !has_supported_standard_compound (words[1]))
+  if ((!hashed1 && !has_supported_standard_compound (words[0]))
+      || (!hashed2 && !has_supported_standard_compound (words[1])))
     {
       return {};
     }
-  if (words.size () == 2 && words[1].contains (QLatin1Char ('/')))
+  if (hashed1 && words[1].contains (QLatin1Char ('/')))
+    {
+      return {};
+    }
+  if (hashed2 && words[0].contains (QLatin1Char ('/')))
+    {
+      return {};
+    }
+  if (words.size () == 2 && (!ok2 || words[1].indexOf (QLatin1Char ('/')) >= 1))
     {
       return {};
     }
@@ -1492,6 +1547,11 @@ Maybe<QByteArray> unpack77_cpp (MessageBits77 const& bits, int i3, int n3,
       int const icq = static_cast<int> (read_bits (bits, 73, 1));
       if (icq == 1)
         {
+          if (context)
+            {
+              context->addRecentCall (nonstandard.value);
+              context->saveHashCall (nonstandard.value);
+            }
           return {true, to_fixed_37 (QStringLiteral ("CQ %1").arg (nonstandard.value))};
         }
       QString call3 = context ? context->lookupHash12 (n12) : QStringLiteral ("<...>");
@@ -1519,6 +1579,7 @@ Maybe<QByteArray> unpack77_cpp (MessageBits77 const& bits, int i3, int n3,
       else if (context && iflip == 1)
         {
           context->addRecentCall (call1);
+          context->saveHashCall (call1);
           if (!received && context->hasMyCall () && n12 == context->hashMy12 ())
             {
               call2 = bracket_hash_call (context->myCall ());
@@ -1797,9 +1858,14 @@ Maybe<PackedMessage> pack_wspr_cpp (QString const& message)
   QStringList const words = split77_cpp (message);
   if (words.size () == 3 && is_grid4 (words[1]))
     {
+      CheckedCall checked = check_call (words[0]);
+      if (!checked.ok)
+        {
+          return {};
+        }
       bool dbm_ok = false;
       int dbm = words[2].toInt (&dbm_ok);
-      Maybe<int> n28 = pack28_cpp (words[0]);
+      Maybe<int> n28 = pack28_cpp (checked.base);
       if (!dbm_ok || !n28.ok)
         {
           return {};
@@ -3161,6 +3227,75 @@ EncodedMessage encodeFst4WithHint (QString const& message, bool wspr_hint, bool 
 EncodedMessage encodeFt8 (QString const& message)
 {
   return encode_ftx_common (message, false, 79, true, false);
+}
+
+EncodedMessage encodeJt4 (QString const& message, bool check_only)
+{
+  return decodium::legacy_jt::encodeJt4 (message, check_only);
+}
+
+EncodedMessage encodeJt65 (QString const& message, bool check_only)
+{
+  return decodium::legacy_jt::encodeJt65 (message, check_only);
+}
+
+EncodedMessage encodeJt9 (QString const& message, bool check_only)
+{
+  return decodium::legacy_jt::encodeJt9 (message, check_only);
+}
+
+EncodedMessage encodeQ65 (QString const& message, bool check_only)
+{
+  EncodedMessage encoded {};
+  QByteArray raw = decodium::legacy_jt::detail::fixed_ascii (message, 37);
+  if (!raw.isEmpty () && raw.front () == '@')
+    {
+      bool ok = false;
+      int const frequency = raw.mid (1, 4).trimmed ().toInt (&ok);
+      int const tone = ok ? frequency : 1000;
+      encoded.ok = true;
+      encoded.msgsent = QByteArray::number (tone).rightJustified (5, ' ') + " Hz";
+      encoded.msgsent = decodium::legacy_jt::detail::fixed_ascii (encoded.msgsent, 37);
+      encoded.tones = QVector<int> (kQ65ChannelSymbols, 0);
+      encoded.tones[0] = tone;
+      encoded.i3 = -1;
+      encoded.n3 = -1;
+      encoded.messageType = 0;
+      if (check_only)
+        {
+          encoded.tones.clear ();
+        }
+      return encoded;
+    }
+
+  std::array<int, kQ65PayloadSymbols> payload_values {};
+  std::array<int, kQ65CodewordSymbols> codeword_values {};
+  std::array<int, kQ65ChannelSymbols> tone_values {};
+  QByteArray packed_msgsent;
+  if (!encode_q65_message_cpp (raw, &packed_msgsent, &payload_values, &codeword_values, &tone_values))
+    {
+      return encoded;
+    }
+
+  encoded.ok = true;
+  encoded.msgsent = packed_msgsent;
+  encoded.i3 = -1;
+  encoded.n3 = -1;
+  encoded.messageType = 0;
+  if (!check_only)
+    {
+      encoded.tones = QVector<int> (kQ65ChannelSymbols, 0);
+      for (int i = 0; i < kQ65ChannelSymbols; ++i)
+        {
+          encoded.tones[i] = tone_values[static_cast<size_t> (i)];
+        }
+    }
+  return encoded;
+}
+
+EncodedMessage encodeWspr (QString const& message, bool check_only)
+{
+  return decodium::legacy_jt::encodeWspr (message, check_only);
 }
 
 EncodedMessage encodeMsk144 (QString const& message, bool check_only)

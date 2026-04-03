@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include "Detector/JT9FastDecoder.hpp"
+
 namespace decodium
 {
 namespace jt9fast
@@ -44,6 +46,9 @@ public:
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
+
+private:
+  FastDecodeState state_;
 };
 
 }

@@ -1,5 +1,76 @@
 # Changelog / Registro Modifiche
 
+## [1.6.0] - 2026-04-03
+
+### English
+
+Release focused on promoting the legacy JT runtime further into native C++, fixing special/non-standard callsign reply handling, hardening GCC/Linux portability, and extending the published release set to Linux `aarch64` AppImage alongside the existing macOS and Linux `x86_64` outputs.
+
+#### Added
+
+- Added native C++ JT65 runtime orchestration, JT65 DSP/IO helpers, JT9 fast/wide decoder building blocks, and broader compare/regression utilities for the continuing legacy JT migration.
+- Added Linux `aarch64` AppImage release support using a Debian Trixie ARM64 build path and GitHub Actions ARM runner coverage.
+- Added dedicated regression coverage for non-standard/special-event callsign reply flows and additional portability checks in the compare utilities.
+
+#### Changed
+
+- JT65 active runtime now runs through the promoted native C++ path, and the legacy JT65 Fortran active-path sources have been removed from the active build.
+- `build-arm.sh` is now version-aware, CI-friendly, and excludes `build-arm-output` from source staging; `build-arm-output/` is ignored permanently.
+- Linux release engineering now publishes both `x86_64` and `aarch64` AppImages, while macOS release targets remain Tahoe arm64, Sequoia arm64, Sequoia x86_64, and Monterey x86_64 best effort.
+- Local version metadata, workflow defaults, readmes, docs, release notes, package description, and GitHub release body are aligned to semantic version `1.6.0`.
+
+#### Fixed
+
+- Fixed replies to non-standard or special-event callsigns that were incorrectly rejected with `*** bad message ***`.
+- Fixed the GCC 14 false-positive `stringop-overflow` build break in `LegacyDspIoHelpers.cpp` without regressing macOS Clang.
+- Fixed GCC/libstdc++ portability failures in `jt9_wide_stage_compare.cpp` and `legacy_wsprio_compare.cpp`.
+
+### Italiano
+
+Release focalizzata nel promuovere ulteriormente il runtime JT legacy verso il C++ nativo, nel correggere la gestione delle risposte verso callsign speciali/non standard, nel rafforzare la portabilita' GCC/Linux e nell'estendere il set release pubblicato anche alla AppImage Linux `aarch64`, oltre agli output macOS e Linux `x86_64` gia' esistenti.
+
+#### Aggiunto
+
+- Aggiunti orchestrazione runtime JT65 nativa C++, helper DSP/IO JT65, blocchi decoder JT9 fast/wide e una copertura compare/regression piu' ampia per la migrazione JT legacy ancora in corso.
+- Aggiunto supporto release Linux AppImage `aarch64` tramite build path ARM64 basato su Debian Trixie e copertura runner ARM GitHub Actions.
+- Aggiunta copertura di regressione dedicata per i flussi reply verso callsign non standard/special-event e ulteriori controlli di portabilita' nelle utility compare.
+
+#### Modificato
+
+- Il runtime attivo JT65 gira ora sul path promosso nativo C++, e i vecchi sorgenti Fortran JT65 del path attivo sono stati rimossi dal build attivo.
+- `build-arm.sh` e' ora sensibile alla versione, adatto alla CI, ed esclude `build-arm-output` dallo staging dei sorgenti; `build-arm-output/` e' ignorata in modo permanente.
+- L'ingegneria release Linux pubblica ora sia AppImage `x86_64` sia `aarch64`, mentre i target macOS restano Tahoe arm64, Sequoia arm64, Sequoia x86_64 e Monterey x86_64 best effort.
+- Metadati versione locali, default workflow, readme, documentazione, note release, package description e body GitHub sono allineati alla semver `1.6.0`.
+
+#### Corretto
+
+- Corrette le risposte verso callsign non standard o special-event che venivano rigettate con `*** bad message ***`.
+- Corretto il falso positivo GCC 14 `stringop-overflow` in `LegacyDspIoHelpers.cpp` senza regressioni su macOS Clang.
+- Corrette le rotture di portabilita' GCC/libstdc++ in `jt9_wide_stage_compare.cpp` e `legacy_wsprio_compare.cpp`.
+
+### Espanol
+
+Release centrada en promover aun mas el runtime JT legacy hacia C++ nativo, corregir la gestion de respuestas a indicativos especiales/no estandar, reforzar la portabilidad GCC/Linux y ampliar el conjunto release publicado tambien a la AppImage Linux `aarch64`, ademas de las salidas macOS y Linux `x86_64` ya existentes.
+
+#### Anadido
+
+- Anadidas orquestacion runtime JT65 nativa C++, helpers DSP/IO JT65, bloques decoder JT9 fast/wide y una cobertura compare/regression mas amplia para la migracion JT legacy que continua.
+- Anadido soporte release Linux AppImage `aarch64` mediante camino de build ARM64 basado en Debian Trixie y cobertura runner ARM de GitHub Actions.
+- Anadida cobertura de regresion dedicada para los flujos reply a indicativos no estandar/special-event y controles adicionales de portabilidad en las utilidades compare.
+
+#### Cambios
+
+- El runtime activo JT65 corre ahora por el camino promovido nativo C++, y las viejas fuentes Fortran JT65 del camino activo se han eliminado del build activo.
+- `build-arm.sh` es ahora sensible a la version, apto para CI, y excluye `build-arm-output` del staging de fuentes; `build-arm-output/` queda ignorado permanentemente.
+- La ingenieria release Linux publica ahora AppImage `x86_64` y `aarch64`, mientras los targets macOS siguen siendo Tahoe arm64, Sequoia arm64, Sequoia x86_64 y Monterey x86_64 best effort.
+- Metadatos locales de version, defaults de workflow, readmes, documentacion, notas release, package description y body GitHub quedan alineados con la semver `1.6.0`.
+
+#### Corregido
+
+- Corregidas las respuestas a indicativos no estandar o special-event que se rechazaban con `*** bad message ***`.
+- Corregido el falso positivo GCC 14 `stringop-overflow` en `LegacyDspIoHelpers.cpp` sin romper macOS Clang.
+- Corregidos los fallos de portabilidad GCC/libstdc++ en `jt9_wide_stage_compare.cpp` y `legacy_wsprio_compare.cpp`.
+
 ## [1.5.9] - 2026-04-01
 
 ### English

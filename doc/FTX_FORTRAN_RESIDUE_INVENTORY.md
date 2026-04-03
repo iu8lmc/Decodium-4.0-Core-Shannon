@@ -150,7 +150,7 @@ Runtime notes:
 - shared decode-side helpers `get_crc24`, `get_fst4_bitmetrics` and `get_fst4_bitmetrics2` are now native in [Detector/FtxFst4Core.cpp](/Users/salvo/Desktop/ft2/decodium3-build/Detector/FtxFst4Core.cpp)
 - the LDPC/OSD decode core and Doppler spread helpers are now native in [Detector/FtxFst4Ldpc.cpp](/Users/salvo/Desktop/ft2/decodium3-build/Detector/FtxFst4Ldpc.cpp)
 - the remaining shared DSP helpers used by the worker are now native in [Detector/FtxSharedDsp.cpp](/Users/salvo/Desktop/ft2/decodium3-build/Detector/FtxSharedDsp.cpp)
-- the legacy `multimode_decoder` path in [lib/decoder.f90](/Users/salvo/Desktop/ft2/decodium3-build/lib/decoder.f90) now routes FST4/FST4W through the native bridge `ftx_fst4_decode_and_emit_params_c`
+- the old `multimode_decoder` wrapper has been retired from the tree; FST4/FST4W now enter through the native bridge `ftx_fst4_decode_and_emit_params_c`
 
 Non-runtime residue:
 

@@ -1,0 +1,62 @@
+# Use Debian Trixie as the base image
+FROM debian:trixie
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gfortran \
+    cmake \
+    git \
+    pkg-config \
+    ca-certificates \
+    file \
+    libfftw3-dev \
+    libhamlib-dev \
+    libhamlib-utils \
+    libusb-1.0-0-dev \
+    libudev-dev \
+    libboost-log-dev \
+    qtbase5-dev \
+    qttools5-dev \
+    qttools5-dev-tools \
+    libqt5serialport5-dev \
+    qtmultimedia5-dev \
+    libqt5websockets5-dev \
+    libqt5sql5-sqlite \
+    libqt5multimedia5-plugins \
+    libqt5svg5-dev \
+    wget \
+    curl \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install AppImage tools (ARM64)
+# We extract them to avoid FUSE issues in Docker
+RUN mkdir -p /opt/appimage-tools && cd /opt/appimage-tools && \
+    wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-aarch64.AppImage && \
+    chmod +x linuxdeploy-aarch64.AppImage && \
+    ./linuxdeploy-aarch64.AppImage --appimage-extract && \
+    mv squashfs-root /opt/linuxdeploy && \
+    ln -s /opt/linuxdeploy/AppRun /usr/local/bin/linuxdeploy && \
+    \
+    wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-qt-aarch64.AppImage && \
+    chmod +x linuxdeploy-plugin-qt-aarch64.AppImage && \
+    ./linuxdeploy-plugin-qt-aarch64.AppImage --appimage-extract && \
+    mv squashfs-root /opt/linuxdeploy-plugin-qt && \
+    ln -s /opt/linuxdeploy-plugin-qt/AppRun /usr/local/bin/linuxdeploy-plugin-qt && \
+    \
+    wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage && \
+    chmod +x appimagetool-aarch64.AppImage && \
+    ./appimagetool-aarch64.AppImage --appimage-extract && \
+    mv squashfs-root /opt/appimagetool && \
+    ln -s /opt/appimagetool/AppRun /usr/local/bin/appimagetool && \
+    rm *.AppImage
+
+# Set the working directory
+WORKDIR /src
+
+# Default command
+CMD ["/bin/bash"]

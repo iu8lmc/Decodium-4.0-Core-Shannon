@@ -1,6 +1,9 @@
 // -*- Mode: C++ -*-
 #include "Detector/LegacyJtDecodeWorker.hpp"
 
+#include "Detector/JT65Decoder.hpp"
+#include "Detector/JT9WideDecoder.hpp"
+
 #include <algorithm>
 #include <cstring>
 
@@ -54,11 +57,23 @@ LegacyJtDecodeWorker::LegacyJtDecodeWorker (QObject * parent)
 
 void LegacyJtDecodeWorker::decode (DecodeRequest const& request)
 {
+  if (request.mode == "JT9" && request.nsubmode >= 1 && !request.ss.isEmpty ())
+    {
+      Q_EMIT decodeReady (request.serial, decodium::jt9wide::decode_wide_jt9 (request));
+      return;
+    }
+
+  if (request.mode == "JT65")
+    {
+      QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+      Q_EMIT decodeReady (request.serial, decodium::jt65::decode_async_jt65 (request, &m_jt65State));
+      return;
+    }
+
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
 
   int nmode = 0;
   if (request.mode == "JT4") nmode = 4;
-  if (request.mode == "JT65") nmode = 65;
   if (request.mode == "JT9") nmode = 9;
   if (nmode == 0) {
     Q_EMIT decodeReady (request.serial, {});

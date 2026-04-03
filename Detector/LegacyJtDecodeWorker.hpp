@@ -2,6 +2,8 @@
 #ifndef LEGACYJTDECODEWORKER_HPP
 #define LEGACYJTDECODEWORKER_HPP
 
+#include "Detector/JT65Decoder.hpp"
+
 #include <QObject>
 #include <QByteArray>
 #include <QStringList>
@@ -59,6 +61,9 @@ public:
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
+
+private:
+  decodium::jt65::AverageState m_jt65State;
 };
 
 }

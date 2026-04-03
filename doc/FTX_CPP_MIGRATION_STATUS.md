@@ -18,7 +18,7 @@ Current default:
 
 What is still Fortran in the active FT8 path:
 
-- the app/runtime decoder path no longer depends on the old `ft8var`, `ft8_core`, or `lib/decoder.f90` FT8 wrapper path
+- the app/runtime decoder path no longer depends on the old `ft8var`, `ft8_core`, or the retired `multimode_decoder` wrapper path
 - no FT8-specific Fortran remains on the promoted runtime path
 - `lib/rtty_spec.f90` is no longer part of the build and has been replaced by `utils/rtty_spec.cpp`
 
@@ -67,7 +67,7 @@ Current default:
 - the production decode path is native C++:
   - `Detector/FT2DecodeWorker.cpp` calls `ftx_ft2_async_decode_stage7_c`
   - `Detector/FtxFt2Stage7.cpp` owns orchestration, LDPC invocation, result formatting and emission
-  - `lib/decoder.f90` no longer carries FT2-specific algorithmic logic and dispatches native FTX modes through `ftx_native_decode_and_emit_params_c`
+- the old `multimode_decoder` wrapper has been removed from the tree; native FTX modes dispatch through `ftx_native_decode_and_emit_params_c`
 
 What is still Fortran in or around the active FT2 path:
 
@@ -93,7 +93,7 @@ Current default:
   - `Detector/Q65DecodeWorker.cpp` calls `ftx_q65_async_decode_c`
   - `Detector/FtxQ65Decoder.cpp` now owns the active orchestration previously carried by `lib/q65_decode.f90`, `lib/qra/q65/q65.f90` and `lib/qra/q65/q65_loops.f90`
 - the active build no longer compiles `lib/qra/q65/q65.f90`
-- `lib/decoder.f90` no longer carries a Q65 decoder path; native FTX dispatch covers Q65 alongside FT8/FT4/FT2
+- the old `multimode_decoder` wrapper has been removed from the tree; native FTX dispatch covers Q65 alongside FT8/FT4/FT2
 - the active shared Q65 helpers used by the native decoder are now native C++ in `Detector/FtxQ65Core.cpp`
 
 What is still Fortran in or around the active Q65 path:
@@ -176,7 +176,7 @@ What is still Fortran in the active FST4 path:
 
 - no active FST4/FST4W runtime Fortran remains:
   - `Detector/FST4DecodeWorker.cpp` owns the active worker orchestration and the compatibility export `fst4_async_decode_`
-  - `Detector/FST4DecodeWorker.cpp` also owns the native emit bridge `ftx_fst4_decode_and_emit_params_c` used by the legacy `multimode_decoder`
+  - `Detector/FST4DecodeWorker.cpp` also owns the native emit bridge `ftx_fst4_decode_and_emit_params_c` that replaced the removed legacy `multimode_decoder` wrapper
   - candidate search, de-duplication, downsample, sync search, async collection and the FST4-specific baseline helper are native in `Detector/FST4DecodeWorker.cpp`
   - shared FST4 decode-side helpers `get_crc24`, `get_fst4_bitmetrics` and `get_fst4_bitmetrics2` are native in `Detector/FtxFst4Core.cpp`
   - the FST4 LDPC/OSD decode core, the legacy `decode240_*`/`osd*` compatibility exports, and the Doppler-spread helper are native in `Detector/FtxFst4Ldpc.cpp`

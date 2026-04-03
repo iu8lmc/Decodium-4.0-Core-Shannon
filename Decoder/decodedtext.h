@@ -68,7 +68,7 @@ public:
 
 private:
   // These define the columns in the decoded text where fields are to be found.
-  // We rely on these columns being the same in the fortran code (lib/decoder.f90) that formats the decoded text
+  // We rely on these columns being the same across the native and legacy text formatters.
   enum Columns {column_time    = 0,
       column_snr     = 5,
       column_dt      = 9,

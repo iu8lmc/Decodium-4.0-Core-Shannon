@@ -13,7 +13,7 @@ The original FT2 in-process migration plan is complete.
   - LDPC invocation
   - decode orchestration
   - result formatting and `decoded.txt` emission
-- `lib/decoder.f90` no longer contains FT2-specific algorithmic logic; it dispatches native FTX modes through the shared native entrypoint `ftx_native_decode_and_emit_params_c`
+- the old `multimode_decoder` wrapper has been retired from the tree; native FTX modes enter through the shared native entrypoint `ftx_native_decode_and_emit_params_c`
 - FT2 TX helpers are native C++:
   - `Modulator/FtxMessageEncoder.cpp`: `genft2_`, `get_ft2_tones_from_77bits_`
   - `Modulator/FtxWaveformGenerator.cpp`: `gen_ft2wave_`, `foxgenft2_`

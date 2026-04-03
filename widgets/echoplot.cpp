@@ -1,4 +1,5 @@
 #include "echoplot.h"
+#include "PlotLegacyHelpers.hpp"
 #include "commons.h"
 #include <math.h>
 #include <QPainter>
@@ -115,9 +116,8 @@ void EPlotter::draw()                           //draw()
   }
   if(m_smooth>0) {
     for(i=0; i<m_smooth; i++) {
-      int n4096=4096;
-      smo121_(blue,&n4096);
-      smo121_(red,&n4096);
+      decodium::plot::smooth121_inplace (blue, 4096);
+      decodium::plot::smooth121_inplace (red, 4096);
     }
   }
 

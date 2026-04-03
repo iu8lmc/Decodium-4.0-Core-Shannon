@@ -290,10 +290,20 @@ set (wsjt_qt_CXXSRCS
   Detector/FtxQ65Frontend.cpp
   Detector/FtxMap65Q65.cpp
   Detector/FtxQ65Support.cpp
+  Detector/LegacyDspIoHelpers.cpp
+  Detector/JT65Decoder.cpp
+  Detector/JT9FastDecoder.cpp
+  Detector/JT9FastHelpers.cpp
+  Detector/JT9WideDecoder.cpp
   Modulator/FtxWaveformGenerator.cpp
   Modulator/FtxMessageEncoder.cpp
+  widgets/LegacyUiHelpers.cpp
+  widgets/PlotLegacyHelpers.cpp
   otpgenerator.cpp
   )
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties (Detector/LegacyDspIoHelpers.cpp PROPERTIES COMPILE_FLAGS "-Wno-error=stringop-overflow -Wno-error=stringop-overread")
+endif ()
 
 set (wsjt_qtmm_CXXSRCS
   Audio/BWFFile.cpp
@@ -316,9 +326,7 @@ set (wsjtx_CXXSRCS
   lib/wsprd/wsprd_embedded.c
   lib/wsprd/wsprsim_utils.c
   lib/wsprd/wsprd_utils.c
-  lib/wsprd/fano.c
   lib/wsprd/jelinek.c
-  lib/wsprd/tab.c
   widgets/logqso.cpp
   widgets/displaytext.cpp
   Decoder/decodedtext.cpp
@@ -414,7 +422,6 @@ set (wsjt_FSRCS
   lib/iso_c_utilities.f90
   lib/jt4.f90
   lib/jt4_decode.f90
-  lib/jt65_decode.f90
   lib/jt65_mod.f90
   lib/jt65_mod6.f90 #ft8md
   lib/get_q3list.f90
@@ -455,16 +462,12 @@ set (wsjt_FSRCS
   lib/coord.f90
   lib/db.f90
   lib/decode4.f90
-  lib/decode65a.f90
-  lib/decode65b.f90
   lib/decode9w.f90
   lib/decode_echo.f90
-  lib/decoder.f90
   lib/env_module.f90
   lib/deep4.f90
   lib/deg2grid.f90
   lib/degrade_snr.f90
-  lib/demod64a.f90
   lib/downsam9.f90
   lib/echosim.f90
   lib/echo_snr.f90
@@ -473,7 +476,6 @@ set (wsjt_FSRCS
   lib/encode_128_90.f90
   lib/entail.f90
   lib/ephem.f90
-  lib/extract.f90
   lib/extract4.f90
   lib/extractmessage77.f90
   lib/fano232.f90
@@ -511,7 +513,6 @@ set (wsjt_FSRCS
   lib/getmet4.f90
   lib/gfsk_pulse.f90
   lib/graycode.f90
-  lib/graycode65.f90
   lib/grayline.f90
   lib/grid2deg.f90
   lib/hash.f90
@@ -520,7 +521,6 @@ set (wsjt_FSRCS
   lib/indexx.f90
   lib/init_random_seed.f90
   lib/interleave4.f90
-  lib/interleave63.f90
   lib/interleave9.f90
   lib/inter_wspr.f90
   lib/jplsubs.f
@@ -550,7 +550,6 @@ set (wsjt_FSRCS
   lib/save_echo_params.f90
   lib/sec0.f90
   lib/sec_midn.f90
-  lib/setup65.f90
   lib/sh65.f90
   lib/sh65snr.f90
   lib/slasubs.f
@@ -566,9 +565,7 @@ set (wsjt_FSRCS
   lib/sun.f90
   lib/symspec.f90
   lib/symspec2.f90
-  lib/symspec65.f90
   lib/sync4.f90
-  lib/sync65.f90
   lib/sync9.f90
   lib/sync9f.f90
   lib/sync9w.f90
@@ -580,7 +577,6 @@ set (wsjt_FSRCS
   lib/update_recent_calls.f90
   lib/wav11.f90
   lib/wav12.f90
-  lib/xcor.f90
   lib/xcor4.f90
   lib/wqdecode.f90
   lib/wqencode.f90
@@ -619,6 +615,8 @@ set (wsjt_CSRCS
   lib/init_random_seed.c
   lib/ldpc32_table.c
   lib/wsprd/nhash.c
+  lib/wsprd/fano.c
+  lib/wsprd/tab.c
   lib/tab.c
   lib/tmoonsub.c
   lib/usleep.c
@@ -798,7 +796,6 @@ endif (APPLE)
 set_source_files_properties (${WSJTX_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
 # suppress intransigent compiler diagnostics
-set_source_files_properties (lib/decoder.f90 PROPERTIES COMPILE_FLAGS "-Wno-unused-dummy-argument")
 set_source_files_properties (lib/filbig.f90 PROPERTIES COMPILE_FLAGS "-Wno-aliasing")
 
 ## disable Qt trace and warning messages from release configurations
@@ -1219,20 +1216,94 @@ target_link_libraries (q65params wsjt_qt wsjt_cxx)
 add_executable (jt49sim lib/jt49sim.f90)
 target_link_libraries (jt49sim wsjt_fort wsjt_cxx)
 
+add_executable (jt9sim lib/jt9sim.f90)
+target_link_libraries (jt9sim wsjt_fort wsjt_cxx)
+
 add_executable (rtty_spec utils/rtty_spec.cpp)
 link_wsjtx_cycle_group (rtty_spec wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (jt65code lib/jt65code.f90)
 target_link_libraries (jt65code wsjt_fort wsjt_cxx)
 
+add_executable (jt65_compare utils/jt65_compare.cpp)
+link_wsjtx_cycle_group (jt65_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt65_symspec_compare utils/jt65_symspec_compare.cpp)
+link_wsjtx_cycle_group (jt65_symspec_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt65_sync_compare
+  utils/jt65_sync_compare.cpp)
+link_wsjtx_cycle_group (jt65_sync_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt65_extract_primitives_compare
+  utils/jt65_extract_primitives_compare.cpp)
+link_wsjtx_cycle_group (jt65_extract_primitives_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt65_extract_compare
+  utils/jt65_extract_compare.cpp)
+link_wsjtx_cycle_group (jt65_extract_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt65_decode65b_compare
+  utils/jt65_decode65b_compare.cpp)
+link_wsjtx_cycle_group (jt65_decode65b_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt65_decode65a_compare
+  utils/jt65_decode65a_compare.cpp)
+link_wsjtx_cycle_group (jt65_decode65a_compare wsjt_qt wsjt_cxx wsjt_fort)
+
 add_executable (jt9code lib/jt9code.f90)
 target_link_libraries (jt9code wsjt_fort wsjt_cxx)
+
+add_executable (jt9_compare utils/jt9_compare.cpp)
+link_wsjtx_cycle_group (jt9_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt9_wide_compare utils/jt9_wide_compare.cpp)
+link_wsjtx_cycle_group (jt9_wide_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt9_wide_stage_compare utils/jt9_wide_stage_compare.cpp)
+link_wsjtx_cycle_group (jt9_wide_stage_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (jt4_compare utils/jt4_compare.cpp)
+link_wsjtx_cycle_group (jt4_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (wspr_compare utils/wspr_compare.cpp)
+link_wsjtx_cycle_group (wspr_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (txwave_compare utils/txwave_compare.cpp)
+link_wsjtx_cycle_group (txwave_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (plot_compare utils/plot_compare.cpp)
+link_wsjtx_cycle_group (plot_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (indexx_compare utils/indexx_compare.cpp)
+link_wsjtx_cycle_group (indexx_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (legacy_dspio_compare utils/legacy_dspio_compare.cpp)
+link_wsjtx_cycle_group (legacy_dspio_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (legacy_spectrum_compare utils/legacy_spectrum_compare.cpp)
+link_wsjtx_cycle_group (legacy_spectrum_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (legacy_echo_compare utils/legacy_echo_compare.cpp)
+link_wsjtx_cycle_group (legacy_echo_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (legacy_wsprio_compare utils/legacy_wsprio_compare.cpp)
+link_wsjtx_cycle_group (legacy_wsprio_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (fast9_stage_compare utils/fast9_stage_compare.cpp)
+link_wsjtx_cycle_group (fast9_stage_compare wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (fast9_decode_compare utils/fast9_decode_compare.cpp)
+link_wsjtx_cycle_group (fast9_decode_compare wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (wsprcode lib/wsprcode/wsprcode.f90 lib/wsprcode/nhash.c)
 target_link_libraries (wsprcode wsjt_fort wsjt_cxx)
 	       
 add_executable (encode77 utils/encode77.cpp)
 link_wsjtx_cycle_group (encode77 wsjt_qt wsjt_cxx wsjt_fort)
+
+add_executable (nonstandard_call_compare utils/nonstandard_call_compare.cpp)
+link_wsjtx_cycle_group (nonstandard_call_compare wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (hash22calc utils/hash22calc.cpp)
 link_wsjtx_cycle_group (hash22calc wsjt_qt wsjt_cxx wsjt_fort)
@@ -1863,7 +1934,7 @@ endif ()
 #
 set (CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_SOURCE_DIR}/package_description.txt")
 set (CPACK_MONOLITHIC_INSTALL 1)
-set (CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
+set (CPACK_PACKAGE_NAME "decodium")
 set (CPACK_PACKAGE_VERSION_MAJOR ${FORK_RELEASE_VERSION_MAJOR})
 set (CPACK_PACKAGE_VERSION_MINOR ${FORK_RELEASE_VERSION_MINOR})
 set (CPACK_PACKAGE_VERSION_PATCH ${FORK_RELEASE_VERSION_PATCH})
