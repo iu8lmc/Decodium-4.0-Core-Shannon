@@ -810,7 +810,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
               break;
 
             case Qt::TextAlignmentRole:
-              item = Qt::AlignHCenter + Qt::AlignVCenter;
+              item = int(Qt::AlignHCenter | Qt::AlignVCenter);
               break;
             }
           break;
@@ -831,7 +831,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
               break;
 
             case Qt::TextAlignmentRole:
-              item = Qt::AlignHCenter + Qt::AlignVCenter;
+              item = int(Qt::AlignHCenter | Qt::AlignVCenter);
               break;
             }
           break;
@@ -859,7 +859,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
               break;
 
             case Qt::TextAlignmentRole:
-              item = Qt::AlignRight + Qt::AlignVCenter;
+              item = int(Qt::AlignRight | Qt::AlignVCenter);
               break;
             }
           break;
@@ -892,7 +892,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
               break;
 
             case Qt::TextAlignmentRole:
-              item = Qt::AlignRight + Qt::AlignVCenter;
+              item = int(Qt::AlignRight | Qt::AlignVCenter);
               break;
             }
             break;
@@ -913,7 +913,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
                 break;
 
                 case Qt::TextAlignmentRole:
-                  item = Qt::AlignLeft + Qt::AlignVCenter;
+                  item = int(Qt::AlignLeft | Qt::AlignVCenter);
                 break;
               }
             break;
@@ -934,7 +934,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
                 break;
 
                 case Qt::TextAlignmentRole:
-                  item = Qt::AlignLeft + Qt::AlignVCenter;
+                  item = int(Qt::AlignLeft | Qt::AlignVCenter);
                 break;
               }
           break;
@@ -968,7 +968,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
                 break;
 
                 case Qt::TextAlignmentRole:
-                  item = Qt::AlignLeft + Qt::AlignVCenter;
+                  item = int(Qt::AlignLeft | Qt::AlignVCenter);
                 break;
               }
           break;
@@ -1002,7 +1002,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
                 break;
 
                 case Qt::TextAlignmentRole:
-                  item = Qt::AlignLeft + Qt::AlignVCenter;
+                  item = int(Qt::AlignLeft | Qt::AlignVCenter);
                 break;
               }
           break;
@@ -1025,7 +1025,7 @@ QVariant FrequencyList_v2_101::impl::data (QModelIndex const& index, int role) c
                 break;
 
                 case Qt::TextAlignmentRole:
-                  item = Qt::AlignHCenter + Qt::AlignVCenter;
+                  item = int(Qt::AlignHCenter | Qt::AlignVCenter);
                 break;
 
                 case Qt::CheckStateRole:

@@ -108,7 +108,7 @@ std::string trim_block (char const* data, size_t width)
 void fill_fixed_chars (char* dest, int width, std::string const& source)
 {
   std::fill_n (dest, width, ' ');
-  int const count = std::min (width, static_cast<int> (source.size ()));
+  int const count = std::min (static_cast<int>(width), static_cast<int>(static_cast<int> (source.size ())));
   if (count > 0)
     {
       std::memcpy (dest, source.data (), static_cast<size_t> (count));
@@ -118,7 +118,7 @@ void fill_fixed_chars (char* dest, int width, std::string const& source)
 void fill_c_string_13 (char dest[13], std::string const& text)
 {
   std::fill_n (dest, 13, '\0');
-  int const count = std::min (12, static_cast<int> (text.size ()));
+  int const count = std::min (static_cast<int>(12), static_cast<int>(static_cast<int> (text.size ())));
   if (count > 0)
     {
       std::memcpy (dest, text.data (), static_cast<size_t> (count));
@@ -814,7 +814,7 @@ void run_ft4_decode (short const* iwave,
                   int const count = kFt4Nn * kFt4Nss + 2 * ibest;
                   if (count > 0 && start_dest < static_cast<int> (cd.size ()))
                     {
-                      std::copy_n (cb.begin (), std::min (count, static_cast<int> (cd.size ()) - start_dest),
+                      std::copy_n (cb.begin (), std::min (static_cast<int>(count), static_cast<int>(static_cast<int> (cd.size ())) - start_dest),
                                    cd.begin () + start_dest);
                     }
                 }

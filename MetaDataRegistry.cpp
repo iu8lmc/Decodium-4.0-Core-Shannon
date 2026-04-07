@@ -53,8 +53,11 @@ void register_types ()
   item_editor_factory->registerEditor (qMetaTypeId<QDateTime> (), new QStandardItemEditorCreator<DateTimeEdit> ());
 
   // V101 Frequency list model
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<FrequencyList_v2_101::Item> ("Item_v2_101");
+#endif
   QMetaType::registerConverter<FrequencyList_v2_101::Item, QString> (&FrequencyList_v2_101::Item::toString);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<FrequencyList_v2_101::FrequencyItems> ("FrequencyItems_v2_101");
 
   // V100 Frequency list model
@@ -64,40 +67,55 @@ void register_types ()
   // defunct old versions
   qRegisterMetaTypeStreamOperators<FrequencyList::Item> ("Item");
   qRegisterMetaTypeStreamOperators<FrequencyList::FrequencyItems> ("FrequencyItems");
+#endif
 
   // Audio device
   qRegisterMetaType<AudioDevice::Channel> ("AudioDevice::Channel");
 
   // Configuration
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<Configuration::DataMode> ("Configuration::DataMode");
   qRegisterMetaTypeStreamOperators<Configuration::Type2MsgGen> ("Configuration::Type2MsgGen");
+#endif
 
   // Station details
   qRegisterMetaType<StationList::Station> ("Station");
   QMetaType::registerConverter<StationList::Station, QString> (&StationList::Station::toString);
   qRegisterMetaType<StationList::Stations> ("Stations");
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<StationList::Station> ("Station");
   qRegisterMetaTypeStreamOperators<StationList::Stations> ("Stations");
+#endif
 
   // Transceiver
   qRegisterMetaType<Transceiver::TransceiverState> ("Transceiver::TransceiverState");
 
   // Transceiver factory
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<TransceiverFactory::DataBits> ("TransceiverFactory::DataBits");
   qRegisterMetaTypeStreamOperators<TransceiverFactory::StopBits> ("TransceiverFactory::StopBits");
   qRegisterMetaTypeStreamOperators<TransceiverFactory::Handshake> ("TransceiverFactory::Handshake");
   qRegisterMetaTypeStreamOperators<TransceiverFactory::PTTMethod> ("TransceiverFactory::PTTMethod");
   qRegisterMetaTypeStreamOperators<TransceiverFactory::TXAudioSource> ("TransceiverFactory::TXAudioSource");
   qRegisterMetaTypeStreamOperators<TransceiverFactory::SplitMode> ("TransceiverFactory::SplitMode");
+#endif
 
   // Waterfall palette
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<WFPalette::Colours> ("Colours");
+#endif
 
   // IARURegions
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<IARURegions::Region> ("IARURegions::Region");
+#endif
 
   // DecodeHighlightingModel
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<DecodeHighlightingModel::HighlightInfo> ("HighlightInfo");
+#endif
   QMetaType::registerConverter<DecodeHighlightingModel::HighlightInfo, QString> (&DecodeHighlightingModel::HighlightInfo::toString);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   qRegisterMetaTypeStreamOperators<DecodeHighlightingModel::HighlightItems> ("HighlightItems");
+#endif
 }

@@ -427,7 +427,9 @@ void FileDownload::download(QUrl qurl)
 
   LOG_INFO(QString{"FileDownload [%1]: Starting download of %2 to %3"}.arg(user_agent_).arg(source_url_).arg(destination_filename_));
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   request_.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+#endif
 #if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
   request_.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                         QNetworkRequest::NoLessSafeRedirectPolicy);

@@ -11,7 +11,7 @@
 
 namespace
 {
-  QString trim_single_trailing_newline (QString text)
+  [[maybe_unused]] QString trim_single_trailing_newline (QString text)
   {
     if (text.endsWith ('\n'))
       {

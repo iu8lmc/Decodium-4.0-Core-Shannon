@@ -1,4 +1,103 @@
 #include "helper_functions.h"
+#include <cmath>
+
+// ============================================================
+// GAP 4 — C13: Maidenhead grid conversion and Haversine dist
+// ============================================================
+
+static const double DEG2RAD = M_PI / 180.0;
+static const double RAD2DEG = 180.0 / M_PI;
+
+// grid2deg: parse 4 or 6-char Maidenhead locator → lon/lat in degrees
+// Returns false if grid is invalid
+bool grid2deg(const QString& grid, double& lon, double& lat)
+{
+    QString g = grid.toUpper().trimmed();
+    if (g.length() < 4) return false;
+
+    // Field: A-R (18 fields, each 20° lon, 10° lat)
+    int F0 = g[0].unicode() - 'A';
+    int F1 = g[1].unicode() - 'A';
+    if (F0 < 0 || F0 > 17 || F1 < 0 || F1 > 17) return false;
+
+    // Square: 0-9 (each 2° lon, 1° lat)
+    if (!g[2].isDigit() || !g[3].isDigit()) return false;
+    int S0 = g[2].digitValue();
+    int S1 = g[3].digitValue();
+
+    lon = F0 * 20.0 + S0 * 2.0 - 180.0;
+    lat = F1 * 10.0 + S1 * 1.0 -  90.0;
+
+    // Sub-square: a-x (each 5'/lon = 0.0833°, 2.5'/lat = 0.0417°)
+    if (g.length() >= 6) {
+        int SS0 = g[4].unicode() - 'A';
+        int SS1 = g[5].unicode() - 'A';
+        if (SS0 >= 0 && SS0 < 24 && SS1 >= 0 && SS1 < 24) {
+            lon += SS0 * (5.0 / 60.0) + (2.5 / 60.0);
+            lat += SS1 * (2.5 / 60.0) + (1.25 / 60.0);
+        }
+    } else {
+        // Centre of the square
+        lon += 1.0;
+        lat += 0.5;
+    }
+    return true;
+}
+
+// deg2grid: lon/lat → 6-char Maidenhead locator
+QString deg2grid(double lon, double lat)
+{
+    lon += 180.0;
+    lat +=  90.0;
+    // clamp
+    if (lon < 0)    lon = 0;
+    if (lon >= 360) lon = 359.999;
+    if (lat < 0)    lat = 0;
+    if (lat >= 180) lat = 179.999;
+
+    int F0 = (int)(lon / 20);
+    int F1 = (int)(lat / 10);
+    lon -= F0 * 20.0;
+    lat -= F1 * 10.0;
+    int S0 = (int)(lon / 2);
+    int S1 = (int)(lat / 1);
+    lon -= S0 * 2.0;
+    lat -= S1 * 1.0;
+    int SS0 = (int)(lon / (5.0 / 60.0));
+    int SS1 = (int)(lat / (2.5 / 60.0));
+    if (SS0 > 23) SS0 = 23;
+    if (SS1 > 23) SS1 = 23;
+
+    QString g;
+    g += QChar('A' + F0);
+    g += QChar('A' + F1);
+    g += QChar('0' + S0);
+    g += QChar('0' + S1);
+    g += QChar('a' + SS0);
+    g += QChar('a' + SS1);
+    return g;
+}
+
+// azdist: Haversine great-circle distance (km) + initial bearing (degrees from N)
+double azdist(double lat1, double lon1, double lat2, double lon2, double& azDeg)
+{
+    const double R = 6371.0; // km
+    double phi1 = lat1 * DEG2RAD;
+    double phi2 = lat2 * DEG2RAD;
+    double dphi = (lat2 - lat1) * DEG2RAD;
+    double dlam = (lon2 - lon1) * DEG2RAD;
+
+    double a = std::sin(dphi/2)*std::sin(dphi/2)
+             + std::cos(phi1)*std::cos(phi2)*std::sin(dlam/2)*std::sin(dlam/2);
+    double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
+    double dist = R * c;
+
+    // Initial bearing
+    double y = std::sin(dlam) * std::cos(phi2);
+    double x = std::cos(phi1)*std::sin(phi2) - std::sin(phi1)*std::cos(phi2)*std::cos(dlam);
+    azDeg = std::fmod(std::atan2(y, x) * RAD2DEG + 360.0, 360.0);
+    return dist;
+}
 
 #include <QByteArray>
 

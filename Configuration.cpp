@@ -1967,7 +1967,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   , doc_dir_ {doc_path ()}
   , data_dir_ {data_path ()}
   , temp_dir_ {temp_directory}
-  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}
+  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}
   , lotw_users_ {network_manager_}
   , cloudlog_ {self, network_manager_}
   , restart_sound_input_device_ {false}
@@ -2514,7 +2514,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   // - missing file: download immediately
   // - stale file (>30 days): delayed background refresh
   {
-    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
     QFileInfo ctyInfo (dataPath.absoluteFilePath ("cty.dat"));
     bool const missing = !ctyInfo.exists ();
     bool const stale = ctyInfo.exists ()
@@ -4586,7 +4586,7 @@ void Configuration::impl::on_rescan_log_push_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CTY_download_button_clicked (bool /*clicked*/)
 {
   ui_->CTY_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   cty_download.configure(network_manager_,
                          "https://www.country-files.com/bigcty/cty.dat",
                          dataPath.absoluteFilePath("cty.dat"),
@@ -4621,7 +4621,7 @@ void Configuration::impl::after_CTY_downloaded ()
 void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4641,7 +4641,7 @@ void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CALL3_EME_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_EME_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4663,7 +4663,7 @@ void Configuration::impl::error_during_CALL3_download (QString const& reason)
   MessageBox::warning_message (this, tr ("Error Loading CALL3.TXT file"), reason);
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
   if (!f.exists()) QFile::copy(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3.TXT");
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
@@ -4680,7 +4680,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 {
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   QFile h {dataPath.absolutePath() + "/" + "CALL3_backup.tmp"};
   if (!g.exists() and h.exists()) {
@@ -4694,7 +4694,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 void Configuration::impl::read_CALL3_version ()
 {
   QString text;
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile call3file {dataPath.absolutePath() + "/" + "CALL3.TXT"};
     QTextStream call3stream(&call3file);
     if(call3file.open (QIODevice::ReadOnly | QIODevice::Text)) {

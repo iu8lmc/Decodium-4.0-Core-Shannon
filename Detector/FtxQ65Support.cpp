@@ -1,4 +1,5 @@
 #include "commons.h"
+#include "Detector/FtxQ65Core.hpp"
 
 #include <algorithm>
 #include <array>
@@ -13,7 +14,6 @@ extern "C"
 void legacy_pack77_reset_context_c ();
 void legacy_pack77_pack_c (char const msg0[37], int* i3, int* n3,
                            char c77[77], char msgsent[37], bool* success, int received);
-void q65_enc_ (int x[], int y[]);
 }
 
 namespace
@@ -201,7 +201,7 @@ bool encode_q65_codeword (QString const& message, int* codeword)
     }
   dgen[12] = 2 * bits_to_int (c77, 72, 5);
 
-  q65_enc_ (dgen.data (), codeword);
+  decodium::q65::encode_payload_symbols (dgen.data (), codeword);
   return true;
 }
 

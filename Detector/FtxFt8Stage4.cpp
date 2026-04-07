@@ -217,7 +217,7 @@ template <size_t N>
 FixedChars<N> fixed_from_string (std::string const& text)
 {
   FixedChars<N> out = blank_fixed<N> ();
-  std::copy_n (text.data (), std::min (text.size (), N), out.data ());
+  std::copy_n (text.data (), std::min (static_cast<int>(text.size ()), static_cast<int>(N)), out.data ());
   return out;
 }
 
@@ -2198,12 +2198,12 @@ struct Ft8A7Slot
 
 struct Ft8A7HistoryState
 {
-  std::array<Ft8A7Slot, kFt8SequenceCount> slots {};
+  std::array<Ft8A7Slot, kFt8SequenceCount> a7slots {};
   int nutc0 {-1};
 
   void reset ()
   {
-    slots = {};
+    a7slots = {};
     nutc0 = -1;
   }
 };
@@ -2279,7 +2279,7 @@ int sequence_index_for_utc (int nutc)
   return std::abs ((nutc / 5) % 2);
 }
 
-void prepare_a7_tables (std::array<Ft8A7Slot, kFt8SequenceCount>& slots, int& nutc0,
+void prepare_a7_tables (std::array<Ft8A7Slot, kFt8SequenceCount>& a7slots, int& nutc0,
                         int nutc, int nzhsym, int jseq)
 {
   if (nzhsym != 41 && nutc == nutc0)
@@ -2287,7 +2287,7 @@ void prepare_a7_tables (std::array<Ft8A7Slot, kFt8SequenceCount>& slots, int& nu
       return;
     }
 
-  Ft8A7Slot& slot = slots[static_cast<size_t> (jseq)];
+  Ft8A7Slot& slot = a7slots[static_cast<size_t> (jseq)];
   slot.previous_count = slot.current_count;
   for (int i = 0; i < slot.current_count && i < kFt8MaxEarly; ++i)
     {
@@ -2297,7 +2297,7 @@ void prepare_a7_tables (std::array<Ft8A7Slot, kFt8SequenceCount>& slots, int& nu
   nutc0 = nutc;
 }
 
-void save_a7_entry (std::array<Ft8A7Slot, kFt8SequenceCount>& slots, int jseq, float dt, float freq,
+void save_a7_entry (std::array<Ft8A7Slot, kFt8SequenceCount>& a7slots, int jseq, float dt, float freq,
                     FixedChars<kFt8DecodedChars> const& decoded)
 {
   std::string const decoded_trimmed = trim_fixed (decoded);
@@ -2326,7 +2326,7 @@ void save_a7_entry (std::array<Ft8A7Slot, kFt8SequenceCount>& slots, int jseq, f
       return;
     }
 
-  Ft8A7Slot& slot = slots[static_cast<size_t> (jseq)];
+  Ft8A7Slot& slot = a7slots[static_cast<size_t> (jseq)];
   if (slot.current_count >= kFt8MaxEarly)
     {
       return;
@@ -2614,7 +2614,7 @@ extern "C" void ftx_ft8_a7_prepare_tables_c (int nutc, int nzhsym, int jseq)
     }
 
   Ft8A7HistoryState& history = global_a7_history ();
-  prepare_a7_tables (history.slots, history.nutc0, nutc, nzhsym, jseq);
+  prepare_a7_tables (history.a7slots, history.nutc0, nutc, nzhsym, jseq);
 }
 
 extern "C" int ftx_ft8_a7_previous_count_c (int jseq)
@@ -2624,7 +2624,7 @@ extern "C" int ftx_ft8_a7_previous_count_c (int jseq)
       return 0;
     }
 
-  Ft8A7Slot const& slot = global_a7_history ().slots[static_cast<size_t> (jseq)];
+  Ft8A7Slot const& slot = global_a7_history ().a7slots[static_cast<size_t> (jseq)];
   return std::max (0, std::min (slot.previous_count, kFt8MaxEarly));
 }
 
@@ -2636,7 +2636,7 @@ extern "C" int ftx_ft8_a7_get_previous_entry_c (int jseq, int index, float* dt_o
       return 0;
     }
 
-  Ft8A7Slot const& slot = global_a7_history ().slots[static_cast<size_t> (jseq)];
+  Ft8A7Slot const& slot = global_a7_history ().a7slots[static_cast<size_t> (jseq)];
   if (index > slot.previous_count || index > kFt8MaxEarly)
     {
       return 0;
@@ -2656,7 +2656,7 @@ extern "C" void ftx_ft8_a7_save_c (int jseq, float dt, float freq, char const* m
       return;
     }
 
-  save_a7_entry (global_a7_history ().slots, jseq, dt, freq,
+  save_a7_entry (global_a7_history ().a7slots, jseq, dt, freq,
                  fixed_from_chars<kFt8DecodedChars> (msg37));
 }
 
@@ -2778,6 +2778,19 @@ void run_main_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq
                           static_cast<float> (ifa), static_cast<float> (ifb),
                           syncmin, static_cast<float> (request.nfqso),
                           kFt8MaxCand, candidate.data (), &ncand, sbase.data ());
+      // --- diagnostics ---
+      {
+        static int dc = 0;
+        if (dc < 6) {
+          ++dc;
+          FILE* f = fopen("C:\\Users\\IU8LMC\\ft8decode_log.txt", "a");
+          if (f) {
+            fprintf(f, "  pass=%d syncmin=%.2f ncand=%d ifa=%d ifb=%d dd[0]=%.1f\n",
+                    ipass, (double)syncmin, ncand, ifa, ifb, state.dd[0]);
+            fclose(f);
+          }
+        }
+      }
 
       for (int icand = 0; icand < ncand; ++icand)
         {
@@ -3282,15 +3295,15 @@ extern "C" void ft8_a8d_ (float* dd, char* mycall, char* dxcall, char* dxgrid,
 
   if (mycall)
     {
-      std::copy_n (mycall, std::min (mycall_len, mycall_copy.size ()), mycall_copy.data ());
+      std::copy_n (mycall, std::min (static_cast<int>(mycall_len), static_cast<int>(mycall_copy.size ())), mycall_copy.data ());
     }
   if (dxcall)
     {
-      std::copy_n (dxcall, std::min (dxcall_len, dxcall_copy.size ()), dxcall_copy.data ());
+      std::copy_n (dxcall, std::min (static_cast<int>(dxcall_len), static_cast<int>(dxcall_copy.size ())), dxcall_copy.data ());
     }
   if (dxgrid)
     {
-      std::copy_n (dxgrid, std::min (dxgrid_len, dxgrid_copy.size ()), dxgrid_copy.data ());
+      std::copy_n (dxgrid, std::min (static_cast<int>(dxgrid_len), static_cast<int>(dxgrid_copy.size ())), dxgrid_copy.data ());
     }
 
   ftx_ft8_a8d_c (dd, mycall_copy.data (), dxcall_copy.data (), dxgrid_copy.data (),
@@ -3298,7 +3311,7 @@ extern "C" void ft8_a8d_ (float* dd, char* mycall, char* dxcall, char* dxgrid,
 
   if (msgbest)
     {
-      size_t const copy_size = std::min (msgbest_len, msg_copy.size ());
+      size_t const copy_size = std::min (static_cast<int>(msgbest_len), static_cast<int>(msg_copy.size ()));
       std::fill_n (msgbest, msgbest_len, ' ');
       std::copy_n (msg_copy.data (), copy_size, msgbest);
     }
@@ -3317,15 +3330,15 @@ extern "C" void __ft8_a7_MOD_ft8_a7d (float* dd0, int* newdat, char* call_1, cha
 
   if (call_1)
     {
-      std::copy_n (call_1, std::min (call_1_len, call1_copy.size ()), call1_copy.data ());
+      std::copy_n (call_1, std::min (static_cast<int>(call_1_len), static_cast<int>(call1_copy.size ())), call1_copy.data ());
     }
   if (call_2)
     {
-      std::copy_n (call_2, std::min (call_2_len, call2_copy.size ()), call2_copy.data ());
+      std::copy_n (call_2, std::min (static_cast<int>(call_2_len), static_cast<int>(call2_copy.size ())), call2_copy.data ());
     }
   if (grid4)
     {
-      std::copy_n (grid4, std::min (grid4_len, grid4_copy.size ()), grid4_copy.data ());
+      std::copy_n (grid4, std::min (static_cast<int>(grid4_len), static_cast<int>(grid4_copy.size ())), grid4_copy.data ());
     }
 
   ftx_ft8_a7d_c (dd0, newdat, call1_copy.data (), call2_copy.data (), grid4_copy.data (),
@@ -3333,7 +3346,7 @@ extern "C" void __ft8_a7_MOD_ft8_a7d (float* dd0, int* newdat, char* call_1, cha
 
   if (msg37)
     {
-      size_t const copy_size = std::min (msg37_len, msg_copy.size ());
+      size_t const copy_size = std::min (static_cast<int>(msg37_len), static_cast<int>(msg_copy.size ()));
       std::fill_n (msg37, msg37_len, ' ');
       std::copy_n (msg_copy.data (), copy_size, msg37);
     }

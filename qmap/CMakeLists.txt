@@ -36,11 +36,11 @@ set_property (SOURCE ${qmap_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CMAK
 add_subdirectory (libqmap)
 
 # UI generation
-qt5_wrap_ui (qmap_GENUISRCS ${qmap_UISRCS})
+qt_wrap_ui (qmap_GENUISRCS ${qmap_UISRCS})
 
 add_executable (qmap ${qmap_CXXSRCS} ${qmap_CSRCS} ${qmap_GENUISRCS} qmap.rc)
 target_include_directories (qmap PRIVATE ${CMAKE_SOURCE_DIR} ${FFTW3_INCLUDE_DIRS})
-target_link_libraries (qmap wsjt_qt qmap_impl ${FFTW3_LIBRARIES} Qt5::Widgets Qt5::Network Usb::Usb)
+target_link_libraries (qmap wsjt_qt qmap_impl ${FFTW3_LIBRARIES} Qt6::Widgets Qt6::Network Usb::Usb)
 
 if (WSJT_CREATE_WINMAIN)
   set_target_properties (qmap PROPERTIES WIN32_EXECUTABLE ON)

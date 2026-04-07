@@ -256,8 +256,15 @@ void HamlibTransceiver::register_transceivers (logger_type * logger,
 {
   rig_set_debug_callback (impl::debug_callback, logger);
   rig_set_debug (RIG_DEBUG_TRACE);
-  BOOST_LOG_SEV (*logger, boost::log::trivial::info) << "Hamlib version: " << rig_version ();
-  rig_load_all_backends ();
+  // Guard: rig_load_all_backends() deve essere chiamato UNA SOLA VOLTA per processo.
+  // Hamlib 4.7.0 crasha con "Hash collision" se chiamato due volte (rig_check_rig_caps
+  // re-invoca initrigs4_* su modelli già registrati).
+  static bool backends_loaded = false;
+  if (!backends_loaded) {
+    BOOST_LOG_SEV (*logger, boost::log::trivial::info) << "Hamlib version: " << rig_version ();
+    rig_load_all_backends ();
+    backends_loaded = true;
+  }
   rig_list_foreach_model (register_callback, registry);
 }
 
@@ -655,6 +662,14 @@ int HamlibTransceiver::do_start ()
     }
 
   m_->error_check (rig_open (m_->rig_.data ()), tr ("opening connection to rig"));
+
+  // Hamlib 4.7.0 bug: kenwood_open (e altri) restituiscono 0 ("continuing anyway")
+  // anche se il rig non risponde, lasciando caps/state in stato invalido.
+  // Verifica esplicita prima di procedere per evitare access violation nel polling.
+  if (!m_->rig_.data () || !m_->rig_.data ()->caps)
+    {
+      throw error {tr ("Rig not ready — caps null after open (no response from radio?)")};
+    }
 
   // reset dynamic state
   m_->one_VFO_ = false;

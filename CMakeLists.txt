@@ -49,10 +49,10 @@ if (POLICY CMP0075)
 endif ()
 
 project (wsjtx
-  VERSION 3.0.0.0
+  VERSION 4.0.0.0
   LANGUAGES C CXX Fortran
   )
-set (PROJECT_DESCRIPTION "Decodium v3.0 SE Raptor: Digital Modes for Weak Signal Communications in Amateur Radio")
+set (PROJECT_DESCRIPTION "Decodium 4.0 Core Shannon: Digital Modes for Weak Signal Communications in Amateur Radio")
 set (CMAKE_PROJECT_DESCRIPTION ${PROJECT_DESCRIPTION})
 set (CMAKE_AUTOUIC ON)
 set (WSJT_APP_BUNDLE_NAME "ft2")
@@ -97,7 +97,7 @@ add_definitions (-DFORK_RELEASE_VERSION=\"${FORK_RELEASE_VERSION}\")
 #
 # project information
 #
-set (PROJECT_BUNDLE_NAME "Decodium v3.0 SE")
+set (PROJECT_BUNDLE_NAME "Decodium 4.0 Core Shannon")
 set (PROJECT_VENDOR "IU8LMC")
 set (PROJECT_CONTACT "IU8LMC <qrz.com/db/IU8LMC>")
 set (PROJECT_COPYRIGHT "See Help | Copyright info")
@@ -262,7 +262,6 @@ set (wsjt_qt_CXXSRCS
   widgets/DoubleClickableRadioButton.cpp
   Network/LotWUsers.cpp
   Network/FileDownload.cpp
-  Network/FoxVerifier.cpp
   Network/Cloudlog.cpp
   models/DecodeHighlightingModel.cpp
   widgets/DecodeHighlightingListView.cpp
@@ -295,6 +294,10 @@ set (wsjt_qt_CXXSRCS
   Detector/JT9FastDecoder.cpp
   Detector/JT9FastHelpers.cpp
   Detector/JT9WideDecoder.cpp
+  Detector/FftCompat.cpp
+  Detector/FanoSequentialDecoder.cpp
+  Detector/JT4Decoder.cpp
+  Detector/JT9NarrowDecoder.cpp
   Modulator/FtxWaveformGenerator.cpp
   Modulator/FtxMessageEncoder.cpp
   widgets/LegacyUiHelpers.cpp
@@ -358,6 +361,8 @@ set (wsjtx_CXXSRCS
   widgets/mainwindow.cpp
   Configuration.cpp
   main.cpp
+  DecodiumBridge.cpp
+  DecodiumBridge.h
   Network/wsprnet.cpp
   WSPR/WSPRBandHopping.cpp
   widgets/ExportCabrillo.cpp
@@ -451,7 +456,6 @@ set (wsjt_FSRCS
   lib/bpdecode40.f90
   lib/bpdecode128_90.f90
   lib/baddata.f90
-  lib/cablog.f90
   lib/calibrate.f90
   lib/ccf2.f90
   lib/ccf65.f90
@@ -469,7 +473,6 @@ set (wsjt_FSRCS
   lib/deg2grid.f90
   lib/degrade_snr.f90
   lib/downsam9.f90
-  lib/echosim.f90
   lib/echo_snr.f90
   lib/encode232.f90
   lib/encode4.f90
@@ -569,7 +572,6 @@ set (wsjt_FSRCS
   lib/sync9.f90
   lib/sync9f.f90
   lib/sync9w.f90
-  lib/test_snr.f90
   lib/timf2.f90
   lib/tweak1.f90
   lib/twkfreq.f90
@@ -822,6 +824,7 @@ if (WIN32 AND ENABLE_OMNIRIG)
     else ()
       string (REPLACE "\"" "" AXSERVER ${AXSERVER})
       file (TO_CMAKE_PATH ${AXSERVER} AXSERVERSRCS)
+      add_compile_definitions (OMNIRIG_AVAILABLE=1)
     endif ()
   else ()
     message (WARNING "dumpcpp not found - OmniRig support disabled")
@@ -935,15 +938,16 @@ if (WSJT_FOX_OTP)
 endif ()
 
 #
-# Qt5 setup
+# Qt6 setup
 #
 
 # Widgets finds its own dependencies.
-find_package (Qt5 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql LinguistTools WebSockets REQUIRED)
+find_package (Qt6 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql LinguistTools WebSockets Test Core5Compat REQUIRED)
+find_package (Qt6 COMPONENTS Qml Quick QuickControls2 REQUIRED)
 
 if (WIN32)
   add_definitions (-DQT_NEEDS_QTMAIN)
-  find_package (Qt5AxContainer REQUIRED)
+  find_package (Qt6 COMPONENTS ActiveQt AxContainer REQUIRED)
 endif (WIN32)
 
 #
@@ -983,10 +987,10 @@ if (WIN32)
 endif (WIN32)
 
 if (APPLE AND ${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -stdlib=libc++")
 else ()
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++11 -pthread")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=gnu++17 -pthread")
 endif ()
 
 
@@ -1009,7 +1013,7 @@ if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
     set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -isysroot ${CMAKE_OSX_SYSROOT}")
   endif (CMAKE_OSX_SYSROOT)
 
-  set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -fbounds-check -funroll-all-loops -fno-f2c -ffpe-summary=invalid,zero,overflow,underflow ${General_FFLAGS}")
+  set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -funroll-all-loops -fno-f2c -ffpe-summary=invalid,zero,overflow,underflow ${General_FFLAGS}")
 
   set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -ggdb -O0 -fbacktrace -fcheck=all -fbounds-check -fno-f2c -ffpe-summary=invalid,zero,overflow,underflow ${General_FFLAGS}")
   
@@ -1039,7 +1043,7 @@ endif (Fortran_COMPILER_NAME MATCHES "gfortran.*")
 # Linker setup
 #
 if (NOT APPLE)
-  set (CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections")
+  set (CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -Wl,-s")
   set (CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections")
 endif (NOT APPLE)
 
@@ -1048,12 +1052,39 @@ endif (NOT APPLE)
 # setup and test Fortran C/C++ interaction
 #
 
-include (FortranCInterface)
-FortranCInterface_VERIFY (CXX)
-FortranCInterface_HEADER (FC.h MACRO_NAMESPACE "FC_" SYMBOL_NAMESPACE "FC_"
-  SYMBOLS
-  grayline
+if (WIN32)
+  # On Windows with mingw64, the FortranCInterface link test fails due to mixed
+  # ucrt64/mingw64 linker environment. Use a known-correct FC.h for gfortran/mingw.
+  file (WRITE "${CMAKE_BINARY_DIR}/FC.h"
+    "#ifndef FC_HEADER_INCLUDED\n"
+    "#define FC_HEADER_INCLUDED\n"
+    "\n"
+    "/* Mangling for Fortran global symbols without underscores. */\n"
+    "#define FC_GLOBAL(name,NAME) name##_\n"
+    "\n"
+    "/* Mangling for Fortran global symbols with underscores. */\n"
+    "#define FC_GLOBAL_(name,NAME) name##_\n"
+    "\n"
+    "/* Mangling for Fortran module symbols without underscores. */\n"
+    "#define FC_MODULE(mod_name,name, mod_NAME,NAME) __##mod_name##_MOD_##name\n"
+    "\n"
+    "/* Mangling for Fortran module symbols with underscores. */\n"
+    "#define FC_MODULE_(mod_name,name, mod_NAME,NAME) __##mod_name##_MOD_##name\n"
+    "\n"
+    "/*--------------------------------------------------------------------------*/\n"
+    "/* Mangle some symbols automatically.                                       */\n"
+    "#define FC_grayline FC_GLOBAL(grayline, GRAYLINE)\n"
+    "\n"
+    "#endif\n"
   )
+else ()
+  include (FortranCInterface)
+  FortranCInterface_VERIFY (CXX)
+  FortranCInterface_HEADER (FC.h MACRO_NAMESPACE "FC_" SYMBOL_NAMESPACE "FC_"
+    SYMBOLS
+    grayline
+    )
+endif ()
 
 
 #
@@ -1094,8 +1125,8 @@ endif ()
 #
 # stuff only qmake can tell us
 #
-get_target_property (QMAKE_EXECUTABLE Qt5::qmake LOCATION)
-get_target_property (LCONVERT_EXECUTABLE Qt5::lconvert LOCATION)
+get_target_property (QMAKE_EXECUTABLE Qt6::qmake LOCATION)
+get_target_property (LCONVERT_EXECUTABLE Qt6::lconvert LOCATION)
 function (QUERY_QMAKE VAR RESULT)
   exec_program (${QMAKE_EXECUTABLE} ARGS "-query ${VAR}" RETURN_VALUE return_code OUTPUT_VARIABLE output)
   if (NOT return_code)
@@ -1112,7 +1143,7 @@ query_qmake (QT_HOST_DATA QT_DATA_DIR)
 set (QT_MKSPECS_DIR ${QT_DATA_DIR}/mkspecs)
 
 # project definitions
-add_definitions (-DQT5 -DCMAKE_BUILD -DBIGSYM=1 -DBOOST_ALL_DYN_LINK)
+add_definitions (-DQT6 -DCMAKE_BUILD -DBIGSYM=1 -DBOOST_ALL_DYN_LINK)
 if (CMAKE_HOST_UNIX)
   add_definitions (-DUNIX)
 elseif (CMAKE_HOST_WIN32)
@@ -1457,13 +1488,13 @@ foreach (lang_ ${LANGUAGES})
 endforeach ()
 if (UPDATE_TRANSLATIONS)
   message (STATUS "UPDATE_TRANSLATIONS option is set.")
-  qt5_create_translation (
+  qt_create_translation (
     QM_FILES ${wsjt_qt_UISRCS} ${wsjtx_UISRCS} ${wsjt_qt_CXXSRCS} ${wsjtx_CXXSRCS}
     ${TS_FILES}
     OPTIONS -I${CMAKE_CURRENT_SOURCE_DIR}
     )
 else ()
-  qt5_add_translation (QM_FILES ${TS_FILES})
+  qt_add_translation (QM_FILES ${TS_FILES})
 endif ()
 add_custom_target (translations DEPENDS ${QM_FILES})
 set_property (DIRECTORY PROPERTY CLEAN_NO_CUSTOM TRUE)
@@ -1490,11 +1521,11 @@ add_resources (wsjtx_RESOURCES /Translations ${QM_FILES})
 configure_file (wsjtx.qrc.in wsjtx.qrc @ONLY)
 
 # UI generation
-qt5_wrap_ui (wsjt_qt_GENUISRCS ${wsjt_qt_UISRCS})
-qt5_wrap_ui (wsjtx_GENUISRCS ${wsjtx_UISRCS})
+qt_wrap_ui (wsjt_qt_GENUISRCS ${wsjt_qt_UISRCS})
+qt_wrap_ui (wsjtx_GENUISRCS ${wsjtx_UISRCS})
 
 # Resource generation
-qt5_add_resources (wsjtx_RESOURCES_RCC
+qt_add_resources (wsjtx_RESOURCES_RCC
   ${CMAKE_BINARY_DIR}/wsjtx.qrc
   contrib/QDarkStyleSheet/qdarkstyle/style.qrc
   )
@@ -1510,17 +1541,23 @@ endif ()
 #
 
 # build a library for the QCustomPlot widget
+# Suppress deprecated-declarations for the bundled QCustomPlot 2.1.1 which uses some Qt5 APIs
+# that are deprecated in Qt6 but still functional.
+set_source_files_properties (qcustomplot-source/qcustomplot.cpp PROPERTIES
+  COMPILE_FLAGS "-Wno-deprecated-declarations")
 add_library (qcp STATIC ${qcp_CXXSRCS})
 target_include_directories (qcp PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/qcustomplot-source>)
-target_link_libraries (qcp Qt5::Widgets Qt5::PrintSupport)
+target_link_libraries (qcp Qt6::Widgets Qt6::PrintSupport)
 
 # build a library of package Qt functionality
 add_library (wsjt_qt STATIC ${wsjt_qt_CXXSRCS} ${wsjt_qt_GENUISRCS} ${GENAXSRCS})
+# Suppress deprecation warnings from Qt5 APIs not yet updated for Qt6 in wsjt_qt sources
+target_compile_options (wsjt_qt PRIVATE -Wno-deprecated-declarations)
 # set wsjtx_udp exports to static variants
 target_compile_definitions (wsjt_qt PUBLIC UDP_STATIC_DEFINE)
-target_link_libraries (wsjt_qt Hamlib::Hamlib Boost::log qcp Qt5::Widgets Qt5::Network Qt5::Sql Qt5::WebSockets)
+target_link_libraries (wsjt_qt Hamlib::Hamlib Boost::log qcp Qt6::Widgets Qt6::Network Qt6::Sql Qt6::WebSockets Qt6::Core5Compat)
 if (WIN32)
-  target_link_libraries (wsjt_qt Qt5::AxContainer Qt5::AxBase)
+  target_link_libraries (wsjt_qt Qt6::ActiveQt)
 endif (WIN32)
 
 # Several legacy Fortran utilities now resolve migrated compatibility exports
@@ -1533,11 +1570,11 @@ if (TARGET wsjt_fort_omp)
 endif ()
 # build a library of package Qt functionality used in Fortran utilities
 add_library (fort_qt STATIC ${fort_qt_CXXSRCS})
-target_link_libraries (fort_qt Qt5::Core)
+target_link_libraries (fort_qt Qt6::Core)
 
 # build a library of WSJT Qt multimedia components
 add_library (wsjt_qtmm STATIC ${wsjt_qtmm_CXXSRCS} ${wsjt_qtmm_GENUISRCS})
-target_link_libraries (wsjt_qtmm Qt5::Multimedia)
+target_link_libraries (wsjt_qtmm Qt6::Multimedia)
 
 add_executable (jt9 utils/jt9.cpp)
 target_sources (jt9 PRIVATE
@@ -1624,8 +1661,135 @@ else ()
       )
   endif ()
 endif ()
-target_link_libraries (wsjtx Qt5::SerialPort wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
 link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx ${_wsjtx_fort_target})
+
+# -----------------------------------------------------------------------
+# decodium_qml: lightweight QML-based frontend (uses DecodiumBridge)
+# -----------------------------------------------------------------------
+if (WIN32)
+  set (DECODIUM_QML_ICON_RC decodium_qml.rc)
+else ()
+  set (DECODIUM_QML_ICON_RC "")
+endif ()
+add_executable (decodium_qml
+  main_qml.cpp
+  DecodiumBridge.cpp
+  DecodiumBridge.h
+  helper_functions.cpp
+  helper_functions.h
+  controllers/ActiveStationsModel.cpp
+  controllers/ActiveStationsModel.hpp
+  DecodiumThemeManager.cpp
+  DecodiumThemeManager.h
+  DecodiumSubManagers.cpp
+  DecodiumSubManagers.h
+  DecodiumCatManager.cpp
+  DecodiumCatManager.h
+  DecodiumOmniRigManager.cpp
+  DecodiumOmniRigManager.h
+  DecodiumTransceiverManager.cpp
+  DecodiumTransceiverManager.h
+  DecodiumAlertManager.cpp
+  DecodiumAlertManager.h
+  WaterfallItem.cpp
+  WaterfallItem.hpp
+  PanadapterItem.cpp
+  PanadapterItem.hpp
+  DecodiumAudioSink.h
+  Detector/FT8DecodeWorker.cpp
+  Detector/FT2DecodeWorker.cpp
+  Detector/FT4DecodeWorker.cpp
+  Detector/Q65DecodeWorker.cpp
+  Detector/MSK144DecodeWorker.cpp
+  Detector/WSPRDecodeWorker.cpp
+  Detector/FST4DecodeWorker.cpp
+  Detector/JT9FastDecodeWorker.cpp
+  Detector/JT9FastDecoder.cpp
+  Detector/JT9FastHelpers.cpp
+  Detector/JT9WideDecoder.cpp
+  Detector/LegacyJtDecodeWorker.cpp
+  Detector/LegacyDspIoHelpers.cpp
+  Detector/FftCompat.cpp
+  Detector/FanoSequentialDecoder.cpp
+  Detector/JT4Decoder.cpp
+  Detector/JT9NarrowDecoder.cpp
+  widgets/PlotLegacyHelpers.cpp
+  lib/wsprd/wsprd_embedded.c
+  lib/wsprd/wsprsim_utils.c
+  lib/wsprd/wsprd_utils.c
+  lib/wsprd/fano.c
+  lib/wsprd/jelinek.c
+  lib/wsprd/tab.c
+  lib/wsprd/nhash.c
+  lib/init_random_seed.c
+  Audio/soundin.cpp
+  Audio/soundout.cpp
+  Modulator/Modulator.cpp
+  Network/FoxVerifier.cpp
+  Network/FoxVerifier.hpp
+  Network/wsprnet.cpp
+  Network/wsprnet.h
+  Network/DecodiumWsprUploader.cpp
+  Network/DecodiumWsprUploader.h
+  Network/DecodiumPskReporterLite.cpp
+  Network/DecodiumPskReporterLite.h
+  Network/DecodiumCloudlogLite.cpp
+  Network/DecodiumCloudlogLite.h
+  DecodiumDxCluster.cpp
+  DecodiumDxCluster.h
+  DxccLookup.cpp
+  DxccLookup.h
+  decodium_fortran_stubs.cpp
+  decodium_common_blocks.c
+  ${wsjtx_GENUISRCS}
+  ${wsjtx_RESOURCES_RCC}
+  ${DECODIUM_QML_ICON_RC}
+)
+if (WSJT_CREATE_WINMAIN)
+  set_target_properties (decodium_qml PROPERTIES WIN32_EXECUTABLE ON)
+endif ()
+set_target_properties (decodium_qml PROPERTIES OUTPUT_NAME decodium)
+# Sopprime i warnings-as-error su LegacyDspIoHelpers (vector bounds in GCC15)
+set_source_files_properties (Detector/LegacyDspIoHelpers.cpp PROPERTIES
+  COMPILE_FLAGS "-Wno-error=stringop-overflow -Wno-error=stringop-overread -Wno-error=array-bounds")
+# C17 — FoxVerifier senza Boost.Log (usa qDebug come shim)
+target_compile_definitions (decodium_qml PRIVATE DECODIUM_NO_BOOST_LOG FFTW3_SINGLE_FOUND)
+target_include_directories (decodium_qml PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${FFTW3_INCLUDE_DIRS}
+)
+target_link_libraries (decodium_qml
+  Qt6::Quick
+  Qt6::Qml
+  Qt6::QuickControls2
+  Qt6::Widgets
+  Qt6::Multimedia
+  Qt6::Network
+  Qt6::SerialPort
+  Qt6::WebSockets
+  Qt6::AxContainer
+  wsjt_qtmm
+  wsjt_qt
+  wsjt_fort
+  wsjt_cxx
+  Hamlib::Hamlib
+  Boost::log
+  ${FFTW3_LIBRARIES}
+  ${LIBM_LIBRARIES}
+)
+# gfortran runtime dinamico
+if (MINGW)
+  target_link_libraries (decodium_qml gfortran quadmath)
+endif ()
+# Copy QML files next to the decodium_qml executable at build time
+add_custom_command (TARGET decodium_qml POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+    "$<TARGET_FILE_DIR:decodium_qml>/qml"
+  COMMENT "Copying QML files to build output"
+)
 
 if (APPLE)
   add_custom_command (TARGET wsjtx POST_BUILD
@@ -1652,7 +1816,7 @@ set_target_properties (wsjtx_udp-static PROPERTIES
   OUTPUT_NAME wsjtx_udp
   )
 target_compile_definitions (wsjtx_udp-static PUBLIC UDP_STATIC_DEFINE)
-target_link_libraries (wsjtx_udp-static Qt5::Network Qt5::Gui)
+target_link_libraries (wsjtx_udp-static Qt6::Network Qt6::Gui)
 generate_export_header (wsjtx_udp-static BASE_NAME udp)
 
 generate_version_info (udp_daemon_VERSION_RESOURCES
@@ -1681,7 +1845,7 @@ generate_version_info (message_aggregator_VERSION_RESOURCES
   )
 add_resources (message_aggregator_RESOURCES /qss ${message_aggregator_STYLESHEETS})
 configure_file (UDPExamples/message_aggregator.qrc.in message_aggregator.qrc @ONLY)
-qt5_add_resources (message_aggregator_RESOURCES_RCC
+qt_add_resources (message_aggregator_RESOURCES_RCC
   ${CMAKE_CURRENT_BINARY_DIR}/message_aggregator.qrc
   contrib/QDarkStyleSheet/qdarkstyle/style.qrc
   )
@@ -1690,7 +1854,7 @@ add_executable (message_aggregator
   ${message_aggregator_RESOURCES_RCC}
   ${message_aggregator_VERSION_RESOURCES}
   )
-target_link_libraries (message_aggregator wsjt_qt Qt5::Widgets wsjtx_udp-static)
+target_link_libraries (message_aggregator wsjt_qt Qt6::Widgets wsjtx_udp-static)
 
 if (WSJT_CREATE_WINMAIN)
   set_target_properties (message_aggregator PROPERTIES WIN32_EXECUTABLE ON)

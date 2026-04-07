@@ -700,7 +700,7 @@ void append_superfox_piece (int ntype, QString const& msg26, QString const& myca
 
 SuperFoxAssembled assemble_superfox_message ()
 {
-  int const slots = clamp_int (foxcom_.nslots, 0, 5);
+  int const nslots = clamp_int (foxcom_.nslots, 0, 5);
   int nmsg[4] {0, 0, 0, 0};
   int nbits = 0;
   int nb_mycall = 0;
@@ -710,7 +710,7 @@ SuperFoxAssembled assemble_superfox_message ()
   std::array<QString, 10> hiscall {};
   std::array<QString, 5> rpt2 {};
 
-  for (int slot = 0; slot < slots; ++slot)
+  for (int slot = 0; slot < nslots; ++slot)
     {
       QString const msg37 = QString::fromLatin1 (foxcom_.cmsg[slot], 40).left (37);
       Split77Words const split = split77_words (msg37);
@@ -852,7 +852,7 @@ bool pack_superfox_message (QString const& line_in, QString const& ckey_in, bool
             {
               continue;
             }
-          int const next_index = std::min (i + 1, words.size () - 1);
+          int const next_index = std::min (static_cast<qsizetype>(i + 1), words.size () - 1);
           if (next_index > i && is_signed_report_word (words.at (next_index)))
             {
               continue;
@@ -1406,7 +1406,7 @@ void fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, float w
     }
 
   std::vector<float> time_domain (static_cast<size_t> (kFt8FoxNfft), 0.0f);
-  int const copy_samples = std::min (wave.size (), kFt8FoxNwave);
+  int const copy_samples = std::min (static_cast<int>(wave.size ()), static_cast<int>(kFt8FoxNwave));
   for (int i = 0; i < copy_samples; ++i)
     {
       time_domain[static_cast<size_t> (i)] = wave.at (i);
@@ -1477,7 +1477,7 @@ void ft2_fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, flo
     }
 
   std::vector<float> time_domain (static_cast<size_t> (kFt2FoxNfft), 0.0f);
-  int const copy_samples = std::min (wave.size (), kFt2FoxNwave);
+  int const copy_samples = std::min (static_cast<int>(wave.size ()), static_cast<int>(kFt2FoxNwave));
   for (int i = 0; i < copy_samples; ++i)
     {
       time_domain[static_cast<size_t> (i)] = wave.at (i);
@@ -1855,8 +1855,8 @@ extern "C" void foxgen_ (bool* bSuperFox, char const* /*fname*/, fortran_charlen
   std::fill_n (foxcom2_.itone2, kFt8FoxNsym, 0);
   std::fill_n (foxcom2_.msgbits2, 77, static_cast<signed char> (0));
 
-  int const slots = clamp_int (foxcom_.nslots, 0, 5);
-  for (int slot = 0; slot < slots; ++slot)
+  int const nfox_slots = clamp_int (foxcom_.nslots, 0, 5);
+  for (int slot = 0; slot < nfox_slots; ++slot)
     {
       QString const message = QString::fromLatin1 (foxcom_.cmsg[slot], 40).left (37);
       auto const encoded = decodium::txmsg::encodeFt8 (message);
@@ -1872,13 +1872,13 @@ extern "C" void foxgen_ (bool* bSuperFox, char const* /*fname*/, fortran_charlen
                                                                           2.0f,
                                                                           48000.0f,
                                                                           f0);
-      int const samples = std::min (wave.size (), slot_wave.size ());
+      int const samples = std::min (static_cast<int>(wave.size ()), static_cast<int>(slot_wave.size ()));
       for (int i = 0; i < samples; ++i)
         {
           wave[i] += slot_wave.at (i);
         }
 
-      if (slot == slots - 1)
+      if (slot == nfox_slots - 1)
         {
           for (int i = 0; i < kFt8FoxNsym; ++i)
             {
@@ -1892,11 +1892,11 @@ extern "C" void foxgen_ (bool* bSuperFox, char const* /*fname*/, fortran_charlen
     }
 
   normalize_wave (wave);
-  fox_bandlimit_inplace (wave, slots, foxcom_.nfreq, 50.0f);
+  fox_bandlimit_inplace (wave, nfox_slots, foxcom_.nfreq, 50.0f);
   normalize_wave (wave);
 
   int const max_samples = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
-  int const copy_samples = std::min (max_samples, wave.size ());
+  int const copy_samples = std::min (static_cast<int>(max_samples), static_cast<int>(wave.size ()));
   std::copy_n (wave.constBegin (), copy_samples, foxcom_.wave);
   if (copy_samples < max_samples)
     {
@@ -1925,8 +1925,8 @@ extern "C" void foxgenft2_ ()
 {
   QVector<float> wave (kFt2FoxNwave, 0.0f);
 
-  int const slots = clamp_int (foxcom_.nslots, 0, 5);
-  for (int slot = 0; slot < slots; ++slot)
+  int const nfox_slots = clamp_int (foxcom_.nslots, 0, 5);
+  for (int slot = 0; slot < nfox_slots; ++slot)
     {
       QString const message = QString::fromLatin1 (foxcom_.cmsg[slot], 40).left (37);
       auto const encoded = decodium::txmsg::encodeFt2 (message);
@@ -1941,7 +1941,7 @@ extern "C" void foxgenft2_ ()
                                                                           kFt2FoxNsps,
                                                                           48000.0f,
                                                                           f0);
-      int const samples = std::min (wave.size (), slot_wave.size ());
+      int const samples = std::min (static_cast<int>(wave.size ()), static_cast<int>(slot_wave.size ()));
       for (int i = 0; i < samples; ++i)
         {
           wave[i] += slot_wave.at (i);
@@ -1949,11 +1949,11 @@ extern "C" void foxgenft2_ ()
     }
 
   normalize_wave (wave);
-  ft2_fox_bandlimit_inplace (wave, slots, foxcom_.nfreq, 50.0f);
+  ft2_fox_bandlimit_inplace (wave, nfox_slots, foxcom_.nfreq, 50.0f);
   normalize_wave (wave);
 
   int const max_samples = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
-  int const copy_samples = std::min (max_samples, wave.size ());
+  int const copy_samples = std::min (static_cast<int>(max_samples), static_cast<int>(wave.size ()));
   std::copy_n (wave.constBegin (), copy_samples, foxcom_.wave);
   if (copy_samples < max_samples)
     {
@@ -2011,7 +2011,7 @@ extern "C" void gen_ft8wave_ (int* itone, int* nsym, int* nsps, float* bt, float
   QVector<float> const generated = decodium::txwave::generateFt8Wave (itone, symbol_count,
                                                                       samples_per_symbol, *bt,
                                                                       *fsample, *f0);
-  int const samples = std::min (output_samples, generated.size ());
+  int const samples = std::min (static_cast<int>(output_samples), static_cast<int>(generated.size ()));
   for (int i = 0; i < samples; ++i)
     {
       wave[i] = generated.at (i);
@@ -2058,7 +2058,7 @@ extern "C" void gen_ft4wave_ (int* itone, int* nsym, int* nsps, float* fsample, 
   QVector<float> const generated = decodium::txwave::generateFt4Wave (itone, symbol_count,
                                                                       samples_per_symbol,
                                                                       *fsample, *f0);
-  int const samples = std::min (output_samples, generated.size ());
+  int const samples = std::min (static_cast<int>(output_samples), static_cast<int>(generated.size ()));
   for (int i = 0; i < samples; ++i)
     {
       wave[i] = generated.at (i);
@@ -2137,7 +2137,7 @@ extern "C" void gen_ft2wave_ (int* itone, int* nsym, int* nsps, float* fsample, 
   QVector<float> const generated = decodium::txwave::generateFt2Wave (itone, symbol_count,
                                                                       samples_per_symbol,
                                                                       *fsample, *f0);
-  int const samples = std::min (output_samples, generated.size ());
+  int const samples = std::min (static_cast<int>(output_samples), static_cast<int>(generated.size ()));
   for (int i = 0; i < samples; ++i)
     {
       wave[i] = generated.at (i);

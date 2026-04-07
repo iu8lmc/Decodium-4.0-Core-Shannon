@@ -121,7 +121,7 @@ std::string trim_fixed (char const* data, std::size_t width)
 template <std::size_t N> void to_fixed (std::string const& src, std::array<char, N>& dest)
 {
   std::fill (dest.begin (), dest.end (), ' ');
-  std::size_t const count = std::min (src.size (), N);
+  std::size_t const count = std::min (static_cast<int>(src.size ()), static_cast<int>(N));
   std::memcpy (dest.data (), src.data (), count);
 }
 

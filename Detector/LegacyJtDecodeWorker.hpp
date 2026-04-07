@@ -2,7 +2,9 @@
 #ifndef LEGACYJTDECODEWORKER_HPP
 #define LEGACYJTDECODEWORKER_HPP
 
+#include "Detector/JT4Decoder.hpp"
 #include "Detector/JT65Decoder.hpp"
+#include "Detector/JT9NarrowDecoder.hpp"
 
 #include <QObject>
 #include <QByteArray>
@@ -48,6 +50,7 @@ struct DecodeRequest
   QByteArray hiscall;
   QByteArray hisgrid;
   QByteArray tempDir;
+  QByteArray dataDir;   // elisir80 1.6.1: percorso dati per deep4 (CALL3.TXT etc.)
 };
 
 class LegacyJtDecodeWorker final : public QObject
@@ -63,7 +66,9 @@ Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
 
 private:
-  decodium::jt65::AverageState m_jt65State;
+  decodium::jt65::AverageState     m_jt65State;
+  decodium::jt4::AverageState      m_jt4State;
+  decodium::jt9narrow::CorrState   m_jt9NarrowState;
 };
 
 }

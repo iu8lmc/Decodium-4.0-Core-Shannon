@@ -103,6 +103,23 @@ bool constant_time_equals (QByteArray const& a, QByteArray const& b)
     }
   return 0 == diff;
 }
+
+bool is_usable_multicast_interface (QNetworkInterface const& net_if)
+{
+  if (!net_if.isValid ())
+    {
+      return false;
+    }
+
+  auto const flags = net_if.flags ();
+  bool const is_loopback = flags.testFlag (QNetworkInterface::IsLoopBack);
+  bool const is_up       = flags.testFlag (QNetworkInterface::IsUp);
+  bool const is_running  = flags.testFlag (QNetworkInterface::IsRunning);
+  bool const can_mcast   = flags.testFlag (QNetworkInterface::CanMulticast);
+
+  return !is_loopback && is_up && is_running && can_mcast;
+}
+
 }
 
 class MessageClient::impl
@@ -725,8 +742,12 @@ void MessageClient::impl::rebuild_trusted_senders ()
     }
   else
     {
+      QSet<QString> seen;
       for (auto const& net_if : QNetworkInterface::allInterfaces ())
         {
+          if (!is_usable_multicast_interface (net_if) || seen.contains (net_if.name ()))
+            continue;
+          seen.insert (net_if.name ());
           add_interface (net_if);
         }
     }

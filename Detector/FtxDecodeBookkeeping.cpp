@@ -273,7 +273,7 @@ void fill_fixed (char* out, int length, std::string const& value)
     }
 
   std::fill_n (out, length, ' ');
-  std::copy_n (value.data (), std::min (length, static_cast<int> (value.size ())), out);
+  std::copy_n (value.data (), std::min (static_cast<int>(length), static_cast<int>(static_cast<int> (value.size ()))), out);
 }
 
 size_t find_fixed_space (std::string const& value, size_t start)
@@ -659,7 +659,7 @@ bool ft8var_filtersfree_impl (std::string const& decoded_raw)
 {
   std::string decoded (22, ' ');
   std::copy_n (decoded_raw.data (),
-               std::min (decoded.size (), decoded_raw.size ()),
+               std::min (static_cast<int>(static_cast<int>(decoded.size ())), static_cast<int>(static_cast<int>(decoded_raw.size ()))),
                decoded.begin ());
 
   auto char_at = [&decoded] (int index) {

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <QHostAddress>
 #include <QByteArray>
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QTcpSocket>
 #include <QThread>
 #include <QStandardPaths>
@@ -157,7 +157,7 @@ int HRDTransceiver::do_start ()
       send_command ("get context", false, false);
     }
 
-  QFile HRD_info_file {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("HRD Interface Information.txt")};
+  QFile HRD_info_file {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("HRD Interface Information.txt")};
   if (!HRD_info_file.open (QFile::WriteOnly | QFile::Text | QFile::Truncate))
     {
       throw error {tr ("Failed to open file \"%1\": %2.").arg (HRD_info_file.fileName ()).arg (HRD_info_file.errorString ())};
@@ -231,33 +231,33 @@ int HRDTransceiver::do_start ()
     }
 
   // set RX VFO
-  rx_A_button_ = find_button (QRegExp ("^(RX~A)$"));
-  rx_B_button_ = find_button (QRegExp ("^(RX~B)$"));
+  rx_A_button_ = find_button (QRegularExpression ("^(RX~A)$"));
+  rx_B_button_ = find_button (QRegularExpression ("^(RX~B)$"));
 
   // select VFO (sometime set as well)
-  vfo_A_button_ = find_button (QRegExp ("^(VFO~A|Main)$"));
-  vfo_B_button_ = find_button (QRegExp ("^(VFO~B|Sub)$"));
+  vfo_A_button_ = find_button (QRegularExpression ("^(VFO~A|Main)$"));
+  vfo_B_button_ = find_button (QRegularExpression ("^(VFO~B|Sub)$"));
 
-  vfo_toggle_button_ = find_button (QRegExp ("^(A~/~B|VFO~A/B)$"));
+  vfo_toggle_button_ = find_button (QRegularExpression ("^(A~/~B|VFO~A/B)$"));
 
-  split_mode_button_ = find_button (QRegExp ("^(Spl~On|Spl_On|Split|Split~On)$"));
-  split_off_button_ = find_button (QRegExp ("^(Spl~Off|Spl_Off|Split~Off)$"));
+  split_mode_button_ = find_button (QRegularExpression ("^(Spl~On|Spl_On|Split|Split~On)$"));
+  split_off_button_ = find_button (QRegularExpression ("^(Spl~Off|Spl_Off|Split~Off)$"));
 
-  if ((split_mode_dropdown_ = find_dropdown (QRegExp ("^(Split)$"))) >= 0)
+  if ((split_mode_dropdown_ = find_dropdown (QRegularExpression ("^(Split)$"))) >= 0)
     {
-      split_mode_dropdown_selection_on_ = find_dropdown_selection (split_mode_dropdown_, QRegExp ("^(On)$"));
-      split_mode_dropdown_selection_off_ = find_dropdown_selection (split_mode_dropdown_, QRegExp ("^(Off)$"));
+      split_mode_dropdown_selection_on_ = find_dropdown_selection (split_mode_dropdown_, QRegularExpression ("^(On)$"));
+      split_mode_dropdown_selection_off_ = find_dropdown_selection (split_mode_dropdown_, QRegularExpression ("^(Off)$"));
     }
-  else if ((receiver_dropdown_ = find_dropdown (QRegExp ("^Receiver$"))) >= 0)
+  else if ((receiver_dropdown_ = find_dropdown (QRegularExpression ("^Receiver$"))) >= 0)
     {
-      rx_A_selection_ = find_dropdown_selection (receiver_dropdown_, QRegExp ("^(RX / Off)$"));
-      rx_B_selection_ = find_dropdown_selection (receiver_dropdown_, QRegExp ("^(Mute / RX)$"));
+      rx_A_selection_ = find_dropdown_selection (receiver_dropdown_, QRegularExpression ("^(RX / Off)$"));
+      rx_B_selection_ = find_dropdown_selection (receiver_dropdown_, QRegularExpression ("^(Mute / RX)$"));
     }
 
-  tx_A_button_ = find_button (QRegExp ("^(TX~main|TX~-~A|TX~A)$"));
-  tx_B_button_ = find_button (QRegExp ("^(TX~sub|TX~-~B|TX~B)$"));
+  tx_A_button_ = find_button (QRegularExpression ("^(TX~main|TX~-~A|TX~A)$"));
+  tx_B_button_ = find_button (QRegularExpression ("^(TX~sub|TX~-~B|TX~B)$"));
 
-  if ((mode_A_dropdown_ = find_dropdown (QRegExp ("^(Main Mode|Mode|Mode A)$"))) >= 0)
+  if ((mode_A_dropdown_ = find_dropdown (QRegularExpression ("^(Main Mode|Mode|Mode A)$"))) >= 0)
     {
       map_modes (mode_A_dropdown_, &mode_A_map_);
     }
@@ -266,7 +266,7 @@ int HRDTransceiver::do_start ()
       Q_ASSERT (mode_A_dropdown_ <= 0);
     }
 
-  if ((mode_B_dropdown_ = find_dropdown (QRegExp ("^(Sub Mode|Mode B)$"))) >= 0)
+  if ((mode_B_dropdown_ = find_dropdown (QRegularExpression ("^(Sub Mode|Mode B)$"))) >= 0)
     {
       map_modes (mode_B_dropdown_, &mode_B_map_);
     }
@@ -276,11 +276,11 @@ int HRDTransceiver::do_start ()
   // so we must filter by rig name as well
   if (current_radio_name.startsWith ("IC")) // works with Icom transceivers
     {
-      data_mode_toggle_button_ = find_button (QRegExp ("^(Data)$"));
+      data_mode_toggle_button_ = find_button (QRegularExpression ("^(Data)$"));
     }
 
-  data_mode_on_button_ = find_button (QRegExp ("^(DATA-ON\\(mid\\))$"));
-  data_mode_off_button_ = find_button (QRegExp ("^(DATA-OFF)$"));
+  data_mode_on_button_ = find_button (QRegularExpression ("^(DATA-ON\\(mid\\))$"));
+  data_mode_off_button_ = find_button (QRegularExpression ("^(DATA-OFF)$"));
 
   // Some newer Icoms have a Data drop down with (Off,On,D1,D2,D3)
   // Some newer Icoms have a Data drop down with (Off,D1,D2,D3)
@@ -288,14 +288,14 @@ int HRDTransceiver::do_start ()
   // (Off,,D1-FIL1,D1-FIL2,D1-FIL3) the missing value counts as an
   // index value - I think it is a drop down separator line - this
   // appears to be an HRD defect and we cannot work around it
-  if ((data_mode_dropdown_ = find_dropdown (QRegExp ("^(Data)$"))) >= 0)
+  if ((data_mode_dropdown_ = find_dropdown (QRegularExpression ("^(Data)$"))) >= 0)
     {
-      data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegExp ("^(On|Data1|D1|D1-FIL1)$"));
-      data_mode_dropdown_selection_off_ = find_dropdown_selection (data_mode_dropdown_, QRegExp ("^(Off)$"));
+      data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(On|Data1|D1|D1-FIL1)$"));
+      data_mode_dropdown_selection_off_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(Off)$"));
     }
 
-  ptt_button_ = find_button (QRegExp ("^(TX)$"));
-  alt_ptt_button_ = find_button (QRegExp ("^(TX~Alt|TX~Data)$"));
+  ptt_button_ = find_button (QRegularExpression ("^(TX)$"));
+  alt_ptt_button_ = find_button (QRegularExpression ("^(TX~Alt|TX~Data)$"));
 
   if (vfo_count_ == 1 && ((vfo_B_button_ >= 0 && vfo_A_button_ >= 0) || vfo_toggle_button_ >= 0))
     {
@@ -362,17 +362,17 @@ void HRDTransceiver::do_stop ()
   CAT_TRACE ("stopped" << state () << "reversed" << reversed_);
 }
 
-int HRDTransceiver::find_button (QRegExp const& re) const
+int HRDTransceiver::find_button (QRegularExpression const& re) const
 {
   return buttons_.indexOf (re);
 }
 
-int HRDTransceiver::find_dropdown (QRegExp const& re) const
+int HRDTransceiver::find_dropdown (QRegularExpression const& re) const
 {
   return dropdown_names_.indexOf (re);
 }
 
-std::vector<int> HRDTransceiver::find_dropdown_selection (int dropdown, QRegExp const& re) const
+std::vector<int> HRDTransceiver::find_dropdown_selection (int dropdown, QRegularExpression const& re) const
 {
   std::vector<int> indices;     // this will always contain at least a
                                 // -1
@@ -394,17 +394,17 @@ std::vector<int> HRDTransceiver::find_dropdown_selection (int dropdown, QRegExp 
 void HRDTransceiver::map_modes (int dropdown, ModeMap *map)
 {
   // order matters here (both in the map and in the regexps)
-  map->push_back (std::forward_as_tuple (CW, find_dropdown_selection (dropdown, QRegExp ("^(CW|CW\\(N\\)|CW-LSB|CWL)$"))));
-  map->push_back (std::forward_as_tuple (CW_R, find_dropdown_selection (dropdown, QRegExp ("^(CW-R|CW-R\\(N\\)|CW|CW-USB|CWU)$"))));
-  map->push_back (std::forward_as_tuple (LSB, find_dropdown_selection (dropdown, QRegExp ("^(LSB\\(N\\)|LSB)$"))));
-  map->push_back (std::forward_as_tuple (USB, find_dropdown_selection (dropdown, QRegExp ("^(USB\\(N\\)|USB)$"))));
-  map->push_back (std::forward_as_tuple (DIG_U, find_dropdown_selection (dropdown, QRegExp ("^(DIG|DIGU|DATA-U|PKT-U|DATA|AFSK|USER-U|USB)$"))));
-  map->push_back (std::forward_as_tuple (DIG_L, find_dropdown_selection (dropdown, QRegExp ("^(DIG|DIGL|DATA-L|PKT-L|DATA-R|USER-L|LSB)$"))));
-  map->push_back (std::forward_as_tuple (FSK, find_dropdown_selection (dropdown, QRegExp ("^(DIG|FSK|RTTY|RTTY-LSB)$"))));
-  map->push_back (std::forward_as_tuple (FSK_R, find_dropdown_selection (dropdown, QRegExp ("^(DIG|FSK-R|RTTY-R|RTTY|RTTY-USB)$"))));
-  map->push_back (std::forward_as_tuple (AM, find_dropdown_selection (dropdown, QRegExp ("^(AM|DSB|SAM|DRM)$"))));
-  map->push_back (std::forward_as_tuple (FM, find_dropdown_selection (dropdown, QRegExp ("^(FM|FM\\(N\\)|FM-N|WFM)$"))));
-  map->push_back (std::forward_as_tuple (DIG_FM, find_dropdown_selection (dropdown, QRegExp ("^(PKT-FM|PKT|DATA\\(FM\\)|FM)$"))));
+  map->push_back (std::forward_as_tuple (CW, find_dropdown_selection (dropdown, QRegularExpression ("^(CW|CW\\(N\\)|CW-LSB|CWL)$"))));
+  map->push_back (std::forward_as_tuple (CW_R, find_dropdown_selection (dropdown, QRegularExpression ("^(CW-R|CW-R\\(N\\)|CW|CW-USB|CWU)$"))));
+  map->push_back (std::forward_as_tuple (LSB, find_dropdown_selection (dropdown, QRegularExpression ("^(LSB\\(N\\)|LSB)$"))));
+  map->push_back (std::forward_as_tuple (USB, find_dropdown_selection (dropdown, QRegularExpression ("^(USB\\(N\\)|USB)$"))));
+  map->push_back (std::forward_as_tuple (DIG_U, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGU|DATA-U|PKT-U|DATA|AFSK|USER-U|USB)$"))));
+  map->push_back (std::forward_as_tuple (DIG_L, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGL|DATA-L|PKT-L|DATA-R|USER-L|LSB)$"))));
+  map->push_back (std::forward_as_tuple (FSK, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|FSK|RTTY|RTTY-LSB)$"))));
+  map->push_back (std::forward_as_tuple (FSK_R, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|FSK-R|RTTY-R|RTTY|RTTY-USB)$"))));
+  map->push_back (std::forward_as_tuple (AM, find_dropdown_selection (dropdown, QRegularExpression ("^(AM|DSB|SAM|DRM)$"))));
+  map->push_back (std::forward_as_tuple (FM, find_dropdown_selection (dropdown, QRegularExpression ("^(FM|FM\\(N\\)|FM-N|WFM)$"))));
+  map->push_back (std::forward_as_tuple (DIG_FM, find_dropdown_selection (dropdown, QRegularExpression ("^(PKT-FM|PKT|DATA\\(FM\\)|FM)$"))));
 
   CAT_TRACE ("for dropdown" << dropdown_names_[dropdown]);
   std::for_each (map->begin (), map->end (), [this, dropdown] (ModeMap::value_type const& item)

@@ -16,7 +16,7 @@ double percentile_cutoff (std::vector<double> values, int percent)
 
   std::sort (values.begin (), values.end ());
   int index = static_cast<int> (std::lround (values.size () * 0.01 * percent));
-  index = std::max (1, std::min (index, static_cast<int> (values.size ())));
+  index = std::max (static_cast<int>(1), static_cast<int>(std::min (index, static_cast<int> (values.size ()))));
   return values[static_cast<size_t> (index - 1)];
 }
 

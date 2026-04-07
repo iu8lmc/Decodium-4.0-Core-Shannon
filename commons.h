@@ -5,9 +5,7 @@
 #define NTMAX 30*60
 #define RX_SAMPLE_RATE 12000
 
-#ifdef __cplusplus
-#include <cstdbool>
-#else
+#ifndef __cplusplus
 #include <stdbool.h>
 #endif
 

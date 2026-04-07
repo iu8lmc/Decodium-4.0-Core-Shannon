@@ -108,7 +108,7 @@ SampleDownloader::impl::impl (QSettings * settings
   auto details_button = button_box_.addButton (tr ("&Details"), QDialogButtonBox::HelpRole);
   details_button->setCheckable (true);
   details_widget_.hide ();
-  details_layout_.setMargin (0);
+  details_layout_.setContentsMargins (0, 0, 0, 0);
   details_layout_.addRow (tr ("Base URL for samples:"), &url_line_edit_);
   details_layout_.addRow (tr ("Only use HTTP:"), &http_only_check_box_);
   http_only_check_box_.setToolTip (tr ("Check this if you get SSL/TLS errors"));

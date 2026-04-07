@@ -12,10 +12,11 @@
 #include <tuple>
 #include <vector>
 
+#include "Detector/FftCompat.hpp"
+
 extern "C"
 {
 void fftbig_ (float dd[], int* nmax);
-void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
 void ftx_q65_async_decode_latest_c_api (short const* iwave, int* nqd0, int* nutc,
                                         int* ntrperiod, int* nsubmode, int* nfqso,
                                         int* ntol, int* ndepth, int* nfa, int* nfb,
@@ -871,11 +872,8 @@ extern "C" void ftx_qmap_q65b_c (int* nutc, int* nqd, double* fcenter, int* nfca
       cz[static_cast<std::size_t> (i)] = {0.0f, 0.0f};
     }
 
-  int nfft_arg = 2 * nfft2;
-  int ndim = 1;
-  int isign = 1;
-  int iform = -1;
-  four2a_ (cz.data (), &nfft_arg, &ndim, &isign, &iform);
+  int const nfft_arg = 2 * nfft2;
+  decodium::fft_compat::inverse_real (cz, nfft_arg);
 
   std::vector<short> iwave (kQmapWaveSamples, 0);
   for (int i = 0; i < nfft2; ++i)

@@ -1,4 +1,6 @@
 // -*- Mode: C++ -*-
+#include "Detector/FftCompat.hpp"
+
 #include <fftw3.h>
 
 #include <algorithm>
@@ -17,14 +19,14 @@ namespace
   static_assert (sizeof (std::complex<float>) == sizeof (fftwf_complex),
                  "std::complex<float> must match fftwf_complex layout");
 
-  struct Four2aKey
+  struct FftPlanKey
   {
     int nfft {0};
     int isign {0};
     int iform {0};
     std::uintptr_t address {0};
 
-    bool operator== (Four2aKey const& other) const noexcept
+    bool operator== (FftPlanKey const& other) const noexcept
     {
       return nfft == other.nfft
           && isign == other.isign
@@ -33,9 +35,9 @@ namespace
     }
   };
 
-  struct Four2aKeyHash
+  struct FftPlanKeyHash
   {
-    std::size_t operator() (Four2aKey const& key) const noexcept
+    std::size_t operator() (FftPlanKey const& key) const noexcept
     {
       std::size_t seed = static_cast<std::size_t> (key.address);
       seed ^= static_cast<std::size_t> (key.nfft) + 0x9e3779b9u + (seed << 6) + (seed >> 2);
@@ -45,12 +47,12 @@ namespace
     }
   };
 
-  class Four2aRegistry
+  class FftPlanRegistry
   {
   public:
     fftwf_plan find_or_create (std::complex<float>* data, int nfft, int isign, int iform)
     {
-      Four2aKey key;
+      FftPlanKey key;
       key.nfft = nfft;
       key.isign = isign;
       key.iform = iform;
@@ -112,18 +114,18 @@ namespace
           return fftwf_plan_dft_c2r_1d (nfft, complex_data, real_data, flags);
         }
 
-      std::fprintf (stderr, "Unsupported request in four2a_: nfft=%d isign=%d iform=%d\n",
+      std::fprintf (stderr, "Unsupported legacy FFT request: nfft=%d isign=%d iform=%d\n",
                     nfft, isign, iform);
       return nullptr;
     }
 
     std::mutex mutex_;
-    std::unordered_map<Four2aKey, fftwf_plan, Four2aKeyHash> plans_;
+    std::unordered_map<FftPlanKey, fftwf_plan, FftPlanKeyHash> plans_;
   };
 
-  Four2aRegistry& four2a_registry ()
+  FftPlanRegistry& fft_plan_registry ()
   {
-    static auto* registry = new Four2aRegistry;
+    static auto* registry = new FftPlanRegistry;
     return *registry;
   }
 
@@ -218,9 +220,36 @@ namespace
   }
 }
 
+namespace decodium
+{
+namespace fft_compat
+{
+
+void legacy_fft_execute (std::complex<float>* buffer, int nfft, int isign, int iform)
+{
+  if (!buffer || nfft == 0)
+    {
+      return;
+    }
+
+  fftwf_plan const plan = fft_plan_registry ().find_or_create (buffer, nfft, isign, iform);
+  if (plan)
+    {
+      fftwf_execute (plan);
+    }
+}
+
+void legacy_fft_cleanup ()
+{
+  fft_plan_registry ().clear ();
+}
+
+}
+}
+
 extern "C"
 {
-  void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform, int)
+  void wsjt_fft_compat_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform, int)
   {
     (void) ndim;
     if (!nfft)
@@ -229,7 +258,7 @@ extern "C"
       }
     if (*nfft < 0)
       {
-        four2a_registry ().clear ();
+        decodium::fft_compat::legacy_fft_cleanup ();
         return;
       }
     if (!a || !isign || !iform || *nfft == 0)
@@ -237,11 +266,7 @@ extern "C"
         return;
       }
 
-    fftwf_plan const plan = four2a_registry ().find_or_create (a, *nfft, *isign, *iform);
-    if (plan)
-      {
-        fftwf_execute (plan);
-      }
+    decodium::fft_compat::legacy_fft_execute (a, *nfft, *isign, *iform);
   }
 
   void blanker_ (short iwave[], int* nz, int* ndropmax, int* npct, std::complex<float> c_bigfft[])

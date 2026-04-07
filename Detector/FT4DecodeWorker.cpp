@@ -163,7 +163,7 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
 
   short int iwave[kFt4SampleCount] {};
-  int const copyCount = std::min (request.audio.size (), kFt4SampleCount);
+  int const copyCount = std::min (static_cast<int>(request.audio.size ()), static_cast<int>(kFt4SampleCount));
   if (copyCount > 0)
     {
       std::copy_n (request.audio.constBegin (), copyCount, iwave);

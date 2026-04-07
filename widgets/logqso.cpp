@@ -97,7 +97,7 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
   setWindowTitle(programTitle + " - Log QSO");
   ui->comboBoxSatellite->addItem ("", "");
   QString sat_file_location;
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   sat_file_location = dataPath.exists(sat_file_name) ? dataPath.absoluteFilePath(sat_file_name) : m_config->data_dir ().absoluteFilePath (sat_file_name);
   QFile file {sat_file_location};
   QFileInfo sat_info {sat_file_location};
@@ -187,7 +187,7 @@ void LogQSO::loadSettings ()
   ui->cbFreqRx->setChecked (m_settings->value ("SaveFreqRx", false).toBool ());
 
   QString comments_location;  // load the content of comments.txt file to the comments combo box
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   comments_location = dataPath.exists("comments.txt") ? dataPath.absoluteFilePath("comments.txt") : m_config->data_dir ().absoluteFilePath ("comments.txt");
   QFile file2 = {comments_location};
   QFileInfo comments_info {comments_location};
@@ -457,7 +457,7 @@ void LogQSO::accept()
   }
   m_freqRx = ui->freqRx->text ();
   //Log this QSO to file "wsjtx.log"
-  static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("wsjtx.log")};
+  static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("wsjtx.log")};
   if(!f.open(QIODevice::Text | QIODevice::Append)) {
     MessageBox::warning_message (this, tr ("Log file error"),
                                  tr ("Cannot open \"%1\" for append").arg (f.fileName ()),

@@ -1,4 +1,7 @@
 // -*- Mode: C++ -*-
+#include "Detector/FftCompat.hpp"
+#include "Detector/FtxQ65Core.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -24,7 +27,6 @@ extern "C"
 
 extern "C"
 {
-void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
 void ftx_q65_ap_c (int* nqsoprogress, int* ipass, int* ncontest, int* lapcqonly,
                    int apsym0[], int aph10[], int apmask[], int apsymbols[], int* iaptype);
 void legacy_pack77_unpack_c (char const c77[77], int received, char msgsent[37], bool* success);
@@ -32,6 +34,8 @@ void legacy_pack77_unpack_c (char const c77[77], int received, char msgsent[37],
 
 namespace
 {
+using decodium::fft_compat::forward_complex;
+
 constexpr int kQ65MessageSymbols {13};
 constexpr int kQ65DecodedChars {37};
 constexpr int kQ65Alphabet {64};
@@ -238,11 +242,7 @@ void spec64_impl (std::complex<float> const* c0, int npts, int nsps, int mode_q6
 
       std::fill (cs.begin (), cs.begin () + nsps, std::complex<float> {});
       std::copy (c0 + ja, c0 + jb + 1, cs.begin ());
-      int nfft = nsps;
-      int ndim = 1;
-      int isign = -1;
-      int iform = 1;
-      four2a_ (cs.data (), &nfft, &ndim, &isign, &iform);
+      forward_complex (cs.data (), nsps);
       for (int ii = 1; ii <= ll; ++ii)
         {
           int i = ii - 65 + mode_q65;
@@ -300,11 +300,16 @@ void spec64_impl (std::complex<float> const* c0, int npts, int nsps, int mode_q6
 
 }
 
-extern "C" void q65_enc_ (int x[], int y[])
+void decodium::q65::encode_payload_symbols (int const payload[13], int codeword[63])
 {
+  if (!payload || !codeword)
+    {
+      return;
+    }
+
   std::lock_guard<std::mutex> lock {shared_q65_codec_mutex ()};
   q65_codec_ds& codec = shared_q65_codec ();
-  q65_encode (&codec, y, x);
+  q65_encode (&codec, codeword, payload);
 }
 
 extern "C" void q65_intrinsics_ff_ (float s3[], int* submode, float* b90ts,

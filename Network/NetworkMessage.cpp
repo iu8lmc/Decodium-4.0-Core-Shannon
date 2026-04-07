@@ -4,6 +4,8 @@
 
 #include <QString>
 #include <QByteArray>
+#include <QDataStream>
+#include <QIODevice>
 #include <QDebug>
 
 #include "pimpl_impl.hpp"

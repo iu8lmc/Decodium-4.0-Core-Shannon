@@ -3,9 +3,10 @@
 #include <cstdlib>
 #include <cmath>
 #include <iomanip>
-#include <QAudioDeviceInfo>
+#include <QAudioDevice>
 #include <QAudioFormat>
-#include <QAudioInput>
+#include <QAudioSource>
+#include <QMediaDevices>
 #include <QSysInfo>
 #include <QDebug>
 
@@ -27,10 +28,6 @@ bool SoundInput::checkStream ()
         case QAudio::IOError:
           Q_EMIT error (tr ("An error occurred during read from the audio input device."));
           break;
-
-        // case QAudio::UnderrunError:
-        //   Q_EMIT error (tr ("Audio data not being fed to the audio input device fast enough."));
-        //   break;
 
         case QAudio::FatalError:
           Q_EMIT error (tr ("Non-recoverable error, audio input device not usable at this time."));
@@ -54,7 +51,7 @@ bool SoundInput::checkStream ()
   return result;
 }
 
-void SoundInput::start(QAudioDeviceInfo const& device, int framesPerBuffer, AudioDevice * sink
+void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDevice * sink
                        , unsigned downSampleFactor, AudioDevice::Channel channel)
 {
   Q_ASSERT (sink);
@@ -63,39 +60,43 @@ void SoundInput::start(QAudioDeviceInfo const& device, int framesPerBuffer, Audi
 
   m_sink = sink;
 
-  QAudioFormat format (device.preferredFormat());
-//  qDebug () << "Preferred audio input format:" << format;
+  // Qt6: QAudioFormat setup — no codec/sampleType/sampleSize/byteOrder
+  QAudioFormat format;
   format.setChannelCount (AudioDevice::Mono == channel ? 1 : 2);
-  format.setCodec ("audio/pcm");
   format.setSampleRate (12000 * downSampleFactor);
-  format.setSampleType (QAudioFormat::SignedInt);
-  format.setSampleSize (16);
-  format.setByteOrder (QAudioFormat::Endian (QSysInfo::ByteOrder));
-  if (!format.isValid ())
-    {
-      Q_EMIT error (tr ("Requested input audio format is not valid."));
-      return;
+  format.setSampleFormat (QAudioFormat::Int16);
+
+  // Se il device preferisce stereo, usiamo stereo anche se è stato richiesto mono.
+  // WASAPI su Windows spesso non funziona in mono su dispositivi USB audio.
+  {
+    QAudioFormat preferred = device.preferredFormat();
+    if (preferred.channelCount() > 1 && format.channelCount() == 1) {
+        qDebug() << "SoundInput: device prefers" << preferred.channelCount() << "channels — upgrading from mono to stereo";
+        format.setChannelCount(preferred.channelCount());
+        // Con stereo bisogna usare Left (non Mono) altrimenti bytesPerFrame()=2
+        // e store() leggerebbe male i frame stereo da 4 byte.
+        channel = AudioDevice::Left;
     }
-  else if (!device.isFormatSupported (format))
+  }
+
+  qDebug() << "SoundInput::start ch=" << format.channelCount() << "rate=" << format.sampleRate() << "dev=" << device.description();
+  if (!device.isFormatSupported (format))
     {
-//      qDebug () << "Nearest supported audio format:" << device.nearestFormat (format);
+      qDebug() << "SoundInput: FORMAT NOT SUPPORTED";
       Q_EMIT error (tr ("Requested input audio format is not supported on device."));
       return;
     }
-  // qDebug () << "Selected audio input format:" << format;
 
-  m_stream.reset (new QAudioInput {device, format});
+  m_stream.reset (new QAudioSource {device, format});
+  qDebug() << "SoundInput: QAudioSource created, error=" << (int)m_stream->error();
   if (!checkStream ())
     {
       return;
     }
 
-  connect (m_stream.data(), &QAudioInput::stateChanged, this, &SoundInput::handleStateChanged);
-  connect (m_stream.data(), &QAudioInput::notify, [this] () {checkStream ();});
+  connect (m_stream.data(), &QAudioSource::stateChanged, this, &SoundInput::handleStateChanged);
+  // Note: QAudioSource::notify() was removed in Qt6; no periodic notification needed.
 
-  //qDebug () << "SoundIn default buffer size (bytes):" << m_stream->bufferSize () << "period size:" << m_stream->periodSize ();
-  // the Windows MME version of QAudioInput uses 1/5 of the buffer
-  // size for period size other platforms seem to optimize themselves
   if (framesPerBuffer > 0)
     {
       m_stream->setBufferSize (m_stream->format ().bytesForFrames (framesPerBuffer));
@@ -105,7 +106,6 @@ void SoundInput::start(QAudioDeviceInfo const& device, int framesPerBuffer, Audi
       m_stream->start (sink);
       checkStream ();
       cummulative_lost_usec_ = -1;
-//      LOG_DEBUG ("Selected buffer size (bytes): " << m_stream->bufferSize () << " period size: " << m_stream->periodSize ());
     }
   else
     {
@@ -117,15 +117,13 @@ void SoundInput::suspend ()
 {
   if (m_stream)
     {
-//      m_stream->suspend ();
-      m_stream->stop();  // better stop and restart audio (fixes issues on Linux and macOS)
+      m_stream->stop();
       checkStream ();
     }
 }
 
 void SoundInput::resume ()
 {
-//  qDebug() << "Resume" << fmod(0.001*QDateTime::currentMSecsSinceEpoch(),6.0);
   if (m_sink)
     {
       m_sink->reset ();
@@ -133,14 +131,15 @@ void SoundInput::resume ()
 
   if (m_stream)
     {
-//      m_stream->resume ();
-      m_stream->start (m_sink);  // better stop and restart audio (fixes issues on Linux and macOS)
+      m_stream->start (m_sink);
       checkStream ();
     }
 }
 
 void SoundInput::handleStateChanged (QAudio::State newState)
 {
+  qDebug() << "SoundInput: handleStateChanged state=" << (int)newState
+           << (m_stream ? " err=" + QString::number((int)m_stream->error()) : " no_stream");
   switch (newState)
     {
     case QAudio::IdleState:
@@ -155,12 +154,6 @@ void SoundInput::handleStateChanged (QAudio::State newState)
     case QAudio::SuspendedState:
       Q_EMIT status (tr ("Suspended"));
       break;
-
-#if QT_VERSION >= QT_VERSION_CHECK (5, 10, 0)
-    case QAudio::InterruptedState:
-      Q_EMIT status (tr ("Interrupted"));
-      break;
-#endif
 
     case QAudio::StoppedState:
       if (!checkStream ())
@@ -183,21 +176,13 @@ void SoundInput::reset (bool report_dropped_frames)
       while (std::abs (elapsed_usecs - m_stream->processedUSecs ())
              > 24 * 60 * 60 * 500000ll) // half day
         {
-          // QAudioInput::elapsedUSecs() wraps after 24 hours
+          // QAudioSource::elapsedUSecs() wraps after 24 hours
           elapsed_usecs += 24 * 60 * 60 * 1000000ll;
         }
-      // don't report first time as we don't yet known latency
+      // don't report first time as we don't yet know latency
       if (cummulative_lost_usec_ != std::numeric_limits<qint64>::min () && report_dropped_frames)
         {
           auto lost_usec = elapsed_usecs - m_stream->processedUSecs () - cummulative_lost_usec_;
-      // disable log warnings on dropped audio for now, as detection is not reliable
-//          if (std::abs (lost_usec) > 48000 / 5)
-//            {
-//              LOG_WARN ("Detected dropped audio source samples: "
-//                        << m_stream->format ().framesForDuration (lost_usec)
-//                        << " (" << std::setprecision (4) << lost_usec / 1.e6 << " S)");
-//            }
-//          else if (std::abs (lost_usec) > 5 * 48000)
           if (std::abs (lost_usec) > 5 * 48000)
             {
               LOG_ERROR ("Detected excessive dropped audio source samples: "

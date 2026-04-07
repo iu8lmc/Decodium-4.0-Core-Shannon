@@ -449,7 +449,7 @@ TCITransceiver::TCITransceiver (logger_type * logger, std::unique_ptr<Transceive
   , m_cwLevel {false}
   , m_j0 {-1}
   , m_toneFrequency0 {1500.0}
-  , wav_file_ {QDir(QStandardPaths::writableLocation (QStandardPaths::DataLocation)).absoluteFilePath ("tx.wav").toStdString()}
+  , wav_file_ {QDir(QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)).absoluteFilePath ("tx.wav").toStdString()}
 {
   m_samplesPerFFT = 6912 / 2;
   tci_Ready = false;
@@ -1757,7 +1757,7 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
           requiredSamples = qMax (requiredSamples, static_cast<qint64> (std::ceil (m_TRperiod * 48000.0 - 24000.0)) + 2);
         }
       int const kFoxWaveSampleCount = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
-      int const copySamples = static_cast<int> (qBound<qint64> (1, requiredSamples, kFoxWaveSampleCount));
+      int const copySamples = static_cast<int> (qBound<qint64> (qint64(1), requiredSamples, qint64(kFoxWaveSampleCount)));
       m_waveSnapshot.resize (copySamples);
       QReadLocker wave_lock {&fox_wave_lock ()};
       std::memcpy (m_waveSnapshot.data (), foxcom_.wave, static_cast<size_t> (copySamples) * sizeof (float));

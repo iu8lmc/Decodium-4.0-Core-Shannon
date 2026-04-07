@@ -126,7 +126,7 @@ set_property (SOURCE ${libm65_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CM
 #
 add_library (m65impl STATIC ${libm65_FSRCS} ${libm65_CSRCS} ${libm65_CXXSRCS})
 target_include_directories (m65impl PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries (m65impl wsjt_fort wsjt_cxx Qt5::Core)
+target_link_libraries (m65impl wsjt_fort wsjt_cxx Qt6::Core)
 
 add_executable (m65 m65.f90 m65a.f90)
 target_link_libraries (m65 m65impl ${FFTW3_LIBRARIES})

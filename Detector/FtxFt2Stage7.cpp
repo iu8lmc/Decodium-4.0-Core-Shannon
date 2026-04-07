@@ -336,7 +336,7 @@ extern "C" int ftx_ft2_message_is_plausible_c (char const decoded37[37])
 void fill_fixed_chars (char* dest, int width, QByteArray const& source)
 {
   std::fill_n (dest, width, ' ');
-  int const count = std::min (width, source.size ());
+  int const count = std::min (width, static_cast<int>(source.size ()));
   if (count > 0)
     {
       std::memcpy (dest, source.constData (), static_cast<size_t> (count));

@@ -45,11 +45,11 @@ set_property (SOURCE ${map65_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CMA
 add_subdirectory (libm65)
 
 # UI generation
-qt5_wrap_ui (map65_GENUISRCS ${map65_UISRCS})
+qt_wrap_ui (map65_GENUISRCS ${map65_UISRCS})
 
 add_executable (map65 ${map65_CXXSRCS} ${map65_CSRCS} ${map65_GENUISRCS} map65.rc)
 target_include_directories (map65 PRIVATE ${CMAKE_SOURCE_DIR} ${FFTW3_INCLUDE_DIRS})
-target_link_libraries (map65 wsjt_qt m65impl ${FFTW3_LIBRARIES} Qt5::Widgets Qt5::Network Portaudio::Portaudio Usb::Usb)
+target_link_libraries (map65 wsjt_qt m65impl ${FFTW3_LIBRARIES} Qt6::Widgets Qt6::Network Portaudio::Portaudio Usb::Usb)
 
 if (WSJT_CREATE_WINMAIN)
   set_target_properties (map65 PROPERTIES WIN32_EXECUTABLE ON)

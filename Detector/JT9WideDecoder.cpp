@@ -409,7 +409,7 @@ decodium::jt9wide::detail::SoftsymResult softsym9w_compute (QVector<short> const
                                                             float f0, float width, int nsubmode)
 {
   decodium::jt9wide::detail::SoftsymResult result;
-  int const npts = std::min (52 * RX_SAMPLE_RATE, audio.size ());
+  int const npts = std::min (static_cast<qsizetype>(52 * RX_SAMPLE_RATE), audio.size ());
   if (npts < kWideNfft)
     {
       return result;

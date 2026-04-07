@@ -1151,7 +1151,7 @@ std::vector<DecodedLine> decodeFst4Lines (DecodeRequest const& request)
   RuntimeConfig const cfg = config_for_period (qBound (15, request.ntrperiod, 1800),
                                                qBound (1, request.ndepth, 3));
   QVector<short> localAudio (cfg.nmax);
-  int const copyCount = std::min (request.audio.size (), cfg.nmax);
+  int const copyCount = std::min (request.audio.size (), static_cast<qsizetype>(cfg.nmax));
   if (copyCount > 0)
     {
       std::copy_n (request.audio.constBegin (), copyCount, localAudio.begin ());
@@ -2173,7 +2173,7 @@ extern "C" int ftx_fst4_debug_first_candidate_c (short const* audio, int audio_s
               if (msg_out)
                 {
                   std::fill_n (msg_out, 37, ' ');
-                  std::copy_n (msg.constData (), std::min (37, msg.size ()), msg_out);
+                  std::copy_n (msg.constData (), std::min (static_cast<qsizetype>(37), msg.size ()), msg_out);
                 }
             }
           if (nharderrors >= 0 && unpackOk)

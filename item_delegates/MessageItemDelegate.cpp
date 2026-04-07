@@ -5,7 +5,7 @@
 #include "MessageItemDelegate.hpp"
 
 #include <QLineEdit>
-#include <QRegExpValidator>
+#include <QRegularExpressionValidator>
 
 //
 // Class MessageItemDelegate

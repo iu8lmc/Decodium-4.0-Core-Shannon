@@ -9086,7 +9086,7 @@ void MainWindow::read_wav_file (QString const& fname)
       qint64 max_bytes = std::min (std::size_t (nsamples),
           sizeof (dec_data.d2) / sizeof (dec_data.d2[0]))* bytes_per_frame;
       auto n = file.read (reinterpret_cast<char *> (dec_data.d2),
-                        std::min (max_bytes, file.size ()));
+                        std::min (static_cast<int>(max_bytes), static_cast<int>(file.size ())));
       int frames_read = n / bytes_per_frame;
     // zero unfilled remaining sample space
       std::memset(&dec_data.d2[frames_read],0,max_bytes - n);
@@ -10109,7 +10109,7 @@ void MainWindow::refreshPileupList()
 
 void MainWindow::read_log()
 {
-  static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium.log")};
+  static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium.log")};
   f.open(QIODevice::ReadOnly);
   if(f.isOpen()) {
     QTextStream in(&f);
@@ -26093,7 +26093,7 @@ void MainWindow::bandHopping()
 void MainWindow::on_actionDefault_event_logging_triggered()
 {
 #if defined(Q_OS_WIN)
-    QFile::remove (QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium_log_config.ini"));
+    QFile::remove (QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium_log_config.ini"));
 #else
     QFile::remove (QDir {QStandardPaths::writableLocation (QStandardPaths::ConfigLocation)}.absoluteFilePath ("decodium_log_config.ini"));
 #endif
@@ -26102,7 +26102,7 @@ void MainWindow::on_actionDefault_event_logging_triggered()
 void MainWindow::on_actionDiagnostic_mode_triggered()
 {
 #if defined(Q_OS_WIN)
-    static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium_log_config.ini")};
+    static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium_log_config.ini")};
 #else
     static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::ConfigLocation)}.absoluteFilePath ("decodium_log_config.ini")};
 #endif
@@ -26113,7 +26113,7 @@ void MainWindow::on_actionDiagnostic_mode_triggered()
       return;
     }
     QString instance = "";
-    QString path = QStandardPaths::writableLocation (QStandardPaths::DataLocation);
+    QString path = QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation);
     QStringList tw;
     if (path.contains("/Decodium")) tw=path.split("/Decodium");
     if (tw.size () > 0 && tw[1].remove(" - ") != "") instance = tw[1].remove(" - ") + "/";
@@ -26162,7 +26162,7 @@ void MainWindow::on_actionDiagnostic_mode_triggered()
 void MainWindow::on_actionDisable_event_logging_triggered()
 {
 #if defined(Q_OS_WIN)
-    static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium_log_config.ini")};
+    static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium_log_config.ini")};
 #else
     static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::ConfigLocation)}.absoluteFilePath ("decodium_log_config.ini")};
 #endif
@@ -26179,7 +26179,7 @@ void MainWindow::on_actionDisable_event_logging_triggered()
     QTextStream out(&f);
     out << EventConfig;
     f.close();
-    QFile::remove (QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium_syslog.log"));
+    QFile::remove (QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium_syslog.log"));
 }
 
 void MainWindow::on_actionUse_Dark_Style_triggered (bool checked)
@@ -27021,7 +27021,7 @@ void MainWindow::selectBandFrequency (Frequency preferredFrequency, Frequency fa
 
 void MainWindow::read_txLog()
 {
-    static QFile logfile {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium.log")};
+    static QFile logfile {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium.log")};
     QTextStream logstream(&logfile);
     if(logfile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         while (!logstream.atEnd()) {
@@ -27037,7 +27037,7 @@ void MainWindow::on_actionErase_Tx_Log_triggered()
   int ret = MessageBox::query_message (this, tr ("Confirm Erase"),
           tr ("Are you sure you want to erase the Tx Log?"));
   if(ret==MessageBox::Yes) {
-    static QFile logFile {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("decodium.log")};
+    static QFile logFile {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium.log")};
     logFile.remove();
     txLog = "";
   }
@@ -27046,7 +27046,7 @@ void MainWindow::on_actionErase_Tx_Log_triggered()
 void MainWindow::addCallsignToignoreList()
 {
   if (m_hisCall!="") {
-    static QFile ignoreFile {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("ignore.list")};
+    static QFile ignoreFile {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("ignore.list")};
     if(ignoreFile.open(QIODevice::Text | QIODevice::Append)) {
       QString ignoreEntry= (m_hisCall + ",");
       QTextStream out(&ignoreFile);
@@ -27067,7 +27067,7 @@ void MainWindow::addCallsignToignoreList()
 
 void MainWindow::read_ignoreList()
 {
-    static QFile ignoreFile {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("ignore.list")};
+    static QFile ignoreFile {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("ignore.list")};
     QTextStream ignoreStream(&ignoreFile);
     if(ignoreFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         while (!ignoreStream.atEnd()) {
@@ -27083,7 +27083,7 @@ void MainWindow::on_actionErase_Ignore_List_triggered()
   int ret = MessageBox::query_message (this, tr ("Confirm Erase"),
           tr ("Are you sure you want to erase the Ignore List?"));
   if(ret==MessageBox::Yes) {
-    static QFile ignoreFile {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath ("ignore.list")};
+    static QFile ignoreFile {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("ignore.list")};
     ignoreFile.remove();
     ignoreList = "";
   }

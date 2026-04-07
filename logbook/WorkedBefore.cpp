@@ -384,7 +384,7 @@ class WorkedBefore::impl final
 public:
   impl (Configuration const * configuration)
     : configuration_ {configuration}
-    , path_ {QDir {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}.absoluteFilePath (logFileName)}
+    , path_ {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath (logFileName)}
     , prefixes_ {configuration}
   {
   }
