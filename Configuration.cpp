@@ -1245,6 +1245,16 @@ bool Configuration::is_transceiver_online () const
   return m_->rig_active_;
 }
 
+void Configuration::refresh_audio_devices ()
+{
+  SettingsGroup g {m_->settings_, "Configuration"};
+  m_->find_audio_devices ();
+  m_->audio_input_device_ = m_->next_audio_input_device_;
+  m_->audio_input_channel_ = m_->next_audio_input_channel_;
+  m_->audio_output_device_ = m_->next_audio_output_device_;
+  m_->audio_output_channel_ = m_->next_audio_output_channel_;
+}
+
 bool Configuration::is_dummy_rig () const
 {
   return m_->rig_is_dummy_;
@@ -1967,7 +1977,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   , doc_dir_ {doc_path ()}
   , data_dir_ {data_path ()}
   , temp_dir_ {temp_directory}
-  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}
+  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}
   , lotw_users_ {network_manager_}
   , cloudlog_ {self, network_manager_}
   , restart_sound_input_device_ {false}
@@ -2514,7 +2524,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   // - missing file: download immediately
   // - stale file (>30 days): delayed background refresh
   {
-    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
     QFileInfo ctyInfo (dataPath.absoluteFilePath ("cty.dat"));
     bool const missing = !ctyInfo.exists ();
     bool const stale = ctyInfo.exists ()
@@ -2754,10 +2764,6 @@ void Configuration::impl::initialize_models ()
   ui_->udp_server_port_spin_box->setValue (udp_server_port_);
   ui_->udp_listen_port_spin_box->setValue (udp_listen_port_);
   load_network_interfaces (ui_->udp_interfaces_combo_box, udp_interface_names_);
-  if (!udp_interface_names_.size ())
-    {
-      udp_interface_names_ = get_selected_network_interfaces (ui_->udp_interfaces_combo_box);
-    }
   ui_->udp_TTL_spin_box->setValue (udp_TTL_);
   ui_->accept_udp_requests_check_box->setChecked (accept_udp_requests_);
   ui_->accept_udp_requests_check_box->setEnabled(true);
@@ -3959,8 +3965,17 @@ int Configuration::impl::exec ()
         rootVBox->setStretch (1, 0); // keep OK/Cancel visible at bottom
       }
 
+    // Preserve the user's resized dialog size across closes/relaunches.
+    // adjustSize() gives us the minimum layout-driven size, but must not
+    // shrink a geometry restored from settings.
+    QSize const restoredOrCurrentSize = size ();
     adjustSize ();
-    QSize const clamped = size ().boundedTo (QSize {maxWidth, maxHeight});
+    QSize const minimumLayoutSize = size ();
+    QSize const targetSize {
+      qMax (restoredOrCurrentSize.width (), minimumLayoutSize.width ()),
+      qMax (restoredOrCurrentSize.height (), minimumLayoutSize.height ())
+    };
+    QSize const clamped = targetSize.boundedTo (QSize {maxWidth, maxHeight});
     resize (clamped);
 
     int x = geometry ().x ();
@@ -4586,7 +4601,7 @@ void Configuration::impl::on_rescan_log_push_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CTY_download_button_clicked (bool /*clicked*/)
 {
   ui_->CTY_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
   cty_download.configure(network_manager_,
                          "https://www.country-files.com/bigcty/cty.dat",
                          dataPath.absoluteFilePath("cty.dat"),
@@ -4621,7 +4636,7 @@ void Configuration::impl::after_CTY_downloaded ()
 void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4641,7 +4656,7 @@ void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CALL3_EME_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_EME_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4663,7 +4678,7 @@ void Configuration::impl::error_during_CALL3_download (QString const& reason)
   MessageBox::warning_message (this, tr ("Error Loading CALL3.TXT file"), reason);
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
   if (!f.exists()) QFile::copy(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3.TXT");
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
@@ -4680,7 +4695,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 {
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   QFile h {dataPath.absolutePath() + "/" + "CALL3_backup.tmp"};
   if (!g.exists() and h.exists()) {
@@ -4694,7 +4709,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 void Configuration::impl::read_CALL3_version ()
 {
   QString text;
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
   QFile call3file {dataPath.absolutePath() + "/" + "CALL3.TXT"};
     QTextStream call3stream(&call3file);
     if(call3file.open (QIODevice::ReadOnly | QIODevice::Text)) {
@@ -5160,6 +5175,26 @@ void Configuration::impl::check_multicast (QHostAddress const& ha)
   ui_->udp_interfaces_combo_box->setVisible (is_multicast);
   ui_->udp_TTL_label->setVisible (is_multicast);
   ui_->udp_TTL_spin_box->setVisible (is_multicast);
+  if (is_multicast && udp_interface_names_.isEmpty ())
+    {
+      auto const selected = get_selected_network_interfaces (ui_->udp_interfaces_combo_box);
+      bool has_non_loopback {false};
+      for (auto const& if_name : selected)
+        {
+          if (if_name != loopback_interface_name_)
+            {
+              has_non_loopback = true;
+              break;
+            }
+        }
+
+      if (!has_non_loopback)
+        {
+          // With no saved interface preference yet, multicast should default
+          // to LAN-capable interfaces rather than loopback only.
+          load_network_interfaces (ui_->udp_interfaces_combo_box, {});
+        }
+    }
   if (isVisible ())
     {
       if (is_MAC_ambiguous_multicast_address (ha))
@@ -6389,6 +6424,8 @@ void Configuration::impl::load_audio_devices(QAudio::Mode mode, QComboBox * comb
 void Configuration::impl::load_network_interfaces (CheckableItemComboBox * combo_box, QStringList current)
 {
   combo_box->clear ();
+  bool const default_to_all_multicast_interfaces =
+      current.isEmpty () && is_multicast_address (QHostAddress {ui_->udp_server_line_edit->text ().trimmed ()});
   QStringList available_interface_names;
   for (auto const& net_if : QNetworkInterface::allInterfaces ())
     {
@@ -6403,13 +6440,13 @@ void Configuration::impl::load_network_interfaces (CheckableItemComboBox * combo
       // unavailable, so users do not lose their choice mid-session.
       if (usable || selected)
         {
-          bool check_it = selected;
+          bool check_it = selected || (default_to_all_multicast_interfaces && usable);
           if (is_loopback)
             {
               loopback_interface_name_ = net_if.name ();
               if (!current.size ())
                 {
-                  check_it = true;
+                  check_it = default_to_all_multicast_interfaces || check_it;
                 }
             }
           auto item = combo_box->addCheckItem (net_if.humanReadableName ()

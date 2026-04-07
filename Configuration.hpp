@@ -365,6 +365,7 @@ public:
 
   // This method queries if a CAT and PTT connection is operational.
   bool is_transceiver_online () const;
+  void refresh_audio_devices ();
 
   // Start the rig connection, safe and normal to call when rig is
   // already open.

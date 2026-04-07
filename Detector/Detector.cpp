@@ -1,4 +1,5 @@
 #include "Detector.hpp"
+#include "Fil4Filter.hpp"
 #include <QDateTime>
 #include <QtAlgorithms>
 #include <QDebug>
@@ -6,10 +7,6 @@
 #include "commons.h"
 
 #include "moc_Detector.cpp"
-
-extern "C" {
-  void   fil4_(qint16*, qint32*, qint16*, qint32*);
-}
 
 extern dec_data_t dec_data;
 
@@ -103,8 +100,8 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
           int const boundedKin = qBound (0, dec_data.params.kin, kMaxKin);
           if(m_downSampleFactor > 1 &&
              boundedKin <= (kMaxKin - framesAfterDownSample)) {
-            fil4_(&m_buffer[0], &framesToProcess, &dec_data.d2[boundedKin],
-                &framesAfterDownSample);
+            fil4_cpp(m_buffer.get(), framesToProcess, &dec_data.d2[boundedKin],
+                framesAfterDownSample);
             dec_data.params.kin = boundedKin + framesAfterDownSample;
           } else {
             // qDebug() << "framesToProcess     = " << framesToProcess;

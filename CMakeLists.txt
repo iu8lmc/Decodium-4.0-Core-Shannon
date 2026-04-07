@@ -302,6 +302,11 @@ set (wsjt_qt_CXXSRCS
   Modulator/FtxMessageEncoder.cpp
   widgets/LegacyUiHelpers.cpp
   widgets/PlotLegacyHelpers.cpp
+  Detector/AstroCompat.cpp
+  Detector/AstroQ3ListCompat.cpp
+  Detector/Conv232Compat.cpp
+  Detector/IndexSortCompat.cpp
+  Modulator/WsprLegacyCompat.cpp
   otpgenerator.cpp
   )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -387,6 +392,8 @@ set (wsjt_CXXSRCS
   lib/crc13.cpp
   lib/crc14.cpp
   Modulator/WattersonChannel.cpp
+  Detector/Fil4Filter.cpp
+  # PctileCompat: pctile_ already defined in FtxSharedDsp.cpp
   Detector/FtxBaseline.cpp
   Detector/FtxCandidates.cpp
   Detector/FtxBitmetrics.cpp
@@ -429,7 +436,7 @@ set (wsjt_FSRCS
   lib/jt4_decode.f90
   lib/jt65_mod.f90
   lib/jt65_mod6.f90 #ft8md
-  lib/get_q3list.f90
+  # lib/get_q3list.f90 — replaced by Detector/AstroQ3ListCompat.cpp
   lib/jt9_decode.f90
   lib/options.f90
   lib/packjt.f90
@@ -474,14 +481,14 @@ set (wsjt_FSRCS
   lib/degrade_snr.f90
   lib/downsam9.f90
   lib/echo_snr.f90
-  lib/encode232.f90
+  # lib/encode232.f90 — replaced by Detector/Conv232Compat.cpp
   lib/encode4.f90
   lib/encode_128_90.f90
   lib/entail.f90
   lib/ephem.f90
   lib/extract4.f90
   lib/extractmessage77.f90
-  lib/fano232.f90
+  # lib/fano232.f90 — replaced by Detector/Conv232Compat.cpp
   lib/fast9.f90
   lib/fast_decode.f90
   lib/fchisq.f90
@@ -489,7 +496,7 @@ set (wsjt_FSRCS
   lib/fchisq65.f90
   lib/fil3.f90
   lib/fil3c.f90
-  lib/fil4.f90
+  # lib/fil4.f90 — replaced by Detector/Fil4Filter.cpp
   lib/fil6521.f90
   lib/filbig.f90
   lib/fitcal.f90
@@ -510,7 +517,7 @@ set (wsjt_FSRCS
   lib/gen_cw_wave.f90
   lib/gen_echocall.f90
   lib/genwave.f90
-  lib/genwspr.f90
+  # lib/genwspr.f90 — replaced by Modulator/WsprLegacyCompat.cpp
   lib/geodist.f90
   lib/getlags.f90
   lib/getmet4.f90
@@ -521,11 +528,11 @@ set (wsjt_FSRCS
   lib/hash.f90
   lib/hint65.f90
   lib/hspec.f90
-  lib/indexx.f90
+  # lib/indexx.f90 — replaced by Detector/IndexSortCompat.cpp
   lib/init_random_seed.f90
   lib/interleave4.f90
   lib/interleave9.f90
-  lib/inter_wspr.f90
+  # lib/inter_wspr.f90 — replaced by Modulator/WsprLegacyCompat.cpp
   lib/jplsubs.f
   lib/jt9fano.f90
   lib/libration.f90
@@ -581,7 +588,7 @@ set (wsjt_FSRCS
   lib/wav12.f90
   lib/xcor4.f90
   lib/wqdecode.f90
-  lib/wqencode.f90
+  # lib/wqencode.f90 — replaced by Modulator/WsprLegacyCompat.cpp
   lib/wspr_downsample.f90
   lib/zplot9.f90
   )
@@ -1185,12 +1192,9 @@ if (${OPENMP_FOUND} OR APPLE)
     )
   file (MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/fortran_modules_omp)
   if (APPLE)
-    # On  Mac  we don't  have  working  OpenMP  support in  the  C/C++
-    # compilers so  we have to manually  set the correct flags  to get
-    # OpenMP support in jt9.
     target_compile_options (wsjt_fort_omp
       PRIVATE
-      $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>   # assumes GNU style Fortran compiler
+      $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>
       )
   endif (APPLE)
 endif (${OPENMP_FOUND} OR APPLE)
