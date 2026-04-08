@@ -58,13 +58,33 @@ DecodiumTransceiverManager::DecodiumTransceiverManager(QObject* parent)
 
 DecodiumTransceiverManager::~DecodiumTransceiverManager()
 {
-    // Disconnette in modo sincrono nel distruttore
-    if (d->transceiver) {
-        QMetaObject::invokeMethod(d->transceiver, "stop", Qt::QueuedConnection);
-        if (d->xcvThread && d->xcvThread->isRunning()) {
-            d->xcvThread->quit();
-            d->xcvThread->wait(3000);
+    auto* xcv = d->transceiver;
+    auto* thread = d->xcvThread;
+    d->transceiver = nullptr;
+    d->xcvThread = nullptr;
+
+    // Chiudi il rig prima di distruggere il QThread per evitare il fatal
+    // "QThread: Destroyed while thread is still running".
+    if (xcv) {
+        if (!thread || !thread->isRunning() || xcv->thread() == QThread::currentThread()) {
+            xcv->stop();
+        } else {
+            QMetaObject::invokeMethod(xcv, [xcv]() {
+                xcv->stop();
+            }, Qt::BlockingQueuedConnection);
         }
+    }
+
+    if (thread && thread->isRunning()) {
+        thread->quit();
+        if (!thread->wait(4000)) {
+            thread->terminate();
+            thread->wait(1000);
+        }
+    }
+
+    if (thread) {
+        delete thread;
     }
 }
 
@@ -190,22 +210,6 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     return p;
 }
 
-// ── teardownTransceiver: helper interno thread-safe ────────────────────────
-// Chiamato SOLO dal main thread quando il rig ha terminato (segnale finished)
-void DecodiumTransceiverManager::teardownDone()
-{
-    // xcvThread emette finished → lo eliminiamo
-    if (d->xcvThread) {
-        d->xcvThread->deleteLater();
-        d->xcvThread = nullptr;
-    }
-    d->transceiver = nullptr;   // già deleteLater-ed dal thread
-    if (m_connected) {
-        m_connected = false;
-        emit connectedChanged();
-    }
-}
-
 // ── connectRig ────────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::connectRig()
 {
@@ -249,12 +253,33 @@ void DecodiumTransceiverManager::connectRig()
 
     d->transceiver = xcv;
 
-    // Cleanup automatico: quando il thread finisce, il transceiver viene distrutto
-    connect(thread, &QThread::finished, xcv, &QObject::deleteLater, Qt::DirectConnection);
-
-    // Segnale finished del transceiver → cleanup sul main thread
+    // Il transceiver è "ripe for destruction" quando emette finished().
     connect(xcv, &Transceiver::finished,
-            this, &DecodiumTransceiverManager::teardownDone,
+            xcv, &QObject::deleteLater,
+            Qt::QueuedConnection);
+
+    // Quando il transceiver ha terminato il suo shutdown, fai terminare
+    // anche il relativo event loop; il QThread verrà poi ripulito solo
+    // dopo il vero QThread::finished.
+    connect(xcv, &Transceiver::finished,
+            thread, &QThread::quit,
+            Qt::QueuedConnection);
+
+    // Cleanup automatico: il QThread viene eliminato solo quando è davvero
+    // terminato, evitando di distruggerlo mentre il worker è ancora attivo.
+    connect(thread, &QThread::finished, xcv, &QObject::deleteLater);
+    connect(thread, &QThread::finished, this,
+            [this, thread, xcv]() {
+                if (d->xcvThread == thread)
+                    d->xcvThread = nullptr;
+                if (d->transceiver == xcv)
+                    d->transceiver = nullptr;
+                thread->deleteLater();
+                if (m_connected) {
+                    m_connected = false;
+                    emit connectedChanged();
+                }
+            },
             Qt::QueuedConnection);
 
     // Aggiornamenti di stato dal rig → main thread
@@ -315,7 +340,7 @@ void DecodiumTransceiverManager::disconnectRig()
 
     // Richiedi stop in modo sincrono sul thread del rig così il cleanup
     // (PTT off, split reset, rig_close) avviene prima del quit del thread.
-    if (xcv->thread() == QThread::currentThread()) {
+    if (!thread || !thread->isRunning() || xcv->thread() == QThread::currentThread()) {
         xcv->stop();
     } else {
         QMetaObject::invokeMethod(xcv, [xcv]() {
