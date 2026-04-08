@@ -1068,6 +1068,12 @@ void DecodiumBridge::openCatSettings()
     emit catSettingsRequested();
 }
 
+void DecodiumBridge::sendPskReporterNow()
+{
+    if (m_pskReporter && m_pskReporterEnabled)
+        m_pskReporter->sendReport();
+}
+
 void DecodiumBridge::searchPskReporter(const QString& callsign)
 {
     if (m_pskSearching) return;

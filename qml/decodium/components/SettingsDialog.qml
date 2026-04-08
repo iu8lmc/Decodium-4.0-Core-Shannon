@@ -538,7 +538,7 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 200
+                        Layout.preferredHeight: 220
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
@@ -563,12 +563,27 @@ Dialog {
                                 }
                                 Rectangle {
                                     width: 10; height: 10; radius: 5
-                                    color: bridge.pskReporterConnected ? "#00ff00" : "#ff4444"
+                                    color: bridge.pskReporterConnected ? "#00ff00"
+                                         : pskEnable.checked ? "#ffaa00" : "#ff4444"
                                 }
                                 Text {
-                                    text: bridge.pskReporterConnected ? "Connesso" : "Non connesso"
-                                    color: bridge.pskReporterConnected ? "#00ff00" : textSecondary
+                                    text: bridge.pskReporterConnected ? "Connesso"
+                                        : pskEnable.checked ? "Attivo (invio ogni 5 min)" : "Non abilitato"
+                                    color: bridge.pskReporterConnected ? "#00ff00"
+                                         : pskEnable.checked ? "#ffaa00" : textSecondary
                                     font.pixelSize: 11
+                                }
+                                Rectangle {
+                                    width: 80; height: 26; radius: 4
+                                    visible: pskEnable.checked
+                                    color: pskSendNowMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
+                                    border.color: secondaryCyan
+                                    Text { anchors.centerIn: parent; text: "Invia ora"; font.pixelSize: 11; color: secondaryCyan }
+                                    MouseArea {
+                                        id: pskSendNowMouse
+                                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                        onClicked: bridge.sendPskReporterNow()
+                                    }
                                 }
                             }
 
@@ -786,6 +801,139 @@ Dialog {
                             }
                         }
                     }
+                    // DX Cluster + Cloudlog + LotW
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.margins: 16
+                        Layout.topMargin: 0
+                        implicitHeight: networkExtraCol.implicitHeight + 32
+                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
+                        border.color: glassBorder
+                        radius: 8
+
+                        ColumnLayout {
+                            id: networkExtraCol
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 10
+
+                            Text { text: "DX Cluster"; color: secondaryCyan; font.bold: true; font.pixelSize: 14 }
+                            RowLayout {
+                                spacing: 12
+                                Text { text: "Host:"; color: textSecondary; font.pixelSize: 12 }
+                                TextField {
+                                    id: dxcHost
+                                    text: bridge.dxCluster ? bridge.dxCluster.host : "dxc.va7dx.com"
+                                    Layout.preferredWidth: 160
+                                    color: textPrimary; font.pixelSize: 11
+                                    onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.host = text
+                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
+                                }
+                                Text { text: "Porta:"; color: textSecondary; font.pixelSize: 12 }
+                                TextField {
+                                    text: bridge.dxCluster ? bridge.dxCluster.port.toString() : "7300"
+                                    Layout.preferredWidth: 60
+                                    color: textPrimary; font.pixelSize: 11
+                                    onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.port = parseInt(text) || 7300
+                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
+                                }
+                            }
+                            RowLayout {
+                                spacing: 12
+                                Rectangle {
+                                    width: 10; height: 10; radius: 5
+                                    color: bridge.dxCluster && bridge.dxCluster.connected ? "#00ff00" : "#ff4444"
+                                }
+                                Text {
+                                    text: bridge.dxCluster && bridge.dxCluster.connected ? "Connesso" : "Disconnesso"
+                                    color: textSecondary; font.pixelSize: 11
+                                }
+                                Item { Layout.fillWidth: true }
+                                Rectangle {
+                                    width: 80; height: 26; radius: 4
+                                    color: dxcConnMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
+                                    border.color: secondaryCyan
+                                    MouseArea {
+                                        id: dxcConnMouse; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: {
+                                            if (bridge.dxCluster) {
+                                                if (bridge.dxCluster.connected) bridge.dxCluster.disconnectCluster()
+                                                else bridge.dxCluster.connectCluster()
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent; font.pixelSize: 11
+                                        text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnetti" : "Connetti"
+                                        color: secondaryCyan
+                                    }
+                                }
+                            }
+
+                            // ─── Cloudlog ───────────────────────────────────────────────────────
+                            Text { text: "Cloudlog"; color: secondaryCyan; font.bold: true; font.pixelSize: 14; Layout.topMargin: 6 }
+                            RowLayout {
+                                spacing: 12
+                                CheckBox {
+                                    text: "Abilita"
+                                    checked: bridge.cloudlogEnabled
+                                    onCheckedChanged: bridge.cloudlogEnabled = checked
+                                }
+                            }
+                            RowLayout {
+                                spacing: 8
+                                Text { text: "URL:"; color: textSecondary; font.pixelSize: 12 }
+                                TextField {
+                                    Layout.preferredWidth: 200; font.pixelSize: 11
+                                    text: bridge.cloudlogUrl
+                                    placeholderText: "http://192.168.1.10/index.php"
+                                    color: textPrimary
+                                    onEditingFinished: bridge.cloudlogUrl = text
+                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
+                                }
+                                Text { text: "Key:"; color: textSecondary; font.pixelSize: 12 }
+                                TextField {
+                                    Layout.preferredWidth: 140; font.pixelSize: 11
+                                    text: bridge.cloudlogApiKey
+                                    placeholderText: "API key..."
+                                    echoMode: TextInput.Password
+                                    color: textPrimary
+                                    onEditingFinished: bridge.cloudlogApiKey = text
+                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
+                                }
+                                Rectangle {
+                                    width: 60; height: 26; radius: 4
+                                    color: testClMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
+                                    border.color: secondaryCyan
+                                    MouseArea { id: testClMouse; anchors.fill: parent; hoverEnabled: true; onClicked: bridge.testCloudlogApi() }
+                                    Text { anchors.centerIn: parent; text: "Test"; font.pixelSize: 11; color: secondaryCyan }
+                                }
+                            }
+
+                            // ─── LotW + WSPR ────────────────────────────────────────────────────
+                            RowLayout {
+                                spacing: 20; Layout.topMargin: 8
+                                CheckBox {
+                                    text: "LotW lookup"
+                                    checked: bridge.lotwEnabled
+                                    onCheckedChanged: bridge.lotwEnabled = checked
+                                }
+                                Rectangle {
+                                    width: 100; height: 26; radius: 4
+                                    color: lotwUpdMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
+                                    border.color: secondaryCyan
+                                    visible: bridge.lotwEnabled
+                                    MouseArea { id: lotwUpdMouse; anchors.fill: parent; hoverEnabled: true; onClicked: bridge.updateLotwUsers() }
+                                    Text { anchors.centerIn: parent; text: bridge.lotwUpdating ? "Aggiornamento…" : "Aggiorna lista"; font.pixelSize: 10; color: secondaryCyan }
+                                }
+                                CheckBox {
+                                    text: "Upload WSPR"
+                                    checked: bridge.wsprUploadEnabled
+                                    onCheckedChanged: bridge.wsprUploadEnabled = checked
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -801,12 +949,13 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 280  // IU8LMC: Increased height to show FT Threads slider
+                        implicitHeight: decoderCol.implicitHeight + 32
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: decoderCol
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -928,121 +1077,6 @@ Dialog {
                                 }
                             }
 
-                            Text { text: "DX Cluster"; color: secondaryCyan; font.bold: true; font.pixelSize: 14; Layout.topMargin: 10 }
-                            RowLayout {
-                                spacing: 12
-                                Text { text: "Host:"; color: textSecondary; font.pixelSize: 12 }
-                                TextField {
-                                    id: dxcHost
-                                    text: bridge.dxCluster ? bridge.dxCluster.host : "dxc.va7dx.com"
-                                    Layout.preferredWidth: 160
-                                    color: textPrimary; font.pixelSize: 11
-                                    onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.host = text
-                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
-                                }
-                                Text { text: "Porta:"; color: textSecondary; font.pixelSize: 12 }
-                                TextField {
-                                    text: bridge.dxCluster ? bridge.dxCluster.port.toString() : "7300"
-                                    Layout.preferredWidth: 60
-                                    color: textPrimary; font.pixelSize: 11
-                                    onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.port = parseInt(text) || 7300
-                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
-                                }
-                            }
-                            RowLayout {
-                                spacing: 12
-                                Rectangle {
-                                    width: 10; height: 10; radius: 5
-                                    color: bridge.dxCluster && bridge.dxCluster.connected ? "#00ff00" : "#ff4444"
-                                }
-                                Text {
-                                    text: bridge.dxCluster && bridge.dxCluster.connected ? "Connesso" : "Disconnesso"
-                                    color: textSecondary; font.pixelSize: 11
-                                }
-                                Item { Layout.fillWidth: true }
-                                Rectangle {
-                                    width: 80; height: 26; radius: 4
-                                    color: dxcConnMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
-                                    border.color: secondaryCyan
-                                    MouseArea {
-                                        id: dxcConnMouse; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: {
-                                            if (bridge.dxCluster) {
-                                                if (bridge.dxCluster.connected) bridge.dxCluster.disconnectCluster()
-                                                else bridge.dxCluster.connectCluster()
-                                            }
-                                        }
-                                    }
-                                    Text {
-                                        anchors.centerIn: parent; font.pixelSize: 11
-                                        text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnetti" : "Connetti"
-                                        color: secondaryCyan
-                                    }
-                                }
-                            }
-
-                            // ─── Cloudlog ───────────────────────────────────────────────────────
-                            Text { text: "Cloudlog"; color: secondaryCyan; font.bold: true; font.pixelSize: 14; Layout.topMargin: 10 }
-                            RowLayout {
-                                spacing: 12
-                                CheckBox {
-                                    text: "Abilita"
-                                    checked: bridge.cloudlogEnabled
-                                    onCheckedChanged: bridge.cloudlogEnabled = checked
-                                }
-                            }
-                            RowLayout {
-                                spacing: 8
-                                Text { text: "URL:"; color: textSecondary; font.pixelSize: 12 }
-                                TextField {
-                                    Layout.preferredWidth: 200; font.pixelSize: 11
-                                    text: bridge.cloudlogUrl
-                                    placeholderText: "http://192.168.1.10/index.php"
-                                    color: textPrimary
-                                    onEditingFinished: bridge.cloudlogUrl = text
-                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
-                                }
-                                Text { text: "Key:"; color: textSecondary; font.pixelSize: 12 }
-                                TextField {
-                                    Layout.preferredWidth: 140; font.pixelSize: 11
-                                    text: bridge.cloudlogApiKey
-                                    placeholderText: "API key..."
-                                    echoMode: TextInput.Password
-                                    color: textPrimary
-                                    onEditingFinished: bridge.cloudlogApiKey = text
-                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
-                                }
-                                Rectangle {
-                                    width: 60; height: 26; radius: 4
-                                    color: testClMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
-                                    border.color: secondaryCyan
-                                    MouseArea { id: testClMouse; anchors.fill: parent; hoverEnabled: true; onClicked: bridge.testCloudlogApi() }
-                                    Text { anchors.centerIn: parent; text: "Test"; font.pixelSize: 11; color: secondaryCyan }
-                                }
-                            }
-
-                            // ─── LotW + WSPR ────────────────────────────────────────────────────
-                            RowLayout {
-                                spacing: 20; Layout.topMargin: 8
-                                CheckBox {
-                                    text: "LotW lookup"
-                                    checked: bridge.lotwEnabled
-                                    onCheckedChanged: bridge.lotwEnabled = checked
-                                }
-                                Rectangle {
-                                    width: 100; height: 26; radius: 4
-                                    color: lotwUpdMouse.containsMouse ? Qt.rgba(0,200/255,1,0.3) : Qt.rgba(0,200/255,1,0.12)
-                                    border.color: secondaryCyan
-                                    visible: bridge.lotwEnabled
-                                    MouseArea { id: lotwUpdMouse; anchors.fill: parent; hoverEnabled: true; onClicked: bridge.updateLotwUsers() }
-                                    Text { anchors.centerIn: parent; text: bridge.lotwUpdating ? "Aggiornamento…" : "Aggiorna lista"; font.pixelSize: 10; color: secondaryCyan }
-                                }
-                                CheckBox {
-                                    text: "Upload WSPR"
-                                    checked: bridge.wsprUploadEnabled
-                                    onCheckedChanged: bridge.wsprUploadEnabled = checked
-                                }
-                            }
                         }
                     }
 
