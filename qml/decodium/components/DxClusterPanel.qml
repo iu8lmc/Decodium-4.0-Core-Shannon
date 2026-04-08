@@ -9,6 +9,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
+    signal closeRequested()
 
     property color bgDeep:        bridge.themeManager.bgDeep
     property color secondaryCyan: bridge.themeManager.secondaryColor
@@ -33,6 +34,19 @@ Rectangle {
         radius: 8
         // bottom corners piatti
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 8; color: parent.color }
+
+        MouseArea {
+            anchors.fill: parent
+            drag.target: root
+            drag.axis: Drag.XAndYAxis
+            drag.minimumX: 0
+            drag.maximumX: root.parent ? root.parent.width - root.width : root.x
+            drag.minimumY: 0
+            drag.maximumY: root.parent ? root.parent.height - 50 : root.y
+            hoverEnabled: true
+            cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            onPressed: root.z = 250
+        }
 
         RowLayout {
             anchors { fill: parent; leftMargin: 10; rightMargin: 6 }
@@ -93,7 +107,7 @@ Rectangle {
                 MouseArea {
                     id: closeMouse; anchors.fill: parent; hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.visible = false
+                    onClicked: root.closeRequested()
                 }
                 Text { anchors.centerIn: parent; text: "✕"; color: textSecondary; font.pixelSize: 11 }
             }
@@ -296,7 +310,7 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: spotList.modeFilter = (spotList.modeFilter === modelData ? "" : modelData)
+                        onClicked: root.modeFilter = (root.modeFilter === modelData ? "" : modelData)
                     }
                     Text { anchors.centerIn: parent; text: modelData; color: textPrimary; font.pixelSize: 9 }
                 }

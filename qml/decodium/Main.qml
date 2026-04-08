@@ -552,45 +552,84 @@ ApplicationWindow {
         modal: true
         x: (parent.width - width) / 2
         y: (parent.height - height) / 2
-        width: 280; height: 120
+        width: 360
+        height: 156
         background: Rectangle {
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-            border.color: glassBorder; radius: 10
+            border.color: glassBorder
+            radius: 10
         }
         onOpened: {
             freqInput.text = isTx ? bridge.txFrequency.toString() : bridge.rxFrequency.toString()
-            freqInput.selectAll(); freqInput.forceActiveFocus()
+            freqInput.selectAll()
+            freqInput.forceActiveFocus()
         }
-        Column {
-            anchors.fill: parent; anchors.margins: 16; spacing: 10
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 8
+
             Text {
                 text: freqInputPopup.isTx ? "TX Frequency (Hz)" : "RX Frequency (Hz)"
-                font.pixelSize: 13; font.bold: true
+                font.pixelSize: 13
+                font.bold: true
                 color: freqInputPopup.isTx ? "#f44336" : accentGreen
             }
-            Row {
-                spacing: 8
+
+            Text {
+                text: "Range valido: 100-5000 Hz"
+                font.pixelSize: 11
+                color: textSecondary
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
                 TextField {
-                    id: freqInput; width: 160; height: 32
-                    font.pixelSize: 14; font.family: "Consolas"
-                    color: textPrimary; placeholderText: "200-5000"
+                    id: freqInput
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    font.pixelSize: 18
+                    font.family: "Consolas"
+                    color: textPrimary
+                    placeholderText: ""
+                    selectByMouse: true
+                    leftPadding: 12
+                    rightPadding: 12
                     inputMethodHints: Qt.ImhDigitsOnly
                     validator: IntValidator { bottom: 100; top: 5000 }
                     background: Rectangle {
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                        border.color: freqInput.activeFocus ? secondaryCyan : glassBorder; radius: 4
+                        border.color: freqInput.activeFocus ? secondaryCyan : glassBorder
+                        border.width: freqInput.activeFocus ? 2 : 1
+                        radius: 6
                     }
                     Keys.onReturnPressed: freqApplyBtn.clicked()
                     Keys.onEscapePressed: freqInputPopup.close()
                 }
+
                 Button {
-                    id: freqApplyBtn; width: 60; height: 32; text: "OK"
-                    font.pixelSize: 12; font.bold: true
+                    id: freqApplyBtn
+                    Layout.preferredWidth: 96
+                    Layout.preferredHeight: 40
+                    text: "OK"
+                    padding: 0
+                    font.pixelSize: 12
+                    font.bold: true
                     background: Rectangle {
                         color: freqApplyBtn.pressed ? Qt.rgba(0,188/255,212/255,0.4) : Qt.rgba(0,188/255,212/255,0.2)
-                        border.color: secondaryCyan; radius: 4
+                        border.color: secondaryCyan
+                        radius: 6
                     }
-                    contentItem: Text { text: parent.text; color: secondaryCyan; font: parent.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Text {
+                        text: parent.text
+                        color: secondaryCyan
+                        font: parent.font
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         var f = parseInt(freqInput.text)
                         if (f >= 100 && f <= 5000) {
@@ -1527,7 +1566,7 @@ ApplicationWindow {
                 // World Clock with Analog Display
                 Item {
                     id: worldClock
-                    width: 220
+                    width: 232
                     height: 80
 
                     property var timezones: [
@@ -1577,9 +1616,13 @@ ApplicationWindow {
                     Rectangle {
                         anchors.fill: parent
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                        border.color: clockMA.containsMouse ? secondaryCyan : glassBorder
-                        border.width: clockMA.containsMouse ? 2 : 1
+                        border.color: clockHover.hovered ? secondaryCyan : glassBorder
+                        border.width: clockHover.hovered ? 2 : 1
                         radius: 6
+
+                        HoverHandler {
+                            id: clockHover
+                        }
 
                         Row {
                             anchors.fill: parent
@@ -1641,7 +1684,7 @@ ApplicationWindow {
                             // Digital time, date and timezone
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 1
+                                spacing: 3
 
                                 Text {
                                     font.pixelSize: 22
@@ -1660,22 +1703,25 @@ ApplicationWindow {
                                     color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
                                 }
 
-                                Text {
-                                    text: worldClock.timezones[worldClock.selectedTz].name + " ▼"
-                                    font.pixelSize: 11
-                                    color: secondaryCyan
+                                StyledComboBox {
+                                    id: timezoneCombo
+                                    width: 100
+                                    height: 24
+                                    font.pixelSize: 10
+                                    itemHeight: 28
+                                    model: worldClock.timezones.map(function(t) { return t.name })
+                                    currentIndex: worldClock.selectedTz
+                                    accentColor: secondaryCyan
+                                    textColor: textPrimary
+                                    bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+                                    borderColor: glassBorder
+                                    onActivated: {
+                                        worldClock.selectedTz = currentIndex
+                                        worldClock.updateTime()
+                                    }
                                 }
                             }
                         }
-                    }
-
-                    // Click area on top
-                    MouseArea {
-                        id: clockMA
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: worldClock.nextTimezone()
                     }
                 }
 
@@ -6656,15 +6702,7 @@ ApplicationWindow {
         z: 210
         x: mainWindow.width - width - 12
         y: 60
-
-        MouseArea {
-            anchors.fill: parent
-            drag.target: dxClusterOverlay
-            drag.axis: Drag.XAndYAxis
-            drag.minimumX: 0; drag.maximumX: mainWindow.width  - dxClusterOverlay.width
-            drag.minimumY: 0; drag.maximumY: mainWindow.height - 50
-            onPressed: dxClusterOverlay.z = 250
-        }
+        onCloseRequested: dxClusterPanelVisible = false
     }
 
     // ── Splash Screen Decodium 4.0 Core Shannon ─────────────────────────────
