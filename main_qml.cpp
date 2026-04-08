@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLibraryInfo>
+#include <QStandardPaths>
 #include <cstdio>
 
 #include "DecodiumBridge.h"
@@ -15,8 +16,11 @@
 #include "PanadapterItem.hpp"
 
 static void L(const char* msg) {
-    FILE* f = fopen("C:\\Users\\IU8LMC\\start_log.txt", "a");
+    QString logPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                      + "/decodium-start.log";
+    FILE* f = fopen(logPath.toLocal8Bit().constData(), "a");
     if (f) { fputs(msg, f); fputc('\n', f); fclose(f); }
+    std::fprintf(stderr, "%s\n", msg);
 }
 
 static void qtMsgHandler(QtMsgType, const QMessageLogContext&, const QString& msg) {

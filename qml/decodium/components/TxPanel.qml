@@ -754,6 +754,7 @@ Item {
                     }
 
                 }
+                }
 
                 RowLayout {
                     id: topControlsRight
