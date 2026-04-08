@@ -7194,7 +7194,7 @@ void MainWindow::process_autoButton (bool checked)   //manually or by controller
         m_asyncTxGuardTimer.stop();
         m_bAsyncTxArmed = true;
       } else if (!m_asyncTxGuardTimer.isActive()) {
-        m_asyncTxGuardTimer.start(300);
+        m_asyncTxGuardTimer.start(100);
       }
     }
 
@@ -7268,7 +7268,7 @@ void MainWindow::auto_tx_mode (bool state)
       m_asyncTxGuardTimer.stop();
       m_bAsyncTxArmed = true;
     } else if (!m_asyncTxGuardTimer.isActive()) {
-      m_asyncTxGuardTimer.start(300);  // 300 ms guard before TX
+      m_asyncTxGuardTimer.start(100);  // 100 ms guard before TX (Shannon behavior)
     }
   }
 }
@@ -12532,7 +12532,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
 
       if((m_mode=="FT8" or m_mode=="FT2") and SpecOp::HOUND==m_specOp) {
         if(decodedtext.string().contains(";")) {
-          QString text = decodedtext.string().remove("<").remove(">");   // needed for MSHV multistream messages
+          QString text = decodedtext.string().remove("<").remove(">");   // needed for Decodium multistream messages
           QStringList w=text.mid(24).split(" ",SkipEmptyParts);
           QString foxCall=w.at(3);
           if(w.at(0)==m_config.my_callsign() or w.at(0)==Radio::base_callsign(m_config.my_callsign())) {
@@ -12548,7 +12548,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
             hound_reply ();
           }
         } else {
-          QString text = decodedtext.string().remove("<").remove(">");   // needed for MSHV multistream messages
+          QString text = decodedtext.string().remove("<").remove(">");   // needed for Decodium multistream messages
           QStringList w=text.mid(24).split(" ",SkipEmptyParts);
           if(decodedtext.string().contains("/")) w.append(" +00");  //Add a dummy report
           if(w.size()>=3) {
@@ -12567,7 +12567,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
                   hound_reply ();
                 } else {
                   if (m_mode=="FT8" && SpecOp::HOUND==m_specOp && (text.mid(4,2).contains("15") or text.mid(4,2).contains("45"))) return;  // ignore stations calling in the wrong time slot
-                  if (text.contains(" " + m_config.my_callsign() + " " + m_hisCall) && !text.contains("73 "))  processMessage(decodedtext0);   // needed for MSHV multistream messages
+                  if (text.contains(" " + m_config.my_callsign() + " " + m_hisCall) && !text.contains("73 "))  processMessage(decodedtext0);   // needed for Decodium multistream messages
                 }
               }
             }
@@ -13337,7 +13337,7 @@ void MainWindow::guiUpdate()
     // DXped mode: non alzare il PTT se la coda caller è vuota e gli slot sono vuoti
     bool dxpedSilent = m_bDXpedMode && m_callerQueue.isEmpty()
         && m_dxpedSlots[0].call.isEmpty() && m_dxpedSlots[1].call.isEmpty() && m_dxpedSlots[2].call.isEmpty();
-    // CQ mode: coda vuota ma tx5 o tx6 disponibile → trasmetti CQ singolo (come MSHV)
+    // CQ mode: coda vuota ma tx5 o tx6 disponibile → trasmetti CQ singolo
     bool dxpedCQmode = dxpedSilent
         && (!ui->tx5->currentText().trimmed().isEmpty() || !ui->tx6->text().trimmed().isEmpty());
     if(dxpedSilent && !dxpedCQmode && g_iptt==1) stopTx(); // abbassa PTT solo se silenzio totale
@@ -13568,7 +13568,7 @@ void MainWindow::guiUpdate()
 
         if(m_mode=="FT8") {
           if(m_bDXpedMode && dxpedCQmode) {
-            // Coda vuota: CQ singolo standard da tx5 (come MSHV)
+            // Coda vuota: CQ singolo standard da tx5
             auto const encoded = decodium::txmsg::encodeFt8 (QString::fromLatin1 (message));
             copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 79);
             int nsym=79;
@@ -13628,7 +13628,7 @@ void MainWindow::guiUpdate()
         }
         if(m_mode=="FT2") {
           if(m_bDXpedMode && dxpedCQmode) {
-            // Coda vuota: CQ singolo standard da tx5 (come MSHV)
+            // Coda vuota: CQ singolo standard da tx5
             auto const encoded = decodium::txmsg::encodeFt2 (QString::fromLatin1 (message));
             copy_encoded_ftx_message (encoded, msgsent, const_cast<int *> (itone), 103);
             int nsym=103;
@@ -15696,7 +15696,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     }
     else if (5 == message_words.size ()
              && m_baseCall == message_words.at (1)) {
-      // dual Fox style message, possibly from MSHV
+      // dual Fox style message
       if (m_config.prompt_to_log() || m_config.autoLog()) {
         if (!is_externalCtrlMode()) logQSOTimer.start(0);   //avt 3/27/24
       }
@@ -16685,7 +16685,7 @@ void MainWindow::processNextInQueue ()
     ui->RxFreqSpinBox->setValue (freq);
     ui->rptSpinBox->setValue (snr);
     genStdMsgs (QString::number (snr));
-    setTxMsg (2);            // MSHV-style: start from direct report
+    setTxMsg (2);            // Decodium-style: start from direct report
     m_QSOProgress = REPORT;
     m_bCallingCQ = false;
     m_bAutoReply = true;
@@ -16834,7 +16834,7 @@ void MainWindow::on_dxpedButton_clicked(bool checked)
     m_bCallingCQ = true;
     ui->cbAutoSeq->setChecked(true);
     dxpedFillEmptySlots();   // frequency-diverse selection all'avvio
-    // Fox usa sempre il primo semiciclo (periodo fisso, come MSHV)
+    // Fox usa sempre il primo semiciclo (periodo fisso)
     if(!m_txFirst) {
       m_txFirst = true;
       ui->txFirstCheckBox->setChecked(true);
@@ -17070,7 +17070,7 @@ int MainWindow::dxpedTxSequencer()
         break;
       case 3:
         msg = QString("%1 %2 RR73").arg(hisBase, myBase);
-        bLogOnTx = true;   // QSO completo quando Fox trasmette RR73 (come MSHV)
+        bLogOnTx = true;   // QSO completo quando Fox trasmette RR73
         break;
       default: continue;
     }

@@ -776,6 +776,8 @@ private:
   double  m_tRemaining;
   double  m_TRperiod;
   double  m_fSpread;
+  double  m_fSpreadSelf {0.0};
+  double  m_fSpreadDx   {0.0};
   double  m_s6;
   double  m_fDither;
   double  m_fAudioShift;

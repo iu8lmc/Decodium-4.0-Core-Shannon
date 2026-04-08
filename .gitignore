@@ -50,6 +50,59 @@ ft2_plugin.rar
 .claude/
 tmpclaude-*
 .zip
+.idea/
+
+# Build output directories (mingw64, ucrt64, etc.)
+build_mingw64/
+build_ucrt64/
+build2/
+build2_*/
+build4/
+build5/
+build5r/
+build-bridge/
+bridge/
+dist_clean/
+gcctest/
+hamlib_shim/
+prebuilt/
+$ROOT/
+Decodium_4.0_CoreShannon_x64/
+
+# Log / debug output files
+*.log
+autogen_err.txt
+boost_install.txt
+both_cc1.txt
+c_err.txt
+cc1*.txt
+cc1plus*.txt
+autogen_syspath_out.txt
+build2_out.txt
+
+# Temp scripts and tools
+check_*.bat
+check_*.sh
+check_*.ps1
+configure_decodium*.bat
+configure_mingw64.bat
+configure_ucrt64.bat
+deploy_*.bat
+do_find_exe.bat
+fix_qsizetype.py
+run_decodium*.bat
+run_mingw64.bat
+t_simple.cpp
+
+# Android / mobile artifacts
+android/
+decodium3-debug.apk
+appverifUI.dll
+
+# Runtime stubs (auto-generated)
+decodium_common_blocks.c
+decodium_fortran_stubs.cpp
+decodium_qml.rc
 
 # Temporary scripts
 sign_all.bat
