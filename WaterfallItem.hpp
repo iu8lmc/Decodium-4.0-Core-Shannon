@@ -86,7 +86,8 @@ signals:
     void foxSlotMarkersChanged();
     void spectrumModeChanged();
     void spectrumHeightChanged();
-    void frequencySelected(int freq);
+    void frequencySelected(int freq);      // Destro = RX
+    void txFrequencySelected(int freq);    // Sinistro = TX
     void autoRangeChanged();
     void noiseFloorChanged();
     void peakLevelChanged();

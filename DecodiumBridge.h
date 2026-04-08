@@ -127,6 +127,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool asyncTxEnabled     READ asyncTxEnabled     WRITE setAsyncTxEnabled     NOTIFY asyncTxEnabledChanged)
     Q_PROPERTY(bool asyncDecodeEnabled READ asyncDecodeEnabled WRITE setAsyncDecodeEnabled NOTIFY asyncDecodeEnabledChanged)
     Q_PROPERTY(bool dualCarrierEnabled READ dualCarrierEnabled WRITE setDualCarrierEnabled NOTIFY dualCarrierEnabledChanged)
+    Q_PROPERTY(bool quickQsoEnabled    READ quickQsoEnabled    WRITE setQuickQsoEnabled    NOTIFY quickQsoEnabledChanged)
     Q_PROPERTY(int  asyncSnrDb         READ asyncSnrDb                                     NOTIFY asyncSnrDbChanged)
 
     // === CAT/TRANSCEIVER ===
@@ -320,6 +321,7 @@ public:
     // QSO progress
     int qsoProgress() const { return m_qsoProgress; }
     QString reportSent() const { return m_reportSent; }
+    void setReportSent(const QString& v) { if (m_reportSent != v) { m_reportSent = v; emit reportSentChanged(); } }
     QString reportReceived() const { return m_reportReceived; }
     void setReportReceived(const QString& v) { if (m_reportReceived != v) { m_reportReceived = v; emit reportReceivedChanged(); } }
     bool sendRR73() const { return m_sendRR73; }
@@ -338,11 +340,14 @@ public:
     int  txPeriod()          const { return m_txPeriod; }
     void setTxPeriod(int v)         { if (m_txPeriod != v)         { m_txPeriod = v;         emit txPeriodChanged(); } }
     bool asyncTxEnabled()      const { return m_asyncTxEnabled; }
-    void setAsyncTxEnabled(bool v)    { if (m_asyncTxEnabled != v)      { m_asyncTxEnabled = v;      emit asyncTxEnabledChanged(); } }
+    void setAsyncTxEnabled(bool v)    { if (m_mode == "FT2") v = true;  /* FT2: sempre attivo */
+                                        if (m_asyncTxEnabled != v)      { m_asyncTxEnabled = v;      emit asyncTxEnabledChanged(); } }
     bool asyncDecodeEnabled()  const { return m_asyncDecodeEnabled; }
     void setAsyncDecodeEnabled(bool v){ if (m_asyncDecodeEnabled != v)  { m_asyncDecodeEnabled = v;  emit asyncDecodeEnabledChanged(); } }
     bool dualCarrierEnabled()  const { return m_dualCarrierEnabled; }
     void setDualCarrierEnabled(bool v){ if (m_dualCarrierEnabled!=v){ m_dualCarrierEnabled=v; emit dualCarrierEnabledChanged(); } }
+    bool quickQsoEnabled()     const { return m_quickQsoEnabled; }
+    void setQuickQsoEnabled(bool v)   { if (m_quickQsoEnabled != v) { m_quickQsoEnabled = v; emit quickQsoEnabledChanged(); } }
     int  asyncSnrDb()          const { return m_asyncSnrDb; }
     void setAsyncSnrDb(int v)         { if (m_asyncSnrDb != v)          { m_asyncSnrDb = v;          emit asyncSnrDbChanged(); } }
 
@@ -692,6 +697,7 @@ signals:
     void txPeriodChanged();
     void asyncTxEnabledChanged();
     void dualCarrierEnabledChanged();
+    void quickQsoEnabledChanged();
     void asyncSnrDbChanged();
     void catConnectedChanged();
     void catRigNameChanged();
@@ -846,6 +852,7 @@ private:
     bool    m_asyncTxEnabled   {false};  // FT2 async TX (no periodo sync, come GitHub cbAsyncDecode)
     qint64  m_asyncLastTxEndMs {0};      // timestamp fine ultima TX FT2 async (per guard timer)
     bool m_dualCarrierEnabled{false}; // FT2 dual carrier mode
+    bool m_quickQsoEnabled   {false}; // FT2 Quick QSO: salta TX1, flusso Ultra2 (2 messaggi)
     int  m_asyncSnrDb          {-99};   // SNR ultimo decode FT2 (per AsyncModeWidget S-meter)
     // FT2 QSO cooldown: evita re-triggering sullo stesso 73 decodificato ogni ~4s (Shannon m_qsoCooldown)
     QMap<QString, qint64> m_qsoCooldown;  // callsign → timestamp msec UTC
@@ -937,6 +944,7 @@ private:
     int  m_nTx73            {0};   // TX5 (73) repeat counter: >=2 → QSO completo, ferma
     int  m_txRetryCount     {0};   // quante volte abbiamo inviato m_lastNtx senza risposta
     int  m_lastNtx          {-1};  // ultimo TX number inviato
+    int  m_lastCqPidx       {-1};  // period index dell'ultimo CQ inviato (evita CQ consecutivi)
     int  m_maxCallerRetries {5};   // macOS v1.4.5+: MAX_TX_RETRIES=5 (Shannon aveva 3)
     int  m_txWatchdogTicks  {0};   // tick watchdog a 250ms (240 tick = 60s)
     static constexpr int TX_WATCHDOG_MAX = 240; // 60s @ 250ms

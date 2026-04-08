@@ -11,7 +11,8 @@ import Decodium 1.0
 Item {
     id: waterfallPanel
 
-    signal frequencySelected(int freq)
+    signal frequencySelected(int freq)       // Destro = RX
+    signal txFrequencySelected(int freq)     // Sinistro = TX
 
     property bool showControls: true
     property int  minFreq: 200
@@ -223,7 +224,10 @@ Item {
             onZoomFactorChanged:   { bridge.uiZoomFactor   = zoomFactor;   mainWindow.scheduleSave() }
 
             onFrequencySelected: function(freq) {
-                waterfallPanel.frequencySelected(freq)
+                waterfallPanel.frequencySelected(freq)        // RX
+            }
+            onTxFrequencySelected: function(freq) {
+                waterfallPanel.txFrequencySelected(freq)      // TX
             }
 
             // Overlay "Start monitoring"

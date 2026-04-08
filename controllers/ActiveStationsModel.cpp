@@ -1,248 +1,205 @@
-#include "controllers/ActiveStationsModel.hpp"
-
+#include "ActiveStationsModel.hpp"
 #include <algorithm>
 
-ActiveStationsModel::ActiveStationsModel(QObject* parent)
+ActiveStationsModel::ActiveStationsModel(QObject *parent)
     : QAbstractListModel(parent)
 {
 }
 
-int ActiveStationsModel::rowCount(const QModelIndex& parent) const
+int ActiveStationsModel::rowCount(const QModelIndex &parent) const
 {
-    if (parent.isValid()) {
-        return 0;
-    }
-    return visibleCount();
+    return parent.isValid() ? 0 : m_stations.size();
 }
 
-QVariant ActiveStationsModel::data(const QModelIndex& index, int role) const
+QVariant ActiveStationsModel::data(const QModelIndex &index, int role) const
 {
-    const StationEntry* station = stationAtVisibleIndex(index.row());
-    if (!station) {
+    if (!index.isValid() || index.row() >= m_stations.size())
         return {};
-    }
 
+    const auto &s = m_stations.at(index.row());
     switch (role) {
-    case CallsignRole:
-        return station->callsign;
-    case FrequencyRole:
-        return station->frequency;
-    case SnrRole:
-        return station->snr;
-    case GridRole:
-        return station->grid;
-    case LastUtcRole:
-        return station->lastUtc;
-    case AgeRole:
-        return station->age;
-    case IsNewDxccRole:
-        return station->isNewDxcc;
-    case IsNewGridRole:
-        return station->isNewGrid;
-    case IsWantedRole:
-        return station->isWanted;
-    case IsLotwUserRole:
-        return station->isLotwUser;
-    default:
-        return {};
+    case CallsignRole:    return s.callsign;
+    case FrequencyRole:   return s.frequency;
+    case SnrRole:         return s.snr;
+    case GridRole:        return s.grid;
+    case LastUtcRole:     return s.lastUtc;
+    case AgeRole:         return s.age;
+    case IsWantedRole:    return s.isWanted;
+    case IsNewDxccRole:   return s.isNewDxcc;
+    case IsNewGridRole:   return s.isNewGrid;
+    case IsLotwUserRole:  return s.isLotwUser;
+    case PriorityRole:    return s.priority;
     }
+    return {};
 }
 
 QHash<int, QByteArray> ActiveStationsModel::roleNames() const
 {
     return {
-        {CallsignRole, "callsign"},
-        {FrequencyRole, "frequency"},
-        {SnrRole, "snr"},
-        {GridRole, "grid"},
-        {LastUtcRole, "lastUtc"},
-        {AgeRole, "age"},
-        {IsNewDxccRole, "isNewDxcc"},
-        {IsNewGridRole, "isNewGrid"},
-        {IsWantedRole, "isWanted"},
+        {CallsignRole,   "callsign"},
+        {FrequencyRole,  "frequency"},
+        {SnrRole,        "snr"},
+        {GridRole,       "grid"},
+        {LastUtcRole,    "lastUtc"},
+        {AgeRole,        "age"},
+        {IsWantedRole,   "isWanted"},
+        {IsNewDxccRole,  "isNewDxcc"},
+        {IsNewGridRole,  "isNewGrid"},
         {IsLotwUserRole, "isLotwUser"},
+        {PriorityRole,   "priority"},
     };
 }
 
-int ActiveStationsModel::count() const
+void ActiveStationsModel::setExpiryPeriods(int v)
 {
-    return visibleCount();
-}
-
-bool ActiveStationsModel::filterCqOnly() const
-{
-    return m_filterCqOnly;
-}
-
-void ActiveStationsModel::setFilterCqOnly(bool value)
-{
-    if (m_filterCqOnly == value) {
-        return;
-    }
-
-    const int previousCount = count();
-    m_filterCqOnly = value;
-    resetModelAndNotifyCount(previousCount);
-    emit filterCqOnlyChanged();
-}
-
-bool ActiveStationsModel::filterWantedOnly() const
-{
-    return m_filterWantedOnly;
-}
-
-void ActiveStationsModel::setFilterWantedOnly(bool value)
-{
-    if (m_filterWantedOnly == value) {
-        return;
-    }
-
-    const int previousCount = count();
-    m_filterWantedOnly = value;
-    resetModelAndNotifyCount(previousCount);
-    emit filterWantedOnlyChanged();
-}
-
-void ActiveStationsModel::clear()
-{
-    if (m_stations.isEmpty()) {
-        return;
-    }
-
-    const int previousCount = count();
-    beginResetModel();
-    m_stations.clear();
-    endResetModel();
-    if (previousCount != 0) {
-        emit countChanged();
+    if (m_expiryPeriods != v) {
+        m_expiryPeriods = v;
+        emit expiryPeriodsChanged();
     }
 }
 
-QString ActiveStationsModel::callsignAt(int index) const
+void ActiveStationsModel::setFilterCqOnly(bool v)
 {
-    const StationEntry* station = stationAtVisibleIndex(index);
-    return station ? station->callsign : QString{};
-}
-
-int ActiveStationsModel::frequencyAt(int index) const
-{
-    const StationEntry* station = stationAtVisibleIndex(index);
-    return station ? station->frequency : 0;
-}
-
-void ActiveStationsModel::addStation(const QString& callsign, int frequency, int snr, const QString& grid, const QString& utc)
-{
-    if (callsign.isEmpty()) {
-        return;
+    if (m_filterCqOnly != v) {
+        m_filterCqOnly = v;
+        emit filterCqOnlyChanged();
     }
+}
 
-    const int previousCount = count();
-    beginResetModel();
+void ActiveStationsModel::setFilterWantedOnly(bool v)
+{
+    if (m_filterWantedOnly != v) {
+        m_filterWantedOnly = v;
+        emit filterWantedOnlyChanged();
+    }
+}
 
-    if (StationEntry* existing = findStation(callsign)) {
-        existing->frequency = frequency;
-        existing->snr = snr;
-        existing->grid = grid;
-        existing->lastUtc = utc;
-        existing->age = 0;
+void ActiveStationsModel::addStation(const QString &callsign, int freq, int snr,
+                                      const QString &grid, const QString &utc)
+{
+    int idx = findStation(callsign);
+    if (idx >= 0) {
+        // Update existing
+        auto &s = m_stations[idx];
+        s.frequency = freq;
+        s.snr = snr;
+        if (!grid.isEmpty()) s.grid = grid;
+        s.lastUtc = utc;
+        s.age = 0;
+        s.isWanted = m_wantedCallsigns.contains(callsign.toUpper());
+        computePriority(s);
+        emit dataChanged(index(idx, 0), index(idx, 0));
     } else {
-        StationEntry station;
-        station.callsign = callsign;
-        station.frequency = frequency;
-        station.snr = snr;
-        station.grid = grid;
-        station.lastUtc = utc;
-        m_stations.prepend(station);
-    }
+        // Insert new at top (sorted by priority later)
+        StationEntry entry;
+        entry.callsign = callsign.toUpper();
+        entry.frequency = freq;
+        entry.snr = snr;
+        entry.grid = grid;
+        entry.lastUtc = utc;
+        entry.age = 0;
+        entry.isWanted = m_wantedCallsigns.contains(entry.callsign);
+        computePriority(entry);
 
-    endResetModel();
-    if (previousCount != count()) {
+        beginInsertRows(QModelIndex(), 0, 0);
+        m_stations.prepend(entry);
+        endInsertRows();
         emit countChanged();
     }
 }
 
 void ActiveStationsModel::ageAllStations()
 {
-    if (m_stations.isEmpty()) {
-        return;
+    for (int i = m_stations.size() - 1; i >= 0; --i) {
+        m_stations[i].age++;
+        if (m_stations[i].age > m_expiryPeriods) {
+            beginRemoveRows(QModelIndex(), i, i);
+            m_stations.removeAt(i);
+            endRemoveRows();
+            emit countChanged();
+        } else {
+            emit dataChanged(index(i, 0), index(i, 0), {AgeRole});
+        }
     }
+}
 
-    const int previousCount = count();
+void ActiveStationsModel::clear()
+{
+    if (m_stations.isEmpty()) return;
     beginResetModel();
-
-    for (StationEntry& station : m_stations) {
-        ++station.age;
-    }
-
-    m_stations.erase(
-        std::remove_if(m_stations.begin(), m_stations.end(), [](const StationEntry& station) {
-            return station.age > 10;
-        }),
-        m_stations.end());
-
+    m_stations.clear();
     endResetModel();
-    if (previousCount != count()) {
-        emit countChanged();
-    }
+    emit countChanged();
 }
 
-bool ActiveStationsModel::matchesFilters(const StationEntry& station) const
+QString ActiveStationsModel::callsignAt(int row) const
 {
-    if (m_filterCqOnly && !station.isCq) {
-        return false;
-    }
-    if (m_filterWantedOnly && !station.isWanted) {
-        return false;
-    }
-    return true;
+    if (row < 0 || row >= m_stations.size()) return {};
+    return m_stations.at(row).callsign;
 }
 
-int ActiveStationsModel::visibleCount() const
+int ActiveStationsModel::frequencyAt(int row) const
 {
-    int total = 0;
-    for (const StationEntry& station : m_stations) {
-        if (matchesFilters(station)) {
-            ++total;
+    if (row < 0 || row >= m_stations.size()) return 0;
+    return m_stations.at(row).frequency;
+}
+
+void ActiveStationsModel::setWantedCallsigns(const QStringList &calls)
+{
+    m_wantedCallsigns = calls;
+    for (int i = 0; i < m_stations.size(); ++i) {
+        bool wanted = m_wantedCallsigns.contains(m_stations[i].callsign);
+        if (m_stations[i].isWanted != wanted) {
+            m_stations[i].isWanted = wanted;
+            computePriority(m_stations[i]);
+            emit dataChanged(index(i, 0), index(i, 0), {IsWantedRole, PriorityRole});
         }
     }
-    return total;
 }
 
-const ActiveStationsModel::StationEntry* ActiveStationsModel::stationAtVisibleIndex(int index) const
+void ActiveStationsModel::markNewDxcc(const QString &callsign, bool isNew)
 {
-    if (index < 0) {
-        return nullptr;
+    int idx = findStation(callsign.toUpper());
+    if (idx >= 0 && m_stations[idx].isNewDxcc != isNew) {
+        m_stations[idx].isNewDxcc = isNew;
+        computePriority(m_stations[idx]);
+        emit dataChanged(index(idx, 0), index(idx, 0), {IsNewDxccRole, PriorityRole});
     }
-
-    int visibleIndex = 0;
-    for (const StationEntry& station : m_stations) {
-        if (!matchesFilters(station)) {
-            continue;
-        }
-        if (visibleIndex == index) {
-            return &station;
-        }
-        ++visibleIndex;
-    }
-
-    return nullptr;
 }
 
-ActiveStationsModel::StationEntry* ActiveStationsModel::findStation(const QString& callsign)
+void ActiveStationsModel::markNewGrid(const QString &callsign, bool isNew)
 {
-    for (StationEntry& station : m_stations) {
-        if (station.callsign.compare(callsign, Qt::CaseInsensitive) == 0) {
-            return &station;
-        }
+    int idx = findStation(callsign.toUpper());
+    if (idx >= 0 && m_stations[idx].isNewGrid != isNew) {
+        m_stations[idx].isNewGrid = isNew;
+        computePriority(m_stations[idx]);
+        emit dataChanged(index(idx, 0), index(idx, 0), {IsNewGridRole, PriorityRole});
     }
-    return nullptr;
 }
 
-void ActiveStationsModel::resetModelAndNotifyCount(int previousCount)
+void ActiveStationsModel::markLotwUser(const QString &callsign, bool isLotw)
 {
-    beginResetModel();
-    endResetModel();
-    if (previousCount != count()) {
-        emit countChanged();
+    int idx = findStation(callsign.toUpper());
+    if (idx >= 0 && m_stations[idx].isLotwUser != isLotw) {
+        m_stations[idx].isLotwUser = isLotw;
+        emit dataChanged(index(idx, 0), index(idx, 0), {IsLotwUserRole});
     }
+}
+
+int ActiveStationsModel::findStation(const QString &callsign) const
+{
+    QString upper = callsign.toUpper();
+    for (int i = 0; i < m_stations.size(); ++i) {
+        if (m_stations.at(i).callsign == upper)
+            return i;
+    }
+    return -1;
+}
+
+void ActiveStationsModel::computePriority(StationEntry &entry)
+{
+    entry.priority = 0;
+    if (entry.isNewDxcc)  entry.priority += 3;
+    if (entry.isNewGrid)  entry.priority += 2;
+    if (entry.isWanted)   entry.priority += 1;
 }

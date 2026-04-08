@@ -475,16 +475,25 @@ void WaterfallItem::scrollWaterfall()
 void WaterfallItem::mousePressEvent(QMouseEvent *event)
 {
     int freq = xToFreq(static_cast<int>(event->position().x()));
-    if (event->button() == Qt::LeftButton) setRxFreq(freq);
-    else if (event->button() == Qt::RightButton) setTxFreq(freq);
-    emit frequencySelected(freq);
+    if (event->button() == Qt::LeftButton) {
+        setTxFreq(freq);           // Sinistro = TX
+        emit txFrequencySelected(freq);
+    } else if (event->button() == Qt::RightButton) {
+        setRxFreq(freq);           // Destro = RX
+        emit frequencySelected(freq);
+    }
 }
 
 void WaterfallItem::mouseMoveEvent(QMouseEvent *event)
 {
     if (event->buttons() & Qt::LeftButton) {
         int freq = xToFreq(static_cast<int>(event->position().x()));
-        setRxFreq(freq);
+        setTxFreq(freq);           // Drag sinistro = TX
+        emit txFrequencySelected(freq);
+    } else if (event->buttons() & Qt::RightButton) {
+        int freq = xToFreq(static_cast<int>(event->position().x()));
+        setRxFreq(freq);           // Drag destro = RX
+        emit frequencySelected(freq);
     }
 }
 

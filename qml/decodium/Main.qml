@@ -2770,7 +2770,10 @@ ApplicationWindow {
                             spectrumHeight: 150
 
                             onFrequencySelected: function(freq) {
-                                bridge.rxFrequency = freq
+                                bridge.rxFrequency = freq      // tasto destro = RX
+                            }
+                            onTxFrequencySelected: function(freq) {
+                                bridge.txFrequency = freq      // tasto sinistro = TX
                             }
                         }
                     }
@@ -3055,8 +3058,15 @@ ApplicationWindow {
                         // ========== LEFT: Band Activity ==========
                         Rectangle {
                             id: period1Panel
-                            SplitView.preferredWidth: 350
+                            SplitView.preferredWidth: 400
                             SplitView.minimumWidth: 150
+                            Component.onCompleted: {
+                                // Dopo il layout, porta il separatore al 50%
+                                Qt.callLater(function() {
+                                    if (parent && parent.width > 0)
+                                        period1Panel.SplitView.preferredWidth = parent.width * 0.5
+                                })
+                            }
                             color: "transparent"
 
                             // Placeholder when detached - magnetic dock zone
@@ -3317,15 +3327,21 @@ ApplicationWindow {
                                             MouseArea {
                                                 anchors.fill: parent
                                                 hoverEnabled: true
+                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
                                                 onClicked: function(mouse) {
-                                                    if (modelData.isTx) return  // TX lines are not clickable
-                                                    if (mouse.modifiers & Qt.ShiftModifier) {
+                                                    if (modelData.isTx) return
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        // Sinistro = imposta TX freq
                                                         bridge.txFrequency = parseInt(modelData.freq || "0")
-                                                    } else {
-                                                        decodePanel.handleDecodeDoubleClick(modelData)
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        // Destro = imposta RX freq
+                                                        bridge.rxFrequency = parseInt(modelData.freq || "0")
                                                     }
                                                 }
-                                                onDoubleClicked: { if (!modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
+                                                onDoubleClicked: function(mouse) {
+                                                    if (!modelData.isTx && mouse.button === Qt.LeftButton)
+                                                        decodePanel.handleDecodeDoubleClick(modelData)
+                                                }
                                                 // IU8LMC: Show tooltip on hover
                                                 onContainsMouseChanged: {
                                                     if (containsMouse) {
@@ -3618,15 +3634,21 @@ ApplicationWindow {
                                             MouseArea {
                                                 anchors.fill: parent
                                                 hoverEnabled: true
+                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
                                                 onClicked: function(mouse) {
-                                                    if (modelData.isTx) return  // TX lines are not clickable
-                                                    if (mouse.modifiers & Qt.ShiftModifier) {
+                                                    if (modelData.isTx) return
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        // Sinistro = imposta TX freq
                                                         bridge.txFrequency = parseInt(modelData.freq || "0")
-                                                    } else {
-                                                        decodePanel.handleDecodeDoubleClick(modelData)
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        // Destro = imposta RX freq
+                                                        bridge.rxFrequency = parseInt(modelData.freq || "0")
                                                     }
                                                 }
-                                                onDoubleClicked: { if (!modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
+                                                onDoubleClicked: function(mouse) {
+                                                    if (!modelData.isTx && mouse.button === Qt.LeftButton)
+                                                        decodePanel.handleDecodeDoubleClick(modelData)
+                                                }
                                                 // IU8LMC: Show DXCC tooltip on hover
                                                 onContainsMouseChanged: {
                                                     if (containsMouse && modelData.dxCountry && modelData.dxCountry !== "") {
@@ -5582,7 +5604,10 @@ ApplicationWindow {
                     spectrumHeight: 150
 
                     onFrequencySelected: function(freq) {
-                        bridge.rxFrequency = freq
+                        bridge.rxFrequency = freq              // tasto destro = RX
+                    }
+                    onTxFrequencySelected: function(freq) {
+                        bridge.txFrequency = freq              // tasto sinistro = TX
                     }
                 }
 
@@ -6199,6 +6224,30 @@ ApplicationWindow {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ========== DETACHABLE PERIOD 2 WINDOW (placeholder) ==========
+    Window {
+        id: period2FloatingWindow
+        width: 500
+        height: 400
+        minimumWidth: 350
+        minimumHeight: 250
+        visible: false
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        title: "Period 2 - Decodium"
+        color: "transparent"
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
+            radius: 8
+            Text {
+                anchors.centerIn: parent
+                text: "Period 2"
+                color: textPrimary
+                font.pixelSize: 14
             }
         }
     }
