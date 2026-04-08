@@ -9,7 +9,7 @@
 #include <memory>
 
 // Forward-declare per nascondere le dipendenze Boost/Hamlib dall'header
-class DecodiumTransceiverManagerPrivate;
+struct DecodiumTransceiverManagerPrivate;
 
 class DecodiumTransceiverManager : public QObject
 {

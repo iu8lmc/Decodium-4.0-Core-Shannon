@@ -17,8 +17,10 @@
 #include "Decoder/BaudotDecoder.hpp"
 
 #include <QAudio>
+#ifdef WIN32
 #include <QAudioOutput>
-#include <QSound>
+#endif
+#include <QSoundEffect>
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <cinttypes>
@@ -49,9 +51,9 @@
 #include <QLineEdit>
 #include <QFontDatabase>
 #include <QFontInfo>
-#include <QRegExpValidator>
 #include <QRegExp>
 #include <QRegularExpression>
+#include <QRegularExpressionValidator>
 #include <QDesktopServices>
 #include <QNetworkAccessManager> // TCI
 #include <QNetworkRequest> // TCI
@@ -84,7 +86,6 @@
 #include <QTcpSocket>
 #include <QAbstractItemView>
 #include <QInputDialog>
-#include <QSound> // TCI
 #include <QtMath> // TCI
 #include <QSignalBlocker>
 #include <QGridLayout>
@@ -118,6 +119,29 @@
 #include "fastplot.h"
 #include "fastgraph.h"
 #include "LegacyUiHelpers.hpp"
+
+namespace
+{
+  void play_sound_effect (QObject * parent, QString const& path)
+  {
+    auto * effect = new QSoundEffect {parent};
+    effect->setLoopCount (1);
+    effect->setSource (QUrl::fromLocalFile (path));
+    QObject::connect (effect, &QSoundEffect::playingChanged, effect, [effect] {
+        if (!effect->isPlaying ())
+          {
+            effect->deleteLater ();
+          }
+      });
+    QObject::connect (effect, &QSoundEffect::statusChanged, effect, [effect] {
+        if (effect->status () == QSoundEffect::Error)
+          {
+            effect->deleteLater ();
+          }
+      });
+    effect->play ();
+  }
+}
 #include "PlotLegacyHelpers.hpp"
 #include "otpgenerator.h"
 #include "about.h"
@@ -1010,7 +1034,7 @@ int* ipc_qmap;
 namespace
 {
   Radio::Frequency constexpr default_frequency {14074000};
-  QRegExp message_alphabet {"[- @A-Za-z0-9+./?#<>;$]*"};
+  QRegularExpression message_alphabet {"[- @A-Za-z0-9+./?#<>;$]*"};
   // grid exact match excluding RR73
   QRegularExpression grid_regexp {"\\A(?![Rr]{2}73)[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2}){0,1}\\z"};
   QRegularExpression non_r_db_regexp {"\\A[-+]{1}[0-9]{1,2}\\z"};
@@ -1662,7 +1686,7 @@ namespace
         return;
       }
 
-    QtConcurrent::run ([&state] {
+    [[maybe_unused]] auto writer_future = QtConcurrent::run ([&state] {
       for (;;)
         {
           QHash<QString, QStringList> batch;
@@ -3020,12 +3044,12 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
                                                             , QMessageBox::ActionRole);
 
   // set up message text validators
-  ui->tx1->setValidator (new QRegExpValidator {message_alphabet, this});
-  ui->tx2->setValidator (new QRegExpValidator {message_alphabet, this});
-  ui->tx3->setValidator (new QRegExpValidator {message_alphabet, this});
-  ui->tx4->setValidator (new QRegExpValidator {message_alphabet, this});
-  ui->tx5->setValidator (new QRegExpValidator {message_alphabet, this});
-  ui->tx6->setValidator (new QRegExpValidator {message_alphabet, this});
+  ui->tx1->setValidator (new QRegularExpressionValidator {message_alphabet, this});
+  ui->tx2->setValidator (new QRegularExpressionValidator {message_alphabet, this});
+  ui->tx3->setValidator (new QRegularExpressionValidator {message_alphabet, this});
+  ui->tx4->setValidator (new QRegularExpressionValidator {message_alphabet, this});
+  ui->tx5->setValidator (new QRegularExpressionValidator {message_alphabet, this});
+  ui->tx6->setValidator (new QRegularExpressionValidator {message_alphabet, this});
 
   // Free text macros model to widget hook up.
   ui->tx5->setModel (m_config.macros ());
@@ -4520,9 +4544,11 @@ void MainWindow::set_application_font (QFont const& font)
       } else {
           qApp->setFont (font);
           QString ss;
-          f.open(QFile::ReadOnly | QFile::Text);
-          QTextStream ts(&f);
-          qApp->setStyleSheet(ts.readAll() + "* {" + font_as_stylesheet (font) + '}');
+          if (f.open (QFile::ReadOnly | QFile::Text))
+            {
+              QTextStream ts(&f);
+              qApp->setStyleSheet(ts.readAll() + "* {" + font_as_stylesheet (font) + '}');
+            }
           m_useDarkStyle = true;
           m_wideGraph->setDarkStyle(m_useDarkStyle);
           check_button_color();
@@ -4543,8 +4569,8 @@ void MainWindow::set_application_font (QFont const& font)
          QFile sf {sheet};
          if (sf.open (QFile::ReadOnly | QFile::Text))
            {
-             QString tmp = sf.readAll();
-             if (tmp != NULL) ss = sf.readAll () + tmp;
+             QString const tmp = sf.readAll();
+             if (!tmp.isNull ()) ss = tmp;
              else qDebug() << "tmp==NULL at sf.readAll";
            }
       }
@@ -5077,11 +5103,9 @@ QString MainWindow::save_wave_file (QString const& name, short const * data, int
   // without suitable synchronization.
   //
   QAudioFormat format;
-  format.setCodec ("audio/pcm");
   format.setSampleRate (12000);
   format.setChannelCount (1);
-  format.setSampleSize (16);
-  format.setSampleType (QAudioFormat::SignedInt);
+  format.setSampleFormat (QAudioFormat::Int16);
   auto source = QString {"%1; %2"}.arg (my_callsign).arg (my_grid);
   auto comment = QString {"Mode=%1%2; Freq=%3%4"}
                    .arg (mode)
@@ -5944,7 +5968,7 @@ void MainWindow::fastSink(qint64 frames)
         effect1->open(QIODevice::ReadOnly);
         audio->start(effect1);
 #else
-        QSound::play(bundled_sound_path(QStringLiteral("DXcall.wav")));  // for Linux and macOS
+        play_sound_effect (this, bundled_sound_path (QStringLiteral ("DXcall.wav")));
 #endif
         play_DXcall = false;
       }
@@ -6052,10 +6076,10 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
                  .arg (m_monitoring)
                  .arg (input_device.isNull ()
                          ? QString {"<null>"}
-                         : input_device.deviceName ())
+                         : input_device.description ())
                  .arg (output_device.isNull ()
                          ? QString {"<null>"}
-                         : output_device.deviceName ()));
+                         : output_device.description ()));
   if (!input_device.isNull ())
     {
       Q_EMIT startAudioInputStream (input_device
@@ -6196,10 +6220,10 @@ void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
               .arg (m_tci_audio)
               .arg (m_config.audio_input_device ().isNull ()
                       ? QString {"<null>"}
-                      : m_config.audio_input_device ().deviceName ())
+                      : m_config.audio_input_device ().description ())
               .arg (m_config.audio_output_device ().isNull ()
                       ? QString {"<null>"}
-                      : m_config.audio_output_device ().deviceName ())
+                      : m_config.audio_output_device ().description ())
               .toStdString ());
 
   if (m_monitoring && !m_config.audio_input_device ().isNull ())
@@ -7306,10 +7330,10 @@ void MainWindow::keyPressEvent (QKeyEvent * e)
   if(SpecOp::FOX == m_specOp) {
     switch (e->key()) {
       case Qt::Key_Return:
-        doubleClickOnCall2(Qt::KeyboardModifier(Qt::ShiftModifier + Qt::ControlModifier + Qt::AltModifier));
+        doubleClickOnCall2 (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier);
         return;
       case Qt::Key_Enter:
-        doubleClickOnCall2(Qt::KeyboardModifier(Qt::ShiftModifier + Qt::ControlModifier + Qt::AltModifier));
+        doubleClickOnCall2 (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier);
         return;
       case Qt::Key_Backspace:
         qDebug() << "Key Backspace";
@@ -9091,7 +9115,7 @@ void MainWindow::read_wav_file (QString const& fname)
     // zero unfilled remaining sample space
       std::memset(&dec_data.d2[frames_read],0,max_bytes - n);
       if (11025 == file.format ().sampleRate ()) {
-        short sample_size = file.format ().sampleSize ();
+        short sample_size = static_cast<short> (file.format ().bytesPerSample () * 8);
         decodium::legacy::wav12_inplace (dec_data.d2, &frames_read, sample_size);
       }
       dec_data.params.kin = frames_read;
@@ -10110,8 +10134,7 @@ void MainWindow::refreshPileupList()
 void MainWindow::read_log()
 {
   static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("decodium.log")};
-  f.open(QIODevice::ReadOnly);
-  if(f.isOpen()) {
+  if (f.open (QIODevice::ReadOnly)) {
     QTextStream in(&f);
     QString line,callsign;
     for(int i=0; i<99999; i++) {
@@ -12203,7 +12226,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
             effect1->open(QIODevice::ReadOnly);
             audio->start(effect1);
 #else
-            QSound::play(bundled_sound_path(QStringLiteral("DXcall.wav")));  // for Linux and macOS
+            play_sound_effect (this, bundled_sound_path (QStringLiteral ("DXcall.wav")));
 #endif
             play_DXcall = false;
           }
@@ -12620,8 +12643,8 @@ void MainWindow::readFromStdout()                             //readFromStdout
             QFile f(m_config.temp_dir ().absoluteFilePath ("avemsg.txt"));
             if(f.open(QIODevice::ReadOnly | QIODevice::Text)) {
               QTextStream s(&f);
-              QString t=s.readAll();
-              if (t != NULL) m_msgAvgWidget->displayAvg(t);
+              QString const t=s.readAll();
+              if (!t.isNull ()) m_msgAvgWidget->displayAvg(t);
               else qDebug() << "tmp==NULL at s.readAll";
             }
           }
@@ -14932,7 +14955,7 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
 //        }
 //    }
 //  }
-  if(modifiers==(Qt::ShiftModifier + Qt::ControlModifier + Qt::AltModifier)) {
+  if(modifiers==(Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier)) {
     //### What was the purpose of this ???  ###
     cursor.setPosition(0);
   } else {
@@ -15002,14 +15025,14 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
       }
     }    //avt 10/2/25
     // MSK144 QSY: set RF freq so next received MSK144 signal is at 1500 Hz
-    if(m_mode=="MSK144" && message.frequencyOffset() > 0 && (modifiers==Qt::ControlModifier or modifiers==(Qt::ControlModifier+Qt::AltModifier))) {
+    if(m_mode=="MSK144" && message.frequencyOffset() > 0 && (modifiers==Qt::ControlModifier or modifiers==(Qt::ControlModifier | Qt::AltModifier))) {
       Frequency dial_frequency = m_msk144basefreq + (message.frequencyOffset() - 1500);
       keep_msk144_frequency = true;
       monitor (true);
       setRig(dial_frequency);
       ui->labDialFreq->setText (Radio::pretty_frequency_MHz_string (dial_frequency));
       msk144qsy = true;
-      if(modifiers==Qt::AltModifier or modifiers==(Qt::ControlModifier+Qt::AltModifier)) {
+      if(modifiers==Qt::AltModifier or modifiers==(Qt::ControlModifier | Qt::AltModifier)) {
         m_bDoubleClicked = false;
         if (m_auto) auto_tx_mode (false);
       }
@@ -15052,7 +15075,7 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
     }
 
     if(call.length()<3) return;
-    if(!call.contains(QRegExp("[0-9]|[A-Z]"))) return;
+    if(!call.contains(QRegularExpression("[0-9]|[A-Z]"))) return;
 
     //avt 8/22/23
     if (((QDateTime::currentMSecsSinceEpoch() / 1000 - m_secBandChanged) > 4*int(m_TRperiod)/4)) {  //band wasn't recently changed
@@ -17348,10 +17371,10 @@ void MainWindow::on_addButton_clicked()                       //Add button
     if (f0.exists ()) f0.remove ();
     f1.copy (old_path);                       // copying as we want to
                                               // preserve symlinks
-    f1.open (QFile::WriteOnly | QFile::Text); // truncates
+    if (!f1.open (QFile::WriteOnly | QFile::Text)) return; // truncates
     f2.seek (0);
-    QByteArray tmp = f2.readAll();
-    if (tmp != (const char*)NULL) f1.write (tmp);                 // copy contents
+    QByteArray const tmp = f2.readAll();
+    if (!tmp.isNull ()) f1.write (tmp);                 // copy contents
     else qDebug() << "tmp==NULL at f1.write";
     f2.remove ();
   }
@@ -17487,8 +17510,8 @@ void MainWindow::on_tx6_editingFinished()                       //tx6 edited
   QString t=ui->tx6->text().toUpper();
   if(t.indexOf(" ")>0) {
     QString t1=t.split(" ").at(1);
-    QRegExp AZ4("^[A-Z]{1,4}$");
-    QRegExp NN3("^[0-9]{1,3}$");
+    QRegularExpression const AZ4("^[A-Z]{1,4}$");
+    QRegularExpression const NN3("^[0-9]{1,3}$");
     m_CQtype="CQ";
     if(t1.size()<=4 and t1.contains(AZ4)) m_CQtype="CQ " + t1;
     if(t1.size()<=3 and t1.contains(NN3)) m_CQtype="CQ " + t1;
@@ -17832,7 +17855,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)    // mouse press events
       effect->open(QIODevice::ReadOnly);
       audio->start(effect);
 #else
-      QSound::play(bundled_sound_path(QStringLiteral("Testing_long.wav")));  // for Linux and macOS
+      play_sound_effect (this, bundled_sound_path (QStringLiteral ("Testing_long.wav")));
 #endif
     }
     ui->pbBandHopping->clearFocus();
@@ -21955,7 +21978,7 @@ QChar MainWindow::current_submode () const
   if (m_mode.contains (QRegularExpression {R"(^(JT65|JT9|JT4|Q65)$)"})
       && (m_config.enable_VHF_features () || "JT4" == m_mode))
     {
-      submode = m_nSubMode + 65;
+      submode = QChar::fromLatin1 (static_cast<char> ('A' + m_nSubMode));
     }
   return submode;
 }
@@ -22581,7 +22604,7 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
   decoded_text.deCallAndGrid(call, grid);
 
   if(call.length()<3) return;
-  if(!call.contains(QRegExp("[0-9]|[A-Z]"))) return;
+  if(!call.contains(QRegularExpression("[0-9]|[A-Z]"))) return;
 
   //avt 10/26/21
   if (((QDateTime::currentMSecsSinceEpoch() / 1000 - m_secBandChanged) > 4*int(m_TRperiod)/4)) {  //avt 7/7/22 band wasn't recently changed
@@ -22698,9 +22721,9 @@ void MainWindow::processWsprDecoderLine (QString const& inputLine)
   }
 
   t += "                                                  ";
-  t.remove(QRegExp("\\s+$"));
+  t.remove(QRegularExpression("\\s+$"));
 
-  QStringList rxFields = t.split(QRegExp("\\s+"));
+  QStringList rxFields = t.split(QRegularExpression("\\s+"));
   QString rxLine;
   QString grid;
   if ( rxFields.count() == 8 ) {
@@ -24045,7 +24068,7 @@ list1Done:
     m_foxQSO[hc].sent=rpt;                //Report to send him
     m_foxQSO[hc].ncall=0;                 //Start a new Hound
     m_foxQSO[hc].nRR73 = 0;               //Have not sent RR73
-    m_foxQSO[hc].rcvd = -99;              //Have not received R+rpt
+    m_foxQSO[hc].rcvd = QStringLiteral ("-99");  //Have not received R+rpt
     m_foxQSO[hc].tFoxRrpt = -1;           //Have not received R+rpt
     m_foxQSO[hc].tFoxTxRR73 = -1;         //Have not sent RR73
     refreshHoundQueueDisplay();
@@ -24337,7 +24360,10 @@ void MainWindow::writeFoxTxMsgs() {
   void MainWindow::writeFoxQSO(QString const& msg)
 {
   QString t;
-  t = t.asprintf("%3d%3d%3d",m_houndQueue.count(),m_foxQSOinProgress.count(),m_foxQSO.count());
+  t = t.asprintf ("%3d%3d%3d",
+                  static_cast<int> (m_houndQueue.count ()),
+                  static_cast<int> (m_foxQSOinProgress.count ()),
+                  static_cast<int> (m_foxQSO.count ()));
   QFile f {m_config.writeable_data_dir ().absoluteFilePath ("FoxQSO.txt")};
   if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
     QTextStream out(&f);
@@ -24452,9 +24478,12 @@ void MainWindow::foxTest()
     if(line.contains("Tx1:")) {
       foxTxSequencer();
     } else {
-      t = t.asprintf("%3d %3d %3d %3d %5d   ",m_houndQueue.count(),
-                m_foxQSOinProgress.count(),m_foxQSO.count(),
-                m_loggedByFox.count(),m_tFoxTx);
+      t = t.asprintf ("%3d %3d %3d %3d %5d   ",
+                      static_cast<int> (m_houndQueue.count ()),
+                      static_cast<int> (m_foxQSOinProgress.count ()),
+                      static_cast<int> (m_foxQSO.count ()),
+                      static_cast<int> (m_loggedByFox.count ()),
+                      m_tFoxTx);
       sdiag << t << line.mid(37).trimmed() << "\n";
     }
   }
@@ -25622,9 +25651,7 @@ void MainWindow::debugToFile(QString str)       //avt 11/25/19
 
   QString file = m_config.writeable_data_dir().absoluteFilePath("debug.txt");
   QFile outputFile(file);
-  outputFile.open(QIODevice::ReadWrite | QIODevice::Append);
-  
-  if(!outputFile.isOpen())
+  if (!outputFile.open(QIODevice::ReadWrite | QIODevice::Append))
   {
      MessageBox::warning_message (this, tr ("Unable to open log file"), file);
      return;
@@ -26192,9 +26219,11 @@ void MainWindow::on_actionUse_Dark_Style_triggered (bool checked)
         } else {
             qApp->setFont (font);
             QString ss;
-            f.open(QFile::ReadOnly | QFile::Text);
-            QTextStream ts(&f);
-            qApp->setStyleSheet(ts.readAll() + "* {" + font_as_stylesheet (font) + '}');
+            if (f.open(QFile::ReadOnly | QFile::Text))
+              {
+                QTextStream ts(&f);
+                qApp->setStyleSheet(ts.readAll() + "* {" + font_as_stylesheet (font) + '}');
+              }
             m_useDarkStyle = true;
             m_wideGraph->setDarkStyle(m_useDarkStyle);
             check_button_color();
@@ -27142,7 +27171,7 @@ void MainWindow::alertQSYmessage ()
   effect1->open(QIODevice::ReadOnly);
   audio->start(effect1);
 #else
-  QSound::play(bundled_sound_path(QStringLiteral("Message.wav")));  // for Linux and macOS
+  play_sound_effect (this, bundled_sound_path (QStringLiteral ("Message.wav")));
 #endif
 }
 
@@ -27166,7 +27195,7 @@ void MainWindow::setCallPriority(QString call, int isEven)   //avt 2/20/25
     m_dblClk = false;
     m_checkCmd = "";
     if(call.length()<3) return;
-    if(!call.contains(QRegExp("[0-9]|[A-Z]"))) return;
+    if(!call.contains(QRegularExpression("[0-9]|[A-Z]"))) return;
 
     //debugToFile(QString {"setCallPrio: call:%1 m_mode:%2 grid:%3 m_currentBand:%4"}.arg(call).arg(m_mode).arg(grid).arg(m_currentBand));
     auto const& looked_up = m_logBook.countries ()->lookup (call);
@@ -27313,12 +27342,13 @@ void MainWindow::downloadQsoComplete(bool result)
    
   if (adiFound) {
     QFile f{tmpFilePathName};
-    f.open(QIODevice::ReadOnly | QIODevice::Text);
-    QTextStream in2(&f);
-    QString line = in2.readLine(0);
-    debugToFile("dlLotwCom    line:" + line);
-    isAdi = !line.contains("HTML");
-    debugToFile(QString{"dlLotwCom    isAdi:%1"}.arg(isAdi));
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+      QTextStream in2(&f);
+      QString const line = in2.readLine(0);
+      debugToFile("dlLotwCom    line:" + line);
+      isAdi = !line.contains("HTML");
+      debugToFile(QString{"dlLotwCom    isAdi:%1"}.arg(isAdi));
+    }
     f.close();
   }
 
@@ -27883,8 +27913,7 @@ void MainWindow::logIncremental(QString call, QString adif)
 {
   QString file = m_config.writeable_data_dir().absolutePath() + "/" + INCR_LOG_FNAME;
   QFile outputFile(file);
-  outputFile.open(QIODevice::ReadWrite | QIODevice::Append);
-  if(!outputFile.isOpen()) {
+  if (!outputFile.open(QIODevice::ReadWrite | QIODevice::Append)) {
     MessageBox::warning_message (this, tr ("Unable to open incremental log file"), file);
   } else {
     QTextStream outStream(&outputFile);

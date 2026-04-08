@@ -358,7 +358,7 @@ int main(int argc, char *argv[])
                             }
                           else
                             {
-                              auto const sequence = value.value<QSequentialIterable> ();
+                              auto const sequence = value.toList ();
                               for (auto const& item: sequence)
                                 {
                                   strm << "\t";

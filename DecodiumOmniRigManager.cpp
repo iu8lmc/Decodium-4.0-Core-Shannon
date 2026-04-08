@@ -1,10 +1,13 @@
 #include "DecodiumOmniRigManager.h"
 
+#ifdef Q_OS_WIN
 #include <QAxObject>
+#endif
 #include <QSettings>
 #include <QTimer>
 #include <QDebug>
 
+#ifdef Q_OS_WIN
 // OmniRig COM ProgID
 static const char* OMNIRIG_PROGID = "OmniRig.OmniRigX";
 
@@ -185,3 +188,78 @@ void DecodiumOmniRigManager::loadSettings()
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
     s.endGroup();
 }
+#else
+QString DecodiumOmniRigManager::modeFromParam(int) const
+{
+    return "USB";
+}
+
+DecodiumOmniRigManager::DecodiumOmniRigManager(QObject* parent)
+    : QObject(parent)
+{
+    m_pollTimer = new QTimer(this);
+    m_pollTimer->setInterval(m_pollInterval * 1000);
+    loadSettings();
+}
+
+DecodiumOmniRigManager::~DecodiumOmniRigManager()
+{
+    disconnectRig();
+}
+
+void DecodiumOmniRigManager::connectRig()
+{
+    emit errorOccurred("OmniRig is only available on Windows builds.");
+}
+
+void DecodiumOmniRigManager::disconnectRig()
+{
+    if (m_pollTimer) m_pollTimer->stop();
+    if (m_connected) {
+        m_connected = false;
+        emit connectedChanged();
+    }
+}
+
+void DecodiumOmniRigManager::onPollTimer() {}
+
+void DecodiumOmniRigManager::setRigFrequency(double) {}
+
+void DecodiumOmniRigManager::setRigPtt(bool on)
+{
+    if (m_pttActive != on) {
+        m_pttActive = on;
+        emit pttActiveChanged();
+    }
+}
+
+void DecodiumOmniRigManager::applyPollInterval()
+{
+    if (m_pollTimer)
+        m_pollTimer->setInterval(m_pollInterval * 1000);
+}
+
+void DecodiumOmniRigManager::saveSettings()
+{
+    QSettings s("Decodium", "Decodium3");
+    s.beginGroup("CAT_OmniRig");
+    s.setValue("rigName",        m_rigName);
+    s.setValue("pttMethod",      m_pttMethod);
+    s.setValue("pollInterval",   m_pollInterval);
+    s.setValue("catAutoConnect", m_catAutoConnect);
+    s.setValue("audioAutoStart", m_audioAutoStart);
+    s.endGroup();
+}
+
+void DecodiumOmniRigManager::loadSettings()
+{
+    QSettings s("Decodium", "Decodium3");
+    s.beginGroup("CAT_OmniRig");
+    m_rigName        = s.value("rigName",        "OmniRig Rig 1").toString();
+    m_pttMethod      = s.value("pttMethod",       "CAT").toString();
+    m_pollInterval   = s.value("pollInterval",    2).toInt();
+    m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
+    m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
+    s.endGroup();
+}
+#endif

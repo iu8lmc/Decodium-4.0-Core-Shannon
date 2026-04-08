@@ -15,7 +15,7 @@
 
 class QSettings;
 class QWidget;
-class QAudioDeviceInfo;
+class QAudioDevice;
 class QDir;
 class QNetworkAccessManager;
 class Bands;
@@ -86,9 +86,9 @@ public:
   QDir data_dir () const;
   QDir writeable_data_dir () const;
 
-  QAudioDeviceInfo const& audio_input_device () const;
+  QAudioDevice const& audio_input_device () const;
   AudioDevice::Channel audio_input_channel () const;
-  QAudioDeviceInfo const& audio_output_device () const;
+  QAudioDevice const& audio_output_device () const;
   AudioDevice::Channel audio_output_channel () const;
 
   // These query methods should be used after a call to exec() to

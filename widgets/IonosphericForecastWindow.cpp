@@ -176,7 +176,10 @@ void IonosphericForecastWindow::refreshNow()
                     .arg(QApplication::applicationName(),
                          QApplication::applicationVersion().isEmpty() ? QStringLiteral("dev")
                                                                       : QApplication::applicationVersion()));
-#if QT_VERSION >= QT_VERSION_CHECK (5, 9, 0)
+#if QT_VERSION >= QT_VERSION_CHECK (6, 0, 0)
+  request.setAttribute (QNetworkRequest::RedirectPolicyAttribute,
+                        QNetworkRequest::NoLessSafeRedirectPolicy);
+#elif QT_VERSION >= QT_VERSION_CHECK (5, 9, 0)
   request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
 #endif
   auto * xmlReply = network_->get(request);
@@ -188,7 +191,10 @@ void IonosphericForecastWindow::refreshNow()
                          .arg(QApplication::applicationName(),
                               QApplication::applicationVersion().isEmpty() ? QStringLiteral("dev")
                                                                            : QApplication::applicationVersion()));
-#if QT_VERSION >= QT_VERSION_CHECK (5, 9, 0)
+#if QT_VERSION >= QT_VERSION_CHECK (6, 0, 0)
+  imageRequest.setAttribute (QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::NoLessSafeRedirectPolicy);
+#elif QT_VERSION >= QT_VERSION_CHECK (5, 9, 0)
   imageRequest.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
 #endif
   auto * sunReply = network_->get(imageRequest);

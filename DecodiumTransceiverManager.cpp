@@ -15,6 +15,26 @@
 #include <atomic>
 #include <stdexcept>
 
+namespace
+{
+QString normalizeDevicePath(QString value)
+{
+    value = value.trimmed();
+    if (value.isEmpty() || value == "CAT" || value == "None")
+        return value;
+
+#if defined(Q_OS_WIN)
+    return value;
+#else
+    if (value.startsWith('/'))
+        return value;
+    if (value.contains(':'))
+        return value;
+    return QStringLiteral("/dev/") + value;
+#endif
+}
+}
+
 // ── PIMPL privato ──────────────────────────────────────────────────────────
 // Il transceiver gira su xcvThread; usiamo raw pointer + deleteLater
 // per evitare che unique_ptr venga distrutto dal thread sbagliato.
@@ -149,9 +169,9 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
 {
     TransceiverFactory::ParameterPack p;
     p.rig_name      = m->rigName();
-    p.serial_port   = m->serialPort();
+    p.serial_port   = normalizeDevicePath(m->serialPort());
     p.network_port  = m->networkPort();
-    p.usb_port      = {};                          // non esposto in UI per ora
+    p.usb_port      = normalizeDevicePath(m->serialPort());
     p.tci_port      = m->tciPort();
     p.baud          = m->baudRate();
     p.data_bits     = parseData(m->dataBits());
@@ -165,7 +185,7 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.audio_source  = TransceiverFactory::TX_audio_source_front;
     p.split_mode    = parseSplit(m->splitMode());
     // ptt_port: "CAT" usa la stessa porta CAT; altrimenti porta seriale dedicata
-    p.ptt_port      = m->pttPort().isEmpty() ? "CAT" : m->pttPort();
+    p.ptt_port      = m->pttPort().isEmpty() ? "CAT" : normalizeDevicePath(m->pttPort());
     p.poll_interval = m->pollInterval();
     return p;
 }
@@ -293,10 +313,15 @@ void DecodiumTransceiverManager::disconnectRig()
     d->transceiver = nullptr;
     d->xcvThread   = nullptr;
 
-    // Richiedi stop al transceiver sul suo thread
-    QMetaObject::invokeMethod(xcv, [xcv]() {
+    // Richiedi stop in modo sincrono sul thread del rig così il cleanup
+    // (PTT off, split reset, rig_close) avviene prima del quit del thread.
+    if (xcv->thread() == QThread::currentThread()) {
         xcv->stop();
-    }, Qt::QueuedConnection);
+    } else {
+        QMetaObject::invokeMethod(xcv, [xcv]() {
+            xcv->stop();
+        }, Qt::BlockingQueuedConnection);
+    }
 
     if (thread && thread->isRunning()) {
         thread->quit();
@@ -327,6 +352,23 @@ static void sendState(DecodiumTransceiverManagerPrivate* d)
     }, Qt::QueuedConnection);
 }
 
+static void sendStateSync(DecodiumTransceiverManagerPrivate* d)
+{
+    if (!d->transceiver) return;
+    auto* xcv = d->transceiver;
+    auto  st  = d->desired;
+    unsigned seq = ++(d->seqNum);
+
+    if (xcv->thread() == QThread::currentThread()) {
+        xcv->set(st, seq);
+        return;
+    }
+
+    QMetaObject::invokeMethod(xcv, [xcv, st, seq]() {
+        xcv->set(st, seq);
+    }, Qt::BlockingQueuedConnection);
+}
+
 void DecodiumTransceiverManager::setRigFrequency(double hz)
 {
     m_frequency = hz;
@@ -346,7 +388,10 @@ void DecodiumTransceiverManager::setRigTxFrequency(double hz)
 void DecodiumTransceiverManager::setRigPtt(bool on)
 {
     d->desired.ptt(on);
-    sendState(d.get());
+    if (on)
+        sendState(d.get());
+    else
+        sendStateSync(d.get());
 }
 
 void DecodiumTransceiverManager::setRigMode(const QString& mode)
@@ -359,8 +404,15 @@ void DecodiumTransceiverManager::setRigMode(const QString& mode)
 void DecodiumTransceiverManager::refreshPorts()
 {
     QStringList ports;
-    for (const auto& info : QSerialPortInfo::availablePorts())
-        ports << info.portName();
+    for (const auto& info : QSerialPortInfo::availablePorts()) {
+#if defined(Q_OS_WIN)
+        const QString port = info.portName();
+#else
+        const QString port = info.systemLocation().isEmpty() ? info.portName() : info.systemLocation();
+#endif
+        if (!port.isEmpty())
+            ports << port;
+    }
     if (ports != m_portList) {
         m_portList = ports;
         emit portListChanged();
@@ -370,10 +422,13 @@ void DecodiumTransceiverManager::refreshPorts()
 // ── Persistenza ───────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::saveSettings()
 {
+    const QString serialPort = normalizeDevicePath(m_serialPort);
+    const QString pttPort = m_pttPort.isEmpty() ? QStringLiteral("CAT") : normalizeDevicePath(m_pttPort);
+
     QSettings s("Decodium", "Decodium3");
     s.beginGroup("Transceiver");
     s.setValue("rigName",      m_rigName);
-    s.setValue("serialPort",   m_serialPort);
+    s.setValue("serialPort",   serialPort);
     s.setValue("baudRate",     m_baudRate);
     s.setValue("dataBits",     m_dataBits);
     s.setValue("stopBits",     m_stopBits);
@@ -385,7 +440,7 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("networkPort",  m_networkPort);
     s.setValue("tciPort",      m_tciPort);
     s.setValue("pttMethod",    m_pttMethod);
-    s.setValue("pttPort",      m_pttPort);
+    s.setValue("pttPort",      pttPort);
     s.setValue("splitMode",    m_splitMode);
     s.setValue("pollInterval", m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
@@ -398,7 +453,7 @@ void DecodiumTransceiverManager::loadSettings()
     QSettings s("Decodium", "Decodium3");
     s.beginGroup("Transceiver");
     auto get = [&](const QString& k, const QVariant& def) { return s.value(k, def); };
-    m_serialPort   = get("serialPort",   m_serialPort).toString();
+    m_serialPort   = normalizeDevicePath(get("serialPort",   m_serialPort).toString());
     m_baudRate     = get("baudRate",     m_baudRate).toInt();
     m_dataBits     = get("dataBits",     m_dataBits).toString();
     m_stopBits     = get("stopBits",     m_stopBits).toString();
@@ -410,7 +465,7 @@ void DecodiumTransceiverManager::loadSettings()
     m_networkPort  = get("networkPort",  m_networkPort).toString();
     m_tciPort      = get("tciPort",      m_tciPort).toString();
     m_pttMethod    = get("pttMethod",    m_pttMethod).toString();
-    m_pttPort      = get("pttPort",      m_pttPort).toString();
+    m_pttPort      = normalizeDevicePath(get("pttPort",      m_pttPort).toString());
     m_splitMode    = get("splitMode",    m_splitMode).toString();
     m_pollInterval = get("pollInterval", m_pollInterval).toInt();
     m_catAutoConnect = get("catAutoConnect", m_catAutoConnect).toBool();

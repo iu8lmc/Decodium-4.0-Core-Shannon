@@ -177,7 +177,4 @@ bool is_MAC_ambiguous_multicast_address (QHostAddress const& host_addr)
   return ok && !((ipv4 & 0xffffff00u) == 0xe0000000) && (ipv4 & 0xf07fff00) == 0xe0000000;
 }
 
-// Register some useful Qt types with QMetaType
-Q_DECLARE_METATYPE (QHostAddress);
-
 #endif

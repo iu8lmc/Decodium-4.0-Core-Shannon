@@ -30,9 +30,9 @@ namespace
     QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Exch Sent"),
     QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Exch Rcvd"),
     QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Prop"),
-    QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Satellite")
+    QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Satellite"),
     QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Sat Mode"),
-    QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "RX Frequency")
+    QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "RX Frequency"),
     QT_TRANSLATE_NOOP ("MessageAggregatorMainWindow", "Comments"),
   };
 }
@@ -240,7 +240,9 @@ MessageAggregatorMainWindow::MessageAggregatorMainWindow ()
 
   // connect up server
   connect (server_, &MessageServer::error, [this] (QString const& message) {
-      QMessageBox::warning (this, QApplication::applicationName (), tr ("Network Error"), message);
+      QMessageBox::warning (this
+                            , QApplication::applicationName ()
+                            , tr ("Network Error:\n%1").arg (message));
     });
   connect (server_, &MessageServer::client_opened, this, &MessageAggregatorMainWindow::add_client);
   connect (server_, &MessageServer::client_closed, this, &MessageAggregatorMainWindow::remove_client);

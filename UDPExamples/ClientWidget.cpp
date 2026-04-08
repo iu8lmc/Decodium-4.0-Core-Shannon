@@ -1,7 +1,7 @@
 #include "ClientWidget.hpp"
 
 #include <limits>
-#include <QRegExp>
+#include <QRegularExpressionValidator>
 #include <QColor>
 #include <QtWidgets>
 #include <QAction>
@@ -10,10 +10,9 @@
 
 namespace
 {
-  //QRegExp message_alphabet {"[- A-Za-z0-9+./?]*"};
-  QRegExp message_alphabet {"[- @A-Za-z0-9+./?#<>]*"};
+  QRegularExpression message_alphabet {"[- @A-Za-z0-9+./?#<>]*"};
   QRegularExpression cq_re {"(CQ|CQDX|QRZ)[^A-Z0-9/]+"};
-  QRegExpValidator message_validator {message_alphabet};
+  QRegularExpressionValidator message_validator {message_alphabet};
   MaidenheadLocatorValidator locator_validator;
   quint32 quint32_max {std::numeric_limits<quint32>::max ()};
 
@@ -236,7 +235,7 @@ ClientWidget::ClientWidget (QAbstractItemModel * decodes_model, QAbstractItemMod
       Q_EMIT configure (key_, empty, quint32_max, submode_line_edit_->text (), fast_mode ()
                         , quint32_max, quint32_max, empty, empty, false);
   });
-  connect (fast_mode_check_box_, &QCheckBox::stateChanged, [this] (int state) {
+  connect (fast_mode_check_box_, &QCheckBox::checkStateChanged, [this] (Qt::CheckState state) {
       QString empty;
       Q_EMIT configure (key_, empty, quint32_max, empty, Qt::Checked == state
                         , quint32_max, quint32_max, empty, empty, false);

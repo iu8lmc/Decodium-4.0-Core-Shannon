@@ -34,31 +34,31 @@ DecodiumCatManager::~DecodiumCatManager()
 
 void DecodiumCatManager::connectRig()
 {
-    if (m_serial && m_serial->isOpen())
+    if (m_serial)
         disconnectRig();
 
-    m_serial = new QSerialPort(this);
-    m_serial->setPortName(m_serialPort);
-    m_serial->setBaudRate(m_baudRate);
-    m_serial->setDataBits(QSerialPort::Data8);
-    m_serial->setParity(QSerialPort::NoParity);
-    m_serial->setStopBits(QSerialPort::OneStop);
-    m_serial->setFlowControl(QSerialPort::NoFlowControl);
+    auto* serial = new QSerialPort(this);
+    serial->setPortName(m_serialPort);
+    serial->setBaudRate(m_baudRate);
+    serial->setDataBits(QSerialPort::Data8);
+    serial->setParity(QSerialPort::NoParity);
+    serial->setStopBits(QSerialPort::OneStop);
+    serial->setFlowControl(QSerialPort::NoFlowControl);
 
+    if (!serial->open(QIODevice::ReadWrite)) {
+        const QString err = serial->errorString();
+        emit errorOccurred("CAT: impossibile aprire " + m_serialPort + " — " + err);
+        serial->deleteLater();
+        return;
+    }
+    serial->setDataTerminalReady(true);
+    serial->setRequestToSend(true);
+
+    m_serial = serial;
     connect(m_serial, &QSerialPort::readyRead,
             this, &DecodiumCatManager::onReadyRead);
     connect(m_serial, &QSerialPort::errorOccurred,
             this, &DecodiumCatManager::onSerialError);
-
-    if (!m_serial->open(QIODevice::ReadWrite)) {
-        QString err = m_serial->errorString();
-        emit errorOccurred("CAT: impossibile aprire " + m_serialPort + " — " + err);
-        m_serial->deleteLater();
-        m_serial = nullptr;
-        return;
-    }
-    m_serial->setDataTerminalReady(true);
-    m_serial->setRequestToSend(true);
 
     m_pollTimer = new QTimer(this);
     m_pollTimer->setInterval(2000);
@@ -95,6 +95,7 @@ void DecodiumCatManager::disconnectRig()
         m_pollTimer = nullptr;
     }
     if (m_serial) {
+        m_serial->blockSignals(true);
         if (m_serial->isOpen())
             m_serial->close();
         m_serial->deleteLater();
@@ -130,6 +131,9 @@ void DecodiumCatManager::onPollTimer()
 
 void DecodiumCatManager::onReadyRead()
 {
+    if (!m_serial)
+        return;
+
     m_rxBuf += m_serial->readAll();
 
     int idx;
@@ -237,7 +241,8 @@ void DecodiumCatManager::setRigPtt(bool on)
         if (!m_connected) return;
         QByteArray cmd = on ? "TX1;" : "RX;";  // TX1 = data input (USB audio), non MIC
         bool written = (m_serial && m_serial->isOpen()) ? (m_serial->write(cmd) > 0) : false;
-        m_serial->flush();
+        if (m_serial)
+            m_serial->flush();
         catLog(written ? "TX/RX scritto OK" : "ERRORE scrittura seriale");
         emit statusUpdate("CAT PTT: " + QString(cmd));
     } else if (m_pttMethod == "DTR" && m_serial && m_serial->isOpen()) {

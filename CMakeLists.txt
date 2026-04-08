@@ -368,6 +368,34 @@ set (wsjtx_CXXSRCS
   main.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodiumAudioSink.h
+  controllers/ActiveStationsModel.cpp
+  controllers/ActiveStationsModel.hpp
+  DecodiumThemeManager.cpp
+  DecodiumThemeManager.h
+  DecodiumSubManagers.cpp
+  DecodiumSubManagers.h
+  DecodiumCatManager.cpp
+  DecodiumCatManager.h
+  DecodiumOmniRigManager.cpp
+  DecodiumOmniRigManager.h
+  DecodiumTransceiverManager.cpp
+  DecodiumTransceiverManager.h
+  DecodiumAlertManager.cpp
+  DecodiumAlertManager.h
+  Network/FoxVerifier.cpp
+  Network/FoxVerifier.hpp
+  Network/DecodiumWsprUploader.cpp
+  Network/DecodiumWsprUploader.h
+  Network/DecodiumPskReporterLite.cpp
+  Network/DecodiumPskReporterLite.h
+  Network/DecodiumCloudlogLite.cpp
+  Network/DecodiumCloudlogLite.h
+  DecodiumDxCluster.cpp
+  DecodiumDxCluster.h
+  DxccLookup.cpp
+  DxccLookup.h
+  WsjtxLegacyLinkCompat.cpp
   Network/wsprnet.cpp
   WSPR/WSPRBandHopping.cpp
   widgets/ExportCabrillo.cpp
@@ -1550,6 +1578,7 @@ endif ()
 set_source_files_properties (qcustomplot-source/qcustomplot.cpp PROPERTIES
   COMPILE_FLAGS "-Wno-deprecated-declarations")
 add_library (qcp STATIC ${qcp_CXXSRCS})
+target_compile_options (qcp PRIVATE -Wno-error=misleading-indentation)
 target_include_directories (qcp PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/qcustomplot-source>)
 target_link_libraries (qcp Qt6::Widgets Qt6::PrintSupport)
 
@@ -1602,14 +1631,18 @@ target_sources (jt9a PRIVATE
   )
 link_wsjtx_cycle_group (jt9a wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (record_time_signal Audio/tools/record_time_signal.cpp)
-target_link_libraries (record_time_signal wsjt_cxx wsjt_qtmm wsjt_qt)
+if (NOT APPLE)
+  add_executable (record_time_signal Audio/tools/record_time_signal.cpp)
+  target_link_libraries (record_time_signal wsjt_cxx wsjt_qtmm wsjt_qt)
+endif ()
 
 if (WIN32)
   find_package (Portaudio REQUIRED)
   add_subdirectory (map65)
 endif ()
-  add_subdirectory (qmap)
+  if (WIN32)
+    add_subdirectory (qmap)
+  endif ()
 
 # build the main application
 generate_version_info (wsjtx_VERSION_RESOURCES
@@ -1666,6 +1699,7 @@ else ()
   endif ()
 endif ()
 target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+target_compile_options (wsjtx PRIVATE -Wno-deprecated-declarations)
 link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx ${_wsjtx_fort_target})
 
 # -----------------------------------------------------------------------
@@ -1730,6 +1764,7 @@ add_executable (decodium_qml
   Audio/soundin.cpp
   Audio/soundout.cpp
   Modulator/Modulator.cpp
+  DecodiumQmlLegacyCompat.cpp
   Network/FoxVerifier.cpp
   Network/FoxVerifier.hpp
   Network/wsprnet.cpp
@@ -1744,8 +1779,6 @@ add_executable (decodium_qml
   DecodiumDxCluster.h
   DxccLookup.cpp
   DxccLookup.h
-  decodium_fortran_stubs.cpp
-  decodium_common_blocks.c
   ${wsjtx_GENUISRCS}
   ${wsjtx_RESOURCES_RCC}
   ${DECODIUM_QML_ICON_RC}
@@ -1755,10 +1788,13 @@ if (WSJT_CREATE_WINMAIN)
 endif ()
 set_target_properties (decodium_qml PROPERTIES OUTPUT_NAME decodium)
 # Sopprime i warnings-as-error su LegacyDspIoHelpers (vector bounds in GCC15)
-set_source_files_properties (Detector/LegacyDspIoHelpers.cpp PROPERTIES
-  COMPILE_FLAGS "-Wno-error=stringop-overflow -Wno-error=stringop-overread -Wno-error=array-bounds")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties (Detector/LegacyDspIoHelpers.cpp PROPERTIES
+    COMPILE_FLAGS "-Wno-error=stringop-overflow -Wno-error=stringop-overread -Wno-error=array-bounds")
+endif ()
 # C17 — FoxVerifier senza Boost.Log (usa qDebug come shim)
 target_compile_definitions (decodium_qml PRIVATE DECODIUM_NO_BOOST_LOG FFTW3_SINGLE_FOUND)
+target_compile_options (decodium_qml PRIVATE -Wno-deprecated-declarations)
 target_include_directories (decodium_qml PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -1773,7 +1809,6 @@ target_link_libraries (decodium_qml
   Qt6::Network
   Qt6::SerialPort
   Qt6::WebSockets
-  Qt6::AxContainer
   wsjt_qtmm
   wsjt_qt
   wsjt_fort
@@ -1783,6 +1818,9 @@ target_link_libraries (decodium_qml
   ${FFTW3_LIBRARIES}
   ${LIBM_LIBRARIES}
 )
+if (WIN32)
+  target_link_libraries (decodium_qml Qt6::AxContainer)
+endif ()
 # gfortran runtime dinamico
 if (MINGW)
   target_link_libraries (decodium_qml gfortran quadmath)
@@ -1859,6 +1897,7 @@ add_executable (message_aggregator
   ${message_aggregator_VERSION_RESOURCES}
   )
 target_link_libraries (message_aggregator wsjt_qt Qt6::Widgets wsjtx_udp-static)
+target_compile_options (message_aggregator PRIVATE -Wno-deprecated-declarations)
 
 if (WSJT_CREATE_WINMAIN)
   set_target_properties (message_aggregator PROPERTIES WIN32_EXECUTABLE ON)

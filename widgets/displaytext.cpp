@@ -3,9 +3,13 @@
 #include <vector>
 #include <algorithm>
 
+#ifdef WIN32
 #include <QAudio>
 #include <QAudioOutput>
-#include <QSound>
+#else
+#include <QSoundEffect>
+#include <QUrl>
+#endif
 #include <QDir>
 #include <QCoreApplication>
 #include <QTimer>
@@ -134,6 +138,17 @@ namespace
 {
   using Highlight = DecodeHighlightingModel::Highlight;
   using highlight_types = std::vector<Highlight>;
+#ifndef WIN32
+  void play_alert_sound(QObject* parent, QString const& path)
+  {
+    auto * effect = new QSoundEffect(parent);
+    effect->setSource(QUrl::fromLocalFile(path));
+    effect->setLoopCount(1);
+    effect->setVolume(1.0f);
+    effect->play();
+    QTimer::singleShot(5000, effect, &QObject::deleteLater);
+  }
+#endif
   Highlight set_colours (Configuration const * config, QColor * bg, QColor * fg, highlight_types const& types)
   {
     Highlight result = Highlight::CQ;
@@ -322,7 +337,7 @@ QString DisplayText::appendWorkedB4 (QString message, QString call, QString cons
     call=call.mid(0,i0);
   }
   if(call.length()<3) return message;
-  if(!call.contains(QRegExp("[0-9]|[A-Z]"))) return message;
+  if(!call.contains(QRegularExpression {"[0-9]|[A-Z]"})) return message;
 
   auto const& looked_up = logBook.countries ()->lookup (call);
   logBook.match (call, currentMode, grid, looked_up, callB4, countryB4, gridB4, continentB4, CQZoneB4, ITUZoneB4);
@@ -1060,7 +1075,7 @@ void DisplayText::AudioAlerts()
                 effect2->open(QIODevice::ReadOnly);
                 audio->start(effect2);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("MyCall.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("MyCall.wav")));
 #endif
 
                 play_MyCall = false;
@@ -1078,7 +1093,7 @@ void DisplayText::AudioAlerts()
                 effect3->open(QIODevice::ReadOnly);
                 audio->start(effect3);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("DXCC.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("DXCC.wav")));
 #endif
 
                 play_DXCC = false;
@@ -1096,7 +1111,7 @@ void DisplayText::AudioAlerts()
                 effect4->open(QIODevice::ReadOnly);
                 audio->start(effect4);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("DXCCOnBand.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("DXCCOnBand.wav")));
 #endif
 
                 play_DXCCOB = false;
@@ -1114,7 +1129,7 @@ void DisplayText::AudioAlerts()
                 effect5->open(QIODevice::ReadOnly);
                 audio->start(effect5);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("Continent.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("Continent.wav")));
 #endif
                 play_Continent = false;
                 play_ContinentOB = false;
@@ -1134,7 +1149,7 @@ void DisplayText::AudioAlerts()
                 effect6->open(QIODevice::ReadOnly);
                 audio->start(effect6);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("ContinentOnBand.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("ContinentOnBand.wav")));
 #endif
                 play_ContinentOB = false;
                 play_GridOB = false;
@@ -1153,7 +1168,7 @@ void DisplayText::AudioAlerts()
                 effect7->open(QIODevice::ReadOnly);
                 audio->start(effect7);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("CQZone.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("CQZone.wav")));
 #endif
                 play_CQZ = false;
                 play_CQZOB = false;
@@ -1170,7 +1185,7 @@ void DisplayText::AudioAlerts()
                 effect8->open(QIODevice::ReadOnly);
                 audio->start(effect8);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("CQZoneOnBand.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("CQZoneOnBand.wav")));
 #endif
                 play_CQZOB = false;
                 alertsTimer.start (1800);
@@ -1186,7 +1201,7 @@ void DisplayText::AudioAlerts()
                 effect9->open(QIODevice::ReadOnly);
                 audio->start(effect9);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("ITUZone.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("ITUZone.wav")));
 #endif
                 play_ITUZ = false;
                 play_ITUZOB = false;
@@ -1204,7 +1219,7 @@ void DisplayText::AudioAlerts()
                 effect10->open(QIODevice::ReadOnly);
                 audio->start(effect10);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("ITUZoneOnBand.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("ITUZoneOnBand.wav")));
 #endif
                 play_ITUZOB = false;
                 play_GridOB = false;
@@ -1221,7 +1236,7 @@ void DisplayText::AudioAlerts()
                 effect11->open(QIODevice::ReadOnly);
                 audio->start(effect11);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("Grid.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("Grid.wav")));
 #endif
                 play_Grid = false;
                 play_GridOB = false;
@@ -1238,7 +1253,7 @@ void DisplayText::AudioAlerts()
                 effect12->open(QIODevice::ReadOnly);
                 audio->start(effect12);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("GridOnBand.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("GridOnBand.wav")));
 #endif
                 play_GridOB = false;
                 alertsTimer.start (1500);
@@ -1254,7 +1269,7 @@ void DisplayText::AudioAlerts()
                 effect13->open(QIODevice::ReadOnly);
                 audio->start(effect13);
 #else
-                QSound::play(bundled_sound_path(QStringLiteral("CQ.wav")));  // for Linux and macOS
+                play_alert_sound(this, bundled_sound_path(QStringLiteral("CQ.wav")));
 #endif
                 play_CQ = false;
                 alertsTimer.start (1000);

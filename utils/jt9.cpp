@@ -289,7 +289,7 @@ namespace
     std::unique_ptr<dec_data_t> shared {new dec_data_t {}};
     shared->params.ndiskdat = true;
 
-    int const copyCount = std::min (audio.size (), NTMAX * RX_SAMPLE_RATE);
+    int const copyCount = std::min<int> (audio.size (), NTMAX * RX_SAMPLE_RATE);
     if (copyCount > 0)
       {
         std::copy_n (audio.constBegin (), copyCount, shared->d2);
