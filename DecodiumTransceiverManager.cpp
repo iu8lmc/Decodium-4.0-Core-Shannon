@@ -252,6 +252,8 @@ void DecodiumTransceiverManager::connectRig()
     }
 
     d->transceiver = xcv;
+    d->desired = Transceiver::TransceiverState {};
+    d->desired.online(true);
 
     // Il transceiver è "ripe for destruction" quando emette finished().
     connect(xcv, &Transceiver::finished,
@@ -274,6 +276,7 @@ void DecodiumTransceiverManager::connectRig()
                     d->xcvThread = nullptr;
                 if (d->transceiver == xcv)
                     d->transceiver = nullptr;
+                d->desired = Transceiver::TransceiverState {};
                 thread->deleteLater();
                 if (m_connected) {
                     m_connected = false;
@@ -286,6 +289,7 @@ void DecodiumTransceiverManager::connectRig()
     connect(xcv, &Transceiver::update,
             this,
             [this](Transceiver::TransceiverState const& state, unsigned /*seq*/) {
+                d->desired = state;
                 double  freq = static_cast<double>(state.frequency());
                 double  txf  = static_cast<double>(state.tx_frequency());
                 QString mode = modeStr(state.mode());
@@ -312,6 +316,7 @@ void DecodiumTransceiverManager::connectRig()
     connect(xcv, &Transceiver::failure,
             this,
             [this](QString const& reason) {
+                d->desired.online(false);
                 emit errorOccurred("CAT failure: " + reason);
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
             },
@@ -337,6 +342,7 @@ void DecodiumTransceiverManager::disconnectRig()
     // Invalida subito i puntatori nel PIMPL per evitare double-call
     d->transceiver = nullptr;
     d->xcvThread   = nullptr;
+    d->desired = Transceiver::TransceiverState {};
 
     // Richiedi stop in modo sincrono sul thread del rig così il cleanup
     // (PTT off, split reset, rig_close) avviene prima del quit del thread.
