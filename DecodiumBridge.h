@@ -576,6 +576,7 @@ public slots:
 
     // PSK Reporter
     Q_INVOKABLE void searchPskReporter(const QString& callsign);
+    Q_INVOKABLE void sendPskReporterNow();
 
     // LED
     Q_INVOKABLE void refreshLedStatus() {}
