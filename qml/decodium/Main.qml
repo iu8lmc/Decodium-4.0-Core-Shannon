@@ -193,6 +193,10 @@ ApplicationWindow {
         return textPrimary
     }
 
+    function formatBearingDegrees(value) {
+        return value !== undefined && value >= 0 ? Math.round(value) + "°" : ""
+    }
+
     // IU8LMC: Function to build tooltip text
     function getDxccTooltipText(modelData) {
         if (!modelData.dxCountry) return ""
@@ -202,9 +206,9 @@ ApplicationWindow {
         lines.push(header)
         // Bearing and distance to DX station
         if (modelData.dxBearing !== undefined && modelData.dxBearing >= 0) {
-            var bearingDist = "Az: " + modelData.dxBearing + "°"
+            var bearingDist = "Az: " + Math.round(modelData.dxBearing) + "°"
             if (modelData.dxDistance !== undefined && modelData.dxDistance > 0) {
-                bearingDist += "  Dist: " + modelData.dxDistance + " km"
+                bearingDist += "  Dist: " + Math.round(modelData.dxDistance) + " km"
             }
             lines.push(bearingDist)
         }
@@ -1174,40 +1178,70 @@ ApplicationWindow {
                             // Mode selector
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 14
+                                Layout.preferredHeight: 30
                                 color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                                border.color: glassBorder; radius: 2
+                                border.color: glassBorder; radius: 4
 
                                 ComboBox {
+                                    id: compactModeCombo
                                     anchors.fill: parent
+                                    anchors.margins: 1
                                     model: bridge.availableModes()
                                     currentIndex: model.indexOf(bridge.mode)
                                     onActivated: function(idx) {
                                         bridge.mode = model[idx]
                                     }
-                                    font.pixelSize: 8; font.bold: true
+                                    font.pixelSize: 11; font.bold: true
+                                    leftPadding: 8
+                                    rightPadding: 22
+                                    topPadding: 4
+                                    bottomPadding: 4
                                     background: Rectangle { color: "transparent" }
                                     contentItem: Text {
-                                        text: bridge.mode
-                                        font.pixelSize: 8; font.bold: true
+                                        text: compactModeCombo.displayText
+                                        font.pixelSize: 11; font.bold: true
                                         color: secondaryCyan
                                         verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignHCenter
+                                        horizontalAlignment: Text.AlignLeft
+                                        elide: Text.ElideRight
                                     }
                                     delegate: ItemDelegate {
-                                        width: parent.width
+                                        width: compactModePopup.width
+                                        height: 34
                                         contentItem: Text {
                                             text: modelData
-                                            font.pixelSize: 8; font.bold: true
+                                            font.pixelSize: 11; font.bold: true
                                             color: bridge.mode === modelData ? secondaryCyan : textPrimary
+                                            verticalAlignment: Text.AlignVCenter
+                                            elide: Text.ElideRight
                                         }
                                         background: Rectangle {
                                             color: hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
                                         }
                                     }
-                                    popup.background: Rectangle {
-                                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.97)
-                                        border.color: glassBorder; radius: 3
+                                    popup: Popup {
+                                        id: compactModePopup
+                                        y: compactModeCombo.height + 1
+                                        width: Math.max(compactModeCombo.width, 168)
+                                        implicitHeight: Math.min(contentItem.implicitHeight + 2, 360)
+                                        padding: 1
+
+                                        contentItem: ListView {
+                                            clip: true
+                                            implicitHeight: contentHeight
+                                            model: compactModeCombo.popup.visible ? compactModeCombo.delegateModel : null
+                                            currentIndex: compactModeCombo.highlightedIndex
+
+                                            ScrollBar.vertical: ScrollBar {
+                                                policy: ScrollBar.AsNeeded
+                                            }
+                                        }
+
+                                        background: Rectangle {
+                                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.97)
+                                            border.color: glassBorder
+                                            radius: 4
+                                        }
                                     }
                                     ToolTip.visible: hovered
                                     ToolTip.text: "Seleziona modo di decodifica"
@@ -1566,7 +1600,7 @@ ApplicationWindow {
                 // World Clock with Analog Display
                 Item {
                     id: worldClock
-                    width: 232
+                    width: 252
                     height: 80
 
                     property var timezones: [
@@ -1705,12 +1739,18 @@ ApplicationWindow {
 
                                 StyledComboBox {
                                     id: timezoneCombo
-                                    width: 100
-                                    height: 24
-                                    font.pixelSize: 10
-                                    itemHeight: 28
+                                    width: 184
+                                    height: 36
+                                    font.pixelSize: 12
+                                    itemHeight: 38
+                                    popupMinWidth: 200
+                                    textHorizontalAlignment: Text.AlignLeft
+                                    topPadding: 6
+                                    bottomPadding: 6
+                                    leftPadding: 12
+                                    rightPadding: 32
                                     model: worldClock.timezones.map(function(t) { return t.name })
-                                    currentIndex: worldClock.selectedTz
+                                    currentIndex: Math.max(0, worldClock.selectedTz)
                                     accentColor: secondaryCyan
                                     textColor: textPrimary
                                     bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
@@ -1718,6 +1758,12 @@ ApplicationWindow {
                                     onActivated: {
                                         worldClock.selectedTz = currentIndex
                                         worldClock.updateTime()
+                                    }
+                                    onCurrentIndexChanged: {
+                                        if (currentIndex >= 0 && worldClock.selectedTz !== currentIndex) {
+                                            worldClock.selectedTz = currentIndex
+                                            worldClock.updateTime()
+                                        }
                                     }
                                 }
                             }
@@ -3206,8 +3252,34 @@ ApplicationWindow {
                                         Text { text: "Freq"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
                                         Item { Layout.preferredWidth: 6 }
                                         Text { text: "Message"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
-                                        Text { text: "DXCC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 75 }
-                                        Text { text: "Az"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
+                                        Item {
+                                            Layout.preferredWidth: 120
+                                            Layout.fillHeight: true
+                                            Text {
+                                                anchors.fill: parent
+                                                text: "DXCC"
+                                                font.family: "Consolas"
+                                                font.pixelSize: Math.round(11 * fs)
+                                                font.bold: true
+                                                color: "#4CAF50"
+                                                horizontalAlignment: Text.AlignRight
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: 46
+                                            Layout.fillHeight: true
+                                            Text {
+                                                anchors.fill: parent
+                                                text: "Az"
+                                                font.family: "Consolas"
+                                                font.pixelSize: Math.round(11 * fs)
+                                                font.bold: true
+                                                color: "#4CAF50"
+                                                horizontalAlignment: Text.AlignRight
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                        }
                                     }
                                 }
 
@@ -3286,9 +3358,34 @@ ApplicationWindow {
                                                 Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
                                                 Text { text: modelData.freq || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
                                                 Item { Layout.preferredWidth: 6 }
-                                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
-                                                Text { text: modelData.dxCountry || ""; font.family: "Consolas"; font.pixelSize: Math.round(10 * fs); color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 75; elide: Text.ElideRight }
-                                                Text { text: modelData.dxBearing !== undefined && modelData.dxBearing >= 0 ? modelData.dxBearing + "°" : ""; font.family: "Consolas"; font.pixelSize: Math.round(10 * fs); color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
+                                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: 140; elide: Text.ElideRight }
+                                                Item {
+                                                    Layout.preferredWidth: 120
+                                                    Layout.fillHeight: true
+                                                    Text {
+                                                        anchors.fill: parent
+                                                        text: modelData.dxCountry || ""
+                                                        font.family: "Consolas"
+                                                        font.pixelSize: Math.round(11 * fs)
+                                                        color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary
+                                                        horizontalAlignment: Text.AlignRight
+                                                        verticalAlignment: Text.AlignVCenter
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                                Item {
+                                                    Layout.preferredWidth: 46
+                                                    Layout.fillHeight: true
+                                                    Text {
+                                                        anchors.fill: parent
+                                                        text: formatBearingDegrees(modelData.dxBearing)
+                                                        font.family: "Consolas"
+                                                        font.pixelSize: Math.round(11 * fs)
+                                                        color: secondaryCyan
+                                                        horizontalAlignment: Text.AlignRight
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
+                                                }
                                             }
                                         }
 

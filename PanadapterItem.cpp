@@ -134,6 +134,7 @@ QRgb PanadapterItem::wfColor(float pct) const
 
 void PanadapterItem::setPaletteIndex(int v)
 {
+    v = qBound(0, v, 5);
     if (m_paletteIndex==v) return;
     m_paletteIndex=v;
     buildPalette(v);
@@ -368,18 +369,26 @@ void PanadapterItem::renderSpectrum()
     fillPath.lineTo(w, h);
     fillPath.closeSubpath();
 
-    // ── Fill SmartSDR: bianco semi-trasparente che sfuma verso il basso ────
+    // ── Fill spettro: usa la palette selezionata, non sempre il bianco ─────
+    QColor fillTopColor = QColor::fromRgb(wfColor(0.82f));
+    QColor fillMidColor = QColor::fromRgb(wfColor(0.58f));
+    QColor glowColor    = QColor::fromRgb(wfColor(0.92f)).lighter(145);
+    QColor traceColor   = QColor::fromRgb(wfColor(0.98f));
+    fillTopColor.setAlpha(78);
+    fillMidColor.setAlpha(22);
+    glowColor.setAlpha(60);
+    traceColor.setAlpha(255);
+
     QLinearGradient fillGrad(0, 0, 0, h);
-    fillGrad.setColorAt(0.00, QColor(255, 255, 255, 75));  // vicino alla linea
-    fillGrad.setColorAt(0.40, QColor(255, 255, 255, 20));  // già quasi trasparente
-    fillGrad.setColorAt(1.00, QColor(255, 255, 255,  0));  // fondo: trasparente
+    fillGrad.setColorAt(0.00, fillTopColor);
+    fillGrad.setColorAt(0.40, fillMidColor);
+    fillGrad.setColorAt(1.00, QColor(0, 0, 0, 0));
     p.fillPath(fillPath, fillGrad);
 
-    // ── Glow bianco: disegna la linea due volte (spessa+alpha poi sottile) ─
-    // Effetto "glow" SmartSDR
-    p.setPen(QPen(QColor(255, 255, 255, 40), 3.0)); // alone soft
+    // ── Glow/trace: segue la palette per dare feedback immediato al cambio ─
+    p.setPen(QPen(glowColor, 3.0));
     p.drawPath(linePath);
-    p.setPen(QPen(QColor(255, 255, 255, 255), 1.0)); // linea nitida
+    p.setPen(QPen(traceColor, 1.0));
     p.drawPath(linePath);
 
     // ── Peak hold: linea bianca tratteggiata più in alto ──────────────────

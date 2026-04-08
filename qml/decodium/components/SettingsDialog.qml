@@ -11,10 +11,10 @@ import QtQuick.Layouts
 Dialog {
     id: settingsDialog
     title: "Decodium Settings"
-    width: 750
-    height: 580
+    width: 1100
+    height: 780
     modal: true
-    standardButtons: Dialog.Ok | Dialog.Cancel | Dialog.Apply
+    closePolicy: Popup.CloseOnEscape
 
     // Dynamic theme colors from ThemeManager
     property color bgDeep: bridge.themeManager.bgDeep
@@ -32,9 +32,9 @@ Dialog {
     readonly property int groupSpacing: 12
     readonly property int rowSpacing: 12
     readonly property int colSpacing: 16
-    readonly property int labelFontSize: 12
-    readonly property int titleFontSize: 14
-    readonly property int fieldHeight: 32
+    readonly property int labelFontSize: 13
+    readonly property int titleFontSize: 16
+    readonly property int fieldHeight: 38
 
     background: Rectangle {
         color: bgMedium
@@ -72,6 +72,7 @@ Dialog {
         TabBar {
             id: tabBar
             Layout.fillWidth: true
+            implicitHeight: 52
 
             background: Rectangle {
                 color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
@@ -82,10 +83,12 @@ Dialog {
 
                 TabButton {
                     text: modelData
-                    width: implicitWidth
+                    width: Math.max(140, Math.floor(tabBar.width / 7))
+                    implicitHeight: 48
+                    padding: 0
                     contentItem: Text {
                         text: parent.text
-                        font.pixelSize: 12
+                        font.pixelSize: 15
                         color: parent.checked ? secondaryCyan : textSecondary
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -208,12 +211,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 100
+                        Layout.preferredHeight: contestSettingsColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: contestSettingsColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -228,6 +232,8 @@ Dialog {
                                     model: ["None", "EU RSQ", "NA VHF", "EU VHF", "ARRL Field Day", "ARRL Digital", "WW Digi DX", "FT4 DX", "FT8 DX", "FT Roundup"]
                                     Layout.preferredWidth: 180
                                     font.pixelSize: 11
+                                    popupMinWidth: 220
+                                    textHorizontalAlignment: Text.AlignLeft
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
                                 Text { text: "Exchange:"; color: textSecondary; font.pixelSize: 12 }
@@ -246,12 +252,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 70
+                        Layout.preferredHeight: startupOptionsColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: startupOptionsColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -259,10 +266,18 @@ Dialog {
                             Text { text: "Startup Options"; color: secondaryCyan; font.bold: true; font.pixelSize: 14 }
 
                             RowLayout {
+                                Layout.fillWidth: true
                                 spacing: 16
                                 CheckBox {
                                     id: autoStartMonitorCheck
                                     text: "Auto-start monitor on startup"
+                                    contentItem: Text {
+                                        text: parent.text
+                                        leftPadding: 8
+                                        color: textPrimary
+                                        font.pixelSize: 12
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                             }
                         }
@@ -365,12 +380,13 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 130
+                        Layout.preferredHeight: audioInputColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: audioInputColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -378,8 +394,9 @@ Dialog {
                             Text { text: "Audio Input"; color: secondaryCyan; font.bold: true; font.pixelSize: 14 }
 
                             RowLayout {
+                                Layout.fillWidth: true
                                 spacing: 12
-                                Text { text: "Device:"; color: textSecondary; font.pixelSize: 12 }
+                                Text { text: "Device:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 80 }
                                 StyledComboBox {
                                     id: audioInputCombo
                                     property bool initialized: false
@@ -389,7 +406,9 @@ Dialog {
                                         function onAudioInputDevicesChanged() { audioInputRestoreTimer.start() }
                                     }
                                     Layout.fillWidth: true
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
+                                    popupMinWidth: 520
+                                    textHorizontalAlignment: Text.AlignLeft
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
 
                                     Timer {
@@ -420,7 +439,7 @@ Dialog {
                                     }
                                 }
                                 Button {
-                                    implicitWidth: 30; implicitHeight: 30
+                                    implicitWidth: 36; implicitHeight: 36
                                     ToolTip.text: "Aggiorna dispositivi audio"; ToolTip.visible: hovered
                                     onClicked: bridge.refreshAudioDevices()
                                     background: Rectangle { color: hovered ? Qt.rgba(1,1,1,0.1) : "transparent"; border.color: glassBorder; radius: 4 }
@@ -428,28 +447,43 @@ Dialog {
                                 }
                             }
 
-                            RowLayout {
-                                spacing: 16
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: 6
+                                columnSpacing: 16
+                                rowSpacing: 10
+
                                 Text { text: "Sample Rate:"; color: textSecondary; font.pixelSize: 12 }
                                 StyledComboBox {
                                     model: ["44100", "48000", "96000"]
                                     currentIndex: 1
-                                    Layout.preferredWidth: 90
-                                    font.pixelSize: 11
+                                    Layout.preferredWidth: 130
+                                    font.pixelSize: 12
+                                    popupMinWidth: 150
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
                                 Text { text: "Channel:"; color: textSecondary; font.pixelSize: 12 }
                                 StyledComboBox {
+                                    id: audioChannelCombo
                                     model: ["Left/Mono", "Right"]
-                                    Layout.preferredWidth: 100
-                                    font.pixelSize: 11
+                                    currentIndex: bridge.audioInputChannel === 1 ? 1 : 0
+                                    Layout.preferredWidth: 150
+                                    font.pixelSize: 12
+                                    popupMinWidth: 170
+                                    textHorizontalAlignment: Text.AlignLeft
+                                    onActivated: bridge.audioInputChannel = currentIndex
+                                    onCurrentIndexChanged: {
+                                        if (currentIndex >= 0 && bridge.audioInputChannel !== currentIndex)
+                                            bridge.audioInputChannel = currentIndex
+                                    }
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
                                 Text { text: "Bits:"; color: textSecondary; font.pixelSize: 12 }
                                 StyledComboBox {
                                     model: ["16", "24", "32"]
-                                    Layout.preferredWidth: 60
-                                    font.pixelSize: 11
+                                    Layout.preferredWidth: 100
+                                    font.pixelSize: 12
+                                    popupMinWidth: 110
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
                             }
@@ -461,12 +495,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 120
+                        Layout.preferredHeight: audioOutputColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: audioOutputColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -474,14 +509,17 @@ Dialog {
                             Text { text: "Audio Output"; color: secondaryCyan; font.bold: true; font.pixelSize: 14 }
 
                             RowLayout {
+                                Layout.fillWidth: true
                                 spacing: 12
-                                Text { text: "Device:"; color: textSecondary; font.pixelSize: 12 }
+                                Text { text: "Device:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 80 }
                                 StyledComboBox {
                                     id: audioOutputCombo
                                     property bool initialized: false
                                     model: bridge.audioOutputDevices
                                     Layout.fillWidth: true
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
+                                    popupMinWidth: 520
+                                    textHorizontalAlignment: Text.AlignLeft
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
 
                                     Timer {
@@ -515,10 +553,12 @@ Dialog {
                             }
 
                             RowLayout {
+                                Layout.fillWidth: true
                                 spacing: 12
-                                Text { text: "TX Level:"; color: textSecondary; font.pixelSize: 12 }
-                                Slider { id: txLevel; from: 0; to: 100; value: 80; Layout.preferredWidth: 200 }
+                                Text { text: "TX Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 80 }
+                                Slider { id: txLevel; from: 0; to: 100; value: 80; Layout.preferredWidth: 260 }
                                 Text { text: Math.round(txLevel.value) + "%"; color: textPrimary; font.pixelSize: 11 }
+                                Item { Layout.fillWidth: true }
                             }
                         }
                     }
@@ -538,12 +578,13 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 200
+                        Layout.preferredHeight: pskReporterColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: pskReporterColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -643,12 +684,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 140
+                        Layout.preferredHeight: udpServerColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: udpServerColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -700,12 +742,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 220
+                        Layout.preferredHeight: remoteServerColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: remoteServerColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -801,12 +844,13 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 280  // IU8LMC: Increased height to show FT Threads slider
+                        Layout.preferredHeight: decoderSettingsColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: decoderSettingsColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -1050,12 +1094,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 100
+                        Layout.preferredHeight: modeOptionsColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: modeOptionsColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 6
@@ -1085,12 +1130,13 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 150
+                        Layout.preferredHeight: waterfallDisplayColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: waterfallDisplayColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -1101,9 +1147,15 @@ Dialog {
                                 spacing: 16
                                 Text { text: "Palette:"; color: textSecondary; font.pixelSize: 12 }
                                 StyledComboBox {
-                                    model: ["Blue-Green-Yellow", "Grayscale", "Rainbow", "Fire", "Ocean"]
+                                    id: paletteSettingsCombo
+                                    model: ["SDR Classic", "Raptor Green", "Grayscale", "SmartSDR", "Hot (SDR#)", "deskHPSDR"]
                                     Layout.preferredWidth: 150
                                     font.pixelSize: 11
+                                    currentIndex: Math.max(0, bridge.uiPaletteIndex)
+                                    onActivated: {
+                                        bridge.uiPaletteIndex = currentIndex
+                                        mainWindow.scheduleSave()
+                                    }
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
                             }
@@ -1128,12 +1180,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 120
+                        Layout.preferredHeight: themeSelectionColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: themeSelectionColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -1217,12 +1270,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 80
+                        Layout.preferredHeight: textColorsColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: textColorsColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -1265,12 +1319,13 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.margins: 16
-                        Layout.preferredHeight: 150
+                        Layout.preferredHeight: logSettingsColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: logSettingsColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -1288,9 +1343,17 @@ Dialog {
                                 }
                                 Button {
                                     text: "Browse..."
-                                    implicitHeight: 26
-                                    font.pixelSize: 11
+                                    implicitWidth: 110
+                                    implicitHeight: 34
+                                    padding: 0
                                     background: Rectangle { color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1); border.color: glassBorder; radius: 4 }
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: textPrimary
+                                        font.pixelSize: 12
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                             }
 
@@ -1325,12 +1388,13 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.margins: 16
                         Layout.topMargin: 0
-                        Layout.preferredHeight: 100
+                        Layout.preferredHeight: adifExportColumn.implicitHeight + 36
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                         border.color: glassBorder
                         radius: 8
 
                         ColumnLayout {
+                            id: adifExportColumn
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
@@ -1341,22 +1405,45 @@ Dialog {
                                 spacing: 12
                                 Button {
                                     text: "Export All"
-                                    implicitHeight: 28
-                                    font.pixelSize: 11
+                                    implicitWidth: 130
+                                    implicitHeight: 34
+                                    padding: 0
                                     background: Rectangle { color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2); border.color: accentGreen; radius: 4 }
-                                    contentItem: Text { text: parent.text; color: accentGreen; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: accentGreen
+                                        font.pixelSize: 12
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                                 Button {
                                     text: "Export Selected"
-                                    implicitHeight: 28
-                                    font.pixelSize: 11
+                                    implicitWidth: 150
+                                    implicitHeight: 34
+                                    padding: 0
                                     background: Rectangle { color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1); border.color: glassBorder; radius: 4 }
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: textPrimary
+                                        font.pixelSize: 12
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                                 Button {
                                     text: "Import ADIF"
-                                    implicitHeight: 28
-                                    font.pixelSize: 11
+                                    implicitWidth: 130
+                                    implicitHeight: 34
+                                    padding: 0
                                     background: Rectangle { color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1); border.color: glassBorder; radius: 4 }
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: textPrimary
+                                        font.pixelSize: 12
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                             }
                         }
@@ -1366,12 +1453,95 @@ Dialog {
         }
     }
 
-    onAccepted: {
-        saveSettings()
-    }
+    footer: Rectangle {
+        implicitHeight: 72
+        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.94)
 
-    onApplied: {
-        saveSettings()
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 12
+            color: parent.color
+        }
+
+        Item {
+            anchors.fill: parent
+            anchors.margins: 14
+
+            Flow {
+            id: settingsFooterFlow
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(parent.width, 364)
+            spacing: 12
+
+            Button {
+                text: "Applica"
+                implicitWidth: 120
+                implicitHeight: 42
+                padding: 0
+                onClicked: settingsDialog.saveSettings()
+                background: Rectangle {
+                    radius: 8
+                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.16)
+                    border.color: secondaryCyan
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: secondaryCyan
+                    font.pixelSize: 13
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            Button {
+                text: "Annulla"
+                implicitWidth: 120
+                implicitHeight: 42
+                padding: 0
+                onClicked: settingsDialog.reject()
+                background: Rectangle {
+                    radius: 8
+                    color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
+                    border.color: glassBorder
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: textSecondary
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            Button {
+                text: "OK"
+                implicitWidth: 100
+                implicitHeight: 42
+                padding: 0
+                onClicked: {
+                    settingsDialog.saveSettings()
+                    settingsDialog.accept()
+                }
+                background: Rectangle {
+                    radius: 8
+                    color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.18)
+                    border.color: accentGreen
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: accentGreen
+                    font.pixelSize: 13
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+        }
+        }
     }
 
     onOpened: {

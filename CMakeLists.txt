@@ -1837,6 +1837,10 @@ if (APPLE)
   add_custom_command (TARGET wsjtx POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E remove_directory
       $<TARGET_FILE_DIR:wsjtx>/sounds
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/cty.dat"
+      "$<TARGET_FILE_DIR:wsjtx>/../Resources/cty.dat"
+    COMMENT "Refreshing macOS bundle data files"
     )
 endif ()
 

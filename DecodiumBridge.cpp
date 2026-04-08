@@ -34,6 +34,7 @@
 #include <QDir>
 #include <QTimeZone>
 #include "Network/FoxVerifier.hpp"
+#include "wsjtx_config.h"
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
@@ -105,16 +106,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // DXCC lookup (cty.dat)
     m_dxccLookup = new DxccLookup();
     {
-        QStringList paths = {
-            QCoreApplication::applicationDirPath() + "/cty.dat",
-            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/cty.dat"
-        };
-        for (const auto& p : paths) {
-            if (QFile::exists(p) && m_dxccLookup->loadCtyDat(p)) {
-                bridgeLog("DXCC: caricato cty.dat da " + p +
-                          " (" + QString::number(m_dxccLookup->entityCount()) + " entità)");
-                break;
-            }
+        QString loadedPath;
+        if (reloadDxccLookup(&loadedPath)) {
+            bridgeLog("DXCC: caricato cty.dat da " + loadedPath +
+                      " (" + QString::number(m_dxccLookup->entityCount()) + " entità)");
+            refreshDecodeListDxcc();
+        } else {
+            bridgeLog("DXCC: cty.dat non trovato, DXCC disabilitato finché il file non viene installato o scaricato.");
         }
     }
     connect(m_wsprUploader, &DecodiumWsprUploader::uploadStatus,
@@ -492,19 +490,66 @@ QString DecodiumBridge::utcTime() const { return m_utcTime; }
 
 // === TX MESSAGES ===
 QString DecodiumBridge::tx1() const { return m_tx1; }
-void DecodiumBridge::setTx1(const QString& v) { if (m_tx1!=v) { m_tx1=v; emit tx1Changed(); } }
+void DecodiumBridge::setTx1(const QString& v) {
+    if (m_tx1!=v) {
+        m_tx1=v;
+        emit tx1Changed();
+        emit txMessagesChanged();
+        emit currentTxMessageChanged();
+    }
+}
 QString DecodiumBridge::tx2() const { return m_tx2; }
-void DecodiumBridge::setTx2(const QString& v) { if (m_tx2!=v) { m_tx2=v; emit tx2Changed(); } }
+void DecodiumBridge::setTx2(const QString& v) {
+    if (m_tx2!=v) {
+        m_tx2=v;
+        emit tx2Changed();
+        emit txMessagesChanged();
+        emit currentTxMessageChanged();
+    }
+}
 QString DecodiumBridge::tx3() const { return m_tx3; }
-void DecodiumBridge::setTx3(const QString& v) { if (m_tx3!=v) { m_tx3=v; emit tx3Changed(); } }
+void DecodiumBridge::setTx3(const QString& v) {
+    if (m_tx3!=v) {
+        m_tx3=v;
+        emit tx3Changed();
+        emit txMessagesChanged();
+        emit currentTxMessageChanged();
+    }
+}
 QString DecodiumBridge::tx4() const { return m_tx4; }
-void DecodiumBridge::setTx4(const QString& v) { if (m_tx4!=v) { m_tx4=v; emit tx4Changed(); } }
+void DecodiumBridge::setTx4(const QString& v) {
+    if (m_tx4!=v) {
+        m_tx4=v;
+        emit tx4Changed();
+        emit txMessagesChanged();
+        emit currentTxMessageChanged();
+    }
+}
 QString DecodiumBridge::tx5() const { return m_tx5; }
-void DecodiumBridge::setTx5(const QString& v) { if (m_tx5!=v) { m_tx5=v; emit tx5Changed(); } }
+void DecodiumBridge::setTx5(const QString& v) {
+    if (m_tx5!=v) {
+        m_tx5=v;
+        emit tx5Changed();
+        emit txMessagesChanged();
+        emit currentTxMessageChanged();
+    }
+}
 QString DecodiumBridge::tx6() const { return m_tx6; }
-void DecodiumBridge::setTx6(const QString& v) { if (m_tx6!=v) { m_tx6=v; emit tx6Changed(); } }
+void DecodiumBridge::setTx6(const QString& v) {
+    if (m_tx6!=v) {
+        m_tx6=v;
+        emit tx6Changed();
+        emit currentTxMessageChanged();
+    }
+}
 int DecodiumBridge::currentTx() const { return m_currentTx; }
-void DecodiumBridge::setCurrentTx(int v) { if (m_currentTx!=v) { m_currentTx=v; emit currentTxChanged(); } }
+void DecodiumBridge::setCurrentTx(int v) {
+    if (m_currentTx!=v) {
+        m_currentTx=v;
+        emit currentTxChanged();
+        emit currentTxMessageChanged();
+    }
+}
 QString DecodiumBridge::dxCall() const { return m_dxCall; }
 void DecodiumBridge::setDxCall(const QString& v) {
     if (m_dxCall != v) {
@@ -532,6 +577,42 @@ int DecodiumBridge::ncontest() const { return m_ncontest; }
 void DecodiumBridge::setNcontest(int v) { if (m_ncontest!=v) { m_ncontest=v; emit ncontestChanged(); } }
 
 // === QML INVOKABLE ACTIONS ===
+
+void DecodiumBridge::clearTxMessages()
+{
+    bridgeLog("clearTxMessages: reset QSO/TX state");
+
+    if (m_transmitting || m_tuning)
+        halt();
+
+    setTxEnabled(false);
+    m_qsoCooldown.clear();
+    m_txRetryCount = 0;
+    m_nTx73 = 0;
+    m_lastNtx = -1;
+
+    if (m_qsoProgress != 0) {
+        m_qsoProgress = 0;
+        emit qsoProgressChanged();
+    }
+    if (m_reportSent != "-10") {
+        m_reportSent = "-10";
+        emit reportSentChanged();
+    }
+    if (m_reportReceived != "-10") {
+        m_reportReceived = "-10";
+        emit reportReceivedChanged();
+    }
+
+    setDxCall(QString());
+    setDxGrid(QString());
+    setTx1(QString());
+    setTx2(QString());
+    setTx3(QString());
+    setTx4(QString());
+    setTx5(QString());
+    setCurrentTx(1);
+}
 
 void DecodiumBridge::startRx()
 {
@@ -1697,6 +1778,158 @@ static bool isValidDecode(const QString& msg, int snr, const QString& aptype, fl
     return true;  // decode valido
 }
 
+namespace {
+
+bool isGridToken(const QString& token)
+{
+    QString t = token.trimmed().toUpper();
+    if (t.size() != 4 && t.size() != 6)
+        return false;
+    if (!t[0].isLetter() || !t[1].isLetter() || !t[2].isDigit() || !t[3].isDigit())
+        return false;
+    if (t.size() == 6 && (!t[4].isLetter() || !t[5].isLetter()))
+        return false;
+    return true;
+}
+
+bool looksLikeCallsignToken(const QString& token)
+{
+    QString t = token.trimmed().toUpper();
+    if (t.size() < 3 || t.size() > 15 || isGridToken(t))
+        return false;
+
+    bool hasLetter = false;
+    bool hasDigit = false;
+    for (const QChar& ch : t) {
+        if (ch.isLetter()) {
+            hasLetter = true;
+        } else if (ch.isDigit()) {
+            hasDigit = true;
+        } else if (ch != '/' && ch != '-') {
+            return false;
+        }
+    }
+
+    return hasLetter && hasDigit;
+}
+
+}
+
+QString DecodiumBridge::extractDecodedCallsign(const QString& msg, bool isCQ) const
+{
+    QStringList parts = msg.toUpper().split(' ', Qt::SkipEmptyParts);
+    if (parts.isEmpty())
+        return {};
+
+    if (isCQ) {
+        for (int i = 1; i < parts.size(); ++i) {
+            if (looksLikeCallsignToken(parts[i]))
+                return parts[i];
+        }
+        return {};
+    }
+
+    QString myCallUpper = m_callsign.trimmed().toUpper();
+    if (!myCallUpper.isEmpty()) {
+        for (int i = 0; i < parts.size(); ++i) {
+            if (parts[i] != myCallUpper)
+                continue;
+            for (int j = i + 1; j < parts.size(); ++j) {
+                if (looksLikeCallsignToken(parts[j]))
+                    return parts[j];
+            }
+            for (int j = i - 1; j >= 0; --j) {
+                if (looksLikeCallsignToken(parts[j]))
+                    return parts[j];
+            }
+            break;
+        }
+    }
+
+    for (const QString& part : parts) {
+        if (looksLikeCallsignToken(part))
+            return part;
+    }
+    return {};
+}
+
+QString DecodiumBridge::extractDecodedGrid(const QString& msg) const
+{
+    QStringList parts = msg.split(' ', Qt::SkipEmptyParts);
+    for (int pi = parts.size() - 1; pi >= 0; --pi) {
+        if (isGridToken(parts[pi]))
+            return parts[pi].toUpper();
+    }
+    return {};
+}
+
+void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
+{
+    QString msg = entry.value("message").toString();
+    bool isCQ = entry.value("isCQ").toBool();
+    QString fromCall = entry.value("fromCall").toString().trimmed().toUpper();
+    if (fromCall.isEmpty())
+        fromCall = extractDecodedCallsign(msg, isCQ);
+
+    bool isB4 = !fromCall.isEmpty() && m_workedCalls.contains(fromCall);
+    bool isLotw = m_lotwEnabled && !fromCall.isEmpty() && m_lotwUsers.contains(fromCall);
+
+    QString dxCountry;
+    QString dxContinent;
+    QString dxPrefix;
+    bool dxIsNewCountry = false;
+    if (m_dxccLookup && m_dxccLookup->isLoaded() && !fromCall.isEmpty()) {
+        DxccEntity ent = m_dxccLookup->lookup(fromCall);
+        if (ent.isValid()) {
+            dxCountry = ent.name;
+            dxContinent = ent.continent;
+            dxPrefix = ent.prefix;
+        }
+    }
+
+    QString dxGridExtracted = extractDecodedGrid(msg);
+    double distKm = -1.0;
+    double bearing = -1.0;
+    if (!dxGridExtracted.isEmpty() && !m_grid.isEmpty()) {
+        bearing = calcBearing(m_grid, dxGridExtracted);
+        distKm = calcDistance(m_grid, dxGridExtracted);
+    }
+
+    entry["fromCall"] = fromCall;
+    entry["isB4"] = isB4;
+    entry["isLotw"] = isLotw;
+    entry["dxCountry"] = dxCountry;
+    entry["dxCallsign"] = fromCall;
+    entry["dxContinent"] = dxContinent;
+    entry["dxPrefix"] = dxPrefix;
+    entry["dxIsWorked"] = isB4;
+    entry["dxIsNewBand"] = entry.value("dxIsNewBand", false);
+    entry["dxIsNewCountry"] = dxIsNewCountry;
+    entry["dxIsMostWanted"] = entry.value("dxIsMostWanted", false);
+    entry["dxBearing"] = bearing;
+    entry["dxDistance"] = distKm;
+    entry["dxGrid"] = dxGridExtracted;
+}
+
+void DecodiumBridge::refreshDecodeListDxcc()
+{
+    bool changed = false;
+    for (int i = 0; i < m_decodeList.size(); ++i) {
+        QVariantMap entry = m_decodeList[i].toMap();
+        if (entry.value("isTx").toBool())
+            continue;
+        QVariantMap original = entry;
+        enrichDecodeEntry(entry);
+        if (entry != original) {
+            m_decodeList[i] = entry;
+            changed = true;
+        }
+    }
+
+    if (changed)
+        emit decodeListChanged();
+}
+
 // === PRIVATE SLOTS ===
 
 void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
@@ -1705,6 +1938,14 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
               " rows=" + QString::number(rows.size()));
     for (int dbgI = 0; dbgI < qMin(rows.size(), 3); ++dbgI)
         bridgeLog("  raw[" + QString::number(dbgI) + "]='" + rows[dbgI] + "'");
+
+    if (m_dxccLookup && !m_dxccLookup->isLoaded()) {
+        QString loadedPath;
+        if (reloadDxccLookup(&loadedPath)) {
+            bridgeLog("DXCC: caricato on-demand da " + loadedPath);
+            refreshDecodeListDxcc();
+        }
+    }
 
     Q_UNUSED(serial)
     bool changed = false;
@@ -1730,31 +1971,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         QString msg     = f[4];
         bool isCQ       = msg.startsWith("CQ ", Qt::CaseInsensitive) || msg == "CQ";
         bool isMyCall   = !m_callsign.isEmpty() && msg.contains(m_callsign, Qt::CaseInsensitive);
-
-        // Estrai callsign del mittente dal messaggio (per B4 check)
-        QString fromCall;
-        {
-            QStringList mparts = msg.split(' ', Qt::SkipEmptyParts);
-            if (isCQ && mparts.size() >= 2) {
-                int ci = 1;
-                if (mparts[ci].length() <= 3 && mparts.size() > 2) ci = 2;
-                fromCall = mparts[ci].toUpper();
-            } else if (mparts.size() >= 2) {
-                // Formato: TO FROM info → il FROM è in posizione 1
-                // Ma se parts[0] == m_callsign → FROM è in parts[1]
-                // Altrimenti FROM è in parts[0]
-                if (!m_callsign.isEmpty() &&
-                    mparts[0].compare(m_callsign, Qt::CaseInsensitive) == 0)
-                    fromCall = mparts[1].toUpper();
-                else
-                    fromCall = mparts[0].toUpper();
-            }
-        }
-
-        // B4 check: verifica se abbiamo già lavorato questa stazione
-        bool isB4 = !fromCall.isEmpty() && m_workedCalls.contains(fromCall);
-        // LotW check: stazione usa LotW
-        bool isLotw = m_lotwEnabled && !fromCall.isEmpty() && m_lotwUsers.contains(fromCall);
+        QString fromCall = extractDecodedCallsign(msg, isCQ);
 
         QVariantMap entry;
         entry["time"]    = f[0];
@@ -1768,69 +1985,16 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         entry["isCQ"]    = isCQ;
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = fromCall;
-        // B4 / LotW (Shannon: appendWorkedB4 logic)
-        entry["isB4"]          = isB4;
-        entry["isLotw"]        = isLotw;
-        // DXCC lookup da cty.dat (Shannon: postDecode + appendWorkedB4)
-        QString dxCountry, dxContinent, dxPrefix;
-        bool dxIsNewCountry = false;
-        if (m_dxccLookup && !fromCall.isEmpty()) {
-            DxccEntity ent = m_dxccLookup->lookup(fromCall);
-            if (ent.isValid()) {
-                dxCountry   = ent.name;
-                dxContinent = ent.continent;
-                dxPrefix    = ent.prefix;
-            }
-        }
-        entry["dxCountry"]      = dxCountry;
-        entry["dxCallsign"]     = fromCall;
-        entry["dxContinent"]    = dxContinent;
-        entry["dxPrefix"]       = dxPrefix;
-        entry["dxIsWorked"]     = isB4;
-        entry["dxIsNewBand"]    = false;  // richiede tracking multi-banda (futuro)
-        entry["dxIsNewCountry"] = dxIsNewCountry;
-        entry["dxIsMostWanted"] = false;
-
-        // C13 — Extract grid from message and compute distance/bearing
-        double distKm  = -1.0;
-        double bearing = -1.0;
-        QString dxGridExtracted;
-        {
-            QStringList parts = msg.split(' ', Qt::SkipEmptyParts);
-            // CQ [MOD] CALL GRID  or  CALL1 CALL2 GRID
-            // Grid is a 4/6-char Maidenhead starting with two letters
-            for (int pi = parts.size() - 1; pi >= 0; --pi) {
-                const QString& p = parts[pi];
-                if (p.length() == 4 || p.length() == 6) {
-                    if (p[0].isLetter() && p[1].isLetter() && p[2].isDigit() && p[3].isDigit()) {
-                        dxGridExtracted = p.toUpper();
-                        break;
-                    }
-                }
-            }
-            if (!dxGridExtracted.isEmpty() && !m_grid.isEmpty()) {
-                bearing = calcBearing(m_grid, dxGridExtracted);
-                distKm  = calcDistance(m_grid, dxGridExtracted);
-            }
-        }
-        entry["dxBearing"]  = bearing;
-        entry["dxDistance"] = distKm;
-        entry["dxGrid"]     = dxGridExtracted;
+        enrichDecodeEntry(entry);
 
         // B9 — Feed ActiveStationsModel: extract callsign from CQ messages
         if (isCQ && m_activeStations) {
-            QStringList parts = msg.split(' ', Qt::SkipEmptyParts);
-            // "CQ [MOD] CALL [GRID]"
-            int callIdx = 1;
-            if (parts.size() > callIdx && parts[callIdx].length() < 3) callIdx = 2; // skip modifier
-            if (parts.size() > callIdx) {
-                QString dxCall = parts[callIdx];
-                if (dxCall.length() >= 3 && !dxCall[0].isDigit()) {
-                    int freqHz = f[7].toInt();
-                    QString utc = f[0];
-                    int snr = f[1].toInt();
-                    m_activeStations->addStation(dxCall, freqHz, snr, dxGridExtracted, utc);
-                }
+            QString dxGridExtracted = entry.value("dxGrid").toString();
+            if (!fromCall.isEmpty()) {
+                int freqHz = f[7].toInt();
+                QString utc = f[0];
+                int snr = f[1].toInt();
+                m_activeStations->addStation(fromCall, freqHz, snr, dxGridExtracted, utc);
             }
         }
 
@@ -1861,17 +2025,9 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
 
         // PSK Reporter: invia spot se abilitato
         if (m_pskReporterEnabled && m_pskReporter && !m_callsign.isEmpty()) {
-            QString spotCall = dxGridExtracted.isEmpty() ? QString() : QString();
+            QString dxGridExtracted = entry.value("dxGrid").toString();
             // Estrai callsign dal messaggio: "CQ [MOD] CALL [GRID]" o "TO FROM ..."
-            QStringList parts = msg.split(' ', Qt::SkipEmptyParts);
-            QString spCall;
-            if (isCQ && parts.size() >= 2) {
-                int idx = 1;
-                if (parts[idx].length() < 3 && parts.size() > 2) idx = 2;
-                spCall = parts[idx];
-            } else if (parts.size() >= 2) {
-                spCall = parts[1]; // mittente
-            }
+            QString spCall = extractDecodedCallsign(msg, isCQ);
             if (!spCall.isEmpty() && spCall != m_callsign) {
                 quint64 absFreqHz = static_cast<quint64>(m_frequency) + f[7].toULongLong();
                 m_pskReporter->addSpot(spCall, dxGridExtracted, absFreqHz, m_mode, f[1].toInt());
@@ -1934,6 +2090,14 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
     bridgeLog("onFt2AsyncDecodeReady: rows=" + QString::number(rows.size()));
     if (!rows.isEmpty()) bridgeLog("  async_raw[0]='" + rows[0] + "'");
 
+    if (m_dxccLookup && !m_dxccLookup->isLoaded()) {
+        QString loadedPath;
+        if (reloadDxccLookup(&loadedPath)) {
+            bridgeLog("DXCC: caricato on-demand da " + loadedPath);
+            refreshDecodeListDxcc();
+        }
+    }
+
     // Costruisci set di messaggi già presenti per deduplicazione O(1)
     QSet<QString> existing;
     for (const auto& v : m_decodeList) {
@@ -1971,16 +2135,8 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         entry["isTx"]    = false;
         entry["isCQ"]    = isCQ;
         entry["isMyCall"] = isMyCall;
-        entry["dxCountry"]     = QString();
-        entry["dxCallsign"]    = QString();
-        entry["dxContinent"]   = QString();
-        entry["dxPrefix"]      = QString();
-        entry["dxBearing"]     = -1;
-        entry["dxDistance"]    = 0;
-        entry["dxIsWorked"]    = false;
-        entry["dxIsNewBand"]   = false;
-        entry["dxIsNewCountry"] = false;
-        entry["dxIsMostWanted"] = false;
+        entry["fromCall"] = extractDecodedCallsign(msg, isCQ);
+        enrichDecodeEntry(entry);
         m_decodeList.append(QVariant(entry));
         changed = true;
     }
@@ -2051,6 +2207,13 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
 {
     bridgeLog("onLegacyJtDecodeReady: serial=" + QString::number(serial) +
               " rows=" + QString::number(rows.size()) + " mode=" + m_mode);
+    if (m_dxccLookup && !m_dxccLookup->isLoaded()) {
+        QString loadedPath;
+        if (reloadDxccLookup(&loadedPath)) {
+            bridgeLog("DXCC: caricato on-demand da " + loadedPath);
+            refreshDecodeListDxcc();
+        }
+    }
     Q_UNUSED(serial)
     bool changed = false;
     for (const auto& row : rows) {
@@ -2063,56 +2226,7 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
         QString msg   = f[4];
         bool isCQ     = msg.startsWith("CQ ", Qt::CaseInsensitive) || msg == "CQ";
         bool isMyCall = !m_callsign.isEmpty() && msg.contains(m_callsign, Qt::CaseInsensitive);
-
-        QString fromCall;
-        {
-            QStringList mparts = msg.split(' ', Qt::SkipEmptyParts);
-            if (isCQ && mparts.size() >= 2) {
-                int ci = 1;
-                if (mparts[ci].length() <= 3 && mparts.size() > 2) ci = 2;
-                fromCall = mparts[ci].toUpper();
-            } else if (mparts.size() >= 2) {
-                if (!m_callsign.isEmpty() &&
-                    mparts[0].compare(m_callsign, Qt::CaseInsensitive) == 0)
-                    fromCall = mparts[1].toUpper();
-                else
-                    fromCall = mparts[0].toUpper();
-            }
-        }
-
-        bool isB4  = !fromCall.isEmpty() && m_workedCalls.contains(fromCall);
-        bool isLotw = m_lotwEnabled && !fromCall.isEmpty() && m_lotwUsers.contains(fromCall);
-
-        // DXCC lookup
-        QString dxCountry, dxContinent, dxPrefix;
-        bool dxIsNewCountry = false;
-        if (m_dxccLookup && !fromCall.isEmpty()) {
-            DxccEntity ent = m_dxccLookup->lookup(fromCall);
-            if (ent.isValid()) {
-                dxCountry   = ent.name;
-                dxContinent = ent.continent;
-                dxPrefix    = ent.prefix;
-            }
-        }
-
-        // Distance/bearing from grid in message
-        double distKm = -1.0, bearing = -1.0;
-        QString dxGridExtracted;
-        {
-            QStringList parts = msg.split(' ', Qt::SkipEmptyParts);
-            for (int pi = parts.size() - 1; pi >= 0; --pi) {
-                const QString& p = parts[pi];
-                if ((p.length() == 4 || p.length() == 6) &&
-                    p[0].isLetter() && p[1].isLetter() && p[2].isDigit() && p[3].isDigit()) {
-                    dxGridExtracted = p.toUpper();
-                    break;
-                }
-            }
-            if (!dxGridExtracted.isEmpty() && !m_grid.isEmpty()) {
-                bearing = calcBearing(m_grid, dxGridExtracted);
-                distKm  = calcDistance(m_grid, dxGridExtracted);
-            }
-        }
+        QString fromCall = extractDecodedCallsign(msg, isCQ);
 
         QVariantMap entry;
         entry["time"]       = f[0];
@@ -2126,19 +2240,7 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
         entry["isCQ"]       = isCQ;
         entry["isMyCall"]   = isMyCall;
         entry["fromCall"]   = fromCall;
-        entry["isB4"]       = isB4;
-        entry["isLotw"]     = isLotw;
-        entry["dxCountry"]  = dxCountry;
-        entry["dxCallsign"] = fromCall;
-        entry["dxContinent"]= dxContinent;
-        entry["dxPrefix"]   = dxPrefix;
-        entry["dxIsWorked"] = isB4;
-        entry["dxIsNewBand"]= false;
-        entry["dxIsNewCountry"] = dxIsNewCountry;
-        entry["dxIsMostWanted"] = false;
-        entry["dxBearing"]  = bearing;
-        entry["dxDistance"] = distKm;
-        entry["dxGrid"]     = dxGridExtracted;
+        enrichDecodeEntry(entry);
 
         m_decodeList.append(QVariant(entry));
         changed = true;
@@ -2355,13 +2457,22 @@ void DecodiumBridge::startAudioCapture()
     bridgeLog("startAudioCapture() called");
     // Qt6: use QMediaDevices::audioInputs() and QAudioDevice
     QAudioDevice selectedDevice = QMediaDevices::defaultAudioInput();
+    bool requestedDeviceFound = m_audioInputDevice.isEmpty();
     if (!m_audioInputDevice.isEmpty()) {
         for (const QAudioDevice& dev : QMediaDevices::audioInputs()) {
-            if (dev.description() == m_audioInputDevice) {
+            if (dev.description() == m_audioInputDevice ||
+                dev.description().contains(m_audioInputDevice, Qt::CaseInsensitive) ||
+                m_audioInputDevice.contains(dev.description(), Qt::CaseInsensitive)) {
                 selectedDevice = dev;
+                requestedDeviceFound = true;
                 break;
             }
         }
+    }
+    if (!requestedDeviceFound) {
+        bridgeLog("startAudioCapture: requested input device not found, fallback to default: " +
+                  selectedDevice.description());
+        emit statusMessage("Audio input non trovato, uso default: " + selectedDevice.description());
     }
 
     // Create the audio sink (once, reused across start/stop cycles).
@@ -2942,10 +3053,7 @@ void DecodiumBridge::checkCtyDatUpdate()
     if (m_ctyDatUpdating) return;
 
     // Cerca cty.dat nelle posizioni standard
-    QStringList searchPaths = {
-        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/cty.dat",
-        QCoreApplication::applicationDirPath() + "/cty.dat"
-    };
+    QStringList searchPaths = ctyDatSearchPaths();
 
     QString existing;
     for (const auto& p : searchPaths) {
@@ -2988,9 +3096,64 @@ void DecodiumBridge::checkCtyDatUpdate()
         if (f.open(QIODevice::WriteOnly)) {
             f.write(reply->readAll());
             f.close();
-            emit statusMessage("cty.dat aggiornato: " + destPath);
+            QString loadedPath;
+            if (reloadDxccLookup(&loadedPath)) {
+                refreshDecodeListDxcc();
+                emit statusMessage("cty.dat aggiornato e caricato: " + loadedPath);
+            } else {
+                emit errorMessage("cty.dat scaricato ma il caricamento DXCC è fallito.");
+            }
         }
     });
+}
+
+QStringList DecodiumBridge::ctyDatSearchPaths() const
+{
+    QString const appDir = QCoreApplication::applicationDirPath();
+    QStringList paths = {
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/cty.dat",
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/cty.dat",
+        appDir + "/cty.dat",
+        QDir(appDir).absoluteFilePath("../cty.dat"),
+        QDir(appDir).absoluteFilePath("../Resources/cty.dat"),
+        QDir(appDir).absoluteFilePath("../share/Decodium/cty.dat"),
+        QDir(appDir).absoluteFilePath("../share/wsjtx/cty.dat"),
+        QDir::current().absoluteFilePath("cty.dat")
+    };
+
+#ifdef CMAKE_SOURCE_DIR
+    paths << QDir(QStringLiteral(CMAKE_SOURCE_DIR)).absoluteFilePath("cty.dat");
+#endif
+
+    QStringList uniquePaths;
+    QSet<QString> seen;
+    for (const QString& path : paths) {
+        QString const cleanPath = QDir::cleanPath(path);
+        if (cleanPath.isEmpty() || seen.contains(cleanPath))
+            continue;
+        seen.insert(cleanPath);
+        uniquePaths << cleanPath;
+    }
+    return uniquePaths;
+}
+
+bool DecodiumBridge::reloadDxccLookup(QString* loadedPath)
+{
+    if (loadedPath)
+        loadedPath->clear();
+    if (!m_dxccLookup)
+        return false;
+
+    for (const QString& path : ctyDatSearchPaths()) {
+        if (!QFile::exists(path))
+            continue;
+        if (m_dxccLookup->loadCtyDat(path)) {
+            if (loadedPath)
+                *loadedPath = path;
+            return true;
+        }
+    }
+    return false;
 }
 
 // ============================================================

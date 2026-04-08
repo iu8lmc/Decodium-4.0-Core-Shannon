@@ -59,9 +59,13 @@ Item {
                     id: paletteCombo
                     Layout.preferredWidth: 106
                     model: waterfallDisplay.paletteNames
-                    currentIndex: bridge.uiPaletteIndex > 0 ? bridge.uiPaletteIndex : 3
+                    currentIndex: Math.max(0, bridge.uiPaletteIndex)
                     font.pixelSize: 10
-                    onActivated: waterfallDisplay.paletteIndex = currentIndex
+                    onActivated: {
+                        waterfallDisplay.paletteIndex = currentIndex
+                        bridge.uiPaletteIndex = currentIndex
+                        mainWindow.scheduleSave()
+                    }
                     background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
                     contentItem: Text { text: paletteCombo.displayText; font.pixelSize: 10; color: textPrimary; verticalAlignment: Text.AlignVCenter; leftPadding: 4 }
                 }
@@ -209,7 +213,7 @@ Item {
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
             // Carica valori da Settings al primo avvio
-            paletteIndex:   bridge.uiPaletteIndex > 0 ? bridge.uiPaletteIndex : 3
+            paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
             autoRange:      true
             peakHold:       true
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0

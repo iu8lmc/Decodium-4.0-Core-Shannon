@@ -14,10 +14,31 @@ ComboBox {
     property color textColor: textPrimary
     property color bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
-    property int itemHeight: 36
+    property int effectiveFontPixelSize: Math.max(font.pixelSize, 14)
+    property int itemHeight: Math.max(42, effectiveFontPixelSize + 22)
+    property int popupMinWidth: 0
+    property int textHorizontalAlignment: Text.AlignLeft
+    readonly property int computedPopupWidth: {
+        var widest = 0
+        for (var i = 0; i < control.count; ++i) {
+            popupMetrics.text = control.textAt(i)
+            widest = Math.max(widest, Math.ceil(popupMetrics.advanceWidth))
+        }
+        return Math.max(control.width, control.popupMinWidth, widest + control.leftPadding + control.rightPadding + 24)
+    }
 
-    height: 40
+    implicitHeight: Math.max(44, effectiveFontPixelSize + 24)
+    height: implicitHeight
     font.pixelSize: 13
+    leftPadding: 14
+    rightPadding: 34
+    topPadding: 8
+    bottomPadding: 8
+
+    TextMetrics {
+        id: popupMetrics
+        font: control.font
+    }
 
     background: Rectangle {
         color: control.bgColor
@@ -27,19 +48,24 @@ ComboBox {
     }
 
     contentItem: Text {
-        text: control.displayText
-        font: control.font
-        color: control.accentColor
-        horizontalAlignment: Text.AlignHCenter
+        text: control.currentText !== undefined && control.currentText !== "" ? control.currentText : control.displayText
+        font.family: control.font.family
+        font.pixelSize: control.effectiveFontPixelSize
+        color: control.textColor
+        horizontalAlignment: control.textHorizontalAlignment
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
+        leftPadding: control.leftPadding
+        rightPadding: control.rightPadding
+        topPadding: control.topPadding
+        bottomPadding: control.bottomPadding
     }
 
     indicator: Canvas {
-        x: control.width - width - 8
+        x: control.width - width - 12
         y: control.height / 2 - height / 2
-        width: 10
-        height: 6
+        width: 12
+        height: 8
         contextType: "2d"
 
         Connections {
@@ -60,17 +86,19 @@ ComboBox {
     }
 
     delegate: ItemDelegate {
-        width: control.width
+        width: ListView.view ? ListView.view.width : control.computedPopupWidth
         height: control.itemHeight
 
         contentItem: Text {
             text: modelData !== undefined ? modelData : (model.text !== undefined ? model.text : "")
             color: highlighted ? "#ffffff" : control.textColor
-            font.pixelSize: 12
+            font.pixelSize: control.effectiveFontPixelSize
             font.bold: highlighted
             elide: Text.ElideRight
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: control.textHorizontalAlignment
             verticalAlignment: Text.AlignVCenter
+            leftPadding: 12
+            rightPadding: 12
         }
 
         background: Rectangle {
@@ -83,8 +111,8 @@ ComboBox {
 
     popup: Popup {
         y: control.height + 2
-        width: control.width
-        implicitHeight: Math.min(contentItem.implicitHeight + 12, 300)
+        width: control.computedPopupWidth
+        implicitHeight: Math.min(contentItem.implicitHeight + 12, 360)
         padding: 6
 
         background: Rectangle {
@@ -104,6 +132,7 @@ ComboBox {
         }
 
         contentItem: ListView {
+            anchors.fill: parent
             clip: true
             implicitHeight: contentHeight
             model: control.popup.visible ? control.delegateModel : null
@@ -114,13 +143,13 @@ ComboBox {
                 policy: ScrollBar.AsNeeded
 
                 contentItem: Rectangle {
-                    implicitWidth: 4
+                    implicitWidth: 6
                     radius: 2
                     color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
                 }
 
                 background: Rectangle {
-                    implicitWidth: 4
+                    implicitWidth: 6
                     color: "transparent"
                 }
             }

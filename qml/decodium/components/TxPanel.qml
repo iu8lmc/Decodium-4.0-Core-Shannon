@@ -60,6 +60,42 @@ Item {
         }
     }
 
+    component ToolbarButtonContent: Item {
+        required property string label
+        property string glyph: ""
+        property color foreground: "white"
+        property int glyphSize: 14
+        property int labelSize: 10
+        property bool boldLabel: false
+
+        implicitWidth: contentRow.implicitWidth
+        implicitHeight: contentRow.implicitHeight
+
+        Row {
+            id: contentRow
+            anchors.centerIn: parent
+            spacing: glyph.length > 0 ? 4 : 0
+
+            Text {
+                visible: glyph.length > 0
+                text: glyph
+                color: foreground
+                font.pixelSize: glyphSize
+                font.family: "Consolas"
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+                text: label
+                color: foreground
+                font.pixelSize: labelSize
+                font.family: "Consolas"
+                font.bold: boldLabel
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         color: glassBg
@@ -74,47 +110,40 @@ Item {
 
 
             // ===== Band + Mode toggles row =====
-            RowLayout {
+            ColumnLayout {
                 id: topControlsRow
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(42, topControlsLeft.implicitHeight + 6)
-                Layout.minimumHeight: Math.max(42, topControlsLeft.implicitHeight + 6)
                 spacing: 4
 
-                Flickable {
-                    id: topControlsFlick
+                Item {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    contentWidth: topControlsContent.width
-                    contentHeight: topControlsContent.height
-                    flickableDirection: Flickable.HorizontalFlick
-                    boundsBehavior: Flickable.StopAtBounds
-                    interactive: contentWidth > width
-                    pressDelay: 0
-                    clip: true
+                    Layout.rightMargin: 36
+                    implicitHeight: topControlsFlow.height
 
-                    Item {
-                        id: topControlsContent
-                        width: topControlsLeft.implicitWidth
-                        height: topControlsLeft.implicitHeight
+                    Flow {
+                        id: topControlsFlow
+                        width: parent.width
+                        spacing: 4
 
-                        Row {
-                            id: topControlsLeft
-                            x: 0
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 4
+                        Rectangle {
+                            width: Math.min(440, topControlsFlow.width)
+                            height: 28
+                            radius: 4
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                            border.color: glassBorder
 
-                            // Band selector (compact)
-                            Rectangle {
-                                width: 440
-                                height: 28
-                                radius: 4
-                                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                                border.color: glassBorder
+                            Flickable {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                contentWidth: bandButtonsRow.width
+                                contentHeight: bandButtonsRow.height
+                                flickableDirection: Flickable.HorizontalFlick
+                                boundsBehavior: Flickable.StopAtBounds
+                                interactive: contentWidth > width
+                                clip: true
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 1
+                                Row {
+                                    id: bandButtonsRow
                                     spacing: 1
 
                                     Repeater {
@@ -142,31 +171,32 @@ Item {
                                             }
 
                                             MouseArea {
-                                                id: bandMa
                                                 anchors.fill: parent
                                                 cursorShape: Qt.PointingHandCursor
                                                 hoverEnabled: true
                                                 onClicked: {
-                                                    if (engine && engine.bandManager) {
+                                                    if (engine && engine.bandManager)
                                                         engine.bandManager.changeBandByLambda(modelData + "M")
-                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+
                         Rectangle {
-                            width: 90
+                            width: 120
                             height: 36
                             radius: 6
                             color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
                             border.color: secondaryCyan
                             border.width: 1
 
-                            ComboBox {
+                            StyledComboBox {
                                 id: modeSelector
                                 anchors.fill: parent
+                                anchors.margins: 1
                                 model: ["FT8", "FT4", "FT2", "Q65A", "Q65B", "Q65C", "Q65D", "Q65E", "JT65A", "JT65B", "JT65C", "MSK144"]
                                 currentIndex: {
                                     var mode = engine ? engine.mode : "FT8"
@@ -174,43 +204,22 @@ Item {
                                     return idx >= 0 ? idx : 0
                                 }
                                 onCurrentTextChanged: if (engine && currentText) engine.mode = currentText
-
-                                background: Rectangle { color: "transparent" }
-                                contentItem: Text {
-                                    text: modeSelector.displayText
-                                    color: secondaryCyan
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    font.family: "Consolas"
-                                    verticalAlignment: Text.AlignVCenter
-                                    horizontalAlignment: Text.AlignHCenter
-                                }
-                                indicator: Item {}
-
-                                popup: Popup {
-                                    y: modeSelector.height
-                                    width: modeSelector.width
-                                    implicitHeight: contentItem.implicitHeight + 2
-                                    padding: 1
-
-                                    contentItem: ListView {
-                                        clip: true
-                                        implicitHeight: contentHeight
-                                        model: modeSelector.popup.visible ? modeSelector.delegateModel : null
-                                        currentIndex: modeSelector.highlightedIndex
-                                    }
-
-                                    background: Rectangle {
-                                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-                                        border.color: secondaryCyan
-                                        radius: 4
-                                    }
-                                }
+                                font.family: "Consolas"
+                                font.pixelSize: 14
+                                itemHeight: 40
+                                popupMinWidth: 190
+                                textHorizontalAlignment: Text.AlignHCenter
+                                leftPadding: 8
+                                rightPadding: 24
+                                topPadding: 6
+                                bottomPadding: 6
+                                bgColor: "transparent"
+                                borderColor: "transparent"
                             }
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: autoSqBtn.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -225,22 +234,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.autoSeq = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u26A1"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: autoSqBtn.checked ? primaryBlue : textSecondary
-                                    }
-                                    Text {
-                                        text: "ASQ"
-                                        color: autoSqBtn.checked ? primaryBlue : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: autoSqBtn.checked
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "ASQ"
+                                    glyph: "\u26A1"
+                                    foreground: autoSqBtn.checked ? primaryBlue : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: autoSqBtn.checked
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Auto Sequence"
@@ -249,7 +249,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: mamBtn.checked ? Qt.rgba(255/255, 152/255, 0, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -264,22 +264,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.multiAnswerMode = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u21C6"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: mamBtn.checked ? warningOrange : textSecondary
-                                    }
-                                    Text {
-                                        text: "MAM"
-                                        color: mamBtn.checked ? warningOrange : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: mamBtn.checked
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "MAM"
+                                    glyph: "\u21C6"
+                                    foreground: mamBtn.checked ? warningOrange : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: mamBtn.checked
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Multi-Answer Mode (right-click=window)"
@@ -294,7 +285,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: deepBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -309,22 +300,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.deepSearchEnabled = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u25CE"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: deepBtn.checked ? accentGreen : textSecondary
-                                    }
-                                    Text {
-                                        text: "DEEP"
-                                        color: deepBtn.checked ? accentGreen : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: deepBtn.checked
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "DEEP"
+                                    glyph: "\u25CE"
+                                    foreground: deepBtn.checked ? accentGreen : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: deepBtn.checked
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Deep Search"
@@ -333,7 +315,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: apBtn.checked ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -348,22 +330,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.avgDecodeEnabled = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u25C6"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: apBtn.checked ? secondaryCyan : textSecondary
-                                    }
-                                    Text {
-                                        text: "AP"
-                                        color: apBtn.checked ? secondaryCyan : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: apBtn.checked
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "AP"
+                                    glyph: "\u25C6"
+                                    foreground: apBtn.checked ? secondaryCyan : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: apBtn.checked
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "A-Priori Decoding"
@@ -372,7 +345,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: swlBtn.checked ? Qt.rgba(156/255, 39/255, 176/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -387,22 +360,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.swlMode = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u2609"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: swlBtn.checked ? "#9c27b0" : textSecondary
-                                    }
-                                    Text {
-                                        text: "SWL"
-                                        color: swlBtn.checked ? "#9c27b0" : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: swlBtn.checked
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "SWL"
+                                    glyph: "\u2609"
+                                    foreground: swlBtn.checked ? "#9c27b0" : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: swlBtn.checked
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "SWL Mode (Listen Only)"
@@ -411,7 +375,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -426,22 +390,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.autoSeq = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u21BB"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: autoSeqBtn2.checked ? primaryBlue : textSecondary
-                                    }
-                                    Text {
-                                        text: "SEQ"
-                                        color: autoSeqBtn2.checked ? primaryBlue : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: autoSeqBtn2.checked
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "SEQ"
+                                    glyph: "\u21BB"
+                                    foreground: autoSeqBtn2.checked ? primaryBlue : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: autoSeqBtn2.checked
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Auto Sequence"
@@ -450,7 +405,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 78
                             height: 36
                             radius: 6
                             color: txEnableBtn.checked ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -465,22 +420,13 @@ Item {
                                 padding: 0
                                 onCheckedChanged: if (engine) engine.txEnabled = checked
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u25B2"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: txEnableBtn.checked ? errorRed : textSecondary
-                                    }
-                                    Text {
-                                        text: "TX"
-                                        color: txEnableBtn.checked ? errorRed : textSecondary
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "TX"
+                                    glyph: "\u25B2"
+                                    foreground: txEnableBtn.checked ? errorRed : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: true
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Enable TX"
@@ -489,7 +435,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 82
                             height: 36
                             radius: 6
                             color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
@@ -501,22 +447,13 @@ Item {
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "⟳"
-                                        font.pixelSize: 16
-                                        color: engine && engine.autoCqRepeat ? successGreen : textPrimary
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    Text {
-                                        text: "ACQ"
-                                        font.pixelSize: 11
-                                        color: engine && engine.autoCqRepeat ? successGreen : textPrimary
-                                        font.bold: engine && engine.autoCqRepeat
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "ACQ"
+                                    glyph: "⟳"
+                                    foreground: engine && engine.autoCqRepeat ? successGreen : textPrimary
+                                    glyphSize: 16
+                                    labelSize: 11
+                                    boldLabel: engine && engine.autoCqRepeat
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Auto CQ Repeat\n(Chiama CQ automaticamente fino a risposta)"
@@ -524,10 +461,8 @@ Item {
 
                                 onClicked: {
                                     if (engine) {
-                                        if (!engine.autoSeq && !engine.autoCqRepeat) {
-                                            console.log("Auto CQ richiede Auto Seq attivo")
+                                        if (!engine.autoSeq && !engine.autoCqRepeat)
                                             engine.autoSeq = true
-                                        }
                                         engine.autoCqRepeat = !engine.autoCqRepeat
                                     }
                                 }
@@ -535,7 +470,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 86
                             height: 36
                             radius: 6
                             color: engine && engine.startFromTx2 ? Qt.alpha(warningOrange, 0.3) : Qt.alpha(textPrimary, 0.05)
@@ -546,32 +481,23 @@ Item {
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "⚡"
-                                        font.pixelSize: 14
-                                        color: engine && engine.startFromTx2 ? warningOrange : textPrimary
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    Text {
-                                        text: "Q.Call"
-                                        font.pixelSize: 10
-                                        color: engine && engine.startFromTx2 ? warningOrange : textPrimary
-                                        font.bold: engine && engine.startFromTx2
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "Q.Call"
+                                    glyph: "⚡"
+                                    foreground: engine && engine.startFromTx2 ? warningOrange : textPrimary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: engine && engine.startFromTx2
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Quick Call\n(Doppio click su decode abilita TX automaticamente\ncome Shannon: 'Double-click on call sets Tx enable')"
                                 ToolTip.delay: 500
-                                onClicked: { if (engine) engine.startFromTx2 = !engine.startFromTx2 }
+                                onClicked: if (engine) engine.startFromTx2 = !engine.startFromTx2
                             }
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 84
                             height: 36
                             radius: 6
                             color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
@@ -584,22 +510,13 @@ Item {
                                 property bool isTuning: engine && engine.tuning
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u266B"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: warningOrange
-                                    }
-                                    Text {
-                                        text: tuneButton.isTuning ? "Stop" : "TUNE"
-                                        color: warningOrange
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: tuneButton.isTuning ? "STOP" : "TUNE"
+                                    glyph: "\u266B"
+                                    foreground: warningOrange
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: true
                                 }
                                 onClicked: {
                                     if (engine) {
@@ -614,7 +531,35 @@ Item {
                         }
 
                         Rectangle {
-                            width: 70
+                            width: 84
+                            height: 36
+                            radius: 6
+                            color: clearTxButton.hovered ? Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.24)
+                                                         : Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.12)
+                            border.color: warningOrange
+                            border.width: 1
+
+                            Button {
+                                id: clearTxButton
+                                anchors.fill: parent
+                                padding: 0
+                                enabled: engine !== null
+                                onClicked: if (engine) engine.clearTxMessages()
+                                background: Rectangle { color: "transparent" }
+                                contentItem: ToolbarButtonContent {
+                                    label: "CLEAR"
+                                    foreground: warningOrange
+                                    labelSize: 11
+                                    boldLabel: true
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Svuota DX, report e TX1-TX5"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 84
                             height: 36
                             radius: 6
                             color: Qt.alpha(errorRed, 0.3)
@@ -625,22 +570,13 @@ Item {
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Row {
-                                    spacing: 3
-                                    anchors.centerIn: parent
-                                    Text {
-                                        text: "\u25A0"
-                                        font.pixelSize: 14
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: errorRed
-                                    }
-                                    Text {
-                                        text: "HALT"
-                                        color: errorRed
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
+                                contentItem: ToolbarButtonContent {
+                                    label: "HALT"
+                                    glyph: "\u25A0"
+                                    foreground: errorRed
+                                    glyphSize: 14
+                                    labelSize: 10
+                                    boldLabel: true
                                 }
                                 onClicked: if (engine) engine.halt()
                                 ToolTip.visible: hovered
@@ -650,7 +586,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 50
+                            width: 56
                             height: 36
                             radius: 6
                             visible: engine && engine.mode === "FT2"
@@ -662,13 +598,11 @@ Item {
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Text {
-                                    text: "ATX"
-                                    color: engine && engine.asyncTxEnabled ? secondaryCyan : textSecondary
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    anchors.centerIn: parent
-                                    horizontalAlignment: Text.AlignHCenter
+                                contentItem: ToolbarButtonContent {
+                                    label: "ATX"
+                                    foreground: engine && engine.asyncTxEnabled ? secondaryCyan : textSecondary
+                                    labelSize: 10
+                                    boldLabel: true
                                 }
                                 onClicked: if (engine) engine.asyncTxEnabled = !engine.asyncTxEnabled
                                 ToolTip.visible: hovered
@@ -691,7 +625,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 50
+                            width: 56
                             height: 36
                             radius: 6
                             visible: engine && engine.mode === "FT2"
@@ -703,13 +637,11 @@ Item {
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Text {
-                                    text: "2xC"
-                                    color: engine && engine.dualCarrierEnabled ? warningOrange : textSecondary
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    anchors.centerIn: parent
-                                    horizontalAlignment: Text.AlignHCenter
+                                contentItem: ToolbarButtonContent {
+                                    label: "2xC"
+                                    foreground: engine && engine.dualCarrierEnabled ? warningOrange : textSecondary
+                                    labelSize: 10
+                                    boldLabel: true
                                 }
                                 onClicked: if (engine) engine.dualCarrierEnabled = !engine.dualCarrierEnabled
                                 ToolTip.visible: hovered
@@ -719,7 +651,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 50
+                            width: 56
                             height: 36
                             radius: 6
                             visible: engine && engine.mode === "FT2"
@@ -731,13 +663,11 @@ Item {
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
-                                contentItem: Text {
-                                    text: "PTT"
-                                    color: engine && engine.manualTxMode ? errorRed : textSecondary
-                                    font.pixelSize: 10
-                                    font.bold: true
-                                    anchors.centerIn: parent
-                                    horizontalAlignment: Text.AlignHCenter
+                                contentItem: ToolbarButtonContent {
+                                    label: "PTT"
+                                    foreground: engine && engine.manualTxMode ? errorRed : textSecondary
+                                    labelSize: 10
+                                    boldLabel: true
                                 }
                                 onClicked: {
                                     if (engine) {
@@ -750,90 +680,6 @@ Item {
                                 ToolTip.text: "Manual TX: Click=transmit, Long press=disable"
                                 ToolTip.delay: 500
                             }
-                        }
-                    }
-
-                }
-                }
-
-                RowLayout {
-                    id: topControlsRight
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 4
-
-                    Rectangle {
-                        width: 80
-                        height: 36
-                        radius: 6
-                        color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
-                        border.color: accentGreen
-                        border.width: 1
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 3
-                            Text {
-                                text: "\u25BC"
-                                color: accentGreen
-                                font.pixelSize: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: engine ? engine.rxFrequency : "0"
-                                color: accentGreen
-                                font.pixelSize: 11
-                                font.bold: true
-                                font.family: "Consolas"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        ToolTip.visible: rxFreqMouse.containsMouse
-                        ToolTip.text: "RX Frequency"
-                        ToolTip.delay: 500
-
-                        MouseArea {
-                            id: rxFreqMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                        }
-                    }
-
-                    Rectangle {
-                        width: 80
-                        height: 36
-                        radius: 6
-                        color: Qt.rgba(244/255, 67/255, 54/255, 0.15)
-                        border.color: errorRed
-                        border.width: 1
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 3
-                            Text {
-                                text: "\u25B2"
-                                color: errorRed
-                                font.pixelSize: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: engine ? engine.txFrequency : "0"
-                                color: errorRed
-                                font.pixelSize: 11
-                                font.bold: true
-                                font.family: "Consolas"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        ToolTip.visible: txFreqMouse.containsMouse
-                        ToolTip.text: "TX Frequency"
-                        ToolTip.delay: 500
-
-                        MouseArea {
-                            id: txFreqMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
                         }
                     }
                 }
@@ -1149,31 +995,35 @@ Item {
             Behavior on color { ColorAnimation { duration: 150 } }
         }
 
-        contentItem: ColumnLayout {
-            spacing: 2
+        contentItem: Item {
+            Column {
+                anchors.centerIn: parent
+                width: parent.width - 10
+                spacing: 2
 
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: label
-                color: {
-                    if (isTransmitting) return errorRed
-                    if (isSelected) return primaryBlue
-                    if (isCQ) return accentGreen
-                    return textSecondary
+                Text {
+                    width: parent.width
+                    text: label
+                    color: {
+                        if (isTransmitting) return errorRed
+                        if (isSelected) return primaryBlue
+                        if (isCQ) return accentGreen
+                        return textSecondary
+                    }
+                    font.pixelSize: 10
+                    font.bold: isSelected || isTransmitting
+                    horizontalAlignment: Text.AlignHCenter
                 }
-                font.pixelSize: 10
-                font.bold: isSelected || isTransmitting
-            }
 
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-                text: message
-                color: isTransmitting ? errorRed : textPrimary
-                font.family: "Consolas"
-                font.pixelSize: 9
-                elide: Text.ElideMiddle
-                horizontalAlignment: Text.AlignHCenter
+                Text {
+                    width: parent.width
+                    text: message
+                    color: isTransmitting ? errorRed : textPrimary
+                    font.family: "Consolas"
+                    font.pixelSize: 9
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
         }
     }

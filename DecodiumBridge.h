@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QString>
 #include <QVector>
 #include <QTimer>
@@ -93,8 +94,8 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString dxCall READ dxCall WRITE setDxCall NOTIFY dxCallChanged)
     Q_PROPERTY(QString dxGrid READ dxGrid WRITE setDxGrid NOTIFY dxGridChanged)
     // txMessages/currentTxMessage: usati da TxPanel (engine = bridge)
-    Q_PROPERTY(QStringList txMessages READ txMessages NOTIFY tx1Changed)
-    Q_PROPERTY(QString currentTxMessage READ currentTxMessage NOTIFY currentTxChanged)
+    Q_PROPERTY(QStringList txMessages READ txMessages NOTIFY txMessagesChanged)
+    Q_PROPERTY(QString currentTxMessage READ currentTxMessage NOTIFY currentTxMessageChanged)
 
     // === APPENGINE STUB PROPERTIES (TxPanel/Main.qml usa engine = bridge) ===
     Q_PROPERTY(bool swlMode READ swlMode WRITE setSwlMode NOTIFY swlModeChanged)
@@ -542,6 +543,7 @@ public slots:
     Q_INVOKABLE void stopTx();
     Q_INVOKABLE void triggerManualTx() { startTx(); }  // PTT manuale FT2
     Q_INVOKABLE void sendTx(int n);    // usato da TxPanel: seleziona messaggio n e trasmette
+    Q_INVOKABLE void clearTxMessages();
     Q_INVOKABLE void startTune();      // tono continuo fino a stopTune()
     Q_INVOKABLE void stopTune();
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
@@ -674,7 +676,9 @@ signals:
     void utcTimeChanged();
     void tx1Changed(); void tx2Changed(); void tx3Changed();
     void tx4Changed(); void tx5Changed(); void tx6Changed();
+    void txMessagesChanged();
     void currentTxChanged();
+    void currentTxMessageChanged();
     void dxCallChanged(); void dxGridChanged();
     void qsoProgressChanged();
     void reportSentChanged();
@@ -1030,6 +1034,12 @@ private:
     static constexpr int SPECTRUM_FFT_SIZE    = 512;   // legacy WaterfallItem
     static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // nuova alta risoluzione
 
+    QStringList ctyDatSearchPaths() const;
+    bool reloadDxccLookup(QString* loadedPath = nullptr);
+    QString extractDecodedCallsign(const QString& msg, bool isCQ) const;
+    QString extractDecodedGrid(const QString& msg) const;
+    void enrichDecodeEntry(QVariantMap& entry) const;
+    void refreshDecodeListDxcc();
     QStringList parseFt8Row(const QString& row) const;
     QStringList parseJt65Row(const QString& row) const;
     void startAudioCapture();

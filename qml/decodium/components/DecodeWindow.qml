@@ -96,6 +96,10 @@ Window {
         return lines.join("\n")
     }
 
+    function formatBearingDegrees(value) {
+        return value !== undefined && value >= 0 ? Math.round(value) + "°" : ""
+    }
+
     // Shannon: RX Frequency window ±200Hz (sbFtol default) + messaggi diretti a noi
     property int rxBandwidth: 200  // Shannon sbFtol default 200Hz
 
@@ -221,7 +225,7 @@ Window {
                     // Band Activity Column headers
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 22
+                        Layout.preferredHeight: 24
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.7)
                         radius: 3
 
@@ -275,6 +279,34 @@ Window {
                                 color: secondaryCyan
                                 Layout.fillWidth: true
                             }
+                            Item {
+                                Layout.preferredWidth: 120
+                                Layout.fillHeight: true
+                                Text {
+                                    anchors.fill: parent
+                                    text: "DXCC"
+                                    font.family: "Consolas"
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: secondaryCyan
+                                    horizontalAlignment: Text.AlignRight
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Item {
+                                Layout.preferredWidth: 46
+                                Layout.fillHeight: true
+                                Text {
+                                    anchors.fill: parent
+                                    text: "Az"
+                                    font.family: "Consolas"
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: secondaryCyan
+                                    horizontalAlignment: Text.AlignRight
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
                         }
                     }
 
@@ -301,7 +333,7 @@ Window {
 
                             delegate: Rectangle {
                                 width: bandActivityList.width - 12
-                                height: 24
+                                height: 26
                                 color: modelData.isMyCall ?
                                        Qt.rgba(244/255, 67/255, 54/255, 0.25) :
                                        modelData.isCQ ?
@@ -425,18 +457,38 @@ Window {
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
+                                        Layout.minimumWidth: 140
                                         elide: Text.ElideRight
                                     }
 
-                                    // Distanza (se disponibile)
-                                    Text {
-                                        visible: modelData.dxDistance > 0
-                                        text: modelData.dxDistance > 0 ?
-                                              Math.round(modelData.dxDistance) + "km" : ""
-                                        font.pixelSize: 9
-                                        color: "#666688"
-                                        Layout.preferredWidth: 50
-                                        horizontalAlignment: Text.AlignRight
+                                    Item {
+                                        Layout.preferredWidth: 120
+                                        Layout.fillHeight: true
+                                        Text {
+                                            anchors.fill: parent
+                                            text: modelData.dxCountry || ""
+                                            font.family: "Consolas"
+                                            font.pixelSize: 11
+                                            color: modelData.dxIsNewCountry ? colorNewCountry :
+                                                   modelData.dxIsMostWanted ? colorMostWanted : textSecondary
+                                            horizontalAlignment: Text.AlignRight
+                                            verticalAlignment: Text.AlignVCenter
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    Item {
+                                        Layout.preferredWidth: 46
+                                        Layout.fillHeight: true
+                                        Text {
+                                            anchors.fill: parent
+                                            text: formatBearingDegrees(modelData.dxBearing)
+                                            font.family: "Consolas"
+                                            font.pixelSize: 11
+                                            color: secondaryCyan
+                                            horizontalAlignment: Text.AlignRight
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
                                     }
                                 }
                             }
