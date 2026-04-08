@@ -9,7 +9,7 @@
 #include <memory>
 
 // Forward-declare per nascondere le dipendenze Boost/Hamlib dall'header
-class DecodiumTransceiverManagerPrivate;
+struct DecodiumTransceiverManagerPrivate;
 
 class DecodiumTransceiverManager : public QObject
 {
@@ -136,9 +136,6 @@ public:
 public slots:
     Q_INVOKABLE void connectRig();
     Q_INVOKABLE void disconnectRig();
-
-private slots:
-    void teardownDone();
 
 signals:
     void connectedChanged();

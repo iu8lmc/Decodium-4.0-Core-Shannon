@@ -142,8 +142,8 @@
 #include <QPair>
 #include <QVariant>
 #include <QSettings>
-#include <QAudioDeviceInfo>
-#include <QAudioInput>
+#include <QAudioDevice>
+#include <QMediaDevices>
 #include <QDialog>
 #include <QAction>
 #include <QFileDialog>
@@ -492,7 +492,7 @@ class Configuration::impl final
 public:
   using FrequencyDelta = Radio::FrequencyDelta;
   using port_type = Configuration::port_type;
-  using audio_info_type = QPair<QAudioDeviceInfo , QList<QVariant> >;
+  using audio_info_type = QPair<QAudioDevice , QList<QVariant> >;
 
   explicit impl (Configuration * self
                  , QNetworkAccessManager * network_manager
@@ -528,14 +528,14 @@ public:
   Q_SLOT void done (int) override;
 
 private:
-  typedef QList<QAudioDeviceInfo> AudioDevices;
+  typedef QList<QAudioDevice> AudioDevices;
 
   void read_settings ();
   void write_settings ();
 
   void find_audio_devices ();
-  QAudioDeviceInfo find_audio_device (QAudio::Mode, QComboBox *, QString const& device_name);
-  void load_audio_devices (QAudio::Mode, QComboBox *, QAudioDeviceInfo *);
+  QAudioDevice find_audio_device (QAudioDevice::Mode, QComboBox *, QString const& device_name);
+  void load_audio_devices (QAudioDevice::Mode, QComboBox *, QAudioDevice *);
   void update_audio_channels (QComboBox const *, int, QComboBox *, bool);
 
   void load_network_interfaces (CheckableItemComboBox *, QStringList current);
@@ -1022,12 +1022,12 @@ private:
   bool alert_QSYmessage_;
   bool alert_Enabled_;
 
-  QAudioDeviceInfo audio_input_device_;
-  QAudioDeviceInfo next_audio_input_device_;
+  QAudioDevice audio_input_device_;
+  QAudioDevice next_audio_input_device_;
   AudioDevice::Channel audio_input_channel_;
   AudioDevice::Channel next_audio_input_channel_;
-  QAudioDeviceInfo audio_output_device_;
-  QAudioDeviceInfo next_audio_output_device_;
+  QAudioDevice audio_output_device_;
+  QAudioDevice next_audio_output_device_;
   AudioDevice::Channel audio_output_channel_;
   AudioDevice::Channel next_audio_output_channel_;
   FileDownload cty_download;
@@ -1062,9 +1062,9 @@ void Configuration::select_tab (int index) {m_->ui_->configuration_tabs->setCurr
 int Configuration::exec () {return m_->exec ();}
 bool Configuration::is_active () const {return m_->isVisible ();}
 
-QAudioDeviceInfo const& Configuration::audio_input_device () const {return m_->audio_input_device_;}
+QAudioDevice const& Configuration::audio_input_device () const {return m_->audio_input_device_;}
 AudioDevice::Channel Configuration::audio_input_channel () const {return m_->audio_input_channel_;}
-QAudioDeviceInfo const& Configuration::audio_output_device () const {return m_->audio_output_device_;}
+QAudioDevice const& Configuration::audio_output_device () const {return m_->audio_output_device_;}
 AudioDevice::Channel Configuration::audio_output_channel () const {return m_->audio_output_channel_;}
 bool Configuration::restart_audio_input () const {return m_->restart_sound_input_device_;}
 bool Configuration::restart_audio_output () const {return m_->restart_sound_output_device_;}
@@ -1419,12 +1419,12 @@ void Configuration::sync_transceiver (bool force_signal, bool enforce_mode_and_s
 
 void Configuration::invalidate_audio_input_device (QString /* error */)
 {
-  m_->audio_input_device_ = QAudioDeviceInfo {};
+  m_->audio_input_device_ = QAudioDevice {};
 }
 
 void Configuration::invalidate_audio_output_device (QString /* error */)
 {
-  m_->audio_output_device_ = QAudioDeviceInfo {};
+  m_->audio_output_device_ = QAudioDevice {};
 }
 
 // OTP seed can be empty, in which case it is not used, or a valid 16 character base32 string.
@@ -1977,7 +1977,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   , doc_dir_ {doc_path ()}
   , data_dir_ {data_path ()}
   , temp_dir_ {temp_directory}
-  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::DataLocation)}
+  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}
   , lotw_users_ {network_manager_}
   , cloudlog_ {self, network_manager_}
   , restart_sound_input_device_ {false}
@@ -2277,14 +2277,14 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   // set up dynamic loading of audio devices
   connect (ui_->sound_input_combo_box, &LazyFillComboBox::about_to_show_popup, [this] () {
       QGuiApplication::setOverrideCursor (QCursor {Qt::WaitCursor});
-      load_audio_devices (QAudio::AudioInput, ui_->sound_input_combo_box, &next_audio_input_device_);
+      load_audio_devices (QAudioDevice::Input, ui_->sound_input_combo_box, &next_audio_input_device_);
       update_audio_channels (ui_->sound_input_combo_box, ui_->sound_input_combo_box->currentIndex (), ui_->sound_input_channel_combo_box, false);
       ui_->sound_input_channel_combo_box->setCurrentIndex (next_audio_input_channel_);
       QGuiApplication::restoreOverrideCursor ();
     });
   connect (ui_->sound_output_combo_box, &LazyFillComboBox::about_to_show_popup, [this] () {
       QGuiApplication::setOverrideCursor (QCursor {Qt::WaitCursor});
-      load_audio_devices (QAudio::AudioOutput, ui_->sound_output_combo_box, &next_audio_output_device_);
+      load_audio_devices (QAudioDevice::Output, ui_->sound_output_combo_box, &next_audio_output_device_);
       update_audio_channels (ui_->sound_output_combo_box, ui_->sound_output_combo_box->currentIndex (), ui_->sound_output_channel_combo_box, true);
       ui_->sound_output_channel_combo_box->setCurrentIndex (next_audio_output_channel_);
       QGuiApplication::restoreOverrideCursor ();
@@ -2524,7 +2524,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   // - missing file: download immediately
   // - stale file (>30 days): delayed background refresh
   {
-    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
     QFileInfo ctyInfo (dataPath.absoluteFilePath ("cty.dat"));
     bool const missing = !ctyInfo.exists ();
     bool const stale = ctyInfo.exists ()
@@ -3341,9 +3341,9 @@ void Configuration::impl::find_audio_devices ()
   //
   auto saved_name = settings_->value ("SoundInName").toString ();
   if (is_tci_ && tci_audio_) saved_name = "TCI audio";  // TCI
-  if (next_audio_input_device_.deviceName () != saved_name || next_audio_input_device_.isNull ())
+  if (next_audio_input_device_.description () != saved_name || next_audio_input_device_.isNull ())
     {
-      next_audio_input_device_ = find_audio_device (QAudio::AudioInput, ui_->sound_input_combo_box, saved_name);
+      next_audio_input_device_ = find_audio_device (QAudioDevice::Input, ui_->sound_input_combo_box, saved_name);
       next_audio_input_channel_ = AudioDevice::fromString (settings_->value ("AudioInputChannel", "Mono").toString ());
       update_audio_channels (ui_->sound_input_combo_box, ui_->sound_input_combo_box->currentIndex (), ui_->sound_input_channel_combo_box, false);
       ui_->sound_input_channel_combo_box->setCurrentIndex (next_audio_input_channel_);
@@ -3356,9 +3356,9 @@ void Configuration::impl::find_audio_devices ()
   //
   saved_name = settings_->value("SoundOutName").toString();
   if (is_tci_ && tci_audio_) saved_name = "TCI audio";  // TCI
-  if (next_audio_output_device_.deviceName () != saved_name || next_audio_output_device_.isNull ())
+  if (next_audio_output_device_.description () != saved_name || next_audio_output_device_.isNull ())
     {
-      next_audio_output_device_ = find_audio_device (QAudio::AudioOutput, ui_->sound_output_combo_box, saved_name);
+      next_audio_output_device_ = find_audio_device (QAudioDevice::Output, ui_->sound_output_combo_box, saved_name);
       next_audio_output_channel_ = AudioDevice::fromString (settings_->value ("AudioOutputChannel", "Mono").toString ());
       update_audio_channels (ui_->sound_output_combo_box, ui_->sound_output_combo_box->currentIndex (), ui_->sound_output_channel_combo_box, true);
       ui_->sound_output_channel_combo_box->setCurrentIndex (next_audio_output_channel_);
@@ -3447,14 +3447,14 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("SaveDir", save_directory_.absolutePath ());
   settings_->setValue ("AzElDir", azel_directory_.absolutePath ());
   if (!audio_input_device_.isNull ()) {
-      settings_->setValue ("SoundInName", audio_input_device_.deviceName ());
+      settings_->setValue ("SoundInName", audio_input_device_.description ());
       settings_->setValue ("AudioInputChannel", AudioDevice::toString (audio_input_channel_));
   } else if (is_tci_ && tci_audio_) {
     settings_->setValue ("SoundInName", "TCI audio");
     settings_->setValue ("AudioInputChannel", "TCI audio");
   }
   if (!audio_output_device_.isNull ()) {
-    settings_->setValue ("SoundOutName", audio_output_device_.deviceName ());
+    settings_->setValue ("SoundOutName", audio_output_device_.description ());
     settings_->setValue ("AudioOutputChannel", AudioDevice::toString (audio_output_channel_));
   } else if (is_tci_ && tci_audio_) {
     settings_->setValue ("SoundOutName", "TCI audio");
@@ -4601,7 +4601,7 @@ void Configuration::impl::on_rescan_log_push_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CTY_download_button_clicked (bool /*clicked*/)
 {
   ui_->CTY_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   cty_download.configure(network_manager_,
                          "https://www.country-files.com/bigcty/cty.dat",
                          dataPath.absoluteFilePath("cty.dat"),
@@ -4636,7 +4636,7 @@ void Configuration::impl::after_CTY_downloaded ()
 void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4656,7 +4656,7 @@ void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CALL3_EME_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_EME_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4678,7 +4678,7 @@ void Configuration::impl::error_during_CALL3_download (QString const& reason)
   MessageBox::warning_message (this, tr ("Error Loading CALL3.TXT file"), reason);
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
   if (!f.exists()) QFile::copy(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3.TXT");
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
@@ -4695,7 +4695,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 {
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   QFile h {dataPath.absolutePath() + "/" + "CALL3_backup.tmp"};
   if (!g.exists() and h.exists()) {
@@ -4709,7 +4709,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 void Configuration::impl::read_CALL3_version ()
 {
   QString text;
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
+  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
   QFile call3file {dataPath.absolutePath() + "/" + "CALL3.TXT"};
     QTextStream call3stream(&call3file);
     if(call3file.open (QIODevice::ReadOnly | QIODevice::Text)) {
@@ -4914,11 +4914,12 @@ void Configuration::impl::on_cbHighDPI_clicked(bool checked)
       QFile::remove ("DisableHighDpiScaling");
   } else {
       static QFile f("DisableHighDpiScaling");
-      f.open(QIODevice::WriteOnly | QIODevice::Text);
-      QString EventConfig = ("DisableHighDpiScaling=\"true\"");
-      QTextStream out(&f);
-      out << EventConfig;
-      f.close();
+      if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+          QString EventConfig = ("DisableHighDpiScaling=\"true\"");
+          QTextStream out(&f);
+          out << EventConfig;
+          f.close();
+      }
   }
 }
 
@@ -5256,10 +5257,13 @@ void Configuration::impl::merge_frequencies ()
 FrequencyList_v2_101::FrequencyItems Configuration::impl::read_frequencies_file (QString const& file_name)
 {
   QFile frequencies_file {file_name};
-  frequencies_file.open (QFile::ReadOnly);
-  QDataStream ids {&frequencies_file};
   FrequencyList_v2_101::FrequencyItems list;
   FrequencyList_v2::FrequencyItems list_v100;
+  if (!frequencies_file.open (QFile::ReadOnly))
+    {
+      return list;
+    }
+  QDataStream ids {&frequencies_file};
 
   // read file as json if ends with qrg.json.
   if (file_name.endsWith(".qrg.json", Qt::CaseInsensitive))
@@ -5325,7 +5329,10 @@ void Configuration::impl::save_frequencies ()
       bool b_write_json = file_name.endsWith(".qrg.json", Qt::CaseInsensitive);
 
       QFile frequencies_file {file_name};
-      frequencies_file.open (QFile::WriteOnly);
+      if (!frequencies_file.open (QFile::WriteOnly))
+        {
+          return;
+        }
 
       QDataStream ods {&frequencies_file};
 
@@ -6312,28 +6319,47 @@ void Configuration::impl::close_rig ()
     }
 }
 
+namespace
+{
+QList<QAudioDevice> available_audio_devices (QAudioDevice::Mode mode)
+{
+  return mode == QAudioDevice::Input ? QMediaDevices::audioInputs () : QMediaDevices::audioOutputs ();
+}
+
+QList<QVariant> supported_audio_channel_counts (QAudioDevice const& device)
+{
+  QList<QVariant> channel_counts;
+  for (int channel_count = device.minimumChannelCount (); channel_count <= device.maximumChannelCount (); ++channel_count)
+    {
+      channel_counts.append (channel_count);
+    }
+  if (channel_counts.isEmpty ())
+    {
+      auto preferred_channels = device.preferredFormat ().channelCount ();
+      if (preferred_channels > 0)
+        {
+          channel_counts.append (preferred_channels);
+        }
+    }
+  return channel_counts;
+}
+}
+
 // find the audio device that matches the specified name, also
 // populate into the selection combo box with any devices we find in
 // the search
-QAudioDeviceInfo Configuration::impl::find_audio_device (QAudio::Mode mode, QComboBox * combo_box
-                                                         , QString const& device_name)
+QAudioDevice Configuration::impl::find_audio_device (QAudioDevice::Mode mode, QComboBox * combo_box
+                                                     , QString const& device_name)
 {
-  using std::copy;
-  using std::back_inserter;
-
   if (device_name.size ())
     {
       Q_EMIT self_->enumerating_audio_devices ();
-      auto const& devices = QAudioDeviceInfo::availableDevices (mode);
+      auto const devices = available_audio_devices (mode);
       Q_FOREACH (auto const& p, devices)
         {
-          // qDebug () << "Configuration::impl::find_audio_device: input:" << (QAudio::AudioInput == mode) << "name:" << p.deviceName () << "preferred format:" << p.preferredFormat () << "endians:" << p.supportedByteOrders () << "codecs:" << p.supportedCodecs () << "channels:" << p.supportedChannelCounts () << "rates:" << p.supportedSampleRates () << "sizes:" << p.supportedSampleSizes () << "types:" << p.supportedSampleTypes ();
-          if (p.deviceName () == device_name)
+          if (p.description () == device_name)
             {
-              // convert supported channel counts into something we can store in the item model
-              QList<QVariant> channel_counts;
-              auto scc = p.supportedChannelCounts ();
-              copy (scc.cbegin (), scc.cend (), back_inserter (channel_counts));
+              auto channel_counts = supported_audio_channel_counts (p);
               combo_box->insertItem (0, device_name, QVariant::fromValue (audio_info_type {p, channel_counts}));
               combo_box->setCurrentIndex (0);
               return p;
@@ -6350,16 +6376,13 @@ QAudioDeviceInfo Configuration::impl::find_audio_device (QAudio::Mode mode, QCom
 }
 
 // load the available audio devices into the selection combo box
-void Configuration::impl::load_audio_devices(QAudio::Mode mode, QComboBox * combo_box, QAudioDeviceInfo * device)
+void Configuration::impl::load_audio_devices(QAudioDevice::Mode mode, QComboBox * combo_box, QAudioDevice * device)
 {
-    using std::copy;
-    using std::back_inserter;
-
     QString selected_device_name = combo_box->currentText(); // Get the currently selected item text
     combo_box->clear();
 
     Q_EMIT self_->enumerating_audio_devices();
-    auto const& devices = QAudioDeviceInfo::availableDevices(mode);
+    auto const devices = available_audio_devices(mode);
 
     printf ("rig_active_ is: %d and tci_audio_ is %d\n", rig_active_, tci_audio_);
     qDebug () << "qDebug says rig_active_ is: " << rig_active_ << '\n';
@@ -6367,8 +6390,7 @@ void Configuration::impl::load_audio_devices(QAudio::Mode mode, QComboBox * comb
     int current_index = -1;
     if (is_tci_ && tci_audio_) {
           QList<QVariant> channel_counts;
-          QList<int> scc({1});
-          copy (scc.cbegin (), scc.cend (), back_inserter (channel_counts));
+          channel_counts.append (1);
           combo_box->addItem ("TCI audio", channel_counts);
           current_index = 0;
           return;
@@ -6379,22 +6401,15 @@ void Configuration::impl::load_audio_devices(QAudio::Mode mode, QComboBox * comb
 
     Q_FOREACH(auto const& p, devices)
     {
-        // Check if the device supports the "audio/pcm" codec
-        if (!p.supportedCodecs().contains("audio/pcm")) {
-            continue; // Skip devices that do not support "audio/pcm"
-        }
 #ifndef WIN32
-        if (hideCARD_ && p.deviceName().contains("CARD=")) {
+        if (hideCARD_ && p.description().contains("CARD=")) {
             continue; // skip ALSA devices on Linux -- we never use them
         }
 #endif
-        // Convert supported channel counts into something we can store in the item model
-        QList<QVariant> channel_counts;
-        auto scc = p.supportedChannelCounts();
-        copy(scc.cbegin(), scc.cend(), back_inserter(channel_counts));
+        auto channel_counts = supported_audio_channel_counts (p);
 
         audio_info_type info = qMakePair(p, channel_counts);
-        device_items.emplace_back(p.deviceName(), info);
+        device_items.emplace_back(p.description(), info);
     }
 
     // Sort the device items by device name
@@ -6411,7 +6426,7 @@ void Configuration::impl::load_audio_devices(QAudio::Mode mode, QComboBox * comb
         combo_box->addItem(item.first, QVariant::fromValue(item.second));
 
         // Match the device name with the currently selected combo box item
-        if (device->deviceName() == item.first)
+        if (device->description() == item.first || selected_device_name == item.first)
         {
             current_index = i;
             combo_box->setCurrentIndex(current_index);
@@ -6661,11 +6676,13 @@ void Configuration::impl::fill_port_combo_box(QComboBox* cb)
 
     // Sort ports by the numeric value of the port name, if possible
     std::sort(ports.begin(), ports.end(), [](const QSerialPortInfo& a, const QSerialPortInfo& b) {
-        bool isANumeric = a.portName().midRef(3).toInt();
-        bool isBNumeric = b.portName().midRef(3).toInt();
+        bool isANumeric = false;
+        bool isBNumeric = false;
+        int const aPortNumber = a.portName().mid(3).toInt(&isANumeric);
+        int const bPortNumber = b.portName().mid(3).toInt(&isBNumeric);
         if (isANumeric && isBNumeric)
         {
-            return a.portName().midRef(3).toInt() < b.portName().midRef(3).toInt();
+            return aPortNumber < bPortNumber;
         }
         else if (isANumeric)
         {

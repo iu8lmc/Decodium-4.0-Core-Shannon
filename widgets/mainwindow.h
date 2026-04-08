@@ -15,7 +15,7 @@
 #include <QTimer>
 #include <QDateTime>
 #include <QList>
-#include <QAudioDeviceInfo>
+#include <QAudioDevice>
 #include <QStringList>
 #include <QScopedPointer>
 #include <QDir>
@@ -632,10 +632,10 @@ private slots:
                                QString const& mode);
 
 private:
-  Q_SIGNAL void initializeAudioOutputStream (QAudioDeviceInfo,
+  Q_SIGNAL void initializeAudioOutputStream (QAudioDevice,
       unsigned channels, unsigned msBuffered) const;
   Q_SIGNAL void stopAudioOutputStream () const;
-  Q_SIGNAL void startAudioInputStream (QAudioDeviceInfo const&,
+  Q_SIGNAL void startAudioInputStream (QAudioDevice const&,
       int framesPerBuffer, AudioDevice * sink,
       unsigned downSampleFactor, AudioDevice::Channel) const;
   Q_SIGNAL void suspendAudioInputStream () const;

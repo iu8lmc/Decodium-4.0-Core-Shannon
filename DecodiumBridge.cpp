@@ -90,7 +90,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     connect(m_pskReporter, &DecodiumPskReporterLite::connectedChanged,
             this, [this]() { emit pskReporterConnectedChanged(); });
     connect(m_pskReporter, &DecodiumPskReporterLite::errorOccurred,
-            this, [this](const QString& msg) { bridgeLog("PSK Reporter: " + msg); });
+            this, [](const QString& msg) { bridgeLog("PSK Reporter: " + msg); });
 
     // Cloudlog
     m_cloudlog = new DecodiumCloudlogLite(this);
@@ -165,6 +165,8 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                 bool autoStart = catProp("audioAutoStart").toBool();
                 if (c && autoStart && !m_monitoring)
                     QTimer::singleShot(300, this, [this]() { setMonitoring(true); });
+                if (!c && (m_transmitting || m_tuning))
+                    QTimer::singleShot(0, this, [this]() { halt(); });
             }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::errorOccurred, this, [this, backend](const QString& msg) {
@@ -306,7 +308,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         bridgeLog("SoundOutput error: " + msg);
         emit errorMessage("Audio TX: " + msg);
     });
-    connect(m_soundOutput, &SoundOutput::status, this, [this](const QString& msg) {
+    connect(m_soundOutput, &SoundOutput::status, this, [](const QString& msg) {
         bridgeLog("SoundOutput: " + msg);
     });
 
@@ -950,6 +952,7 @@ void DecodiumBridge::clearDecodeList()
 void DecodiumBridge::setCatBackend(const QString& v)
 {
     if (m_catBackend == v) return;
+    halt();
     // Disconnetti il manager attivo prima di cambiare
     if (m_catBackend == "native"  && m_nativeCat->connected())   m_nativeCat->disconnectRig();
     else if (m_catBackend == "omnirig" && m_omniRigCat->connected()) m_omniRigCat->disconnectRig();
@@ -1048,7 +1051,14 @@ void DecodiumBridge::saveSettings()
 
 void DecodiumBridge::shutdown()
 {
+    halt();
     stopRx();
+    if (m_catBackend == "native" && m_nativeCat->connected())
+        m_nativeCat->disconnectRig();
+    else if (m_catBackend == "omnirig" && m_omniRigCat->connected())
+        m_omniRigCat->disconnectRig();
+    else if (m_catBackend == "hamlib" && m_hamlibCat->connected())
+        m_hamlibCat->disconnectRig();
     saveSettings();
 }
 

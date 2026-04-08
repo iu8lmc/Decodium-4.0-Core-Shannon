@@ -36,6 +36,11 @@ namespace
   size_t constexpr num_periods {sizeof (periods) / sizeof (periods[0])};
   // These 10 bands are globally coordinated
   QList<QString> const coordinated_bands = {"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"};
+  std::mt19937& wspr_shuffle_rng ()
+  {
+    static std::mt19937 rng {std::random_device {} ()};
+    return rng;
+  }
 }
 
 //
@@ -422,9 +427,9 @@ auto WSPRBandHopping::next_hop (bool tx_enabled) -> Hop
             {
               // build new random permutations
               m_->rx_permutation_ = target_rx_bands.values ();
-              std::random_shuffle (std::begin (m_->rx_permutation_), std::end (m_->rx_permutation_));
+              std::shuffle (std::begin (m_->rx_permutation_), std::end (m_->rx_permutation_), wspr_shuffle_rng ());
               m_->tx_permutation_ = target_tx_bands.values ();
-              std::random_shuffle (std::begin (m_->tx_permutation_), std::end (m_->tx_permutation_));
+              std::shuffle (std::begin (m_->tx_permutation_), std::end (m_->tx_permutation_), wspr_shuffle_rng ());
               // qDebug () << "New random Rx permutation:" << m_->rx_permutation_
               //           << "random Tx permutation:" << m_->tx_permutation_;
             }
