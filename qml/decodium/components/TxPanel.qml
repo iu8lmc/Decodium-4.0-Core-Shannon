@@ -186,8 +186,8 @@ Item {
 
                 // AutoSQ toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: autoSqBtn.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: autoSqBtn.checked ? primaryBlue : glassBorder
                     border.width: autoSqBtn.checked ? 2 : 1
@@ -196,6 +196,7 @@ Item {
                     Button {
                         id: autoSqBtn
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.autoSeq : false
                         onCheckedChanged: if (engine) engine.autoSeq = checked
@@ -225,8 +226,8 @@ Item {
 
                 // MAM toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: mamBtn.checked ? Qt.rgba(255/255, 152/255, 0, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: mamBtn.checked ? warningOrange : glassBorder
                     border.width: mamBtn.checked ? 2 : 1
@@ -235,6 +236,7 @@ Item {
                     Button {
                         id: mamBtn
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.multiAnswerMode : false
                         onCheckedChanged: if (engine) engine.multiAnswerMode = checked
@@ -271,8 +273,8 @@ Item {
 
                 // Deep toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: deepBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: deepBtn.checked ? accentGreen : glassBorder
                     border.width: deepBtn.checked ? 2 : 1
@@ -281,6 +283,7 @@ Item {
                     Button {
                         id: deepBtn
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.deepSearchEnabled : false
                         onCheckedChanged: if (engine) engine.deepSearchEnabled = checked
@@ -310,8 +313,8 @@ Item {
 
                 // AP toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: apBtn.checked ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: apBtn.checked ? secondaryCyan : glassBorder
                     border.width: apBtn.checked ? 2 : 1
@@ -320,6 +323,7 @@ Item {
                     Button {
                         id: apBtn
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.avgDecodeEnabled : false
                         onCheckedChanged: if (engine) engine.avgDecodeEnabled = checked
@@ -349,8 +353,8 @@ Item {
 
                 // SWL toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: swlBtn.checked ? Qt.rgba(156/255, 39/255, 176/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: swlBtn.checked ? "#9c27b0" : glassBorder
                     border.width: swlBtn.checked ? 2 : 1
@@ -359,6 +363,7 @@ Item {
                     Button {
                         id: swlBtn
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.swlMode : false
                         onCheckedChanged: if (engine) engine.swlMode = checked
@@ -388,8 +393,8 @@ Item {
 
                 // AutoSeq toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: autoSeqBtn2.checked ? primaryBlue : glassBorder
                     border.width: autoSeqBtn2.checked ? 2 : 1
@@ -398,6 +403,7 @@ Item {
                     Button {
                         id: autoSeqBtn2
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.autoSeq : false
                         onCheckedChanged: if (engine) engine.autoSeq = checked
@@ -427,8 +433,8 @@ Item {
 
                 // TX Enable toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: txEnableBtn.checked ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
                     border.color: txEnableBtn.checked ? errorRed : glassBorder
                     border.width: txEnableBtn.checked ? 2 : 1
@@ -437,6 +443,7 @@ Item {
                     Button {
                         id: txEnableBtn
                         anchors.fill: parent
+                        padding: 0
                         checkable: true
                         checked: engine ? engine.txEnabled : false
                         onCheckedChanged: if (engine) engine.txEnabled = checked
@@ -466,8 +473,8 @@ Item {
 
                 // Auto CQ Repeat toggle
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
                     border.color: engine && engine.autoCqRepeat ? successGreen : Qt.alpha(textPrimary, 0.2)
                     border.width: engine && engine.autoCqRepeat ? 2 : 1
@@ -476,6 +483,7 @@ Item {
                     Button {
                         id: autoCqButton
                         anchors.fill: parent
+                        padding: 0
                         background: Rectangle { color: "transparent" }
                         contentItem: Row {
                             spacing: 3
@@ -515,8 +523,8 @@ Item {
                 // Quick Call toggle (come Shannon "Double-click on call sets Tx enable")
                 // Abilita TX automaticamente al doppio click senza premere "Enable TX"
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: engine && engine.startFromTx2 ? Qt.alpha(warningOrange, 0.3) : Qt.alpha(textPrimary, 0.05)
                     border.color: engine && engine.startFromTx2 ? warningOrange : Qt.alpha(textPrimary, 0.2)
                     border.width: engine && engine.startFromTx2 ? 2 : 1
@@ -524,6 +532,7 @@ Item {
 
                     Button {
                         anchors.fill: parent
+                        padding: 0
                         background: Rectangle { color: "transparent" }
                         contentItem: Row {
                             spacing: 3
@@ -551,8 +560,8 @@ Item {
 
                 // TUNE button
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
                     border.color: warningOrange
                     border.width: tuneButton.isTuning ? 2 : 1
@@ -561,6 +570,7 @@ Item {
                     Button {
                         id: tuneButton
                         anchors.fill: parent
+                        padding: 0
                         property bool isTuning: engine && engine.tuning
                         background: Rectangle { color: "transparent" }
                         contentItem: Row {
@@ -594,8 +604,8 @@ Item {
 
                 // HALT button
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
                     color: Qt.alpha(errorRed, 0.3)
                     border.color: errorRed
                     border.width: engine && engine.transmitting ? 2 : 1
@@ -603,6 +613,7 @@ Item {
 
                     Button {
                         anchors.fill: parent
+                        padding: 0
                         background: Rectangle { color: "transparent" }
                         contentItem: Row {
                             spacing: 3

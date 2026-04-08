@@ -551,16 +551,27 @@ void PanadapterItem::geometryChange(const QRectF& newGeom, const QRectF& oldGeom
 void PanadapterItem::mousePressEvent(QMouseEvent* ev)
 {
     int freq = xToFreq((int)ev->position().x());
-    if (ev->button() == Qt::LeftButton)  setRxFreq(freq);
-    else if (ev->button() == Qt::RightButton) setTxFreq(freq);
-    emit frequencySelected(freq);
+    if (ev->button() == Qt::LeftButton) {
+        setTxFreq(freq);
+        emit txFrequencySelected(freq);
+    } else if (ev->button() == Qt::RightButton) {
+        setRxFreq(freq);
+        emit frequencySelected(freq);
+    }
     ev->accept();
 }
 
 void PanadapterItem::mouseMoveEvent(QMouseEvent* ev)
 {
     if (ev->buttons() & Qt::LeftButton) {
-        setRxFreq(xToFreq((int)ev->position().x()));
+        int freq = xToFreq((int)ev->position().x());
+        setTxFreq(freq);
+        emit txFrequencySelected(freq);
+        ev->accept();
+    } else if (ev->buttons() & Qt::RightButton) {
+        int freq = xToFreq((int)ev->position().x());
+        setRxFreq(freq);
+        emit frequencySelected(freq);
         ev->accept();
     }
 }

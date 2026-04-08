@@ -1076,10 +1076,21 @@ void DecodiumBridge::searchPskReporter(const QString& callsign)
 
 void DecodiumBridge::processDecodeDoubleClick(const QString& message,
                                               const QString& timeStr,
-                                              const QString& /*db*/,
+                                              const QString& db,
                                               int audioFreq)
 {
     if (message.isEmpty()) return;
+
+    // Aggiorna il report che invieremo in TX2 basandoci sull'SNR del segnale decodificato
+    if (!db.isEmpty()) {
+        bool ok = false;
+        int snr = db.trimmed().toInt(&ok);
+        if (ok) {
+            QString rpt = (snr >= 0) ? QString("+%1").arg(snr, 2, 10, QChar('0'))
+                                     : QString("-%1").arg(-snr, 2, 10, QChar('0'));
+            setReportSent(rpt);
+        }
+    }
 
     QStringList parts = message.trimmed().split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     if (parts.isEmpty()) return;
@@ -1146,6 +1157,7 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
         m_nTx73 = 0;
         m_txRetryCount = 0;
         m_lastNtx = -1;
+        m_lastCqPidx = -1;
         m_txWatchdogTicks = 0;
     }
 
@@ -1215,6 +1227,12 @@ void DecodiumBridge::genStdMsgs(const QString& hisCall, const QString& hisGrid)
 // 0=IDLE, 1=CALLING_CQ, 2=REPLYING, 3=REPORT, 4=ROGER_REPORT, 5=SIGNOFF, 6=IDLE_QSO
 void DecodiumBridge::advanceQsoState(int txNum)
 {
+    // Quick QSO (Ultra2): salta TX1 → vai diretto a TX2 (come FT2QsoFlowPolicy Ultra2)
+    if (txNum == 1 && m_quickQsoEnabled && m_mode == "FT2") {
+        bridgeLog("advanceQsoState: QuickQSO attivo → salta TX1, va a TX2 (Ultra2)");
+        txNum = 2;
+    }
+
     int progress = 0;
     switch (txNum) {
         case 1: progress = 2; break; // TX1 (risposta CQ)  → REPLYING (in attesa risposta)
@@ -1237,8 +1255,14 @@ void DecodiumBridge::checkAndStartPeriodicTx()
     if (!m_monitoring || m_transmitting || m_tuning) return;
     if (!m_txEnabled && !m_autoCqRepeat) return;
 
-    // FT2 async mode (come Shannon cbAsyncDecode): TX in qualsiasi periodo
-    bool skipPeriodCheck = (m_mode == "FT2" && m_asyncTxEnabled);
+    // FT2 async mode:
+    // - Per risposte QSO (m_txEnabled, stazione DX nota): salta il controllo di periodo
+    //   → risposta immediata alla stazione partner senza aspettare il boundary
+    // - Per AutoCQ (nessuna stazione DX): usa il controllo di periodo normale
+    //   → evita loop CQ continuo (CQ ogni 3.75s senza pausa RX)
+    bool inQsoResponse = (m_mode == "FT2" && m_asyncTxEnabled &&
+                          m_txEnabled && !m_dxCall.isEmpty());
+    bool skipPeriodCheck = inQsoResponse;
 
     if (!skipPeriodCheck) {
         qint64 msNow = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
@@ -1247,13 +1271,20 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         bool isEven = (pidx % 2 == 0);
         bool isOurPeriod = (m_txPeriod == 0) ? isEven : !isEven;
         if (!isOurPeriod) return;
+
+        // Guardia anti-CQ-consecutivi: se l'ultimo CQ è stato nel periodo corrente o
+        // nel periodo immediatamente precedente, aspetta almeno un periodo di pausa RX.
+        bool isCqTx = (m_autoCqRepeat && !m_txEnabled) ||
+                      (m_txEnabled && m_currentTx == 6);
+        if (isCqTx && m_lastCqPidx >= 0 && (pidx - m_lastCqPidx) < 2) {
+            bridgeLog("checkAndStartPeriodicTx: CQ guard — pidx=" + QString::number(pidx) +
+                      " lastCqPidx=" + QString::number(m_lastCqPidx) + " → pausa RX forzata");
+            return;
+        }
     } else {
-        // Shannon m_asyncTxGuardTimer: 100ms guard dopo fine TX (come mainwindow riga 7197/7271)
-        // Evita ritrasmissione immediata prima che PTT sia abbassato e audio settato
-        // La finestra di ascolto FT2 (3.75s) è garantita dal ciclo di decode async
-        // Se una risposta valida arriva, m_asyncLastTxEndMs viene azzerato → guard bypassato
+        // QSO response: Shannon m_asyncTxGuardTimer 100ms dopo fine TX
         qint64 msNow    = QDateTime::currentMSecsSinceEpoch();
-        qint64 guardMs  = 100;  // 100ms — allineato a mainwindow m_asyncTxGuardTimer
+        qint64 guardMs  = 100;
         if (m_asyncLastTxEndMs > 0 && (msNow - m_asyncLastTxEndMs) < guardMs) {
             return;  // in guard PTT
         }
@@ -1308,10 +1339,22 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         bridgeLog("checkAndStartPeriodicTx: TX" + QString::number(m_currentTx) +
                   " retry=" + QString::number(m_txRetryCount) +
                   " async=" + QString::number(m_asyncTxEnabled));
+        // Aggiorna lastCqPidx se stiamo inviando CQ (TX6)
+        if (m_currentTx == 6 && !skipPeriodCheck) {
+            qint64 msNow2 = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
+            int pMs2 = periodMsForMode(m_mode);
+            m_lastCqPidx = (int)(msNow2 / (qint64)pMs2);
+        }
         startTx();
     } else if (m_autoCqRepeat && !m_tx6.isEmpty()) {
         bridgeLog("checkAndStartPeriodicTx: AutoCQ async=" + QString::number(m_asyncTxEnabled));
         advanceQsoState(6);  // CQ → CALLING (0)
+        // Aggiorna lastCqPidx per la guardia anti-consecutivi
+        if (!skipPeriodCheck) {
+            qint64 msNow2 = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
+            int pMs2 = periodMsForMode(m_mode);
+            m_lastCqPidx = (int)(msNow2 / (qint64)pMs2);
+        }
         startTx();
     }
 }
@@ -1356,6 +1399,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     // Shannon (riga 9699-9720): filtro messaggi — solo quelli rilevanti per noi
     // CQ mode (m_bCallingCQ && m_bAutoReply): accetta solo chi ci chiama (parts[0]==m_callsign)
     // Non CQ mode: accetta solo dalla stazione DX corrente; se dxCall vuoto → non rispondere
+    // Shannon: inCqMode attivo solo con autoCqRepeat (allineato a Shannon riga 9699)
     bool inCqMode = m_autoCqRepeat && (m_currentTx == 6);
     if (inCqMode) {
         // Rispondo solo a chi mi ha mandato un messaggio diretto (parts[0] == mia stazione)
@@ -1394,6 +1438,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         m_nTx73 = 0;
         m_txRetryCount = 0;
         m_lastNtx = -1;
+        m_lastCqPidx = -1;
         setDxCall(QString());   // triggers regenerateTxMessages → aggiorna TX6 con callsign corretto
         setDxGrid(QString());
         if (m_multiAnswerMode && !m_callerQueue.isEmpty()) {
@@ -1976,6 +2021,29 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
     }
     if (changed) emit decodeListChanged();
     if (bestSnr > -99) setAsyncSnrDb(bestSnr);
+
+    // Auto-sequenza FT2 async: identico a onFt8DecodeReady
+    // Shannon cbAsyncDecode: quando arriva un decode con il nostro callsign,
+    // elabora auto-seq e avvia TX IMMEDIATAMENTE senza aspettare il boundary del periodo.
+    // IMPORTANTE: checkAndStartPeriodicTx() solo se gotResponse=true.
+    // Il CQ periodico è gestito dal boundary del periodo — chiamarlo qui
+    // incondizionatamente causerebbe loop CQ ogni ~100ms.
+    bool autoSeqActive = m_autoSeq && !m_callsign.isEmpty() &&
+                         (m_txEnabled || m_autoCqRepeat || !m_dxCall.isEmpty());
+    if (autoSeqActive) {
+        bool gotResponse = false;
+        for (const auto& row : rows) {
+            QStringList f = parseFt8Row(row);
+            if (f.size() < 5) continue;
+            if (f[4].contains(m_callsign, Qt::CaseInsensitive)) {
+                autoSequenceStep(f);
+                gotResponse = true;
+            }
+        }
+        // Avvia TX immediatamente solo se abbiamo ricevuto una risposta valida
+        if (gotResponse && !m_transmitting)
+            checkAndStartPeriodicTx();
+    }
 }
 
 void DecodiumBridge::onAsyncDecodeTimer()

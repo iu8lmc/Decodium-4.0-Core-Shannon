@@ -126,6 +126,7 @@ signals:
     void measuredFloorChanged();
     void measuredPeakChanged();
     void frequencySelected(int freq);
+    void txFrequencySelected(int freq);
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
