@@ -23,6 +23,7 @@ Item {
     property color primaryBlue: bridge.themeManager.primaryColor
     property color secondaryCyan: bridge.themeManager.secondaryColor
     property color accentGreen: bridge.themeManager.accentColor
+    property color successGreen: bridge.themeManager.accentColor
     property color warningOrange: bridge.themeManager.warningColor
     property color errorRed: bridge.themeManager.errorColor
     property color textPrimary: bridge.themeManager.textPrimary
@@ -74,715 +75,767 @@ Item {
 
             // ===== Band + Mode toggles row =====
             RowLayout {
+                id: topControlsRow
                 Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(42, topControlsLeft.implicitHeight + 6)
+                Layout.minimumHeight: Math.max(42, topControlsLeft.implicitHeight + 6)
                 spacing: 4
 
-                // Band selector (compact)
-                Rectangle {
-                    Layout.preferredHeight: 28
-                    Layout.preferredWidth: 440
-                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                    border.color: glassBorder
-                    radius: 4
+                Flickable {
+                    id: topControlsFlick
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    contentWidth: topControlsContent.width
+                    contentHeight: topControlsContent.height
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
+                    interactive: contentWidth > width
+                    pressDelay: 0
+                    clip: true
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 1
-                        spacing: 1
+                    Item {
+                        id: topControlsContent
+                        width: topControlsLeft.implicitWidth
+                        height: topControlsLeft.implicitHeight
 
-                        Repeater {
-                            model: ["160", "80", "60", "40", "30", "20", "17", "15", "12", "10", "6"]
+                        Row {
+                            id: topControlsLeft
+                            x: 0
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 4
 
+                            // Band selector (compact)
                             Rectangle {
-                                id: bandRect
-                                width: 38
-                                height: 26
-                                radius: 3
+                                width: 440
+                                height: 28
+                                radius: 4
+                                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                                border.color: glassBorder
 
-                                readonly property bool isSelected: engine && engine.bandManager &&
-                                                                   engine.bandManager.currentBandLambda === (modelData + "M")
-
-                                color: isSelected ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                                border.color: isSelected ? secondaryCyan : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
-                                border.width: isSelected ? 2 : 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData
-                                    font.pixelSize: 10
-                                    font.bold: bandRect.isSelected
-                                    color: bandRect.isSelected ? "#ffffff" : textPrimary
-                                }
-
-                                MouseArea {
-                                    id: bandMa
+                                RowLayout {
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        if (engine && engine.bandManager) {
-                                            engine.bandManager.changeBandByLambda(modelData + "M")
+                                    anchors.margins: 1
+                                    spacing: 1
+
+                                    Repeater {
+                                        model: ["160", "80", "60", "40", "30", "20", "17", "15", "12", "10", "6"]
+
+                                        Rectangle {
+                                            id: bandRect
+                                            width: 38
+                                            height: 26
+                                            radius: 3
+
+                                            readonly property bool isSelected: engine && engine.bandManager &&
+                                                                               engine.bandManager.currentBandLambda === (modelData + "M")
+
+                                            color: isSelected ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                                            border.color: isSelected ? secondaryCyan : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+                                            border.width: isSelected ? 2 : 1
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData
+                                                font.pixelSize: 10
+                                                font.bold: bandRect.isSelected
+                                                color: bandRect.isSelected ? "#ffffff" : textPrimary
+                                            }
+
+                                            MouseArea {
+                                                id: bandMa
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                hoverEnabled: true
+                                                onClicked: {
+                                                    if (engine && engine.bandManager) {
+                                                        engine.bandManager.changeBandByLambda(modelData + "M")
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
-                }
+                        Rectangle {
+                            width: 90
+                            height: 36
+                            radius: 6
+                            color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
+                            border.color: secondaryCyan
+                            border.width: 1
 
-                // Mode selector
-                Rectangle {
-                    Layout.preferredWidth: 90
-                    Layout.preferredHeight: 36
-                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
-                    border.color: secondaryCyan
-                    border.width: 1
-                    radius: 6
+                            ComboBox {
+                                id: modeSelector
+                                anchors.fill: parent
+                                model: ["FT8", "FT4", "FT2", "Q65A", "Q65B", "Q65C", "Q65D", "Q65E", "JT65A", "JT65B", "JT65C", "MSK144"]
+                                currentIndex: {
+                                    var mode = engine ? engine.mode : "FT8"
+                                    var idx = model.indexOf(mode)
+                                    return idx >= 0 ? idx : 0
+                                }
+                                onCurrentTextChanged: if (engine && currentText) engine.mode = currentText
 
-                    ComboBox {
-                        id: modeSelector
-                        anchors.fill: parent
-                        model: ["FT8", "FT4", "FT2", "Q65A", "Q65B", "Q65C", "Q65D", "Q65E", "JT65A", "JT65B", "JT65C", "MSK144"]
-                        currentIndex: {
-                            var mode = engine ? engine.mode : "FT8"
-                            var idx = model.indexOf(mode)
-                            return idx >= 0 ? idx : 0
-                        }
-                        onCurrentTextChanged: if (engine && currentText) engine.mode = currentText
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Text {
+                                    text: modeSelector.displayText
+                                    color: secondaryCyan
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    font.family: "Consolas"
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                                indicator: Item {}
 
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Text {
-                            text: modeSelector.displayText
-                            color: secondaryCyan
-                            font.pixelSize: 13
-                            font.bold: true
-                            font.family: "Consolas"
-                            verticalAlignment: Text.AlignVCenter
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-                        indicator: Item {}
+                                popup: Popup {
+                                    y: modeSelector.height
+                                    width: modeSelector.width
+                                    implicitHeight: contentItem.implicitHeight + 2
+                                    padding: 1
 
-                        popup: Popup {
-                            y: modeSelector.height
-                            width: modeSelector.width
-                            implicitHeight: contentItem.implicitHeight + 2
-                            padding: 1
+                                    contentItem: ListView {
+                                        clip: true
+                                        implicitHeight: contentHeight
+                                        model: modeSelector.popup.visible ? modeSelector.delegateModel : null
+                                        currentIndex: modeSelector.highlightedIndex
+                                    }
 
-                            contentItem: ListView {
-                                clip: true
-                                implicitHeight: contentHeight
-                                model: modeSelector.popup.visible ? modeSelector.delegateModel : null
-                                currentIndex: modeSelector.highlightedIndex
-                            }
-
-                            background: Rectangle {
-                                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-                                border.color: secondaryCyan
-                                radius: 4
+                                    background: Rectangle {
+                                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
+                                        border.color: secondaryCyan
+                                        radius: 4
+                                    }
+                                }
                             }
                         }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: autoSqBtn.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: autoSqBtn.checked ? primaryBlue : glassBorder
+                            border.width: autoSqBtn.checked ? 2 : 1
+
+                            Button {
+                                id: autoSqBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.autoSeq : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.autoSeq = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u26A1"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: autoSqBtn.checked ? primaryBlue : textSecondary
+                                    }
+                                    Text {
+                                        text: "ASQ"
+                                        color: autoSqBtn.checked ? primaryBlue : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: autoSqBtn.checked
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Auto Sequence"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: mamBtn.checked ? Qt.rgba(255/255, 152/255, 0, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: mamBtn.checked ? warningOrange : glassBorder
+                            border.width: mamBtn.checked ? 2 : 1
+
+                            Button {
+                                id: mamBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.multiAnswerMode : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.multiAnswerMode = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u21C6"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: mamBtn.checked ? warningOrange : textSecondary
+                                    }
+                                    Text {
+                                        text: "MAM"
+                                        color: mamBtn.checked ? warningOrange : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: mamBtn.checked
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Multi-Answer Mode (right-click=window)"
+                                ToolTip.delay: 500
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.RightButton
+                                onClicked: txPanel.mamWindowRequested()
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: deepBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: deepBtn.checked ? accentGreen : glassBorder
+                            border.width: deepBtn.checked ? 2 : 1
+
+                            Button {
+                                id: deepBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.deepSearchEnabled : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.deepSearchEnabled = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u25CE"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: deepBtn.checked ? accentGreen : textSecondary
+                                    }
+                                    Text {
+                                        text: "DEEP"
+                                        color: deepBtn.checked ? accentGreen : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: deepBtn.checked
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Deep Search"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: apBtn.checked ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: apBtn.checked ? secondaryCyan : glassBorder
+                            border.width: apBtn.checked ? 2 : 1
+
+                            Button {
+                                id: apBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.avgDecodeEnabled : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.avgDecodeEnabled = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u25C6"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: apBtn.checked ? secondaryCyan : textSecondary
+                                    }
+                                    Text {
+                                        text: "AP"
+                                        color: apBtn.checked ? secondaryCyan : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: apBtn.checked
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "A-Priori Decoding"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: swlBtn.checked ? Qt.rgba(156/255, 39/255, 176/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: swlBtn.checked ? "#9c27b0" : glassBorder
+                            border.width: swlBtn.checked ? 2 : 1
+
+                            Button {
+                                id: swlBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.swlMode : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.swlMode = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u2609"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: swlBtn.checked ? "#9c27b0" : textSecondary
+                                    }
+                                    Text {
+                                        text: "SWL"
+                                        color: swlBtn.checked ? "#9c27b0" : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: swlBtn.checked
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "SWL Mode (Listen Only)"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: autoSeqBtn2.checked ? primaryBlue : glassBorder
+                            border.width: autoSeqBtn2.checked ? 2 : 1
+
+                            Button {
+                                id: autoSeqBtn2
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.autoSeq : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.autoSeq = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u21BB"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: autoSeqBtn2.checked ? primaryBlue : textSecondary
+                                    }
+                                    Text {
+                                        text: "SEQ"
+                                        color: autoSeqBtn2.checked ? primaryBlue : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: autoSeqBtn2.checked
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Auto Sequence"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: txEnableBtn.checked ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: txEnableBtn.checked ? errorRed : glassBorder
+                            border.width: txEnableBtn.checked ? 2 : 1
+
+                            Button {
+                                id: txEnableBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.txEnabled : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.txEnabled = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u25B2"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: txEnableBtn.checked ? errorRed : textSecondary
+                                    }
+                                    Text {
+                                        text: "TX"
+                                        color: txEnableBtn.checked ? errorRed : textSecondary
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Enable TX"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
+                            border.color: engine && engine.autoCqRepeat ? successGreen : Qt.alpha(textPrimary, 0.2)
+                            border.width: engine && engine.autoCqRepeat ? 2 : 1
+
+                            Button {
+                                id: autoCqButton
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "⟳"
+                                        font.pixelSize: 16
+                                        color: engine && engine.autoCqRepeat ? successGreen : textPrimary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "ACQ"
+                                        font.pixelSize: 11
+                                        color: engine && engine.autoCqRepeat ? successGreen : textPrimary
+                                        font.bold: engine && engine.autoCqRepeat
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Auto CQ Repeat\n(Chiama CQ automaticamente fino a risposta)"
+                                ToolTip.delay: 500
+
+                                onClicked: {
+                                    if (engine) {
+                                        if (!engine.autoSeq && !engine.autoCqRepeat) {
+                                            console.log("Auto CQ richiede Auto Seq attivo")
+                                            engine.autoSeq = true
+                                        }
+                                        engine.autoCqRepeat = !engine.autoCqRepeat
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: engine && engine.startFromTx2 ? Qt.alpha(warningOrange, 0.3) : Qt.alpha(textPrimary, 0.05)
+                            border.color: engine && engine.startFromTx2 ? warningOrange : Qt.alpha(textPrimary, 0.2)
+                            border.width: engine && engine.startFromTx2 ? 2 : 1
+
+                            Button {
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "⚡"
+                                        font.pixelSize: 14
+                                        color: engine && engine.startFromTx2 ? warningOrange : textPrimary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Q.Call"
+                                        font.pixelSize: 10
+                                        color: engine && engine.startFromTx2 ? warningOrange : textPrimary
+                                        font.bold: engine && engine.startFromTx2
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Quick Call\n(Doppio click su decode abilita TX automaticamente\ncome Shannon: 'Double-click on call sets Tx enable')"
+                                ToolTip.delay: 500
+                                onClicked: { if (engine) engine.startFromTx2 = !engine.startFromTx2 }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
+                            border.color: warningOrange
+                            border.width: tuneButton.isTuning ? 2 : 1
+
+                            Button {
+                                id: tuneButton
+                                anchors.fill: parent
+                                property bool isTuning: engine && engine.tuning
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u266B"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: warningOrange
+                                    }
+                                    Text {
+                                        text: tuneButton.isTuning ? "Stop" : "TUNE"
+                                        color: warningOrange
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                onClicked: {
+                                    if (engine) {
+                                        if (engine.tuning) engine.stopTune()
+                                        else engine.startTune()
+                                    }
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Tune"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 70
+                            height: 36
+                            radius: 6
+                            color: Qt.alpha(errorRed, 0.3)
+                            border.color: errorRed
+                            border.width: engine && engine.transmitting ? 2 : 1
+
+                            Button {
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Row {
+                                    spacing: 3
+                                    anchors.centerIn: parent
+                                    Text {
+                                        text: "\u25A0"
+                                        font.pixelSize: 14
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: errorRed
+                                    }
+                                    Text {
+                                        text: "HALT"
+                                        color: errorRed
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                onClicked: if (engine) engine.halt()
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Halt TX"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 50
+                            height: 36
+                            radius: 6
+                            visible: engine && engine.mode === "FT2"
+                            color: engine && engine.asyncTxEnabled ? Qt.alpha(secondaryCyan, 0.3) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
+                            border.color: engine && engine.asyncTxEnabled ? secondaryCyan : glassBorder
+                            border.width: 1
+
+                            Button {
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Text {
+                                    text: "ATX"
+                                    color: engine && engine.asyncTxEnabled ? secondaryCyan : textSecondary
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    anchors.centerIn: parent
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                                onClicked: if (engine) engine.asyncTxEnabled = !engine.asyncTxEnabled
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Async TX (FT2)"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        AsyncModeWidget {
+                            id: asyncModeVis
+                            width: 90
+                            height: 50
+                            visible: engine && engine.mode === "FT2"
+                            running: engine ? (engine.asyncTxEnabled || engine.asyncDecodeEnabled) : false
+                            transmitting: engine ? engine.transmitting : false
+                            snr: engine ? engine.asyncSnrDb : -99
+                            ToolTip.visible: hovered
+                            ToolTip.text: "FT2 Async Mode — onda sinusoidale: verde=RX, rosso=TX"
+                            ToolTip.delay: 400
+                        }
+
+                        Rectangle {
+                            width: 50
+                            height: 36
+                            radius: 6
+                            visible: engine && engine.mode === "FT2"
+                            color: engine && engine.dualCarrierEnabled ? Qt.alpha(warningOrange, 0.3) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
+                            border.color: engine && engine.dualCarrierEnabled ? warningOrange : glassBorder
+                            border.width: 1
+
+                            Button {
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Text {
+                                    text: "2xC"
+                                    color: engine && engine.dualCarrierEnabled ? warningOrange : textSecondary
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    anchors.centerIn: parent
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                                onClicked: if (engine) engine.dualCarrierEnabled = !engine.dualCarrierEnabled
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Dual Carrier (-3dB/carrier)"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 50
+                            height: 36
+                            radius: 6
+                            visible: engine && engine.mode === "FT2"
+                            color: engine && engine.manualTxMode ? Qt.alpha(errorRed, 0.4) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
+                            border.color: engine && engine.manualTxMode ? errorRed : glassBorder
+                            border.width: 1
+
+                            Button {
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: Text {
+                                    text: "PTT"
+                                    color: engine && engine.manualTxMode ? errorRed : textSecondary
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    anchors.centerIn: parent
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                                onClicked: {
+                                    if (engine) {
+                                        if (!engine.manualTxMode) engine.manualTxMode = true
+                                        else engine.triggerManualTx()
+                                    }
+                                }
+                                onPressAndHold: if (engine) engine.manualTxMode = false
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Manual TX: Click=transmit, Long press=disable"
+                                ToolTip.delay: 500
+                            }
+                        }
                     }
+
                 }
 
-                // AutoSQ toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: autoSqBtn.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: autoSqBtn.checked ? primaryBlue : glassBorder
-                    border.width: autoSqBtn.checked ? 2 : 1
-                    radius: 6
+                RowLayout {
+                    id: topControlsRight
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 4
 
-                    Button {
-                        id: autoSqBtn
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.autoSeq : false
-                        onCheckedChanged: if (engine) engine.autoSeq = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
+                    Rectangle {
+                        width: 80
+                        height: 36
+                        radius: 6
+                        color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
+                        border.color: accentGreen
+                        border.width: 1
+
+                        Row {
                             anchors.centerIn: parent
+                            spacing: 3
                             Text {
-                                text: "\u26A1"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: autoSqBtn.checked ? primaryBlue : textSecondary
-                            }
-                            Text {
-                                text: "ASQ"
-                                color: autoSqBtn.checked ? primaryBlue : textSecondary
+                                text: "\u25BC"
+                                color: accentGreen
                                 font.pixelSize: 10
-                                font.bold: autoSqBtn.checked
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: engine ? engine.rxFrequency : "0"
+                                color: accentGreen
+                                font.pixelSize: 11
+                                font.bold: true
+                                font.family: "Consolas"
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Auto Sequence"
+
+                        ToolTip.visible: rxFreqMouse.containsMouse
+                        ToolTip.text: "RX Frequency"
                         ToolTip.delay: 500
-                    }
-                }
 
-                // MAM toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: mamBtn.checked ? Qt.rgba(255/255, 152/255, 0, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: mamBtn.checked ? warningOrange : glassBorder
-                    border.width: mamBtn.checked ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: mamBtn
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.multiAnswerMode : false
-                        onCheckedChanged: if (engine) engine.multiAnswerMode = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "\u21C6"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: mamBtn.checked ? warningOrange : textSecondary
-                            }
-                            Text {
-                                text: "MAM"
-                                color: mamBtn.checked ? warningOrange : textSecondary
-                                font.pixelSize: 10
-                                font.bold: mamBtn.checked
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
+                        MouseArea {
+                            id: rxFreqMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Multi-Answer Mode (right-click=window)"
-                        ToolTip.delay: 500
                     }
 
-                    // Right-click to open MAM window
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.RightButton
-                        onClicked: txPanel.mamWindowRequested()
-                    }
-                }
+                    Rectangle {
+                        width: 80
+                        height: 36
+                        radius: 6
+                        color: Qt.rgba(244/255, 67/255, 54/255, 0.15)
+                        border.color: errorRed
+                        border.width: 1
 
-                // Deep toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: deepBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: deepBtn.checked ? accentGreen : glassBorder
-                    border.width: deepBtn.checked ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: deepBtn
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.deepSearchEnabled : false
-                        onCheckedChanged: if (engine) engine.deepSearchEnabled = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
+                        Row {
                             anchors.centerIn: parent
-                            Text {
-                                text: "\u25CE"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: deepBtn.checked ? accentGreen : textSecondary
-                            }
-                            Text {
-                                text: "DEEP"
-                                color: deepBtn.checked ? accentGreen : textSecondary
-                                font.pixelSize: 10
-                                font.bold: deepBtn.checked
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Deep Search"
-                        ToolTip.delay: 500
-                    }
-                }
-
-                // AP toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: apBtn.checked ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: apBtn.checked ? secondaryCyan : glassBorder
-                    border.width: apBtn.checked ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: apBtn
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.avgDecodeEnabled : false
-                        onCheckedChanged: if (engine) engine.avgDecodeEnabled = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
                             spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "\u25C6"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: apBtn.checked ? secondaryCyan : textSecondary
-                            }
-                            Text {
-                                text: "AP"
-                                color: apBtn.checked ? secondaryCyan : textSecondary
-                                font.pixelSize: 10
-                                font.bold: apBtn.checked
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "A-Priori Decoding"
-                        ToolTip.delay: 500
-                    }
-                }
-
-                // SWL toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: swlBtn.checked ? Qt.rgba(156/255, 39/255, 176/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: swlBtn.checked ? "#9c27b0" : glassBorder
-                    border.width: swlBtn.checked ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: swlBtn
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.swlMode : false
-                        onCheckedChanged: if (engine) engine.swlMode = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "\u2609"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: swlBtn.checked ? "#9c27b0" : textSecondary
-                            }
-                            Text {
-                                text: "SWL"
-                                color: swlBtn.checked ? "#9c27b0" : textSecondary
-                                font.pixelSize: 10
-                                font.bold: swlBtn.checked
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "SWL Mode (Listen Only)"
-                        ToolTip.delay: 500
-                    }
-                }
-
-                // AutoSeq toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: autoSeqBtn2.checked ? primaryBlue : glassBorder
-                    border.width: autoSeqBtn2.checked ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: autoSeqBtn2
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.autoSeq : false
-                        onCheckedChanged: if (engine) engine.autoSeq = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "\u21BB"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: autoSeqBtn2.checked ? primaryBlue : textSecondary
-                            }
-                            Text {
-                                text: "SEQ"
-                                color: autoSeqBtn2.checked ? primaryBlue : textSecondary
-                                font.pixelSize: 10
-                                font.bold: autoSeqBtn2.checked
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Auto Sequence"
-                        ToolTip.delay: 500
-                    }
-                }
-
-                // TX Enable toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: txEnableBtn.checked ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                    border.color: txEnableBtn.checked ? errorRed : glassBorder
-                    border.width: txEnableBtn.checked ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: txEnableBtn
-                        anchors.fill: parent
-                        checkable: true
-                        checked: engine ? engine.txEnabled : false
-                        onCheckedChanged: if (engine) engine.txEnabled = checked
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
                             Text {
                                 text: "\u25B2"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: txEnableBtn.checked ? errorRed : textSecondary
-                            }
-                            Text {
-                                text: "TX"
-                                color: txEnableBtn.checked ? errorRed : textSecondary
+                                color: errorRed
                                 font.pixelSize: 10
-                                font.bold: true
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Enable TX"
-                        ToolTip.delay: 500
-                    }
-                }
-
-                // Auto CQ Repeat toggle
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
-                    border.color: engine && engine.autoCqRepeat ? successGreen : Qt.alpha(textPrimary, 0.2)
-                    border.width: engine && engine.autoCqRepeat ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: autoCqButton
-                        anchors.fill: parent
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "⟳"  // Unicode circular arrow
-                                font.pixelSize: 16
-                                color: engine && engine.autoCqRepeat ? successGreen : textPrimary
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
-                                text: "ACQ"
+                                text: engine ? engine.txFrequency : "0"
+                                color: errorRed
                                 font.pixelSize: 11
-                                color: engine && engine.autoCqRepeat ? successGreen : textPrimary
-                                font.bold: engine && engine.autoCqRepeat
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Auto CQ Repeat\n(Chiama CQ automaticamente fino a risposta)"
-                        ToolTip.delay: 500
-
-                        onClicked: {
-                            if (engine) {
-                                // Auto CQ requires Auto Seq to be enabled
-                                if (!engine.autoSeq && !engine.autoCqRepeat) {
-                                    console.log("Auto CQ richiede Auto Seq attivo")
-                                    // Auto-enable Auto Seq when enabling Auto CQ
-                                    engine.autoSeq = true
-                                }
-                                engine.autoCqRepeat = !engine.autoCqRepeat
-                            }
-                        }
-                    }
-                }
-
-                // Quick Call toggle (come Shannon "Double-click on call sets Tx enable")
-                // Abilita TX automaticamente al doppio click senza premere "Enable TX"
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: engine && engine.startFromTx2 ? Qt.alpha(warningOrange, 0.3) : Qt.alpha(textPrimary, 0.05)
-                    border.color: engine && engine.startFromTx2 ? warningOrange : Qt.alpha(textPrimary, 0.2)
-                    border.width: engine && engine.startFromTx2 ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        anchors.fill: parent
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "⚡"
-                                font.pixelSize: 14
-                                color: engine && engine.startFromTx2 ? warningOrange : textPrimary
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: "Q.Call"
-                                font.pixelSize: 10
-                                color: engine && engine.startFromTx2 ? warningOrange : textPrimary
-                                font.bold: engine && engine.startFromTx2
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Quick Call\n(Doppio click su decode abilita TX automaticamente\ncome Shannon: 'Double-click on call sets Tx enable')"
-                        ToolTip.delay: 500
-                        onClicked: { if (engine) engine.startFromTx2 = !engine.startFromTx2 }
-                    }
-                }
-
-                // TUNE button
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
-                    border.color: warningOrange
-                    border.width: tuneButton.isTuning ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        id: tuneButton
-                        anchors.fill: parent
-                        property bool isTuning: engine && engine.tuning
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "\u266B"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: warningOrange
-                            }
-                            Text {
-                                text: tuneButton.isTuning ? "Stop" : "TUNE"
-                                color: warningOrange
-                                font.pixelSize: 10
                                 font.bold: true
+                                font.family: "Consolas"
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
-                        onClicked: {
-                            if (engine) {
-                                if (engine.tuning) engine.stopTune()
-                                else engine.startTune()
-                            }
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Tune"
+
+                        ToolTip.visible: txFreqMouse.containsMouse
+                        ToolTip.text: "TX Frequency"
                         ToolTip.delay: 500
-                    }
-                }
 
-                // HALT button
-                Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 36
-                    color: Qt.alpha(errorRed, 0.3)
-                    border.color: errorRed
-                    border.width: engine && engine.transmitting ? 2 : 1
-                    radius: 6
-
-                    Button {
-                        anchors.fill: parent
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text {
-                                text: "\u25A0"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: errorRed
-                            }
-                            Text {
-                                text: "HALT"
-                                color: errorRed
-                                font.pixelSize: 10
-                                font.bold: true
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                        onClicked: if (engine) engine.halt()
-                        ToolTip.visible: hovered
-                        ToolTip.text: "Halt TX"
-                        ToolTip.delay: 500
-                    }
-                }
-
-                // Raptor: Async TX (FT2 only)
-                Rectangle {
-                    Layout.preferredWidth: 50
-                    Layout.preferredHeight: 36
-                    color: engine && engine.asyncTxEnabled ? Qt.alpha(secondaryCyan, 0.3) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-                    border.color: engine && engine.asyncTxEnabled ? secondaryCyan : glassBorder
-                    border.width: 1
-                    radius: 6
-                    visible: engine && engine.mode === "FT2"
-                    Button {
-                        anchors.fill: parent
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Text { text: "ATX"; color: engine && engine.asyncTxEnabled ? secondaryCyan : textSecondary; font.pixelSize: 9; font.bold: true; anchors.centerIn: parent; horizontalAlignment: Text.AlignHCenter }
-                        onClicked: if (engine) engine.asyncTxEnabled = !engine.asyncTxEnabled
-                        ToolTip.visible: hovered; ToolTip.text: "Async TX (FT2)"; ToolTip.delay: 500
-                    }
-                }
-
-                // AsyncModeWidget — onda sinusoidale animata (sempre visibile in FT2)
-                AsyncModeWidget {
-                    id: asyncModeVis
-                    Layout.preferredWidth:  90
-                    Layout.preferredHeight: 50
-                    Layout.alignment:       Qt.AlignVCenter
-                    visible:      engine && engine.mode === "FT2"
-                    running:      engine ? (engine.asyncTxEnabled || engine.asyncDecodeEnabled) : false
-                    transmitting: engine ? engine.transmitting : false
-                    snr:          engine ? engine.asyncSnrDb   : -99
-                    ToolTip.visible: hovered
-                    ToolTip.text:    "FT2 Async Mode — onda sinusoidale: verde=RX, rosso=TX"
-                    ToolTip.delay:   400
-                }
-
-                // Raptor: Dual Carrier (FT2 only)
-                Rectangle {
-                    Layout.preferredWidth: 50
-                    Layout.preferredHeight: 36
-                    color: engine && engine.dualCarrierEnabled ? Qt.alpha(warningOrange, 0.3) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-                    border.color: engine && engine.dualCarrierEnabled ? warningOrange : glassBorder
-                    border.width: 1
-                    radius: 6
-                    visible: engine && engine.mode === "FT2"
-                    Button {
-                        anchors.fill: parent
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Text { text: "2xC"; color: engine && engine.dualCarrierEnabled ? warningOrange : textSecondary; font.pixelSize: 9; font.bold: true; anchors.centerIn: parent; horizontalAlignment: Text.AlignHCenter }
-                        onClicked: if (engine) engine.dualCarrierEnabled = !engine.dualCarrierEnabled
-                        ToolTip.visible: hovered; ToolTip.text: "Dual Carrier (-3dB/carrier)"; ToolTip.delay: 500
-                    }
-                }
-
-                // Raptor: Manual TX PTT
-                Rectangle {
-                    Layout.preferredWidth: 50
-                    Layout.preferredHeight: 36
-                    color: engine && engine.manualTxMode ? Qt.alpha(errorRed, 0.4) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-                    border.color: engine && engine.manualTxMode ? errorRed : glassBorder
-                    border.width: 1
-                    radius: 6
-                    visible: engine && engine.mode === "FT2"
-                    Button {
-                        anchors.fill: parent
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Text { text: "PTT"; color: engine && engine.manualTxMode ? errorRed : textSecondary; font.pixelSize: 10; font.bold: true; anchors.centerIn: parent; horizontalAlignment: Text.AlignHCenter }
-                        onClicked: {
-                            if (engine) {
-                                if (!engine.manualTxMode) engine.manualTxMode = true
-                                else engine.triggerManualTx()
-                            }
-                        }
-                        onPressAndHold: if (engine) engine.manualTxMode = false
-                        ToolTip.visible: hovered; ToolTip.text: "Manual TX: Click=transmit, Long press=disable"; ToolTip.delay: 500
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // RX Frequency
-                Rectangle {
-                    Layout.preferredWidth: 80
-                    Layout.preferredHeight: 36
-                    color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
-                    border.color: accentGreen
-                    border.width: 1
-                    radius: 6
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        Text {
-                            text: "\u25BC"
-                            color: accentGreen
-                            font.pixelSize: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: engine ? engine.rxFrequency : "0"
-                            color: accentGreen
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: "Consolas"
-                            anchors.verticalCenter: parent.verticalCenter
+                        MouseArea {
+                            id: txFreqMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
                         }
                     }
-
-                    ToolTip.visible: rxFreqMouse.containsMouse
-                    ToolTip.text: "RX Frequency"
-                    ToolTip.delay: 500
-
-                    MouseArea {
-                        id: rxFreqMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                    }
                 }
-
-                // TX Frequency
-                Rectangle {
-                    Layout.preferredWidth: 80
-                    Layout.preferredHeight: 36
-                    color: Qt.rgba(244/255, 67/255, 54/255, 0.15)
-                    border.color: errorRed
-                    border.width: 1
-                    radius: 6
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        Text {
-                            text: "\u25B2"
-                            color: errorRed
-                            font.pixelSize: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: engine ? engine.txFrequency : "0"
-                            color: errorRed
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: "Consolas"
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    ToolTip.visible: txFreqMouse.containsMouse
-                    ToolTip.text: "TX Frequency"
-                    ToolTip.delay: 500
-
-                    MouseArea {
-                        id: txFreqMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                    }
-                }
-
             }
 
             // DX Station info row
