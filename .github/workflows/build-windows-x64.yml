@@ -41,6 +41,7 @@ jobs:
           install: >-
             git
             make
+            mingw-w64-x86_64-gcc-fortran
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
@@ -91,7 +92,7 @@ jobs:
           cmake --version
           ninja --version
           g++ --version
-          gfortran --version
+          /mingw64/bin/gfortran --version
           qmake6 -v || true
           /mingw64/bin/windeployqt6.exe --version || /mingw64/bin/windeployqt.exe --version || true
 
@@ -101,6 +102,7 @@ jobs:
           cmake -S . -B build-windows -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran \
             -DBUILD_TESTING=OFF \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
