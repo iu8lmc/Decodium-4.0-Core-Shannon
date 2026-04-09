@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+env:
+  HAMLIB_TAG: "4.7.1"
+  HAMLIB_VERSION: "4.7.1"
+
 jobs:
   build-windows-x64:
     runs-on: windows-2022
@@ -36,6 +40,7 @@ jobs:
           cache: true
           install: >-
             git
+            make
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
@@ -54,11 +59,19 @@ jobs:
             mingw-w64-x86_64-qt6-tools
             mingw-w64-x86_64-qt6-websockets
 
-      - name: Install Hamlib package
+      - name: Build and install Hamlib
         run: |
           set -euo pipefail
-          pacman -S --needed --noconfirm mingw-w64-x86_64-hamlib \
-            || pacman -S --needed --noconfirm mingw-w64-x86_64-libhamlib
+          curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" \
+            "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix=/mingw64 --disable-static --enable-shared
+          make -j"$(nproc)"
+          make install
+          echo "/mingw64/bin" >> "${GITHUB_PATH}"
+          echo "PKG_CONFIG_PATH=/mingw64/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "${GITHUB_ENV}"
+          /mingw64/bin/rigctl --version
 
       - name: Resolve build version
         run: |
