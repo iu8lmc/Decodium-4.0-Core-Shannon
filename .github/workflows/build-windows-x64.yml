@@ -82,8 +82,23 @@ jobs:
         run: |
           set -euo pipefail
           HAMLIB_PREFIX="$(cygpath -u "$GITHUB_WORKSPACE")/.ci/hamlib-mingw64"
+          HAMLIB_INCLUDE_DIR="${HAMLIB_PREFIX}/include"
+          HAMLIB_LIBRARY="$(find "${HAMLIB_PREFIX}/lib" -maxdepth 1 \( -name 'libhamlib*.dll.a' -o -name 'libhamlib*.a' -o -name 'libhamlib*.dll' \) | sort | head -n1)"
+          RIGCTL_EXE="${HAMLIB_PREFIX}/bin/rigctl"
+          RIGCTLD_EXE="${HAMLIB_PREFIX}/bin/rigctld"
+          RIGCTLCOM_EXE="${HAMLIB_PREFIX}/bin/rigctlcom"
+
+          test -f "${HAMLIB_INCLUDE_DIR}/hamlib/rig.h"
+          test -n "${HAMLIB_LIBRARY}"
+          test -x "${RIGCTL_EXE}"
+
           echo "$(cygpath -w "${HAMLIB_PREFIX}/bin")" >> "${GITHUB_PATH}"
           echo "HAMLIB_PREFIX=${HAMLIB_PREFIX}" >> "${GITHUB_ENV}"
+          echo "HAMLIB_INCLUDE_DIR=${HAMLIB_INCLUDE_DIR}" >> "${GITHUB_ENV}"
+          echo "HAMLIB_LIBRARY=${HAMLIB_LIBRARY}" >> "${GITHUB_ENV}"
+          echo "RIGCTL_EXE=${RIGCTL_EXE}" >> "${GITHUB_ENV}"
+          echo "RIGCTLD_EXE=${RIGCTLD_EXE}" >> "${GITHUB_ENV}"
+          echo "RIGCTLCOM_EXE=${RIGCTLCOM_EXE}" >> "${GITHUB_ENV}"
           echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig" >> "${GITHUB_ENV}"
           "${HAMLIB_PREFIX}/bin/rigctl" --version
 
@@ -113,7 +128,12 @@ jobs:
           set -euo pipefail
           cmake -S . -B build-windows -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DCMAKE_PREFIX_PATH="${HAMLIB_PREFIX};/mingw64" \
+            -DHamlib_INCLUDE_DIR="${HAMLIB_INCLUDE_DIR}" \
+            -DHamlib_LIBRARY="${HAMLIB_LIBRARY}" \
+            -DRIGCTL_EXE="${RIGCTL_EXE}" \
+            -DRIGCTLD_EXE="${RIGCTLD_EXE}" \
+            -DRIGCTLCOM_EXE="${RIGCTLCOM_EXE}" \
             -DBUILD_TESTING=OFF \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
