@@ -36,6 +36,21 @@ struct EchoAnalysisResult
   QString rxcall;
 };
 
+struct SpectrumPlotState
+{
+  std::array<float, NSMAX> syellow {};
+  std::array<float, 3457> ref {};
+  std::array<float, 3457> filter {};
+};
+
+struct EchoPlotState
+{
+  int nclearave {0};
+  int nsum {0};
+  std::array<float, 4096> blue {};
+  std::array<float, 4096> red {};
+};
+
 struct Jt65SymspecResult
 {
   int nqsym {0};
@@ -100,9 +115,32 @@ struct Jt65Decode65aResult
   QByteArray decoded;
 };
 
+struct Jt65SharedStateView
+{
+  int const* param {nullptr};
+  int const* mrs {nullptr};
+  int const* mrs2 {nullptr};
+  int const* mdat {nullptr};
+  int const* mref {nullptr};
+  int const* mdat2 {nullptr};
+  int const* mref2 {nullptr};
+  float const* pr {nullptr};
+  float const* s3a {nullptr};
+  float width {0.0f};
+  int const* correct {nullptr};
+  float sync_threshold {0.0f};
+  float refspec_dfref {0.0f};
+  float const* refspec_ref {nullptr};
+  float const* sync_ss {nullptr};
+};
+
 void wav12_inplace (short* d2_io, int* npts_io, short sample_bits);
 QString freqcal_line (short const* id2, int k, int nkhz, int noffset, int ntol);
 CalibrationSolution calibrate_freqcal_directory (QString const& data_dir);
+SpectrumPlotState& spectrum_plot_state ();
+void clear_spectrum_plot_state ();
+EchoPlotState& echo_plot_state ();
+void clear_echo_plot_state ();
 void reset_refspectrum_state ();
 void refspectrum_update (short* id2, bool clear_reference, bool accumulate_reference,
                          bool use_reference, QString const& file_path);
@@ -114,6 +152,20 @@ std::vector<Jt65SyncCandidate> sync65_compute (int nfa, int nfb, int ntol, int n
                                                bool robust, bool vhf, float thresh0);
 void graycode65_inplace (int* dat, int n, int idir);
 void interleave63_inplace (int* data, int idir);
+void smooth121_inplace (float* x, int nz);
+void lorentzian_fit (float const* y, int npts, std::array<float, 5>* a_out);
+void subtract65_inplace (float* dd, int npts, float f0, float dt);
+void set_jt65_data_dir_hint (QByteArray const& path);
+void jt65_initialize_tables ();
+Jt65SharedStateView jt65_shared_state ();
+void jt65_set_mode_width (float width);
+float jt65_mode_width ();
+void jt65_set_sync_threshold (float thresh0);
+float jt65_sync_threshold ();
+void jt65_set_decode_smoothing (int nsmo);
+int jt65_decode_smoothing ();
+void jt65_store_symspec_state (Jt65SymspecResult const& result);
+void jt65_store_extract_state (Jt65ExtractResult const& result);
 Jt65Demod64aResult demod64a_compute (float const* s3, int nadd, float afac1);
 Jt65ExtractResult extract_compute (float const* s3, int nadd, int mode65, int ntrials,
                                    int naggressive, int ndepth, int nflip,
@@ -144,7 +196,9 @@ void load_echo_params (short const id2[15], int* ndop_total, int* ndop_audio, in
                        float* f1, float* fspread, int* tone_spacing, int itone[6]);
 EchoAnalysisResult avecho_update (short const* id2, int ndop, int nfrit, int nauto, int ndf,
                                   int navg, float f1, float width, bool disk_data,
-                                  bool echo_call, QString const& txcall);
+                                  bool echo_call, QString const& txcall,
+                                  int nclearave = 0, float fspread_self = 0.0f,
+                                  float fspread_dx = 0.0f);
 
 }
 }

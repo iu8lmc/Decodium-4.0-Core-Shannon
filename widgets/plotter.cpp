@@ -8,6 +8,7 @@
 #include <QMouseEvent>
 #include <QDebug>
 #include "PlotLegacyHelpers.hpp"
+#include "Detector/LegacyDspIoHelpers.hpp"
 #include "qt_helpers.hpp"
 #include "commons.h"
 #include "moc_plotter.cpp"
@@ -228,6 +229,7 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
 
   float y2min=1.e30;
   float y2max=-1.e30;
+  auto& plot_state = decodium::legacy::spectrum_plot_state ();
   for(int i=0; i<iz; i++) {
     y=swide[i] - ymin;
     y2=0;
@@ -248,7 +250,7 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
       float sum=0.0;
       int j=j0+m_binsPerPixel*i;
       for(int k=0; k<m_binsPerPixel; k++) {
-        sum+=spectra_.syellow[j++];
+        sum+=plot_state.syellow[static_cast<std::size_t> (j++)];
       }
       y2=2.0*gain2d*sum/m_binsPerPixel + m_plot2dZero;
     }
@@ -256,8 +258,8 @@ void CPlotter::draw(float swide[], bool bScroll, bool bRed)
     if(m_bReference) {                                   //Reference (red)
       float df_ref=12000.0/6912.0;
       int j=FreqfromX(i)/df_ref + 0.5;
-      y2=spectra_.ref[j] + m_plot2dZero;
-//      if(gain2d>1.5) y2=spectra_.filter[j] + m_plot2dZero;
+      y2=plot_state.ref[static_cast<std::size_t> (j)] + m_plot2dZero;
+//      if(gain2d>1.5) y2=plot_state.filter[static_cast<std::size_t> (j)] + m_plot2dZero;
 
     }
 

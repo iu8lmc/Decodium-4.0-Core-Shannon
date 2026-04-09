@@ -3739,6 +3739,475 @@ MainWindow::~MainWindow()
   memset(ipc_qmap,0,4096);         //Zero all of QMAP shared memory
 }
 
+QString MainWindow::legacyCallsign() const
+{
+  return m_config.my_callsign();
+}
+
+QString MainWindow::legacyGrid() const
+{
+  return m_config.my_grid();
+}
+
+QString MainWindow::legacyMode() const
+{
+  return m_mode;
+}
+
+QString MainWindow::legacyRigName() const
+{
+  return m_config.rig_name();
+}
+
+MainWindow::Frequency MainWindow::legacyDialFrequency() const
+{
+  return m_freqNominal;
+}
+
+int MainWindow::legacyRxFrequency() const
+{
+  return ui && ui->RxFreqSpinBox ? ui->RxFreqSpinBox->value() : 0;
+}
+
+int MainWindow::legacyTxFrequency() const
+{
+  if (!ui) {
+    return 0;
+  }
+  if (m_mode == "WSPR" || m_mode == "FST4W") {
+    return ui->WSPRfreqSpinBox ? ui->WSPRfreqSpinBox->value() : 0;
+  }
+  return ui->TxFreqSpinBox ? ui->TxFreqSpinBox->value() : 0;
+}
+
+QString MainWindow::legacyAudioInputDeviceName() const
+{
+  return m_config.audio_input_device().description();
+}
+
+QString MainWindow::legacyAudioOutputDeviceName() const
+{
+  return m_config.audio_output_device().description();
+}
+
+int MainWindow::legacyAudioInputChannel() const
+{
+  return static_cast<int> (m_config.audio_input_channel ());
+}
+
+int MainWindow::legacyAudioOutputChannel() const
+{
+  return static_cast<int> (m_config.audio_output_channel ());
+}
+
+QString MainWindow::legacyWaterfallPalette() const
+{
+  if (m_wideGraph)
+    {
+      return m_wideGraph->waterfallPaletteName ();
+    }
+  return m_settings ? m_settings->value ("WideGraph/WaterfallPalette", "Default").toString ()
+                    : QStringLiteral ("Default");
+}
+
+bool MainWindow::legacyMonitoring() const
+{
+  return m_monitoring;
+}
+
+bool MainWindow::legacyTransmitting() const
+{
+  return m_transmitting;
+}
+
+bool MainWindow::legacyTuning() const
+{
+  return m_tune;
+}
+
+bool MainWindow::legacyCatConnected() const
+{
+  return m_config.is_transceiver_online();
+}
+
+double MainWindow::legacySignalLevel() const
+{
+  if (!m_monitoring && !m_diskData) {
+    return 0.0;
+  }
+
+  return qMax(0.0, static_cast<double>(m_px));
+}
+
+int MainWindow::legacyBandActivityRevision() const
+{
+  return (ui && ui->decodedTextBrowser && ui->decodedTextBrowser->document ())
+      ? ui->decodedTextBrowser->document ()->revision ()
+      : -1;
+}
+
+QStringList MainWindow::legacyBandActivityLines() const
+{
+  if (!ui || !ui->decodedTextBrowser) {
+    return {};
+  }
+
+  return ui->decodedTextBrowser->toPlainText ()
+      .split (QRegularExpression {"[\r\n]+"}, SkipEmptyParts);
+}
+
+int MainWindow::legacyRxFrequencyRevision() const
+{
+  return (ui && ui->decodedTextBrowser2 && ui->decodedTextBrowser2->document ())
+      ? ui->decodedTextBrowser2->document ()->revision ()
+      : -1;
+}
+
+QStringList MainWindow::legacyRxFrequencyLines() const
+{
+  if (!ui || !ui->decodedTextBrowser2) {
+    return {};
+  }
+
+  return ui->decodedTextBrowser2->toPlainText ()
+      .split (QRegularExpression {"[\r\n]+"}, SkipEmptyParts);
+}
+
+void MainWindow::legacyClearBandActivity()
+{
+  if (ui && ui->decodedTextBrowser) {
+    ui->decodedTextBrowser->erase ();
+  }
+}
+
+void MainWindow::legacySetMode(QString const& mode)
+{
+  if (mode != m_mode || mode != "FT2")
+    {
+      m_embeddedFt2MonitorPrepared = false;
+    }
+  onRemoteSetModeRequested(QString {}, mode);
+}
+
+void MainWindow::legacySetDialFrequency(Frequency frequency)
+{
+  if (!frequency || frequency == m_freqNominal) {
+    return;
+  }
+  setRig(frequency);
+}
+
+void MainWindow::legacySetMonitoring(bool enabled)
+{
+  if (enabled && m_embeddedShellMode && m_mode == "FT2" && !m_embeddedFt2MonitorPrepared)
+    {
+      on_actionFT2_triggered();
+      m_embeddedFt2MonitorPrepared = true;
+    }
+  onRemoteSetMonitoringRequested(QString {}, enabled);
+}
+
+void MainWindow::legacySetAutoSeq(bool enabled)
+{
+  if (!ui || !ui->cbAutoSeq) {
+    return;
+  }
+  if (ui->cbAutoSeq->isChecked() != enabled) {
+    ui->cbAutoSeq->setChecked(enabled);
+  }
+}
+
+void MainWindow::legacySetTxEnabled(bool enabled)
+{
+  onRemoteSetTxEnabledRequested(QString {}, enabled);
+}
+
+void MainWindow::legacySetAutoCq(bool enabled)
+{
+  onRemoteSetAutoCqRequested(QString {}, enabled);
+}
+
+void MainWindow::legacySetRxFrequency(int frequencyHz)
+{
+  onRemoteSetRxFrequencyRequested(QString {}, frequencyHz);
+}
+
+void MainWindow::legacySetTxFrequency(int frequencyHz)
+{
+  onRemoteSetTxFrequencyRequested(QString {}, frequencyHz);
+}
+
+void MainWindow::legacySetAudioInputDeviceName(QString const& name)
+{
+  m_config.set_audio_input_device (name);
+  restartConfiguredAudioStreams (m_monitoring);
+}
+
+void MainWindow::legacySetAudioOutputDeviceName(QString const& name)
+{
+  m_config.set_audio_output_device (name);
+  restartConfiguredAudioStreams (m_monitoring);
+}
+
+void MainWindow::legacySetAudioInputChannel(int channel)
+{
+  m_config.set_audio_input_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 1)));
+  restartConfiguredAudioStreams (m_monitoring);
+}
+
+void MainWindow::legacySetAudioOutputChannel(int channel)
+{
+  m_config.set_audio_output_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 3)));
+  restartConfiguredAudioStreams (m_monitoring);
+}
+
+void MainWindow::legacySetDxCall(QString const& call)
+{
+  if (!ui || !ui->dxCallEntry) {
+    return;
+  }
+  QString const normalized = call.trimmed().toUpper();
+  if (ui->dxCallEntry->text() != normalized) {
+    ui->dxCallEntry->setText(normalized);
+  }
+  on_dxCallEntry_editingFinished();
+}
+
+void MainWindow::legacySetDxGrid(QString const& grid)
+{
+  if (!ui || !ui->dxGridEntry) {
+    return;
+  }
+  QString const normalized = grid.trimmed().toUpper();
+  if (ui->dxGridEntry->text() != normalized) {
+    ui->dxGridEntry->setText(normalized);
+  }
+  on_dxGridEntry_textChanged(normalized);
+}
+
+void MainWindow::legacySetTxMessage(int index, QString const& message)
+{
+  if (!ui) {
+    return;
+  }
+
+  QString const normalized = message.trimmed().toUpper();
+  switch (index) {
+  case 1:
+    if (ui->tx1) {
+      ui->tx1->setText(normalized);
+      on_tx1_editingFinished();
+    }
+    break;
+  case 2:
+    if (ui->tx2) {
+      ui->tx2->setText(normalized);
+      on_tx2_editingFinished();
+    }
+    break;
+  case 3:
+    if (ui->tx3) {
+      ui->tx3->setText(normalized);
+      on_tx3_editingFinished();
+    }
+    break;
+  case 4:
+    if (ui->tx4) {
+      ui->tx4->setText(normalized);
+      on_tx4_editingFinished();
+    }
+    break;
+  case 5:
+    if (ui->tx5) {
+      ui->tx5->setCurrentText(normalized);
+      on_tx5_currentTextChanged(normalized);
+    }
+    break;
+  case 6:
+    if (ui->tx6) {
+      ui->tx6->setText(normalized);
+      on_tx6_editingFinished();
+    }
+    break;
+  default:
+    break;
+  }
+}
+
+void MainWindow::legacySelectTxMessage(int index)
+{
+  switch (index) {
+  case 1: on_txb1_clicked(); break;
+  case 2: on_txb2_clicked(); break;
+  case 3: on_txb3_clicked(); break;
+  case 4: on_txb4_clicked(); break;
+  case 5: on_txb5_clicked(); break;
+  case 6: on_txb6_clicked(); break;
+  default: break;
+  }
+}
+
+void MainWindow::legacyGenerateStandardMessages()
+{
+  on_genStdMsgsPushButton_clicked();
+}
+
+void MainWindow::legacyStartTune(bool enabled)
+{
+  if (ui && ui->tuneButton) {
+    ui->tuneButton->setChecked(enabled);
+  }
+  on_tuneButton_clicked(enabled);
+}
+
+void MainWindow::legacyStopTransmission()
+{
+  on_stopTxButton_clicked();
+}
+
+void MainWindow::legacyArmCurrentTx()
+{
+  if (m_tune) {
+    legacyStartTune(false);
+  }
+  if (!m_monitoring && !m_transmitting) {
+    legacySetMonitoring(true);
+  }
+  legacySetTxEnabled(true);
+}
+
+void MainWindow::legacyLogQso()
+{
+  on_logQSOButton_clicked();
+}
+
+void MainWindow::legacySetWaterfallPalette(QString const& palette)
+{
+  if (palette.isEmpty ())
+    {
+      return;
+    }
+
+  if (m_wideGraph)
+    {
+      m_wideGraph->setWaterfallPaletteName (palette);
+      m_wideGraph->saveSettings ();
+    }
+  else if (m_settings)
+    {
+      m_settings->setValue ("WideGraph/WaterfallPalette", palette);
+    }
+}
+
+void MainWindow::legacyOpenSettings(int tabIndex)
+{
+  if (tabIndex >= 0)
+    {
+      m_config.select_tab (tabIndex);
+    }
+  on_actionSettings_triggered ();
+}
+
+void MainWindow::legacyOpenTimeSyncPanel()
+{
+  on_actionTime_Sync_triggered();
+}
+
+void MainWindow::legacyRetryRigConnection()
+{
+  QTimer::singleShot (0, this, SLOT (rigOpen ()));
+}
+
+bool MainWindow::legacyAlt12Enabled() const
+{
+  return ui && ui->cbAutoTogglePeriod && ui->cbAutoTogglePeriod->isChecked();
+}
+
+void MainWindow::legacySetAlt12Enabled(bool enabled)
+{
+  if (!ui || !ui->cbAutoTogglePeriod)
+    {
+      return;
+    }
+
+  if (m_mode == "FT2")
+    {
+      ui->cbAutoTogglePeriod->setChecked(false);
+      return;
+    }
+
+  ui->cbAutoTogglePeriod->setChecked(enabled);
+}
+
+bool MainWindow::legacyTxFirst() const
+{
+  return ui && ui->txFirstCheckBox && ui->txFirstCheckBox->isChecked();
+}
+
+void MainWindow::legacySetTxFirst(bool enabled)
+{
+  if (!ui || !ui->txFirstCheckBox)
+    {
+      return;
+    }
+
+  if (m_mode == "FT2")
+    {
+      ui->txFirstCheckBox->setChecked(false);
+      return;
+    }
+
+  ui->txFirstCheckBox->setChecked(enabled);
+}
+
+void MainWindow::legacyRaiseWarning(QString const& title,
+                                    QString const& summary,
+                                    QString const& details)
+{
+  if (m_embeddedShellMode)
+    {
+      Q_EMIT legacyWarningRaised (title, summary, details);
+      return;
+    }
+
+  MessageBox::warning_message (this, title, summary, details);
+}
+
+void MainWindow::legacySetEmbeddedMode(bool enabled)
+{
+  m_embeddedShellMode = enabled;
+  if (m_wideGraph)
+    {
+      m_wideGraph->setAttribute (Qt::WA_DontShowOnScreen, enabled);
+      if (enabled) m_wideGraph->hide ();
+    }
+  if (m_fastGraph)
+    {
+      m_fastGraph->setAttribute (Qt::WA_DontShowOnScreen, enabled);
+      if (enabled) m_fastGraph->hide ();
+    }
+}
+
+void MainWindow::legacyShutdownForEmbedding()
+{
+  if (upLotw) {
+    disconnect(upLotw, nullptr, this, nullptr);
+    if (upLotw->state() != QProcess::NotRunning) {
+      upLotw->terminate();
+      if (!upLotw->waitForFinished(500)) {
+        upLotw->kill();
+        upLotw->waitForFinished(1000);
+      }
+    }
+    upLotw->close();
+    delete upLotw;
+    upLotw = nullptr;
+  }
+
+  m_logbookRead = true;
+  close();
+}
+
 DisplayText * MainWindow::secondaryDecodeView () const
 {
   return ui->decodedTextBrowser2;
@@ -4928,7 +5397,8 @@ void MainWindow::dataSink(qint64 frames)
       float sigdb=0.0;
       float dfreq=0.0;
       float width=m_fSpread;
-      echocom_.nclearave=m_nclearave;
+      auto& echo_state = decodium::legacy::echo_plot_state ();
+      echo_state.nclearave = m_nclearave;
       int nDop=m_fAudioShift;
       if(m_astroWidget && m_astroWidget->DopplerMethod()==2) nDop=0;   //Using CFOM
       int nDopTotal=m_fDop;
@@ -4981,13 +5451,13 @@ void MainWindow::dataSink(qint64 frames)
         }
         int n=t0.toInt();
         int nsec=((n/10000)*3600) + (((n/100)%100)*60) + (n%100);
-        if(!m_echoRunning or echocom_.nsum<2) m_echoSec0=nsec;
+        if(!m_echoRunning or echo_state.nsum<2) m_echoSec0=nsec;
         float hour=n/10000 + ((n/100)%100)/60.0 + (n%100)/3600.0;
         m_echoRunning=true;
         if(ndf<0 or ndf>30) ndf=0;
         QString t;
         t = t.asprintf("%7.4f  %5.2f %7d %7.1f %5d %5d %6d %6.1f %7.1f %5.2f %3d",hour,xlevel,
-                       nDopTotal,width,echocom_.nsum,nqual,qRound(dfreq),sigdb,dBerr,xdt,ndf);
+                       nDopTotal,width,echo_state.nsum,nqual,qRound(dfreq),sigdb,dBerr,xdt,ndf);
         t = t0 + t + "  " + rxcall;
         if(!bEchoCall) t=t.left(78);
         if(ui) ui->decodedTextBrowser->insertText(t);
@@ -7266,7 +7736,7 @@ void MainWindow::process_autoButton (bool checked)   //manually or by controller
   m_bEchoTxOK=false;
   if(m_mode=="Echo" and m_auto) {
     m_nclearave=1;
-    echocom_.nsum=0;
+    decodium::legacy::echo_plot_state ().nsum = 0;
   }
   m_tAutoOn=QDateTime::currentMSecsSinceEpoch()/1000;
   if(m_mode=="Echo") m_echoRunning=false;
@@ -8408,6 +8878,10 @@ void MainWindow::on_actionWide_Waterfall_triggered()      //Display Waterfalls
     {
       return;
     }
+  if (m_embeddedShellMode)
+    {
+      return;
+    }
   m_wideGraph->showNormal();
   m_wideGraph->raise();
   m_wideGraph->activateWindow();
@@ -9435,7 +9909,7 @@ void MainWindow::on_ClrAvgButton_clicked()
 {
   m_nclearave=1;
   if(m_mode=="Echo") {
-    echocom_.nsum=0;
+    decodium::legacy::echo_plot_state ().nsum = 0;
     m_echoGraph->clearAvg();
     m_wideGraph->restartTotalPower();
   } else {
@@ -19167,7 +19641,11 @@ void MainWindow::on_actionFT2_triggered()
   VHF_features_enabled(bVHF);
   ui->cbAutoSeq->setChecked(true);
   m_fastGraph->hide();
-  m_wideGraph->show();
+  if (!m_embeddedShellMode) {
+    m_wideGraph->show();
+  } else {
+    m_wideGraph->hide();
+  }
   // ASYMX: replace DT with TΔ (time since TX) in FT2 headings
   {
     QString ft2hdr = QString::fromUtf8("UTC   dB   T\xce\x94 Freq    ") + tr ("Message");
@@ -21195,6 +21673,15 @@ void MainWindow::rigFailure (QString const& reason, bool allowAutoRetry)
                                         + QDateTime::currentDateTimeUtc ().toString ("yyyy-MM-ddTHH:mm:ss.zzzZ")
 #endif
                                         );
+
+  if (m_embeddedShellMode)
+    {
+      Q_EMIT legacyRigErrorRaised (tr ("Rig Control Error")
+                                   , tr ("Do you want to reconfigure the radio interface?")
+                                   , m_rigErrorMessageBox.detailedText ());
+      m_first_error = true;
+      return;
+    }
 
   // don't call slot functions directly to avoid recursion
   m_rigErrorMessageBox.exec ();
@@ -28081,6 +28568,12 @@ void MainWindow::onWideGraphWaterfallRow(QByteArray const& rowLevels,
                                          int txFrequencyHz,
                                          QString const& mode)
 {
+  Q_EMIT legacyWaterfallRowReady(rowLevels,
+                                 startFrequencyHz,
+                                 spanHz,
+                                 rxFrequencyHz,
+                                 txFrequencyHz,
+                                 mode);
   if (!m_remoteCommandServer || !m_remoteWaterfallStreamingEnabled || rowLevels.isEmpty())
     {
       return;

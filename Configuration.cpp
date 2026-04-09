@@ -1066,6 +1066,111 @@ QAudioDevice const& Configuration::audio_input_device () const {return m_->audio
 AudioDevice::Channel Configuration::audio_input_channel () const {return m_->audio_input_channel_;}
 QAudioDevice const& Configuration::audio_output_device () const {return m_->audio_output_device_;}
 AudioDevice::Channel Configuration::audio_output_channel () const {return m_->audio_output_channel_;}
+void Configuration::set_audio_input_device (QString const& device_name)
+{
+  if (device_name.isEmpty ())
+    {
+      return;
+    }
+
+  auto const devices = QMediaDevices::audioInputs ();
+  Q_FOREACH (auto const& device, devices)
+    {
+      if (device.description () != device_name)
+        {
+          continue;
+        }
+
+      int max_channels = qMax (device.maximumChannelCount (), device.preferredFormat ().channelCount ());
+      if (max_channels <= 0) max_channels = 1;
+
+      m_->audio_input_device_ = device;
+      m_->next_audio_input_device_ = device;
+      if (max_channels < 2 && m_->audio_input_channel_ != AudioDevice::Mono)
+        {
+          m_->audio_input_channel_ = AudioDevice::Mono;
+          m_->next_audio_input_channel_ = AudioDevice::Mono;
+          m_->settings_->setValue ("AudioInputChannel", AudioDevice::toString (AudioDevice::Mono));
+        }
+      m_->settings_->setValue ("SoundInName", device.description ());
+      m_->restart_sound_input_device_ = true;
+      return;
+    }
+}
+
+void Configuration::set_audio_output_device (QString const& device_name)
+{
+  if (device_name.isEmpty ())
+    {
+      return;
+    }
+
+  auto const devices = QMediaDevices::audioOutputs ();
+  Q_FOREACH (auto const& device, devices)
+    {
+      if (device.description () != device_name)
+        {
+          continue;
+        }
+
+      int max_channels = qMax (device.maximumChannelCount (), device.preferredFormat ().channelCount ());
+      if (max_channels <= 0) max_channels = 1;
+
+      m_->audio_output_device_ = device;
+      m_->next_audio_output_device_ = device;
+      if (max_channels < 2 && m_->audio_output_channel_ != AudioDevice::Mono)
+        {
+          m_->audio_output_channel_ = AudioDevice::Mono;
+          m_->next_audio_output_channel_ = AudioDevice::Mono;
+          m_->settings_->setValue ("AudioOutputChannel", AudioDevice::toString (AudioDevice::Mono));
+        }
+      m_->settings_->setValue ("SoundOutName", device.description ());
+      m_->restart_sound_output_device_ = true;
+      return;
+    }
+}
+
+void Configuration::set_audio_input_channel (AudioDevice::Channel channel)
+{
+  if (channel > AudioDevice::Right)
+    {
+      channel = AudioDevice::Mono;
+    }
+  if (m_->audio_input_device_.maximumChannelCount () < 2 && channel != AudioDevice::Mono)
+    {
+      channel = AudioDevice::Mono;
+    }
+  if (m_->audio_input_channel_ == channel && m_->next_audio_input_channel_ == channel)
+    {
+      return;
+    }
+
+  m_->audio_input_channel_ = channel;
+  m_->next_audio_input_channel_ = channel;
+  m_->settings_->setValue ("AudioInputChannel", AudioDevice::toString (channel));
+  m_->restart_sound_input_device_ = true;
+}
+
+void Configuration::set_audio_output_channel (AudioDevice::Channel channel)
+{
+  if (channel > AudioDevice::Both)
+    {
+      channel = AudioDevice::Mono;
+    }
+  if (m_->audio_output_device_.maximumChannelCount () < 2 && channel != AudioDevice::Mono)
+    {
+      channel = AudioDevice::Mono;
+    }
+  if (m_->audio_output_channel_ == channel && m_->next_audio_output_channel_ == channel)
+    {
+      return;
+    }
+
+  m_->audio_output_channel_ = channel;
+  m_->next_audio_output_channel_ = channel;
+  m_->settings_->setValue ("AudioOutputChannel", AudioDevice::toString (channel));
+  m_->restart_sound_output_device_ = true;
+}
 bool Configuration::restart_audio_input () const {return m_->restart_sound_input_device_;}
 bool Configuration::restart_audio_output () const {return m_->restart_sound_output_device_;}
 bool Configuration::restart_tci () const {return m_->restart_tci_device_;}
@@ -2523,17 +2628,25 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   // Auto-update cty.dat at startup:
   // - missing file: download immediately
   // - stale file (>30 days): delayed background refresh
+  //
+  // In the embedded QML shell we already have a bundled/new DXCC path, so
+  // avoid legacy startup refreshes that can produce noisy network popups.
   {
-    QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
-    QFileInfo ctyInfo (dataPath.absoluteFilePath ("cty.dat"));
-    bool const missing = !ctyInfo.exists ();
-    bool const stale = ctyInfo.exists ()
-                       && ctyInfo.lastModified ().daysTo (QDateTime::currentDateTime ()) > 30;
-    if (missing) {
-      QTimer::singleShot (0, this, [this] { on_CTY_download_button_clicked (true); });
-    } else if (stale) {
-      QTimer::singleShot (5000, this, [this] { on_CTY_download_button_clicked (true); });
-    }
+    bool const embedded_legacy_shell =
+      qApp && qApp->property ("decodiumEmbeddedLegacyShell").toBool ();
+    if (!embedded_legacy_shell)
+      {
+        QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+        QFileInfo ctyInfo (dataPath.absoluteFilePath ("cty.dat"));
+        bool const missing = !ctyInfo.exists ();
+        bool const stale = ctyInfo.exists ()
+                           && ctyInfo.lastModified ().daysTo (QDateTime::currentDateTime ()) > 30;
+        if (missing) {
+          QTimer::singleShot (0, this, [this] { on_CTY_download_button_clicked (true); });
+        } else if (stale) {
+          QTimer::singleShot (5000, this, [this] { on_CTY_download_button_clicked (true); });
+        }
+      }
   }
 
   transceiver_thread_ = new QThread {this};
@@ -4620,7 +4733,36 @@ void Configuration::impl::set_CTY_DAT_version(QString const& version)
 
 void Configuration::impl::error_during_CTY_download (QString const& reason)
 {
-  MessageBox::warning_message (this, tr ("Error Loading CTY.DAT"), reason);
+  bool const embedded_legacy_shell =
+    qApp && qApp->property ("decodiumEmbeddedLegacyShell").toBool ();
+
+  if (embedded_legacy_shell)
+    {
+      QString const title = tr ("Error Loading CTY.DAT");
+      QString const detail =
+        tr ("The legacy CTY.DAT refresh failed, but Decodium will continue "
+            "using the currently available country file.\n\nNetwork detail: %1")
+          .arg (reason);
+
+      bool handled = false;
+      if (auto * parent = parentWidget ())
+        {
+          handled = QMetaObject::invokeMethod (parent, "legacyRaiseWarning",
+                                               Qt::DirectConnection,
+                                               Q_ARG (QString, title),
+                                               Q_ARG (QString, reason),
+                                               Q_ARG (QString, detail));
+        }
+
+      if (!handled)
+        {
+          MessageBox::warning_message (this, title, reason, detail);
+        }
+    }
+  else
+    {
+      MessageBox::warning_message (this, tr ("Error Loading CTY.DAT"), reason);
+    }
   after_CTY_downloaded();
 }
 

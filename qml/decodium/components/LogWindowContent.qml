@@ -45,18 +45,6 @@ Rectangle {
         selectedQso = null
     }
 
-    // Real-time update: refresh log when a new QSO is logged (via LogManager signal)
-    Connections {
-        target: appEngine && appEngine.logManager ? appEngine.logManager : null
-        function onQsoLogged(call, mode, band) { refreshLog() }
-    }
-
-    // Real-time update: refresh log when MshvBridge signals a QSO logged
-    Connections {
-        target: bridge
-        function onQsoLogged(call, grid, report) { refreshLog() }
-    }
-
     // Fallback auto-refresh
     Timer {
         interval: 3000

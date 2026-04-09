@@ -1,3 +1,0 @@
-gfortran -c packjt77.f90
-gfortran -o test28 -fbounds-check -Wall -Wno-conversion test28.f90 \
-	 ../chkcall.f90 packjt77.o

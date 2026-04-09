@@ -21,7 +21,7 @@ FoxVerifier::FoxVerifier(QString user_agent, QNetworkAccessManager *manager,QStr
   QString encodedCall = QString::fromUtf8(QUrl::toPercentEncoding(callsign));
   QString url = QString("%1/check/").arg(base_url) + encodedCall + QString("/%1/%2.text").arg(timestamp.toString(Qt::ISODate)).arg(code);
   q_url_ = QUrl(url);
-  LOG_INFO(QString("FoxVerifier: prepared request to host %1").arg(q_url_.host()).toStdString());
+  LOG_INFO(QString("FoxVerifier: prepared request to host %1").arg(q_url_.host()).toUtf8().constData());
   if (manager_ == nullptr) {
     LOG_INFO("FoxVerifier: manager is null, creating new one");
     manager_ = new QNetworkAccessManager(this);
@@ -63,7 +63,7 @@ FoxVerifier::FoxVerifier(QString user_agent, QNetworkAccessManager *manager,QStr
 #endif
 
   } else {
-    LOG_INFO(QString("FoxVerifier: url invalid").toStdString());
+    LOG_INFO(QString("FoxVerifier: url invalid").toUtf8().constData());
   }
 }
 
@@ -95,7 +95,7 @@ void FoxVerifier::errorOccurred(QNetworkReply::NetworkError code)
   if (reply_->error() != QNetworkReply::NoError) {
 
     LOG_INFO(QString("FoxVerifier: errorOccurred status %1 error [%2][%3] isFinished %4 isrunning %5 code %6").arg(status).arg(
-            reason).arg(error_reason_).arg(reply_->isFinished()).arg(reply_->isRunning()).arg(code).toStdString());
+            reason).arg(error_reason_).arg(reply_->isFinished()).arg(reply_->isRunning()).arg(code).toUtf8().constData());
     return;
   }
   // TODO emit
@@ -114,13 +114,13 @@ void FoxVerifier::httpFinished()
   int status =  reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
   QString reason = reply_->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString();
   if (reply_->error() != QNetworkReply::NoError) {
-    LOG_INFO(QString("FoxVerifier: httpFinished error:[%1 - %2] msg:[%3]").arg(status).arg(reason).arg(reply_->errorString()).toStdString());
+    LOG_INFO(QString("FoxVerifier: httpFinished error:[%1 - %2] msg:[%3]").arg(status).arg(reason).arg(reply_->errorString()).toUtf8().constData());
     reply_->abort();
     emit verifyError(status, ts_, callsign_, code_, hz_, reply_->errorString());
   }
   return_value = reply_->read(1024); // limit amount we get
   LOG_INFO(QString("FoxVerifier: httpFinished status:[%1 - %2] body_length:[%3]")
-           .arg(status).arg(reason).arg(return_value.size()).toStdString());
+           .arg(status).arg(reason).arg(return_value.size()).toUtf8().constData());
   finished_ = true;
   reply_->deleteLater();
   if (status >= 200 && status <= 299) {
@@ -145,7 +145,7 @@ void FoxVerifier::sslErrors(const QList<QSslError> & errors)
         .arg (error.errorString ())
         .arg (static_cast<int> (error.error ()));
     }
-  LOG_INFO(QString("FoxVerifier: sslErrors - refusing insecure TLS certificate: %1").arg(details).toStdString());
+  LOG_INFO(QString("FoxVerifier: sslErrors - refusing insecure TLS certificate: %1").arg(details).toUtf8().constData());
 
   // Security hardening: do not bypass TLS verification.
   if (reply_ && reply_->isRunning())
@@ -155,7 +155,7 @@ void FoxVerifier::sslErrors(const QList<QSslError> & errors)
 }
 
 void FoxVerifier::httpRedirected(const QUrl &url) {
-  LOG_INFO(QString("FoxVerifier: redirected to host %1").arg(url.host()).toStdString());
+  LOG_INFO(QString("FoxVerifier: redirected to host %1").arg(url.host()).toUtf8().constData());
 }
 
 void FoxVerifier::httpEncrypted() {

@@ -235,9 +235,9 @@ ClientWidget::ClientWidget (QAbstractItemModel * decodes_model, QAbstractItemMod
       Q_EMIT configure (key_, empty, quint32_max, submode_line_edit_->text (), fast_mode ()
                         , quint32_max, quint32_max, empty, empty, false);
   });
-  connect (fast_mode_check_box_, &QCheckBox::checkStateChanged, [this] (Qt::CheckState state) {
+  connect (fast_mode_check_box_, &QCheckBox::stateChanged, [this] (int state) {
       QString empty;
-      Q_EMIT configure (key_, empty, quint32_max, empty, Qt::Checked == state
+      Q_EMIT configure (key_, empty, quint32_max, empty, Qt::Checked == static_cast<Qt::CheckState>(state)
                         , quint32_max, quint32_max, empty, empty, false);
   });
   connect (tr_period_spin_box_, static_cast<void (QSpinBox::*) (int)> (&QSpinBox::valueChanged), [this] (int i) {

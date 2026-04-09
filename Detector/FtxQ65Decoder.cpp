@@ -1,6 +1,10 @@
 // -*- Mode: C++ -*-
 #include "wsjtx_config.h"
 #include "commons.h"
+#include "Detector/FftCompat.hpp"
+#include "Detector/FtxQ65Core.hpp"
+#include "Detector/FtxQ65Decoder.hpp"
+#include "Detector/LegacyDspIoHelpers.hpp"
 
 #include <algorithm>
 #include <array>
@@ -24,8 +28,6 @@
 
 extern "C"
 {
-  void four2a_ (std::complex<float> a[], int* nfft, int* ndim, int* isign, int* iform);
-  void smo121_ (float x[], int* nz);
   void ftx_prepare_ft8_ap_c (char const mycall[12], char const hiscall[12], int ncontest,
                              int apsym[58], int aph10[10]);
   void ftx_q65_set_list_c (char const mycall[12], char const hiscall[12],
@@ -58,13 +60,13 @@ extern "C"
                            int* ipk, int* jpk, int* ll, int* mode_q65,
                            float const sync[85], float s3[]);
   void ftx_q65_sync_curve_c (float ccf1[], int* count, float* rms1);
-  void q65_enc_ (int x[], int y[]);
   void legacy_pack77_unpack_c (char const c77[77], int received, char msgsent[37],
                                bool* success);
 }
 
 namespace
 {
+  using decodium::fft_compat::forward_complex;
   constexpr int kQ65MaxLines {200};
   constexpr int kQ65Bits {77};
   constexpr int kQ65DecodedChars {37};
@@ -486,9 +488,6 @@ namespace
   {
     (void) ntrperiod;
     int const nfft = nsps;
-    int ndim = 1;
-    int isign = -1;
-    int iform = 0;
     float const fac = 1.0f / 32767.0f;
 
     std::vector<std::complex<float>> c0 (static_cast<size_t> (nfft));
@@ -510,8 +509,7 @@ namespace
           {
             std::fill (c0.begin () + (k + 1), c0.end (), std::complex<float> {});
           }
-        int local_nfft = nfft;
-        four2a_ (c0.data (), &local_nfft, &ndim, &isign, &iform);
+        forward_complex (c0.data (), nfft);
         for (int i = 1; i <= iz; ++i)
           {
             std::complex<float> const value = c0[static_cast<size_t> (i - 1)];
@@ -521,8 +519,8 @@ namespace
         int local_nsmo = nsmo <= 1 ? 0 : nsmo;
         for (int i = 0; i < local_nsmo; ++i)
           {
-            int nz = iz;
-            smo121_ (&s1[static_cast<size_t> (col_major_index (0, j - 1, iz))], &nz);
+            decodium::legacy::smooth121_inplace (
+                &s1[static_cast<size_t> (col_major_index (0, j - 1, iz))], iz);
           }
         if (j >= 3)
           {
@@ -857,7 +855,7 @@ namespace
       {
         dat4_local[i] = dat4[static_cast<size_t> (i)];
       }
-    q65_enc_ (dat4_local, codeword);
+    decodium::q65::encode_payload_symbols (dat4_local, codeword);
 
     int const isync[22] = {1, 9, 12, 13, 15, 22, 23, 26, 27, 33, 35,
                            38, 46, 50, 55, 60, 62, 66, 69, 74, 76, 85};
@@ -1342,7 +1340,7 @@ namespace
       }
     std::array<int, kQ65PayloadSymbols> dgen {};
     int init_codeword[kQ65CodewordSymbols] {};
-    q65_enc_ (dgen.data (), init_codeword);
+    decodium::q65::encode_payload_symbols (dgen.data (), init_codeword);
   }
 
   bool append_q65_line (std::vector<Q65Line>& lines, int nutc, float syncsnr, float snr2,
@@ -1811,7 +1809,7 @@ extern "C" int ftx_q65_ana64_c (short const* iwave, int npts, float* real_out, f
     }
 
   std::vector<std::complex<float>> c0;
-  if (!ana64_native (iwave, npts, c0))
+  if (!decodium::q65::ana64_transform (iwave, npts, c0))
     {
       return 0;
     }
@@ -1826,21 +1824,10 @@ extern "C" int ftx_q65_ana64_c (short const* iwave, int npts, float* real_out, f
   return 1;
 }
 
-extern "C" void ana64_ (short iwave[], int* npts, std::complex<float> c0[])
+bool decodium::q65::ana64_transform (short const* iwave, int npts,
+                                     std::vector<std::complex<float>>& c0)
 {
-  if (!iwave || !npts || *npts <= 0 || (*npts & 1) != 0 || !c0)
-    {
-      return;
-    }
-
-  std::vector<std::complex<float>> analytic;
-  if (!ana64_native (iwave, *npts, analytic))
-    {
-      return;
-    }
-
-  int const count = *npts / 2;
-  std::copy_n (analytic.begin (), count, c0);
+  return ana64_native (iwave, npts, c0);
 }
 
 extern "C" void ftx_q65_async_decode_c (short const* iwave,

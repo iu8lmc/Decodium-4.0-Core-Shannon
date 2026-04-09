@@ -16,6 +16,7 @@
 #include "logbook/logbook.h"
 #include "MessageBox.hpp"
 #include "Configuration.hpp"
+#include "Radio.hpp"
 #include "models/Bands.hpp"
 #include "models/CabrilloLog.hpp"
 #include "validators/MaidenheadLocatorValidator.hpp"
@@ -27,6 +28,48 @@
 
 namespace
 {
+  QString sanitize_operator_value (QString const& in)
+  {
+    QString out;
+    out.reserve (in.size ());
+    for (auto const& ch : in)
+      {
+        if (ch.isNull () || ch == QChar {'<'} || ch == QChar {'>'} || ch == QChar {'\r'} || ch == QChar {'\n'})
+          {
+            continue;
+          }
+        if (ch.isPrint ())
+          {
+            out.append (ch);
+          }
+      }
+    return out.trimmed ();
+  }
+
+  QString normalized_operator_call (QString const& operator_call, QString const& station_call)
+  {
+    auto const safeOperator = sanitize_operator_value (operator_call).trimmed ().toUpper ();
+    auto const safeStation = sanitize_operator_value (station_call).trimmed ().toUpper ();
+    if (safeOperator.isEmpty ())
+      {
+        return {};
+      }
+
+    auto const operatorBase = Radio::base_callsign (safeOperator).trimmed ().toUpper ();
+    auto const stationBase = Radio::base_callsign (safeStation).trimmed ().toUpper ();
+    if (operatorBase.isEmpty () || !Radio::is_callsign (operatorBase))
+      {
+        return {};
+      }
+
+    if (!stationBase.isEmpty () && operatorBase == stationBase)
+      {
+        return {};
+      }
+
+    return safeOperator;
+  }
+
   auto const sat_file_name = "sat.dat";
   struct PropMode
   {
@@ -300,7 +343,7 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
   m_myCall=m_config->my_callsign();
   m_myGrid=m_config->my_grid();
   ui->band->setText (m_config->bands ()->find (dialFreq));
-  ui->loggedOperator->setText(m_config->opCall());
+  ui->loggedOperator->setText (normalized_operator_call (m_config->opCall (), m_myCall));
   ui->exchSent->setText (xSent);
   ui->exchRcvd->setText (xRcvd);
   if (!ui->cbPropMode->isChecked ())
@@ -399,7 +442,7 @@ void LogQSO::accept()
   auto name = ui->name->text ();
   m_txPower = ui->txPower->text ();
   auto strDialFreq = QString::number (m_dialFreq / 1.e6,'f',6);
-  auto operator_call = ui->loggedOperator->text ();
+  auto operator_call = normalized_operator_call (ui->loggedOperator->text (), m_myCall);
   auto xsent = ui->exchSent->text ();
   auto xrcvd = ui->exchRcvd->text ();
 

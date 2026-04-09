@@ -1,5 +1,6 @@
 #include "echograph.h"
 #include "commons.h"
+#include "Detector/LegacyDspIoHelpers.hpp"
 #include "WindowGeometryUtils.hpp"
 #include <QSettings>
 #include <QApplication>
@@ -72,7 +73,7 @@ void EchoGraph::saveSettings()
 void EchoGraph::plotSpec()
 {
   ui->echoPlot->draw();
-  ui->nsum_label->setText("N: " + QString::number(echocom_.nsum));
+  ui->nsum_label->setText("N: " + QString::number(decodium::legacy::echo_plot_state ().nsum));
 }
 
 void EchoGraph::on_smoothSpinBox_valueChanged(int n)
@@ -118,10 +119,6 @@ bool EchoGraph::baseline()
 
 void EchoGraph::clearAvg()
 {
-  for(int i=0; i<4096; i++) {
-    echocom_.blue[i]=0;
-    echocom_.red[i]=0;
-  }
-  echocom_.nsum=0;
+  decodium::legacy::clear_echo_plot_state ();
   plotSpec();
 }

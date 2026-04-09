@@ -35,6 +35,26 @@ Dialog {
     readonly property int labelFontSize: 13
     readonly property int titleFontSize: 16
     readonly property int fieldHeight: 38
+    readonly property int tabButtonWidth: Math.max(140, Math.floor((settingsDialog.width - 32) / 7))
+
+    function openTab(tabIndex) {
+        var maxIndex = tabBar.count > 0 ? tabBar.count - 1 : 0
+        tabBar.currentIndex = Math.max(0, Math.min(tabIndex, maxIndex))
+        open()
+    }
+
+    function safeString(value, fallback) {
+        return value === undefined || value === null ? fallback : String(value)
+    }
+
+    function safeBool(value, fallback) {
+        return value === undefined || value === null ? fallback : !!value
+    }
+
+    function safeNumber(value, fallback) {
+        var n = Number(value)
+        return isNaN(n) ? fallback : n
+    }
 
     background: Rectangle {
         color: bgMedium
@@ -83,7 +103,7 @@ Dialog {
 
                 TabButton {
                     text: modelData
-                    width: Math.max(140, Math.floor(tabBar.width / 7))
+                    width: settingsDialog.tabButtonWidth
                     implicitHeight: 48
                     padding: 0
                     contentItem: Text {
@@ -439,10 +459,11 @@ Dialog {
                                     }
                                 }
                                 Button {
+                                    id: refreshAudioButton
                                     implicitWidth: 36; implicitHeight: 36
-                                    ToolTip.text: "Aggiorna dispositivi audio"; ToolTip.visible: hovered
+                                    ToolTip.text: "Aggiorna dispositivi audio"; ToolTip.visible: refreshAudioButton.hovered
                                     onClicked: bridge.refreshAudioDevices()
-                                    background: Rectangle { color: hovered ? Qt.rgba(1,1,1,0.1) : "transparent"; border.color: glassBorder; radius: 4 }
+                                    background: Rectangle { color: refreshAudioButton.hovered ? Qt.rgba(1,1,1,0.1) : "transparent"; border.color: glassBorder; radius: 4 }
                                     contentItem: Text { text: "↻"; color: secondaryCyan; font.pixelSize: 16; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                 }
                             }
@@ -465,15 +486,17 @@ Dialog {
                                 Text { text: "Channel:"; color: textSecondary; font.pixelSize: 12 }
                                 StyledComboBox {
                                     id: audioChannelCombo
+                                    property bool initialized: false
                                     model: ["Left/Mono", "Right"]
                                     currentIndex: bridge.audioInputChannel === 1 ? 1 : 0
                                     Layout.preferredWidth: 150
                                     font.pixelSize: 12
                                     popupMinWidth: 170
                                     textHorizontalAlignment: Text.AlignLeft
-                                    onActivated: bridge.audioInputChannel = currentIndex
+                                    Component.onCompleted: initialized = true
+                                    onActivated: if (initialized) bridge.audioInputChannel = currentIndex
                                     onCurrentIndexChanged: {
-                                        if (currentIndex >= 0 && bridge.audioInputChannel !== currentIndex)
+                                        if (initialized && currentIndex >= 0 && bridge.audioInputChannel !== currentIndex)
                                             bridge.audioInputChannel = currentIndex
                                     }
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
@@ -550,6 +573,30 @@ Dialog {
                                         }
                                     }
                                 }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+                                Text { text: "Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 80 }
+                                StyledComboBox {
+                                    id: audioOutputChannelCombo
+                                    property bool initialized: false
+                                    model: ["Mono", "Left", "Right", "Both"]
+                                    currentIndex: Math.max(0, bridge.audioOutputChannel)
+                                    Layout.preferredWidth: 170
+                                    font.pixelSize: 12
+                                    popupMinWidth: 180
+                                    textHorizontalAlignment: Text.AlignLeft
+                                    Component.onCompleted: initialized = true
+                                    onActivated: if (initialized) bridge.audioOutputChannel = currentIndex
+                                    onCurrentIndexChanged: {
+                                        if (initialized && currentIndex >= 0 && bridge.audioOutputChannel !== currentIndex)
+                                            bridge.audioOutputChannel = currentIndex
+                                    }
+                                    background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
+                                }
+                                Item { Layout.fillWidth: true }
                             }
 
                             RowLayout {
@@ -866,7 +913,7 @@ Dialog {
                                 Text { text: "Host:"; color: textSecondary; font.pixelSize: 12 }
                                 TextField {
                                     id: dxcHost
-                                    text: bridge.dxCluster ? bridge.dxCluster.host : "dxc.va7dx.com"
+                                    text: bridge.dxCluster && bridge.dxCluster.host !== undefined ? bridge.dxCluster.host : "dxc.va7dx.com"
                                     Layout.preferredWidth: 160
                                     color: textPrimary; font.pixelSize: 11
                                     onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.host = text
@@ -874,7 +921,7 @@ Dialog {
                                 }
                                 Text { text: "Porta:"; color: textSecondary; font.pixelSize: 12 }
                                 TextField {
-                                    text: bridge.dxCluster ? bridge.dxCluster.port.toString() : "7300"
+                                    text: bridge.dxCluster && bridge.dxCluster.port !== undefined ? String(bridge.dxCluster.port) : "7300"
                                     Layout.preferredWidth: 60
                                     color: textPrimary; font.pixelSize: 11
                                     onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.port = parseInt(text) || 7300
@@ -1051,7 +1098,7 @@ Dialog {
                                     id: ftThreadsSlider
                                     from: 1
                                     to: 6
-                                    value: bridge.ftThreads
+                                    value: settingsDialog.safeNumber(bridge.ftThreads, 3)
                                     stepSize: 1
                                     Layout.preferredWidth: 150
                                     onValueChanged: {
@@ -1079,12 +1126,12 @@ Dialog {
                                 spacing: 20
                                 CheckBox {
                                     text: "L2 Triggered Decoder"
-                                    checked: bridge.asyncL2Enabled
-                                    onCheckedChanged: bridge.asyncL2Enabled = checked
+                                    checked: settingsDialog.safeBool(bridge.asyncL2Enabled, false)
+                                    onCheckedChanged: if (bridge.asyncL2Enabled !== undefined) bridge.asyncL2Enabled = checked
                                 }
                                 CheckBox {
                                     text: "Async Decode"
-                                    checked: bridge.asyncDecodeEnabled
+                                    checked: settingsDialog.safeBool(bridge.asyncDecodeEnabled, false)
                                     onCheckedChanged: bridge.asyncDecodeEnabled = checked
                                 }
                             }
@@ -1093,30 +1140,31 @@ Dialog {
                                 spacing: 20
                                 CheckBox {
                                     text: "EMA Averaging"
-                                    checked: bridge.emaEnabled
-                                    onCheckedChanged: bridge.emaEnabled = checked
+                                    checked: settingsDialog.safeBool(bridge.emaEnabled, false)
+                                    onCheckedChanged: if (bridge.emaEnabled !== undefined) bridge.emaEnabled = checked
                                 }
                                 Text { text: "Alpha:"; color: textSecondary; font.pixelSize: 12 }
                                 Slider {
-                                    from: 0.1; to: 0.9; value: bridge.emaAlpha; stepSize: 0.05
+                                    id: emaAlphaSlider
+                                    from: 0.1; to: 0.9; value: settingsDialog.safeNumber(bridge.emaAlpha, 0.5); stepSize: 0.05
                                     Layout.preferredWidth: 120
-                                    onValueChanged: bridge.emaAlpha = value
-                                    enabled: bridge.emaEnabled
+                                    onValueChanged: if (bridge.emaAlpha !== undefined) bridge.emaAlpha = value
+                                    enabled: settingsDialog.safeBool(bridge.emaEnabled, false)
                                 }
-                                Text { text: bridge.emaAlpha.toFixed(2); color: textPrimary; font.pixelSize: 11 }
+                                Text { text: emaAlphaSlider.value.toFixed(2); color: textPrimary; font.pixelSize: 11 }
                             }
 
                             RowLayout {
                                 spacing: 20
                                 CheckBox {
                                     text: "B4 Strikethrough"
-                                    checked: bridge.showB4Strikethrough
+                                    checked: settingsDialog.safeBool(bridge.showB4Strikethrough, true)
                                     onCheckedChanged: bridge.b4Strikethrough = checked
                                 }
                                 CheckBox {
                                     text: "Filter B4"
-                                    checked: bridge.filterNoB4
-                                    onCheckedChanged: bridge.filterNoB4 = checked
+                                    checked: settingsDialog.safeBool(bridge.filterNoB4, false)
+                                    onCheckedChanged: if (bridge.filterNoB4 !== undefined) bridge.filterNoB4 = checked
                                 }
                             }
 
@@ -1231,11 +1279,12 @@ Dialog {
                                 Text { text: "Theme:"; color: textSecondary; font.pixelSize: 12 }
                                 StyledComboBox {
                                     id: themeCombo
-                                    model: bridge.themeManager ? bridge.themeManager.availableThemes : ["Ocean Blue"]
+                                    model: bridge.themeManager && bridge.themeManager.availableThemes !== undefined ? bridge.themeManager.availableThemes : ["Ocean Blue"]
                                     currentIndex: {
-                                        if (bridge.themeManager) {
+                                        if (bridge.themeManager && bridge.themeManager.availableThemes !== undefined && bridge.themeManager.currentTheme !== undefined) {
                                             var themes = bridge.themeManager.availableThemes
-                                            return themes.indexOf(bridge.themeManager.currentTheme)
+                                            var idx = themes.indexOf(bridge.themeManager.currentTheme)
+                                            return idx >= 0 ? idx : 0
                                         }
                                         return 0
                                     }

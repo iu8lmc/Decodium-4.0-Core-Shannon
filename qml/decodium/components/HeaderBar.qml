@@ -30,6 +30,8 @@ Rectangle {
     signal tune()
     signal halt()
 
+    readonly property var supportedModes: bridge ? bridge.availableModes() : ["FT8", "FT2", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR"]
+
     height: 60
     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
 
@@ -44,7 +46,7 @@ Rectangle {
 
             // Decodium icon
             Image {
-                source: "qrc:/src/pic/decodium_256.png"
+                source: "qrc:/icon_128x128.png"
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
                 fillMode: Image.PreserveAspectFit
@@ -91,9 +93,9 @@ Rectangle {
         // Mode selector
         StyledComboBox {
             id: modeSelector
-            model: ["FT8", "FT4", "FT2", "Q65", "MSK144", "WSPR", "JT65"]
+            model: supportedModes
             currentIndex: model.indexOf(currentMode)
-            Layout.preferredWidth: 100
+            Layout.preferredWidth: 120
 
             background: Rectangle {
                 color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)

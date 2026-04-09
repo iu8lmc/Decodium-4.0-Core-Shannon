@@ -7,6 +7,7 @@
 #include <QAudioSink>
 #include <QAudioDevice>
 #include <QAudioFormat>
+#include <QOperatingSystemVersion>
 #include <QScopedPointer>
 
 class QIODevice;

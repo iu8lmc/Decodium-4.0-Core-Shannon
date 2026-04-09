@@ -43,6 +43,25 @@ Window {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color glassBorder: bridge.themeManager.glassBorder
+    readonly property real leftPanelWidth: width * 0.5
+    readonly property bool compactBandColumns: leftPanelWidth < 460
+    readonly property int bandUtcWidth: compactBandColumns ? 48 : 60
+    readonly property int bandDbWidth: compactBandColumns ? 28 : 35
+    readonly property int bandDtWidth: compactBandColumns ? 34 : 45
+    readonly property int bandFreqWidth: compactBandColumns ? 42 : 50
+    readonly property int bandGapWidth: compactBandColumns ? 6 : 10
+    readonly property int bandDxccWidth: compactBandColumns ? 92 : 132
+    readonly property int bandAzWidth: compactBandColumns ? 42 : 52
+    readonly property int bandMessageMinWidth: compactBandColumns ? 72 : 140
+    readonly property real rightPanelWidth: width * 0.5
+    readonly property bool compactRxColumns: rightPanelWidth < 420
+    readonly property bool compactRxHeader: rightPanelWidth < 340
+    readonly property int rxUtcWidth: compactRxColumns ? 58 : 72
+    readonly property int rxDbWidth: compactRxColumns ? 28 : 35
+    readonly property int rxDtWidth: compactRxColumns ? 36 : 45
+    readonly property int rxGapWidth: compactRxColumns ? 6 : 10
+    readonly property int rxDistanceWidth: compactRxColumns ? 0 : 50
+    readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
 
     // Shannon-compatible color scheme
     readonly property color colorB4:          "#606060"   // Grigio — già lavorato (B4)
@@ -109,6 +128,62 @@ Window {
         var inWindow = Math.abs(f - appEngine.rxFrequency) <= rxBandwidth
         var relevant = md && (md.isMyCall || md.isTx)
         return inWindow || relevant
+    }
+    function currentRxDecodes() {
+        var merged = []
+        var seen = {}
+        function utcSortValue(timeStr) {
+            var digits = String(timeStr || "").replace(/[^0-9]/g, "")
+            if (digits.length >= 6)
+                return parseInt(digits.substring(0, 6))
+            if (digits.length === 4)
+                return parseInt(digits + "00")
+            return -1
+        }
+        function appendUnique(item) {
+            if (!item)
+                return
+            var key = (item.time || "") + "|" +
+                      (item.freq || "") + "|" +
+                      (item.message || "") + "|" +
+                      (item.isTx ? "1" : "0")
+            if (seen[key])
+                return
+            seen[key] = true
+            merged.push(item)
+        }
+        if (appEngine.rxDecodeList) {
+            for (var j = 0; j < appEngine.rxDecodeList.length; j++) {
+                appendUnique(appEngine.rxDecodeList[j])
+            }
+        }
+        for (var i = 0; i < appEngine.decodeList.length; i++) {
+            var decode = appEngine.decodeList[i]
+            if (isAtRxFrequency(decode.freq, decode)) {
+                appendUnique(decode)
+            }
+        }
+        merged.sort(function(a, b) {
+            var ta = utcSortValue(a.time)
+            var tb = utcSortValue(b.time)
+            if (ta !== tb)
+                return ta - tb
+            var fa = parseInt(a.freq || "0")
+            var fb = parseInt(b.freq || "0")
+            if (fa !== fb)
+                return fa - fb
+            return String(a.message || "").localeCompare(String(b.message || ""))
+        })
+        return merged
+    }
+
+    function formatUtcForDisplay(timeStr) {
+        var digits = String(timeStr || "").replace(/[^0-9]/g, "")
+        if (digits.length >= 6)
+            return digits.substring(0, 2) + ":" + digits.substring(2, 4) + ":" + digits.substring(4, 6)
+        if (digits.length === 4)
+            return digits.substring(0, 2) + ":" + digits.substring(2, 4)
+        return timeStr || ""
     }
 
     // IU8LMC: Custom tooltip properties
@@ -241,7 +316,7 @@ Window {
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: secondaryCyan
-                                Layout.preferredWidth: 60
+                                Layout.preferredWidth: decodeWindow.bandUtcWidth
                             }
                             Text {
                                 text: "dB"
@@ -250,7 +325,7 @@ Window {
                                 font.bold: true
                                 color: secondaryCyan
                                 horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: 35
+                                Layout.preferredWidth: decodeWindow.bandDbWidth
                             }
                             Text {
                                 text: "DT"
@@ -259,7 +334,7 @@ Window {
                                 font.bold: true
                                 color: secondaryCyan
                                 horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: 45
+                                Layout.preferredWidth: decodeWindow.bandDtWidth
                             }
                             Text {
                                 text: "Freq"
@@ -268,9 +343,9 @@ Window {
                                 font.bold: true
                                 color: secondaryCyan
                                 horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: 50
+                                Layout.preferredWidth: decodeWindow.bandFreqWidth
                             }
-                            Item { Layout.preferredWidth: 10 }
+                            Item { Layout.preferredWidth: decodeWindow.bandGapWidth }
                             Text {
                                 text: "Message"
                                 font.family: "Consolas"
@@ -280,7 +355,7 @@ Window {
                                 Layout.fillWidth: true
                             }
                             Item {
-                                Layout.preferredWidth: 120
+                                Layout.preferredWidth: decodeWindow.bandDxccWidth
                                 Layout.fillHeight: true
                                 Text {
                                     anchors.fill: parent
@@ -289,12 +364,12 @@ Window {
                                     font.pixelSize: 10
                                     font.bold: true
                                     color: secondaryCyan
-                                    horizontalAlignment: Text.AlignRight
+                                    horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
                             }
                             Item {
-                                Layout.preferredWidth: 46
+                                Layout.preferredWidth: decodeWindow.bandAzWidth
                                 Layout.fillHeight: true
                                 Text {
                                     anchors.fill: parent
@@ -303,7 +378,7 @@ Window {
                                     font.pixelSize: 10
                                     font.bold: true
                                     color: secondaryCyan
-                                    horizontalAlignment: Text.AlignRight
+                                    horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
                             }
@@ -406,11 +481,11 @@ Window {
                                     spacing: 0
 
                                     Text {
-                                        text: modelData.time
+                                        text: formatUtcForDisplay(modelData.time)
                                         font.family: "Consolas"
                                         font.pixelSize: 11
                                         color: textSecondary
-                                        Layout.preferredWidth: 60
+                                        Layout.preferredWidth: decodeWindow.bandUtcWidth
                                     }
 
                                     Text {
@@ -421,7 +496,7 @@ Window {
                                                parseInt(modelData.db) > -15 ? secondaryCyan :
                                                parseInt(modelData.db) > -20 ? textSecondary : "#888"
                                         horizontalAlignment: Text.AlignRight
-                                        Layout.preferredWidth: 35
+                                        Layout.preferredWidth: decodeWindow.bandDbWidth
                                     }
 
                                     Text {
@@ -430,7 +505,7 @@ Window {
                                         font.pixelSize: 11
                                         color: textSecondary
                                         horizontalAlignment: Text.AlignRight
-                                        Layout.preferredWidth: 45
+                                        Layout.preferredWidth: decodeWindow.bandDtWidth
                                     }
 
                                     Text {
@@ -440,10 +515,10 @@ Window {
                                         color: isAtRxFrequency(modelData.freq, modelData) ? primaryBlue : secondaryCyan
                                         font.bold: isAtRxFrequency(modelData.freq, modelData)
                                         horizontalAlignment: Text.AlignRight
-                                        Layout.preferredWidth: 50
+                                        Layout.preferredWidth: decodeWindow.bandFreqWidth
                                     }
 
-                                    Item { Layout.preferredWidth: 10 }
+                                    Item { Layout.preferredWidth: decodeWindow.bandGapWidth }
 
                                     // Messaggio con coloring Shannon-compatible
                                     Text {
@@ -457,12 +532,12 @@ Window {
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
-                                        Layout.minimumWidth: 140
+                                        Layout.minimumWidth: decodeWindow.bandMessageMinWidth
                                         elide: Text.ElideRight
                                     }
 
                                     Item {
-                                        Layout.preferredWidth: 120
+                                        Layout.preferredWidth: decodeWindow.bandDxccWidth
                                         Layout.fillHeight: true
                                         Text {
                                             anchors.fill: parent
@@ -471,14 +546,14 @@ Window {
                                             font.pixelSize: 11
                                             color: modelData.dxIsNewCountry ? colorNewCountry :
                                                    modelData.dxIsMostWanted ? colorMostWanted : textSecondary
-                                            horizontalAlignment: Text.AlignRight
+                                            horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideRight
                                         }
                                     }
 
                                     Item {
-                                        Layout.preferredWidth: 46
+                                        Layout.preferredWidth: decodeWindow.bandAzWidth
                                         Layout.fillHeight: true
                                         Text {
                                             anchors.fill: parent
@@ -486,7 +561,7 @@ Window {
                                             font.family: "Consolas"
                                             font.pixelSize: 11
                                             color: secondaryCyan
-                                            horizontalAlignment: Text.AlignRight
+                                            horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                         }
                                     }
@@ -531,14 +606,14 @@ Window {
                             spacing: 8
 
                             Text {
-                                text: "RX Frequency"
-                                font.pixelSize: 13
+                                text: decodeWindow.compactRxHeader ? "RX Freq" : "RX Frequency"
+                                font.pixelSize: decodeWindow.compactRxHeader ? 12 : 13
                                 font.bold: true
                                 color: primaryBlue
                             }
 
                             Rectangle {
-                                Layout.preferredWidth: 70
+                                Layout.preferredWidth: decodeWindow.rxHeaderBadgeWidth
                                 Layout.preferredHeight: 22
                                 color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
                                 radius: 4
@@ -559,14 +634,11 @@ Window {
                             // RX Frequency count
                             Text {
                                 text: {
-                                    var count = 0
-                                    for (var i = 0; i < appEngine.decodeList.length; i++) {
-                                        if (isAtRxFrequency(appEngine.decodeList[i].freq, appEngine.decodeList[i])) count++
-                                    }
-                                    return count + " msgs"
+                                    return currentRxDecodes().length + " msgs"
                                 }
                                 font.pixelSize: 11
                                 color: textSecondary
+                                visible: !decodeWindow.compactRxHeader
                             }
                         }
                     }
@@ -590,7 +662,7 @@ Window {
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: primaryBlue
-                                Layout.preferredWidth: 60
+                                Layout.preferredWidth: decodeWindow.rxUtcWidth
                             }
                             Text {
                                 text: "dB"
@@ -599,7 +671,7 @@ Window {
                                 font.bold: true
                                 color: primaryBlue
                                 horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: 35
+                                Layout.preferredWidth: decodeWindow.rxDbWidth
                             }
                             Text {
                                 text: "DT"
@@ -608,9 +680,9 @@ Window {
                                 font.bold: true
                                 color: primaryBlue
                                 horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: 45
+                                Layout.preferredWidth: decodeWindow.rxDtWidth
                             }
-                            Item { Layout.preferredWidth: 10 }
+                            Item { Layout.preferredWidth: decodeWindow.rxGapWidth }
                             Text {
                                 text: "Message"
                                 font.family: "Consolas"
@@ -641,14 +713,7 @@ Window {
 
                             // Filter model to only show messages at RX frequency
                             model: {
-                                var filtered = []
-                                for (var i = 0; i < appEngine.decodeList.length; i++) {
-                                    var decode = appEngine.decodeList[i]
-                                    if (isAtRxFrequency(decode.freq, decode)) {
-                                        filtered.push(decode)
-                                    }
-                                }
-                                return filtered
+                                return currentRxDecodes()
                             }
 
                             ScrollBar.vertical: ScrollBar {
@@ -722,11 +787,11 @@ Window {
                                     spacing: 0
 
                                     Text {
-                                        text: modelData.time
+                                        text: formatUtcForDisplay(modelData.time)
                                         font.family: "Consolas"
                                         font.pixelSize: 11
                                         color: textSecondary
-                                        Layout.preferredWidth: 60
+                                        Layout.preferredWidth: decodeWindow.rxUtcWidth
                                     }
 
                                     Text {
@@ -737,7 +802,7 @@ Window {
                                                parseInt(modelData.db) > -15 ? secondaryCyan :
                                                parseInt(modelData.db) > -20 ? textSecondary : "#888"
                                         horizontalAlignment: Text.AlignRight
-                                        Layout.preferredWidth: 35
+                                        Layout.preferredWidth: decodeWindow.rxDbWidth
                                     }
 
                                     Text {
@@ -746,10 +811,10 @@ Window {
                                         font.pixelSize: 11
                                         color: textSecondary
                                         horizontalAlignment: Text.AlignRight
-                                        Layout.preferredWidth: 45
+                                        Layout.preferredWidth: decodeWindow.rxDtWidth
                                     }
 
-                                    Item { Layout.preferredWidth: 10 }
+                                    Item { Layout.preferredWidth: decodeWindow.rxGapWidth }
 
                                     // Messaggio RX con coloring + strikethrough B4
                                     Text {
@@ -767,12 +832,12 @@ Window {
 
                                     // Distanza
                                     Text {
-                                        visible: modelData.dxDistance > 0
+                                        visible: modelData.dxDistance > 0 && !decodeWindow.compactRxColumns
                                         text: modelData.dxDistance > 0 ?
                                               Math.round(modelData.dxDistance) + "km" : ""
                                         font.pixelSize: 9
                                         color: "#666688"
-                                        Layout.preferredWidth: 50
+                                        Layout.preferredWidth: decodeWindow.rxDistanceWidth
                                         horizontalAlignment: Text.AlignRight
                                     }
                                 }

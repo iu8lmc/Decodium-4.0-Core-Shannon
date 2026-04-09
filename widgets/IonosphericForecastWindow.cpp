@@ -530,7 +530,7 @@ bool IonosphericForecastWindow::parseSolarXml(QByteArray const& xml, SolarSnapsh
           continue;
         }
 
-      if (reader.name() != "solardata")
+      if (reader.name() != QLatin1String("solardata"))
         {
           continue;
         }
@@ -553,7 +553,7 @@ bool IonosphericForecastWindow::parseSolarXml(QByteArray const& xml, SolarSnapsh
             {
               while (reader.readNextStartElement())
                 {
-                  if (reader.name() == "band")
+                  if (reader.name() == QLatin1String("band"))
                     {
                       auto attrs = reader.attributes();
                       BandCondition band;
@@ -572,7 +572,7 @@ bool IonosphericForecastWindow::parseSolarXml(QByteArray const& xml, SolarSnapsh
             {
               while (reader.readNextStartElement())
                 {
-                  if (reader.name() == "phenomenon")
+                  if (reader.name() == QLatin1String("phenomenon"))
                     {
                       auto attrs = reader.attributes();
                       VhfCondition vhf;

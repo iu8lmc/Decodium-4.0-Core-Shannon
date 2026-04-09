@@ -12,24 +12,26 @@ Rectangle {
     property string catStatus: "Disconnected"
     property string pttStatus: "Ready"
     property double audioLevel: 0.0  // raw RMS 0.0..1.0 da DecodiumAudioSink
+    property double signalLevel: 0.0 // legacy S-meter in dB circa 0..90
     property double cpuUsage: 0.0    // 0.0 to 1.0
 
     // Scala logaritmica: -60 dBFS → 0.0, 0 dBFS → 1.0
     // Mappa valori RMS tipici (0.001..0.3) su tutto il range S-meter
     readonly property double scaledLevel: audioLevel > 0.0
         ? Math.max(0.0, Math.min(1.0, (20.0 * Math.log(audioLevel) / Math.LN10 + 60.0) / 60.0))
-        : 0.0
+        : Math.max(0.0, Math.min(1.0, signalLevel / 90.0))
     property bool monitoring: false
     property bool transmitting: false
     property bool decoding: false
 
     onDecodingChanged: console.log("StatusBar: decoding =", decoding)
 
-    property color accentGreen: bridge.themeManager.accentColor
-    property color secondaryCyan: bridge.themeManager.secondaryColor
-    property color textSecondary: bridge.themeManager.textSecondary
-    property color textPrimary: bridge.themeManager.textPrimary
-    property color bgDeep: bridge.themeManager.bgDeep
+    readonly property var themeManager: bridge && bridge.themeManager ? bridge.themeManager : null
+    property color accentGreen: themeManager ? themeManager.accentColor : "#4CAF50"
+    property color secondaryCyan: themeManager ? themeManager.secondaryColor : "#00D4FF"
+    property color textSecondary: themeManager ? themeManager.textSecondary : "#89B4D0"
+    property color textPrimary: themeManager ? themeManager.textPrimary : "#E8F4FD"
+    property color bgDeep: themeManager ? themeManager.bgDeep : "#111827"
 
     height: 36
     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
@@ -98,9 +100,13 @@ Rectangle {
             // dB value
             Text {
                 text: {
-                    if (audioLevel <= 0) return "-∞"
-                    var db = 20.0 * Math.log(audioLevel) / Math.LN10
-                    return db.toFixed(0) + "dB"
+                    if (audioLevel > 0) {
+                        var db = 20.0 * Math.log(audioLevel) / Math.LN10
+                        return db.toFixed(0) + "dB"
+                    }
+                    if (signalLevel > 0)
+                        return signalLevel.toFixed(0) + "dB"
+                    return "-∞"
                 }
                 font.family: "Consolas"
                 font.pixelSize: 10
@@ -208,7 +214,7 @@ Rectangle {
                 height: 18
                 radius: 9
 
-                property int threadCount: bridge.ftThreads
+                property int threadCount: bridge ? bridge.ftThreads : 1
                 property bool isActive: threadCount > 1
 
                 color: isActive ? Qt.rgba(255/255, 152/255, 0/255, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -287,8 +293,8 @@ Rectangle {
         // PSK Reporter Status
         RowLayout {
             spacing: 4
-            property bool pskEnabled:   bridge.pskReporterEnabled
-            property bool pskConnected: bridge.pskReporterConnected
+            property bool pskEnabled:   bridge ? bridge.pskReporterEnabled : false
+            property bool pskConnected: bridge ? bridge.pskReporterConnected : false
 
             Rectangle {
                 width: 8

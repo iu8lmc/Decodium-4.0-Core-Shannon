@@ -441,6 +441,25 @@ void WideGraph::on_paletteComboBox_activated (QString const& palette)    //palet
   replot();
 }
 
+void WideGraph::setWaterfallPaletteName(QString const& palette)
+{
+  if (palette.isEmpty () || palette == m_waterfallPalette)
+    {
+      return;
+    }
+
+  int const index = ui->paletteComboBox->findText (palette);
+  if (index < 0)
+    {
+      return;
+    }
+
+  ui->paletteComboBox->setCurrentIndex (index);
+  m_waterfallPalette = palette;
+  readPalette ();
+  replot ();
+}
+
 void WideGraph::on_cbFlatten_toggled(bool b)                          //Flatten On/Off
 {
   m_bFlatten=b;

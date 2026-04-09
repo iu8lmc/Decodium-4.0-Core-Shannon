@@ -170,8 +170,18 @@ private:
   unsigned last_sequence_number_;    // from set state operation
 };
 
-// some loggimg macros
-#define CAT_TRACE(MSG) LOG_LOG_LOCATION (logger (), trace, MSG)
+// Keep routine CAT traffic out of the terminal. We still preserve
+// debug/warning/error levels for actionable failures.
+struct CatTraceSilencer
+{
+  template<typename T>
+  CatTraceSilencer& operator<< (T const&)
+  {
+    return *this;
+  }
+};
+
+#define CAT_TRACE(MSG) (CatTraceSilencer {} << MSG)
 #define CAT_DEBUG(MSG) LOG_LOG_LOCATION (logger (), debug, MSG)
 #define CAT_INFO(MSG) LOG_LOG_LOCATION (logger (), info, MSG)
 #define CAT_WARNING(MSG) LOG_LOG_LOCATION (logger (), warning, MSG)

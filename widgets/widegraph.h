@@ -57,6 +57,8 @@ public:
   void   setDiskUTC(int nutc);
   void   restartTotalPower();
   void	 setDarkStyle(bool b);
+  QString waterfallPaletteName() const { return m_waterfallPalette; }
+  void   setWaterfallPaletteName(QString const& palette);
 
 signals:
   void freezeDecode2(int n);

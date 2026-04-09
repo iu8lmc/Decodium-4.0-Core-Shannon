@@ -33,24 +33,151 @@ class MacroManager : public QObject
     Q_OBJECT
     Q_PROPERTY(bool contestMode READ contestMode NOTIFY contestModeChanged)
     Q_PROPERTY(QString contestName READ contestName NOTIFY contestNameChanged)
+    Q_PROPERTY(QStringList contestList READ contestList CONSTANT)
+    Q_PROPERTY(int contestId READ contestId WRITE setContestId NOTIFY contestIdChanged)
+    Q_PROPERTY(int serialNumber READ serialNumber WRITE setSerialNumber NOTIFY serialNumberChanged)
+    Q_PROPERTY(QString exchange READ exchange WRITE setExchange NOTIFY exchangeChanged)
 public:
-    explicit MacroManager(QObject* parent = nullptr) : QObject(parent) {}
+    explicit MacroManager(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+        resetMacrosToDefault();
+    }
+
     bool contestMode() const { return m_contestMode; }
-    QString contestName() const { return m_contestName; }
+    QString contestName() const
+    {
+        return m_contestId >= 0 && m_contestId < m_contests.size()
+            ? m_contests.at(m_contestId)
+            : QStringLiteral("NONE");
+    }
+    QStringList contestList() const { return m_contests; }
+    int contestId() const { return m_contestId; }
+    void setContestId(int value)
+    {
+        int clamped = value;
+        if (clamped < 0) clamped = 0;
+        if (clamped >= m_contests.size()) clamped = m_contests.size() - 1;
+        if (m_contestId == clamped) return;
+        m_contestId = clamped;
+        bool newContestMode = m_contestId > 0;
+        if (m_contestMode != newContestMode) {
+            m_contestMode = newContestMode;
+            emit contestModeChanged();
+        }
+        emit contestIdChanged();
+        emit contestNameChanged();
+    }
+    int serialNumber() const { return m_serialNumber; }
+    void setSerialNumber(int value)
+    {
+        int clamped = value < 1 ? 1 : value;
+        if (m_serialNumber == clamped) return;
+        m_serialNumber = clamped;
+        emit serialNumberChanged();
+    }
+    QString exchange() const { return m_exchange; }
+    void setExchange(QString value)
+    {
+        value = value.trimmed().toUpper();
+        if (m_exchange == value) return;
+        m_exchange = value;
+        emit exchangeChanged();
+    }
 
 public slots:
     Q_INVOKABLE void toggleContest() {
-        m_contestMode = !m_contestMode;
-        emit contestModeChanged();
+        setContestId(m_contestMode ? 0 : 1);
+    }
+
+    Q_INVOKABLE int getSerialNumberMax() const { return 9999; }
+
+    Q_INVOKABLE QString getMacroTemplate(int index) const
+    {
+        return index >= 0 && index < m_macros.size() ? m_macros.at(index) : QString {};
+    }
+
+    Q_INVOKABLE void setMacroTemplate(int index, const QString& value)
+    {
+        if (index < 0) return;
+        while (index >= m_macros.size()) m_macros.append(QString {});
+        if (m_macros[index] == value) return;
+        m_macros[index] = value;
+        emit macrosChanged();
+    }
+
+    Q_INVOKABLE QString getMacro(int index) const
+    {
+        return getMacroTemplate(index);
+    }
+
+    Q_INVOKABLE void setMacro(int index, const QString& value)
+    {
+        setMacroTemplate(index, value);
+    }
+
+    Q_INVOKABLE void resetMacrosToDefault()
+    {
+        m_macros = {
+            QStringLiteral("%T %M %G4"),
+            QStringLiteral("%T %M %R"),
+            QStringLiteral("%T %M R%R"),
+            QStringLiteral("%T %M RR73"),
+            QStringLiteral("%T %M 73"),
+            QStringLiteral("CQ %M %G4"),
+            QStringLiteral("%T %M %E")
+        };
+        emit macrosChanged();
+    }
+
+    Q_INVOKABLE QString generateContestTx(int txNumber,
+                                          const QString& myCall,
+                                          const QString& myGrid,
+                                          const QString& dxCall,
+                                          const QString& dxGrid,
+                                          const QString& report,
+                                          int) const
+    {
+        QString result = getMacroTemplate(txNumber - 1);
+        if (result.isEmpty()) return QString {};
+
+        const QString grid4 = myGrid.left(4);
+        const QString serial = QStringLiteral("%1").arg(m_serialNumber, 4, 10, QChar('0'));
+        result.replace("%M", myCall);
+        result.replace("%T", dxCall);
+        result.replace("%R", report);
+        result.replace("%RST", report);
+        result.replace("%N", serial);
+        result.replace("%G6", myGrid);
+        result.replace("%G4", grid4);
+        result.replace("%G", dxGrid);
+        result.replace("%EXCH", m_exchange);
+        result.replace("%E", m_exchange);
+        result.replace("%73", "73");
+        return result.simplified();
     }
 
 signals:
     void contestModeChanged();
     void contestNameChanged();
+    void contestIdChanged();
+    void serialNumberChanged();
+    void exchangeChanged();
+    void macrosChanged();
 
 private:
     bool m_contestMode {false};
-    QString m_contestName {"NONE"};
+    QStringList m_contests {
+        QStringLiteral("None"),
+        QStringLiteral("Generic"),
+        QStringLiteral("ARRL Field Day"),
+        QStringLiteral("RTTY Roundup"),
+        QStringLiteral("EU VHF")
+    };
+    int m_contestId {0};
+    int m_serialNumber {1};
+    QString m_exchange;
+    QStringList m_macros;
 };
 
 // --- BandManager ---

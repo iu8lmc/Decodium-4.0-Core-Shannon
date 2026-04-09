@@ -120,6 +120,34 @@ ApplicationWindow {
         qsyDialogLoader.item.open()
     }
 
+    property var legacySetupSections: [
+        { title: "Generale",   tabIndex: 0, description: "Stazione, display e comportamento" },
+        { title: "Radio",      tabIndex: 1, description: "CAT, PTT e parametri radio" },
+        { title: "Audio",      tabIndex: 2, description: "Schede audio, canali e livelli" },
+        { title: "Macro TX",   tabIndex: 3, description: "Messaggi predefiniti e testo libero" },
+        { title: "Reporting",  tabIndex: 4, description: "PSK Reporter, logging e servizi" },
+        { title: "Frequenze",  tabIndex: 5, description: "Bande, frequenze e allocazioni" },
+        { title: "Colori",     tabIndex: 6, description: "Highlight, palette e aspetto decode" },
+        { title: "Avanzate",   tabIndex: 7, description: "Opzioni estese e comportamento avanzato" },
+        { title: "Allarmi",    tabIndex: 8, description: "Alert, notifiche e suoni" },
+        { title: "Filtri",     tabIndex: 9, description: "Whitelist, blacklist e filtri decode" }
+    ]
+    property string rigErrorDialogTitle: ""
+    property string rigErrorSummary: ""
+    property string rigErrorDetails: ""
+    property bool rigErrorDetailsVisible: false
+    property string warningDialogTitle: ""
+    property string warningDialogSummary: ""
+    property string warningDialogDetails: ""
+    property bool warningDialogDetailsVisible: false
+
+    function openSetupMenu(anchorItem) {
+        const point = anchorItem.mapToItem(Overlay.overlay, 0, anchorItem.height + 8)
+        setupMenuPopup.x = Math.max(16, Math.min(point.x, mainWindow.width - setupMenuPopup.width - 16))
+        setupMenuPopup.y = Math.max(16, point.y)
+        setupMenuPopup.open()
+    }
+
     // WAV file open dialog - single file
     FileDialog {
         id: wavOpenDialog
@@ -162,6 +190,7 @@ ApplicationWindow {
     property color secondaryCyan: bridge.themeManager.secondaryColor
     property color accentGreen: bridge.themeManager.accentColor
     property color accentOrange: bridge.themeManager.warningColor
+    property color warningOrange: accentOrange
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color successGreen: bridge.themeManager.successColor
@@ -1320,6 +1349,7 @@ ApplicationWindow {
 
                         // Settings
                         Rectangle {
+                            id: settingsButton
                             Layout.preferredWidth: 50
                             Layout.fillHeight: true
                             radius: 3
@@ -1346,7 +1376,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsDialog.open()
+                                onClicked: openSetupMenu(settingsButton)
                             }
 
                             ToolTip.visible: settingsMA.containsMouse
@@ -1602,6 +1632,10 @@ ApplicationWindow {
                     id: worldClock
                     width: 252
                     height: 80
+                    readonly property int analogClockWidth: 60
+                    readonly property int cardMargins: 10
+                    readonly property int rowSpacing: 12
+                    readonly property int infoColumnWidth: Math.max(116, width - (cardMargins * 2) - analogClockWidth - rowSpacing - 4)
 
                     property var timezones: [
                         { name: "UTC", offset: 0 },
@@ -1649,6 +1683,7 @@ ApplicationWindow {
 
                     Rectangle {
                         anchors.fill: parent
+                        clip: true
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                         border.color: clockHover.hovered ? secondaryCyan : glassBorder
                         border.width: clockHover.hovered ? 2 : 1
@@ -1658,113 +1693,118 @@ ApplicationWindow {
                             id: clockHover
                         }
 
-                        Row {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 12
+                        Rectangle {
+                            id: analogClockFace
+                            anchors.left: parent.left
+                            anchors.leftMargin: worldClock.cardMargins
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: worldClock.analogClockWidth
+                            height: 60
+                            radius: 30
+                            color: bgMedium
+                            border.color: secondaryCyan
+                            border.width: 1
 
-                            // Analog Clock Face
-                            Rectangle {
-                                width: 60
-                                height: 60
-                                radius: 30
-                                color: bgMedium
-                                border.color: secondaryCyan
-                                border.width: 1
-
-                                // Clock face markers
-                                Repeater {
-                                    model: 12
-                                    Rectangle {
-                                        width: index % 3 === 0 ? 3 : 2
-                                        height: index % 3 === 0 ? 6 : 3
-                                        color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.5)
-                                        x: 30 + 24 * Math.sin(index * 30 * Math.PI / 180) - width/2
-                                        y: 30 - 24 * Math.cos(index * 30 * Math.PI / 180) - height/2
-                                    }
-                                }
-
-                                // Hour hand
+                            Repeater {
+                                model: 12
                                 Rectangle {
-                                    width: 3; height: 18; color: textPrimary
-                                    x: 28.5; y: 14
-                                    transformOrigin: Item.Bottom
-                                    rotation: (worldClock.hours % 12 + worldClock.minutes / 60) * 30
-                                }
-
-                                // Minute hand
-                                Rectangle {
-                                    width: 2; height: 22; color: secondaryCyan
-                                    x: 29; y: 10
-                                    transformOrigin: Item.Bottom
-                                    rotation: worldClock.minutes * 6
-                                }
-
-                                // Second hand
-                                Rectangle {
-                                    width: 1.5; height: 26; color: accentGreen
-                                    x: 29.25; y: 6
-                                    transformOrigin: Item.Bottom
-                                    rotation: worldClock.seconds * 6
-                                }
-
-                                // Center dot
-                                Rectangle {
-                                    width: 6; height: 6; radius: 3
-                                    color: accentGreen; x: 27; y: 27
+                                    width: index % 3 === 0 ? 3 : 2
+                                    height: index % 3 === 0 ? 6 : 3
+                                    color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.5)
+                                    x: 30 + 24 * Math.sin(index * 30 * Math.PI / 180) - width/2
+                                    y: 30 - 24 * Math.cos(index * 30 * Math.PI / 180) - height/2
                                 }
                             }
 
-                            // Digital time, date and timezone
-                            Column {
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 3
+                            Rectangle {
+                                width: 3; height: 18; color: textPrimary
+                                x: 28.5; y: 14
+                                transformOrigin: Item.Bottom
+                                rotation: (worldClock.hours % 12 + worldClock.minutes / 60) * 30
+                            }
 
-                                Text {
-                                    font.pixelSize: 22
-                                    font.family: "Consolas"
-                                    font.bold: true
-                                    color: textPrimary
-                                    text: ("0" + worldClock.hours).slice(-2) + ":" +
-                                          ("0" + worldClock.minutes).slice(-2) + ":" +
-                                          ("0" + worldClock.seconds).slice(-2)
-                                }
+                            Rectangle {
+                                width: 2; height: 22; color: secondaryCyan
+                                x: 29; y: 10
+                                transformOrigin: Item.Bottom
+                                rotation: worldClock.minutes * 6
+                            }
 
-                                Text {
-                                    text: worldClock.dateStr
-                                    font.pixelSize: 11
-                                    font.family: "Consolas"
-                                    color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
-                                }
+                            Rectangle {
+                                width: 1.5; height: 26; color: accentGreen
+                                x: 29.25; y: 6
+                                transformOrigin: Item.Bottom
+                                rotation: worldClock.seconds * 6
+                            }
 
-                                StyledComboBox {
-                                    id: timezoneCombo
-                                    width: 184
-                                    height: 36
-                                    font.pixelSize: 12
-                                    itemHeight: 38
-                                    popupMinWidth: 200
-                                    textHorizontalAlignment: Text.AlignLeft
-                                    topPadding: 6
-                                    bottomPadding: 6
-                                    leftPadding: 12
-                                    rightPadding: 32
-                                    model: worldClock.timezones.map(function(t) { return t.name })
-                                    currentIndex: Math.max(0, worldClock.selectedTz)
-                                    accentColor: secondaryCyan
-                                    textColor: textPrimary
-                                    bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
-                                    borderColor: glassBorder
-                                    onActivated: {
-                                        worldClock.selectedTz = currentIndex
-                                        worldClock.updateTime()
-                                    }
-                                    onCurrentIndexChanged: {
-                                        if (currentIndex >= 0 && worldClock.selectedTz !== currentIndex) {
-                                            worldClock.selectedTz = currentIndex
-                                            worldClock.updateTime()
-                                        }
-                                    }
+                            Rectangle {
+                                width: 6; height: 6; radius: 3
+                                color: accentGreen; x: 27; y: 27
+                            }
+                        }
+
+                        Text {
+                            id: worldClockTimeText
+                            anchors.left: analogClockFace.right
+                            anchors.leftMargin: worldClock.rowSpacing
+                            anchors.right: parent.right
+                            anchors.rightMargin: worldClock.cardMargins
+                            anchors.top: parent.top
+                            anchors.topMargin: 2
+                            font.pixelSize: 22
+                            minimumPixelSize: 17
+                            fontSizeMode: Text.Fit
+                            font.family: "Consolas"
+                            font.bold: true
+                            color: textPrimary
+                            elide: Text.ElideRight
+                            text: ("0" + worldClock.hours).slice(-2) + ":" +
+                                  ("0" + worldClock.minutes).slice(-2) + ":" +
+                                  ("0" + worldClock.seconds).slice(-2)
+                        }
+
+                        Text {
+                            id: worldClockDateText
+                            anchors.left: worldClockTimeText.left
+                            anchors.right: worldClockTimeText.right
+                            anchors.top: worldClockTimeText.bottom
+                            anchors.topMargin: 2
+                            text: worldClock.dateStr
+                            font.pixelSize: 11
+                            font.family: "Consolas"
+                            color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
+                            elide: Text.ElideRight
+                        }
+
+                        StyledComboBox {
+                            id: timezoneCombo
+                            anchors.left: worldClockTimeText.left
+                            anchors.right: worldClockTimeText.right
+                            anchors.top: worldClockDateText.bottom
+                            anchors.topMargin: 2
+                            height: 32
+                            font.pixelSize: 11
+                            itemHeight: 34
+                            popupMinWidth: width
+                            textHorizontalAlignment: Text.AlignLeft
+                            topPadding: 4
+                            bottomPadding: 4
+                            leftPadding: 12
+                            rightPadding: 32
+                            model: worldClock.timezones.map(function(t) { return t.name })
+                            currentIndex: Math.max(0, worldClock.selectedTz)
+                            accentColor: secondaryCyan
+                            textColor: textPrimary
+                            bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+                            borderColor: glassBorder
+                            onActivated: {
+                                worldClock.selectedTz = currentIndex
+                                worldClock.updateTime()
+                            }
+                            onCurrentIndexChanged: {
+                                if (currentIndex >= 0 && worldClock.selectedTz !== currentIndex) {
+                                    worldClock.selectedTz = currentIndex
+                                    worldClock.updateTime()
                                 }
                             }
                         }
@@ -2849,6 +2889,62 @@ ApplicationWindow {
                         var relevant = md && (md.isMyCall || md.isTx)
                         return inWindow || relevant
                     }
+                    function currentRxDecodes() {
+                        var merged = []
+                        var seen = {}
+                        function utcSortValue(timeStr) {
+                            var digits = String(timeStr || "").replace(/[^0-9]/g, "")
+                            if (digits.length >= 6)
+                                return parseInt(digits.substring(0, 6))
+                            if (digits.length === 4)
+                                return parseInt(digits + "00")
+                            return -1
+                        }
+                        function appendUnique(item) {
+                            if (!item)
+                                return
+                            var key = (item.time || "") + "|" +
+                                      (item.freq || "") + "|" +
+                                      (item.message || "") + "|" +
+                                      (item.isTx ? "1" : "0")
+                            if (seen[key])
+                                return
+                            seen[key] = true
+                            merged.push(item)
+                        }
+                        if (bridge.rxDecodeList) {
+                            for (var j = 0; j < bridge.rxDecodeList.length; j++) {
+                                appendUnique(bridge.rxDecodeList[j])
+                            }
+                        }
+                        for (var i = 0; i < bridge.decodeList.length; i++) {
+                            var item = bridge.decodeList[i]
+                            if (decodePanel.isAtRxFrequency(item.freq, item)) {
+                                appendUnique(item)
+                            }
+                        }
+                        merged.sort(function(a, b) {
+                            var ta = utcSortValue(a.time)
+                            var tb = utcSortValue(b.time)
+                            if (ta !== tb)
+                                return ta - tb
+                            var fa = parseInt(a.freq || "0")
+                            var fb = parseInt(b.freq || "0")
+                            if (fa !== fb)
+                                return fa - fb
+                            return String(a.message || "").localeCompare(String(b.message || ""))
+                        })
+                        return merged
+                    }
+
+                    function formatUtcForDisplay(timeStr) {
+                        var digits = String(timeStr || "").replace(/[^0-9]/g, "")
+                        if (digits.length >= 6)
+                            return digits.substring(0, 2) + ":" + digits.substring(2, 4) + ":" + digits.substring(4, 6)
+                        if (digits.length === 4)
+                            return digits.substring(0, 2) + ":" + digits.substring(2, 4)
+                        return timeStr || ""
+                    }
 
                     // Period filtering function - adapts to mode (FT4=7.5s, FT8=15s)
                     function isEvenPeriod(timeStr) {
@@ -3059,7 +3155,16 @@ ApplicationWindow {
                         Rectangle {
                             id: period1Panel
                             SplitView.preferredWidth: 400
-                            SplitView.minimumWidth: 150
+                            SplitView.minimumWidth: 360
+                            readonly property bool compactColumns: width < 540
+                            readonly property int utcColumnWidth: compactColumns ? 48 : 55
+                            readonly property int dbColumnWidth: compactColumns ? 26 : 30
+                            readonly property int dtColumnWidth: compactColumns ? 32 : 35
+                            readonly property int freqColumnWidth: compactColumns ? 42 : 45
+                            readonly property int gapColumnWidth: compactColumns ? 4 : 6
+                            readonly property int dxccColumnWidth: compactColumns ? 96 : 132
+                            readonly property int azColumnWidth: compactColumns ? 42 : 52
+                            readonly property int messageMinWidth: compactColumns ? 72 : 140
                             Component.onCompleted: {
                                 // Dopo il layout, porta il separatore al 50%
                                 Qt.callLater(function() {
@@ -3256,14 +3361,14 @@ ApplicationWindow {
                                         anchors.rightMargin: 6
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: 55 }
-                                        Text { text: "dB"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 30 }
-                                        Text { text: "DT"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
-                                        Text { text: "Freq"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                                        Item { Layout.preferredWidth: 6 }
+                                        Text { text: "UTC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                        Text { text: "DT"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                        Text { text: "Freq"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                        Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                         Text { text: "Message"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
                                         Item {
-                                            Layout.preferredWidth: 120
+                                            Layout.preferredWidth: period1Panel.dxccColumnWidth
                                             Layout.fillHeight: true
                                             Text {
                                                 anchors.fill: parent
@@ -3272,12 +3377,12 @@ ApplicationWindow {
                                                 font.pixelSize: Math.round(11 * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
-                                                horizontalAlignment: Text.AlignRight
+                                                horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
                                             }
                                         }
                                         Item {
-                                            Layout.preferredWidth: 46
+                                            Layout.preferredWidth: period1Panel.azColumnWidth
                                             Layout.fillHeight: true
                                             Text {
                                                 anchors.fill: parent
@@ -3286,7 +3391,7 @@ ApplicationWindow {
                                                 font.pixelSize: Math.round(11 * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
-                                                horizontalAlignment: Text.AlignRight
+                                                horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
                                             }
                                         }
@@ -3369,14 +3474,14 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: modelData.time || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: 55 }
-                                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 30 }
-                                                Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
-                                                Text { text: modelData.freq || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                                                Item { Layout.preferredWidth: 6 }
-                                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: 140; elide: Text.ElideRight }
+                                                Text { text: modelData.time || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                                Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                                Text { text: modelData.freq || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                                Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
+                                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: Text.ElideRight }
                                                 Item {
-                                                    Layout.preferredWidth: 120
+                                                    Layout.preferredWidth: period1Panel.dxccColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
                                                         anchors.fill: parent
@@ -3384,13 +3489,13 @@ ApplicationWindow {
                                                         font.family: "Consolas"
                                                         font.pixelSize: Math.round(11 * fs)
                                                         color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary
-                                                        horizontalAlignment: Text.AlignRight
+                                                        horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                         elide: Text.ElideRight
                                                     }
                                                 }
                                                 Item {
-                                                    Layout.preferredWidth: 46
+                                                    Layout.preferredWidth: period1Panel.azColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
                                                         anchors.fill: parent
@@ -3398,7 +3503,7 @@ ApplicationWindow {
                                                         font.family: "Consolas"
                                                         font.pixelSize: Math.round(11 * fs)
                                                         color: secondaryCyan
-                                                        horizontalAlignment: Text.AlignRight
+                                                        horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                     }
                                                 }
@@ -3422,7 +3527,14 @@ ApplicationWindow {
                         Rectangle {
                             id: rxFreqPanel
                             SplitView.fillWidth: true
-                            SplitView.minimumWidth: 100
+                            SplitView.minimumWidth: 260
+                            readonly property bool compactColumns: width < 430
+                            readonly property bool compactHeader: width < 350
+                            readonly property int utcColumnWidth: compactColumns ? 58 : 72
+                            readonly property int dbColumnWidth: compactColumns ? 26 : 30
+                            readonly property int dtColumnWidth: compactColumns ? 30 : 35
+                            readonly property int gapColumnWidth: compactColumns ? 4 : 6
+                            readonly property int headerBadgeWidth: compactHeader ? 62 : 70
                             color: "transparent"
 
                             // Placeholder when detached - magnetic dock zone
@@ -3501,14 +3613,14 @@ ApplicationWindow {
                                         }
 
                                         Text {
-                                            text: "RX Frequency"
-                                            font.pixelSize: 14
+                                            text: rxFreqPanel.compactHeader ? "RX Freq" : "RX Frequency"
+                                            font.pixelSize: rxFreqPanel.compactHeader ? 12 : 14
                                             font.bold: true
                                             color: primaryBlue
                                         }
 
                                         Rectangle {
-                                            width: 70
+                                            width: rxFreqPanel.headerBadgeWidth
                                             height: 18
                                             color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
                                             radius: 4
@@ -3528,14 +3640,11 @@ ApplicationWindow {
 
                                         Text {
                                             text: {
-                                                var count = 0
-                                                for (var i = 0; i < bridge.decodeList.length; i++) {
-                                                    if (decodePanel.isAtRxFrequency(bridge.decodeList[i].freq, bridge.decodeList[i])) count++
-                                                }
-                                                return count + " msgs"
+                                                return decodePanel.currentRxDecodes().length + " msgs"
                                             }
                                             font.pixelSize: 10
                                             color: textSecondary
+                                            visible: !rxFreqPanel.compactHeader
                                         }
 
                                         // Detach button
@@ -3584,10 +3693,10 @@ ApplicationWindow {
                                         anchors.rightMargin: 6
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: 55 }
-                                        Text { text: "dB"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 30 }
-                                        Text { text: "DT"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
-                                        Item { Layout.preferredWidth: 6 }
+                                        Text { text: "UTC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                        Text { text: "DT"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                        Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
                                         Text { text: "Message"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
                                     }
                                 }
@@ -3611,13 +3720,7 @@ ApplicationWindow {
                                         onCountChanged: positionViewAtEnd()
 
                                         model: {
-                                            var filtered = []
-                                            for (var i = 0; i < bridge.decodeList.length; i++) {
-                                                if (decodePanel.isAtRxFrequency(bridge.decodeList[i].freq, bridge.decodeList[i])) {
-                                                    filtered.push(bridge.decodeList[i])
-                                                }
-                                            }
-                                            return filtered
+                                            return decodePanel.currentRxDecodes()
                                         }
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
@@ -3676,10 +3779,10 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: modelData.time || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: 55 }
-                                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 30 }
-                                                Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 35 }
-                                                Item { Layout.preferredWidth: 6 }
+                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                                Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                                Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
                                                 Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                                             }
                                         }
@@ -3938,11 +4041,12 @@ ApplicationWindow {
         // Status Bar
         StatusBar {
             Layout.fillWidth: true
-            audioLevel: bridge.audioLevel
-            monitoring: bridge.monitoring
-            transmitting: bridge.transmitting
-            decoding: bridge.decoding
-            catStatus: bridge.catConnected ? "Connected" : "Disconnected"
+            audioLevel: bridge ? bridge.audioLevel : 0.0
+            signalLevel: bridge ? bridge.sMeter : 0.0
+            monitoring: bridge ? bridge.monitoring : false
+            transmitting: bridge ? bridge.transmitting : false
+            decoding: bridge ? bridge.decoding : false
+            catStatus: bridge && bridge.catConnected ? "Connected" : "Disconnected"
         }
     }
 
@@ -3950,6 +4054,334 @@ ApplicationWindow {
     SettingsDialog {
         id: settingsDialog
         anchors.centerIn: parent
+    }
+
+    Popup {
+        id: setupMenuPopup
+        parent: Overlay.overlay
+        width: 520
+        modal: false
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: secondaryCyan
+            border.width: 1
+            radius: 14
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 0
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 56
+                Layout.preferredHeight: implicitHeight
+                color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.95)
+                radius: 14
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Setup"
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: secondaryCyan
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Preferenze Decodium 3"
+                    font.pixelSize: 11
+                    color: textSecondary
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                Layout.topMargin: 14
+                Layout.bottomMargin: 14
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 10
+
+                Repeater {
+                    model: legacySetupSections
+
+                    delegate: Button {
+                        id: setupEntryButton
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 58
+
+                        contentItem: Column {
+                            spacing: 2
+                            anchors.centerIn: parent
+
+                            Text {
+                                text: modelData.title
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: textPrimary
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            Text {
+                                text: modelData.description
+                                font.pixelSize: 10
+                                color: textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
+
+                        background: Rectangle {
+                            color: setupEntryButton.down
+                                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.26)
+                                   : (setupEntryButton.hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.16)
+                                                     : Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.92))
+                            border.color: setupEntryButton.hovered ? secondaryCyan : glassBorder
+                            border.width: 1
+                            radius: 10
+                        }
+
+                        onClicked: {
+                            setupMenuPopup.close()
+                            bridge.openSetupSettings(modelData.tabIndex)
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                Layout.preferredHeight: implicitHeight
+                color: glassBorder
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                color: "transparent"
+                implicitHeight: 48
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Il setup storico resta disponibile completo. Time Sync / NTP apre il pannello legacy con server, sync immediato e diagnostica."
+                        font.pixelSize: 11
+                        color: textSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Button {
+                        text: "Apri Generale"
+                        onClicked: {
+                            setupMenuPopup.close()
+                            bridge.openSetupSettings(0)
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: secondaryCyan
+                            font.pixelSize: 12
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.14)
+                            border.color: secondaryCyan
+                            border.width: 1
+                            radius: 8
+                        }
+                    }
+
+                    Button {
+                        text: "Time Sync / NTP"
+                        onClicked: {
+                            setupMenuPopup.close()
+                            bridge.openTimeSyncSettings()
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: warningOrange
+                            font.pixelSize: 12
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.12)
+                            border.color: warningOrange
+                            border.width: 1
+                            radius: 8
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: rigErrorDialog
+        modal: true
+        width: 580
+        anchors.centerIn: parent
+        closePolicy: Popup.NoAutoClose
+        title: rigErrorDialogTitle
+
+        background: Rectangle {
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: accentOrange
+            border.width: 1
+            radius: 14
+        }
+
+        header: Rectangle {
+            height: 62
+            color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.96)
+            radius: 14
+
+            Row {
+                anchors.fill: parent
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                spacing: 12
+
+                Rectangle {
+                    width: 34
+                    height: 34
+                    radius: 17
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.18)
+                    border.color: accentOrange
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "!"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: accentOrange
+                    }
+                }
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+
+                    Text {
+                        text: rigErrorDialogTitle.length > 0 ? rigErrorDialogTitle : "Rig Control Error"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: accentOrange
+                    }
+
+                    Text {
+                        text: "Il backend radio legacy ha segnalato un problema."
+                        font.pixelSize: 11
+                        color: textSecondary
+                    }
+                }
+            }
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            Text {
+                Layout.fillWidth: true
+                text: rigErrorSummary
+                font.pixelSize: 15
+                color: textPrimary
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                text: rigErrorDetailsVisible ? "Nascondi dettagli" : "Mostra dettagli"
+                Layout.alignment: Qt.AlignLeft
+                onClicked: rigErrorDetailsVisible = !rigErrorDetailsVisible
+
+                contentItem: Text {
+                    text: parent.text
+                    color: secondaryCyan
+                    font.pixelSize: 12
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.1)
+                    border.color: glassBorder
+                    border.width: 1
+                    radius: 8
+                }
+            }
+
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: rigErrorDetailsVisible ? 150 : 0
+                visible: rigErrorDetailsVisible
+                clip: true
+
+                TextArea {
+                    readOnly: true
+                    wrapMode: TextEdit.WrapAnywhere
+                    text: rigErrorDetails
+                    color: textSecondary
+                    font.pixelSize: 12
+                    background: Rectangle {
+                        color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.8)
+                        border.color: glassBorder
+                        border.width: 1
+                        radius: 10
+                    }
+                }
+            }
+        }
+
+        footer: DialogButtonBox {
+            alignment: Qt.AlignRight
+
+            Button {
+                text: "Configura radio"
+                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                onClicked: {
+                    rigErrorDialog.close()
+                    bridge.openSetupSettings(1)
+                }
+            }
+
+            Button {
+                text: "Riprova"
+                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                onClicked: {
+                    rigErrorDialog.close()
+                    bridge.retryRigConnection()
+                }
+            }
+
+            Button {
+                text: "Chiudi"
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                onClicked: rigErrorDialog.close()
+            }
+        }
     }
 
     // ========== QSO PROGRESS BADGE OVERLAY ==========
@@ -4065,8 +4497,166 @@ ApplicationWindow {
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato
     Connections {
         target: bridge
+        function onErrorMessage(msg) {
+            warningDialogTitle = "Errore"
+            warningDialogSummary = msg
+            warningDialogDetails = ""
+            warningDialogDetailsVisible = false
+            warningDialog.open()
+        }
+        function onWarningRaised(title, summary, details) {
+            warningDialogTitle = title
+            warningDialogSummary = summary
+            warningDialogDetails = details
+            warningDialogDetailsVisible = false
+            warningDialog.open()
+        }
+        function onSetupSettingsRequested(tabIndex) {
+            settingsDialog.openTab(tabIndex)
+        }
+        function onTimeSyncSettingsRequested() {
+            timeSyncPanelVisible = true
+        }
         function onCatSettingsRequested() {
             rigControlDialog.open()
+        }
+        function onRigErrorRaised(title, summary, details) {
+            rigErrorDialogTitle = title
+            rigErrorSummary = summary
+            rigErrorDetails = details
+            rigErrorDetailsVisible = false
+            rigErrorDialog.open()
+        }
+    }
+
+    Dialog {
+        id: warningDialog
+        modal: true
+        width: 560
+        anchors.centerIn: parent
+        closePolicy: Popup.NoAutoClose
+        title: warningDialogTitle
+
+        background: Rectangle {
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: accentOrange
+            border.width: 1
+            radius: 14
+        }
+
+        header: Rectangle {
+            height: 62
+            color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.96)
+            radius: 14
+
+            Row {
+                anchors.fill: parent
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                spacing: 12
+
+                Rectangle {
+                    width: 34
+                    height: 34
+                    radius: 17
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.18)
+                    border.color: accentOrange
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "!"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: accentOrange
+                    }
+                }
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+
+                    Text {
+                        text: warningDialogTitle.length > 0 ? warningDialogTitle : "Errore"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: accentOrange
+                    }
+
+                    Text {
+                        text: "Decodium ha segnalato un problema non bloccante."
+                        font.pixelSize: 11
+                        color: textSecondary
+                    }
+                }
+            }
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            Text {
+                Layout.fillWidth: true
+                text: warningDialogSummary
+                font.pixelSize: 15
+                color: textPrimary
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                visible: warningDialogDetails.length > 0
+                text: warningDialogDetailsVisible ? "Nascondi dettagli" : "Mostra dettagli"
+                Layout.alignment: Qt.AlignLeft
+                onClicked: warningDialogDetailsVisible = !warningDialogDetailsVisible
+
+                contentItem: Text {
+                    text: parent.text
+                    color: secondaryCyan
+                    font.pixelSize: 12
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.1)
+                    border.color: glassBorder
+                    border.width: 1
+                    radius: 8
+                }
+            }
+
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: warningDialogDetailsVisible ? 150 : 0
+                visible: warningDialogDetailsVisible && warningDialogDetails.length > 0
+                clip: true
+
+                TextArea {
+                    readOnly: true
+                    wrapMode: TextEdit.WrapAnywhere
+                    text: warningDialogDetails
+                    color: textSecondary
+                    font.pixelSize: 12
+                    background: Rectangle {
+                        color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.8)
+                        border.color: glassBorder
+                        border.width: 1
+                        radius: 10
+                    }
+                }
+            }
+        }
+
+        footer: DialogButtonBox {
+            alignment: Qt.AlignRight
+
+            Button {
+                text: "OK"
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                onClicked: warningDialog.close()
+            }
         }
     }
 
@@ -6406,13 +6996,7 @@ ApplicationWindow {
                         clip: true
                         spacing: 1
                         model: {
-                            var filtered = []
-                            for (var i = 0; i < bridge.decodeList.length; i++) {
-                                if (decodePanel.isAtRxFrequency(bridge.decodeList[i].freq, bridge.decodeList[i])) {
-                                    filtered.push(bridge.decodeList[i])
-                                }
-                            }
-                            return filtered
+                            return decodePanel.currentRxDecodes()
                         }
                         ScrollBar.vertical: ScrollBar { active: true }
 

@@ -4,6 +4,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QString>
+#include <QByteArray>
 #include <QVector>
 #include <QTimer>
 #include <QThread>
@@ -26,6 +27,7 @@ class DecodiumPskReporterLite;
 class DecodiumCloudlogLite;
 class DecodiumWsprUploader;
 class DxccLookup;
+class DecodiumLegacyBackend;
 
 Q_DECLARE_OPAQUE_POINTER(DecodiumDxCluster*)
 
@@ -77,9 +79,11 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString audioInputDevice READ audioInputDevice WRITE setAudioInputDevice NOTIFY audioInputDeviceChanged)
     Q_PROPERTY(QString audioOutputDevice READ audioOutputDevice WRITE setAudioOutputDevice NOTIFY audioOutputDeviceChanged)
     Q_PROPERTY(int audioInputChannel READ audioInputChannel WRITE setAudioInputChannel NOTIFY audioInputChannelChanged)
+    Q_PROPERTY(int audioOutputChannel READ audioOutputChannel WRITE setAudioOutputChannel NOTIFY audioOutputChannelChanged)
 
     // === DECODE ===
     Q_PROPERTY(QVariantList decodeList READ decodeList NOTIFY decodeListChanged)
+    Q_PROPERTY(QVariantList rxDecodeList READ rxDecodeList NOTIFY rxDecodeListChanged)
     Q_PROPERTY(int periodProgress READ periodProgress NOTIFY periodProgressChanged)
     Q_PROPERTY(QString utcTime READ utcTime NOTIFY utcTimeChanged)
 
@@ -123,6 +127,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool autoCqRepeat     READ autoCqRepeat     WRITE setAutoCqRepeat     NOTIFY autoCqRepeatChanged)
     Q_PROPERTY(bool avgDecodeEnabled READ avgDecodeEnabled WRITE setAvgDecodeEnabled NOTIFY avgDecodeEnabledChanged)
     Q_PROPERTY(int  txPeriod         READ txPeriod         WRITE setTxPeriod         NOTIFY txPeriodChanged)
+    Q_PROPERTY(bool alt12Enabled     READ alt12Enabled     WRITE setAlt12Enabled     NOTIFY alt12EnabledChanged)
     // FT2-specific: async TX (no period sync) e dual carrier
     Q_PROPERTY(bool asyncTxEnabled     READ asyncTxEnabled     WRITE setAsyncTxEnabled     NOTIFY asyncTxEnabledChanged)
     Q_PROPERTY(bool asyncDecodeEnabled READ asyncDecodeEnabled WRITE setAsyncDecodeEnabled NOTIFY asyncDecodeEnabledChanged)
@@ -279,9 +284,9 @@ public:
 
     // Audio frequencies
     int rxFrequency() const { return m_rxFrequency; }
-    void setRxFrequency(int f) { if (m_rxFrequency != f) { m_rxFrequency = f; emit rxFrequencyChanged(); } }
+    void setRxFrequency(int f);
     int txFrequency() const { return m_txFrequency; }
-    void setTxFrequency(int f) { f = qBound(0, f, 3000); if (m_txFrequency != f) { m_txFrequency = f; emit txFrequencyChanged(); } }
+    void setTxFrequency(int f);
 
     // Audio levels
     double audioLevel() const;
@@ -298,9 +303,12 @@ public:
     void setAudioOutputDevice(const QString&);
     int audioInputChannel() const;
     void setAudioInputChannel(int);
+    int audioOutputChannel() const;
+    void setAudioOutputChannel(int);
 
     // Decode
     QVariantList decodeList() const;
+    QVariantList rxDecodeList() const;
     int periodProgress() const;
     QString utcTime() const;
 
@@ -330,15 +338,17 @@ public:
     void setMultiAnswerMode(bool v) { if (m_multiAnswerMode != v) { m_multiAnswerMode = v; emit multiAnswerModeChanged(); } }
 
     bool autoSeq()           const { return m_autoSeq; }
-    void setAutoSeq(bool v)         { if (m_autoSeq != v)          { m_autoSeq = v;          emit autoSeqChanged(); } }
+    void setAutoSeq(bool v);
     bool txEnabled()         const { return m_txEnabled; }
-    void setTxEnabled(bool v)       { if (m_txEnabled != v)        { m_txEnabled = v;        emit txEnabledChanged(); } }
+    void setTxEnabled(bool v);
     bool autoCqRepeat()      const { return m_autoCqRepeat; }
-    void setAutoCqRepeat(bool v)    { if (m_autoCqRepeat != v)     { m_autoCqRepeat = v;     emit autoCqRepeatChanged(); } }
+    void setAutoCqRepeat(bool v);
     bool avgDecodeEnabled()  const { return m_avgDecodeEnabled; }
     void setAvgDecodeEnabled(bool v){ if (m_avgDecodeEnabled != v) { m_avgDecodeEnabled = v; emit avgDecodeEnabledChanged(); } }
     int  txPeriod()          const { return m_txPeriod; }
-    void setTxPeriod(int v)         { if (m_txPeriod != v)         { m_txPeriod = v;         emit txPeriodChanged(); } }
+    void setTxPeriod(int v);
+    bool alt12Enabled()      const { return m_alt12Enabled; }
+    void setAlt12Enabled(bool v);
     bool asyncTxEnabled()      const { return m_asyncTxEnabled; }
     void setAsyncTxEnabled(bool v)    { if (m_mode == "FT2") v = true;  /* FT2: sempre attivo */
                                         if (m_asyncTxEnabled != v)      { m_asyncTxEnabled = v;      emit asyncTxEnabledChanged(); } }
@@ -425,7 +435,7 @@ public:
     int    uiSpectrumHeight()  const { return m_uiSpectrumHeight; }
     void   setUiSpectrumHeight(int v)   { if(m_uiSpectrumHeight!=v){m_uiSpectrumHeight=v;emit uiSpectrumHeightChanged();} }
     int    uiPaletteIndex()    const { return m_uiPaletteIndex; }
-    void   setUiPaletteIndex(int v)     { if(m_uiPaletteIndex!=v){m_uiPaletteIndex=v;emit uiPaletteIndexChanged();} }
+    void   setUiPaletteIndex(int v);
     double uiZoomFactor()      const { return m_uiZoomFactor; }
     void   setUiZoomFactor(double v)    { if(m_uiZoomFactor!=v){m_uiZoomFactor=v;emit uiZoomFactorChanged();} }
     int    uiWaterfallHeight() const { return m_uiWaterfallHeight; }
@@ -572,7 +582,10 @@ public slots:
     Q_INVOKABLE void openWavFolderDecode(const QString& folderPath);
 
     // CAT
+    Q_INVOKABLE void openSetupSettings(int tabIndex = -1);
+    Q_INVOKABLE void openTimeSyncSettings();
     Q_INVOKABLE void openCatSettings();
+    Q_INVOKABLE void retryRigConnection();
 
     // PSK Reporter
     Q_INVOKABLE void searchPskReporter(const QString& callsign);
@@ -677,7 +690,9 @@ signals:
     void audioInputDeviceChanged();
     void audioOutputDeviceChanged();
     void audioInputChannelChanged();
+    void audioOutputChannelChanged();
     void decodeListChanged();
+    void rxDecodeListChanged();
     void periodProgressChanged();
     void utcTimeChanged();
     void tx1Changed(); void tx2Changed(); void tx3Changed();
@@ -696,6 +711,7 @@ signals:
     void autoCqRepeatChanged();
     void avgDecodeEnabledChanged();
     void txPeriodChanged();
+    void alt12EnabledChanged();
     void asyncTxEnabledChanged();
     void dualCarrierEnabledChanged();
     void quickQsoEnabledChanged();
@@ -720,7 +736,11 @@ signals:
     void spectrumVisibleChanged();
     void statusMessage(const QString& msg);
     void errorMessage(const QString& msg);
+    void warningRaised(const QString& title, const QString& summary, const QString& details);
+    void setupSettingsRequested(int tabIndex);
+    void timeSyncSettingsRequested();
     void catSettingsRequested();
+    void rigErrorRaised(const QString& title, const QString& summary, const QString& details);
     // B6 — cty.dat
     void ctyDatUpdatingChanged();
     // B7 — Color highlighting
@@ -809,6 +829,12 @@ private slots:
     void onPeriodTimer();
     void onUtcTimer();
     void onSpectrumTimer();
+    void onLegacyWaterfallRow(QByteArray const& rowLevels,
+                              int startFrequencyHz,
+                              int spanHz,
+                              int rxFrequencyHz,
+                              int txFrequencyHz,
+                              QString const& mode);
     void onAsyncDecodeTimer();   // FT2 turbo async ogni 100ms
     void regenerateTxMessages();  // auto-genera TX6 (CQ) e TX1-5 da callsign/grid/dxCall
     void processNextInQueue();   // mainwindow processNextInQueue: auto-handoff al prossimo caller
@@ -833,7 +859,9 @@ private:
     QString m_audioInputDevice;
     QString m_audioOutputDevice;
     int m_audioInputChannel {0};
+    int m_audioOutputChannel {0};
     QVariantList m_decodeList;
+    QVariantList m_rxDecodeList;
     int m_periodProgress {0};
     QString m_utcTime;
     QString m_tx1, m_tx2, m_tx3, m_tx4, m_tx5, m_tx6;
@@ -850,6 +878,7 @@ private:
     bool m_autoCqRepeat     {false};
     bool m_avgDecodeEnabled {false};
     int  m_txPeriod         {0};   // 0=even periods, 1=odd periods
+    bool m_alt12Enabled     {false};
     bool    m_asyncTxEnabled   {false};  // FT2 async TX (no periodo sync, come GitHub cbAsyncDecode)
     qint64  m_asyncLastTxEndMs {0};      // timestamp fine ultima TX FT2 async (per guard timer)
     bool m_dualCarrierEnabled{false}; // FT2 dual carrier mode
@@ -933,13 +962,19 @@ private:
     QTimer* m_utcTimer         {nullptr};
     QTimer* m_spectrumTimer    {nullptr};
     QTimer* m_asyncDecodeTimer {nullptr};   // FT2 turbo async 100ms
+    QTimer* m_legacyStateTimer {nullptr};
     SoundInput*        m_soundInput  {nullptr};
     SoundOutput*       m_soundOutput {nullptr};
     Modulator*         m_modulator   {nullptr};
     DecodiumAudioSink* m_audioSink   {nullptr};
     QAudioSink*        m_txAudioSink  {nullptr};
     QBuffer*           m_txPcmBuffer  {nullptr};
+    QByteArray         m_txPcmData;
     QTimer*            m_tuneTimer    {nullptr};
+    DecodiumLegacyBackend* m_legacyBackend {nullptr};
+    bool m_useLegacyTxBackend {false};
+    int  m_legacyBandActivityRevision {-1};
+    int  m_legacyRxFrequencyRevision {-1};
 
     // === GitHub TxController clone ===
     int  m_nTx73            {0};   // TX5 (73) repeat counter: >=2 → QSO completo, ferma
@@ -1060,6 +1095,11 @@ private:
     QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
     void initTxDevices();
     QString buildCurrentTxMessage() const;
+    bool usingLegacyBackendForTx() const;
+    void syncLegacyBackendTxState();
+    void syncLegacyBackendState();
+    void syncLegacyBackendDecodeList();
+    QVariantList mirrorLegacyDecodeLines(QStringList const& lines, bool rxPane) const;
     void genStdMsgs(const QString& hisCall, const QString& hisGrid);
     void checkAndStartPeriodicTx();
     void autoSequenceStep(const QStringList& parsedFields);
@@ -1070,6 +1110,10 @@ private:
         if (mode=="MSK144")   return 15000;
         if (mode=="WSPR")     return 120000;
         if (mode=="JT65")     return 60000;
+        if (mode=="JT9")      return 60000;
+        if (mode=="JT4")      return 60000;
+        if (mode=="FST4")     return 60000;
+        if (mode=="FST4W")    return 120000;
         // C12 — FST4/FST4W multi-period
         if (mode=="FST4-15")  return 15000;
         if (mode=="FST4-30")  return 30000;
@@ -1083,5 +1127,5 @@ private:
         return 15000;  // FT8 default
     }
     void updateSoundOutputDevice();
-    void launchTuneAudio();
+    bool launchTuneAudio();
 };

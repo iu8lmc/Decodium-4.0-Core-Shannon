@@ -164,6 +164,60 @@ public:
   ~MainWindow();
 
   int decoderBusy () const {return m_decoderBusy;}
+  QString legacyCallsign() const;
+  QString legacyGrid() const;
+  QString legacyMode() const;
+  QString legacyRigName() const;
+  Frequency legacyDialFrequency() const;
+  int legacyRxFrequency() const;
+  int legacyTxFrequency() const;
+  QString legacyAudioInputDeviceName() const;
+  QString legacyAudioOutputDeviceName() const;
+  int legacyAudioInputChannel() const;
+  int legacyAudioOutputChannel() const;
+  QString legacyWaterfallPalette() const;
+  bool legacyMonitoring() const;
+  bool legacyTransmitting() const;
+  bool legacyTuning() const;
+  bool legacyCatConnected() const;
+  double legacySignalLevel() const;
+  int legacyBandActivityRevision() const;
+  QStringList legacyBandActivityLines() const;
+  int legacyRxFrequencyRevision() const;
+  QStringList legacyRxFrequencyLines() const;
+  void legacyClearBandActivity();
+  void legacySetMode(QString const& mode);
+  void legacySetDialFrequency(Frequency frequency);
+  void legacySetMonitoring(bool enabled);
+  void legacySetAutoSeq(bool enabled);
+  void legacySetTxEnabled(bool enabled);
+  void legacySetAutoCq(bool enabled);
+  void legacySetRxFrequency(int frequencyHz);
+  void legacySetTxFrequency(int frequencyHz);
+  void legacySetAudioInputDeviceName(QString const& name);
+  void legacySetAudioOutputDeviceName(QString const& name);
+  void legacySetAudioInputChannel(int channel);
+  void legacySetAudioOutputChannel(int channel);
+  void legacySetDxCall(QString const& call);
+  void legacySetDxGrid(QString const& grid);
+  void legacySetTxMessage(int index, QString const& message);
+  void legacySelectTxMessage(int index);
+  void legacyGenerateStandardMessages();
+  void legacyStartTune(bool enabled);
+  void legacyStopTransmission();
+  void legacyArmCurrentTx();
+  void legacyLogQso();
+  void legacySetWaterfallPalette(QString const& palette);
+  void legacyOpenSettings(int tabIndex = -1);
+  void legacyOpenTimeSyncPanel();
+  void legacyRetryRigConnection();
+  bool legacyAlt12Enabled() const;
+  void legacySetAlt12Enabled(bool enabled);
+  bool legacyTxFirst() const;
+  void legacySetTxFirst(bool enabled);
+  void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
+  void legacySetEmbeddedMode(bool enabled);
+  void legacyShutdownForEmbedding();
 
 public slots:
   void showSoundInError(const QString& errorMsg);
@@ -657,6 +711,18 @@ private:
   Q_SIGNAL void toggleShorthand () const;
   Q_SIGNAL void reset_audio_input_stream (bool report_dropped_frames) const;
   Q_SIGNAL void download_finished (bool) const;  //avt 10/2/25
+  Q_SIGNAL void legacyWaterfallRowReady (QByteArray const& rowLevels,
+                                         int startFrequencyHz,
+                                         int spanHz,
+                                         int rxFrequencyHz,
+                                         int txFrequencyHz,
+                                         QString const& mode) const;
+  Q_SIGNAL void legacyWarningRaised (QString const& title,
+                                     QString const& summary,
+                                     QString const& details) const;
+  Q_SIGNAL void legacyRigErrorRaised (QString const& title,
+                                      QString const& summary,
+                                      QString const& details) const;
 
 private:
   void set_mode (QString const& mode);
@@ -701,6 +767,8 @@ private:
   WSPRBandHopping m_WSPR_band_hopping;
   bool m_WSPR_tx_next;
   MessageBox m_rigErrorMessageBox;
+  bool m_embeddedShellMode {false};
+  bool m_embeddedFt2MonitorPrepared {false};
   QScopedPointer<SampleDownloader> m_sampleDownloader;
   QScopedPointer<EqualizationToolsDialog> m_equalizationToolsDialog;
 

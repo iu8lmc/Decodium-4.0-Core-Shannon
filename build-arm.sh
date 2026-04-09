@@ -67,12 +67,12 @@ docker run --rm -i --platform linux/arm64 \
           -DWSJT_GENERATE_DOCS=OFF \
           -DWSJT_SKIP_MANPAGES=ON \
           -DWSJT_BUILD_UTILS=OFF \
+          -DBUILD_TESTING=OFF \
           -DCMAKE_INSTALL_PREFIX=/tmp/wsjtx_install
 
         echo '>>> Building targets...'
-        # First build the libraries that need single threading or specific order if any
-        # Then build everything
-        make -j$(nproc)
+        # Reduced parallelism to avoid OOM killer on memory-intensive files like qcustomplot
+        make -j2
 
         echo '>>> Installing to temporary prefix...'
         make install

@@ -47,10 +47,19 @@ void SoundOutput::setFormat(QAudioDevice const& device, unsigned channels, int f
 void SoundOutput::restart(QIODevice* source)
 {
   if (!m_device.id().isEmpty()) {
-    QAudioFormat format;
+    QAudioFormat format(m_device.preferredFormat());
     format.setChannelCount(static_cast<int>(m_channels));
     format.setSampleRate(48000);
     format.setSampleFormat(QAudioFormat::Int16);
+
+    if (!format.isValid()) {
+      Q_EMIT error(tr("Requested output audio format is not valid."));
+      return;
+    }
+    if (!m_device.isFormatSupported(format)) {
+      Q_EMIT error(tr("Requested output audio format is not supported on device."));
+      return;
+    }
 
     m_stream.reset(new QAudioSink(m_device, format));
     checkStream();
@@ -89,28 +98,45 @@ void SoundOutput::restart(QIODevice* source)
 
 void SoundOutput::suspend()
 {
-  if (m_stream && QAudio::ActiveState == m_stream->state())
+  if (m_stream && QAudio::ActiveState == m_stream->state()) {
     m_stream->suspend();
+    checkStream();
+  }
 }
 
 void SoundOutput::resume()
 {
-  if (m_stream && QAudio::SuspendedState == m_stream->state())
+  if (m_stream && QAudio::SuspendedState == m_stream->state()) {
     m_stream->resume();
+    checkStream();
+  }
 }
 
 void SoundOutput::reset()
 {
-  if (m_stream)
+  if (m_stream) {
     m_stream->reset();
+    checkStream();
+  }
 }
 
 void SoundOutput::stop()
 {
   if (m_stream) {
+#if defined(__APPLE__)
+    const bool sequoiaOrNewer =
+        QOperatingSystemVersion::current() >= QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15);
+    if (!sequoiaOrNewer)
+      m_stream->reset();
+#else
     m_stream->reset();
+#endif
     m_stream->stop();
   }
+#if defined(__APPLE__)
+  if (QOperatingSystemVersion::current() < QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15))
+    m_stream.reset();
+#endif
 }
 
 qreal SoundOutput::attenuation() const

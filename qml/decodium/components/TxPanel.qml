@@ -29,6 +29,7 @@ Item {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color bgDeep: bridge.themeManager.bgDeep
+    readonly property var supportedModes: engine ? engine.availableModes() : ["FT8", "FT2", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR"]
 
     // State colors based on QSO progress (bridge::QSOProgress enum)
     // 0=IDLE, 1=CALLING_CQ, 2=REPLYING, 3=REPORT, 4=ROGER_REPORT, 5=SIGNOFF, 6=IDLE_QSO
@@ -186,7 +187,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 120
+                            width: 136
                             height: 36
                             radius: 6
                             color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
@@ -197,7 +198,7 @@ Item {
                                 id: modeSelector
                                 anchors.fill: parent
                                 anchors.margins: 1
-                                model: ["FT8", "FT4", "FT2", "Q65A", "Q65B", "Q65C", "Q65D", "Q65E", "JT65A", "JT65B", "JT65C", "MSK144"]
+                                model: txPanel.supportedModes
                                 currentIndex: {
                                     var mode = engine ? engine.mode : "FT8"
                                     var idx = model.indexOf(mode)
@@ -207,7 +208,7 @@ Item {
                                 font.family: "Consolas"
                                 font.pixelSize: 14
                                 itemHeight: 40
-                                popupMinWidth: 190
+                                popupMinWidth: 176
                                 textHorizontalAlignment: Text.AlignHCenter
                                 leftPadding: 8
                                 rightPadding: 24
@@ -470,6 +471,66 @@ Item {
                         }
 
                         Rectangle {
+                            width: 84
+                            height: 36
+                            radius: 6
+                            visible: engine && engine.mode !== "FT2"
+                            color: engine && engine.txPeriod === 1 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.28)
+                                                                   : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: engine && engine.txPeriod === 1 ? primaryBlue : glassBorder
+                            border.width: engine && engine.txPeriod === 1 ? 2 : 1
+
+                            Button {
+                                id: txPhaseButton
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: ToolbarButtonContent {
+                                    label: engine && engine.txPeriod === 1 ? "1ST" : "EVEN"
+                                    glyph: engine && engine.txPeriod === 1 ? "\u2460" : "\u2461"
+                                    foreground: engine && engine.txPeriod === 1 ? primaryBlue : textPrimary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: true
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Tx even/1st\n(come Decodium 3)"
+                                ToolTip.delay: 500
+                                onClicked: if (engine) engine.txPeriod = engine.txPeriod === 1 ? 0 : 1
+                            }
+                        }
+
+                        Rectangle {
+                            width: 92
+                            height: 36
+                            radius: 6
+                            visible: engine && engine.mode !== "FT2"
+                            color: engine && engine.alt12Enabled ? Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.22)
+                                                                 : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: engine && engine.alt12Enabled ? warningOrange : glassBorder
+                            border.width: engine && engine.alt12Enabled ? 2 : 1
+
+                            Button {
+                                id: alt12Button
+                                anchors.fill: parent
+                                padding: 0
+                                background: Rectangle { color: "transparent" }
+                                contentItem: ToolbarButtonContent {
+                                    label: "ALT 1/2"
+                                    glyph: "\u21C4"
+                                    foreground: engine && engine.alt12Enabled ? warningOrange : textPrimary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: engine && engine.alt12Enabled
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Auto CQ: alterna le fasi Tx/Rx dopo CQ ripetuti senza risposta"
+                                ToolTip.delay: 500
+                                onClicked: if (engine) engine.alt12Enabled = !engine.alt12Enabled
+                            }
+                        }
+
+                        Rectangle {
                             width: 86
                             height: 36
                             radius: 6
@@ -562,20 +623,23 @@ Item {
                             width: 84
                             height: 36
                             radius: 6
-                            color: Qt.alpha(errorRed, 0.3)
-                            border.color: errorRed
+                            color: haltButton.hovered || (engine && engine.transmitting)
+                                   ? Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.92)
+                                   : Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.78)
+                            border.color: Qt.lighter(errorRed, 1.2)
                             border.width: engine && engine.transmitting ? 2 : 1
 
                             Button {
+                                id: haltButton
                                 anchors.fill: parent
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
                                 contentItem: ToolbarButtonContent {
                                     label: "HALT"
                                     glyph: "\u25A0"
-                                    foreground: errorRed
+                                    foreground: "#FFF8F6"
                                     glyphSize: 14
-                                    labelSize: 10
+                                    labelSize: 11
                                     boldLabel: true
                                 }
                                 onClicked: if (engine) engine.halt()

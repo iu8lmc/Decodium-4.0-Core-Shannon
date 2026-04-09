@@ -17,52 +17,9 @@
 #include <string>
 #include <vector>
 
-extern "C"
-{
-  void decode65a_ (float dd[], int* npts, int* newdat, int* nqd, float* f0, int* nflip,
-                   int* mode65, int* ntrials, int* naggressive, int* ndepth, int* ntol,
-                   char const* mycall, char const* hiscall, char const* hisgrid,
-                   int* nQSOProgress, int* ljt65apon, int* bVHF, float* sync2, float a[],
-                   float* dt, int* nft, int* nspecial, float* qual, int* nhist, int* nsmo,
-                   char decoded[], size_t, size_t, size_t, size_t);
-  void extract_ (float s3[], int* nadd, int* mode65, int* ntrials, int* naggressive,
-                 int* ndepth, int* nflip, char const* mycall_12, char const* hiscall_12,
-                 char const* hisgrid, int* nQSOProgress, int* ljt65apon, int* ncount,
-                 int* nhist, char decoded[], int* ltext, int* nft, float* qual, size_t,
-                 size_t, size_t, size_t);
-  void subtract65_ (float dd[], int* npts, float* f0, float* dt);
-  void smo121_ (float x[], int* nz);
-  void lorentzian_ (float y[], int* npts, float a[]);
-
-  extern int __jt65_mod_MOD_param[10];
-  extern int __jt65_mod_MOD_mdat[126];
-  extern int __jt65_mod_MOD_mdat2[126];
-  extern float __jt65_mod_MOD_s3a[64 * 63];
-  extern float __jt65_mod_MOD_width;
-  extern struct {
-    int ntry65a;
-    int ntry65b;
-    int n65a;
-    int n65b;
-    int num9;
-    int numfano;
-  } decstats_;
-  extern struct {
-    float dfref;
-    float ref[3413];
-  } refspec_;
-  extern struct {
-    float ss[552 * 3413];
-  } sync_;
-  extern struct {
-    float thresh0;
-  } steve_;
-}
-
 namespace
 {
 constexpr int kNzMax = 60 * 12000;
-constexpr int kJt65Nfft = 8192;
 constexpr int kJt65Nsz = 3413;
 constexpr int kJt65MaxQsym = 552;
 constexpr int kJt65DecodeRows = 512;
@@ -208,6 +165,7 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
 {
   AvgResult result;
   result.message = blank_message ();
+  auto const shared = decodium::legacy::jt65_shared_state ();
 
   std::vector<float> s1b (static_cast<std::size_t> (kJt65DecodeRows * kJt65DecodeCols), 0.0f);
   std::vector<float> s2 (static_cast<std::size_t> (66 * 126), 0.0f);
@@ -253,7 +211,7 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
       state.avg_nfsave[slot] = nfreq;
       state.avg_nflipsave[slot] = nflip;
       decodium::legacy::jt65_load_last_s1 (state.avg_s1save + state.s1_slot_offset (nsave));
-      std::copy_n (__jt65_mod_MOD_s3a, static_cast<std::size_t> (kJt65S3Rows * kJt65S3Cols),
+      std::copy_n (shared.s3a, static_cast<std::size_t> (kJt65S3Rows * kJt65S3Cols),
                    state.avg_s3save + state.s3_slot_offset (nsave));
     }
 
@@ -324,7 +282,7 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
   int maxsmo = 0;
   if (mode65 >= 2)
     {
-      minsmo = static_cast<int> (std::lround (__jt65_mod_MOD_width / df));
+      minsmo = static_cast<int> (std::lround (shared.width / df));
       maxsmo = 2 * minsmo;
     }
   int nn = 0;
@@ -338,14 +296,14 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
             {
               float* column =
                   s1b.data () + static_cast<std::ptrdiff_t> ((j - 1) * kJt65DecodeRows);
-              smo121_ (column, &nz);
+              decodium::legacy::smooth121_inplace (column, nz);
               if (j == 1)
                 {
                   ++nn;
                 }
               if (nn >= 4)
                 {
-                  smo121_ (column, &nz);
+                  decodium::legacy::smooth121_inplace (column, nz);
                   if (j == 1)
                     {
                       ++nn;
@@ -383,10 +341,10 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
 
       for (int j = 1; j <= 63; ++j)
         {
-          int k = __jt65_mod_MOD_mdat[static_cast<std::size_t> (j - 1)];
+          int k = shared.mdat[static_cast<std::size_t> (j - 1)];
           if (nflip < 0)
             {
-              k = __jt65_mod_MOD_mdat2[static_cast<std::size_t> (j - 1)];
+              k = shared.mdat2[static_cast<std::size_t> (j - 1)];
             }
           for (int i = 1; i <= 64; ++i)
             {
@@ -394,26 +352,20 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
             }
         }
 
-      int nadd = result.nsum * ismo;
-      int nhist = 0;
-      int ncount = -99;
-      int ltext = 0;
-      int nftt = 0;
-      float qual = 0.0f;
-      QByteArray avemsg = blank_message ();
-      int ljt65apon_i = ljt65apon ? 1 : 0;
-      extract_ (s3c.data (), &nadd, &mode65, &ntrials, &naggressive, &ndepth, &nflip,
-                mycall.constData (), hiscall.constData (), hisgrid.constData (), &nQSOProgress,
-                &ljt65apon_i, &ncount,
-                &nhist, avemsg.data (), &ltext, &nftt, &qual, static_cast<size_t> (12),
-                static_cast<size_t> (12), static_cast<size_t> (6), static_cast<size_t> (22));
+      int const nadd = result.nsum * ismo;
+      auto const extract = decodium::legacy::extract_compute (
+          s3c.data (), nadd, mode65, ntrials, naggressive, ndepth, nflip, mycall, hiscall,
+          hisgrid, nQSOProgress, ljt65apon);
+      int const nftt = extract.nft;
+      float const qual = extract.qual;
+      QByteArray const avemsg = fixed_field (extract.decoded, kDecodeBlankWidth);
       if (nftt == 1)
         {
           result.nft = nftt;
           result.message = avemsg;
           result.qual = qual;
           result.nsmo = ismo;
-          __jt65_mod_MOD_param[9] = result.nsmo;
+          decodium::legacy::jt65_set_decode_smoothing (result.nsmo);
           return result;
         }
       else if (nftt >= 2 && qual > qualbest)
@@ -431,7 +383,7 @@ AvgResult avg65_compute (AverageStateView state, int nutc, int nsave, float snrs
       result.message = deepbest;
       result.qual = qualbest;
       result.nsmo = nsmobest;
-      __jt65_mod_MOD_param[9] = result.nsmo;
+      decodium::legacy::jt65_set_decode_smoothing (result.nsmo);
     }
 
   return result;
@@ -660,9 +612,7 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
         {
           break;
         }
-      std::copy_n (spec.ss.data (), static_cast<std::size_t> (kJt65MaxQsym * kJt65Nsz), sync_.ss);
-      std::copy_n (spec.ref.data (), static_cast<std::size_t> (kJt65Nsz), refspec_.ref);
-      refspec_.dfref = 12000.0f / kJt65Nfft;
+      decodium::legacy::jt65_store_symspec_state (spec);
 
       int nfa = nf1;
       int nfb = nf2;
@@ -673,7 +623,7 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
           thresh0 = 1.0f;
         }
 
-      float width = __jt65_mod_MOD_width;
+      float width = decodium::legacy::jt65_mode_width ();
       float baseline = 0.0f;
       float amp = 0.0f;
       float const df = 12000.0f / 8192.0f;
@@ -696,17 +646,17 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
               break;
             }
           std::array<float, 5> lorentz {};
-          int nz_local = nz;
-          lorentzian_ (const_cast<float*> (spec.savg.data () + static_cast<std::size_t> (ia - 1)),
-                       &nz_local, lorentz.data ());
+          decodium::legacy::lorentzian_fit (
+              spec.savg.data () + static_cast<std::size_t> (ia - 1), nz, &lorentz);
           baseline = lorentz[0];
           amp = lorentz[1];
           width = lorentz[3] * df;
           (void) baseline;
           (void) amp;
         }
+      decodium::legacy::jt65_set_mode_width (width);
 
-      steve_.thresh0 = thresh0;
+      decodium::legacy::jt65_set_sync_threshold (thresh0);
       auto candidates =
           decodium::legacy::sync65_compute (nfa, nfb, ntol, spec.nqsym, nrob != 0, bVHF, thresh0);
       int ncand = std::min<int> (static_cast<int> (candidates.size ()), 50 / ipass);
@@ -752,33 +702,24 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
             {
               nflip = 0;
             }
-          if (ipass == 1)
-            {
-              ++decstats_.ntry65a;
-            }
-          else if (ipass == 2)
-            {
-              ++decstats_.ntry65b;
-            }
-
           std::array<float, 5> a {};
           float sync2 = 0.0f;
           int nft = 0;
           int nspecial = 0;
           float qual = 0.0f;
-          int nhist = 0;
           int nsmo = 0;
           QByteArray decoded = blank_message ();
-          int decode_newdat = 1;
-          int bvhf_int = bVHF ? 1 : 0;
-          int ljt65apon_i = ljt65apon ? 1 : 0;
-          decode65a_ (dd.data (), &npts, &decode_newdat, &nqd, &freq, &nflip,
-                      &mode65, &nvec, &naggressive, &ndepth, &ntol_local,
-                      mycall.constData (), hiscall.constData (),
-                      hisgrid.constData (), &nQSOProgress, &ljt65apon_i, &bvhf_int, &sync2,
-                      a.data (), &dtx, &nft, &nspecial, &qual, &nhist, &nsmo, decoded.data (),
-                      static_cast<size_t> (12),
-                      static_cast<size_t> (12), static_cast<size_t> (6), static_cast<size_t> (22));
+          auto const decode = decodium::legacy::decode65a_compute (
+              dd.data (), npts, 1, nqd, freq, nflip, mode65, nvec, naggressive, ndepth,
+              ntol_local, mycall, hiscall, hisgrid, nQSOProgress, ljt65apon, bVHF, dtx);
+          sync2 = decode.sync2;
+          a = decode.a;
+          dtx = decode.dt;
+          nft = decode.nft;
+          nspecial = decode.nspecial;
+          qual = decode.qual;
+          nsmo = decode.nsmo;
+          decoded = fixed_field (decode.decoded, kDecodeBlankWidth);
 
           if (!bVHF)
             {
@@ -816,10 +757,11 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
             {
               nflip = 0;
             }
-          int const nhard_min = __jt65_mod_MOD_param[1];
-          int const nrtt1000 = __jt65_mod_MOD_param[4];
-          int const ntotal_min = __jt65_mod_MOD_param[5];
-          nsmo = __jt65_mod_MOD_param[9];
+          auto const shared_state = decodium::legacy::jt65_shared_state ();
+          int const nhard_min = shared_state.param[1];
+          int const nrtt1000 = shared_state.param[4];
+          int const ntotal_min = shared_state.param[5];
+          nsmo = decodium::legacy::jt65_decode_smoothing ();
           int const nfreq = static_cast<int> (std::lround (freq + a[0]));
           int const ndrift = static_cast<int> (std::lround (2.0f * a[1]));
           int const nsnr = clamp_snr (sync1, sync2, width, bVHF, nspecial);
@@ -838,7 +780,7 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
                                      mode65, ntol, ntrials, naggressive, ndepth, mycall, hiscall,
                                      hisgrid, nQSOProgress, ljt65apon);
                   out_avg_lines.insert (out_avg_lines.end (), avg.lines.begin (), avg.lines.end ());
-                  nsmo = __jt65_mod_MOD_param[9];
+                  nsmo = decodium::legacy::jt65_decode_smoothing ();
                   if (avg.nft >= 1 && avg.nsum >= 2)
                     {
                       append_decode (out_records, sync1, nsnr, dtx, nfreq, ndrift, nflip, width,
@@ -877,9 +819,7 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
             {
               if (nsubtract == 1)
                 {
-                  float freq_sub = freq;
-                  float dt_sub = dtx;
-                  subtract65_ (dd.data (), &npts, &freq_sub, &dt_sub);
+                  decodium::legacy::subtract65_inplace (dd.data (), npts, freq, dtx);
                 }
 
               bool dupe = false;
@@ -893,14 +833,6 @@ void decode_batch_impl (float const* dd0, int npts, bool newdat, int nutc, int n
                 }
               if (!dupe && (sync1 >= static_cast<float> (minsync) || bVHF))
                 {
-                  if (ipass == 1)
-                    {
-                      ++decstats_.n65a;
-                    }
-                  else if (ipass == 2)
-                    {
-                      ++decstats_.n65b;
-                    }
                   if (ndecoded < 50)
                     {
                       ++ndecoded;
@@ -1083,6 +1015,7 @@ QStringList decode_async_jt65 (legacyjt::DecodeRequest const& request, AverageSt
 
   std::vector<DecodeRecord> records;
   std::vector<std::string> avg_lines;
+  decodium::legacy::set_jt65_data_dir_hint (request.dataDir);
   decode_batch_impl (
       dd.data (), static_cast<int> (dd.size ()), request.newdat != 0, request.nutc, request.nfa,
       request.nfb, request.nfqso, request.ntol, request.nsubmode, request.minsync,
@@ -1091,6 +1024,7 @@ QStringList decode_async_jt65 (legacyjt::DecodeRequest const& request, AverageSt
       fixed_field (request.mycall, 12), fixed_field (request.hiscall, 12),
       fixed_field (request.hisgrid, 6), request.nexp_decode, request.nqsoprogress,
       request.ljt65apon != 0, view, records, avg_lines);
+  decodium::legacy::set_jt65_data_dir_hint ({});
 
   write_avg_lines (QString::fromLocal8Bit (request.tempDir), avg_lines);
 

@@ -63,7 +63,6 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             width: 140; height: 140; radius: 70
             gradient: Gradient {
-                orientation: Gradient.Diagonal
                 GradientStop { position: 0.0; color: "#1a73e8" }
                 GradientStop { position: 1.0; color: "#00bcd4" }
             }
@@ -88,7 +87,7 @@ Rectangle {
                 id: iconImg
                 anchors.centerIn: parent
                 width: 96; height: 96
-                source: "qrc:/src/pic/decodium_256.png"
+                source: "qrc:/icon_128x128.png"
                 fillMode: Image.PreserveAspectFit
                 smooth: true; mipmap: true
                 visible: status === Image.Ready

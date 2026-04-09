@@ -1,6 +1,0 @@
-gfortran -c ../packjt.f90
-gfortran -c packjt77.f90
-gfortran -o encode77 -fbounds-check -Wall -Wno-conversion \
-	 encode77.f90 ../deg2grid.f90 ../grid2deg.f90 ../fix_contest_msg.f90 \
-	 ../to_contest_msg.f90 ../fmtmsg.f90 ../azdist.f90 ../geodist.f90 \
-	 packjt.o packjt77.o

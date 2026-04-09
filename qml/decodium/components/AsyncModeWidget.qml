@@ -15,6 +15,7 @@ Item {
     property int   snr:          -99     // -99 = nessun segnale
     property bool  showWave:     true
     property bool  showMeter:    true
+    property bool  hovered:      asyncHover.containsMouse
 
     // Fase animata (0 … 2π)
     property real _phase: 0.0
@@ -112,7 +113,7 @@ Item {
             // Rideseña ogni volta che la fase cambia
             Connections {
                 target: root
-                function on_phaseChanged() { waveCanvas.requestPaint() }
+                function on_PhaseChanged() { waveCanvas.requestPaint() }
             }
             Connections {
                 target: root
@@ -198,5 +199,12 @@ Item {
             checked:   root.showMeter
             onTriggered: root.showMeter = !root.showMeter
         }
+    }
+
+    MouseArea {
+        id: asyncHover
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
     }
 }

@@ -255,7 +255,10 @@ void HamlibTransceiver::register_transceivers (logger_type * logger,
                                                TransceiverFactory::Transceivers * registry)
 {
   rig_set_debug_callback (impl::debug_callback, logger);
-  rig_set_debug (RIG_DEBUG_TRACE);
+  // Decodium 4: keep Hamlib CAT traffic silent in the terminal by default.
+  // The bridge/UI already surfaces connection failures, so the raw poll/CI-V
+  // trace is just noise during normal startup and operation.
+  rig_set_debug (RIG_DEBUG_NONE);
   // Guard: rig_load_all_backends() deve essere chiamato UNA SOLA VOLTA per processo.
   // Hamlib 4.7.0 crasha con "Hash collision" se chiamato due volte (rig_check_rig_caps
   // re-invoca initrigs4_* su modelli già registrati).

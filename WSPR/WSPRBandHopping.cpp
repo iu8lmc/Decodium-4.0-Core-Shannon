@@ -19,14 +19,9 @@
 
 extern "C"
 {
-#ifndef CMAKE_BUILD
-#define FC_grayline grayline_
-#else
-#include "FC.h"
-  void FC_grayline (int const * year, int const * month, int const * nday, float const * uth, char const * my_grid
-                   , int const * nduration, int * isun
-                   , int my_grid_len);
-#endif
+  void grayline_(int const * year, int const * month, int const * nday, float const * uth, char const * my_grid
+               , int const * nduration, int * isun
+               , int my_grid_len);
 };
 
 namespace
@@ -357,9 +352,9 @@ auto WSPRBandHopping::next_hop (bool tx_enabled) -> Hop
                                            // short grids
 
   // look up the period for this time
-  FC_grayline (&year, &month, &day, &uth, my_grid.toLatin1 ().constData ()
-               , &m_->gray_line_duration_, &period_index
-               , my_grid.size ());
+  grayline_ (&year, &month, &day, &uth, my_grid.toLatin1 ().constData ()
+             , &m_->gray_line_duration_, &period_index
+             , my_grid.size ());
 
   band_index = next_hopping_band();
 

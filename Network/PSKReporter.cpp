@@ -37,6 +37,10 @@
 
 //#define DEBUGECLIPSE 0
 
+// Keep routine PSK Reporter chatter out of the terminal. Errors still go
+// through the normal logger path.
+#define PSK_REPORTER_TRACE(LOGGER, ARG) do { } while (false)
+
 namespace
 {
   QLatin1String HOST {"report.pskreporter.info"};
@@ -90,7 +94,7 @@ public:
                                                      if (socket_
                                                          && QAbstractSocket::UdpSocket == socket_->socketType ())
                                                        {
-                                                         LOG_LOG_LOCATION (logger_, trace, "enable descriptor resend");
+                                                         PSK_REPORTER_TRACE (logger_, "enable descriptor resend");
                                                          // send templates again
                                                          send_descriptors_ = 3; // three times
                                                          // send receiver data set again
@@ -111,7 +115,7 @@ public:
             && QAbstractSocket::UnconnectedState != socket_->state ()
             && QAbstractSocket::ClosingState != socket_->state ())
           {
-            LOG_LOG_LOCATION (logger_, trace, "create/recreate socket");
+            PSK_REPORTER_TRACE (logger_, "create/recreate socket");
             // handle re-opening asynchronously
             auto connection = QSharedPointer<QMetaObject::Connection>::create ();
             *connection = connect (socket_.data (), &QAbstractSocket::disconnected, [this, connection] () {
@@ -154,14 +158,14 @@ public:
     // be called from the disconnected handler above.
     if (config_->psk_reporter_tcpip ())
       {
-        LOG_LOG_LOCATION (logger_, trace, "create TCP/IP socket");
+        PSK_REPORTER_TRACE (logger_, "create TCP/IP socket");
         socket_.reset (new QTcpSocket, &QObject::deleteLater);
         send_descriptors_ = 1;
         send_receiver_data_ = 1;
       }
     else
       {
-        LOG_LOG_LOCATION (logger_, trace, "create UDP/IP socket");
+        PSK_REPORTER_TRACE (logger_, "create UDP/IP socket");
         socket_.reset (new QUdpSocket, &QObject::deleteLater);
         send_descriptors_ = 3;
         send_receiver_data_ = 3;
@@ -194,7 +198,7 @@ public:
   {
     if (socket_)
       {
-        LOG_LOG_LOCATION (logger_, trace, "disconnecting");
+        PSK_REPORTER_TRACE (logger_, "disconnecting");
         socket_->disconnectFromHost ();
       }
     descriptor_timer_.stop ();
@@ -209,7 +213,7 @@ public:
   bool flushing ()
   {
     bool flush =  FLUSH_INTERVAL && !(++flush_counter_ % FLUSH_INTERVAL);
-    LOG_LOG_LOCATION (logger_, trace, "flush: " << flush);
+    PSK_REPORTER_TRACE (logger_, "flush: " << flush);
     return flush;
   }
 
@@ -371,7 +375,7 @@ void PSKReporter::impl::build_preamble (QDataStream& message)
     << quint32 (0u)           // Export Time (place-holder filled in later)
     << ++sequence_number_     // Sequence Number
     << observation_id_;       // Observation Domain ID
-  LOG_LOG_LOCATION (logger_, trace, "#: " << sequence_number_);
+  PSK_REPORTER_TRACE (logger_, "#: " << sequence_number_);
 
   if (send_descriptors_)
     {
@@ -470,7 +474,7 @@ void PSKReporter::impl::build_preamble (QDataStream& message)
 
 void PSKReporter::impl::send_report (bool send_residue)
 {
-  LOG_LOG_LOCATION (logger_, trace, "sending residue: " << send_residue);
+  PSK_REPORTER_TRACE (logger_, "sending residue: " << send_residue);
   if (QAbstractSocket::ConnectedState != socket_->state ()) return;
 
   QDataStream message {&payload_, QIODevice::WriteOnly | QIODevice::Append};
@@ -595,18 +599,18 @@ void PSKReporter::impl::send_report (bool send_residue)
 PSKReporter::PSKReporter (Configuration const * config, QString const& program_info)
   : m_ {this, config, program_info}
 {
-  LOG_LOG_LOCATION (m_->logger_, trace, "Started for: " << program_info);
+  PSK_REPORTER_TRACE (m_->logger_, "Started for: " << program_info);
 }
 
 PSKReporter::~PSKReporter ()
 {
   // m_->send_report (true);       // send any pending spots
-  LOG_LOG_LOCATION (m_->logger_, trace, "Ended");
+  PSK_REPORTER_TRACE (m_->logger_, "Ended");
 }
 
 void PSKReporter::reconnect ()
 {
-  LOG_LOG_LOCATION (m_->logger_, trace, "");
+  PSK_REPORTER_TRACE (m_->logger_, "");
   m_->reconnect ();
 }
 
@@ -617,11 +621,11 @@ bool PSKReporter::eclipse_active(QDateTime now)
 
 void PSKReporter::setLocalStation (QString const& call, QString const& gridSquare, QString const& antenna, QString const& rigInformation, QString const& program_info)        //avt 1/12/26
 {
-  LOG_LOG_LOCATION (m_->logger_, trace, "call: " << call << " grid: " << gridSquare << " ant: " << antenna);
+  PSK_REPORTER_TRACE (m_->logger_, "call: " << call << " grid: " << gridSquare << " ant: " << antenna);
   m_->check_connection ();
   if (call != m_->rx_call_ || gridSquare != m_->rx_grid_ || antenna != m_->rx_ant_ || program_info != m_->prog_id_)   //avt 1/12/26
     {
-      LOG_LOG_LOCATION (m_->logger_, trace, "updating information");
+      PSK_REPORTER_TRACE (m_->logger_, "updating information");
       m_->send_receiver_data_ = m_->socket_
         && QAbstractSocket::UdpSocket == m_->socket_->socketType () ? 3 : 1;
       m_->rx_call_ = call;
@@ -635,7 +639,7 @@ void PSKReporter::setLocalStation (QString const& call, QString const& gridSquar
 bool PSKReporter::addRemoteStation (QString const& call, QString const& grid, Radio::Frequency freq
                                      , QString const& mode, int snr)
 {
-  LOG_LOG_LOCATION (m_->logger_, trace, "call: " << call << " grid: " << grid << " freq: " << freq << " mode: " << mode << " snr: " << snr);
+  PSK_REPORTER_TRACE (m_->logger_, "call: " << call << " grid: " << grid << " freq: " << freq << " mode: " << mode << " snr: " << snr);
   m_->check_connection ();
   if (m_->socket_ && m_->socket_->isValid ())
     {
@@ -695,7 +699,7 @@ bool PSKReporter::addRemoteStation (QString const& call, QString const& grid, Ra
 
 void PSKReporter::sendReport (bool last)
 {
-  LOG_LOG_LOCATION (m_->logger_, trace, "last: " << last);
+  PSK_REPORTER_TRACE (m_->logger_, "last: " << last);
   m_->check_connection ();
   if (m_->socket_ && QAbstractSocket::ConnectedState == m_->socket_->state ())
     {

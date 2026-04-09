@@ -90,6 +90,10 @@ public:
   AudioDevice::Channel audio_input_channel () const;
   QAudioDevice const& audio_output_device () const;
   AudioDevice::Channel audio_output_channel () const;
+  void set_audio_input_device (QString const& device_name);
+  void set_audio_output_device (QString const& device_name);
+  void set_audio_input_channel (AudioDevice::Channel channel);
+  void set_audio_output_channel (AudioDevice::Channel channel);
 
   // These query methods should be used after a call to exec() to
   // determine if either the audio input or audio output stream

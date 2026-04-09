@@ -19,22 +19,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
     libudev-dev \
     libboost-log-dev \
-    qtbase5-dev \
-    qttools5-dev \
-    qttools5-dev-tools \
-    libqt5serialport5-dev \
-    qtmultimedia5-dev \
-    libqt5websockets5-dev \
-    libqt5sql5-sqlite \
-    libqt5multimedia5-plugins \
-    libqt5svg5-dev \
+    qt6-base-dev \
+    qt6-base-dev-tools \
+    qt6-tools-dev \
+    qt6-serialport-dev \
+    qt6-multimedia-dev \
+    qt6-websockets-dev \
+    qt6-5compat-dev \
+    qt6-svg-dev \
+    qt6-declarative-dev \
+    libqt6sql6-sqlite \
     wget \
     curl \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install AppImage tools (ARM64)
-# We extract them to avoid FUSE issues in Docker
 RUN mkdir -p /opt/appimage-tools && cd /opt/appimage-tools && \
     wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-aarch64.AppImage && \
     chmod +x linuxdeploy-aarch64.AppImage && \

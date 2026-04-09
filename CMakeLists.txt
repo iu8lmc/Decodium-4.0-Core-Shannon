@@ -50,7 +50,7 @@ endif ()
 
 project (wsjtx
   VERSION 4.0.0.0
-  LANGUAGES C CXX Fortran
+  LANGUAGES C CXX
   )
 set (PROJECT_DESCRIPTION "Decodium 4.0 Core Shannon: Digital Modes for Weak Signal Communications in Amateur Radio")
 set (CMAKE_PROJECT_DESCRIPTION ${PROJECT_DESCRIPTION})
@@ -332,6 +332,7 @@ set (wsjtx_CXXSRCS
   Detector/Q65DecodeWorker.cpp
   Detector/WSPRDecodeWorker.cpp
   lib/wsprd/wsprd_embedded.c
+  lib/wsprd/osdwspr.c
   lib/wsprd/wsprsim_utils.c
   lib/wsprd/wsprd_utils.c
   lib/wsprd/jelinek.c
@@ -451,178 +452,11 @@ set_source_files_properties (
 
 # Windows-specific helper sources intentionally excluded in this fork.
 
-set (wsjt_FSRCS
-  # put module sources first in the hope that they get rebuilt before use
-  lib/types.f90
-  lib/C_interface_module.f90
-  lib/shmem.f90
-  lib/crc.f90
-  lib/fftw3mod.f90
-  lib/hashing.f90
-  lib/iso_c_utilities.f90
-  lib/jt4.f90
-  lib/jt4_decode.f90
-  lib/jt65_mod.f90
-  lib/jt65_mod6.f90 #ft8md
-  # lib/get_q3list.f90 — replaced by Detector/AstroQ3ListCompat.cpp
-  lib/jt9_decode.f90
-  lib/options.f90
-  lib/packjt.f90
-  lib/normalizebmet.f90
-  lib/readwav.f90
-  lib/wsjtx_wav_catalog.f90
-  lib/timer_C_wrapper.f90
-  lib/timer_impl.f90
-  lib/timer_module.f90
-  lib/wavhdr.f90
-
-  # remaining non-module sources
-  lib/addit.f90
-  lib/afc65b.f90
-  lib/afc9.f90
-  lib/ana932.f90
-  lib/analytic.f90
-  lib/astro.f90
-  lib/astrosub.f90
-  lib/astro0.f90
-  lib/avecho.f90
-  lib/averms.f90
-  lib/azdist.f90
-  lib/bpdecode40.f90
-  lib/bpdecode128_90.f90
-  lib/baddata.f90
-  lib/calibrate.f90
-  lib/ccf2.f90
-  lib/ccf65.f90
-  lib/chkcall.f90
-  lib/chkhist.f90
-  lib/chkmsg.f90
-  lib/chkss2.f90
-  lib/coord.f90
-  lib/db.f90
-  lib/decode4.f90
-  lib/decode9w.f90
-  lib/decode_echo.f90
-  lib/env_module.f90
-  lib/deep4.f90
-  lib/deg2grid.f90
-  lib/degrade_snr.f90
-  lib/downsam9.f90
-  lib/echo_snr.f90
-  # lib/encode232.f90 — replaced by Detector/Conv232Compat.cpp
-  lib/encode4.f90
-  lib/encode_128_90.f90
-  lib/entail.f90
-  lib/ephem.f90
-  lib/extract4.f90
-  lib/extractmessage77.f90
-  # lib/fano232.f90 — replaced by Detector/Conv232Compat.cpp
-  lib/fast9.f90
-  lib/fast_decode.f90
-  lib/fchisq.f90
-  lib/fchisq0.f90
-  lib/fchisq65.f90
-  lib/fil3.f90
-  lib/fil3c.f90
-  # lib/fil4.f90 — replaced by Detector/Fil4Filter.cpp
-  lib/fil6521.f90
-  lib/filbig.f90
-  lib/fitcal.f90
-  lib/flat1.f90
-  lib/flat1a.f90
-  lib/flat1b.f90
-  lib/flat2.f90
-  lib/flat4.f90
-  lib/flat65.f90
-  lib/fmtmsg.f90
-  lib/foldspec9f.f90
-  lib/fspread_lorentz.f90
-#  lib/ft8/foxgen_wrap.f90
-  lib/freqcal.f90
-  lib/gen4.f90
-  lib/gen65.f90
-  lib/gen9.f90
-  lib/gen_cw_wave.f90
-  lib/gen_echocall.f90
-  lib/genwave.f90
-  # lib/genwspr.f90 — replaced by Modulator/WsprLegacyCompat.cpp
-  lib/geodist.f90
-  lib/getlags.f90
-  lib/getmet4.f90
-  lib/gfsk_pulse.f90
-  lib/graycode.f90
-  lib/grayline.f90
-  lib/grid2deg.f90
-  lib/hash.f90
-  lib/hint65.f90
-  lib/hspec.f90
-  # lib/indexx.f90 — replaced by Detector/IndexSortCompat.cpp
-  lib/init_random_seed.f90
-  lib/interleave4.f90
-  lib/interleave9.f90
-  # lib/inter_wspr.f90 — replaced by Modulator/WsprLegacyCompat.cpp
-  lib/jplsubs.f
-  lib/jt9fano.f90
-  lib/libration.f90
-  lib/lorentzian.f90
-  lib/lpf1.f90
-  lib/mixlpf.f90
-  lib/makepings.f90
-  lib/moondopjpl.f90
-  lib/morse.f90
-  lib/move.f90
-  lib/nuttal_window.f90
-  lib/legacy_jt_async_decode.f90
-  lib/77bit/my_hash.f90
-  lib/wsprd/osdwspr.f90
-  lib/osd128_90.f90
-  lib/peakdt9.f90
-  lib/peakup.f90
-  lib/plotsave.f90
-  lib/platanh.f90
-  lib/pltanh.f90
-  lib/prog_args.f90
-  lib/ps4.f90
-  lib/refspectrum.f90
-  lib/savec2.f90
-  lib/save_echo_params.f90
-  lib/sec0.f90
-  lib/sec_midn.f90
-  lib/sh65.f90
-  lib/sh65snr.f90
-  lib/slasubs.f
-  lib/sleep_msec.f90
-  lib/slope.f90
-  lib/smo.f90
-  lib/smo121.f90
-  lib/softsym.f90
-  lib/softsym9f.f90
-  lib/softsym9w.f90
-  lib/spec9f.f90
-  lib/subtract65.f90
-  lib/sun.f90
-  lib/symspec.f90
-  lib/symspec2.f90
-  lib/sync4.f90
-  lib/sync9.f90
-  lib/sync9f.f90
-  lib/sync9w.f90
-  lib/timf2.f90
-  lib/tweak1.f90
-  lib/twkfreq.f90
-  lib/twkfreq65.f90
-  lib/update_recent_calls.f90
-  lib/wav11.f90
-  lib/wav12.f90
-  lib/xcor4.f90
-  lib/wqdecode.f90
-  # lib/wqencode.f90 — replaced by Modulator/WsprLegacyCompat.cpp
-  lib/wspr_downsample.f90
-  lib/zplot9.f90
-  )
-
-# temporary workaround for a gfortran v7.3 ICE on Fedora 27 64-bit
-set_source_files_properties (lib/slasubs.f PROPERTIES COMPILE_FLAGS -O2)
+# wsjt_FSRCS is intentionally empty: the maintained application path follows
+# Decodium 3 and resolves the migrated Fortran functionality through native C++.
+# Historical Fortran sources stay in-tree only as dormant archives / utility-only
+# material until a larger repo prune is done.
+set (wsjt_FSRCS)
 
 set (ka9q_CSRCS
   lib/ftrsd/decode_rs.c
@@ -644,6 +478,42 @@ set (qra_CSRCS
 
 set (wsjt_CSRCS
   ${ka9q_CSRCS}
+  lib/db.c
+  lib/graycode.c
+  lib/hash.c
+  lib/move.c
+  lib/nuttal_window.c
+  lib/peakup.c
+  lib/averms.c
+  lib/azdist.c
+  lib/c0com.c
+  lib/chkcall.c
+  lib/coord.c
+  lib/degrade_snr.c
+  lib/geodist.c
+  lib/morse.c
+  lib/genwave.c
+  lib/getmet4.c
+  lib/chkhist.c
+  lib/chkmsg.c
+  lib/chkss2.c
+  lib/deg2grid.c
+  lib/entail.c
+  lib/flat1.c
+  lib/fmtmsg.c
+  lib/grid2deg.c
+  lib/interleave4.c
+  lib/interleave63.c
+  lib/interleave9.c
+  lib/getlags.c
+  lib/grayline.c
+  lib/twkfreq.c
+  lib/platanh.c
+  lib/plotsave.c
+  lib/sec0.c
+  lib/sleep_msec.c
+  lib/slope.c
+  lib/smo.c
   lib/ftrsd/ftrsdap.c
   lib/sgran.c
   lib/golay24_table.c
@@ -654,6 +524,7 @@ set (wsjt_CSRCS
   lib/wsprd/nhash.c
   lib/wsprd/fano.c
   lib/wsprd/tab.c
+  lib/wsprd/osdwspr.c
   lib/tab.c
   lib/tmoonsub.c
   lib/usleep.c
@@ -690,6 +561,7 @@ set (wsprsim_CSRCS
 
 set (wsprd_CSRCS
   lib/wsprd/wsprd.c
+  lib/wsprd/osdwspr.c
   lib/wsprd/wsprsim_utils.c
   lib/wsprd/wsprd_utils.c
   lib/wsprd/fano.c
@@ -831,9 +703,6 @@ else ()
 endif (APPLE)
 
 set_source_files_properties (${WSJTX_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-
-# suppress intransigent compiler diagnostics
-set_source_files_properties (lib/filbig.f90 PROPERTIES COMPILE_FLAGS "-Wno-aliasing")
 
 ## disable Qt trace and warning messages from release configurations
 # set_property (DIRECTORY APPEND PROPERTY
@@ -991,7 +860,6 @@ endif (WIN32)
 include (GenerateExportHeader)
 set (CMAKE_CXX_VISIBILITY_PRESET hidden)
 set (CMAKE_C_VISIBILITY_PRESET hidden)
-set (CMAKE_Fortran_VISIBILITY_PRESET hidden)
 set (CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 #set (CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON)
 
@@ -1030,96 +898,12 @@ endif ()
 
 
 #
-# Fortran setup
-#
-set (General_FFLAGS "-Wall -Wno-conversion -Wno-c-binding-type -fno-second-underscore")
-
-# FFLAGS depend on the compiler
-get_filename_component (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
-
-if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
-  # gfortran
-
-  # CMake compiler test is supposed to do this but doesn't yet
-  if (CMAKE_OSX_DEPLOYMENT_TARGET)
-    set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
-  endif (CMAKE_OSX_DEPLOYMENT_TARGET)
-  if (CMAKE_OSX_SYSROOT)
-    set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -isysroot ${CMAKE_OSX_SYSROOT}")
-  endif (CMAKE_OSX_SYSROOT)
-
-  set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -funroll-all-loops -fno-f2c -ffpe-summary=invalid,zero,overflow,underflow ${General_FFLAGS}")
-
-  set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -ggdb -O0 -fbacktrace -fcheck=all -fbounds-check -fno-f2c -ffpe-summary=invalid,zero,overflow,underflow ${General_FFLAGS}")
-  
-  # FPE traps currently disabled in Debug configuration builds until
-  # we decide if they are meaningful, without these FP instructions
-  # run in nonstop mode and do not trap
-  #set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} ${CMAKE_Fortran_FLAGS_DEBUG}  -ffpe-trap=invalid,zero,overflow")
-  
-elseif (Fortran_COMPILER_NAME MATCHES "ifort.*")
-  # ifort (untested)
-  set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -f77rtl ${General_FFLAGS}")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -f77rtl ${General_FFLAGS}")
-elseif (Fortran_COMPILER_NAME MATCHES "g77")
-  # g77
-  set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -funroll-all-loops -fno-f2c -m32 ${General_FFLAGS}")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -fbounds-check -fno-f2c -m32 ${General_FFLAGS}")
-else (Fortran_COMPILER_NAME MATCHES "gfortran.*")
-  message ("CMAKE_Fortran_COMPILER full path: " ${CMAKE_Fortran_COMPILER})
-  message ("Fortran compiler: " ${Fortran_COMPILER_NAME})
-  message ("No optimized Fortran compiler flags are known, we just try -O3...")
-  set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -O3 ${General_FFLAGS}")
-  set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -g -fbacktrace -fcheck=all -fbounds-check ${General_FFLAGS}")
-endif (Fortran_COMPILER_NAME MATCHES "gfortran.*")
-
-
-#
 # Linker setup
 #
 if (NOT APPLE)
   set (CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -Wl,-s")
   set (CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections")
 endif (NOT APPLE)
-
-
-#
-# setup and test Fortran C/C++ interaction
-#
-
-if (WIN32)
-  # On Windows with mingw64, the FortranCInterface link test fails due to mixed
-  # ucrt64/mingw64 linker environment. Use a known-correct FC.h for gfortran/mingw.
-  file (WRITE "${CMAKE_BINARY_DIR}/FC.h"
-    "#ifndef FC_HEADER_INCLUDED\n"
-    "#define FC_HEADER_INCLUDED\n"
-    "\n"
-    "/* Mangling for Fortran global symbols without underscores. */\n"
-    "#define FC_GLOBAL(name,NAME) name##_\n"
-    "\n"
-    "/* Mangling for Fortran global symbols with underscores. */\n"
-    "#define FC_GLOBAL_(name,NAME) name##_\n"
-    "\n"
-    "/* Mangling for Fortran module symbols without underscores. */\n"
-    "#define FC_MODULE(mod_name,name, mod_NAME,NAME) __##mod_name##_MOD_##name\n"
-    "\n"
-    "/* Mangling for Fortran module symbols with underscores. */\n"
-    "#define FC_MODULE_(mod_name,name, mod_NAME,NAME) __##mod_name##_MOD_##name\n"
-    "\n"
-    "/*--------------------------------------------------------------------------*/\n"
-    "/* Mangle some symbols automatically.                                       */\n"
-    "#define FC_grayline FC_GLOBAL(grayline, GRAYLINE)\n"
-    "\n"
-    "#endif\n"
-  )
-else ()
-  include (FortranCInterface)
-  FortranCInterface_VERIFY (CXX)
-  FortranCInterface_HEADER (FC.h MACRO_NAMESPACE "FC_" SYMBOL_NAMESPACE "FC_"
-    SYMBOLS
-    grayline
-    )
-endif ()
 
 
 #
@@ -1200,32 +984,14 @@ endif ()
 
 # build a library of package functionality (without and optionally with OpenMP support)
 add_library (wsjt_cxx STATIC ${wsjt_CSRCS} ${wsjt_CXXSRCS})
+target_include_directories (wsjt_cxx PRIVATE ${FFTW3_INCLUDE_DIRS})
 target_link_libraries (wsjt_cxx ${LIBM_LIBRARIES} Boost::log_setup ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
 
-# build an OpenMP variant of the Fortran library routines
-add_library (wsjt_fort STATIC ${wsjt_FSRCS})
-target_link_libraries (wsjt_fort  ${FFTW3_LIBRARIES})
-if (${OPENMP_FOUND} OR APPLE)
-  add_library (wsjt_fort_omp STATIC ${wsjt_FSRCS})
-  target_link_libraries (wsjt_fort_omp  ${FFTW3_LIBRARIES})
-  if (OpenMP_C_FLAGS AND NOT APPLE)
-    set_target_properties (wsjt_fort_omp
-      PROPERTIES
-      COMPILE_FLAGS "${OpenMP_C_FLAGS}"
-      )
-  endif ()
-  set_target_properties (wsjt_fort_omp
-    PROPERTIES
-    Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/fortran_modules_omp
-    )
-  file (MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/fortran_modules_omp)
-  if (APPLE)
-    target_compile_options (wsjt_fort_omp
-      PRIVATE
-      $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>
-      )
-  endif (APPLE)
-endif (${OPENMP_FOUND} OR APPLE)
+# wsjt_fort is now a pure interface library: all maintained application-path
+# Fortran has already been migrated in Decodium 3 and is reused here.
+add_library (wsjt_fort INTERFACE)
+target_link_libraries (wsjt_fort INTERFACE ${FFTW3_LIBRARIES})
+add_library (wsjt_fort_omp ALIAS wsjt_fort)
 
 function (link_wsjtx_cycle_group target)
   if (APPLE OR WIN32)
@@ -1237,32 +1003,18 @@ endfunction ()
 
 if(WSJT_BUILD_UTILS) 
 
-add_executable (jt4sim lib/jt4sim.f90)
-target_link_libraries (jt4sim wsjt_fort wsjt_cxx)
-
-add_executable (jt65sim lib/jt65sim.f90)
-target_link_libraries (jt65sim wsjt_fort wsjt_cxx)
-
-add_executable (sumsim lib/sumsim.f90)
-target_link_libraries (sumsim wsjt_fort wsjt_cxx)
-
-add_executable (cablog lib/cablog.f90)
-target_link_libraries (cablog)
-
-add_executable (test_snr lib/test_snr.f90)
-target_link_libraries (test_snr wsjt_fort)
-
 add_executable (q65sim utils/q65sim.cpp)
 link_wsjtx_cycle_group (q65sim wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (EchoCallSim lib/EchoCallSim.f90)
-target_link_libraries (EchoCallSim wsjt_fort wsjt_cxx)
+add_executable (EchoCallSim
+  utils/EchoCallSim.cpp
+  utils/EchoToolSupport.cpp)
+link_wsjtx_cycle_group (EchoCallSim wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (testEchoCall lib/testEchoCall.f90)
-target_link_libraries (testEchoCall wsjt_fort wsjt_cxx)
-
-add_executable (cwsim lib/cwsim.f90)
-target_link_libraries (cwsim wsjt_fort wsjt_cxx)
+add_executable (testEchoCall
+  utils/testEchoCall.cpp
+  utils/EchoToolSupport.cpp)
+link_wsjtx_cycle_group (testEchoCall wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (q65code utils/q65code.cpp)
 link_wsjtx_cycle_group (q65code wsjt_qt wsjt_cxx wsjt_fort)
@@ -1276,20 +1028,11 @@ link_wsjtx_cycle_group (q65_ftn_test wsjt_qt wsjt_cxx wsjt_fort)
 add_executable (q65params utils/q65params.cpp)
 target_link_libraries (q65params wsjt_qt wsjt_cxx)
 
-add_executable (jt49sim lib/jt49sim.f90)
-target_link_libraries (jt49sim wsjt_fort wsjt_cxx)
-
-add_executable (jt9sim lib/jt9sim.f90)
-target_link_libraries (jt9sim wsjt_fort wsjt_cxx)
-
 add_executable (rtty_spec utils/rtty_spec.cpp)
 link_wsjtx_cycle_group (rtty_spec wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (jt65code lib/jt65code.f90)
-target_link_libraries (jt65code wsjt_fort wsjt_cxx)
-
 add_executable (jt65_compare utils/jt65_compare.cpp)
-link_wsjtx_cycle_group (jt65_compare wsjt_qt wsjt_cxx wsjt_fort)
+link_wsjtx_cycle_group (jt65_compare wsjt_qt wsjt_cxx)
 
 add_executable (jt65_symspec_compare utils/jt65_symspec_compare.cpp)
 link_wsjtx_cycle_group (jt65_symspec_compare wsjt_qt wsjt_cxx wsjt_fort)
@@ -1314,53 +1057,20 @@ add_executable (jt65_decode65a_compare
   utils/jt65_decode65a_compare.cpp)
 link_wsjtx_cycle_group (jt65_decode65a_compare wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (jt9code lib/jt9code.f90)
-target_link_libraries (jt9code wsjt_fort wsjt_cxx)
-
 add_executable (jt9_compare utils/jt9_compare.cpp)
 link_wsjtx_cycle_group (jt9_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (jt9_wide_compare utils/jt9_wide_compare.cpp)
-link_wsjtx_cycle_group (jt9_wide_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (jt9_wide_stage_compare utils/jt9_wide_stage_compare.cpp)
-link_wsjtx_cycle_group (jt9_wide_stage_compare wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (jt4_compare utils/jt4_compare.cpp)
 link_wsjtx_cycle_group (jt4_compare wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (wspr_compare utils/wspr_compare.cpp)
-link_wsjtx_cycle_group (wspr_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (txwave_compare utils/txwave_compare.cpp)
-link_wsjtx_cycle_group (txwave_compare wsjt_qt wsjt_cxx wsjt_fort)
+link_wsjtx_cycle_group (wspr_compare wsjt_qt wsjt_cxx)
 
 add_executable (plot_compare utils/plot_compare.cpp)
 link_wsjtx_cycle_group (plot_compare wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (indexx_compare utils/indexx_compare.cpp)
-link_wsjtx_cycle_group (indexx_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (legacy_dspio_compare utils/legacy_dspio_compare.cpp)
-link_wsjtx_cycle_group (legacy_dspio_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (legacy_spectrum_compare utils/legacy_spectrum_compare.cpp)
-link_wsjtx_cycle_group (legacy_spectrum_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (legacy_echo_compare utils/legacy_echo_compare.cpp)
-link_wsjtx_cycle_group (legacy_echo_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (legacy_wsprio_compare utils/legacy_wsprio_compare.cpp)
-link_wsjtx_cycle_group (legacy_wsprio_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (fast9_stage_compare utils/fast9_stage_compare.cpp)
-link_wsjtx_cycle_group (fast9_stage_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (fast9_decode_compare utils/fast9_decode_compare.cpp)
-link_wsjtx_cycle_group (fast9_decode_compare wsjt_qt wsjt_cxx wsjt_fort)
-
-add_executable (wsprcode lib/wsprcode/wsprcode.f90 lib/wsprcode/nhash.c)
-target_link_libraries (wsprcode wsjt_fort wsjt_cxx)
+link_wsjtx_cycle_group (indexx_compare wsjt_qt wsjt_cxx)
 	       
 add_executable (encode77 utils/encode77.cpp)
 link_wsjtx_cycle_group (encode77 wsjt_qt wsjt_cxx wsjt_fort)
@@ -1374,9 +1084,6 @@ link_wsjtx_cycle_group (hash22calc wsjt_qt wsjt_cxx wsjt_fort)
 add_executable (wsprsim ${wsprsim_CSRCS})
 target_link_libraries (wsprsim ${LIBM_LIBRARIES})
 
-add_executable (jt4code lib/jt4code.f90)
-target_link_libraries (jt4code wsjt_fort wsjt_cxx)
-
 add_executable (msk144code utils/msk144code.cpp)
 link_wsjtx_cycle_group (msk144code wsjt_qt wsjt_cxx wsjt_fort)
 
@@ -1386,8 +1093,10 @@ link_wsjtx_cycle_group (ft8code wsjt_qt wsjt_cxx wsjt_fort)
 add_executable (ft4code utils/ft4code.cpp)
 link_wsjtx_cycle_group (ft4code wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (echosim lib/echosim.f90)
-target_link_libraries (echosim wsjt_fort wsjt_cxx)
+add_executable (echosim
+  utils/echosim.cpp
+  utils/EchoToolSupport.cpp)
+link_wsjtx_cycle_group (echosim wsjt_qt wsjt_cxx wsjt_fort)
 
 add_executable (ft8sim utils/ft8sim.cpp)
 link_wsjtx_cycle_group (ft8sim wsjt_qt wsjt_cxx wsjt_fort)
@@ -1426,16 +1135,6 @@ target_link_libraries (ldpcsim240_74 wsjt_qt wsjt_cxx wsjt_fort)
 
 endif(WSJT_BUILD_UTILS)
 
-if(WSJT_BUILD_UTILS)
-
-add_executable (fmtave lib/fmtave.f90)
-
-add_executable (fcal lib/fcal.f90)
-
-add_executable (fmeasure lib/fmeasure.f90)
-
-endif(WSJT_BUILD_UTILS)
-
 # build the wsprd WSPR mode decoder driver
 generate_version_info (wsprd_VERSION_RESOURCES
   NAME wsprd
@@ -1443,7 +1142,7 @@ generate_version_info (wsprd_VERSION_RESOURCES
   ICON ${WSJTX_ICON_FILE}
   FILE_DESCRIPTION "WSPR mode decoder"
   )
-add_executable (wsprd ${wsprd_CSRCS} lib/indexx.f90 lib/wsprd/osdwspr.f90 ${wsprd_VERSION_RESOURCES})
+add_executable (wsprd ${wsprd_CSRCS} ${wsprd_VERSION_RESOURCES})
 target_include_directories (wsprd PRIVATE ${FFTW3_INCLUDE_DIRS})
 target_link_libraries (wsprd ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
 if (APPLE AND CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -1593,14 +1292,9 @@ if (WIN32)
   target_link_libraries (wsjt_qt Qt6::ActiveQt)
 endif (WIN32)
 
-# Several legacy Fortran utilities now resolve migrated compatibility exports
-# from both the Qt-side encoder code and the shared C++ DSP/Q65 helpers.
-# Export both transitively so tools that still link only wsjt_fort continue to
-# resolve the native replacements when WSJT_BUILD_UTILS is enabled.
-target_link_libraries (wsjt_fort wsjt_qt wsjt_cxx)
-if (TARGET wsjt_fort_omp)
-  target_link_libraries (wsjt_fort_omp wsjt_qt wsjt_cxx)
-endif ()
+# wsjt_fort is an INTERFACE library: propagate wsjt_qt and wsjt_cxx transitively
+# so targets that still link wsjt_fort continue to resolve the migrated symbols.
+target_link_libraries (wsjt_fort INTERFACE wsjt_qt wsjt_cxx)
 # build a library of package Qt functionality used in Fortran utilities
 add_library (fort_qt STATIC ${fort_qt_CXXSRCS})
 target_link_libraries (fort_qt Qt6::Core)
@@ -1609,32 +1303,34 @@ target_link_libraries (fort_qt Qt6::Core)
 add_library (wsjt_qtmm STATIC ${wsjt_qtmm_CXXSRCS} ${wsjt_qtmm_GENUISRCS})
 target_link_libraries (wsjt_qtmm Qt6::Multimedia)
 
-add_executable (jt9 utils/jt9.cpp)
-target_sources (jt9 PRIVATE
-  Detector/FT2DecodeWorker.cpp
-  Detector/FT4DecodeWorker.cpp
-  Detector/FT8DecodeWorker.cpp
-  Detector/LegacyJtDecodeWorker.cpp
-  Detector/MSK144DecodeWorker.cpp
-  Detector/Q65DecodeWorker.cpp
-  )
-link_wsjtx_cycle_group (jt9 wsjt_qt wsjt_cxx wsjt_fort)
+if (WSJT_BUILD_UTILS)
+  add_executable (jt9 utils/jt9.cpp)
+  target_sources (jt9 PRIVATE
+    Detector/FT2DecodeWorker.cpp
+    Detector/FT4DecodeWorker.cpp
+    Detector/FT8DecodeWorker.cpp
+    Detector/LegacyJtDecodeWorker.cpp
+    Detector/MSK144DecodeWorker.cpp
+    Detector/Q65DecodeWorker.cpp
+    )
+  link_wsjtx_cycle_group (jt9 wsjt_qt wsjt_cxx wsjt_fort)
 
-add_executable (jt9a utils/jt9.cpp)
-target_sources (jt9a PRIVATE
-  Detector/FT2DecodeWorker.cpp
-  Detector/FT4DecodeWorker.cpp
-  Detector/FT8DecodeWorker.cpp
-  Detector/LegacyJtDecodeWorker.cpp
-  Detector/MSK144DecodeWorker.cpp
-  Detector/Q65DecodeWorker.cpp
-  )
-link_wsjtx_cycle_group (jt9a wsjt_qt wsjt_cxx wsjt_fort)
+  add_executable (jt9a utils/jt9.cpp)
+  target_sources (jt9a PRIVATE
+    Detector/FT2DecodeWorker.cpp
+    Detector/FT4DecodeWorker.cpp
+    Detector/FT8DecodeWorker.cpp
+    Detector/LegacyJtDecodeWorker.cpp
+    Detector/MSK144DecodeWorker.cpp
+    Detector/Q65DecodeWorker.cpp
+    )
+  link_wsjtx_cycle_group (jt9a wsjt_qt wsjt_cxx wsjt_fort)
 
-if (NOT APPLE)
-  add_executable (record_time_signal Audio/tools/record_time_signal.cpp)
-  target_link_libraries (record_time_signal wsjt_cxx wsjt_qtmm wsjt_qt)
-endif ()
+  if (NOT APPLE)
+    add_executable (record_time_signal Audio/tools/record_time_signal.cpp)
+    target_link_libraries (record_time_signal wsjt_cxx wsjt_qtmm wsjt_qt)
+  endif ()
+endif (WSJT_BUILD_UTILS)
 
 if (WIN32)
   find_package (Portaudio REQUIRED)
@@ -1678,29 +1374,22 @@ set_target_properties (wsjtx PROPERTIES
   )
 
 target_include_directories (wsjtx PRIVATE ${FFTW3_INCLUDE_DIRS})
-set (_wsjtx_fort_target wsjt_fort)
-if ((NOT ${OPENMP_FOUND}) OR APPLE)
-  set (_wsjtx_fort_target wsjt_fort)
-else ()
-  set (_wsjtx_fort_target wsjt_fort_omp)
+if (${OPENMP_FOUND} AND NOT APPLE)
   if (OpenMP_C_FLAGS)
     set_target_properties (wsjtx PROPERTIES
       COMPILE_FLAGS "${OpenMP_C_FLAGS}"
       LINK_FLAGS "${OpenMP_C_FLAGS}"
       )
   endif ()
-  set_target_properties (wsjtx PROPERTIES
-    Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/fortran_modules_omp
-    )
   if (WIN32)
     set_target_properties (wsjtx PROPERTIES
       LINK_FLAGS -Wl,--stack,0x1000000,--heap,0x20000000
       )
-  endif ()
+    endif ()
 endif ()
 target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
 target_compile_options (wsjtx PRIVATE -Wno-deprecated-declarations)
-link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx ${_wsjtx_fort_target})
+link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx wsjt_fort)
 
 # -----------------------------------------------------------------------
 # decodium_qml: lightweight QML-based frontend (uses DecodiumBridge)
@@ -1710,10 +1399,54 @@ if (WIN32)
 else ()
   set (DECODIUM_QML_ICON_RC "")
 endif ()
+set (DECODIUM_QML_LEGACY_SRCS
+  WSJTXLogging.cpp
+  logbook/logbook.cpp
+  Network/PSKReporter.cpp
+  Detector/Detector.cpp
+  widgets/logqso.cpp
+  widgets/displaytext.cpp
+  Decoder/decodedtext.cpp
+  getfile.cpp
+  widgets/meterwidget.cpp
+  widgets/signalmeter.cpp
+  widgets/plotter.cpp
+  widgets/widegraph.cpp
+  widgets/echograph.cpp
+  widgets/echoplot.cpp
+  widgets/fastgraph.cpp
+  widgets/fastplot.cpp
+  widgets/about.cpp
+  widgets/asyncmodewidget.cpp
+  widgets/FT2QsoFlowPolicy.cpp
+  widgets/astro.cpp
+  widgets/messageaveraging.cpp
+  widgets/activeStations.cpp
+  widgets/worldmapwidget.cpp
+  widgets/colorhighlighting.cpp
+  widgets/RTTYTerminalWidget.cpp
+  Modulator/RTTYModulator.cpp
+  Detector/RTTYDetector.cpp
+  Decoder/BaudotDecoder.cpp
+  DecodiumCertificate.cpp
+  WSPR/WsprTxScheduler.cpp
+  widgets/mainwindow.cpp
+  Configuration.cpp
+  WSPR/WSPRBandHopping.cpp
+  widgets/ExportCabrillo.cpp
+  widgets/QSYMessage.cpp
+  widgets/QSYMessageCreator.cpp
+  widgets/qsymonitor.cpp
+  widgets/TimeSyncPanel.cpp
+  widgets/IonosphericForecastWindow.cpp
+  widgets/DXClusterWindow.cpp
+  )
 add_executable (decodium_qml
   main_qml.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodiumLegacyBackend.cpp
+  DecodiumLegacyBackend.h
   helper_functions.cpp
   helper_functions.h
   controllers/ActiveStationsModel.cpp
@@ -1741,7 +1474,6 @@ add_executable (decodium_qml
   Detector/Q65DecodeWorker.cpp
   Detector/MSK144DecodeWorker.cpp
   Detector/WSPRDecodeWorker.cpp
-  Detector/FST4DecodeWorker.cpp
   Detector/JT9FastDecodeWorker.cpp
   Detector/JT9FastDecoder.cpp
   Detector/JT9FastHelpers.cpp
@@ -1754,6 +1486,7 @@ add_executable (decodium_qml
   Detector/JT9NarrowDecoder.cpp
   widgets/PlotLegacyHelpers.cpp
   lib/wsprd/wsprd_embedded.c
+  lib/wsprd/osdwspr.c
   lib/wsprd/wsprsim_utils.c
   lib/wsprd/wsprd_utils.c
   lib/wsprd/fano.c
@@ -1779,6 +1512,7 @@ add_executable (decodium_qml
   DecodiumDxCluster.h
   DxccLookup.cpp
   DxccLookup.h
+  ${DECODIUM_QML_LEGACY_SRCS}
   ${wsjtx_GENUISRCS}
   ${wsjtx_RESOURCES_RCC}
   ${DECODIUM_QML_ICON_RC}
@@ -1821,16 +1555,24 @@ target_link_libraries (decodium_qml
 if (WIN32)
   target_link_libraries (decodium_qml Qt6::AxContainer)
 endif ()
-# gfortran runtime dinamico
-if (MINGW)
-  target_link_libraries (decodium_qml gfortran quadmath)
-endif ()
-# Copy QML files next to the decodium_qml executable at build time
+# Copy QML files next to the decodium_qml executable on every build.
+# The runtime loads QML from the build tree, so stale copied files cause
+# "fixed in source but still broken at startup" behavior.
+add_custom_target (sync_decodium_qml ALL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+    "${CMAKE_BINARY_DIR}/qml"
+  COMMENT "Syncing QML files to build output"
+)
+add_dependencies (decodium_qml sync_decodium_qml)
+add_custom_target (decodium
+  DEPENDS decodium_qml sync_decodium_qml
+)
 add_custom_command (TARGET decodium_qml POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/qml"
-    "$<TARGET_FILE_DIR:decodium_qml>/qml"
-  COMMENT "Copying QML files to build output"
+    "${CMAKE_BINARY_DIR}/qml"
+  COMMENT "Syncing QML files after decodium_qml build"
 )
 
 if (APPLE)
@@ -1948,13 +1690,13 @@ install (TARGETS udp_daemon message_aggregator wsjtx_app_version
   BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   )
 
-install (TARGETS jt9 wsprd
+install (TARGETS wsprd
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   )
 
 if(WSJT_BUILD_UTILS)
-install (TARGETS fmtave fcal fmeasure
+install (TARGETS jt9 fmtave fcal fmeasure
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT runtime
   )

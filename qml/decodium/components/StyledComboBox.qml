@@ -16,16 +16,8 @@ ComboBox {
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
     property int effectiveFontPixelSize: Math.max(font.pixelSize, 14)
     property int itemHeight: Math.max(42, effectiveFontPixelSize + 22)
-    property int popupMinWidth: 0
+    property int popupMinWidth: 180
     property int textHorizontalAlignment: Text.AlignLeft
-    readonly property int computedPopupWidth: {
-        var widest = 0
-        for (var i = 0; i < control.count; ++i) {
-            popupMetrics.text = control.textAt(i)
-            widest = Math.max(widest, Math.ceil(popupMetrics.advanceWidth))
-        }
-        return Math.max(control.width, control.popupMinWidth, widest + control.leftPadding + control.rightPadding + 24)
-    }
 
     implicitHeight: Math.max(44, effectiveFontPixelSize + 24)
     height: implicitHeight
@@ -34,11 +26,6 @@ ComboBox {
     rightPadding: 34
     topPadding: 8
     bottomPadding: 8
-
-    TextMetrics {
-        id: popupMetrics
-        font: control.font
-    }
 
     background: Rectangle {
         color: control.bgColor
@@ -86,7 +73,7 @@ ComboBox {
     }
 
     delegate: ItemDelegate {
-        width: ListView.view ? ListView.view.width : control.computedPopupWidth
+        width: ListView.view ? ListView.view.width : Math.max(control.width, control.popupMinWidth)
         height: control.itemHeight
 
         contentItem: Text {
@@ -111,7 +98,7 @@ ComboBox {
 
     popup: Popup {
         y: control.height + 2
-        width: control.computedPopupWidth
+        width: Math.max(control.width, control.popupMinWidth)
         implicitHeight: Math.min(contentItem.implicitHeight + 12, 360)
         padding: 6
 

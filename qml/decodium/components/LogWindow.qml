@@ -57,18 +57,6 @@ Popup {
         selectedQso = null
     }
 
-    // Real-time update: refresh log when a new QSO is logged (via LogManager signal)
-    Connections {
-        target: appEngine && appEngine.logManager ? appEngine.logManager : null
-        function onQsoLogged(call, mode, band) { if (logWindow.visible) refreshLog() }
-    }
-
-    // Real-time update: refresh log when DecodiumBridge signals a QSO logged
-    Connections {
-        target: bridge
-        function onQsoLogged(call, grid, report) { if (logWindow.visible) refreshLog() }
-    }
-
     // Fallback auto-refresh: catches auto-sequence QSOs that bypass MshvBridge
     Timer {
         interval: 3000
