@@ -14,8 +14,8 @@ permissions:
   contents: write
 
 env:
-  HAMLIB_TAG: "4.7.1"
-  HAMLIB_VERSION: "4.7.1"
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
 
 jobs:
   build-windows-x64:
