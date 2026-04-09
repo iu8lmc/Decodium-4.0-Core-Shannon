@@ -939,6 +939,7 @@ private:
     DecodiumAudioSink* m_audioSink   {nullptr};
     QAudioSink*        m_txAudioSink  {nullptr};
     QBuffer*           m_txPcmBuffer  {nullptr};
+    QByteArray         m_txPcmData;    // persistent PCM storage (avoids CoreAudio lifetime issues on macOS)
     QTimer*            m_tuneTimer    {nullptr};
 
     // === GitHub TxController clone ===

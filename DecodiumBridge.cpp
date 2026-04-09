@@ -819,20 +819,50 @@ void DecodiumBridge::startTx()
         m_txPcmBuffer = nullptr;
     }
 
-    // GitHub ptt1Timer: delay pre-audio (20ms per FT2, 0 per FT8/FT4)
-    // Permette all'amplificatore di commutarsi prima che arrivi il segnale RF
+    // Salva PCM come membro persistente prima del lambda:
+    // su macOS CoreAudio legge il buffer in modo asincrono, una copia
+    // catturata nel lambda può essere deallocata prima della lettura.
+    m_txPcmData = pcm;
+
+    // GitHub ptt1Timer: delay pre-audio
+    // macOS CoreAudio richiede ~300ms per inizializzare l'audio session
+    // prima che il segnale RF arrivi — altrimenti i primi campioni vengono persi.
+    // Windows/Linux: 20ms per FT2, 0 per FT8/FT4.
+#if defined(Q_OS_MACOS)
+    int ptt1DelayMs = 300;
+#else
     int ptt1DelayMs = (m_mode == "FT2") ? 20 : 0;
+#endif
 
     // Lambda che avvia effettivamente QAudioSink dopo il delay ptt1
-    auto launchAudio = [this, outDev, pcm, msg, wave]() {
+    auto launchAudio = [this, outDev, msg, wave]() {
         m_txPcmBuffer = new QBuffer(this);
-        m_txPcmBuffer->setData(pcm);
+        m_txPcmBuffer->setData(m_txPcmData);  // usa il membro persistente
         m_txPcmBuffer->open(QIODevice::ReadOnly);
 
         QAudioFormat fmt;
         fmt.setChannelCount(1);  // mono: USB Audio CODEC TS-590S è mono
         fmt.setSampleRate(48000);
+        // macOS CoreAudio nativo usa Float32 — Int16 passa per conversione software
+        // che introduce jitter/latenza. Convertiamo qui per garantire il path nativo.
+#if defined(Q_OS_MACOS)
+        fmt.setSampleFormat(QAudioFormat::Float);
+        // Riconverti PCM Int16 → Float32 per il path CoreAudio nativo
+        {
+            const qint16* src16 = reinterpret_cast<const qint16*>(m_txPcmData.constData());
+            const int nSamples  = m_txPcmData.size() / static_cast<int>(sizeof(qint16));
+            QByteArray floatPcm(nSamples * static_cast<int>(sizeof(float)), Qt::Uninitialized);
+            float* dstF = reinterpret_cast<float*>(floatPcm.data());
+            for (int i = 0; i < nSamples; ++i)
+                dstF[i] = src16[i] / 32767.0f;
+            m_txPcmData = floatPcm;
+            m_txPcmBuffer->close();
+            m_txPcmBuffer->setData(m_txPcmData);
+            m_txPcmBuffer->open(QIODevice::ReadOnly);
+        }
+#else
         fmt.setSampleFormat(QAudioFormat::Int16);
+#endif
 
         m_txAudioSink = new QAudioSink(outDev, fmt, this);
         m_txAudioSink->setVolume(1.0f);
@@ -875,7 +905,7 @@ void DecodiumBridge::startTx()
 
         bridgeLog("startTx launchAudio: mode=" + m_mode + " msg=" + msg.trimmed() +
                   " samples=" + QString::number(wave.size()) +
-                  " pcm_bytes=" + QString::number(pcm.size()) +
+                  " pcm_bytes=" + QString::number(m_txPcmData.size()) +
                   " dev=" + outDev.description() +
                   " TX=" + QString::number(m_currentTx) +
                   " retry=" + QString::number(m_txRetryCount) +
