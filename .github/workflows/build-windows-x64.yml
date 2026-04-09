@@ -59,19 +59,35 @@ jobs:
             mingw-w64-x86_64-qt6-tools
             mingw-w64-x86_64-qt6-websockets
 
+      - name: Restore Hamlib cache
+        id: hamlib-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\.ci\hamlib-mingw64
+          key: windows-mingw64-hamlib-${{ env.HAMLIB_VERSION }}
+
       - name: Build and install Hamlib
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
+          HAMLIB_PREFIX="$(cygpath -u "$GITHUB_WORKSPACE")/.ci/hamlib-mingw64"
+          mkdir -p "${HAMLIB_PREFIX}"
           curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" \
             "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
           tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
           cd "hamlib-${HAMLIB_VERSION}"
-          ./configure --prefix=/mingw64 --disable-static --enable-shared
+          ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
           make -j"$(nproc)"
           make install
-          echo "/mingw64/bin" >> "${GITHUB_PATH}"
-          echo "PKG_CONFIG_PATH=/mingw64/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "${GITHUB_ENV}"
-          /mingw64/bin/rigctl --version
+
+      - name: Export Hamlib environment
+        run: |
+          set -euo pipefail
+          HAMLIB_PREFIX="$(cygpath -u "$GITHUB_WORKSPACE")/.ci/hamlib-mingw64"
+          echo "$(cygpath -w "${HAMLIB_PREFIX}/bin")" >> "${GITHUB_PATH}"
+          echo "HAMLIB_PREFIX=${HAMLIB_PREFIX}" >> "${GITHUB_ENV}"
+          echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig" >> "${GITHUB_ENV}"
+          "${HAMLIB_PREFIX}/bin/rigctl" --version
 
       - name: Resolve build version
         run: |
