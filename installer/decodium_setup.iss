@@ -1,25 +1,43 @@
-; Decodium Installer Script per InnoSetup 6.x
-; Usa wildcard *.dll per includere tutte le DLL del build dir
+; Decodium Installer Script per Inno Setup 6.x
+; Pensato per essere pilotato sia localmente sia da GitHub Actions.
 
-#define AppName "Decodium"
-#define AppVersion "4.0.0"
-#define AppPublisher "IU8LMC"
-#define AppExeName "decodium.exe"
-#define BuildDir "..\build_mingw64"
-#define SourceRoot ".."
+#ifndef AppName
+  #define AppName "Decodium"
+#endif
+#ifndef AppVersion
+  #define AppVersion "4.0.0"
+#endif
+#ifndef AppPublisher
+  #define AppPublisher "IU8LMC"
+#endif
+#ifndef AppExeName
+  #define AppExeName "decodium.exe"
+#endif
+#ifndef BuildDir
+  #define BuildDir "..\build_mingw64"
+#endif
+#ifndef SourceRoot
+  #define SourceRoot ".."
+#endif
+#ifndef OutputDir
+  #define OutputDir ".\output"
+#endif
+#ifndef OutputBaseFilename
+  #define OutputBaseFilename "Decodium_{#AppVersion}_Setup_x64"
+#endif
 
 [Setup]
-AppId={{D3C0D1UM-4000-4000-4000-D3C0D1UM4000}
+AppId={{D3C0D1A4-4000-4A10-8C64-6F7C3A6F4000}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
-AppPublisherURL=https://github.com/elisir80/decodium3-build-macos
+AppPublisherURL=https://github.com/elisir80/Decodium-4.0-Core-Shannon
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
-OutputDir=.\output
-OutputBaseFilename=Decodium_{#AppVersion}_Setup_x64
+OutputDir={#OutputDir}
+OutputBaseFilename={#OutputBaseFilename}
 SetupIconFile={#SourceRoot}\icons\windows-icons\decodium.ico
 WizardImageFile=compiler:WizClassicImage-IS.bmp
 WizardSmallImageFile=compiler:WizClassicSmallImage-IS.bmp
@@ -48,6 +66,11 @@ Source: "{#BuildDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Tutte le DLL nella root del build dir (Qt6, MinGW runtime, lib*)
 Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+
+; File dati principali
+Source: "{#BuildDir}\cty.dat"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#BuildDir}\ALLCALL7.TXT"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#SourceRoot}\COPYING"; DestDir: "{app}"; DestName: "COPYING.txt"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Plugin Qt — platforms (qwindows.dll, ecc.)
 Source: "{#BuildDir}\platforms\*"; DestDir: "{app}\platforms"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -78,6 +101,10 @@ Source: "{#BuildDir}\Qt\*"; DestDir: "{app}\Qt"; Flags: ignoreversion recursesub
 
 ; Traduzioni
 Source: "{#BuildDir}\*.qm"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
+; Risorse runtime
+Source: "{#BuildDir}\sounds\*"; DestDir: "{app}\sounds"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "{#BuildDir}\Palettes\*"; DestDir: "{app}\Palettes"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"

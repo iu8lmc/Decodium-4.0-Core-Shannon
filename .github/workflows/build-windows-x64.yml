@@ -1,0 +1,191 @@
+name: Build Windows x64
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          cache: true
+          install: >-
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-qt6-5compat
+            mingw-w64-x86_64-qt6-activeqt
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-serialport
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-websockets
+
+      - name: Install Hamlib package
+        run: |
+          set -euo pipefail
+          pacman -S --needed --noconfirm mingw-w64-x86_64-hamlib \
+            || pacman -S --needed --noconfirm mingw-w64-x86_64-libhamlib
+
+      - name: Resolve build version
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            APP_VERSION="${GITHUB_REF#refs/tags/}"
+            APP_VERSION="${APP_VERSION#v}"
+          else
+            APP_VERSION="0.0.0-ci.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
+          echo "INSTALLER_BASENAME=Decodium_${APP_VERSION}_Setup_x64" >> "${GITHUB_ENV}"
+
+      - name: Show toolchain versions
+        run: |
+          set -euo pipefail
+          cmake --version
+          ninja --version
+          g++ --version
+          gfortran --version
+          qmake6 -v || true
+          /mingw64/bin/windeployqt6.exe --version || /mingw64/bin/windeployqt.exe --version || true
+
+      - name: Configure CMake
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-windows -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DBUILD_TESTING=OFF \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Fortran targets
+        run: |
+          set -euo pipefail
+          cmake --build build-windows --target wsjt_fort wsjt_fort_omp --parallel 1
+
+      - name: Build Decodium
+        run: |
+          set -euo pipefail
+          cmake --build build-windows --target decodium --parallel "$(nproc)"
+
+      - name: Prepare portable bundle
+        run: |
+          set -euo pipefail
+
+          DIST="dist-windows-x64"
+          rm -rf "${DIST}"
+          mkdir -p "${DIST}"
+
+          cp build-windows/decodium.exe "${DIST}/"
+          cp -R build-windows/qml "${DIST}/"
+          cp build-windows/*.qm "${DIST}/" 2>/dev/null || true
+          cp cty.dat ALLCALL7.TXT "${DIST}/" 2>/dev/null || true
+          cp -R sounds "${DIST}/sounds"
+          cp -R Palettes "${DIST}/Palettes"
+
+          WINDEPLOYQT="/mingw64/bin/windeployqt6.exe"
+          if [[ ! -x "${WINDEPLOYQT}" ]]; then
+            WINDEPLOYQT="/mingw64/bin/windeployqt.exe"
+          fi
+
+          "${WINDEPLOYQT}" \
+            --release \
+            --compiler-runtime \
+            --qmldir "${PWD}/qml" \
+            --dir "${PWD}/${DIST}" \
+            "${PWD}/${DIST}/decodium.exe"
+
+          ldd "${DIST}/decodium.exe" \
+            | awk '/=> \\/mingw64\\/bin\\// {print $3}' \
+            | sort -u \
+            | while read -r dll; do
+                cp -u "${dll}" "${DIST}/"
+              done
+
+          echo "=== Portable bundle contents ==="
+          find "${DIST}" -maxdepth 2 -type f | sort
+
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found after installation attempt"
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE 'installer-output'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
+            "/DAppVersion=$env:APP_VERSION" `
+            "/DBuildDir=$env:GITHUB_WORKSPACE\dist-windows-x64" `
+            "/DSourceRoot=$env:GITHUB_WORKSPACE" `
+            "/DOutputDir=$outputDir" `
+            "/DOutputBaseFilename=$env:INSTALLER_BASENAME" `
+            "$env:GITHUB_WORKSPACE\installer\decodium_setup.iss"
+
+          Get-ChildItem $outputDir
+
+      - name: Upload portable bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-windows-x64-portable
+          if-no-files-found: error
+          path: dist-windows-x64
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-windows-x64-installer
+          if-no-files-found: error
+          path: installer-output/*.exe
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            installer-output/*.exe
