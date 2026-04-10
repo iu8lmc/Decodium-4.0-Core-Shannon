@@ -23,7 +23,7 @@
   #define OutputDir ".\output"
 #endif
 #ifndef OutputBaseFilename
-  #define OutputBaseFilename "Decodium_{#AppVersion}_Setup_x64"
+  #define OutputBaseFilename "Decodium_" + AppVersion + "_Setup_x64"
 #endif
 
 [Setup]

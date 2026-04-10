@@ -53,25 +53,6 @@ public:
   Q_SIGNAL void stateChanged (ModulatorState) const;
 
 protected:
-  qint64 bytesAvailable () const override
-  {
-    qint64 const base = AudioDevice::bytesAvailable ();
-    if (!isOpen () || Idle == m_state)
-      {
-        return base;
-      }
-    // Qt6/QAudioSink on macOS can treat a sequential source with zero
-    // advertised bytes as EOF and move straight to Idle before it ever
-    // pulls samples. Keep reporting a reasonable positive chunk while
-    // modulation is active so the sink continues reading.
-    return base + static_cast<qint64> (bytesPerFrame ()) * 4096;
-  }
-
-  bool atEnd () const override
-  {
-    return !isOpen () || Idle == m_state;
-  }
-
   qint64 readData (char * data, qint64 maxSize) override;
   qint64 writeData (char const * /* data */, qint64 /* maxSize */) override
   {

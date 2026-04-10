@@ -188,7 +188,7 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
             }
           else
             {
-              int const copySamples = static_cast<int> (qBound<qint64> (qint64{1}, requiredSamples, static_cast<qint64>(kFoxWaveSampleCount)));
+              int const copySamples = static_cast<int> (qBound<qint64> ((qint64)1, requiredSamples, (qint64)kFoxWaveSampleCount));
               m_waveSnapshot.resize (copySamples);
               std::memcpy (m_waveSnapshot.data (), foxcom_.wave, static_cast<size_t> (copySamples) * sizeof (float));
             }

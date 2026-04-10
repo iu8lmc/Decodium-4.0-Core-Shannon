@@ -3401,13 +3401,13 @@ void to_fixed_chars (QString const& text, char* out, int length)
 {
   QByteArray latin = text.left (length).toLatin1 ();
   std::fill_n (out, length, ' ');
-  std::copy_n (latin.constData (), std::min (static_cast<int>(length), static_cast<int>(latin.size ())), out);
+  std::copy_n (latin.constData (), std::min (length, (int)latin.size ()), out);
 }
 
 void to_fixed_chars (QByteArray const& text, char* out, int length)
 {
   std::fill_n (out, length, ' ');
-  std::copy_n (text.constData (), std::min (static_cast<int>(length), static_cast<int>(text.size ())), out);
+  std::copy_n (text.constData (), std::min (length, (int)text.size ()), out);
 }
 
 MessageBits77 bits_from_chars (char const* data, int length)
@@ -4132,7 +4132,7 @@ extern "C" void genmsk_128_90_ (char* msg0, int* ichk, char* msgsent, int* i4ton
     }
   if (i4tone && !encoded.tones.isEmpty ())
     {
-      int const tone_count = std::min (static_cast<qsizetype>(144), encoded.tones.size ());
+      int const tone_count = std::min (144, (int)encoded.tones.size ());
       for (int i = 0; i < tone_count; ++i)
         {
           i4tone[i] = encoded.tones.at (i);
@@ -6828,14 +6828,14 @@ void legacy_pack77_split77_c (char const msg[37], int* nwords, int nw[19], char 
   if (words) std::fill_n (words, 19 * 13, ' ');
 
   QStringList const split = split77_cpp (from_fixed_chars (msg, 37));
-  int const count = std::min (static_cast<int>(19), static_cast<int>(split.size ()));
+  int const count = std::min (19, (int)split.size ());
   if (nwords) *nwords = count;
   for (int i = 0; i < count; ++i)
     {
       QByteArray latin = split.at (i).left (13).toLatin1 ();
       if (nw) nw[i] = latin.size ();
       std::fill_n (words + i * 13, 13, ' ');
-      std::copy_n (latin.constData (), std::min (static_cast<int>(13), static_cast<int>(latin.size ())), words + i * 13);
+      std::copy_n (latin.constData (), std::min (13, (int)latin.size ()), words + i * 13);
     }
 }
 
@@ -6915,7 +6915,7 @@ void q65_encode_message_ (char* msg0, char* msgsent, int* payload, int* codeword
   std::copy_n (payload_values.begin (), kQ65PayloadSymbols, payload);
   std::copy_n (codeword_values.begin (), kQ65CodewordSymbols, codeword);
   std::copy_n (tone_values.begin (), kQ65ChannelSymbols, itone);
-  int const copy_len = std::min (static_cast<int>(static_cast<int> (len2)), static_cast<int>(packed_msgsent.size ()));
+  int const copy_len = std::min (static_cast<int> (len2), (int)packed_msgsent.size ());
   std::copy_n (packed_msgsent.constData (), copy_len, msgsent);
 }
 
@@ -6945,7 +6945,7 @@ void genq65_ (char* msg0, int* ichk, char* msgsent, int* itone, int* i3, int* n3
       int const tone = ok ? frequency : 1000;
       itone[0] = tone;
       QByteArray text = QByteArray::number (tone).rightJustified (5, ' ') + " Hz";
-      int const copy_len = std::min (static_cast<int>(static_cast<int> (len2)), static_cast<int>(text.size ()));
+      int const copy_len = std::min (static_cast<int> (len2), (int)text.size ());
       std::copy_n (text.constData (), copy_len, msgsent);
       return;
     }
@@ -6966,7 +6966,7 @@ void genq65_ (char* msg0, int* ichk, char* msgsent, int* itone, int* i3, int* n3
       return;
     }
 
-  int const copy_len = std::min (static_cast<int>(static_cast<int> (len2)), static_cast<int>(packed_msgsent.size ()));
+  int const copy_len = std::min (static_cast<int> (len2), (int)packed_msgsent.size ());
   std::copy_n (packed_msgsent.constData (), copy_len, msgsent);
 
   if (ichk && *ichk == 1)
