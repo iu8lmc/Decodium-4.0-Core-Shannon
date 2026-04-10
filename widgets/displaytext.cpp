@@ -3,13 +3,8 @@
 #include <vector>
 #include <algorithm>
 
-#ifdef WIN32
-#include <QAudio>
-#include <QAudioOutput>
-#else
 #include <QSoundEffect>
 #include <QUrl>
-#endif
 #include <QDir>
 #include <QCoreApplication>
 #include <QTimer>
@@ -138,7 +133,6 @@ namespace
 {
   using Highlight = DecodeHighlightingModel::Highlight;
   using highlight_types = std::vector<Highlight>;
-#ifndef WIN32
   void play_alert_sound(QObject* parent, QString const& path)
   {
     auto * effect = new QSoundEffect(parent);
@@ -148,7 +142,6 @@ namespace
     effect->play();
     QTimer::singleShot(5000, effect, &QObject::deleteLater);
   }
-#endif
   Highlight set_colours (Configuration const * config, QColor * bg, QColor * fg, highlight_types const& types)
   {
     Highlight result = Highlight::CQ;
@@ -1026,58 +1019,16 @@ void DisplayText::highlight_callsign (QString const& callsign, QColor const& bg,
 
 void DisplayText::AudioAlerts()
 {
-#ifdef WIN32
   if(m_config->alert_Enabled()) {
-        QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-        QAudioFormat format;
-        format.setCodec("audio/pcm");
-        format.setSampleRate (48000);
-        format.setChannelCount (1);
-        format.setSampleSize (16);
-        format.setSampleType(QAudioFormat::SignedInt);
-        QAudioOutput* audio;
-        audio = new QAudioOutput(format, this);
-        connect(audio, SIGNAL(stateChanged(QAudio::State)), this, SLOT(handleStateChanged(QAudio::State)));
-#else
-  if(m_config->alert_Enabled()) {
-#endif
-        QFile *effect2 = new QFile(this);
-        QFile *effect3 = new QFile(this);
-        QFile *effect4 = new QFile(this);
-        QFile *effect5 = new QFile(this);
-        QFile *effect6 = new QFile(this);
-        QFile *effect7 = new QFile(this);
-        QFile *effect8 = new QFile(this);
-        QFile *effect9 = new QFile(this);
-        QFile *effect10 = new QFile(this);
-        QFile *effect11 = new QFile(this);
-        QFile *effect12 = new QFile(this);
-        QFile *effect13 = new QFile(this);
-        effect2->setFileName(bundled_sound_path(QStringLiteral("MyCall.wav")));
-        effect3->setFileName(bundled_sound_path(QStringLiteral("DXCC.wav")));
-        effect4->setFileName(bundled_sound_path(QStringLiteral("DXCCOnBand.wav")));
-        effect5->setFileName(bundled_sound_path(QStringLiteral("Continent.wav")));
-        effect6->setFileName(bundled_sound_path(QStringLiteral("ContinentOnBand.wav")));
-        effect7->setFileName(bundled_sound_path(QStringLiteral("CQZone.wav")));
-        effect8->setFileName(bundled_sound_path(QStringLiteral("CQZoneOnBand.wav")));
-        effect9->setFileName(bundled_sound_path(QStringLiteral("ITUZone.wav")));
-        effect10->setFileName(bundled_sound_path(QStringLiteral("ITUZoneOnBand.wav")));
-        effect11->setFileName(bundled_sound_path(QStringLiteral("Grid.wav")));
-        effect12->setFileName(bundled_sound_path(QStringLiteral("GridOnBand.wav")));
-        effect13->setFileName(bundled_sound_path(QStringLiteral("CQ.wav")));
+        auto playAlert = [this](QString const& fileName) {
+            play_alert_sound(this, bundled_sound_path(fileName));
+        };
         static int startIndex = 0;
         int nextStartIndex = startIndex +1;
         switch (startIndex) {
         case 0:
             if (play_MyCall) {
-
-#ifdef WIN32
-                effect2->open(QIODevice::ReadOnly);
-                audio->start(effect2);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("MyCall.wav")));
-#endif
-
+                playAlert(QStringLiteral("MyCall.wav"));
                 play_MyCall = false;
                 alertsTimer.start (1000);
                 startIndex = nextStartIndex;
@@ -1088,14 +1039,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 1:
             if (play_DXCC) {
-
-#ifdef WIN32
-                effect3->open(QIODevice::ReadOnly);
-                audio->start(effect3);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("DXCC.wav")));
-#endif
-
+                playAlert(QStringLiteral("DXCC.wav"));
                 play_DXCC = false;
                 play_DXCCOB = false;
                 alertsTimer.start (1200);
@@ -1107,13 +1051,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 2:
             if (play_DXCCOB && !play_DXCC) {
-#ifdef WIN32
-                effect4->open(QIODevice::ReadOnly);
-                audio->start(effect4);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("DXCCOnBand.wav")));
-#endif
-
+                playAlert(QStringLiteral("DXCCOnBand.wav"));
                 play_DXCCOB = false;
                 alertsTimer.start (1800);
                 startIndex = nextStartIndex;
@@ -1124,13 +1062,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 3:
             if (play_Continent) {
-
-#ifdef WIN32
-                effect5->open(QIODevice::ReadOnly);
-                audio->start(effect5);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("Continent.wav")));
-#endif
+                playAlert(QStringLiteral("Continent.wav"));
                 play_Continent = false;
                 play_ContinentOB = false;
                 play_GridOB = false;
@@ -1145,12 +1077,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 4:
             if (play_ContinentOB && !play_Continent) {
-#ifdef WIN32
-                effect6->open(QIODevice::ReadOnly);
-                audio->start(effect6);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("ContinentOnBand.wav")));
-#endif
+                playAlert(QStringLiteral("ContinentOnBand.wav"));
                 play_ContinentOB = false;
                 play_GridOB = false;
                 play_CQZOB = false;
@@ -1164,12 +1091,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 5:
             if (play_CQZ) {
-#ifdef WIN32
-                effect7->open(QIODevice::ReadOnly);
-                audio->start(effect7);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("CQZone.wav")));
-#endif
+                playAlert(QStringLiteral("CQZone.wav"));
                 play_CQZ = false;
                 play_CQZOB = false;
                 alertsTimer.start (1500);
@@ -1181,12 +1103,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 6:
             if (play_CQZOB && !play_CQZ) {
-#ifdef WIN32
-                effect8->open(QIODevice::ReadOnly);
-                audio->start(effect8);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("CQZoneOnBand.wav")));
-#endif
+                playAlert(QStringLiteral("CQZoneOnBand.wav"));
                 play_CQZOB = false;
                 alertsTimer.start (1800);
                 startIndex = nextStartIndex;
@@ -1197,12 +1114,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 7:
             if (play_ITUZ) {
-#ifdef WIN32
-                effect9->open(QIODevice::ReadOnly);
-                audio->start(effect9);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("ITUZone.wav")));
-#endif
+                playAlert(QStringLiteral("ITUZone.wav"));
                 play_ITUZ = false;
                 play_ITUZOB = false;
                 play_GridOB = false;
@@ -1215,12 +1127,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 8:
             if (play_ITUZOB && !(play_ITUZ)) {
-#ifdef WIN32
-                effect10->open(QIODevice::ReadOnly);
-                audio->start(effect10);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("ITUZoneOnBand.wav")));
-#endif
+                playAlert(QStringLiteral("ITUZoneOnBand.wav"));
                 play_ITUZOB = false;
                 play_GridOB = false;
                 alertsTimer.start (1900);
@@ -1232,12 +1139,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 9:
             if (play_Grid) {
-#ifdef WIN32
-                effect11->open(QIODevice::ReadOnly);
-                audio->start(effect11);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("Grid.wav")));
-#endif
+                playAlert(QStringLiteral("Grid.wav"));
                 play_Grid = false;
                 play_GridOB = false;
                 alertsTimer.start (1000);
@@ -1249,12 +1151,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 10:
             if (play_GridOB && !play_Grid) {
-#ifdef WIN32
-                effect12->open(QIODevice::ReadOnly);
-                audio->start(effect12);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("GridOnBand.wav")));
-#endif
+                playAlert(QStringLiteral("GridOnBand.wav"));
                 play_GridOB = false;
                 alertsTimer.start (1500);
                 startIndex = nextStartIndex;
@@ -1265,12 +1162,7 @@ void DisplayText::AudioAlerts()
             Q_FALLTHROUGH();
         case 11:
             if (play_CQ) {
-#ifdef WIN32
-                effect13->open(QIODevice::ReadOnly);
-                audio->start(effect13);
-#else
-                play_alert_sound(this, bundled_sound_path(QStringLiteral("CQ.wav")));
-#endif
+                playAlert(QStringLiteral("CQ.wav"));
                 play_CQ = false;
                 alertsTimer.start (1000);
                 nextStartIndex++;
@@ -1282,33 +1174,6 @@ void DisplayText::AudioAlerts()
         case 12:
             // stop any running alerts timer, clear temp data, and restart alerts timer
             alertsTimer.stop ();
-#ifdef WIN32
-            effect2->close();
-            effect2->deleteLater();
-            effect3->close();
-            effect3->deleteLater();
-            effect4->close();
-            effect4->deleteLater();
-            effect5->close();
-            effect5->deleteLater();
-            effect6->close();
-            effect6->deleteLater();
-            effect7->close();
-            effect7->deleteLater();
-            effect8->close();
-            effect8->deleteLater();
-            effect9->close();
-            effect9->deleteLater();
-            effect10->close();
-            effect10->deleteLater();
-            effect11->close();
-            effect11->deleteLater();
-            effect12->close();
-            effect12->deleteLater();
-            effect13->close();
-            effect13->deleteLater();
-            audio->deleteLater();  // remove QAudioSink to avoid a memory leak
-#endif
             alertsTimer.start (1250);
             startIndex = 0;
             return;

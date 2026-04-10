@@ -16,10 +16,6 @@
 #include "Modulator/RTTYModulator.hpp"
 #include "Decoder/BaudotDecoder.hpp"
 
-#include <QAudio>
-#ifdef WIN32
-#include <QAudioOutput>
-#endif
 #include <QSoundEffect>
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -4973,19 +4969,7 @@ void MainWindow::readSettings()
 
 #ifdef WIN32
   if (m_config.alert_Enabled()) {  // testing and initializing the default audio device for playing audible alerts
-      QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-      QAudioFormat format;
-      format.setCodec("audio/pcm");
-      format.setSampleRate (48000);
-      format.setChannelCount (1);
-      format.setSampleSize (16);
-      format.setSampleType(QAudioFormat::SignedInt);
-      QAudioOutput* audio;
-      audio = new QAudioOutput(format, this);
-      QFile *effect = new QFile(this);
-      effect->setFileName(bundled_sound_path(QStringLiteral("Testing.wav")));
-      effect->open(QIODevice::ReadOnly);
-      audio->start(effect);
+      play_sound_effect (this, bundled_sound_path (QStringLiteral ("Testing.wav")));
   }
 #endif
 }
@@ -6422,21 +6406,7 @@ void MainWindow::fastSink(qint64 frames)
     QTimer::singleShot (100, [=] {                       // UR delete for versions without alerts
       if ((m_config.alert_Enabled()) && (m_config.alert_DXcall()) && (play_DXcall) && (m_hisCall!="")) {
 #ifdef WIN32
-        QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-        QString binPath = QCoreApplication::applicationDirPath();
-        QAudioFormat format;
-        format.setCodec("audio/pcm");
-        format.setSampleRate (48000);
-        format.setChannelCount (1);
-        format.setSampleSize (16);
-        format.setSampleType(QAudioFormat::SignedInt);
-        QAudioOutput* audio;
-        audio = new QAudioOutput(format, this);
-        connect(audio, SIGNAL(stateChanged(QAudio::State)), this, SLOT(handleStateChanged(QAudio::State)));
-        QFile *effect1 = new QFile(this);
-        effect1->setFileName(QString("%1/%2").arg(binPath, "/sounds/DXcall.wav"));
-        effect1->open(QIODevice::ReadOnly);
-        audio->start(effect1);
+        play_sound_effect (this, bundled_sound_path (QStringLiteral ("DXcall.wav")));
 #else
         play_sound_effect (this, bundled_sound_path (QStringLiteral ("DXcall.wav")));
 #endif
@@ -12684,21 +12654,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         QTimer::singleShot (100, [=] {                       // UR delete for versions without alerts
           if (m_config.alert_Enabled() && m_config.alert_DXcall() && play_DXcall && m_hisCall!="") {
 #ifdef WIN32
-            QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-            QString binPath = QCoreApplication::applicationDirPath();
-            QAudioFormat format;
-            format.setCodec("audio/pcm");
-            format.setSampleRate (48000);
-            format.setChannelCount (1);
-            format.setSampleSize (16);
-            format.setSampleType(QAudioFormat::SignedInt);
-            QAudioOutput* audio;
-            audio = new QAudioOutput(format, this);
-            connect(audio, SIGNAL(stateChanged(QAudio::State)), this, SLOT(handleStateChanged(QAudio::State)));
-            QFile *effect1 = new QFile(this);
-            effect1->setFileName(QString("%1/%2").arg(binPath, "/sounds/DXcall.wav"));
-            effect1->open(QIODevice::ReadOnly);
-            audio->start(effect1);
+            play_sound_effect (this, bundled_sound_path (QStringLiteral ("DXcall.wav")));
 #else
             play_sound_effect (this, bundled_sound_path (QStringLiteral ("DXcall.wav")));
 #endif
@@ -18314,20 +18270,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)    // mouse press events
     } else {
       // Testing the default audio device
 #ifdef WIN32
-      QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-      QString binPath = QCoreApplication::applicationDirPath();
-      QAudioFormat format;
-      format.setCodec("audio/pcm");
-      format.setSampleRate (48000);
-      format.setChannelCount (1);
-      format.setSampleSize (16);
-      format.setSampleType(QAudioFormat::SignedInt);
-      QAudioOutput* audio;
-      audio = new QAudioOutput(format, this);
-      QFile *effect = new QFile(this);
-      effect->setFileName(QString("%1/%2").arg(binPath, "/sounds/Testing_long.wav"));
-      effect->open(QIODevice::ReadOnly);
-      audio->start(effect);
+      play_sound_effect (this, bundled_sound_path (QStringLiteral ("Testing_long.wav")));
 #else
       play_sound_effect (this, bundled_sound_path (QStringLiteral ("Testing_long.wav")));
 #endif
@@ -27642,21 +27585,7 @@ void MainWindow::remove_old_files(const QString &directoryPath, int daysOld)
 void MainWindow::alertQSYmessage ()
 {
 #ifdef WIN32
-  QAudioOutput info(QAudioDeviceInfo::defaultOutputDevice());
-  QString binPath = QCoreApplication::applicationDirPath();
-  QAudioFormat format;
-  format.setCodec("audio/pcm");
-  format.setSampleRate (48000);
-  format.setChannelCount (1);
-  format.setSampleSize (16);
-  format.setSampleType(QAudioFormat::SignedInt);
-  QAudioOutput* audio;
-  audio = new QAudioOutput(format, this);
-  connect(audio, SIGNAL(stateChanged(QAudio::State)), this, SLOT(handleStateChanged(QAudio::State)));
-  QFile *effect1 = new QFile(this);
-  effect1->setFileName(QString("%1/%2").arg(binPath, "/sounds/Message.wav"));
-  effect1->open(QIODevice::ReadOnly);
-  audio->start(effect1);
+  play_sound_effect (this, bundled_sound_path (QStringLiteral ("Message.wav")));
 #else
   play_sound_effect (this, bundled_sound_path (QStringLiteral ("Message.wav")));
 #endif
