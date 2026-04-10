@@ -3,6 +3,7 @@
 #include <string>
 #include <exception>
 #include <sstream>
+#include <atomic>
 
 #include <boost/version.hpp>
 #include <boost/log/core.hpp>
@@ -64,6 +65,29 @@ namespace
   // Reroute Qt messages to the system logger
   void qt_log_handler (QtMsgType type, QMessageLogContext const& context, QString const& msg)
   {
+#if defined (Q_OS_LINUX)
+    static std::atomic<bool> qsocketnotifier_warning_logged {false};
+    static bool const trace_qsocketnotifier_warning =
+      qEnvironmentVariableIsSet ("FT2_TRACE_QSOCKETNOTIFIER");
+    if (!trace_qsocketnotifier_warning
+        && type == QtWarningMsg
+        && msg == QStringLiteral ("QSocketNotifier: Can only be used with threads started with QThread"))
+      {
+        if (!qsocketnotifier_warning_logged.exchange (true))
+          {
+            auto log = sys::get ();
+            BOOST_LOG_SEV (log, trivial::debug)
+              << boost::log::add_value ("Line", context.line)
+              << boost::log::add_value ("File", context.file ? std::string {context.file} : std::string {})
+              << boost::log::add_value ("Function", context.function ? std::string {context.function} : std::string {})
+              << "Suppressed Linux startup warning: "
+              << msg.toStdString ()
+              << " (set FT2_TRACE_QSOCKETNOTIFIER=1 to show it)";
+          }
+        return;
+      }
+#endif
+
     // Convert Qt message types to logger severities
     auto severity = trivial::trace;
     switch (type)
@@ -240,11 +264,13 @@ DecodiumLogging::DecodiumLogging ()
       default_log_config ();
     }
 
-  ::qInstallMessageHandler (&qt_log_handler);
+  previous_qt_message_handler_ = ::qInstallMessageHandler (&qt_log_handler);
 }
 
 DecodiumLogging::~DecodiumLogging ()
 {
+  ::qInstallMessageHandler (previous_qt_message_handler_);
+  previous_qt_message_handler_ = nullptr;
   LOG_INFO ("Log Finish");
   auto core = logging::core::get ();
   core->flush ();
