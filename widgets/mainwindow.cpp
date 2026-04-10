@@ -7225,6 +7225,16 @@ QUrl MainWindow::bestReleaseDownloadUrl (QJsonObject const& release, QString * a
       return {};
     }
 
+  struct Candidate
+  {
+    int score {-1};
+    QString name;
+    QUrl url;
+  };
+
+  Candidate best;
+
+#if defined (Q_OS_MACOS) || defined (Q_OS_MAC)
   auto const current_arch = QSysInfo::currentCpuArchitecture ().toLower ();
   auto const assets = assets_value.toArray ();
   auto const is_text_or_checksum_asset = [] (QString const& name) {
@@ -7243,17 +7253,6 @@ QUrl MainWindow::bestReleaseDownloadUrl (QJsonObject const& release, QString * a
       }
     return false;
   };
-
-  struct Candidate
-  {
-    int score {-1};
-    QString name;
-    QUrl url;
-  };
-
-  Candidate best;
-
-#if defined (Q_OS_MACOS) || defined (Q_OS_MAC)
   auto const current_major = QOperatingSystemVersion::current ().majorVersion ();
   QStringList arch_tokens;
   if (current_arch.contains (QStringLiteral ("arm")))
@@ -7351,6 +7350,24 @@ QUrl MainWindow::bestReleaseDownloadUrl (QJsonObject const& release, QString * a
         }
     }
 #elif defined (Q_OS_LINUX)
+  auto const current_arch = QSysInfo::currentCpuArchitecture ().toLower ();
+  auto const assets = assets_value.toArray ();
+  auto const is_text_or_checksum_asset = [] (QString const& name) {
+    auto const lower = name.toLower ();
+    return lower.endsWith (QStringLiteral (".txt"))
+           || lower.contains (QStringLiteral ("sha256"))
+           || lower.contains (QStringLiteral ("checksum"));
+  };
+  auto const mentions_any = [] (QString const& text, QStringList const& needles) {
+    for (auto const& needle : needles)
+      {
+        if (text.contains (needle))
+          {
+            return true;
+          }
+      }
+    return false;
+  };
   QStringList arch_tokens;
   if (current_arch.contains (QStringLiteral ("arm")))
     {
