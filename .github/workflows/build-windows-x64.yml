@@ -188,7 +188,7 @@ jobs:
           "${WINDEPLOYQT}" "${WINDEPLOY_ARGS[@]}"
 
           ldd "${DIST}/decodium.exe" \
-            | awk '/=> \\/mingw64\\/bin\\// {print $3}' \
+            | awk 'index($0, "=> /mingw64/bin/") {print $3}' \
             | sort -u \
             | while read -r dll; do
                 cp -u "${dll}" "${DIST}/"
