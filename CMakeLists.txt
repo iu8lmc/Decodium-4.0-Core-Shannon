@@ -637,7 +637,6 @@ set (all_C_and_CXXSRCS
   )
 
 set (TOP_LEVEL_RESOURCES
-  icons/Darwin/wsjtx.iconset/icon_128x128.png
   artwork/ft2logo.png
   contrib/gpl-v3-logo.svg
   artwork/splash.png
@@ -699,7 +698,7 @@ if (APPLE)
     COMMENT "Building Icons"
     )
 else ()
-  set (WSJTX_ICON_FILE icons/windows-icons/wsjtx.ico)
+  set (WSJTX_ICON_FILE icons/windows-icons/decodium.ico)
 endif (APPLE)
 
 set_source_files_properties (${WSJTX_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
@@ -1205,7 +1204,7 @@ set (LANGUAGES
   it				# Italian
   )
 foreach (lang_ ${LANGUAGES})
-  file (TO_NATIVE_PATH ${CMAKE_SOURCE_DIR}/translations/wsjtx_${lang_}.ts ts_)
+  file (TO_NATIVE_PATH ${CMAKE_SOURCE_DIR}/translations/decodium_${lang_}.ts ts_)
   list (APPEND TS_FILES ${ts_})
   set (qt_translations_ "${QT_TRANSLATIONS_DIR}/qtbase_${lang_}.qm")
   if (EXISTS "${qt_translations_}")
@@ -1853,7 +1852,7 @@ if (NOT WIN32 AND NOT APPLE)
     #COMPONENT runtime
     )
   install (
-    FILES icons/Unix/wsjtx_icon.png
+    FILES icons/Unix/decodium_icon.png
     DESTINATION share/pixmaps
     #COMPONENT runtime
     )
