@@ -60,10 +60,12 @@ jobs:
 
       - name: Restore Hamlib cache
         id: hamlib-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}\.ci\hamlib-mingw64
           key: windows-mingw64-hamlib-${{ env.HAMLIB_VERSION }}
+          restore-keys: |
+            windows-mingw64-hamlib-
 
       - name: Build and install Hamlib
         if: steps.hamlib-cache.outputs.cache-hit != 'true'
@@ -78,6 +80,13 @@ jobs:
           ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
           make -j"$(nproc)"
           make install
+
+      - name: Save Hamlib cache
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}\.ci\hamlib-mingw64
+          key: windows-mingw64-hamlib-${{ env.HAMLIB_VERSION }}
 
       - name: Export Hamlib environment
         run: |
