@@ -206,7 +206,19 @@ jobs:
             local upper_name=""
             upper_name="$(printf '%s' "${dll_name}" | tr '[:lower:]' '[:upper:]')"
             case "${upper_name}" in
-              API-MS-WIN-*.DLL|EXT-MS-*.DLL|KERNEL32.DLL|KERNELBASE.DLL|USER32.DLL|GDI32.DLL|ADVAPI32.DLL|COMDLG32.DLL|COMCTL32.DLL|SHELL32.DLL|OLE32.DLL|OLEAUT32.DLL|WS2_32.DLL|WINMM.DLL|IMM32.DLL|VERSION.DLL|SETUPAPI.DLL|SHLWAPI.DLL|RPCRT4.DLL|CRYPT32.DLL|IPHLPAPI.DLL|DNSAPI.DLL|NETAPI32.DLL|WTSAPI32.DLL|UXTHEME.DLL|DWMAPI.DLL|MPR.DLL|BCRYPT.DLL|MSVCRT.DLL|SECHOST.DLL|NTDLL.DLL|WINSPOOL.DRV)
+              API-MS-WIN-*.DLL|EXT-MS-*.DLL|KERNEL32.DLL|KERNELBASE.DLL|USER32.DLL|GDI32.DLL|ADVAPI32.DLL|COMDLG32.DLL|COMCTL32.DLL|SHELL32.DLL|OLE32.DLL|OLEAUT32.DLL|WS2_32.DLL|WSOCK32.DLL|WINMM.DLL|IMM32.DLL|VERSION.DLL|SETUPAPI.DLL|SHLWAPI.DLL|SHCORE.DLL|RPCRT4.DLL|CRYPT32.DLL|CRYPTSP.DLL|IPHLPAPI.DLL|DNSAPI.DLL|NETAPI32.DLL|WTSAPI32.DLL|UXTHEME.DLL|DWMAPI.DLL|MPR.DLL|BCRYPT.DLL|BCRYPTPRIMITIVES.DLL|MSVCRT.DLL|SECHOST.DLL|NTDLL.DLL|WINSPOOL.DRV|AUTHZ.DLL|AVRT.DLL|D3D9.DLL|D3D11.DLL|D3D12.DLL|DWRITE.DLL|DXGI.DLL|DXVA2.DLL|GDIPLUS.DLL|MF.DLL|MFPLAT.DLL|MFREADWRITE.DLL|MSIMG32.DLL|NCRYPT.DLL|ODBC32.DLL|PROPSYS.DLL|SECUR32.DLL|USERENV.DLL|USP10.DLL|WINHTTP.DLL)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
+          is_optional_runtime_dll() {
+            local dll_name="$1"
+            local upper_name=""
+            upper_name="$(printf '%s' "${dll_name}" | tr '[:lower:]' '[:upper:]')"
+            case "${upper_name}" in
+              FBCLIENT.DLL|LIBMARIADB.DLL|LIBPQ.DLL)
                 return 0
                 ;;
             esac
@@ -231,6 +243,9 @@ jobs:
             local dll_name="$1"
             local source_path=""
             if is_system_dll "${dll_name}"; then
+              return 1
+            fi
+            if is_optional_runtime_dll "${dll_name}"; then
               return 1
             fi
             if find "${DIST}" -type f -iname "${dll_name}" | grep -q .; then
@@ -270,6 +285,9 @@ jobs:
           while IFS= read -r dll_name; do
             [[ -n "${dll_name}" ]] || continue
             if is_system_dll "${dll_name}"; then
+              continue
+            fi
+            if is_optional_runtime_dll "${dll_name}"; then
               continue
             fi
             if ! find "${DIST}" -type f -iname "${dll_name}" | grep -q .; then
