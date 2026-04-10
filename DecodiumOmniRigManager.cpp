@@ -1,13 +1,34 @@
 #include "DecodiumOmniRigManager.h"
 
-#ifdef Q_OS_WIN
-#include <QAxObject>
+#if defined(Q_OS_WIN)
+#  if defined(__has_include)
+#    if __has_include(<QtAxContainer/qaxobject.h>)
+#      include <QtAxContainer/qaxobject.h>
+#      define DECODIUM_HAS_QAXOBJECT 1
+#    elif __has_include(<ActiveQt/qaxobject.h>)
+#      include <ActiveQt/qaxobject.h>
+#      define DECODIUM_HAS_QAXOBJECT 1
+#    elif __has_include(<QtActiveQt/qaxobject.h>)
+#      include <QtActiveQt/qaxobject.h>
+#      define DECODIUM_HAS_QAXOBJECT 1
+#    elif __has_include(<QAxObject>)
+#      include <QAxObject>
+#      define DECODIUM_HAS_QAXOBJECT 1
+#    else
+#      define DECODIUM_HAS_QAXOBJECT 0
+#    endif
+#  else
+#    include <QAxObject>
+#    define DECODIUM_HAS_QAXOBJECT 1
+#  endif
+#else
+#  define DECODIUM_HAS_QAXOBJECT 0
 #endif
 #include <QSettings>
 #include <QTimer>
 #include <QDebug>
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && DECODIUM_HAS_QAXOBJECT
 // OmniRig COM ProgID
 static const char* OMNIRIG_PROGID = "OmniRig.OmniRigX";
 
@@ -209,7 +230,7 @@ DecodiumOmniRigManager::~DecodiumOmniRigManager()
 
 void DecodiumOmniRigManager::connectRig()
 {
-    emit errorOccurred("OmniRig is only available on Windows builds.");
+    emit errorOccurred("OmniRig support is not available in this build.");
 }
 
 void DecodiumOmniRigManager::disconnectRig()
