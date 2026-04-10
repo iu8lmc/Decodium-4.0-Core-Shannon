@@ -185,6 +185,10 @@ public:
   QStringList legacyBandActivityLines() const;
   int legacyRxFrequencyRevision() const;
   QStringList legacyRxFrequencyLines() const;
+  QString legacyTxMessage(int index) const;
+  int legacyCurrentTx() const;
+  QString legacyAdifLogPath() const;
+  int legacyTxOutputAttenuation() const;
   void legacyClearBandActivity();
   void legacySetMode(QString const& mode);
   void legacySetDialFrequency(Frequency frequency);
@@ -198,6 +202,7 @@ public:
   void legacySetAudioOutputDeviceName(QString const& name);
   void legacySetAudioInputChannel(int channel);
   void legacySetAudioOutputChannel(int channel);
+  void legacySetTxOutputAttenuation(int value);
   void legacySetDxCall(QString const& call);
   void legacySetDxGrid(QString const& grid);
   void legacySetTxMessage(int index, QString const& message);
@@ -723,6 +728,7 @@ private:
   Q_SIGNAL void legacyRigErrorRaised (QString const& title,
                                       QString const& summary,
                                       QString const& details) const;
+  Q_SIGNAL void legacyPreferencesRequested () const;
 
 private:
   void set_mode (QString const& mode);
@@ -768,6 +774,7 @@ private:
   bool m_WSPR_tx_next;
   MessageBox m_rigErrorMessageBox;
   bool m_embeddedShellMode {false};
+  bool m_forceLegacySettingsDialog {false};
   bool m_embeddedFt2MonitorPrepared {false};
   QScopedPointer<SampleDownloader> m_sampleDownloader;
   QScopedPointer<EqualizationToolsDialog> m_equalizationToolsDialog;
@@ -1026,6 +1033,9 @@ private:
   void enqueueCaller (QString const& call, int freq, int snr = -99, float dt = 0.0f);
   void processNextInQueue ();
   void refreshCallerQueueDisplay ();
+  bool legacyWidgetLogicallyVisible (QWidget const * widget) const;
+  bool legacyAutoSeqEnabled () const;
+  bool legacyRespondSelectionEnabled () const;
   bool isRecentAutoCqDuplicate (QString const& call) const;
   void rememberRecentAutoCqAbandoned (QString const& call, Frequency dialFreq, QString const& mode);
   void rememberRecentAutoCqWorked (QString const& call, Frequency dialFreq, QString const& mode);
@@ -1591,7 +1601,7 @@ private:
 #endif
   void process_autoButton(bool checked); //avt 1/23/24
   void setMyContinent();    //avt 5/6/24updateLotwCtrls()
-  bool is_externalCtrlMode();     //avt 12/5/20
+  bool is_externalCtrlMode() const;     //avt 12/5/20
   void initExternalCtrl();     //avt 12/5/20
   void externalCtrlDisconnected();  //avt 12/16/21
   void debugToFile(QString str);        //avt 12/6/23

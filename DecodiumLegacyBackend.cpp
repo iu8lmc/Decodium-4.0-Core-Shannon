@@ -320,6 +320,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                 SIGNAL(legacyRigErrorRaised(QString const&,QString const&,QString const&)),
                 this,
                 SIGNAL(rigErrorRaised(QString const&,QString const&,QString const&)));
+        connect(m_mainWindow,
+                SIGNAL(legacyPreferencesRequested()),
+                this,
+                SIGNAL(preferencesRequested()));
         m_available = true;
 
         // Prevent legacy startup options from auto-starting monitor behind the
@@ -473,6 +477,26 @@ QStringList DecodiumLegacyBackend::rxFrequencyLines() const
     return m_mainWindow ? m_mainWindow->legacyRxFrequencyLines() : QStringList {};
 }
 
+QString DecodiumLegacyBackend::txMessage(int index) const
+{
+    return m_mainWindow ? m_mainWindow->legacyTxMessage(index) : QString {};
+}
+
+int DecodiumLegacyBackend::currentTx() const
+{
+    return m_mainWindow ? m_mainWindow->legacyCurrentTx() : 1;
+}
+
+QString DecodiumLegacyBackend::adifLogPath() const
+{
+    return m_mainWindow ? m_mainWindow->legacyAdifLogPath() : QString {};
+}
+
+int DecodiumLegacyBackend::txOutputAttenuation() const
+{
+    return m_mainWindow ? m_mainWindow->legacyTxOutputAttenuation() : 0;
+}
+
 void DecodiumLegacyBackend::setMode(const QString& mode)
 {
     if (m_mainWindow) {
@@ -558,6 +582,13 @@ void DecodiumLegacyBackend::setAudioOutputChannel(int channel)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetAudioOutputChannel(channel);
+    }
+}
+
+void DecodiumLegacyBackend::setTxOutputAttenuation(int value)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetTxOutputAttenuation(value);
     }
 }
 

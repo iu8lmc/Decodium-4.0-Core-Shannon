@@ -16,7 +16,20 @@ Popup {
     modal: false
     closePolicy: Popup.CloseOnEscape
     padding: 0
-    anchors.centerIn: parent ? parent : undefined
+    property bool positionInitialized: false
+
+    function clampToParent() {
+        if (!parent) return
+        x = Math.max(0, Math.min(x, parent.width - width))
+        y = Math.max(0, Math.min(y, parent.height - height))
+    }
+
+    function ensureInitialPosition() {
+        if (positionInitialized || !parent) return
+        x = Math.max(0, Math.round((parent.width - width) / 2))
+        y = Math.max(0, Math.round((parent.height - height) / 2))
+        positionInitialized = true
+    }
 
     // Dynamic theme colors from ThemeManager
     property color bgDeep: bridge.themeManager.bgDeep
@@ -40,7 +53,10 @@ Popup {
     property int selectedIndex: -1
     property var selectedQso: null
 
-    onOpened: refreshLog()
+    onOpened: {
+        ensureInitialPosition()
+        refreshLog()
+    }
 
     function refreshLog() {
         if (appEngine && appEngine.logManager) {
@@ -158,6 +174,22 @@ Popup {
             Layout.preferredHeight: 42
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
             radius: 10
+
+            MouseArea {
+                anchors.fill: parent
+                property point clickPos: Qt.point(0, 0)
+                cursorShape: Qt.SizeAllCursor
+                onPressed: function(mouse) {
+                    clickPos = Qt.point(mouse.x, mouse.y)
+                    logWindow.positionInitialized = true
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    logWindow.x += mouse.x - clickPos.x
+                    logWindow.y += mouse.y - clickPos.y
+                    logWindow.clampToParent()
+                }
+            }
 
             Rectangle {
                 anchors.bottom: parent.bottom

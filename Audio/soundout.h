@@ -4,11 +4,14 @@
 
 #include <QObject>
 #include <QString>
+#include <QByteArray>
 #include <QAudioSink>
 #include <QAudioDevice>
 #include <QAudioFormat>
 #include <QOperatingSystemVersion>
+#include <QPointer>
 #include <QScopedPointer>
+#include <QTimer>
 
 class QIODevice;
 
@@ -21,10 +24,14 @@ class SoundOutput
 
 public:
   SoundOutput()
-    : m_framesBuffered{0}
+    : m_pumpTimer{this}
+    , m_framesBuffered{0}
     , m_volume{1.0}
     , error_{false}
-  {}
+  {
+    m_pumpTimer.setInterval(5);
+    connect(&m_pumpTimer, &QTimer::timeout, this, &SoundOutput::pumpAudio);
+  }
 
   qreal attenuation() const;
 
@@ -47,11 +54,16 @@ private:
 
 private Q_SLOTS:
   void handleStateChanged(QAudio::State);
+  void pumpAudio();
 
 private:
   QAudioDevice m_device;
   unsigned m_channels {1};
   QScopedPointer<QAudioSink> m_stream;
+  QPointer<QIODevice> m_streamDevice;
+  QPointer<QIODevice> m_sourceDevice;
+  QByteArray m_pendingWrite;
+  QTimer m_pumpTimer;
   int m_framesBuffered;
   qreal m_volume;
   bool error_;

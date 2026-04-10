@@ -15,6 +15,25 @@ Dialog {
     height: 780
     modal: true
     closePolicy: Popup.CloseOnEscape
+    property bool positionInitialized: false
+
+    function clampToParent() {
+        if (!parent) return
+        x = Math.max(0, Math.min(x, parent.width - width))
+        y = Math.max(0, Math.min(y, parent.height - height))
+    }
+
+    function ensureInitialPosition() {
+        if (positionInitialized || !parent) return
+        x = Math.max(0, Math.round((parent.width - width) / 2))
+        y = Math.max(0, Math.round((parent.height - height) / 2))
+        positionInitialized = true
+    }
+
+    onOpened: {
+        ensureInitialPosition()
+        loadSettings()
+    }
 
     // Dynamic theme colors from ThemeManager
     property color bgDeep: bridge.themeManager.bgDeep
@@ -67,6 +86,22 @@ Dialog {
         height: 50
         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
         radius: 12
+
+        MouseArea {
+            anchors.fill: parent
+            property point clickPos: Qt.point(0, 0)
+            cursorShape: Qt.SizeAllCursor
+            onPressed: function(mouse) {
+                clickPos = Qt.point(mouse.x, mouse.y)
+                settingsDialog.positionInitialized = true
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) return
+                settingsDialog.x += mouse.x - clickPos.x
+                settingsDialog.y += mouse.y - clickPos.y
+                settingsDialog.clampToParent()
+            }
+        }
 
         Text {
             anchors.centerIn: parent
@@ -213,11 +248,18 @@ Dialog {
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
 
-                                Text { text: "Power (W):"; color: textSecondary; font.pixelSize: 12 }
+                                Text {
+                                    text: "Power (W):"
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
                                 TextField {
                                     id: powerField
                                     text: "100"
                                     Layout.preferredWidth: 60
+                                    Layout.preferredHeight: settingsDialog.fieldHeight
+                                    Layout.alignment: Qt.AlignVCenter
                                     font.pixelSize: 11
                                     validator: IntValidator { bottom: 1; top: 9999 }
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
@@ -291,9 +333,31 @@ Dialog {
                                 CheckBox {
                                     id: autoStartMonitorCheck
                                     text: "Auto-start monitor on startup"
+                                    spacing: 10
+                                    indicator: Rectangle {
+                                        implicitWidth: 18
+                                        implicitHeight: 18
+                                        x: 0
+                                        y: Math.round((autoStartMonitorCheck.height - height) / 2)
+                                        radius: 4
+                                        border.width: 1
+                                        border.color: autoStartMonitorCheck.checked ? secondaryCyan : glassBorder
+                                        color: autoStartMonitorCheck.checked
+                                               ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.22)
+                                               : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.78)
+
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: 10
+                                            height: 10
+                                            radius: 2
+                                            visible: autoStartMonitorCheck.checked
+                                            color: secondaryCyan
+                                        }
+                                    }
                                     contentItem: Text {
-                                        text: parent.text
-                                        leftPadding: 8
+                                        text: autoStartMonitorCheck.text
+                                        leftPadding: autoStartMonitorCheck.indicator.width + autoStartMonitorCheck.spacing
                                         color: textPrimary
                                         font.pixelSize: 12
                                         verticalAlignment: Text.AlignVCenter
@@ -474,24 +538,37 @@ Dialog {
                                 columnSpacing: 16
                                 rowSpacing: 10
 
-                                Text { text: "Sample Rate:"; color: textSecondary; font.pixelSize: 12 }
+                                Text {
+                                    text: "Sample Rate:"
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    Layout.preferredWidth: 96
+                                }
                                 StyledComboBox {
                                     model: ["44100", "48000", "96000"]
                                     currentIndex: 1
-                                    Layout.preferredWidth: 130
-                                    font.pixelSize: 12
-                                    popupMinWidth: 150
+                                    Layout.preferredWidth: 170
+                                    Layout.minimumWidth: 170
+                                    font.pixelSize: 13
+                                    popupMinWidth: 170
+                                    textHorizontalAlignment: Text.AlignLeft
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
-                                Text { text: "Channel:"; color: textSecondary; font.pixelSize: 12 }
+                                Text {
+                                    text: "Channel:"
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    Layout.preferredWidth: 80
+                                }
                                 StyledComboBox {
                                     id: audioChannelCombo
                                     property bool initialized: false
                                     model: ["Left/Mono", "Right"]
                                     currentIndex: bridge.audioInputChannel === 1 ? 1 : 0
-                                    Layout.preferredWidth: 150
-                                    font.pixelSize: 12
-                                    popupMinWidth: 170
+                                    Layout.preferredWidth: 190
+                                    Layout.minimumWidth: 190
+                                    font.pixelSize: 13
+                                    popupMinWidth: 190
                                     textHorizontalAlignment: Text.AlignLeft
                                     Component.onCompleted: initialized = true
                                     onActivated: if (initialized) bridge.audioInputChannel = currentIndex
@@ -501,12 +578,20 @@ Dialog {
                                     }
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
-                                Text { text: "Bits:"; color: textSecondary; font.pixelSize: 12 }
+                                Text {
+                                    text: "Bits:"
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    Layout.preferredWidth: 56
+                                }
                                 StyledComboBox {
                                     model: ["16", "24", "32"]
-                                    Layout.preferredWidth: 100
-                                    font.pixelSize: 12
-                                    popupMinWidth: 110
+                                    currentIndex: 0
+                                    Layout.preferredWidth: 120
+                                    Layout.minimumWidth: 120
+                                    font.pixelSize: 13
+                                    popupMinWidth: 120
+                                    textHorizontalAlignment: Text.AlignLeft
                                     background: Rectangle { color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8); border.color: glassBorder; radius: 4 }
                                 }
                             }
@@ -1559,6 +1644,7 @@ Dialog {
             spacing: 12
 
             Button {
+                id: applyButton
                 text: "Applica"
                 implicitWidth: 120
                 implicitHeight: 42
@@ -1566,8 +1652,16 @@ Dialog {
                 onClicked: settingsDialog.saveSettings()
                 background: Rectangle {
                     radius: 8
-                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.16)
+                    color: applyButton.down
+                           ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.34)
+                           : (applyButton.hovered
+                              ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.24)
+                              : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.16))
                     border.color: secondaryCyan
+                    border.width: applyButton.down ? 2 : 1
+                    scale: applyButton.down ? 0.985 : 1.0
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on scale { NumberAnimation { duration: 90 } }
                 }
                 contentItem: Text {
                     text: parent.text
@@ -1580,6 +1674,7 @@ Dialog {
             }
 
             Button {
+                id: cancelButton
                 text: "Annulla"
                 implicitWidth: 120
                 implicitHeight: 42
@@ -1587,8 +1682,16 @@ Dialog {
                 onClicked: settingsDialog.reject()
                 background: Rectangle {
                     radius: 8
-                    color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
+                    color: cancelButton.down
+                           ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.18)
+                           : (cancelButton.hovered
+                              ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.12)
+                              : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08))
                     border.color: glassBorder
+                    border.width: cancelButton.down ? 2 : 1
+                    scale: cancelButton.down ? 0.985 : 1.0
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on scale { NumberAnimation { duration: 90 } }
                 }
                 contentItem: Text {
                     text: parent.text
@@ -1600,6 +1703,7 @@ Dialog {
             }
 
             Button {
+                id: okButton
                 text: "OK"
                 implicitWidth: 100
                 implicitHeight: 42
@@ -1610,8 +1714,16 @@ Dialog {
                 }
                 background: Rectangle {
                     radius: 8
-                    color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.18)
+                    color: okButton.down
+                           ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.36)
+                           : (okButton.hovered
+                              ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.26)
+                              : Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.18))
                     border.color: accentGreen
+                    border.width: okButton.down ? 2 : 1
+                    scale: okButton.down ? 0.985 : 1.0
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on scale { NumberAnimation { duration: 90 } }
                 }
                 contentItem: Text {
                     text: parent.text
@@ -1626,18 +1738,30 @@ Dialog {
         }
     }
 
-    onOpened: {
-        loadSettings()
-    }
-
     function loadSettings() {
         callsignField.text = bridge.callsign
         gridField.text     = bridge.grid
+        nameField.text     = bridge.stationName
+        qthField.text      = bridge.stationQth
+        rigField.text      = bridge.stationRigInfo
+        antennaField.text  = bridge.stationAntenna
+        powerField.text    = String(bridge.stationPowerWatts)
+        exchangeField.text = bridge.contestExchange
+        contestCombo.currentIndex = Math.max(0, bridge.contestType)
+        autoStartMonitorCheck.checked = bridge.autoStartMonitorOnStartup
     }
 
     function saveSettings() {
         bridge.callsign = callsignField.text.trim().toUpperCase()
         bridge.grid     = gridField.text.trim().toUpperCase()
+        bridge.stationName = nameField.text.trim()
+        bridge.stationQth = qthField.text.trim()
+        bridge.stationRigInfo = rigField.text.trim()
+        bridge.stationAntenna = antennaField.text.trim()
+        bridge.stationPowerWatts = Math.max(0, Number(powerField.text) || 0)
+        bridge.contestExchange = exchangeField.text.trim()
+        bridge.contestType = contestCombo.currentIndex
+        bridge.autoStartMonitorOnStartup = autoStartMonitorCheck.checked
         bridge.saveSettings()
         console.log("Settings saved")
     }

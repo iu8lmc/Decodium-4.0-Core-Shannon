@@ -2,19 +2,29 @@ cmake_minimum_required (VERSION 3.7.2 FATAL_ERROR)
 
 if (APPLE)
   #
-  # The following variables define the portability and compatability attributes of the Mac macOS build
-  # they are choosen with care and should not be changed without good cause.
+  # The following variable defines the default deployment target for macOS
+  # builds. Qt 6 no longer matches the old 10.12 baseline used by the Qt 5
+  # packaging line, so keep the local default modern and let CI / release
+  # jobs override it explicitly when they target a specific macOS line.
   #
-  # Among other things these options are chosen to match the portability and compatability options of the
-  # Qt framework dylibs which can be checked as follows:
+  # Among other things this should match the portability and compatibility
+  # settings of the Qt framework dylibs, which can be checked as follows:
   #
   # otool -l <binary> | grep -A3 LC_VERSION_MIN_MACOSX
   #
-  set (CMAKE_OSX_DEPLOYMENT_TARGET 10.12
-    CACHE STRING "Earliest version of macOS supported
+  if (NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR "${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL "")
+    set (CMAKE_OSX_DEPLOYMENT_TARGET 13.0
+      CACHE STRING "Default minimum macOS version for Qt 6 builds.
 
-Earliest version we can support with Qt 5.12, C++11 & libc++ is 10.12.
-Do not override this if you intend to build an official deployable installer.")
+Override explicitly in CI / packaging jobs when targeting Intel Monterey,
+Intel Sequoia or Apple Silicon release lines.")
+  else ()
+    set (CMAKE_OSX_DEPLOYMENT_TARGET "${CMAKE_OSX_DEPLOYMENT_TARGET}"
+      CACHE STRING "Default minimum macOS version for Qt 6 builds.
+
+Override explicitly in CI / packaging jobs when targeting Intel Monterey,
+Intel Sequoia or Apple Silicon release lines." FORCE)
+  endif ()
 endif (APPLE)
 
 #
@@ -679,21 +689,25 @@ set (PALETTE_FILES
 
 if (APPLE)
   set (WSJTX_ICON_FILE ${CMAKE_PROJECT_NAME}.icns)
+  set (WSJTX_ICONSET_NAME ${CMAKE_PROJECT_NAME})
+  if (NOT EXISTS "${CMAKE_SOURCE_DIR}/icons/Darwin/${WSJTX_ICONSET_NAME}.iconset")
+    set (WSJTX_ICONSET_NAME wsjt)
+  endif ()
   set (ICONSRCS
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_16x16.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_16x16@2x.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_32x32.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_32x32@2x.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_128x128.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_128x128@2x.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_256x256.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_256x256@2x.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_512x512.png
-    icons/Darwin/${CMAKE_PROJECT_NAME}.iconset/icon_512x512@2x.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_16x16.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_16x16@2x.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_32x32.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_32x32@2x.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_128x128.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_128x128@2x.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_256x256.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_256x256@2x.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_512x512.png
+    icons/Darwin/${WSJTX_ICONSET_NAME}.iconset/icon_512x512@2x.png
     )
   add_custom_command (
     OUTPUT ${WSJTX_ICON_FILE}
-    COMMAND iconutil -c icns --output "${CMAKE_BINARY_DIR}/${WSJTX_ICON_FILE}" "${CMAKE_SOURCE_DIR}/icons/Darwin/${CMAKE_PROJECT_NAME}.iconset"
+    COMMAND iconutil -c icns --output "${CMAKE_BINARY_DIR}/${WSJTX_ICON_FILE}" "${CMAKE_SOURCE_DIR}/icons/Darwin/${WSJTX_ICONSET_NAME}.iconset"
     DEPENDS ${ICONSRCS}
     COMMENT "Building Icons"
     )
@@ -1204,8 +1218,13 @@ set (LANGUAGES
   it				# Italian
   )
 foreach (lang_ ${LANGUAGES})
-  file (TO_NATIVE_PATH ${CMAKE_SOURCE_DIR}/translations/decodium_${lang_}.ts ts_)
-  list (APPEND TS_FILES ${ts_})
+  set (ts_source_ "${CMAKE_SOURCE_DIR}/translations/decodium_${lang_}.ts")
+  if (EXISTS "${ts_source_}")
+    file (TO_NATIVE_PATH "${ts_source_}" ts_)
+    list (APPEND TS_FILES "${ts_}")
+  else ()
+    message (STATUS "Skipping missing translation source: ${ts_source_}")
+  endif ()
   set (qt_translations_ "${QT_TRANSLATIONS_DIR}/qtbase_${lang_}.qm")
   if (EXISTS "${qt_translations_}")
     add_custom_command (
@@ -1218,13 +1237,21 @@ foreach (lang_ ${LANGUAGES})
 endforeach ()
 if (UPDATE_TRANSLATIONS)
   message (STATUS "UPDATE_TRANSLATIONS option is set.")
-  qt_create_translation (
-    QM_FILES ${wsjt_qt_UISRCS} ${wsjtx_UISRCS} ${wsjt_qt_CXXSRCS} ${wsjtx_CXXSRCS}
-    ${TS_FILES}
-    OPTIONS -I${CMAKE_CURRENT_SOURCE_DIR}
-    )
+  if (TS_FILES)
+    qt_create_translation (
+      QM_FILES ${wsjt_qt_UISRCS} ${wsjtx_UISRCS} ${wsjt_qt_CXXSRCS} ${wsjtx_CXXSRCS}
+      ${TS_FILES}
+      OPTIONS -I${CMAKE_CURRENT_SOURCE_DIR}
+      )
+  else ()
+    message (STATUS "No source translation .ts files found; skipping translation update.")
+  endif ()
 else ()
-  qt_add_translation (QM_FILES ${TS_FILES})
+  if (TS_FILES)
+    qt_add_translation (QM_FILES ${TS_FILES})
+  else ()
+    message (STATUS "No source translation .ts files found; skipping app translation compilation.")
+  endif ()
 endif ()
 add_custom_target (translations DEPENDS ${QM_FILES})
 set_property (DIRECTORY PROPERTY CLEAN_NO_CUSTOM TRUE)
@@ -1444,6 +1471,8 @@ add_executable (decodium_qml
   main_qml.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodiumPropagationManager.cpp
+  DecodiumPropagationManager.h
   DecodiumLegacyBackend.cpp
   DecodiumLegacyBackend.h
   helper_functions.cpp

@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QLibraryInfo>
 #include <QStandardPaths>
+#include <QList>
 #include <atomic>
 #include <cstdio>
 
@@ -41,6 +42,18 @@ static std::atomic_bool g_shuttingDown {false};
 static bool isIgnorableShutdownQmlMessage(const QString& msg)
 {
     return msg.contains(".qml:");
+}
+
+static void logQmlWarnings(const QList<QQmlError>& warnings)
+{
+    for (const QQmlError& warning : warnings) {
+        const QString warningText = warning.toString();
+        if (g_shuttingDown.load(std::memory_order_relaxed)
+            && isIgnorableShutdownQmlMessage(warningText)) {
+            continue;
+        }
+        L(warningText.toLocal8Bit().constData());
+    }
 }
 
 static void qtMsgHandler(QtMsgType, const QMessageLogContext&, const QString& msg) {
@@ -110,6 +123,11 @@ int main(int argc, char* argv[])
     // terminal with TypeError messages on exit.
     QQmlApplicationEngine engine;
     L("engine OK");
+    engine.setOutputWarningsToStandardError(false);
+    QObject::connect(&engine, &QQmlEngine::warnings, &app,
+                     [] (const QList<QQmlError>& warnings) {
+        logQmlWarnings(warnings);
+    });
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 

@@ -15,6 +15,22 @@ Dialog {
     width: 700
     height: 600
     closePolicy: Popup.CloseOnEscape
+    property bool positionInitialized: false
+
+    function clampToParent() {
+        if (!parent) return
+        x = Math.max(0, Math.min(x, parent.width - width))
+        y = Math.max(0, Math.min(y, parent.height - height))
+    }
+
+    function ensureInitialPosition() {
+        if (positionInitialized || !parent) return
+        x = Math.max(0, Math.round((parent.width - width) / 2))
+        y = Math.max(0, Math.round((parent.height - height) / 2))
+        positionInitialized = true
+    }
+
+    onOpened: ensureInitialPosition()
 
     // Colors
     property color bgDeep: bridge.themeManager.bgDeep
@@ -36,6 +52,22 @@ Dialog {
     header: Rectangle {
         height: 50
         color: "transparent"
+
+        MouseArea {
+            anchors.fill: parent
+            property point clickPos: Qt.point(0, 0)
+            cursorShape: Qt.SizeAllCursor
+            onPressed: function(mouse) {
+                clickPos = Qt.point(mouse.x, mouse.y)
+                macroDialog.positionInitialized = true
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) return
+                macroDialog.x += mouse.x - clickPos.x
+                macroDialog.y += mouse.y - clickPos.y
+                macroDialog.clampToParent()
+            }
+        }
 
         RowLayout {
             anchors.fill: parent

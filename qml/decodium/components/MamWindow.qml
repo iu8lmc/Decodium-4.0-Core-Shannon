@@ -13,6 +13,22 @@ Dialog {
     height: 450
     modal: false
     standardButtons: Dialog.Close
+    property bool positionInitialized: false
+
+    function clampToParent() {
+        if (!parent) return
+        x = Math.max(0, Math.min(x, parent.width - width))
+        y = Math.max(0, Math.min(y, parent.height - height))
+    }
+
+    function ensureInitialPosition() {
+        if (positionInitialized || !parent) return
+        x = Math.max(0, Math.round((parent.width - width) / 2))
+        y = Math.max(0, Math.round((parent.height - height) / 2))
+        positionInitialized = true
+    }
+
+    onOpened: ensureInitialPosition()
 
     // Colors
     property color bgDeep: bridge.themeManager.bgDeep
@@ -36,6 +52,22 @@ Dialog {
         height: 50
         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
         radius: 8
+
+        MouseArea {
+            anchors.fill: parent
+            property point clickPos: Qt.point(0, 0)
+            cursorShape: Qt.SizeAllCursor
+            onPressed: function(mouse) {
+                clickPos = Qt.point(mouse.x, mouse.y)
+                mamWindow.positionInitialized = true
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) return
+                mamWindow.x += mouse.x - clickPos.x
+                mamWindow.y += mouse.y - clickPos.y
+                mamWindow.clampToParent()
+            }
+        }
 
         Text {
             anchors.centerIn: parent

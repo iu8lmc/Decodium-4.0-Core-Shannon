@@ -3869,6 +3869,45 @@ QStringList MainWindow::legacyRxFrequencyLines() const
       .split (QRegularExpression {"[\r\n]+"}, SkipEmptyParts);
 }
 
+QString MainWindow::legacyTxMessage(int index) const
+{
+  if (!ui) {
+    return {};
+  }
+
+  switch (index) {
+  case 1:
+    return ui->tx1 ? ui->tx1->text().trimmed().toUpper() : QString {};
+  case 2:
+    return ui->tx2 ? ui->tx2->text().trimmed().toUpper() : QString {};
+  case 3:
+    return ui->tx3 ? ui->tx3->text().trimmed().toUpper() : QString {};
+  case 4:
+    return ui->tx4 ? ui->tx4->text().trimmed().toUpper() : QString {};
+  case 5:
+    return ui->tx5 ? ui->tx5->currentText().trimmed().toUpper() : QString {};
+  case 6:
+    return ui->tx6 ? ui->tx6->text().trimmed().toUpper() : QString {};
+  default:
+    return {};
+  }
+}
+
+int MainWindow::legacyCurrentTx() const
+{
+  return qBound (1, static_cast<int> (m_ntx), 6);
+}
+
+QString MainWindow::legacyAdifLogPath() const
+{
+  return m_logBook.path ();
+}
+
+int MainWindow::legacyTxOutputAttenuation() const
+{
+  return (ui && ui->outAttenuation) ? ui->outAttenuation->value() : 0;
+}
+
 void MainWindow::legacyClearBandActivity()
 {
   if (ui && ui->decodedTextBrowser) {
@@ -3908,8 +3947,11 @@ void MainWindow::legacySetAutoSeq(bool enabled)
   if (!ui || !ui->cbAutoSeq) {
     return;
   }
-  if (ui->cbAutoSeq->isChecked() != enabled) {
+  bool const changed = (ui->cbAutoSeq->isChecked() != enabled);
+  if (changed) {
     ui->cbAutoSeq->setChecked(enabled);
+  } else {
+    on_cbAutoSeq_toggled(enabled);
   }
 }
 
@@ -3955,6 +3997,20 @@ void MainWindow::legacySetAudioOutputChannel(int channel)
 {
   m_config.set_audio_output_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 3)));
   restartConfiguredAudioStreams (m_monitoring);
+}
+
+void MainWindow::legacySetTxOutputAttenuation(int value)
+{
+  if (!ui || !ui->outAttenuation) {
+    return;
+  }
+
+  int const bounded = qBound(0, value, ui->outAttenuation->maximum());
+  if (ui->outAttenuation->value() != bounded) {
+    ui->outAttenuation->setValue(bounded);
+  } else {
+    on_outAttenuation_valueChanged(bounded);
+  }
 }
 
 void MainWindow::legacySetDxCall(QString const& call)
@@ -4097,11 +4153,14 @@ void MainWindow::legacySetWaterfallPalette(QString const& palette)
 
 void MainWindow::legacyOpenSettings(int tabIndex)
 {
+  auto const previous_force_legacy = m_forceLegacySettingsDialog;
+  m_forceLegacySettingsDialog = true;
   if (tabIndex >= 0)
     {
       m_config.select_tab (tabIndex);
     }
   on_actionSettings_triggered ();
+  m_forceLegacySettingsDialog = previous_force_legacy;
 }
 
 void MainWindow::legacyOpenTimeSyncPanel()
@@ -6094,7 +6153,7 @@ void MainWindow::fastSink(qint64 frames)
     // CQ: First for MSK144
     if(((pounce && text.contains(" CQ ") && m_config.Wait_features_enabled())
         or (m_auto && m_bCallingCQ && text.contains(" " + m_config.my_callsign() + " "))) && !ignored
-        && !filtered && !selected && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: First"
+        && !filtered && !selected && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: First"
         && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
                   m_bDoubleClicked=true;
                   selected = true;
@@ -6107,7 +6166,7 @@ void MainWindow::fastSink(qint64 frames)
     }
 
     // CQ: Max Dist for MSK144
-    if((pounce or m_auto) && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: Max Dist"
+    if((pounce or m_auto) && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: Max Dist"
         && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
         QString deCall;
         QString deGrid;
@@ -6140,7 +6199,7 @@ void MainWindow::fastSink(qint64 frames)
     }
 
     // CQ: Max dB for MSK144
-    if((pounce or m_auto) && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: Max dB"
+    if((pounce or m_auto) && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: Max dB"
         && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
         QString deCall;
         QString deGrid;
@@ -6171,7 +6230,7 @@ void MainWindow::fastSink(qint64 frames)
     }
 
     // CQ: Min dB for MSK144
-    if((pounce or m_auto) && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: Min dB"
+    if((pounce or m_auto) && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: Min dB"
         && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
         QString deCall;
         QString deGrid;
@@ -6278,7 +6337,7 @@ void MainWindow::fastSink(qint64 frames)
 
     auto const& message_words = decodedtext.messageWords ();//avt 12/11/21
     if (m_auto && decodedtext.isStandardMessage () && message_words.at(1) == m_config.my_callsign () //avt 12/11/21
-          && m_bCallingCQ && !m_bAutoReply && ui->respondComboBox->isVisible() && ui->respondComboBox->currentIndex() > 0) {  //avt to-do
+          && m_bCallingCQ && !m_bAutoReply && legacyRespondSelectionEnabled () && ui->respondComboBox->currentIndex() > 0) {  //avt to-do
       m_bAutoReply = true;  //avt 12/11/21
       //debugToFile(QString{"fastSink:    m_bAutoReply:%1 m_bCallingCQ:%2"}.arg(m_bAutoReply).arg(m_bCallingCQ));   //avt 1/4/24
     } //avt 12/11/21
@@ -6840,6 +6899,12 @@ void MainWindow::showQSYMessage(QString message)
 
 void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settings dialog)
 {
+  if (m_embeddedShellMode && !m_forceLegacySettingsDialog)
+    {
+      Q_EMIT legacyPreferencesRequested ();
+      return;
+    }
+
   inSettings = true;
   keep_frequency = true;
   m_config.read_CALL3_version();
@@ -7706,7 +7771,7 @@ void MainWindow::process_autoButton (bool checked)   //manually or by controller
       mindBPoints=99;                     // reset points
   }
   m_maxPoints=-1;
-  if (checked && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText() != "CQ: None"
+  if (checked && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText() != "CQ: None"
       && CALLING == m_QSOProgress) {
       m_bAutoReply = false;         // ready for next
       m_bCallingCQ = true;          // allows tail-enders to be picked up
@@ -8738,7 +8803,7 @@ void MainWindow::on_stopButton_clicked()                       //stopButton
   stopWCTimer.stop();           // Stop any Wait & Call timeout
   no_wait_and_call = false;
   m_specOp=m_config.special_op_id();
-  if (ui->respondComboBox->isVisible() and ui->respondComboBox->currentIndex()!=0 and !m_diskData) {
+  if (legacyRespondSelectionEnabled () and ui->respondComboBox->currentIndex()!=0 and !m_diskData) {
     Dpoints=0;                          // reset points
     maxDPoints=0;                       // reset points
     dBpoints=-28;                       // reset points
@@ -12511,7 +12576,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         // CQ: First
         if(((pounce && text.contains(" CQ ") && m_config.Wait_features_enabled())
               or autoCqDirectedReplyAllowed) && !ignored
-            && !filtered && !selected && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: First"
+            && !filtered && !selected && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: First"
             && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
           m_bDoubleClicked=true;
           selected = true;
@@ -12524,7 +12589,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         }
 
         // CQ: Max Dist
-        if((pounce or m_auto) && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: Max Dist"
+        if((pounce or m_auto) && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: Max Dist"
             && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
           QString deCall;
           QString deGrid;
@@ -12557,7 +12622,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         }
 
         // CQ: Max dB
-        if((pounce or m_auto) && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: Max dB"
+        if((pounce or m_auto) && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: Max dB"
             && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
           QString deCall;
           QString deGrid;
@@ -12589,7 +12654,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         }
 
         // CQ: Min dB
-        if((pounce or m_auto) && ui->respondComboBox->isVisible() && ui->respondComboBox->currentText()=="CQ: Min dB"
+        if((pounce or m_auto) && legacyRespondSelectionEnabled () && ui->respondComboBox->currentText()=="CQ: Min dB"
             && (!(ui->actionFull_Duplex_Mode->isChecked() && m_txing))) {
           QString deCall;
           QString deGrid;
@@ -13389,10 +13454,7 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     }
     bool const waitFeaturesAutoSeqEnabled =
         m_config.Wait_features_enabled ()
-        && (ft2AutoSeqEnabled ()
-            || (ui->cbAutoSeq->isVisible ()
-                && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode())
-                && ui->cbAutoSeq->isChecked ()));
+        && (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ());
     bool const waitFeaturesNeedsResync =
         waitFeaturesAutoSeqEnabled
         && m_auto
@@ -13415,10 +13477,7 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     }
     if (m_auto             // transmit allowed
                //avt 10/2/25
-               && (ft2AutoSeqEnabled ()
-                   || (ui->cbAutoSeq->isVisible ()
-                       && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode())
-                       && ui->cbAutoSeq->isChecked ())) // auto-sequencing allowed
+               && (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ()) // auto-sequencing allowed
                && (activeQsoReplyMatch || callingReplyMatch)) {
       if(SpecOp::FOX != m_specOp){
         if (m_autoCQ && m_QSOProgress > CALLING && !from_active_partner_effective) {
@@ -14375,8 +14434,7 @@ void MainWindow::guiUpdate()
     }
 
     bool b=("FT8"==m_mode or "FT4"==m_mode or "FT2"==m_mode or "Q65"==m_mode or "JT65"==m_mode or "JT9"==m_mode or m_mode == "FST4" or m_mode == "MSK144" or m_mode == "JT65" or m_mode == "JT9")  //avt 9/30/25
-        &&  (ft2AutoSeqEnabled ()
-             || (ui->cbAutoSeq->isVisible () && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode()) && ui->cbAutoSeq->isChecked ()));   //avt 9/30/25
+        &&  (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ());   //avt 9/30/25
     if(is_73 and (m_config.disable_TX_on_73() or b) && !deferredSignoffPending) {
       m_nextCall="";  //### Temporary: disable use of "TU;" messages;
       if(m_nextCall!="") {
@@ -14966,7 +15024,7 @@ void MainWindow::stopTx2()
     m_config.transceiver_ptt (false); //Lower PTT
   }
   if (m_mode == "JT9" && m_bFast9
-      && ui->cbAutoSeq->isVisible () && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode()) && ui->cbAutoSeq->isChecked ()  //avt 9/30/25
+      && legacyAutoSeqEnabled ()  //avt 9/30/25
       && m_ntx == 5 && m_nTx73 >= 5) {
     on_stopTxButton_clicked ();
     m_nTx73 = 0;
@@ -15593,8 +15651,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   auto ctrl = modifiers.testFlag (Qt::ControlModifier);
   auto alt = modifiers.testFlag (Qt::AltModifier);      //avt 1/1/21
   if (alt) return;                                      //avt 1/1/21
-  auto auto_seq = ft2AutoSeqEnabled ()
-      || (ui->cbAutoSeq->isVisible () && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode()) && ui->cbAutoSeq->isChecked ());  //avt
+  auto auto_seq = ft2AutoSeqEnabled () || legacyAutoSeqEnabled ();  //avt
   // basic mode sanity checks
   auto const& parts = message.clean_string ().split (' ', SkipEmptyParts);
   if (parts.size () < 5) return;
@@ -17249,7 +17306,7 @@ void MainWindow::clearDX ()
   ui->dxCallEntry->clear ();
   if (m_config.clear_DXgrid () or (SpecOp::HOUND == m_specOp && m_config.superFox())) ui->dxGridEntry->clear ();
   if (!keepTx5) ui->tx5->setCurrentText("");   // clear tx5
-  if (ui->respondComboBox->isVisible()) {
+  if (legacyRespondSelectionEnabled ()) {
     Dpoints=0;                          // reset points
     maxDPoints=0;                       // reset points
     dBpoints=-28;                       // reset points
@@ -18042,7 +18099,7 @@ void MainWindow::mousePressEvent(QMouseEvent *event)    // mouse press events
     clearDX();                                   // clear dxCallEntry
     ui->dxGridEntry->clear ();                   // clear dxGridEntry
     if (!keepTx5) ui->tx5->setCurrentText("");   // clear tx5
-    if (ui->respondComboBox->isVisible()) {
+    if (legacyRespondSelectionEnabled ()) {
       Dpoints=0;                          // reset points
       maxDPoints=0;                       // reset points
       dBpoints=-28;                       // reset points
@@ -18427,8 +18484,7 @@ void MainWindow::cease_auto_Tx_after_QSO ()
   }
 
   if (SpecOp::FOX != m_specOp && m_mode != "MSK144"    //avt 10/2/25
-      && (ft2AutoSeqEnabled ()
-          || (ui->cbAutoSeq->isVisible () && ui->cbAutoSeq->isEnabled () && ui->cbAutoSeq->isChecked ())))   //avt
+      && (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ()))   //avt
     {
       // ensure that auto Tx is disabled even if disable Tx
       // on 73 is not checked, unless in Fox mode where it is allowed
@@ -18564,7 +18620,7 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
                         is_externalCtrlMode() || m_mode == "MSK144" || m_autoCQ);    //avt 11/20/20 and 12/12/21 — Auto CQ forces auto-log
   clearPendingAutoLogSnapshot ();
   m_inQSOwith="";
-  if (ui->respondComboBox->isVisible() && ui->respondComboBox->currentText() != "CQ: None") {
+  if (legacyRespondSelectionEnabled () && ui->respondComboBox->currentText() != "CQ: None") {
         Dpoints=0;                          // reset points
         maxDPoints=0;                       // reset points
         dBpoints=-28;                       // reset points
@@ -21339,7 +21395,7 @@ void MainWindow::on_stopTxButton_clicked()                    // Stop Tx
   tuneATU_Timer.stop ();        // stop tune watchdog when stopping Tune manually
   no_wait_and_call = false;
   m_specOp=m_config.special_op_id();
-  if (ui->respondComboBox->isVisible() && ui->respondComboBox->currentText() != "CQ: None") {
+  if (legacyRespondSelectionEnabled () && ui->respondComboBox->currentText() != "CQ: None") {
       Dpoints=0;                          // reset points
       maxDPoints=0;                       // reset points
       dBpoints=-28;                       // reset points
@@ -22031,8 +22087,7 @@ void MainWindow::transmit (double snr)
                      m_currentMessage.split (' ', SkipEmptyParts));
 // In auto-sequencing mode, track repeated "73"/"RR73" transmissions.
   if (m_bFastMode || m_bFast9 || m_mode=="FT2" || m_autoCQ) {
-    if (ft2AutoSeqEnabled ()
-        || (ui->cbAutoSeq->isVisible () && (ui->cbAutoSeq->isEnabled () or is_externalCtrlMode()) && ui->cbAutoSeq->isChecked ())) {    //avt 9/30/25
+    if (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ()) {    //avt 9/30/25
       if (m_ntx == 5 || txIs73) {
         m_nTx73 += 1;
       } else {
@@ -26035,7 +26090,7 @@ void MainWindow::bandHoppingTimer()
 }
 
 //if external controller is connected, does the current mode use the external controller commansd?
-bool MainWindow::is_externalCtrlMode()    //avt 6/7/22
+bool MainWindow::is_externalCtrlMode() const    //avt 6/7/22
 {
   return m_externalCtrl && (QString {CONTROLLER_MODES_SUPPORTED}).contains(m_mode) && m_specOp == SpecOp::NONE;    //avt 3/26/24
 }
@@ -26110,6 +26165,27 @@ void MainWindow::debugToFile(QString str)       //avt 11/25/19
   }
   outStream << Qt::endl;
   outputFile.close();
+}
+
+bool MainWindow::legacyWidgetLogicallyVisible (QWidget const * widget) const
+{
+  return widget && (widget->isVisible () || (m_embeddedShellMode && !widget->isHidden ()));
+}
+
+bool MainWindow::legacyAutoSeqEnabled () const
+{
+  return ui
+      && ui->cbAutoSeq
+      && ui->cbAutoSeq->isChecked ()
+      && (((legacyWidgetLogicallyVisible (ui->cbAutoSeq)) && ui->cbAutoSeq->isEnabled ())
+          || is_externalCtrlMode ());
+}
+
+bool MainWindow::legacyRespondSelectionEnabled () const
+{
+  return ui
+      && ui->respondComboBox
+      && legacyWidgetLogicallyVisible (ui->respondComboBox);
 }
 
 void MainWindow::debugAutoCq(QString const& event, QString const& details)
@@ -27349,8 +27425,8 @@ void MainWindow::on_pb160_clicked()
 
 void MainWindow::on_pb80_clicked()
 {
-  selectBandFrequency ((m_mode=="FT2") ? 3578000 : 3573000,
-                       (m_mode=="FT2") ? 3578000 : 3576000);
+  selectBandFrequency ((m_mode=="FT2") ? 3568000 : 3573000,
+                       (m_mode=="FT2") ? 3568000 : 3576000);
 }
 
 void MainWindow::on_pb60_clicked()

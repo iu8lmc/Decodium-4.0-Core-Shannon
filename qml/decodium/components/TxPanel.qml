@@ -1023,6 +1023,17 @@ Item {
                     onClicked: if (engine) engine.sendTx(5)
                 }
 
+                // TX6 - CQ
+                TxButton {
+                    txNum: 6
+                    label: "TX6"
+                    message: engine && engine.txMessages.length > 5 ? engine.txMessages[5] : "-- --"
+                    isSelected: engine && engine.currentTx === 6
+                    isTransmitting: engine && engine.transmitting && engine.currentTx === 6
+                    isCQ: true
+                    onClicked: if (engine) engine.sendTx(6)
+                }
+
             }
 
         }

@@ -6,6 +6,7 @@ import QtQuick.Layouts
 // Theme.* sostituiti con costanti inline; lat/lon da bridge.grid
 Rectangle {
     id: astroPanel
+    signal closeRequested()
     color: Qt.rgba(12/255, 12/255, 22/255, 0.98)
     radius: 8
     border.color: Qt.rgba(1,1,1,0.15)
@@ -166,6 +167,30 @@ Rectangle {
                 font.pixelSize: 10
                 color: "#90A4AE"
             }
+            Rectangle {
+                width: 22
+                height: 22
+                radius: 5
+                color: astroCloseArea.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.22) : "transparent"
+                border.color: astroCloseArea.containsMouse ? "#f44336" : Qt.rgba(1,1,1,0.18)
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "✕"
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: astroCloseArea.containsMouse ? "#f44336" : "#B0BEC5"
+                }
+
+                MouseArea {
+                    id: astroCloseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: astroPanel.closeRequested()
+                }
+            }
         }
 
         Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(1,1,1,0.15) }
@@ -237,6 +262,13 @@ Rectangle {
                 font.bold: true
                 font.letterSpacing: 1
                 color: moonElevation > 5 ? "#69F0AE" : "#f44336"
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: moonElevation <= 5
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: astroPanel.closeRequested()
             }
         }
     }

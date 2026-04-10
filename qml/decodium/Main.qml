@@ -18,11 +18,18 @@ ApplicationWindow {
     minimumHeight: 700
     visible: true
     title: "Decodium 4.0 — " + bridge.mode + " — " + bridge.callsign
+    property bool windowStateRestoreInProgress: true
 
-    // Carica posizione/dimensioni finestra dal bridge (salvate al close)
+    // Carica posizione/dimensioni finestre dal bridge
     Component.onCompleted: {
-        if (bridge.uiDecodeWinWidth  > 0) { width  = bridge.uiDecodeWinWidth  } // non usato qui
-        // Nota: posizione mainWindow non salvata per semplicità
+        var state = bridge.loadWindowState("mainWindow")
+        if (state.width !== undefined && state.width > 0) width = state.width
+        if (state.height !== undefined && state.height > 0) height = state.height
+        if (state.x !== undefined) x = state.x
+        if (state.y !== undefined) y = state.y
+        Qt.callLater(function() {
+            windowStateRestoreInProgress = false
+        })
     }
 
     // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight
@@ -35,12 +42,58 @@ ApplicationWindow {
         repeat: false
         onTriggered: bridge.saveSettings()
     }
+    Timer {
+        id: windowStateSaveTimer
+        interval: 500
+        repeat: false
+        onTriggered: persistWindowLayouts()
+    }
     // Funzione helper chiamabile da qualsiasi parte del QML
     function scheduleSave() { saveTimer.restart() }
+    function scheduleWindowStateSave() {
+        if (!windowStateRestoreInProgress) {
+            windowStateSaveTimer.restart()
+        }
+    }
+
+    function restoreFloatingWindowState(windowRef, key, detachedPropName, minimizedPropName) {
+        var state = bridge.loadWindowState(key)
+        if (state.width !== undefined && state.width > 0) windowRef.width = state.width
+        if (state.height !== undefined && state.height > 0) windowRef.height = state.height
+        if (state.x !== undefined) windowRef.x = state.x
+        if (state.y !== undefined) windowRef.y = state.y
+
+        if (detachedPropName && detachedPropName.length > 0) {
+            var detached = state.detached !== undefined ? !!state.detached : mainWindow[detachedPropName]
+            var minimized = minimizedPropName && state.minimized !== undefined ? (!!state.minimized && detached) : (minimizedPropName ? mainWindow[minimizedPropName] : false)
+            mainWindow[detachedPropName] = detached
+            if (minimizedPropName) {
+                mainWindow[minimizedPropName] = minimized
+            }
+            if (detached && !minimized) {
+                windowRef.visible = true
+            }
+        }
+    }
+
+    function persistWindowLayouts() {
+        bridge.saveWindowState("mainWindow", Math.round(x), Math.round(y), Math.round(width), Math.round(height), false, visibility === Window.Minimized)
+        bridge.saveWindowState("waterfallWindow", Math.round(waterfallWindow.x), Math.round(waterfallWindow.y), Math.round(waterfallWindow.width), Math.round(waterfallWindow.height), waterfallDetached, waterfallMinimized)
+        bridge.saveWindowState("logFloatingWindow", Math.round(logFloatingWindow.x), Math.round(logFloatingWindow.y), Math.round(logFloatingWindow.width), Math.round(logFloatingWindow.height), logWindowDetached, logWindowMinimized)
+        bridge.saveWindowState("astroFloatingWindow", Math.round(astroFloatingWindow.x), Math.round(astroFloatingWindow.y), Math.round(astroFloatingWindow.width), Math.round(astroFloatingWindow.height), astroWindowDetached, astroWindowMinimized)
+        bridge.saveWindowState("macroFloatingWindow", Math.round(macroFloatingWindow.x), Math.round(macroFloatingWindow.y), Math.round(macroFloatingWindow.width), Math.round(macroFloatingWindow.height), macroDialogDetached, macroDialogMinimized)
+        bridge.saveWindowState("rigFloatingWindow", Math.round(rigFloatingWindow.x), Math.round(rigFloatingWindow.y), Math.round(rigFloatingWindow.width), Math.round(rigFloatingWindow.height), rigControlDetached, rigControlMinimized)
+        bridge.saveWindowState("period1FloatingWindow", Math.round(period1FloatingWindow.x), Math.round(period1FloatingWindow.y), Math.round(period1FloatingWindow.width), Math.round(period1FloatingWindow.height), period1Detached, period1Minimized)
+        bridge.saveWindowState("period2FloatingWindow", Math.round(period2FloatingWindow.x), Math.round(period2FloatingWindow.y), Math.round(period2FloatingWindow.width), Math.round(period2FloatingWindow.height), period2Detached, period2Minimized)
+        bridge.saveWindowState("rxFreqFloatingWindow", Math.round(rxFreqFloatingWindow.x), Math.round(rxFreqFloatingWindow.y), Math.round(rxFreqFloatingWindow.width), Math.round(rxFreqFloatingWindow.height), rxFreqDetached, rxFreqMinimized)
+        bridge.saveWindowState("txPanelFloatingWindow", Math.round(txPanelFloatingWindow.x), Math.round(txPanelFloatingWindow.y), Math.round(txPanelFloatingWindow.width), Math.round(txPanelFloatingWindow.height), txPanelDetached, txPanelMinimized)
+    }
 
     // Salva impostazioni bridge al close
     onClosing: function(close) {
         saveTimer.stop()
+        windowStateSaveTimer.stop()
+        persistWindowLayouts()
         bridge.saveSettings()
         console.log("Main window closing - shutting down application")
         // Close all floating windows
@@ -59,6 +112,11 @@ ApplicationWindow {
         // Quit application
         Qt.quit()
     }
+
+    onXChanged: scheduleWindowStateSave()
+    onYChanged: scheduleWindowStateSave()
+    onWidthChanged: scheduleWindowStateSave()
+    onHeightChanged: scheduleWindowStateSave()
 
     // Decodium: Keyboard shortcut handler
     Item {
@@ -99,6 +157,24 @@ ApplicationWindow {
     // TxPanel detached and minimized states
     property bool txPanelDetached: false
     property bool txPanelMinimized: false
+    onWaterfallDetachedChanged: scheduleWindowStateSave()
+    onWaterfallMinimizedChanged: scheduleWindowStateSave()
+    onLogWindowDetachedChanged: scheduleWindowStateSave()
+    onLogWindowMinimizedChanged: scheduleWindowStateSave()
+    onAstroWindowDetachedChanged: scheduleWindowStateSave()
+    onAstroWindowMinimizedChanged: scheduleWindowStateSave()
+    onMacroDialogDetachedChanged: scheduleWindowStateSave()
+    onMacroDialogMinimizedChanged: scheduleWindowStateSave()
+    onRigControlDetachedChanged: scheduleWindowStateSave()
+    onRigControlMinimizedChanged: scheduleWindowStateSave()
+    onPeriod1DetachedChanged: scheduleWindowStateSave()
+    onPeriod1MinimizedChanged: scheduleWindowStateSave()
+    onPeriod2DetachedChanged: scheduleWindowStateSave()
+    onPeriod2MinimizedChanged: scheduleWindowStateSave()
+    onRxFreqDetachedChanged: scheduleWindowStateSave()
+    onRxFreqMinimizedChanged: scheduleWindowStateSave()
+    onTxPanelDetachedChanged: scheduleWindowStateSave()
+    onTxPanelMinimizedChanged: scheduleWindowStateSave()
 
     // === GAP 3 — Nuovi pannelli (A3, B9, A4, C14) ===
     property bool timeSyncPanelVisible:       false
@@ -1138,7 +1214,7 @@ ApplicationWindow {
                                         id: txSliderHeader
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 14
-                                        from: 0; to: 100; live: true; stepSize: 1
+                                        from: 0; to: 450; live: true; stepSize: 1
                                         onMoved: bridge.txOutputLevel = value
                                         Binding on value { value: bridge.txOutputLevel; when: !txSliderHeader.pressed }
                                         background: Rectangle {
@@ -1152,7 +1228,13 @@ ApplicationWindow {
                                             width: 8; height: 8; radius: 4; color: accentGreen
                                         }
                                     }
-                                    Text { text: Math.round(bridge.txOutputLevel); color: accentGreen; font.pixelSize: 8; font.family: "Consolas"; Layout.preferredWidth: 18 }
+                                    Text {
+                                        text: bridge.txOutputLevel > 0 ? ("-" + (bridge.txOutputLevel / 10).toFixed(1)) : "0.0"
+                                        color: accentGreen
+                                        font.pixelSize: 8
+                                        font.family: "Consolas"
+                                        Layout.preferredWidth: 28
+                                    }
                                 }
                             }
                         }
@@ -3474,7 +3556,7 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: modelData.time || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
                                                 Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
                                                 Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Text { text: modelData.freq || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
@@ -4053,7 +4135,6 @@ ApplicationWindow {
     // Settings Dialog
     SettingsDialog {
         id: settingsDialog
-        anchors.centerIn: parent
     }
 
     Popup {
@@ -4473,25 +4554,21 @@ ApplicationWindow {
     // Log Window
     LogWindow {
         id: logWindow
-        anchors.centerIn: parent
     }
 
     // Macro Dialog
     MacroDialog {
         id: macroDialog
-        anchors.centerIn: parent
     }
 
     // Astro Window
     AstroWindow {
         id: astroWindow
-        anchors.centerIn: parent
     }
 
     // Rig Control Dialog
     RigControlDialog {
         id: rigControlDialog
-        anchors.centerIn: parent
     }
 
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato
@@ -4663,13 +4740,11 @@ ApplicationWindow {
     // Info Dialog
     InfoDialog {
         id: infoDialog
-        anchors.centerIn: parent
     }
 
     // MAM Window - Multi-Answer Mode
     MamWindow {
         id: mamWindow
-        anchors.centerIn: parent
     }
 
     // Auto-open MAM window when MAM mode is enabled
@@ -5694,6 +5769,11 @@ ApplicationWindow {
         // Position to right of main window initially
         x: mainWindow.x + mainWindow.width + 20
         y: mainWindow.y + 50
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(waterfallWindow, "waterfallWindow", "waterfallDetached", "waterfallMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         // Handle window close
         onClosing: function(close) {
@@ -6268,6 +6348,11 @@ ApplicationWindow {
 
         x: mainWindow.x + mainWindow.width + 20
         y: mainWindow.y + 50
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(logFloatingWindow, "logFloatingWindow", "logWindowDetached", "logWindowMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             logWindowDetached = false
@@ -6373,6 +6458,11 @@ ApplicationWindow {
 
         x: mainWindow.x + mainWindow.width + 20
         y: mainWindow.y + 100
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(astroFloatingWindow, "astroFloatingWindow", "astroWindowDetached", "astroWindowMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             astroWindowDetached = false
@@ -6471,6 +6561,11 @@ ApplicationWindow {
 
         x: mainWindow.x + mainWindow.width + 20
         y: mainWindow.y + 150
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(macroFloatingWindow, "macroFloatingWindow", "macroDialogDetached", "macroDialogMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             macroDialogDetached = false
@@ -6569,6 +6664,11 @@ ApplicationWindow {
 
         x: mainWindow.x + mainWindow.width + 20
         y: mainWindow.y + 200
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(rigFloatingWindow, "rigFloatingWindow", "rigControlDetached", "rigControlMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             rigControlDetached = false
@@ -6667,6 +6767,11 @@ ApplicationWindow {
 
         x: mainWindow.x + 100
         y: mainWindow.y + 150
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             period1Detached = false
@@ -6802,7 +6907,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: modelData.time || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 50 }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
                                 Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
                                 Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                             }
@@ -6829,6 +6934,17 @@ ApplicationWindow {
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         title: "Period 2 - Decodium"
         color: "transparent"
+        x: mainWindow.x + 180
+        y: mainWindow.y + 180
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(period2FloatingWindow, "period2FloatingWindow", "period2Detached", "period2Minimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onClosing: function(close) {
+            period2Detached = false
+            close.accepted = true
+        }
         Rectangle {
             anchors.fill: parent
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
@@ -6856,6 +6972,11 @@ ApplicationWindow {
 
         x: mainWindow.x + 300
         y: mainWindow.y + 250
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(rxFreqFloatingWindow, "rxFreqFloatingWindow", "rxFreqDetached", "rxFreqMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             rxFreqDetached = false
@@ -7010,7 +7131,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: modelData.time || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 50 }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
                                 Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
                                 Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                             }
@@ -7040,6 +7161,11 @@ ApplicationWindow {
 
         x: mainWindow.x + 150
         y: mainWindow.y + 400
+        Component.onCompleted: mainWindow.restoreFloatingWindowState(txPanelFloatingWindow, "txPanelFloatingWindow", "txPanelDetached", "txPanelMinimized")
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
 
         onClosing: function(close) {
             txPanelDetached = false
@@ -7422,6 +7548,14 @@ ApplicationWindow {
             anchors.fill: parent
             active: astroPanelVisible
             source: "../panels/AstroPanel.qml"
+        }
+
+        Connections {
+            target: astroPanelLoader.item
+            ignoreUnknownSignals: true
+            function onCloseRequested() {
+                astroPanelVisible = false
+            }
         }
     }
 

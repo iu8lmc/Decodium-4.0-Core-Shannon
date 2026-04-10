@@ -13,13 +13,47 @@ Dialog {
     id: astroWindow
     title: "Astronomical Data"
     modal: false
-    width: Math.max(420, Math.min(560, (parent ? parent.width : 560) - 48))
+    width: Math.max(480, Math.min(620, (parent ? parent.width : 620) - 48))
     height: Math.max(430, Math.min(720, (parent ? parent.height : 720) - 48))
     padding: 16
     closePolicy: Popup.CloseOnEscape
+    property bool positionInitialized: false
+
+    function clampToParent() {
+        if (!parent) return
+        x = Math.max(0, Math.min(x, parent.width - width))
+        y = Math.max(0, Math.min(y, parent.height - height))
+    }
+
+    function ensureInitialPosition() {
+        if (positionInitialized || !parent) return
+        x = Math.max(0, Math.round((parent.width - width) / 2))
+        y = Math.max(0, Math.round((parent.height - height) / 2))
+        positionInitialized = true
+    }
+
+    function displayPropagationValue(value, placeholder) {
+        if (value === undefined || value === null) return placeholder || "---"
+        const text = String(value)
+        return text.length > 0 ? text : (placeholder || "---")
+    }
+
+    onOpened: {
+        ensureInitialPosition()
+        if (astroWindow.astroManager && bridge.grid) {
+            astroWindow.astroManager.setLocationFromGrid(bridge.grid)
+            astroWindow.astroManager.frequency = bridge.frequency / 1000000.0
+            astroWindow.astroManager.update()
+        }
+        if (astroWindow.propagationManager) {
+            astroWindow.propagationManager.refresh()
+        }
+    }
 
     property var astroManager: (typeof appEngine !== "undefined" && appEngine) ? appEngine.astroManager : null
     property bool hasAstroManager: astroManager !== null && astroManager !== undefined
+    property var propagationManager: (typeof appEngine !== "undefined" && appEngine) ? appEngine.propagationManager : null
+    property bool hasPropagationManager: propagationManager !== null && propagationManager !== undefined
     property bool hasGrid: !!(bridge && bridge.grid && bridge.grid.length >= 4)
     property string fallbackGrid: hasGrid ? bridge.grid.toUpperCase() : "----"
     property real fallbackLatitude: hasGrid ? bridge.latFromGrid(bridge.grid) : 0.0
@@ -46,6 +80,22 @@ Dialog {
     header: Rectangle {
         height: 50
         color: "transparent"
+
+        MouseArea {
+            anchors.fill: parent
+            property point clickPos: Qt.point(0, 0)
+            cursorShape: Qt.SizeAllCursor
+            onPressed: function(mouse) {
+                clickPos = Qt.point(mouse.x, mouse.y)
+                astroWindow.positionInitialized = true
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) return
+                astroWindow.x += mouse.x - clickPos.x
+                astroWindow.y += mouse.y - clickPos.y
+                astroWindow.clampToParent()
+            }
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -127,12 +177,14 @@ Dialog {
     }
 
     contentItem: ScrollView {
+        id: astroScroll
         clip: true
-        contentWidth: width
+        rightPadding: 12
+        contentWidth: availableWidth
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
         ColumnLayout {
-            width: Math.max(astroWindow.width - astroWindow.leftPadding - astroWindow.rightPadding, 0)
+            width: Math.max(astroScroll.availableWidth, 0)
             spacing: 12
 
             Rectangle {
@@ -476,8 +528,303 @@ Dialog {
                 }
             }
 
+            Rectangle {
+                visible: astroWindow.hasPropagationManager
+                Layout.fillWidth: true
+                Layout.preferredHeight: 250
+                color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.09)
+                border.color: secondaryCyan
+                radius: 8
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+
+                    RowLayout {
+                        Text {
+                            text: "Propagation (HamQSL)"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: secondaryCyan
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Text {
+                            text: propagationManager
+                                  ? astroWindow.displayPropagationValue(
+                                        propagationManager.updated,
+                                        propagationManager.updating ? "Updating..." : "Waiting for first update")
+                                  : "---"
+                            font.pixelSize: 10
+                            font.family: "Consolas"
+                            color: textSecondary
+                        }
+                    }
+
+                    GridLayout {
+                        columns: 4
+                        columnSpacing: 20
+                        rowSpacing: 6
+
+                        Text { text: "Solar Flux:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.solarFlux) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "A-Index:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.aIndex) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "K-Index:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.kIndex) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "X-Ray:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.xRay) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "Sunspots:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.sunspots) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "Solar Wind:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.solarWind) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "MUF:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.muf) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "Geomagnetic:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.geomagneticField) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                        }
+
+                        Text { text: "Signal Noise:"; color: textSecondary; font.pixelSize: 11 }
+                        Text {
+                            text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.signalNoise) : "---"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            color: textPrimary
+                            Layout.columnSpan: 3
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: glassBorder
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: propagationManager
+                              ? astroWindow.displayPropagationValue(
+                                    propagationManager.statusText,
+                                    "Source: " + propagationManager.sourcePageUrl)
+                              : "---"
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 10
+                        color: textSecondary
+                    }
+                }
+            }
+
+            Rectangle {
+                visible: astroWindow.hasPropagationManager
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(
+                    150,
+                    82 + ((propagationManager ? propagationManager.hfConditions.length : 0) * 28))
+                color: Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.08)
+                border.color: accentGreen
+                radius: 8
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+
+                    Text {
+                        text: "HF Band Conditions"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: accentGreen
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Text {
+                            Layout.preferredWidth: 90
+                            text: "Band"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: textSecondary
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Day"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: textSecondary
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Night"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: textSecondary
+                        }
+                    }
+
+                    Repeater {
+                        model: propagationManager ? propagationManager.hfConditions : []
+
+                        delegate: RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Text {
+                                Layout.preferredWidth: 90
+                                text: modelData.band
+                                font.family: "Consolas"
+                                font.pixelSize: 12
+                                color: textPrimary
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 24
+                                radius: 4
+                                color: Qt.rgba(1, 1, 1, 0.02)
+                                border.color: glassBorder
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.day
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: modelData.dayColor
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 24
+                                radius: 4
+                                color: Qt.rgba(1, 1, 1, 0.02)
+                                border.color: glassBorder
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.night
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: modelData.nightColor
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: propagationManager && propagationManager.hfConditions.length === 0
+                        text: "No HF condition data available yet."
+                        font.pixelSize: 11
+                        color: textSecondary
+                    }
+                }
+            }
+
+            Rectangle {
+                visible: astroWindow.hasPropagationManager
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(
+                    120,
+                    74 + ((propagationManager ? propagationManager.vhfConditions.length : 0) * 28))
+                color: Qt.rgba(moonColor.r, moonColor.g, moonColor.b, 0.08)
+                border.color: moonColor
+                radius: 8
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+
+                    Text {
+                        text: "VHF Conditions"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: moonColor
+                    }
+
+                    Repeater {
+                        model: propagationManager ? propagationManager.vhfConditions : []
+
+                        delegate: RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.title
+                                font.pixelSize: 11
+                                color: textPrimary
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                text: modelData.status
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: modelData.color
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: propagationManager && propagationManager.vhfConditions.length === 0
+                        text: "No VHF condition data available yet."
+                        font.pixelSize: 11
+                        color: textSecondary
+                    }
+                }
+            }
+
             RowLayout {
-                visible: astroWindow.hasAstroManager
+                visible: astroWindow.hasAstroManager || astroWindow.hasPropagationManager
                 Layout.alignment: Qt.AlignHCenter
 
                 Button {
@@ -507,6 +854,9 @@ Dialog {
                         if (astroWindow.astroManager) {
                             astroWindow.astroManager.update()
                         }
+                        if (astroWindow.propagationManager) {
+                            astroWindow.propagationManager.refresh()
+                        }
                     }
                 }
             }
@@ -524,11 +874,4 @@ Dialog {
         }
     }
 
-    onOpened: {
-        if (astroWindow.astroManager && bridge.grid) {
-            astroWindow.astroManager.setLocationFromGrid(bridge.grid)
-            astroWindow.astroManager.frequency = bridge.frequency / 1000000.0
-            astroWindow.astroManager.update()
-        }
-    }
 }

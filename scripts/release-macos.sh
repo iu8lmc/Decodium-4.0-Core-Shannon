@@ -308,7 +308,7 @@ cmake_args=(
   -DWSJT_BUILD_UTILS=OFF
 )
 
-# Respect externally provided CMake prefix paths (e.g. qt@5 on GitHub Actions).
+# Respect externally provided CMake prefix paths (e.g. Homebrew Qt on GitHub Actions).
 if [[ -n "${CMAKE_PREFIX_PATH:-}" ]]; then
   cmake_args+=("-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
 fi

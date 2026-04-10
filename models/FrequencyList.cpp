@@ -105,7 +105,7 @@ namespace
       {3570000, Modes::JT65, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // JA compatible
       {3572000, Modes::JT9, IARURegions::ALL, "","", QDateTime(), QDateTime(), false},
       {3573000, Modes::FT8, IARURegions::ALL, "","", QDateTime(), QDateTime(), true}, // above as below JT65 is out of DM allocation
-      {3578000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
+      {3568000, Modes::FT2, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {3590000, Modes::RTTY, IARURegions::ALL, "","", QDateTime(), QDateTime(), true},
       {3568600, Modes::WSPR, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // needs guard marker and lock out
       {3568600, Modes::FST4W, IARURegions::ALL, "","", QDateTime(), QDateTime(), false}, // needs guard marker and lock out

@@ -1,4 +1,4 @@
-name: Release macOS (Tahoe + Sequoia + Intel Sequoia/Monterey)
+name: Release macOS Intel
 
 on:
   workflow_dispatch:
@@ -30,29 +30,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Keep ARM build target for Sequoia (15.x) and Tahoe.
-          - runner: macos-26
-            arch_label: arm64
-            compat_macos: "26.0"
-            asset_suffix: "macos-tahoe-arm64"
-            experimental: false
-          - runner: macos-15
-            arch_label: arm64
-            compat_macos: "15.0"
-            asset_suffix: "macos-sequoia-arm64"
-            experimental: false
-          # Intel build runs on GitHub's x86_64 image.
           - runner: macos-15-intel
-            arch_label: x86_64
             compat_macos: "15.0"
             asset_suffix: "macos-sequoia-x86_64"
             experimental: false
-          # Best-effort legacy Intel target for older Macs (Monterey line).
           - runner: macos-15-intel
-            arch_label: x86_64
             compat_macos: "12.0"
             asset_suffix: "macos-monterey-x86_64"
             experimental: true
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -73,7 +59,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install qt@5 gcc fftw libusb boost pkg-config
+          brew install qt gcc fftw libusb boost pkg-config create-dmg dylibbundler
 
           GCC_PREFIX="$(brew --prefix gcc)"
           GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
@@ -84,10 +70,11 @@ jobs:
           echo "FC=${GFORTRAN}" >> "$GITHUB_ENV"
           "${GFORTRAN}" --version
 
-          QT5_PREFIX="$(brew --prefix qt@5)"
-          echo "${QT5_PREFIX}/bin" >> "$GITHUB_PATH"
-          echo "QT5_PREFIX=${QT5_PREFIX}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${QT5_PREFIX}" >> "$GITHUB_ENV"
+          QT_PREFIX="$(brew --prefix qt)"
+          echo "${QT_PREFIX}/bin" >> "$GITHUB_PATH"
+          echo "QT_PREFIX=${QT_PREFIX}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "$GITHUB_ENV"
+          qmake6 -v
 
       - name: Build and install Hamlib
         run: |
@@ -111,7 +98,7 @@ jobs:
 
           echo "${HAMLIB_PREFIX}/bin" >> "$GITHUB_PATH"
           echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
-          echo "CMAKE_PREFIX_PATH=${QT5_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
           echo "Hamlib_INCLUDE_DIR=${HAMLIB_PREFIX}/include" >> "$GITHUB_ENV"
           echo "Hamlib_LIBRARY=${HAMLIB_LIBRARY}" >> "$GITHUB_ENV"
           echo "RIGCTL_EXE=${HAMLIB_PREFIX}/bin/rigctl" >> "$GITHUB_ENV"
@@ -157,6 +144,9 @@ jobs:
         id: version
         run: |
           VERSION="${{ github.event.inputs.version }}"
+          if [[ -z "${VERSION}" && -f fork_release_version.txt ]]; then
+            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          fi
           VERSION="${VERSION#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Using version: ${VERSION}"
@@ -164,7 +154,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: decodium3-ft2-${{ steps.version.outputs.version }}-macos-*
+          pattern: decodium3-ft2-${{ steps.version.outputs.version }}-macos-*x86_64
           merge-multiple: true
           path: release-assets
 
@@ -172,12 +162,6 @@ jobs:
         run: |
           ls -lh release-assets
           VERSION="${{ steps.version.outputs.version }}"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64.dmg"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64.zip"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64-sha256.txt"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-arm64.dmg"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-arm64.zip"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-arm64-sha256.txt"
           test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
           test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.zip"
           test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
@@ -207,12 +191,6 @@ jobs:
           fi
 
           ASSETS=(
-            "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64.dmg"
-            "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64.zip"
-            "release-assets/decodium3-ft2-${VERSION}-macos-tahoe-arm64-sha256.txt"
-            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-arm64.dmg"
-            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-arm64.zip"
-            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-arm64-sha256.txt"
             "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
             "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.zip"
             "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
@@ -233,7 +211,7 @@ jobs:
           else
             gh release create "${VERSION}" "${ASSETS[@]}" \
               --repo "${REPO}" \
-              --title "Decodium 3 FT2 ${VERSION} (macOS + Linux AppImage)" \
+              --title "Decodium 3 FT2 ${VERSION} (macOS Intel)" \
               --notes-file "${NOTES_FILE}"
           fi
 

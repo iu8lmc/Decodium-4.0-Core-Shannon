@@ -13,9 +13,23 @@ Dialog {
     height: 580
     modal: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    anchors.centerIn: parent
-
+    property bool positionInitialized: false
     property int currentTab: 0
+
+    function clampToParent() {
+        if (!parent) return
+        x = Math.max(0, Math.min(x, parent.width - width))
+        y = Math.max(0, Math.min(y, parent.height - height))
+    }
+
+    function ensureInitialPosition() {
+        if (positionInitialized || !parent) return
+        x = Math.max(0, Math.round((parent.width - width) / 2))
+        y = Math.max(0, Math.round((parent.height - height) / 2))
+        positionInitialized = true
+    }
+
+    onOpened: ensureInitialPosition()
 
     // Color palette
     property color bgDeep: bridge.themeManager.bgDeep
@@ -40,6 +54,22 @@ Dialog {
         width: parent.width
         height: 50
         color: "transparent"
+
+        MouseArea {
+            anchors.fill: parent
+            property point clickPos: Qt.point(0, 0)
+            cursorShape: Qt.SizeAllCursor
+            onPressed: function(mouse) {
+                clickPos = Qt.point(mouse.x, mouse.y)
+                infoDialog.positionInitialized = true
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) return
+                infoDialog.x += mouse.x - clickPos.x
+                infoDialog.y += mouse.y - clickPos.y
+                infoDialog.clampToParent()
+            }
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -290,51 +320,59 @@ Dialog {
 
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.preferredWidth: 580
-                            implicitHeight: timelineCol.height + 20
+                            Layout.preferredWidth: 600
+                            implicitHeight: Math.max(yearBadge.implicitHeight, timelineDetails.implicitHeight) + 24
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
                             border.color: glassBorder
                             radius: 10
 
                             RowLayout {
-                                id: timelineCol
-                                anchors.fill: parent
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
                                 anchors.margins: 12
                                 spacing: 16
 
                                 // Year badge
                                 Rectangle {
+                                    id: yearBadge
                                     Layout.preferredWidth: 60
                                     Layout.preferredHeight: 28
+                                    Layout.alignment: Qt.AlignTop
                                     color: primaryBlue
                                     radius: 6
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: modelData.year
-                                        font.pixelSize: 12
+                                        font.pixelSize: 13
                                         font.bold: true
                                         color: "white"
                                     }
                                 }
 
                                 ColumnLayout {
+                                    id: timelineDetails
                                     Layout.fillWidth: true
-                                    spacing: 4
+                                    Layout.alignment: Qt.AlignTop
+                                    spacing: 6
 
                                     Text {
                                         text: modelData.title
-                                        font.pixelSize: 13
+                                        Layout.fillWidth: true
+                                        font.pixelSize: 14
                                         font.bold: true
                                         color: accentGreen
+                                        wrapMode: Text.WordWrap
                                     }
 
                                     Text {
                                         Layout.fillWidth: true
                                         text: modelData.desc
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         color: textSecondary
                                         wrapMode: Text.WordWrap
+                                        lineHeight: 1.18
                                     }
                                 }
                             }
@@ -406,6 +444,39 @@ Dialog {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: Qt.openUrlExternally("mailto:iu8lmc@gmail.com")
+                                }
+
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "Sviluppatore: 9H1SR"
+                                font.pixelSize: 14
+                                color: textPrimary
+                            }
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignHCenter
+                                width: 250
+                                height: 36
+                                color: email2MA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.3) : Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
+                                border.color: accentGreen
+                                radius: 8
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "9h1sr@gmail.com"
+                                    font.pixelSize: 14
+                                    color: accentGreen
+                                }
+
+                                MouseArea {
+                                    id: email2MA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally("mailto:9h1sr@gmail.com")
                                 }
 
                                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -494,7 +565,7 @@ Dialog {
                                 onClicked: {
                                     var subject = encodeURIComponent(feedbackSubject.text || "Decodium Feedback")
                                     var body = encodeURIComponent(feedbackMessage.text + "\n\n--\nDecodium 4.0 Core Shannon\nCallsign: " + (bridge ? bridge.callsign : "N/A"))
-                                    Qt.openUrlExternally("mailto:iu8lmc@gmail.com?subject=" + subject + "&body=" + body)
+                                    Qt.openUrlExternally("mailto:iu8lmc@gmail.com,9h1sr@gmail.com?subject=" + subject + "&body=" + body)
                                 }
                             }
                         }

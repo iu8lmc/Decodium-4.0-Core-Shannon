@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QThread>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QMap>
 #include <QSet>
 #include <QDateTime>
@@ -28,6 +29,7 @@ class DecodiumCloudlogLite;
 class DecodiumWsprUploader;
 class DxccLookup;
 class DecodiumLegacyBackend;
+class DecodiumPropagationManager;
 
 Q_DECLARE_OPAQUE_POINTER(DecodiumDxCluster*)
 
@@ -162,6 +164,12 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool    alertOnMyCall     READ alertOnMyCall     WRITE setAlertOnMyCall     NOTIFY alertOnMyCallChanged)
     Q_PROPERTY(bool    recordRxEnabled   READ recordRxEnabled   WRITE setRecordRxEnabled   NOTIFY recordRxEnabledChanged)
     Q_PROPERTY(bool    recordTxEnabled   READ recordTxEnabled   WRITE setRecordTxEnabled   NOTIFY recordTxEnabledChanged)
+    Q_PROPERTY(QString stationName       READ stationName       WRITE setStationName       NOTIFY stationNameChanged)
+    Q_PROPERTY(QString stationQth        READ stationQth        WRITE setStationQth        NOTIFY stationQthChanged)
+    Q_PROPERTY(QString stationRigInfo    READ stationRigInfo    WRITE setStationRigInfo    NOTIFY stationRigInfoChanged)
+    Q_PROPERTY(QString stationAntenna    READ stationAntenna    WRITE setStationAntenna    NOTIFY stationAntennaChanged)
+    Q_PROPERTY(int     stationPowerWatts READ stationPowerWatts WRITE setStationPowerWatts NOTIFY stationPowerWattsChanged)
+    Q_PROPERTY(bool    autoStartMonitorOnStartup READ autoStartMonitorOnStartup WRITE setAutoStartMonitorOnStartup NOTIFY autoStartMonitorOnStartupChanged)
     Q_PROPERTY(bool    startFromTx2      READ startFromTx2      WRITE setStartFromTx2      NOTIFY startFromTx2Changed)
     Q_PROPERTY(bool    vhfUhfFeatures    READ vhfUhfFeatures    WRITE setVhfUhfFeatures    NOTIFY vhfUhfFeaturesChanged)
     Q_PROPERTY(bool    directLogQso      READ directLogQso      WRITE setDirectLogQso      NOTIFY directLogQsoChanged)
@@ -170,6 +178,9 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int     contestNumber     READ contestNumber     WRITE setContestNumber     NOTIFY contestNumberChanged)
     Q_PROPERTY(QStringList contestTypeNames READ contestTypeNames CONSTANT)
     Q_PROPERTY(QString logAllTxtPath     READ logAllTxtPath     CONSTANT)
+    Q_PROPERTY(QObject* logManager READ logManager CONSTANT)
+    Q_PROPERTY(QObject* propagationManager READ propagationManager CONSTANT)
+    Q_PROPERTY(int qsoCount READ qsoCount NOTIFY qsoCountChanged)
 
     // === ADIF / LOTW ===
     Q_PROPERTY(int  workedCount  READ workedCount  NOTIFY workedCountChanged)
@@ -294,7 +305,7 @@ public:
     double rxInputLevel() const { return m_rxInputLevel; }
     void setRxInputLevel(double v);
     double txOutputLevel() const { return m_txOutputLevel; }
-    void setTxOutputLevel(double v) { if (m_txOutputLevel != v) { m_txOutputLevel = v; emit txOutputLevelChanged(); } }
+    void setTxOutputLevel(double v);
     QStringList audioInputDevices() const;
     QStringList audioOutputDevices() const;
     QString audioInputDevice() const;
@@ -323,17 +334,17 @@ public:
     QString dxCall() const; void setDxCall(const QString&);
     QString dxGrid() const; void setDxGrid(const QString&);
     // txMessages / currentTxMessage — usati da TxPanel (engine alias)
-    QStringList txMessages() const { return {m_tx1, m_tx2, m_tx3, m_tx4, m_tx5}; }
+    QStringList txMessages() const { return {m_tx1, m_tx2, m_tx3, m_tx4, m_tx5, m_tx6}; }
     QString currentTxMessage() const { return buildCurrentTxMessage(); }
 
     // QSO progress
     int qsoProgress() const { return m_qsoProgress; }
     QString reportSent() const { return m_reportSent; }
-    void setReportSent(const QString& v) { if (m_reportSent != v) { m_reportSent = v; emit reportSentChanged(); } }
+    void setReportSent(const QString& v);
     QString reportReceived() const { return m_reportReceived; }
-    void setReportReceived(const QString& v) { if (m_reportReceived != v) { m_reportReceived = v; emit reportReceivedChanged(); } }
+    void setReportReceived(const QString& v);
     bool sendRR73() const { return m_sendRR73; }
-    void setSendRR73(bool v) { if (m_sendRR73 != v) { m_sendRR73 = v; emit sendRR73Changed(); } }
+    void setSendRR73(bool v);
     bool multiAnswerMode() const { return m_multiAnswerMode; }
     void setMultiAnswerMode(bool v) { if (m_multiAnswerMode != v) { m_multiAnswerMode = v; emit multiAnswerModeChanged(); } }
 
@@ -458,6 +469,18 @@ public:
     void    setRecordRxEnabled(bool v){ if (m_recordRxEnabled!=v){m_recordRxEnabled=v;emit recordRxEnabledChanged();} }
     bool    recordTxEnabled()const { return m_recordTxEnabled; }
     void    setRecordTxEnabled(bool v){ if (m_recordTxEnabled!=v){m_recordTxEnabled=v;emit recordTxEnabledChanged();} }
+    QString stationName() const { return m_stationName; }
+    void    setStationName(const QString& v){ if (m_stationName!=v){m_stationName=v;emit stationNameChanged();} }
+    QString stationQth() const { return m_stationQth; }
+    void    setStationQth(const QString& v){ if (m_stationQth!=v){m_stationQth=v;emit stationQthChanged();} }
+    QString stationRigInfo() const { return m_stationRigInfo; }
+    void    setStationRigInfo(const QString& v){ if (m_stationRigInfo!=v){m_stationRigInfo=v;emit stationRigInfoChanged();} }
+    QString stationAntenna() const { return m_stationAntenna; }
+    void    setStationAntenna(const QString& v){ if (m_stationAntenna!=v){m_stationAntenna=v;emit stationAntennaChanged();} }
+    int     stationPowerWatts() const { return m_stationPowerWatts; }
+    void    setStationPowerWatts(int v){ v = qBound(0, v, 9999); if (m_stationPowerWatts!=v){m_stationPowerWatts=v;emit stationPowerWattsChanged();} }
+    bool    autoStartMonitorOnStartup() const { return m_autoStartMonitorOnStartup; }
+    void    setAutoStartMonitorOnStartup(bool v){ if (m_autoStartMonitorOnStartup!=v){m_autoStartMonitorOnStartup=v;emit autoStartMonitorOnStartupChanged();} }
     bool    startFromTx2()   const { return m_startFromTx2; }
     void    setStartFromTx2(bool v) { if (m_startFromTx2!=v){m_startFromTx2=v;emit startFromTx2Changed();} }
     bool    vhfUhfFeatures() const { return m_vhfUhfFeatures; }
@@ -541,6 +564,9 @@ public:
     void        setHoundMode(bool v) { if (m_houndMode!=v){m_houndMode=v; emit houndModeChanged();} }
     QStringList callerQueue()    const { return m_callerQueue; }
     int         callerQueueSize()const { return m_callerQueue.size(); }
+    QObject*    logManager() { return this; }
+    QObject*    propagationManager() const;
+    int         qsoCount() const;
 
     // B9 — Active Stations
     QObject* activeStations() const;
@@ -634,11 +660,29 @@ public slots:
     // Settings
     Q_INVOKABLE void saveSettings();
     Q_INVOKABLE void loadSettings();
+    Q_INVOKABLE QVariantMap loadWindowState(const QString& key) const;
+    Q_INVOKABLE void saveWindowState(const QString& key,
+                                     int x,
+                                     int y,
+                                     int width,
+                                     int height,
+                                     bool detached,
+                                     bool minimized);
     Q_INVOKABLE QString version() const;
 
     // ADIF import/export
     Q_INVOKABLE bool exportAdif(const QString& filename);
     Q_INVOKABLE bool importAdif(const QString& filename);
+    Q_INVOKABLE QVariantList searchQsos(const QString& search,
+                                        const QString& band,
+                                        const QString& mode,
+                                        const QString& fromDate,
+                                        const QString& toDate) const;
+    Q_INVOKABLE QVariantMap getQsoStats() const;
+    Q_INVOKABLE int importFromAdif(const QString& filename);
+    Q_INVOKABLE bool exportToAdif(const QString& filename);
+    Q_INVOKABLE bool deleteQso(const QString& call, const QString& dateTime);
+    Q_INVOKABLE bool editQso(const QString& call, const QString& dateTime, const QVariantMap& newData);
     Q_INVOKABLE QStringList workedCallsigns() const;
     int workedCount() const;
 
@@ -787,6 +831,12 @@ signals:
     void alertOnMyCallChanged();
     void recordRxEnabledChanged();
     void recordTxEnabledChanged();
+    void stationNameChanged();
+    void stationQthChanged();
+    void stationRigInfoChanged();
+    void stationAntennaChanged();
+    void stationPowerWattsChanged();
+    void autoStartMonitorOnStartupChanged();
     void startFromTx2Changed();
     void vhfUhfFeaturesChanged();
     void directLogQsoChanged();
@@ -798,6 +848,7 @@ signals:
     void pskReporterEnabledChanged();
     void pskReporterConnectedChanged();
     // ADIF / LotW / Cloudlog
+    void qsoCountChanged();
     void workedCountChanged();
     void lotwEnabledChanged();
     void lotwUpdatingChanged();
@@ -840,6 +891,24 @@ private slots:
     void processNextInQueue();   // mainwindow processNextInQueue: auto-handoff al prossimo caller
 
 private:
+    QString autoCqBandKeyForFrequency(double freqHz) const;
+    QString effectiveAdifLogPath() const;
+    QString ensureAdifLogPath();
+    bool isRecentAutoCqDuplicate(const QString& call,
+                                 double freqHz = -1.0,
+                                 const QString& mode = QString()) const;
+    void rememberRecentAutoCqAbandoned(const QString& call, double freqHz, const QString& mode);
+    void rememberRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
+    void removeCallerFromQueue(const QString& call);
+    void capturePendingAutoLogSnapshot();
+    void clearPendingAutoLogSnapshot();
+    void armLateAutoLogSnapshot();
+    void clearLateAutoLogSnapshot();
+    void clearAutoCqPartnerLock();
+    void updateAutoCqPartnerLock();
+    void restoreAutoCqPartnerLock();
+    void enqueueCallerInternal(const QString& call, int freq = -1, int snr = -99);
+
     QString m_callsign {"IU8LMC"};
     QString m_grid {"JN70"};
     double m_frequency {14074000.0};
@@ -853,7 +922,7 @@ private:
     double m_audioLevel {0.0};
     double m_sMeter {0.0};
     double m_rxInputLevel {50.0};
-    double m_txOutputLevel {50.0};
+    double m_txOutputLevel {0.0};
     QStringList m_audioInputDevices;
     QStringList m_audioOutputDevices;
     QString m_audioInputDevice;
@@ -910,6 +979,7 @@ private:
     bool   m_spectrumVisible {true};
 
     DecodiumThemeManager* m_themeManager  {nullptr};
+    DecodiumPropagationManager* m_propagationManager {nullptr};
     WavManager*           m_wavManager    {nullptr};
     MacroManager*         m_macroManager  {nullptr};
     BandManager*          m_bandManager   {nullptr};
@@ -1001,12 +1071,40 @@ private:
     bool    m_alertOnMyCall {false};
     bool    m_recordRxEnabled {false};
     bool    m_recordTxEnabled {false};
+    QString m_stationName;
+    QString m_stationQth;
+    QString m_stationRigInfo;
+    QString m_stationAntenna;
+    int     m_stationPowerWatts {100};
+    bool    m_autoStartMonitorOnStartup {true};
     bool    m_startFromTx2 {false};
     bool    m_vhfUhfFeatures {false};
     bool    m_directLogQso {false};
     bool    m_confirm73 {true};
     QString m_contestExchange;
     int     m_contestNumber {1};
+    bool    m_pendingAutoLogValid {false};
+    QString m_pendingAutoLogCall;
+    QString m_pendingAutoLogGrid;
+    QString m_pendingAutoLogRptSent;
+    QString m_pendingAutoLogRptRcvd;
+    QDateTime m_pendingAutoLogOn;
+    double    m_pendingAutoLogDialFreq {0.0};
+    bool    m_lateAutoLogValid {false};
+    QString m_lateAutoLogCall;
+    QString m_lateAutoLogGrid;
+    QString m_lateAutoLogRptSent;
+    QString m_lateAutoLogRptRcvd;
+    QDateTime m_lateAutoLogOn;
+    double    m_lateAutoLogDialFreq {0.0};
+    QDateTime m_lateAutoLogExpires;
+    QString m_autoCqLockedCall;
+    QString m_autoCqLockedGrid;
+    int     m_autoCqLockedNtx {6};
+    int     m_autoCqLockedProgress {0};
+    QHash<QString, QDateTime> m_recentAutoCqAbandonedUtcByKey;
+    QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
+    QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
 
     // B6 — cty.dat
     bool   m_ctyDatUpdating {false};

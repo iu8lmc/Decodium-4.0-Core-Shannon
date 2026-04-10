@@ -187,12 +187,95 @@ jobs:
 
           "${WINDEPLOYQT}" "${WINDEPLOY_ARGS[@]}"
 
-          ldd "${DIST}/decodium.exe" \
-            | awk 'index($0, "=> /mingw64/bin/") {print $3}' \
-            | sort -u \
-            | while read -r dll; do
-                cp -u "${dll}" "${DIST}/"
-              done
+          SEARCH_DIRS=(
+            "/mingw64/bin"
+            "${HAMLIB_PREFIX}/bin"
+          )
+
+          is_system_dll() {
+            local dll_name="$1"
+            local upper_name=""
+            upper_name="$(printf '%s' "${dll_name}" | tr '[:lower:]' '[:upper:]')"
+            case "${upper_name}" in
+              API-MS-WIN-*.DLL|EXT-MS-*.DLL|KERNEL32.DLL|KERNELBASE.DLL|USER32.DLL|GDI32.DLL|ADVAPI32.DLL|COMDLG32.DLL|COMCTL32.DLL|SHELL32.DLL|OLE32.DLL|OLEAUT32.DLL|WS2_32.DLL|WINMM.DLL|IMM32.DLL|VERSION.DLL|SETUPAPI.DLL|SHLWAPI.DLL|RPCRT4.DLL|CRYPT32.DLL|IPHLPAPI.DLL|DNSAPI.DLL|NETAPI32.DLL|WTSAPI32.DLL|UXTHEME.DLL|DWMAPI.DLL|MPR.DLL|BCRYPT.DLL|MSVCRT.DLL|SECHOST.DLL|NTDLL.DLL|WINSPOOL.DRV)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
+          find_dll_in_search_dirs() {
+            local dll_name="$1"
+            local search_dir=""
+            local match=""
+            for search_dir in "${SEARCH_DIRS[@]}"; do
+              match="$(find "${search_dir}" -maxdepth 1 -type f -iname "${dll_name}" | head -n1 || true)"
+              if [[ -n "${match}" ]]; then
+                printf '%s\n' "${match}"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          copy_runtime_dll() {
+            local dll_name="$1"
+            local source_path=""
+            if is_system_dll "${dll_name}"; then
+              return 1
+            fi
+            if find "${DIST}" -type f -iname "${dll_name}" | grep -q .; then
+              return 1
+            fi
+            source_path="$(find_dll_in_search_dirs "${dll_name}" || true)"
+            if [[ -z "${source_path}" ]]; then
+              return 2
+            fi
+            cp -u "${source_path}" "${DIST}/"
+            return 0
+          }
+
+          collect_binary_dependencies() {
+            find "${DIST}" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0 \
+              | while IFS= read -r -d '' binary_path; do
+                  objdump -p "${binary_path}" 2>/dev/null \
+                    | awk '/DLL Name:/ {print $3}'
+                done \
+              | sort -fu
+          }
+
+          copy_runtime_dll "libhamlib-4.dll" || true
+
+          copied_new=1
+          while [[ "${copied_new}" -ne 0 ]]; do
+            copied_new=0
+            while IFS= read -r dll_name; do
+              [[ -n "${dll_name}" ]] || continue
+              if copy_runtime_dll "${dll_name}"; then
+                copied_new=1
+              fi
+            done < <(collect_binary_dependencies)
+          done
+
+          unresolved_dlls=()
+          while IFS= read -r dll_name; do
+            [[ -n "${dll_name}" ]] || continue
+            if is_system_dll "${dll_name}"; then
+              continue
+            fi
+            if ! find "${DIST}" -type f -iname "${dll_name}" | grep -q .; then
+              unresolved_dlls+=("${dll_name}")
+            fi
+          done < <(collect_binary_dependencies)
+
+          if [[ "${#unresolved_dlls[@]}" -ne 0 ]]; then
+            echo "Unresolved runtime DLL dependencies detected:" >&2
+            printf '  %s\n' "${unresolved_dlls[@]}" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "Runtime DLLs bundled:" > "${DIST}/runtime-dll-report.txt"
+          find "${DIST}" -maxdepth 1 -type f -iname '*.dll' -printf '%f\n' | sort -fu >> "${DIST}/runtime-dll-report.txt"
 
           echo "=== Portable bundle contents ==="
           find "${DIST}" -maxdepth 2 -type f | sort

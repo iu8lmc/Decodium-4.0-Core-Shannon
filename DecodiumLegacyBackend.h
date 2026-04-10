@@ -45,6 +45,10 @@ public:
     QStringList bandActivityLines() const;
     int rxFrequencyRevision() const;
     QStringList rxFrequencyLines() const;
+    QString txMessage(int index) const;
+    int currentTx() const;
+    QString adifLogPath() const;
+    int txOutputAttenuation() const;
 
     void setMode(const QString& mode);
     void setDialFrequency(double frequencyHz);
@@ -58,6 +62,7 @@ public:
     void setAudioOutputDeviceName(const QString& name);
     void setAudioInputChannel(int channel);
     void setAudioOutputChannel(int channel);
+    void setTxOutputAttenuation(int value);
     void setDxCall(const QString& call);
     void setDxGrid(const QString& grid);
     void setTxMessage(int index, const QString& message);
@@ -82,6 +87,7 @@ Q_SIGNALS:
                            int rxFrequencyHz,
                            int txFrequencyHz,
                            QString const& mode) const;
+    void preferencesRequested() const;
     void warningRaised(QString const& title,
                        QString const& summary,
                        QString const& details) const;
