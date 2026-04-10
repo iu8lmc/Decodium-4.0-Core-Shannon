@@ -588,10 +588,12 @@ static QByteArray buildTxPcmBuffer(const QVector<float>& wave48kMono, const QAud
     return pcm;
 }
 
+#if defined(Q_OS_MAC)
 static AudioDevice::Channel txOutputChannelForFormat(const QAudioFormat& format)
 {
     return format.channelCount() > 1 ? AudioDevice::Both : AudioDevice::Mono;
 }
+#endif
 
 // ── helpers PTT / freq che delegano al backend attivo ────────────────────────
 static inline bool activeCatCanPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
