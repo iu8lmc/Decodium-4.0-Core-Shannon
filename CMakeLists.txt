@@ -318,7 +318,7 @@ set (wsjt_qtmm_CXXSRCS
   )
 
 set (wsjtx_CXXSRCS
-  WSJTXLogging.cpp
+  DecodiumLogging.cpp
   logbook/logbook.cpp
   Network/PSKReporter.cpp
   Modulator/Modulator.cpp
@@ -396,7 +396,7 @@ set (wsjtx_CXXSRCS
   DecodiumDxCluster.h
   DxccLookup.cpp
   DxccLookup.h
-  WsjtxLegacyLinkCompat.cpp
+  DecodiumLegacyLinkCompat.cpp
   Network/wsprnet.cpp
   WSPR/WSPRBandHopping.cpp
   widgets/ExportCabrillo.cpp
@@ -1245,11 +1245,11 @@ function (add_resources resources path)
   endforeach (resource_file_ ${ARGN})
 endfunction (add_resources resources path)
 
-add_resources (wsjtx_RESOURCES "" ${TOP_LEVEL_RESOURCES})
-add_resources (wsjtx_RESOURCES /Palettes ${PALETTE_FILES})
-add_resources (wsjtx_RESOURCES /Translations ${QM_FILES})
+add_resources (decodium_RESOURCES "" ${TOP_LEVEL_RESOURCES})
+add_resources (decodium_RESOURCES /Palettes ${PALETTE_FILES})
+add_resources (decodium_RESOURCES /Translations ${QM_FILES})
 
-configure_file (wsjtx.qrc.in wsjtx.qrc @ONLY)
+configure_file (decodium.qrc.in decodium.qrc @ONLY)
 
 # UI generation
 qt_wrap_ui (wsjt_qt_GENUISRCS ${wsjt_qt_UISRCS})
@@ -1257,7 +1257,7 @@ qt_wrap_ui (wsjtx_GENUISRCS ${wsjtx_UISRCS})
 
 # Resource generation
 qt_add_resources (wsjtx_RESOURCES_RCC
-  ${CMAKE_BINARY_DIR}/wsjtx.qrc
+  ${CMAKE_BINARY_DIR}/decodium.qrc
   contrib/QDarkStyleSheet/qdarkstyle/style.qrc
   )
 
@@ -1400,7 +1400,7 @@ else ()
   set (DECODIUM_QML_ICON_RC "")
 endif ()
 set (DECODIUM_QML_LEGACY_SRCS
-  WSJTXLogging.cpp
+  DecodiumLogging.cpp
   logbook/logbook.cpp
   Network/PSKReporter.cpp
   Detector/Detector.cpp
@@ -1839,7 +1839,7 @@ add_dependencies (wsjt_qt revisiontag)
 # versioning and configuration
 #
 configure_file (
-  "${CMAKE_CURRENT_SOURCE_DIR}/wsjtx_config.h.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/decodium_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/wsjtx_config.h"
   )
 

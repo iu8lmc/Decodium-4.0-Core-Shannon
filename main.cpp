@@ -46,7 +46,7 @@
 #include "L10nLoader.hpp"
 #include "SettingsGroup.hpp"
 //#include "TraceFile.hpp"
-#include "WSJTXLogging.hpp"
+#include "DecodiumLogging.hpp"
 #include "MultiSettings.hpp"
 #include "widgets/mainwindow.h"
 #include "commons.h"
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
         }
 
       // now we have the application name we can open the logging and settings
-      WSJTXLogging lg;
+      DecodiumLogging lg;
       LOG_INFO (program_title (revision ()) << " - Program startup");
       MultiSettings multi_settings {parser.value (cfg_option)};
 
