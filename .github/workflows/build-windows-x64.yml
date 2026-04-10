@@ -55,6 +55,7 @@ jobs:
             mingw-w64-x86_64-qt6-serialport
             mingw-w64-x86_64-qt6-svg
             mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-translations
             mingw-w64-x86_64-qt6-websockets
 
       - name: Restore Hamlib cache
@@ -164,12 +165,27 @@ jobs:
             WINDEPLOYQT="/mingw64/bin/windeployqt.exe"
           fi
 
-          "${WINDEPLOYQT}" \
-            --release \
-            --compiler-runtime \
-            --qmldir "${PWD}/qml" \
-            --dir "${PWD}/${DIST}" \
+          QT_SHARE_BIN="/mingw64/share/qt6/bin"
+          QMLIMPORTSCANNER="${QT_SHARE_BIN}/qmlimportscanner.exe"
+          if [[ ! -x "${QMLIMPORTSCANNER}" ]]; then
+            echo "qmlimportscanner.exe not found under ${QT_SHARE_BIN}" >&2
+            find /mingw64 -maxdepth 4 -iname 'qmlimportscanner*' -print >&2 || true
+            exit 1
+          fi
+          export PATH="${QT_SHARE_BIN}:$PATH"
+
+          WINDEPLOY_ARGS=(
+            --release
+            --compiler-runtime
+            --qmldir "${PWD}/qml"
+            --dir "${PWD}/${DIST}"
             "${PWD}/${DIST}/decodium.exe"
+          )
+          if [[ ! -f /mingw64/share/qt6/translations/catalogs.json ]]; then
+            WINDEPLOY_ARGS=(--no-translations "${WINDEPLOY_ARGS[@]}")
+          fi
+
+          "${WINDEPLOYQT}" "${WINDEPLOY_ARGS[@]}"
 
           ldd "${DIST}/decodium.exe" \
             | awk '/=> \\/mingw64\\/bin\\// {print $3}' \
