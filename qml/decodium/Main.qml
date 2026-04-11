@@ -1229,7 +1229,7 @@ ApplicationWindow {
                                         }
                                     }
                                     Text {
-                                        text: bridge.txOutputLevel > 0 ? ("-" + (bridge.txOutputLevel / 10).toFixed(1)) : "0.0"
+                                        text: bridge.txOutputLevel < 450 ? ("-" + ((450 - bridge.txOutputLevel) / 10).toFixed(1)) : "0.0"
                                         color: accentGreen
                                         font.pixelSize: 8
                                         font.family: "Consolas"

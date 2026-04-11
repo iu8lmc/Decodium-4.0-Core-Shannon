@@ -518,8 +518,9 @@ static QAudioFormat chooseTxAudioFormat(const QAudioDevice& device)
 
 static qreal txAttenuationFromSlider(double outputLevel)
 {
-    // Slider 0..450 → attenuazione legacy reale: 0=0dB (massima uscita), 450=45dB
-    return qBound<qreal>(0.0, static_cast<qreal>(outputLevel / 10.0), 45.0);
+    // Slider 0..450 → invertito: 0=max atten (45dB), 450=nessuna atten (0dB)
+    // Slider a destra = potenza massima (come atteso dall'utente)
+    return qBound<qreal>(0.0, static_cast<qreal>((450.0 - outputLevel) / 10.0), 45.0);
 }
 
 static float rxInputGainFromLevel(double inputLevel)
