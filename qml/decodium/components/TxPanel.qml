@@ -223,36 +223,6 @@ Item {
                             width: 78
                             height: 36
                             radius: 6
-                            color: autoSqBtn.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                            border.color: autoSqBtn.checked ? primaryBlue : glassBorder
-                            border.width: autoSqBtn.checked ? 2 : 1
-
-                            Button {
-                                id: autoSqBtn
-                                anchors.fill: parent
-                                checkable: true
-                                checked: engine ? engine.autoSeq : false
-                                padding: 0
-                                onCheckedChanged: if (engine) engine.autoSeq = checked
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "ASQ"
-                                    glyph: "\u26A1"
-                                    foreground: autoSqBtn.checked ? primaryBlue : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
-                                    boldLabel: autoSqBtn.checked
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: "Auto Sequence"
-                                ToolTip.delay: 500
-                            }
-                        }
-
-                        Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
                             color: mamBtn.checked ? Qt.rgba(255/255, 152/255, 0, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: mamBtn.checked ? warningOrange : glassBorder
                             border.width: mamBtn.checked ? 2 : 1
@@ -401,6 +371,36 @@ Item {
                                 }
                                 ToolTip.visible: hovered
                                 ToolTip.text: "Auto Sequence"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
+                            width: 78
+                            height: 36
+                            radius: 6
+                            color: qqBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: qqBtn.checked ? accentGreen : glassBorder
+                            border.width: qqBtn.checked ? 2 : 1
+
+                            Button {
+                                id: qqBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: engine ? engine.quickQsoEnabled : false
+                                padding: 0
+                                onCheckedChanged: if (engine) engine.quickQsoEnabled = checked
+                                background: Rectangle { color: "transparent" }
+                                contentItem: ToolbarButtonContent {
+                                    label: "QQ"
+                                    glyph: "\u21E8"
+                                    foreground: qqBtn.checked ? accentGreen : textSecondary
+                                    glyphSize: 15
+                                    labelSize: 10
+                                    boldLabel: qqBtn.checked
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Quick QSO — salta TX1, parte da TX2 (report diretto)"
                                 ToolTip.delay: 500
                             }
                         }
@@ -649,32 +649,6 @@ Item {
                             }
                         }
 
-                        Rectangle {
-                            width: 56
-                            height: 36
-                            radius: 6
-                            visible: engine && engine.mode === "FT2"
-                            color: engine && engine.asyncTxEnabled ? Qt.alpha(secondaryCyan, 0.3) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-                            border.color: engine && engine.asyncTxEnabled ? secondaryCyan : glassBorder
-                            border.width: 1
-
-                            Button {
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "ATX"
-                                    foreground: engine && engine.asyncTxEnabled ? secondaryCyan : textSecondary
-                                    labelSize: 10
-                                    boldLabel: true
-                                }
-                                onClicked: if (engine) engine.asyncTxEnabled = !engine.asyncTxEnabled
-                                ToolTip.visible: hovered
-                                ToolTip.text: "Async TX (FT2)"
-                                ToolTip.delay: 500
-                            }
-                        }
-
                         AsyncModeWidget {
                             id: asyncModeVis
                             width: 90
@@ -688,63 +662,6 @@ Item {
                             ToolTip.delay: 400
                         }
 
-                        Rectangle {
-                            width: 56
-                            height: 36
-                            radius: 6
-                            visible: engine && engine.mode === "FT2"
-                            color: engine && engine.dualCarrierEnabled ? Qt.alpha(warningOrange, 0.3) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-                            border.color: engine && engine.dualCarrierEnabled ? warningOrange : glassBorder
-                            border.width: 1
-
-                            Button {
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "2xC"
-                                    foreground: engine && engine.dualCarrierEnabled ? warningOrange : textSecondary
-                                    labelSize: 10
-                                    boldLabel: true
-                                }
-                                onClicked: if (engine) engine.dualCarrierEnabled = !engine.dualCarrierEnabled
-                                ToolTip.visible: hovered
-                                ToolTip.text: "Dual Carrier (-3dB/carrier)"
-                                ToolTip.delay: 500
-                            }
-                        }
-
-                        Rectangle {
-                            width: 56
-                            height: 36
-                            radius: 6
-                            visible: engine && engine.mode === "FT2"
-                            color: engine && engine.manualTxMode ? Qt.alpha(errorRed, 0.4) : Qt.rgba(0.15, 0.15, 0.15, 0.6)
-                            border.color: engine && engine.manualTxMode ? errorRed : glassBorder
-                            border.width: 1
-
-                            Button {
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "PTT"
-                                    foreground: engine && engine.manualTxMode ? errorRed : textSecondary
-                                    labelSize: 10
-                                    boldLabel: true
-                                }
-                                onClicked: {
-                                    if (engine) {
-                                        if (!engine.manualTxMode) engine.manualTxMode = true
-                                        else engine.triggerManualTx()
-                                    }
-                                }
-                                onPressAndHold: if (engine) engine.manualTxMode = false
-                                ToolTip.visible: hovered
-                                ToolTip.text: "Manual TX: Click=transmit, Long press=disable"
-                                ToolTip.delay: 500
-                            }
-                        }
                     }
                 }
             }
@@ -756,18 +673,23 @@ Item {
 
                 // QSO State indicator
                 Rectangle {
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
                     Layout.preferredHeight: 32
                     color: Qt.alpha(stateColor, 0.2)
                     border.color: stateColor
                     radius: 4
 
                     Text {
-                        anchors.centerIn: parent
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
                         text: stateText
                         color: stateColor
                         font.pixelSize: 11
                         font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
                     }
                 }
 

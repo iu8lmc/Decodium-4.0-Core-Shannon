@@ -518,7 +518,8 @@ static QAudioFormat chooseTxAudioFormat(const QAudioDevice& device)
 
 static qreal txAttenuationFromSlider(double outputLevel)
 {
-    return qBound<qreal>(0.0, static_cast<qreal>(outputLevel / 10.0), 45.0);
+    // Slider 0..450 → attenuazione invertita: 0=max atten (45dB), 450=nessuna atten (0dB)
+    return qBound<qreal>(0.0, static_cast<qreal>((450.0 - outputLevel) / 10.0), 45.0);
 }
 
 static qreal txGainFromSlider(double outputLevel)
@@ -1863,19 +1864,20 @@ void DecodiumBridge::updateSoundOutputDevice()
 // Restituisce QAudioDevice corrispondente a m_audioOutputDevice (o il default)
 static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceFound)
 {
-    bool found = name.isEmpty();
+    auto const outputs = QMediaDevices::audioOutputs();
+
     if (!name.isEmpty()) {
-        for (const QAudioDevice& d : QMediaDevices::audioOutputs()) {
+        for (const QAudioDevice& d : outputs) {
             if (d.description() == name ||
                 d.description().contains(name, Qt::CaseInsensitive) ||
                 name.contains(d.description(), Qt::CaseInsensitive)) {
-                found = true;
                 if (requestedDeviceFound) *requestedDeviceFound = true;
                 return d;
             }
         }
     }
-    if (requestedDeviceFound) *requestedDeviceFound = found;
+
+    if (requestedDeviceFound) *requestedDeviceFound = name.isEmpty();
     return QMediaDevices::defaultAudioOutput();
 }
 
@@ -2053,6 +2055,15 @@ void DecodiumBridge::startTx()
 
     bool requestedDeviceFound = false;
     QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
+    bridgeLog("startTx: outputDevice=[" + m_audioOutputDevice + "] found=" +
+              QString::number(requestedDeviceFound) + " using=[" + outDev.description() + "]");
+    // Log tutti i device di output disponibili
+    {
+        auto outputs = QMediaDevices::audioOutputs();
+        bridgeLog("startTx: available outputs (" + QString::number(outputs.size()) + "):");
+        for (const QAudioDevice& d : outputs)
+            bridgeLog("  - " + d.description());
+    }
     if (!requestedDeviceFound) {
         bridgeLog("startTx: requested output device not found, fallback to default: " +
                   outDev.description() + " requested=[" + m_audioOutputDevice + "]");
@@ -2514,6 +2525,15 @@ void DecodiumBridge::clearDecodeList()
     emit rxDecodeListChanged();
 }
 
+void DecodiumBridge::clearRxDecodes()
+{
+    if (usingLegacyBackendForTx()) {
+        m_legacyRxFrequencyRevision = -1;
+    }
+    m_rxDecodeList.clear();
+    emit rxDecodeListChanged();
+}
+
 // ── catBackend switch ─────────────────────────────────────────────────────────
 void DecodiumBridge::setCatBackend(const QString& v)
 {
@@ -2786,6 +2806,12 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
 
     if (hisCall.isEmpty()) return;
 
+    // Modalita' normale (non Quick QSO): doppio click parte SEMPRE da TX1
+    // Quick QSO: usa il TX step determinato dal parsing del messaggio
+    if (!m_quickQsoEnabled) {
+        newCurrentTx = 1;
+    }
+
     // Nuovo QSO: resetta contatori retry/watchdog (GitHub handleDoubleClick)
     bool newQso = (hisCall.compare(m_dxCall, Qt::CaseInsensitive) != 0);
     setDxCall(hisCall);
@@ -2837,9 +2863,9 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
     }
     emit txPeriodChanged();
 
-    // Abilita TX: se autoSeq attivo OPPURE Quick Call attivo (come Shannon quick_call)
-    // Quick Call = doppio click su decode abilita TX automaticamente senza premere "Enable TX"
-    if (m_autoSeq || m_startFromTx2) setTxEnabled(true);
+    // Abilita TX: doppio click su decode abilita TX automaticamente (quick call behavior)
+    // Come Shannon: il doppio click equivale sempre a "Enable TX" + avvio sequenza
+    setTxEnabled(true);
 
     bridgeLog("processDecodeDoubleClick: hisCall=" + hisCall +
               " TX=" + QString::number(newCurrentTx) +
@@ -2858,7 +2884,15 @@ void DecodiumBridge::genStdMsgs(const QString& hisCall, const QString& hisGrid)
 
     setTx1(hisCall + " " + my + " " + mygr);                          // risposta CQ
     setTx2(hisCall + " " + my + " " + rptSent);                       // il nostro report
-    setTx3(hisCall + " " + my + " R" + rptRcvd);                      // R + report ricevuto
+
+    // Quick QSO (Ultra2): TX3 include "TU" per segnalare QSO completo in 2 messaggi
+    // Formato: "HIS_CALL MY_CALL R+NN TU" — il DX peer risponde con RR73 direttamente
+    if (m_quickQsoEnabled) {
+        setTx3(hisCall + " " + my + " R" + rptRcvd + " TU");
+    } else {
+        setTx3(hisCall + " " + my + " R" + rptRcvd);
+    }
+
     setTx4(hisCall + " " + my + " " + (m_sendRR73 ? "RR73" : "RRR")); // RR73 o RRR
     setTx5(hisCall + " " + my + " 73");                                // 73
     setTx6("CQ "   + my + " " + mygr);                                // CQ
@@ -3162,9 +3196,20 @@ void DecodiumBridge::enqueueCallerInternal(const QString& call, int freq, int sn
 void DecodiumBridge::advanceQsoState(int txNum)
 {
     // Quick QSO (Ultra2): salta TX1 → vai diretto a TX2 (come FT2QsoFlowPolicy Ultra2)
-    if (txNum == 1 && m_quickQsoEnabled && m_mode == "FT2") {
+    if (txNum == 1 && m_quickQsoEnabled) {
         bridgeLog("advanceQsoState: QuickQSO attivo → salta TX1, va a TX2 (Ultra2)");
         txNum = 2;
+    }
+
+    // Quick QSO (Ultra2): TX3 contiene "R+report TU" → dopo TX3 il QSO e' finito
+    // Salta TX4/TX5 e va diretto a SIGNOFF con log automatico
+    if (txNum == 3 && m_quickQsoEnabled) {
+        bridgeLog("advanceQsoState: QuickQSO TX3 con TU → SIGNOFF diretto");
+        setCurrentTx(txNum);
+        m_qsoProgress = 5; // SIGNOFF
+        emit qsoProgressChanged();
+        m_txWatchdogTicks = 0;
+        return;
     }
 
     int progress = 0;
@@ -3209,11 +3254,13 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         bool isOurPeriod = (m_txPeriod == 0) ? isEven : !isEven;
         if (!isOurPeriod) return;
 
-        // Guardia anti-CQ-consecutivi: se l'ultimo CQ è stato nel periodo corrente o
-        // nel periodo immediatamente precedente, aspetta almeno un periodo di pausa RX.
+        // Guardia anti-CQ-consecutivi: dopo un CQ aspetta almeno N periodi di pausa RX
+        // FT2 (3.75s): 4 periodi = ~15s di pausa per decodificare risposte async
+        // FT8 (15s): 2 periodi = ~30s (standard)
         bool isCqTx = (m_autoCqRepeat && !m_txEnabled) ||
                       (m_txEnabled && m_currentTx == 6);
-        if (isCqTx && m_lastCqPidx >= 0 && (pidx - m_lastCqPidx) < 2) {
+        int cqGuardPeriods = (m_mode == "FT2") ? 4 : 2;
+        if (isCqTx && m_lastCqPidx >= 0 && (pidx - m_lastCqPidx) < cqGuardPeriods) {
             bridgeLog("checkAndStartPeriodicTx: CQ guard — pidx=" + QString::number(pidx) +
                       " lastCqPidx=" + QString::number(m_lastCqPidx) + " → pausa RX forzata");
             return;
@@ -3449,6 +3496,20 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         if (m_mode == "FT2" && m_asyncTxEnabled && m_qsoProgress >= 2 && !from.isEmpty())
             m_qsoCooldown[from] = QDateTime::currentMSecsSinceEpoch();
         nextTx = 5;
+    } else if (last.compare("TU", Qt::CaseInsensitive) == 0 && parts.size() >= 4) {
+        // Quick QSO (Ultra2): peer ha inviato "R+NN TU" o "+NN TU"
+        // Significa che il peer considera il QSO completo → rispondiamo con RR73 (TX4)
+        QString reportToken = parts[parts.size() - 2];
+        static QRegularExpression const rptRx(R"(^(?:R)?[+-]\d{2}$)");
+        if (rptRx.match(reportToken).hasMatch()) {
+            bridgeLog("autoSeq: ricevuto Quick QSO TU da " + from + " (report=" + reportToken + ") → TX4 (RR73)");
+            setReportReceived(reportToken.startsWith('R') ? reportToken.mid(1) : reportToken);
+            if (!m_dxCall.isEmpty()) genStdMsgs(m_dxCall, m_dxGrid);
+            nextTx = 4;
+        } else {
+            bridgeLog("autoSeq: TU senza report valido, ignoro");
+            return;
+        }
     } else if (last.length() >= 2 && last[0] == 'R' &&
                (last[1] == '-' || last[1] == '+' || last[1].isDigit())) {
         bridgeLog("autoSeq: ricevuto R+report → TX4 (RR73)");
@@ -3711,6 +3772,13 @@ QString DecodiumBridge::effectiveAdifLogPath() const
     }
     if (!m_adifLogPath.trimmed().isEmpty()) {
         return m_adifLogPath;
+    }
+    // Usa la directory legacy (AppData\Local\Decodium) se il log esiste gia' li',
+    // altrimenti la directory standard Qt (AppData\Local\IU8LMC\Decodium)
+    QString const legacyDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/Decodium/decodium_log.adi");
+    if (QFile::exists(legacyDir)) {
+        return legacyDir;
     }
     return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
         + QStringLiteral("/decodium_log.adi");
@@ -4656,10 +4724,12 @@ void DecodiumBridge::startAudioCapture()
     if (!m_audioSink) {
         m_audioSink = new DecodiumAudioSink(m_audioBuffer, 4, this);
         // Ring buffer per il path async FT2: ogni campione decimato va anche nel buffer circolare
+        // + feed campioni al WavManager per registrazione audio
         m_audioSink->setSampleCallback([this](short s) {
             m_asyncAudio[m_asyncAudioPos % ASYNC_BUF_SIZE] = s;
             ++m_asyncAudioPos;
             ++m_driftExpectedFrames;  // A2: count frames for drift detection
+            if (m_wavManager) m_wavManager->feedSample(s);
         });
         connect(m_audioSink, &DecodiumAudioSink::audioLevelChanged,
                 this, [this](double level) {
@@ -4700,6 +4770,31 @@ void DecodiumBridge::startAudioCapture()
     m_soundInput->setVolume(static_cast<float>(m_rxInputLevel / 100.0));
 
     emit statusMessage("Audio capture avviato: " + selectedDevice.description());
+
+    // Auto-match: se l'output TX non è configurato, cerca un device di output
+    // che appartiene alla stessa scheda audio dell'input (es. "USB Audio CODEC")
+    if (m_audioOutputDevice.isEmpty()) {
+        // Estrai la parte identificativa dal nome input (es. "USB Audio CODEC" da "Microphone (USB Audio CODEC )")
+        QString inputDesc = selectedDevice.description();
+        // Cerca tra parentesi: "Microphone (USB Audio CODEC )" → "USB Audio CODEC"
+        int paren1 = inputDesc.indexOf('(');
+        int paren2 = inputDesc.lastIndexOf(')');
+        QString deviceId;
+        if (paren1 >= 0 && paren2 > paren1)
+            deviceId = inputDesc.mid(paren1 + 1, paren2 - paren1 - 1).trimmed();
+
+        if (!deviceId.isEmpty()) {
+            for (const QAudioDevice& d : QMediaDevices::audioOutputs()) {
+                if (d.description().contains(deviceId, Qt::CaseInsensitive)) {
+                    setAudioOutputDevice(d.description());
+                    bridgeLog("auto-matched TX output device: " + d.description() +
+                              " (from input: " + inputDesc + ")");
+                    break;
+                }
+            }
+        }
+    }
+
     bridgeLog("startAudioCapture() done");
 }
 

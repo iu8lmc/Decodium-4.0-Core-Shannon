@@ -2,29 +2,139 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QFile>
+#include <QDataStream>
+#include <QDateTime>
+#include <QStandardPaths>
+#include <QDir>
+#include <QTimer>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QVector>
 
-// --- WavManager stub ---
+// --- WavManager — registrazione audio WAV 16-bit mono a 12 kHz ---
 class WavManager : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(int recordedSeconds READ recordedSeconds NOTIFY recordedSecondsChanged)
+    Q_PROPERTY(QString lastFilePath READ lastFilePath NOTIFY lastFilePathChanged)
 public:
-    explicit WavManager(QObject* parent = nullptr) : QObject(parent) {}
+    explicit WavManager(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+        m_timer.setInterval(1000);
+        connect(&m_timer, &QTimer::timeout, this, [this]() {
+            ++m_recordedSeconds;
+            emit recordedSecondsChanged();
+        });
+    }
+    ~WavManager() override { if (m_recording) stopRecording(); }
+
     bool recording() const { return m_recording; }
     int recordedSeconds() const { return m_recordedSeconds; }
+    QString lastFilePath() const { return m_lastFilePath; }
+
+    // Chiamato da DecodiumAudioSink per ogni campione decimato (12 kHz, 16-bit mono)
+    void feedSample(short sample)
+    {
+        if (!m_recording) return;
+        QMutexLocker lock(&m_mutex);
+        m_samples.append(sample);
+    }
 
 public slots:
-    Q_INVOKABLE void startRecording() { m_recording = true; m_recordedSeconds = 0; emit recordingChanged(); }
-    Q_INVOKABLE void stopRecording()  { m_recording = false; emit recordingChanged(); }
+    Q_INVOKABLE void startRecording()
+    {
+        if (m_recording) return;
+
+        // Directory di salvataggio: ~/Documents/Decodium/recordings/
+        QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                      + "/Decodium/recordings";
+        QDir().mkpath(dir);
+
+        QString ts = QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss");
+        m_lastFilePath = dir + "/decodium_" + ts + ".wav";
+        emit lastFilePathChanged();
+
+        {
+            QMutexLocker lock(&m_mutex);
+            m_samples.clear();
+            m_samples.reserve(12000 * 60); // pre-alloca ~1 minuto
+        }
+
+        m_recordedSeconds = 0;
+        m_recording = true;
+        m_timer.start();
+        emit recordingChanged();
+        emit recordedSecondsChanged();
+        qDebug() << "WavManager: recording started →" << m_lastFilePath;
+    }
+
+    Q_INVOKABLE void stopRecording()
+    {
+        if (!m_recording) return;
+        m_recording = false;
+        m_timer.stop();
+        emit recordingChanged();
+
+        // Scrivi WAV su file in modo sincrono (dati gia' in memoria)
+        QVector<short> data;
+        {
+            QMutexLocker lock(&m_mutex);
+            data = m_samples;
+            m_samples.clear();
+        }
+        writeWav(m_lastFilePath, data, 12000);
+        qDebug() << "WavManager: recording stopped —" << data.size() << "samples →" << m_lastFilePath;
+    }
 
 signals:
     void recordingChanged();
     void recordedSecondsChanged();
+    void lastFilePathChanged();
 
 private:
+    static void writeWav(const QString& path, const QVector<short>& samples, int sampleRate)
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly)) {
+            qWarning() << "WavManager: cannot open" << path;
+            return;
+        }
+        QDataStream s(&f);
+        s.setByteOrder(QDataStream::LittleEndian);
+
+        const quint32 dataSize = static_cast<quint32>(samples.size() * 2);
+        const quint32 fileSize = 36 + dataSize;
+
+        // RIFF header
+        f.write("RIFF", 4);
+        s << fileSize;
+        f.write("WAVE", 4);
+
+        // fmt chunk
+        f.write("fmt ", 4);
+        s << quint32(16);            // chunk size
+        s << quint16(1);             // PCM
+        s << quint16(1);             // mono
+        s << quint32(sampleRate);    // sample rate
+        s << quint32(sampleRate * 2);// byte rate
+        s << quint16(2);             // block align
+        s << quint16(16);            // bits per sample
+
+        // data chunk
+        f.write("data", 4);
+        s << dataSize;
+        for (short v : samples) s << qint16(v);
+    }
+
     bool m_recording {false};
     int m_recordedSeconds {0};
+    QString m_lastFilePath;
+    QTimer m_timer;
+    QMutex m_mutex;
+    QVector<short> m_samples;
 };
 
 // --- MacroManager stub ---

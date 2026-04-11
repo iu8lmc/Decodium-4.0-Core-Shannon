@@ -600,6 +600,7 @@ public slots:
     // Decode
     Q_INVOKABLE void clearDecodeList();
     Q_INVOKABLE void clearDecodes() { clearDecodeList(); }
+    Q_INVOKABLE void clearRxDecodes();
     Q_INVOKABLE void processDecodeDoubleClick(const QString& message, const QString& timeStr,
                                               const QString& db, int audioFreq);
 
@@ -942,7 +943,7 @@ private:
     bool    m_sendRR73 {true};         // true=RR73, false=RRR (come mainwindow m_sendRR73)
     int     m_autoCQPeriodsMissed {0}; // periodi CQ senza risposta (watchdog count-based)
     bool m_multiAnswerMode {false};
-    bool m_autoSeq          {false};
+    bool m_autoSeq          {true};
     bool m_txEnabled        {false};
     bool m_autoCqRepeat     {false};
     bool m_avgDecodeEnabled {false};

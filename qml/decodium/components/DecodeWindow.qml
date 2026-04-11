@@ -640,6 +640,27 @@ Window {
                                 color: textSecondary
                                 visible: !decodeWindow.compactRxHeader
                             }
+
+                            Button {
+                                text: "Clear"
+                                flat: true
+                                implicitHeight: 24
+                                implicitWidth: 50
+                                onClicked: appEngine.clearRxDecodes()
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: textSecondary
+                                    font.pixelSize: 10
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    color: parent.hovered ? Qt.rgba(255,255,255,0.1) : "transparent"
+                                    radius: 4
+                                }
+                            }
                         }
                     }
 

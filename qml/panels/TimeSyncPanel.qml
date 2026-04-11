@@ -70,7 +70,8 @@ Rectangle {
             }
 
             MouseArea {
-                anchors.fill: parent
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 onClicked: timeSyncPanel.expanded = !timeSyncPanel.expanded
             }
         }
