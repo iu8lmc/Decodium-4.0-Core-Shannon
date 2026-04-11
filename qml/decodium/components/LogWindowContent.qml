@@ -309,67 +309,67 @@ Rectangle {
 
                     ColumnLayout {
                         spacing: 1
-                        Text { text: "Call"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
+                        Text { text: "Call"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 90; height: 22; radius: 3
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                            border.color: editCallF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editCallF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; font.bold: true; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            width: 100; height: 26; radius: 3
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
+                            border.color: editCallF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
+                            TextField { id: editCallF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; font.bold: true; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
                     ColumnLayout {
                         spacing: 1
-                        Text { text: "Grid"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
+                        Text { text: "Grid"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 55; height: 22; radius: 3
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                            border.color: editGridF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editGridF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            width: 60; height: 26; radius: 3
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
+                            border.color: editGridF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
+                            TextField { id: editGridF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
                     ColumnLayout {
                         spacing: 1
-                        Text { text: "Band"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
+                        Text { text: "Band"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 45; height: 22; radius: 3
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                            border.color: editBandF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editBandF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            width: 50; height: 26; radius: 3
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
+                            border.color: editBandF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
+                            TextField { id: editBandF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
                     ColumnLayout {
                         spacing: 1
-                        Text { text: "Mode"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
+                        Text { text: "Mode"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 45; height: 22; radius: 3
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                            border.color: editModeF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editModeF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            width: 50; height: 26; radius: 3
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
+                            border.color: editModeF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
+                            TextField { id: editModeF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
                     ColumnLayout {
                         spacing: 1
-                        Text { text: "Sent"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
+                        Text { text: "Sent"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 40; height: 22; radius: 3
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                            border.color: editSentF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editSentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            width: 45; height: 26; radius: 3
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
+                            border.color: editSentF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
+                            TextField { id: editSentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
                     ColumnLayout {
                         spacing: 1
-                        Text { text: "Rcvd"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
+                        Text { text: "Rcvd"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 40; height: 22; radius: 3
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                            border.color: editRcvdF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editRcvdF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            width: 45; height: 26; radius: 3
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
+                            border.color: editRcvdF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
+                            TextField { id: editRcvdF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 

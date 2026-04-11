@@ -1229,7 +1229,7 @@ ApplicationWindow {
                                         }
                                     }
                                     Text {
-                                        text: bridge.txOutputLevel > 0 ? ("-" + (bridge.txOutputLevel / 10).toFixed(1)) : "0.0"
+                                        text: bridge.txOutputLevel < 450 ? ("-" + ((450 - bridge.txOutputLevel) / 10).toFixed(1)) : "0.0"
                                         color: accentGreen
                                         font.pixelSize: 8
                                         font.family: "Consolas"
@@ -3119,10 +3119,13 @@ ApplicationWindow {
                                 var elapsed = totalMs % periodMs
                                 timingBar.secInPeriod = elapsed / 1000.0
                                 timingBar.progress = elapsed / periodMs
-                                timingBar.isTxPhase = timingBar.secInPeriod < timingBar.txDuration
                                 var periodIndex = Math.floor(totalMs / periodMs)
                                 timingBar.isEvenPeriod = (periodIndex % 2) === 0
-                                timingBar.periodLabel = timingBar.isEvenPeriod ? "P1" : "P2"
+                                // isTxPhase: true quando siamo nel NOSTRO periodo TX
+                                // txPeriod=0 → TX nei periodi pari, txPeriod=1 → TX nei dispari
+                                var isOurTxPeriod = bridge ? ((bridge.txPeriod === 0) === timingBar.isEvenPeriod) : false
+                                timingBar.isTxPhase = isOurTxPeriod && timingBar.secInPeriod < timingBar.txDuration
+                                timingBar.periodLabel = isOurTxPeriod ? "TX" : "RX"
                             }
                         }
 
@@ -3184,7 +3187,7 @@ ApplicationWindow {
                             font.pixelSize: 11
                             font.bold: true
                             font.family: "Consolas"
-                            color: timingBar.isEvenPeriod ? "#4CAF50" : "#FF9800"
+                            color: timingBar.isTxPhase ? "#f44336" : "#4CAF50"
                         }
 
                         // Mode + phase label (left of bar)
