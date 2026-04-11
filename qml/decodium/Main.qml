@@ -409,7 +409,7 @@ ApplicationWindow {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "v4.0.0"
+                text: "v" + bridge.version()
                 font.pixelSize: 16
                 font.letterSpacing: 2
                 color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.6)
@@ -856,7 +856,7 @@ ApplicationWindow {
                             color: secondaryCyan
                         }
                         Text {
-                            text: "v2.5"
+                            text: "v" + bridge.version()
                             font.pixelSize: 9
                             color: textSecondary
                         }
@@ -1214,7 +1214,7 @@ ApplicationWindow {
                                         id: txSliderHeader
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 14
-                                        from: 0; to: 450; live: true; stepSize: 1
+                                        from: 450; to: 0; live: true; stepSize: 1
                                         onMoved: bridge.txOutputLevel = value
                                         Binding on value { value: bridge.txOutputLevel; when: !txSliderHeader.pressed }
                                         background: Rectangle {
@@ -1229,7 +1229,7 @@ ApplicationWindow {
                                         }
                                     }
                                     Text {
-                                        text: bridge.txOutputLevel < 450 ? ("-" + ((450 - bridge.txOutputLevel) / 10).toFixed(1)) : "0.0"
+                                        text: bridge.txOutputLevel > 0 ? ("-" + (bridge.txOutputLevel / 10).toFixed(1)) : "0.0"
                                         color: accentGreen
                                         font.pixelSize: 8
                                         font.family: "Consolas"

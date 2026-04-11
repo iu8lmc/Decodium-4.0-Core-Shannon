@@ -53,7 +53,7 @@ Popup {
     property int selectedIndex: -1
     property var selectedQso: null
 
-    onOpened: {
+    onAboutToShow: {
         ensureInitialPosition()
         refreshLog()
     }

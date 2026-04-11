@@ -33,6 +33,7 @@ public:
     QString audioOutputDeviceName() const;
     int audioInputChannel() const;
     int audioOutputChannel() const;
+    int rxInputLevel() const;
     QString waterfallPalette() const;
     bool alt12Enabled() const;
     bool txFirst() const;
@@ -62,6 +63,7 @@ public:
     void setAudioOutputDeviceName(const QString& name);
     void setAudioInputChannel(int channel);
     void setAudioOutputChannel(int channel);
+    void setRxInputLevel(int value);
     void setTxOutputAttenuation(int value);
     void setDxCall(const QString& call);
     void setDxGrid(const QString& grid);

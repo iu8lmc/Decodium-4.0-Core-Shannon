@@ -518,13 +518,32 @@ static QAudioFormat chooseTxAudioFormat(const QAudioDevice& device)
 
 static qreal txAttenuationFromSlider(double outputLevel)
 {
-    // Slider 0..450 → attenuazione invertita: 0=max atten (45dB), 450=nessuna atten (0dB)
-    return qBound<qreal>(0.0, static_cast<qreal>((450.0 - outputLevel) / 10.0), 45.0);
+    // Slider 0..450 → attenuazione legacy reale: 0=0dB (massima uscita), 450=45dB
+    return qBound<qreal>(0.0, static_cast<qreal>(outputLevel / 10.0), 45.0);
+}
+
+static float rxInputGainFromLevel(double inputLevel)
+{
+    double const bounded = qBound(0.0, inputLevel, 100.0);
+    if (bounded <= 50.0) {
+        return static_cast<float>(bounded / 50.0);
+    }
+    return static_cast<float>(1.0 + ((bounded - 50.0) / 50.0) * 3.0);
 }
 
 static qreal txGainFromSlider(double outputLevel)
 {
     return static_cast<qreal>(std::pow(10.0, -txAttenuationFromSlider(outputLevel) / 20.0));
+}
+
+static int legacyTxAttenuationFromLevel(double outputLevel)
+{
+    return qRound(qBound(0.0, outputLevel, 450.0));
+}
+
+static double txLevelFromLegacyAttenuation(int attenuation)
+{
+    return qBound(0.0, static_cast<double>(attenuation), 450.0);
 }
 
 static QByteArray buildTxPcmBuffer(const QVector<float>& wave48kMono, const QAudioFormat& format)
@@ -959,7 +978,9 @@ void DecodiumBridge::syncLegacyBackendTxState()
     }
     m_legacyBackend->setAudioInputChannel(qBound(0, m_audioInputChannel, 1));
     m_legacyBackend->setAudioOutputChannel(qBound(0, m_audioOutputChannel, 3));
-    m_legacyBackend->setTxOutputAttenuation(qRound(qBound(0.0, m_txOutputLevel, 450.0)));
+    m_legacyBackend->setRxInputLevel(qRound(qBound(0.0, m_rxInputLevel, 100.0)));
+    int const legacyTxAttn = legacyTxAttenuationFromLevel(m_txOutputLevel);
+    m_legacyBackend->setTxOutputAttenuation(legacyTxAttn);
     m_legacyBackend->setMode(m_mode);
     m_legacyBackend->setDialFrequency(m_frequency);
     m_legacyBackend->setAutoSeq(m_autoSeq);
@@ -976,7 +997,7 @@ void DecodiumBridge::syncLegacyBackendTxState()
     m_legacyBackend->setTxMessage(5, m_tx5);
     m_legacyBackend->setTxMessage(6, m_tx6);
     m_legacyBackend->selectTxMessage(qBound(1, m_currentTx, 6));
-    bridgeLog(QStringLiteral("legacyTxSync: mode=%1 outDev=%2 outChan=%3 inDev=%4 inChan=%5 tx=%6 rx=%7 currentTx=%8 txPeriod=%9 alt12=%10 txAttn=%11")
+    bridgeLog(QStringLiteral("legacyTxSync: mode=%1 outDev=%2 outChan=%3 inDev=%4 inChan=%5 tx=%6 rx=%7 currentTx=%8 txPeriod=%9 alt12=%10 txLevel=%11 legacyTxAttn=%12")
                   .arg(m_mode,
                        m_audioOutputDevice,
                        QString::number(m_audioOutputChannel),
@@ -987,7 +1008,8 @@ void DecodiumBridge::syncLegacyBackendTxState()
                        QString::number(m_currentTx),
                        QString::number(m_txPeriod),
                        m_alt12Enabled ? QStringLiteral("1") : QStringLiteral("0"),
-                       QString::number(qRound(qBound(0.0, m_txOutputLevel, 450.0)))));
+                       QString::number(qRound(qBound(0.0, m_txOutputLevel, 450.0))),
+                       QString::number(legacyTxAttn)));
 }
 
 void DecodiumBridge::syncLegacyBackendState()
@@ -1045,7 +1067,7 @@ void DecodiumBridge::syncLegacyBackendState()
     updateBool(m_catConnected, m_legacyBackend->catConnected(), [this]() { emit catConnectedChanged(); });
     updateString(m_catRigName, m_catConnected ? m_legacyBackend->rigName() : QString {}, [this]() { emit catRigNameChanged(); });
     updateDouble(m_sMeter, m_legacyBackend->signalLevel(), [this]() { emit sMeterChanged(); });
-    updateDouble(m_txOutputLevel, qBound(0.0, static_cast<double>(m_legacyBackend->txOutputAttenuation()), 450.0),
+    updateDouble(m_txOutputLevel, txLevelFromLegacyAttenuation(m_legacyBackend->txOutputAttenuation()),
                  [this]() { emit txOutputLevelChanged(); });
 
     QString const legacyMode = m_legacyBackend->mode();
@@ -1074,9 +1096,14 @@ void DecodiumBridge::syncLegacyBackendState()
     }
 
     double const legacyDialFrequency = m_legacyBackend->dialFrequency();
-    if (legacyDialFrequency > 0.0 && !qFuzzyCompare(m_frequency + 1.0, legacyDialFrequency + 1.0)) {
-        m_frequency = legacyDialFrequency;
-        emit frequencyChanged();
+    if (legacyDialFrequency > 0.0) {
+        if (!qFuzzyCompare(m_frequency + 1.0, legacyDialFrequency + 1.0)) {
+            m_frequency = legacyDialFrequency;
+            emit frequencyChanged();
+        }
+        if (m_bandManager) {
+            m_bandManager->updateFromFrequency(legacyDialFrequency);
+        }
     }
 
     updateInt(m_rxFrequency, m_legacyBackend->rxFrequency(), [this]() { emit rxFrequencyChanged(); });
@@ -1116,6 +1143,8 @@ void DecodiumBridge::syncLegacyBackendState()
               [this]() { emit audioInputChannelChanged(); });
     updateInt(m_audioOutputChannel, qBound(0, m_legacyBackend->audioOutputChannel(), 3),
               [this]() { emit audioOutputChannelChanged(); });
+    updateDouble(m_rxInputLevel, qBound(0.0, static_cast<double>(m_legacyBackend->rxInputLevel()), 100.0),
+                 [this]() { emit rxInputLevelChanged(); });
     updateInt(m_uiPaletteIndex, uiPaletteIndexForLegacyName(m_legacyBackend->waterfallPalette()),
               [this]() { emit uiPaletteIndexChanged(); });
 
@@ -1320,12 +1349,15 @@ void DecodiumBridge::regenerateTxMessages()
 }
 double DecodiumBridge::frequency() const { return m_frequency; }
 void DecodiumBridge::setFrequency(double v) {
-    if (m_frequency != v) {
+    if (!qFuzzyCompare(m_frequency + 1.0, v + 1.0)) {
         m_frequency = v;
         emit frequencyChanged();
         if (usingLegacyBackendForTx()) {
             m_legacyBackend->setDialFrequency(v);
         }
+    }
+    if (m_bandManager) {
+        m_bandManager->updateFromFrequency(v);
     }
 }
 QString DecodiumBridge::mode() const { return m_mode; }
@@ -1406,9 +1438,13 @@ double DecodiumBridge::sMeter() const { return m_sMeter; }
 
 void DecodiumBridge::setRxInputLevel(double v)
 {
-    if (m_rxInputLevel != v) {
-        m_rxInputLevel = v;
-        if (m_soundInput) m_soundInput->setVolume(static_cast<float>(v / 100.0));
+    double const bounded = qBound(0.0, v, 100.0);
+    if (!qFuzzyCompare(m_rxInputLevel + 1.0, bounded + 1.0)) {
+        m_rxInputLevel = bounded;
+        if (usingLegacyBackendForTx()) {
+            m_legacyBackend->setRxInputLevel(qRound(m_rxInputLevel));
+        }
+        if (m_soundInput) m_soundInput->setInputGain(rxInputGainFromLevel(m_rxInputLevel));
         emit rxInputLevelChanged();
     }
 }
@@ -1423,7 +1459,7 @@ void DecodiumBridge::setTxOutputLevel(double v)
     m_txOutputLevel = bounded;
 
     if (usingLegacyBackendForTx()) {
-        m_legacyBackend->setTxOutputAttenuation(qRound(m_txOutputLevel));
+        m_legacyBackend->setTxOutputAttenuation(legacyTxAttenuationFromLevel(m_txOutputLevel));
     }
 
     qreal const attenuationDb = txAttenuationFromSlider(m_txOutputLevel);
@@ -1638,6 +1674,10 @@ void DecodiumBridge::setAutoSeq(bool v)
 
 void DecodiumBridge::setTxEnabled(bool v)
 {
+    if (v) {
+        clearManualTxHold(QStringLiteral("tx-enabled"));
+    }
+
     if (m_txEnabled != v) {
         m_txEnabled = v;
         emit txEnabledChanged();
@@ -1652,6 +1692,9 @@ void DecodiumBridge::setAutoCqRepeat(bool v)
 {
     if (m_autoCqRepeat != v) {
         m_autoCqRepeat = v;
+        if (m_autoCqRepeat) {
+            clearManualTxHold(QStringLiteral("autocq-enabled"));
+        }
         if (m_autoCqRepeat && !m_autoSeq) {
             // AutoCQ must always behave like legacy auto-reply mode.
             m_autoSeq = true;
@@ -1659,6 +1702,7 @@ void DecodiumBridge::setAutoCqRepeat(bool v)
             bridgeLog("setAutoCqRepeat: forcing autoSeq=true");
         }
         if (!m_autoCqRepeat) {
+            clearCallerQueue();
             clearAutoCqPartnerLock();
             clearPendingAutoLogSnapshot();
             clearLateAutoLogSnapshot();
@@ -2494,16 +2538,20 @@ void DecodiumBridge::stopTune()
 
 void DecodiumBridge::halt()
 {
+    engageManualTxHold(QStringLiteral("halt"), true);
+
     if (usingLegacyBackendForTx()) {
         bridgeLog("halt: delegating stop to legacy backend");
         m_legacyBackend->stopTransmission();
         m_legacyBackend->startTune(false);
+        setTxEnabled(false);
         syncLegacyBackendState();
         return;
     }
 
     stopTx();
     stopTune();
+    setTxEnabled(false);
 }
 
 void DecodiumBridge::refreshAudioDevices()
@@ -2564,6 +2612,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("audioOutputDevice", m_audioOutputDevice);
     s.setValue("audioInputChannel", m_audioInputChannel);
     s.setValue("audioOutputChannel", m_audioOutputChannel);
+    s.setValue("rxInputLevel", m_rxInputLevel);
     s.setValue("txOutputLevel", m_txOutputLevel);
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
@@ -2806,11 +2855,12 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
 
     if (hisCall.isEmpty()) return;
 
-    // Modalita' normale (non Quick QSO): doppio click parte SEMPRE da TX1
-    // Quick QSO: usa il TX step determinato dal parsing del messaggio
-    if (!m_quickQsoEnabled) {
-        newCurrentTx = 1;
+    if (m_autoCqRepeat) {
+        setAutoCqRepeat(false);
     }
+    clearCallerQueue();
+    clearAutoCqPartnerLock();
+    clearManualTxHold(QStringLiteral("decode-double-click"));
 
     // Nuovo QSO: resetta contatori retry/watchdog (GitHub handleDoubleClick)
     bool newQso = (hisCall.compare(m_dxCall, Qt::CaseInsensitive) != 0);
@@ -3088,6 +3138,33 @@ void DecodiumBridge::clearLateAutoLogSnapshot()
     m_lateAutoLogExpires = QDateTime {};
 }
 
+void DecodiumBridge::engageManualTxHold(const QString& reason, bool clearQueue)
+{
+    if (!m_manualTxHold) {
+        bridgeLog(QStringLiteral("manualTxHold: engaged (%1)").arg(reason));
+    }
+    m_manualTxHold = true;
+    clearAutoCqPartnerLock();
+    clearPendingAutoLogSnapshot();
+    clearLateAutoLogSnapshot();
+    m_txRetryCount = 0;
+    m_lastNtx = -1;
+    m_txWatchdogTicks = 0;
+    m_autoCQPeriodsMissed = 0;
+    if (clearQueue) {
+        clearCallerQueue();
+    }
+}
+
+void DecodiumBridge::clearManualTxHold(const QString& reason)
+{
+    if (!m_manualTxHold) {
+        return;
+    }
+    m_manualTxHold = false;
+    bridgeLog(QStringLiteral("manualTxHold: cleared (%1)").arg(reason));
+}
+
 void DecodiumBridge::clearAutoCqPartnerLock()
 {
     m_autoCqLockedCall.clear();
@@ -3115,7 +3192,7 @@ void DecodiumBridge::updateAutoCqPartnerLock()
 
 void DecodiumBridge::restoreAutoCqPartnerLock()
 {
-    if (!m_autoCqRepeat || m_autoCqLockedCall.trimmed().isEmpty()) {
+    if (m_manualTxHold || !m_autoCqRepeat || m_autoCqLockedCall.trimmed().isEmpty()) {
         return;
     }
 
@@ -3231,7 +3308,7 @@ void DecodiumBridge::advanceQsoState(int txNum)
 
 void DecodiumBridge::checkAndStartPeriodicTx()
 {
-    if (!m_monitoring || m_transmitting || m_tuning) return;
+    if (m_manualTxHold || !m_monitoring || m_transmitting || m_tuning) return;
     if (!m_txEnabled && !m_autoCqRepeat) return;
     if (m_autoCqRepeat && m_dxCall.isEmpty() && m_currentTx != 6) {
         restoreAutoCqPartnerLock();
@@ -3362,6 +3439,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     QString msg = f[4].trimmed();
     QStringList parts = msg.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     if (parts.size() < 2) return;
+    if (m_manualTxHold) return;
 
     // Estrai il mittente: TO_CALL FROM_CALL ...
     QString from;
@@ -3609,6 +3687,7 @@ void DecodiumBridge::loadSettings()
     m_audioOutputDevice = s.value("audioOutputDevice", "").toString();
     m_audioInputChannel = s.value("audioInputChannel", 0).toInt();
     m_audioOutputChannel = s.value("audioOutputChannel", 0).toInt();
+    m_rxInputLevel = qBound(0.0, s.value("rxInputLevel", 50.0).toDouble(), 100.0);
     m_txOutputLevel = qBound(0.0, s.value("txOutputLevel", 0.0).toDouble(), 450.0);
     m_nfa      = s.value("nfa", 200).toInt();
     m_nfb      = s.value("nfb", 4000).toInt();
@@ -3759,7 +3838,7 @@ void DecodiumBridge::saveWindowState(const QString& key,
 
 QString DecodiumBridge::version() const
 {
-    return "3.0.0";
+    return QStringLiteral(FORK_RELEASE_VERSION);
 }
 
 QString DecodiumBridge::effectiveAdifLogPath() const
@@ -4767,7 +4846,7 @@ void DecodiumBridge::startAudioCapture()
               " channel=" + QString::number((int)channel) +
               " dsf=" + QString::number(downSampleFactor));
     m_soundInput->start(selectedDevice, 4096, m_audioSink, downSampleFactor, channel);
-    m_soundInput->setVolume(static_cast<float>(m_rxInputLevel / 100.0));
+    m_soundInput->setInputGain(rxInputGainFromLevel(m_rxInputLevel));
 
     emit statusMessage("Audio capture avviato: " + selectedDevice.description());
 
@@ -5189,6 +5268,10 @@ void DecodiumBridge::enumerateAudioDevices()
 // Chiamato dopo QSO completato in multi-answer mode
 void DecodiumBridge::processNextInQueue()
 {
+    if (m_manualTxHold) {
+        return;
+    }
+
     while (!m_callerQueue.isEmpty()) {
         QString entry = m_callerQueue.takeFirst();
         emit callerQueueChanged();

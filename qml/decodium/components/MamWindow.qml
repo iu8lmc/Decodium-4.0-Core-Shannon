@@ -28,7 +28,7 @@ Dialog {
         positionInitialized = true
     }
 
-    onOpened: ensureInitialPosition()
+    onAboutToShow: ensureInitialPosition()
 
     // Colors
     property color bgDeep: bridge.themeManager.bgDeep

@@ -1421,9 +1421,17 @@ link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx wsjt_fort)
 # decodium_qml: lightweight QML-based frontend (uses DecodiumBridge)
 # -----------------------------------------------------------------------
 if (WIN32)
-  set (DECODIUM_QML_ICON_RC decodium_qml.rc)
+  generate_version_info (decodium_qml_VERSION_RESOURCES
+    NAME decodium
+    BUNDLE ${PROJECT_BUNDLE_NAME}
+    ICON ${WSJTX_ICON_FILE}
+    PRODUCT_VERSION_MAJOR ${FORK_RELEASE_VERSION_MAJOR}
+    PRODUCT_VERSION_MINOR ${FORK_RELEASE_VERSION_MINOR}
+    PRODUCT_VERSION_PATCH ${FORK_RELEASE_VERSION_PATCH}
+    PRODUCT_VERSION_TWEAK 0
+    )
 else ()
-  set (DECODIUM_QML_ICON_RC "")
+  set (decodium_qml_VERSION_RESOURCES "")
 endif ()
 set (DECODIUM_QML_LEGACY_SRCS
   DecodiumLogging.cpp
@@ -1543,7 +1551,7 @@ add_executable (decodium_qml
   ${DECODIUM_QML_LEGACY_SRCS}
   ${wsjtx_GENUISRCS}
   ${wsjtx_RESOURCES_RCC}
-  ${DECODIUM_QML_ICON_RC}
+  ${decodium_qml_VERSION_RESOURCES}
 )
 if (WSJT_CREATE_WINMAIN)
   set_target_properties (decodium_qml PROPERTIES WIN32_EXECUTABLE ON)

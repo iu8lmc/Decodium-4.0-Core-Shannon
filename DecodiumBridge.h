@@ -905,6 +905,8 @@ private:
     void clearPendingAutoLogSnapshot();
     void armLateAutoLogSnapshot();
     void clearLateAutoLogSnapshot();
+    void engageManualTxHold(const QString& reason, bool clearQueue = false);
+    void clearManualTxHold(const QString& reason);
     void clearAutoCqPartnerLock();
     void updateAutoCqPartnerLock();
     void restoreAutoCqPartnerLock();
@@ -945,6 +947,7 @@ private:
     bool m_multiAnswerMode {false};
     bool m_autoSeq          {true};
     bool m_txEnabled        {false};
+    bool m_manualTxHold     {false};
     bool m_autoCqRepeat     {false};
     bool m_avgDecodeEnabled {false};
     int  m_txPeriod         {0};   // 0=even periods, 1=odd periods

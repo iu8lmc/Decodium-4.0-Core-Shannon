@@ -37,7 +37,13 @@ public:
   Q_SLOT void resume ();
   Q_SLOT void stop ();
   Q_SLOT void reset (bool report_dropped_frames);
-  void setVolume (float v) { if (m_stream) m_stream->setVolume (qBound (0.0f, v, 1.0f)); }
+  void setInputGain (float gain)
+  {
+    m_inputGain = qMax (0.0f, gain);
+    if (m_sink) m_sink->setInputGainLinear (m_inputGain);
+    if (m_stream) m_stream->setVolume (1.0f);
+  }
+  float inputGain () const { return m_inputGain; }
 
   Q_SIGNAL void error (QString message) const;
   Q_SIGNAL void status (QString message) const;
@@ -51,6 +57,7 @@ private:
   QScopedPointer<QAudioSource> m_stream;
   QPointer<AudioDevice> m_sink;
   qint64 cummulative_lost_usec_;
+  float m_inputGain {1.0f};
 };
 
 #endif

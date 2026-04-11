@@ -175,6 +175,7 @@ public:
   QString legacyAudioOutputDeviceName() const;
   int legacyAudioInputChannel() const;
   int legacyAudioOutputChannel() const;
+  int legacyRxInputLevel() const;
   QString legacyWaterfallPalette() const;
   bool legacyMonitoring() const;
   bool legacyTransmitting() const;
@@ -202,6 +203,7 @@ public:
   void legacySetAudioOutputDeviceName(QString const& name);
   void legacySetAudioInputChannel(int channel);
   void legacySetAudioOutputChannel(int channel);
+  void legacySetRxInputLevel(int value);
   void legacySetTxOutputAttenuation(int value);
   void legacySetDxCall(QString const& call);
   void legacySetDxGrid(QString const& grid);
@@ -819,6 +821,7 @@ private:
   Detector * m_detector;
   unsigned m_FFTSize;
   SoundInput * m_soundInput;
+  int m_legacyRxInputLevel {50};
   Modulator * m_modulator;
   SoundOutput * m_soundOutput;
   int m_rx_audio_buffer_frames;

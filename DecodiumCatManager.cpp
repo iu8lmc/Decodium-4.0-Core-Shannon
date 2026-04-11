@@ -3,6 +3,53 @@
 #include <QSerialPortInfo>
 #include <QSettings>
 
+namespace
+{
+QString normalizedRigName(QString const& rigName)
+{
+    QString normalized = rigName.trimmed().toUpper();
+    normalized.remove(' ');
+    return normalized;
+}
+
+bool isYaesuRig(QString const& rigName)
+{
+    QString const normalized = normalizedRigName(rigName);
+    return normalized.contains(QStringLiteral("YAESU"))
+        || normalized.contains(QStringLiteral("FT-"))
+        || normalized.contains(QStringLiteral("FT"));
+}
+
+bool supportsYaesuDataPtt(QString const& rigName)
+{
+    QString const normalized = normalizedRigName(rigName);
+    return normalized.contains(QStringLiteral("FT991"))
+        || normalized.contains(QStringLiteral("FTDX10"))
+        || normalized.contains(QStringLiteral("FTDX101"));
+}
+
+bool isLikelyDataMode(QString const& mode)
+{
+    QString const normalized = mode.trimmed().toUpper();
+    return normalized.contains(QStringLiteral("DATA"))
+        || normalized.contains(QStringLiteral("DIG"))
+        || normalized.contains(QStringLiteral("PKT"))
+        || normalized.contains(QStringLiteral("RTTY"));
+}
+
+QByteArray nativePttOnCommand(QString const& rigName, QString const& mode)
+{
+    if (isYaesuRig(rigName)) {
+        if (supportsYaesuDataPtt(rigName) && isLikelyDataMode(mode)) {
+            return QByteArrayLiteral("TX1;");
+        }
+        return QByteArrayLiteral("TX;");
+    }
+
+    return QByteArrayLiteral("TX;");
+}
+}
+
 // --- rigList ---
 
 QStringList DecodiumCatManager::rigList() const
@@ -170,8 +217,8 @@ void DecodiumCatManager::processResponse(const QByteArray& resp)
         }
     }
     // MD<1 char>; — modo
-    else if (resp.startsWith("MD") && resp.length() == 4) {
-        QString newMode = parseMode(resp.at(2));
+    else if (resp.startsWith("MD") && resp.length() >= 4 && resp.endsWith(';')) {
+        QString newMode = parseMode(resp.at(resp.length() - 2));
         if (newMode != m_mode) {
             m_mode = newMode;
             emit modeChanged();
@@ -189,9 +236,14 @@ QString DecodiumCatManager::parseMode(char code)
     case '3': return "CW";
     case '4': return "FM";
     case '5': return "AM";
-    case '6': return "FSK";
+    case '6': return "RTTY-L";
     case '7': return "CW-R";
-    case '9': return "FSK-R";
+    case '8': return "DATA-L";
+    case '9': return "RTTY-U";
+    case 'A': return "DATA-FM";
+    case 'B': return "FM-N";
+    case 'C': return "DATA-U";
+    case 'D': return "AM-N";
     default:  return "---";
     }
 }
@@ -239,12 +291,13 @@ void DecodiumCatManager::setRigPtt(bool on)
     if (m_pttMethod == "CAT") {
         catLog(m_connected ? "CAT: m_connected=true, invio TX/RX" : "CAT: m_connected=false, skip");
         if (!m_connected) return;
-        QByteArray cmd = on ? "TX1;" : "RX;";  // TX1 = data input (USB audio), non MIC
+        QByteArray const cmd = on ? nativePttOnCommand(m_rigName, m_mode)
+                                  : QByteArrayLiteral("RX;");
         bool written = (m_serial && m_serial->isOpen()) ? (m_serial->write(cmd) > 0) : false;
         if (m_serial)
             m_serial->flush();
         catLog(written ? "TX/RX scritto OK" : "ERRORE scrittura seriale");
-        emit statusUpdate("CAT PTT: " + QString(cmd));
+        emit statusUpdate("CAT PTT: " + QString::fromLatin1(cmd));
     } else if (m_pttMethod == "DTR" && m_serial && m_serial->isOpen()) {
         // DTR/RTS funzionano appena la porta è aperta (no handshake necessario)
         m_serial->setDataTerminalReady(on);

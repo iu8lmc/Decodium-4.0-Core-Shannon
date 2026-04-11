@@ -417,6 +417,11 @@ int DecodiumLegacyBackend::audioOutputChannel() const
     return m_mainWindow ? m_mainWindow->legacyAudioOutputChannel() : 0;
 }
 
+int DecodiumLegacyBackend::rxInputLevel() const
+{
+    return m_mainWindow ? m_mainWindow->legacyRxInputLevel() : 50;
+}
+
 QString DecodiumLegacyBackend::waterfallPalette() const
 {
     return m_mainWindow ? m_mainWindow->legacyWaterfallPalette() : QString {};
@@ -582,6 +587,13 @@ void DecodiumLegacyBackend::setAudioOutputChannel(int channel)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetAudioOutputChannel(channel);
+    }
+}
+
+void DecodiumLegacyBackend::setRxInputLevel(int value)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetRxInputLevel(value);
     }
 }
 

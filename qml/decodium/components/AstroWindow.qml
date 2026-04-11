@@ -38,7 +38,7 @@ Dialog {
         return text.length > 0 ? text : (placeholder || "---")
     }
 
-    onOpened: {
+    onAboutToShow: {
         ensureInitialPosition()
         if (astroWindow.astroManager && bridge.grid) {
             astroWindow.astroManager.setLocationFromGrid(bridge.grid)

@@ -94,6 +94,9 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
       return;
     }
 
+  m_sink->setInputGainLinear (m_inputGain);
+  m_stream->setVolume (1.0f);
+
   connect (m_stream.data(), &QAudioSource::stateChanged, this, &SoundInput::handleStateChanged);
   // Note: QAudioSource::notify() was removed in Qt6; no periodic notification needed.
 

@@ -3796,6 +3796,11 @@ int MainWindow::legacyAudioOutputChannel() const
   return static_cast<int> (m_config.audio_output_channel ());
 }
 
+int MainWindow::legacyRxInputLevel() const
+{
+  return m_legacyRxInputLevel;
+}
+
 QString MainWindow::legacyWaterfallPalette() const
 {
   if (m_wideGraph)
@@ -3997,6 +4002,30 @@ void MainWindow::legacySetAudioOutputChannel(int channel)
 {
   m_config.set_audio_output_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 3)));
   restartConfiguredAudioStreams (m_monitoring);
+}
+
+void MainWindow::legacySetRxInputLevel(int value)
+{
+  int const bounded = qBound (0, value, 100);
+  if (m_legacyRxInputLevel == bounded) {
+    return;
+  }
+
+  m_legacyRxInputLevel = bounded;
+  float const inputGain = bounded <= 50
+      ? static_cast<float> (bounded / 50.0)
+      : static_cast<float> (1.0 + ((bounded - 50.0) / 50.0) * 3.0);
+  m_inGain = 0;
+  if (m_detector) {
+    m_detector->setInputGainLinear (inputGain);
+  }
+  if (m_soundInput) {
+    QMetaObject::invokeMethod (m_soundInput, [this, inputGain] {
+      if (m_soundInput) {
+        m_soundInput->setInputGain (inputGain);
+      }
+    }, Qt::QueuedConnection);
+  }
 }
 
 void MainWindow::legacySetTxOutputAttenuation(int value)

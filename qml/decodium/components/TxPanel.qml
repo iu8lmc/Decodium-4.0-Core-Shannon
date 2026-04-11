@@ -419,7 +419,16 @@ Item {
                                 checkable: true
                                 checked: engine ? engine.txEnabled : false
                                 padding: 0
-                                onCheckedChanged: if (engine) engine.txEnabled = checked
+                                onClicked: {
+                                    if (!engine) {
+                                        return
+                                    }
+                                    if (checked) {
+                                        engine.txEnabled = true
+                                    } else {
+                                        engine.halt()
+                                    }
+                                }
                                 background: Rectangle { color: "transparent" }
                                 contentItem: ToolbarButtonContent {
                                     label: "TX"

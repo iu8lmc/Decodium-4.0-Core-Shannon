@@ -11,6 +11,8 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QVector>
+#include <cmath>
+#include <limits>
 
 // --- WavManager — registrazione audio WAV 16-bit mono a 12 kHz ---
 class WavManager : public QObject
@@ -304,6 +306,8 @@ public:
         int     index;
         QString lambda;
         QString name;
+        double  lowerBoundHz;
+        double  upperBoundHz;
         double  ft8Freq;   // FT8 standard (Hz)
         double  ft2Freq;   // FT2 standard (Hz)
         double  ft4Freq;   // FT4 standard (Hz)
@@ -313,20 +317,20 @@ public:
     {
         // ft8Freq, ft2Freq, ft4Freq  (0 = usa ft8Freq come fallback)
         m_bands = {
-            {  3, "160M", "1.8 MHz",   1840000.0,  1843000.0,        0.0  },
-            {  4, "80M",  "3.5 MHz",   3573000.0,  3568000.0,  3575000.0  },
-            {  5, "60M",  "5 MHz",     5357000.0,  5360000.0,        0.0  },
-            {  6, "40M",  "7 MHz",     7074000.0,  7052000.0,  7047500.0  },
-            {  7, "30M",  "10 MHz",   10136000.0, 10144000.0, 10140000.0  },
-            {  8, "20M",  "14 MHz",   14074000.0, 14084000.0, 14080000.0  },
-            {  9, "17M",  "18 MHz",   18100000.0, 18108000.0, 18104000.0  },
-            { 10, "15M",  "21 MHz",   21074000.0, 21144000.0, 21140000.0  },
-            { 11, "12M",  "24 MHz",   24915000.0, 24923000.0, 24919000.0  },
-            { 12, "10M",  "28 MHz",   28074000.0, 28184000.0, 28180000.0  },
-            { 14, "6M",   "50 MHz",   50313000.0, 50313000.0, 50318000.0  },
-            { 16, "4M",   "70 MHz",   70154000.0, 70154000.0,       0.0   },
-            { 17, "2M",   "144 MHz", 144174000.0,144174000.0,       0.0   },
-            { 19, "70CM", "432 MHz", 432174000.0,432174000.0,       0.0   },
+            {  3, "160M", "1.8 MHz",    1800000.0,   2000000.0,   1840000.0,   1843000.0,        0.0  },
+            {  4, "80M",  "3.5 MHz",    3500000.0,   4000000.0,   3573000.0,   3568000.0,  3575000.0  },
+            {  5, "60M",  "5 MHz",      5060000.0,   5450000.0,   5357000.0,   5360000.0,        0.0  },
+            {  6, "40M",  "7 MHz",      7000000.0,   7300000.0,   7074000.0,   7052000.0,  7047500.0  },
+            {  7, "30M",  "10 MHz",    10100000.0,  10150000.0,  10136000.0,  10144000.0, 10140000.0  },
+            {  8, "20M",  "14 MHz",    14000000.0,  14350000.0,  14074000.0,  14084000.0, 14080000.0  },
+            {  9, "17M",  "18 MHz",    18068000.0,  18168000.0,  18100000.0,  18108000.0, 18104000.0  },
+            { 10, "15M",  "21 MHz",    21000000.0,  21450000.0,  21074000.0,  21144000.0, 21140000.0  },
+            { 11, "12M",  "24 MHz",    24890000.0,  24990000.0,  24915000.0,  24923000.0, 24919000.0  },
+            { 12, "10M",  "28 MHz",    28000000.0,  29700000.0,  28074000.0,  28184000.0, 28180000.0  },
+            { 14, "6M",   "50 MHz",    50000000.0,  54000000.0,  50313000.0,  50313000.0, 50318000.0  },
+            { 16, "4M",   "70 MHz",    70000000.0,  71000000.0,  70154000.0,  70154000.0,       0.0   },
+            { 17, "2M",   "144 MHz",  144000000.0, 148000000.0, 144174000.0, 144174000.0,       0.0   },
+            { 19, "70CM", "432 MHz",  420000000.0, 450000000.0, 432174000.0, 432174000.0,       0.0   },
         };
     }
 
@@ -368,7 +372,20 @@ public:
     // Chiamato dalla bridge quando la frequenza CAT cambia
     void updateFromFrequency(double freqHz)
     {
-        double bestDelta = 1e18;
+        if (freqHz <= 0.0) return;
+
+        for (const Band& b : m_bands) {
+            if (b.lowerBoundHz <= freqHz && freqHz <= b.upperBoundHz) {
+                if (b.index != m_currentIndex || !qFuzzyCompare(m_dialFreq + 1.0, freqHz + 1.0)) {
+                    m_currentIndex = b.index;
+                    m_dialFreq = freqHz;
+                    emit currentBandChanged();
+                }
+                return;
+            }
+        }
+
+        double bestDelta = std::numeric_limits<double>::max();
         int    bestIndex = m_currentIndex;
         for (const Band& b : m_bands) {
             double delta = std::abs(b.ft8Freq - freqHz);

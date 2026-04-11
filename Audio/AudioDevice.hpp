@@ -2,6 +2,7 @@
 #define AUDIODEVICE_HPP__
 
 #include <QIODevice>
+#include <QtGlobal>
 
 class QDataStream;
 
@@ -31,6 +32,8 @@ public:
   size_t bytesPerFrame () const {return sizeof (qint16) * (Mono == m_channel ? 1 : 2);}
 
   Channel channel () const {return m_channel;}
+  void setInputGainLinear (float gain) {m_inputGainLinear = qMax (0.0f, gain);}
+  float inputGainLinear () const {return m_inputGainLinear;}
 
 protected:
   AudioDevice (QObject * parent = nullptr)
@@ -40,24 +43,33 @@ protected:
 
   void store (char const * source, size_t numFrames, qint16 * dest)
   {
+    auto apply_input_gain = [this] (qint16 sample) {
+      if (m_inputGainLinear == 1.0f)
+        {
+          return sample;
+        }
+      return static_cast<qint16> (qBound (-32768,
+                                          qRound (static_cast<float> (sample) * m_inputGainLinear),
+                                          32767));
+    };
     qint16 const * begin (reinterpret_cast<qint16 const *> (source));
     for ( qint16 const * i = begin; i != begin + numFrames * (bytesPerFrame () / sizeof (qint16)); i += bytesPerFrame () / sizeof (qint16))
       {
         switch (m_channel)
           {
           case Mono:
-            *dest++ = *i;
+            *dest++ = apply_input_gain (*i);
             break;
 
           case Right:
-            *dest++ = *(i + 1);
+            *dest++ = apply_input_gain (*(i + 1));
             break;
 
           case Both:    // should be able to happen but if it
             // does we'll take left
             Q_ASSERT (Both == m_channel);
           case Left:
-            *dest++ = *i;
+            *dest++ = apply_input_gain (*i);
             break;
           }
       }
@@ -91,6 +103,7 @@ protected:
 
 private:
   Channel m_channel;
+  float m_inputGainLinear {1.0f};
 };
 
 Q_DECLARE_METATYPE (AudioDevice::Channel);

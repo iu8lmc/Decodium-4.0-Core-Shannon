@@ -30,7 +30,7 @@ Dialog {
         positionInitialized = true
     }
 
-    onOpened: {
+    onAboutToShow: {
         ensureInitialPosition()
         loadSettings()
     }
