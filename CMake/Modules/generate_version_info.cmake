@@ -42,6 +42,7 @@ function(generate_version_info outfiles)
     NAME
     BUNDLE
     ICON
+    MANIFEST
     VERSION_MAJOR
     VERSION_MINOR
     VERSION_PATCH
@@ -65,6 +66,20 @@ function(generate_version_info outfiles)
 
   if (NOT PRODUCT_ICON)
     set (PRODUCT_ICON "${CMAKE_SOURCE_DIR}/icons/windows-icons/${PRODUCT_NAME}.ico")
+  endif ()
+
+  if (NOT PRODUCT_MANIFEST)
+    set (_DefaultManifest "${CMAKE_SOURCE_DIR}/wsjtx.manifest")
+    if (EXISTS "${_DefaultManifest}")
+      set (PRODUCT_MANIFEST "${_DefaultManifest}")
+    endif ()
+  endif ()
+
+  if (PRODUCT_MANIFEST)
+    file (TO_CMAKE_PATH "${PRODUCT_MANIFEST}" PRODUCT_MANIFEST)
+    set (PRODUCT_MANIFEST_LINE "1 24 \"${PRODUCT_MANIFEST}\"")
+  else ()
+    set (PRODUCT_MANIFEST_LINE "")
   endif ()
 
   if (NOT PRODUCT_VERSION_MAJOR)
