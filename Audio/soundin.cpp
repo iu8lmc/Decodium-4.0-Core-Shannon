@@ -56,8 +56,6 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
 {
   Q_ASSERT (sink);
 
-  stop ();
-
   m_sink = sink;
 
   // Qt6: QAudioFormat setup — no codec/sampleType/sampleSize/byteOrder
@@ -79,6 +77,23 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
     }
   }
 
+  if (m_stream
+      && m_sink == sink
+      && m_deviceDescription == device.description()
+      && m_sampleRate == format.sampleRate()
+      && m_channelCount == format.channelCount()
+      && m_channelSelector == static_cast<int>(channel))
+    {
+      qDebug() << "SoundInput: start skipped, stream already active for"
+               << m_deviceDescription
+               << "rate=" << m_sampleRate
+               << "channels=" << m_channelCount;
+      m_sink->setInputGainLinear (m_inputGain);
+      return;
+    }
+
+  stop ();
+
   qDebug() << "SoundInput::start ch=" << format.channelCount() << "rate=" << format.sampleRate() << "dev=" << device.description();
   if (!device.isFormatSupported (format))
     {
@@ -96,6 +111,10 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
 
   m_sink->setInputGainLinear (m_inputGain);
   m_stream->setVolume (1.0f);
+  m_deviceDescription = device.description();
+  m_sampleRate = format.sampleRate();
+  m_channelCount = format.channelCount();
+  m_channelSelector = static_cast<int>(channel);
 
   connect (m_stream.data(), &QAudioSource::stateChanged, this, &SoundInput::handleStateChanged);
   // Note: QAudioSource::notify() was removed in Qt6; no periodic notification needed.
@@ -204,6 +223,10 @@ void SoundInput::stop()
       m_stream->stop ();
     }
   m_stream.reset ();
+  m_deviceDescription.clear ();
+  m_sampleRate = 0;
+  m_channelCount = 0;
+  m_channelSelector = static_cast<int>(AudioDevice::Mono);
 }
 
 SoundInput::~SoundInput ()

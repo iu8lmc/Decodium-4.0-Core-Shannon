@@ -4,7 +4,6 @@
 #include <QRadioButton>
 #include <QButtonGroup>
 #include <QObject>
-#include <QMessageBox>
 #include <QInputDialog>
 #include <QCloseEvent>
 #include <QTimer>
@@ -21,6 +20,7 @@
 #include "commons.h"
 #include "SettingsGroup.hpp"
 #include "Configuration.hpp"
+#include "MessageBox.hpp"
 #include "qt_helpers.hpp"
 #include "QSYMessageCreator.h"
 #include "ui_QSYMessageCreator.h"
@@ -769,10 +769,11 @@ void QSYMessageCreator::onkHzBox3ValueChanged()
 void QSYMessageCreator::setup()
 {
   if (configuration_->region() == 0) {
-    QMessageBox *regionWarning = new QMessageBox(this);
+    MessageBox *regionWarning = new MessageBox(MessageBox::Warning,
+                                               tr("You need to enter your IARU Region\nin Settings or FM frequencies\nwill not be shown!"),
+                                               MessageBox::Ok,
+                                               this);
     regionWarning->setModal(false);
-    regionWarning->setIcon(QMessageBox::Warning);
-    regionWarning->setText("You need to enter your IARU Region\nin Settings or FM frequencies\nwill not be shown!");
     regionWarning->setWindowFlags(regionWarning->windowFlags() | Qt::WindowStaysOnTopHint);
     regionWarning->show();
   } else if (configuration_->region() == 2) {

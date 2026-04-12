@@ -22,6 +22,22 @@
 
 namespace
 {
+#if defined (WIN32)
+  QString hamlib_windows_port_path (QString const& port)
+  {
+    auto const trimmed = port.trimmed ();
+    if (trimmed.isEmpty ())
+      {
+        return trimmed;
+      }
+    if (trimmed.startsWith (QStringLiteral ("\\\\.\\")))
+      {
+        return trimmed;
+      }
+    return QStringLiteral ("\\\\.\\") + trimmed;
+  }
+#endif
+
   // Unfortunately bandwidth is conflated  with mode, this is probably
   // because Icom do  the same. So we have to  care about bandwidth if
   // we want  to set  mode otherwise we  will end up  setting unwanted
@@ -503,7 +519,12 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
         case RIG_PORT_SERIAL:
           if (!params.serial_port.isEmpty ())
             {
+#if defined (WIN32)
+              auto const serial_path = hamlib_windows_port_path (params.serial_port);
+              m_->set_conf ("rig_pathname", serial_path.toLatin1 ().data ());
+#else
               m_->set_conf ("rig_pathname", params.serial_port.toLatin1 ().data ());
+#endif
             }
           m_->set_conf ("serial_speed", QByteArray::number (params.baud).data ());
           if (params.data_bits != TransceiverFactory::default_data_bits)

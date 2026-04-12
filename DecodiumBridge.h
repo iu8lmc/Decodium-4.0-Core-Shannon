@@ -74,6 +74,7 @@ class DecodiumBridge : public QObject
     // === AUDIO LEVELS ===
     Q_PROPERTY(double audioLevel READ audioLevel NOTIFY audioLevelChanged)
     Q_PROPERTY(double sMeter READ sMeter NOTIFY sMeterChanged)
+    Q_PROPERTY(bool legacyBackendActive READ legacyBackendActive CONSTANT)
     Q_PROPERTY(double rxInputLevel READ rxInputLevel WRITE setRxInputLevel NOTIFY rxInputLevelChanged)
     Q_PROPERTY(double txOutputLevel READ txOutputLevel WRITE setTxOutputLevel NOTIFY txOutputLevelChanged)
     Q_PROPERTY(QStringList audioInputDevices READ audioInputDevices NOTIFY audioInputDevicesChanged)
@@ -302,6 +303,7 @@ public:
     // Audio levels
     double audioLevel() const;
     double sMeter() const;
+    bool legacyBackendActive() const { return usingLegacyBackendForTx(); }
     double rxInputLevel() const { return m_rxInputLevel; }
     void setRxInputLevel(double v);
     double txOutputLevel() const { return m_txOutputLevel; }
@@ -1197,9 +1199,13 @@ private:
     QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
     void initTxDevices();
     QString buildCurrentTxMessage() const;
+    bool legacyBackendAvailable() const;
+    bool ensureLegacyBackendAvailable();
     bool usingLegacyBackendForTx() const;
+    void syncLegacyBackendDialogState();
     void syncLegacyBackendTxState();
     void syncLegacyBackendState();
+    void reloadBridgeSettingsFromPersistentStore();
     void syncLegacyBackendDecodeList();
     QVariantList mirrorLegacyDecodeLines(QStringList const& lines, bool rxPane) const;
     void genStdMsgs(const QString& hisCall, const QString& hisGrid);

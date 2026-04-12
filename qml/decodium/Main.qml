@@ -196,18 +196,6 @@ ApplicationWindow {
         qsyDialogLoader.item.open()
     }
 
-    property var legacySetupSections: [
-        { title: "Generale",   tabIndex: 0, description: "Stazione, display e comportamento" },
-        { title: "Radio",      tabIndex: 1, description: "CAT, PTT e parametri radio" },
-        { title: "Audio",      tabIndex: 2, description: "Schede audio, canali e livelli" },
-        { title: "Macro TX",   tabIndex: 3, description: "Messaggi predefiniti e testo libero" },
-        { title: "Reporting",  tabIndex: 4, description: "PSK Reporter, logging e servizi" },
-        { title: "Frequenze",  tabIndex: 5, description: "Bande, frequenze e allocazioni" },
-        { title: "Colori",     tabIndex: 6, description: "Highlight, palette e aspetto decode" },
-        { title: "Avanzate",   tabIndex: 7, description: "Opzioni estese e comportamento avanzato" },
-        { title: "Allarmi",    tabIndex: 8, description: "Alert, notifiche e suoni" },
-        { title: "Filtri",     tabIndex: 9, description: "Whitelist, blacklist e filtri decode" }
-    ]
     property string rigErrorDialogTitle: ""
     property string rigErrorSummary: ""
     property string rigErrorDetails: ""
@@ -216,13 +204,6 @@ ApplicationWindow {
     property string warningDialogSummary: ""
     property string warningDialogDetails: ""
     property bool warningDialogDetailsVisible: false
-
-    function openSetupMenu(anchorItem) {
-        const point = anchorItem.mapToItem(Overlay.overlay, 0, anchorItem.height + 8)
-        setupMenuPopup.x = Math.max(16, Math.min(point.x, mainWindow.width - setupMenuPopup.width - 16))
-        setupMenuPopup.y = Math.max(16, point.y)
-        setupMenuPopup.open()
-    }
 
     // WAV file open dialog - single file
     FileDialog {
@@ -1191,8 +1172,19 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 14
                                         from: 0; to: 100; live: true; stepSize: 1
-                                        onMoved: bridge.rxInputLevel = value
-                                        Binding on value { value: bridge.rxInputLevel; when: !rxSliderHeader.pressed }
+                                        Component.onCompleted: if (bridge) value = bridge.rxInputLevel
+                                        onMoved: if (bridge) bridge.rxInputLevel = value
+                                        onPressedChanged: {
+                                            if (!pressed && bridge && Math.abs(bridge.rxInputLevel - value) >= 0.5)
+                                                bridge.rxInputLevel = value
+                                        }
+                                        Connections {
+                                            target: bridge
+                                            function onRxInputLevelChanged() {
+                                                if (!rxSliderHeader.pressed && Math.abs(rxSliderHeader.value - bridge.rxInputLevel) >= 0.5)
+                                                    rxSliderHeader.value = bridge.rxInputLevel
+                                            }
+                                        }
                                         background: Rectangle {
                                             x: rxSliderHeader.leftPadding; y: rxSliderHeader.topPadding + rxSliderHeader.availableHeight / 2 - height / 2
                                             width: rxSliderHeader.availableWidth; height: 3; radius: 1; color: bgMedium
@@ -1458,7 +1450,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: openSetupMenu(settingsButton)
+                                onClicked: bridge.openSetupSettings()
                             }
 
                             ToolTip.visible: settingsMA.containsMouse
@@ -4135,191 +4127,6 @@ ApplicationWindow {
         }
     }
 
-    // Settings Dialog
-    SettingsDialog {
-        id: settingsDialog
-    }
-
-    Popup {
-        id: setupMenuPopup
-        parent: Overlay.overlay
-        width: 520
-        modal: false
-        focus: true
-        padding: 0
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-        background: Rectangle {
-            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
-            border.color: secondaryCyan
-            border.width: 1
-            radius: 14
-        }
-
-        contentItem: ColumnLayout {
-            spacing: 0
-
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 56
-                Layout.preferredHeight: implicitHeight
-                color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.95)
-                radius: 14
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 18
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Setup"
-                    font.pixelSize: 18
-                    font.bold: true
-                    color: secondaryCyan
-                }
-
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 18
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Preferenze Decodium 3"
-                    font.pixelSize: 11
-                    color: textSecondary
-                }
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 14
-                Layout.rightMargin: 14
-                Layout.topMargin: 14
-                Layout.bottomMargin: 14
-                columns: 2
-                rowSpacing: 10
-                columnSpacing: 10
-
-                Repeater {
-                    model: legacySetupSections
-
-                    delegate: Button {
-                        id: setupEntryButton
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 58
-
-                        contentItem: Column {
-                            spacing: 2
-                            anchors.centerIn: parent
-
-                            Text {
-                                text: modelData.title
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: textPrimary
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-
-                            Text {
-                                text: modelData.description
-                                font.pixelSize: 10
-                                color: textSecondary
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-                        }
-
-                        background: Rectangle {
-                            color: setupEntryButton.down
-                                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.26)
-                                   : (setupEntryButton.hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.16)
-                                                     : Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.92))
-                            border.color: setupEntryButton.hovered ? secondaryCyan : glassBorder
-                            border.width: 1
-                            radius: 10
-                        }
-
-                        onClicked: {
-                            setupMenuPopup.close()
-                            bridge.openSetupSettings(modelData.tabIndex)
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 1
-                Layout.preferredHeight: implicitHeight
-                color: glassBorder
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                color: "transparent"
-                implicitHeight: 48
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    spacing: 12
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Il setup storico resta disponibile completo. Time Sync / NTP apre il pannello legacy con server, sync immediato e diagnostica."
-                        font.pixelSize: 11
-                        color: textSecondary
-                        wrapMode: Text.WordWrap
-                    }
-
-                    Button {
-                        text: "Apri Generale"
-                        onClicked: {
-                            setupMenuPopup.close()
-                            bridge.openSetupSettings(0)
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: secondaryCyan
-                            font.pixelSize: 12
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.14)
-                            border.color: secondaryCyan
-                            border.width: 1
-                            radius: 8
-                        }
-                    }
-
-                    Button {
-                        text: "Time Sync / NTP"
-                        onClicked: {
-                            setupMenuPopup.close()
-                            bridge.openTimeSyncSettings()
-                        }
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: warningOrange
-                            font.pixelSize: 12
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.12)
-                            border.color: warningOrange
-                            border.width: 1
-                            radius: 8
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     Dialog {
         id: rigErrorDialog
         modal: true
@@ -4590,9 +4397,6 @@ ApplicationWindow {
             warningDialogDetails = details
             warningDialogDetailsVisible = false
             warningDialog.open()
-        }
-        function onSetupSettingsRequested(tabIndex) {
-            settingsDialog.openTab(tabIndex)
         }
         function onTimeSyncSettingsRequested() {
             timeSyncPanelVisible = true

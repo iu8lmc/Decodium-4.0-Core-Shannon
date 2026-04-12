@@ -1,5 +1,7 @@
 build/
 build-mac/
+build-codex-check/
+build-win-mingw/
 .DS_Store
 ~*
 TAGS
@@ -26,6 +28,7 @@ CMakeFiles/
 # Distribution directories
 dist_32bit/
 dist_64bit/
+release-*/
 Decodium3_FT2_x64/
 Decodium_3.0_*/
 docker-output/
@@ -104,6 +107,7 @@ appverifUI.dll
 decodium_common_blocks.c
 decodium_fortran_stubs.cpp
 decodium_qml.rc
+libhamlib-4.def
 
 # Temporary scripts
 sign_all.bat

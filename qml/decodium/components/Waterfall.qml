@@ -74,7 +74,7 @@ Item {
                 // Auto Range
                 CheckBox {
                     id: autoRangeCheck
-                    checked: true
+                    checked: !(bridge && bridge.legacyBackendActive)
                     onCheckedChanged: waterfallDisplay.autoRange = checked
                     ToolTip.text: "Auto noise floor (IIR)"
                     ToolTip.visible: autoRangeCheck.hovered
@@ -215,7 +215,7 @@ Item {
             spectrumHeight: waterfallPanel.spectrumHeight
             // Carica valori da Settings al primo avvio
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
-            autoRange:      true
+            autoRange:      autoRangeCheck.checked
             peakHold:       true
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
 

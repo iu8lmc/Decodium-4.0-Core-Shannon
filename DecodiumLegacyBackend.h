@@ -59,6 +59,7 @@ public:
     void setAutoCq(bool enabled);
     void setRxFrequency(int frequencyHz);
     void setTxFrequency(int frequencyHz);
+    void setRigPtt(bool enabled);
     void setAudioInputDeviceName(const QString& name);
     void setAudioOutputDeviceName(const QString& name);
     void setAudioInputChannel(int channel);
