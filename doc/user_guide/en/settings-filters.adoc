@@ -1,0 +1,50 @@
+Filters provide a way to limit what is displayed in the *Band Activity*
+window. Define desired filtering categories using entry fields and
+checkboxes on the *Filters* tab. You can turn many filters on or off
+by checking lines on the main-window <<FILTERS_MENU,*Filters*>>
+menu.
+
+image::filters1.png[align="center",alt="Filters"]
+
+You can specify up to four territories for which hiding messages can
+be switched on or off using options on the main window *Filters* menu.
+You can hide messages from a specific continent, or stations worked
+before on a band. There are entry fields for a *Blacklist*, a
+*Whitelist*, and an *Always Pass* list, and these can be used in
+combination. *Blacklist* might be used to suppress decodes from pirate
+stations, contest messages, or other messages with unwanted
+content. You can enter whole callsigns, parts of callsigns, or
+keywords. *Whitelist* can be used if you're interested _only_ in
+messages with certain grids, calls, or keywords. All other messages
+(except those allowed by the *Always Pass* list) will then be
+suppressed. *Always Pass* will enable display of decodes from specific
+stations even though the respective country or continent is hidden.
+
+You can optionally apply filters only to callsigns of transmitting
+stations, or use the filters only for *Wait and Pounce* operation. In
+the latter case, all messages will be displayed in the *Band Activity*
+window, but *Wait and Pounce* will respond only to stations that meet
+the set filter criteria.
+
+When any filter is active that limits display of some decodes, the
+status label at bottom left of the main window changes from green
+"Receiving" to cyan "Receiving, Filters on".
+
+TIP: Filters are automatically disabled for Special Operating modes,
+to ensure that you don’t accidentally miss a station.
+
+.Ignore List
+
+A click on the *Ignore* button (located on the main window below the
+*DX Grid* box) adds the callsign present in the *DX Call* box to your
+*Ignore List*. If you have also checked the box *Ignore stations from
+the Ignore List* on the main-window *Filters* menu, such stations are
+automatically ignored when you use one of the *CQ: ...* options or
+*Wait and Reply*. The "Ignore List" will be created in your log
+directory the first time a station is added to it.  You can erase the
+"Ignore List" from the *File* menu.
+
+TIP: For callsigns in the *Ignore List* or corresponding to a selected
+*Ignore ...* Quick Filters, no alert sounds are played unless you have
+activated the *BP* (bypass) checkbox. This can be used to temporarily
+mute the alerts for a certain callsign.

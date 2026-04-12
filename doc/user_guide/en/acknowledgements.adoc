@@ -1,0 +1,34 @@
+// Status=review
+
+The _WSJT_ project was started by *K1JT* in 2001.  Starting in 2005 it
+has been an Open Source project, and it has included the programs
+_WSJT_, _MAP65_, _WSPR_, _WSJT-X_, and _QMAP_.  *G4WJS* (since 2013),
+*K9AN* (2015), *IV3NWV* (2016), *DG2YCB* (2021), *N9ADG* (2022),
+*G4KLA* (2024), *DL3WDG* (2024), and *W3SZ* (2025) have made major
+contributions to _WSJT-X_.  Together with K1JT they now form the core
+development team.  *G4WJS* and *W9MDB* also made major contributions
+to the _Hamlib_ library, on which _WSJT-X_ depends for rig control.
+
+All code in the _WSJT_ project is licensed under the GNU Public
+License (GPL).  Many users of these programs, too numerous to mention
+here individually, have contributed suggestions and advice that have
+greatly aided the development of _WSJT_ and its sister programs.  For
+_WSJT-X_ in particular, in addition to those mentioned above we
+acknowledge contributions from *AC6SL, AE4JY, DF2ET, DJ0OT, IW3RAB,
+K3WYC, KA1GT, KA6MAL, KA9Q, KB1ZMX, KD6EKQ, KI7MT, KK1D, ND0B, PY2SDR,
+VE1SKY, VK3ACF, VK4BDJ, VK7MO, W3DJS, W4TI, and W4TV*.  Each of these
+amateurs has helped to bring the program’s design, code, testing,
+and/or documentation to its present state.
+
+Many of the color palettes for the _WSJT-X_ waterfall were copied from
+the excellent, well documented, open-source program _fldigi_, by *W1HKJ*
+and friends.
+
+We use development tools and libraries from many sources.  We
+particularly wish to acknowledge importance of the GNU Compiler
+Collection from the Free Software Foundation, the "clang" compiler
+from LLVM at the University of Illinois, and the Qt Project from Digia
+PLC.  Other important resources include the FFTW library by Matteo
+Frigo and Steven G. Johnson; SLALIB, the Positional Astronomy Library
+by P. T.  Wallace; and a high-precision planetary ephemeris and
+associated software from NASA's Jet Propulsion Laboratory.

@@ -1,0 +1,358 @@
+name: Build Windows x64
+
+on:
+  push:
+    tags:
+      - "[0-9]*.[0-9]*.[0-9]*"
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          cache: true
+          install: >-
+            git
+            make
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-qt6-5compat
+            mingw-w64-x86_64-qt6-activeqt
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-serialport
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-translations
+            mingw-w64-x86_64-qt6-websockets
+
+      - name: Restore Hamlib cache
+        id: hamlib-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}\.ci\hamlib-mingw64
+          key: windows-mingw64-hamlib-${{ env.HAMLIB_VERSION }}
+          restore-keys: |
+            windows-mingw64-hamlib-
+
+      - name: Build and install Hamlib
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          HAMLIB_PREFIX="$(cygpath -u "$GITHUB_WORKSPACE")/.ci/hamlib-mingw64"
+          mkdir -p "${HAMLIB_PREFIX}"
+          curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" \
+            "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
+          make -j"$(nproc)"
+          make install
+
+      - name: Save Hamlib cache
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}\.ci\hamlib-mingw64
+          key: windows-mingw64-hamlib-${{ env.HAMLIB_VERSION }}
+
+      - name: Export Hamlib environment
+        run: |
+          set -euo pipefail
+          HAMLIB_PREFIX="$(cygpath -u "$GITHUB_WORKSPACE")/.ci/hamlib-mingw64"
+          HAMLIB_INCLUDE_DIR="${HAMLIB_PREFIX}/include"
+          HAMLIB_LIBRARY="$(find "${HAMLIB_PREFIX}/lib" -maxdepth 1 \( -name 'libhamlib*.dll.a' -o -name 'libhamlib*.a' -o -name 'libhamlib*.dll' \) | sort | head -n1)"
+          RIGCTL_EXE="${HAMLIB_PREFIX}/bin/rigctl"
+          RIGCTLD_EXE="${HAMLIB_PREFIX}/bin/rigctld"
+          RIGCTLCOM_EXE="${HAMLIB_PREFIX}/bin/rigctlcom"
+
+          test -f "${HAMLIB_INCLUDE_DIR}/hamlib/rig.h"
+          test -n "${HAMLIB_LIBRARY}"
+          test -x "${RIGCTL_EXE}"
+
+          echo "$(cygpath -w "${HAMLIB_PREFIX}/bin")" >> "${GITHUB_PATH}"
+          echo "HAMLIB_PREFIX=${HAMLIB_PREFIX}" >> "${GITHUB_ENV}"
+          echo "HAMLIB_INCLUDE_DIR=${HAMLIB_INCLUDE_DIR}" >> "${GITHUB_ENV}"
+          echo "HAMLIB_LIBRARY=${HAMLIB_LIBRARY}" >> "${GITHUB_ENV}"
+          echo "RIGCTL_EXE=${RIGCTL_EXE}" >> "${GITHUB_ENV}"
+          echo "RIGCTLD_EXE=${RIGCTLD_EXE}" >> "${GITHUB_ENV}"
+          echo "RIGCTLCOM_EXE=${RIGCTLCOM_EXE}" >> "${GITHUB_ENV}"
+          echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:/mingw64/lib/pkgconfig:/mingw64/share/pkgconfig" >> "${GITHUB_ENV}"
+          "${HAMLIB_PREFIX}/bin/rigctl" --version
+
+      - name: Resolve build version
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            APP_VERSION="${GITHUB_REF#refs/tags/}"
+            APP_VERSION="${APP_VERSION#v}"
+          else
+            APP_VERSION="0.0.0-ci.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
+          echo "INSTALLER_BASENAME=Decodium_${APP_VERSION}_Setup_x64" >> "${GITHUB_ENV}"
+
+      - name: Show toolchain versions
+        run: |
+          set -euo pipefail
+          cmake --version
+          ninja --version
+          g++ --version
+          qmake6 -v || true
+          /mingw64/bin/windeployqt6.exe --version || /mingw64/bin/windeployqt.exe --version || true
+
+      - name: Configure CMake
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-windows -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${HAMLIB_PREFIX};/mingw64" \
+            -DHamlib_INCLUDE_DIR="${HAMLIB_INCLUDE_DIR}" \
+            -DHamlib_LIBRARY="${HAMLIB_LIBRARY}" \
+            -DRIGCTL_EXE="${RIGCTL_EXE}" \
+            -DRIGCTLD_EXE="${RIGCTLD_EXE}" \
+            -DRIGCTLCOM_EXE="${RIGCTLCOM_EXE}" \
+            -DBUILD_TESTING=OFF \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Decodium
+        run: |
+          set -euo pipefail
+          cmake --build build-windows --target decodium_app --parallel "$(nproc)"
+
+      - name: Prepare portable bundle
+        run: |
+          set -euo pipefail
+
+          DIST="dist-windows-x64"
+          rm -rf "${DIST}"
+          mkdir -p "${DIST}"
+
+          cp build-windows/decodium.exe "${DIST}/"
+          cp -R build-windows/qml "${DIST}/"
+          cp build-windows/*.qm "${DIST}/" 2>/dev/null || true
+          cp cty.dat ALLCALL7.TXT "${DIST}/" 2>/dev/null || true
+          cp -R sounds "${DIST}/sounds"
+          cp -R Palettes "${DIST}/Palettes"
+
+          WINDEPLOYQT="/mingw64/bin/windeployqt6.exe"
+          if [[ ! -x "${WINDEPLOYQT}" ]]; then
+            WINDEPLOYQT="/mingw64/bin/windeployqt.exe"
+          fi
+
+          QT_SHARE_BIN="/mingw64/share/qt6/bin"
+          QMLIMPORTSCANNER="${QT_SHARE_BIN}/qmlimportscanner.exe"
+          if [[ ! -x "${QMLIMPORTSCANNER}" ]]; then
+            echo "qmlimportscanner.exe not found under ${QT_SHARE_BIN}" >&2
+            find /mingw64 -maxdepth 4 -iname 'qmlimportscanner*' -print >&2 || true
+            exit 1
+          fi
+          export PATH="${QT_SHARE_BIN}:$PATH"
+
+          WINDEPLOY_ARGS=(
+            --release
+            --compiler-runtime
+            --qmldir "${PWD}/qml"
+            --dir "${PWD}/${DIST}"
+            "${PWD}/${DIST}/decodium.exe"
+          )
+          if [[ ! -f /mingw64/share/qt6/translations/catalogs.json ]]; then
+            WINDEPLOY_ARGS=(--no-translations "${WINDEPLOY_ARGS[@]}")
+          fi
+
+          "${WINDEPLOYQT}" "${WINDEPLOY_ARGS[@]}"
+
+          SEARCH_DIRS=(
+            "/mingw64/bin"
+            "${HAMLIB_PREFIX}/bin"
+          )
+
+          is_system_dll() {
+            local dll_name="$1"
+            local upper_name=""
+            upper_name="$(printf '%s' "${dll_name}" | tr '[:lower:]' '[:upper:]')"
+            case "${upper_name}" in
+              API-MS-WIN-*.DLL|EXT-MS-*.DLL|KERNEL32.DLL|KERNELBASE.DLL|USER32.DLL|GDI32.DLL|ADVAPI32.DLL|COMDLG32.DLL|COMCTL32.DLL|SHELL32.DLL|OLE32.DLL|OLEAUT32.DLL|WS2_32.DLL|WSOCK32.DLL|WINMM.DLL|IMM32.DLL|VERSION.DLL|SETUPAPI.DLL|SHLWAPI.DLL|SHCORE.DLL|RPCRT4.DLL|CRYPT32.DLL|CRYPTSP.DLL|IPHLPAPI.DLL|DNSAPI.DLL|NETAPI32.DLL|WTSAPI32.DLL|UXTHEME.DLL|DWMAPI.DLL|MPR.DLL|BCRYPT.DLL|BCRYPTPRIMITIVES.DLL|MSVCRT.DLL|SECHOST.DLL|NTDLL.DLL|WINSPOOL.DRV|AUTHZ.DLL|AVRT.DLL|D3D9.DLL|D3D11.DLL|D3D12.DLL|DWRITE.DLL|DXGI.DLL|DXVA2.DLL|GDIPLUS.DLL|MF.DLL|MFPLAT.DLL|MFREADWRITE.DLL|MSIMG32.DLL|NCRYPT.DLL|ODBC32.DLL|PROPSYS.DLL|SECUR32.DLL|USERENV.DLL|USP10.DLL|WINHTTP.DLL)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
+          is_optional_runtime_dll() {
+            local dll_name="$1"
+            local upper_name=""
+            upper_name="$(printf '%s' "${dll_name}" | tr '[:lower:]' '[:upper:]')"
+            case "${upper_name}" in
+              FBCLIENT.DLL|LIBMARIADB.DLL|LIBPQ.DLL)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
+          find_dll_in_search_dirs() {
+            local dll_name="$1"
+            local search_dir=""
+            local match=""
+            for search_dir in "${SEARCH_DIRS[@]}"; do
+              match="$(find "${search_dir}" -maxdepth 1 -type f -iname "${dll_name}" | head -n1 || true)"
+              if [[ -n "${match}" ]]; then
+                printf '%s\n' "${match}"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          copy_runtime_dll() {
+            local dll_name="$1"
+            local source_path=""
+            if is_system_dll "${dll_name}"; then
+              return 1
+            fi
+            if is_optional_runtime_dll "${dll_name}"; then
+              return 1
+            fi
+            if find "${DIST}" -type f -iname "${dll_name}" | grep -q .; then
+              return 1
+            fi
+            source_path="$(find_dll_in_search_dirs "${dll_name}" || true)"
+            if [[ -z "${source_path}" ]]; then
+              return 2
+            fi
+            cp -u "${source_path}" "${DIST}/"
+            return 0
+          }
+
+          collect_binary_dependencies() {
+            find "${DIST}" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0 \
+              | while IFS= read -r -d '' binary_path; do
+                  objdump -p "${binary_path}" 2>/dev/null \
+                    | awk '/DLL Name:/ {print $3}'
+                done \
+              | sort -fu
+          }
+
+          copy_runtime_dll "libhamlib-4.dll" || true
+
+          copied_new=1
+          while [[ "${copied_new}" -ne 0 ]]; do
+            copied_new=0
+            while IFS= read -r dll_name; do
+              [[ -n "${dll_name}" ]] || continue
+              if copy_runtime_dll "${dll_name}"; then
+                copied_new=1
+              fi
+            done < <(collect_binary_dependencies)
+          done
+
+          unresolved_dlls=()
+          while IFS= read -r dll_name; do
+            [[ -n "${dll_name}" ]] || continue
+            if is_system_dll "${dll_name}"; then
+              continue
+            fi
+            if is_optional_runtime_dll "${dll_name}"; then
+              continue
+            fi
+            if ! find "${DIST}" -type f -iname "${dll_name}" | grep -q .; then
+              unresolved_dlls+=("${dll_name}")
+            fi
+          done < <(collect_binary_dependencies)
+
+          if [[ "${#unresolved_dlls[@]}" -ne 0 ]]; then
+            echo "Unresolved runtime DLL dependencies detected:" >&2
+            printf '  %s\n' "${unresolved_dlls[@]}" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "Runtime DLLs bundled:" > "${DIST}/runtime-dll-report.txt"
+          find "${DIST}" -maxdepth 1 -type f -iname '*.dll' -printf '%f\n' | sort -fu >> "${DIST}/runtime-dll-report.txt"
+
+          echo "=== Portable bundle contents ==="
+          find "${DIST}" -maxdepth 2 -type f | sort
+
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found after installation attempt"
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE 'installer-output'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
+            "/DAppVersion=$env:APP_VERSION" `
+            "/DBuildDir=$env:GITHUB_WORKSPACE\dist-windows-x64" `
+            "/DSourceRoot=$env:GITHUB_WORKSPACE" `
+            "/DOutputDir=$outputDir" `
+            "/DOutputBaseFilename=$env:INSTALLER_BASENAME" `
+            "$env:GITHUB_WORKSPACE\installer\decodium_setup.iss"
+
+          Get-ChildItem $outputDir
+
+      - name: Upload portable bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-windows-x64-portable
+          if-no-files-found: error
+          path: dist-windows-x64
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-windows-x64-installer
+          if-no-files-found: error
+          path: installer-output/*.exe
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            installer-output/*.exe

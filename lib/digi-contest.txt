@@ -1,0 +1,277 @@
+	     Possible FT8 Enhancements for Contesting
+	     ----------------------------------------
+
+In addition to all the standard FT8 messages, FT8 DXpedition Mode
+defines a new message type to convey messages like this example
+acknowledging completion of a QSO with K1ABC and initiating a QSO with
+W9XYZ:
+
+  K1ABC RR73; W9XYZ <KH1/KH7Z> -11
+
+With 15s T/R sequencing and otherwise using standard FT8 messages,
+this feature allows QSO rates up to 120/hour with one Tx signal.  The
+callsign enclosed in angle brackets is sent as a 10-bit hash code.
+
+High QSO rates are also desirable for contest operating, but some
+details are quite different from the DXpedition case.  Contesting is a
+many-to-many (as opposed to many-to-one) activity.  We distinguish
+between "Run stations" and "S+P stations" rather than between "Fox"
+and "Hounds".
+
+An optimal sequence of messages suitable for contesting looks
+something like the list in Table 1, where {exch} represents the
+required contest exchange.  With 15 s transmissions and a steady
+stream of callers, messages like these can support QSO rates
+approaching 120/hour.
+
+Table 1. Example sequence of FT8 contest messages
+-------------------------------------------------------------------------
+    Run station                        S+P stations
+-------------------------------------------------------------------------
+1.  CQ K1ABC
+2.                                     K1ABC W9XYZ, K1ABC G4AAA, ...
+3.  W9XYZ K1ABC {exch}
+4.                                     K1ABC W9XYZ {exch}
+5.  TU; G4AAA K1ABC {exch}
+6.                                     K1ABC G4AAA {exch}
+7.  TU; VE2BBB K1ABC {exch}
+8.                                     K1ABC VE2BBB {exch}
+9.  ...
+-------------------------------------------------------------------------
+
+In some circumstances one or both station callsigns may safely be
+taken as known by context.  High-rate contest transmissions in SSB,
+CW, and RTTY can therefore be considerably shortened with no resulting
+ambiguity for attentive operators.  CQing stations need not include
+their own callsign in every transmission, while S+P stations may send
+only their own callsign at first, as in line 2 of Table 2, and then
+only the contest exchange, as in line 4.
+
+Table 2. Abbreviated contest messages
+-------------------------------------------------------------------------
+    Run station                        S+P stations
+-------------------------------------------------------------------------
+1.  CQ K1ABC
+2.                                     W9XYZ, G4AAA, ...
+3.  W9XYZ {exch}
+4.                                     {exch}             (sent by W9XYZ)
+5.  TU; G4AAA {exch}
+6.                                     {exch}             (sent by G4AAA)
+7.  TU; VE2BBB {exch}
+8.                                     {exch}             (sent by VE2BBB)
+9.  TU; CQ K1ABC
+10. ...
+-------------------------------------------------------------------------
+
+There would be no advantage to such message brevity with FT8.  FT8
+transmissions are of fixed duration, by design; and the AP decoder can
+treat the home callsign and previously decoded callsigns as
+hypothetically given, thereby making the effective code rate lower and
+sensitivity up to 4 dB better.
+
+Required exchange information for some relevant contests is
+illustrated in Table 3, along with a breakdown of bit requirements for
+each component of the exchange.  Lower-case letter-number combinations
+such as r1, r3, s7,... in the table suggest the meanings and indicate
+the number of bits required to convey each part of the exchange.
+Further details are given below the Table.  Parameter T1 is the total
+number of exchange bits, and T2=T1+56 is the number of bits for the
+full message, including two standard 28-bit callsigns.
+
+Table 3. Examples of required contest exchanges {exch}
+------------------------------------------------------------------------------
+Event        Exchange                    Example          Bits          T1 T2
+------------------------------------------------------------------------------
+ARRL RTTY    US/Can: rpt state/prov      R 579 MA         r1 r3 s7      11 67
+     	     DX:     rpt serial          R 559 0013       r1 r3 n12     16 72
+	      
+Field Day    US/Can: OpClass Section     R 6A EMA         r1 n5 c3 s7   16 72
+             DX:     OpClass DX          R 1A DX          r1 n5 c3 s7   16 72
+
+CQ WPX RTTY  RST + serial                R 589 0013       r1 r3 n12     16 72
+
+CQ WW RTTY   US/Can: RST CQZ state/prov  R 579 8 NJ       r1 r3 z6 s6   16 72
+             DX:     RST + CQzone        R 559 3          r1 r3 z6      10 66
+
+ARRL VHF+    grid4                       R FN42           r1 g15        16 72
+
+EU VHF+      rpt serial grid6            R 590013 IO91NP  r1 r3 n12 g25 41 97
+------------------------------------------------------------------------------
+Meaning and number of bits for each exchange component:
+
+c3  Operating class (A-F)
+g15 grid4
+g25 grid6
+n12 Serial number
+n5  Number of transmitters (0-31)
+r1  acknowledgment of received exchange
+r3  3-bit report (0-7 ==> -24 to +18 dB, effectively "S2 to "S9")
+s6  US state or Canadian province (48+14=62)
+s7  ARRL/RAC Section  (83 sections)
+z6  CQ zone
+------------------------------------------------------------------------------
+
+How best to accommodate all these possibilities within the 72+3-bit
+FT8 message payload?  Let i3 (aka "i3bit") denote message type, with
+available range 0-7.  Type 0 is already used for standard JT-style
+structured messages and free text, and type 1 for DXpedition mode.
+Examples of suggested new message types 2 through 6 are summarized in
+the Table 4.
+
+Table 4. Proposed FT8 message types
+------------------------------------------------------------------------------
+i3 Example message                    Bits        i72 Total Special purpose
+------------------------------------------------------------------------------
+0  K1ABC W9XYZ EN37                   28 28 15     0   72   Standard message
+0  FREE TEXT                          71           1   72   Free text
+1  K1ABC RR73; W9XYZ <KH1/KH7Z> -11   28 28 10 6       72   DXpedition Mode
+2  W9XYZ K1ABC x16                    28 28 16         72   Contesting
+3  TU; G4AAA K1ABC x16                28 28 16         72   Contesting with "TU;"
+4  <K1ABC> W9XYZ/R R x25              17 28 1 1 25     72   Rovers, Grid6
+5  <K1ABC> PJ4/W9XYZ                  17 49            66   Compound TxCall
+6  PA9XYZ R 590003 IO91NP             28 1 3 12 24     68   EU VHF contest
+7  tbd...
+
+The first callsign in a message can also be "CQ" and a few other
+special tokens.  Type 3 messages are the same as type 2 except for
+including "TU;", the completion-of-QSO indicator.  Message fragments
+x16 and x25 represent generic contest exchanges.  A "contest template"
+will define the specific source encoding/decoding needed for each
+event.
+
+Suggested message types 4 and 5 use a 17-bit hash for the first
+callsign.  I'm imagining that we'd start with a 32-bit crc and then
+use its remainder after dividing by the prime number 131063.  Values
+less than 131063 will be the desired hash code, and the nine values
+131063-131071 can be assigned special meanings such as CQ, QRZ, etc.
+Type 4 messages identify the transmitting station as a Rover and can
+also accommodate 6-digit grid locators.  Type 5 messages allow the
+transmitting station to send a full compound callsign with add-on
+prefixes up to 4 characters and suffixes up to 3.  Compound callsigns
+are also permissible for the hashed callsigns in message types 4 and
+5.
+
+Contest Operating
+-----------------
+
+Operating in this proposed FT8 Contest Mode would be similar to that
+in current RTTY contests.  CQing stations will be distributed over 20
+kHz or more on each band, perhaps at ~500 Hz separation.  They will
+respond to callers on their own frequency +/- ~200 Hz.  Thus, a CQing
+station and callers should occupy no more than 500 Hz total bandwidth.
+CQers might always transmit at Tx audio frequency 1750 Hz and
+configure their FT8 decoders to respond to signals between 1500 and
+2000 Hz.  S+P stations will typically work their way up or down the
+band, perhaps in steps of 2 or 3 kHz, looking for unworked CQers.  The
+FT8 Contest GUI will offer special features for CQ mode and S+P mode
+that make such conventions easy to follow.
+
+Some Pertinent Questions
+------------------------
+
+1. FT8 is a good mode, but does it make for a good contesting mode?
+
+The model described above maxes out at 120 QSOs/hour.  (One can
+imagine SO2R or even SO3R extensions, doubling or tripling that
+limit.)  Should we consider T/R sequences of 10s, or even 5s, to get
+potentially higher rates? Should we consider giving up synchronized,
+fixed-length sequences entirely, and use operator-determined start
+times and transmission lengths?  That's a significant departure from
+all existing WSJT-X modes.
+
+2. How much automation should be permissible?
+
+We're not aiming to make a contesting robot.  We want something that
+rewards operator and station performance.  The recently introduced FT8
+DXpedition Mode offers the "Fox" operator a list of decoded "Hounds"
+sorted by Call, Grid, S/N, Distance, or Random order.  Hounds must
+initiate their calls to Fox, and Fox must manually select each Hound
+to be called.  Otherwise, QSOs proceed with standard FT8
+"auto-sequencing".  Is this model acceptable?
+
+3. How much bandwidth?  How much sensitivity?  
+
+RTTY signals use bandwidth ~220 Hz and require S/N around -5 dB or
+better, measured in a 2500 Hz bandwidth.  FT8 uses signal bandwidth 50
+Hz and reaches threshold sensitivity between -20 and -24 dB, depending
+on how much a priori (AP) information is available.  Shorter
+transmissions conveying the same messages would increase the
+bandwidth, S/N threshold, and potential QSO rate proportionally.  Has
+FT8 already hit the "sweet spot" of such trade-offs?
+
+4. Suitable power limits?
+
+WSJT-X modes are designed as weak-signal modes.  They have strong FEC
+and don't suffer from partial or corrupted copy.  Sensitivity already
+beats RTTY by 15-19 dB, so arguably it makes sense for an FT8 contest
+or contest category to be limited to 100 W or even QRP power levels.
+
+5. What software should provide the operator's GUI?
+
+Things are described above as though WSJT-X, the software that
+introduced FT8, would be used for contest operating.  WSJT-X can send
+QSO information to N1MM+ and other logging programs, so they could be
+used in combination with WSJT-X.  Alternatively, we could set things
+up so that N1MM+ is the control program and FT8 encoding/decoding is
+provided by a plug-in "MMFT8" similar to MMTTY.  Operators already
+into serious RTTY contesting would probably like the N1MM-in-control
+option.  However, existing FT8 users might be more comfortable with
+WSJT-X in full control.  Moreover, WSJT-X offers full support for
+Linux and MacOS, which N1MM+ does not.
+
+########################################################################
+
+More thinking, beyond the above...
+
+FT8 currently uses LDPC(174,87), where 87=72+3+12.  Suggest going to
+LDPC(174,91), with 91=72+5+14.  This would give us 32 message types
+rather than 7, and stronger suppression of false decodes.  SNR penalty
+would be 10log(91/87)=0.2 dB.
+
+MSK144 currently uses LDPC(128,80), where 80=72+8.  Suggest going to
+LDPC(128,87), with 87=72+5+10.  SNR penalty is 0.4 dB.
+
+ARRL RTTY Roundup
+-------------------------------------------------------------------------
+    Run station               S+P stations
+-------------------------------------------------------------------------
+1.  CQ K1ABC
+2.                            K1ABC W9XYZ, K1ABC G4AAA, ...
+3.  W9XYZ K1ABC 579 MA
+4.                            K1ABC W9XYZ 599 WI
+5.  TU; G4AAA K1ABC 559 MA
+6.                            K1ABC G4AAA 579 0013
+7.  TU; VE2BBB K1ABC 599 MA
+8.                            K1ABC VE2BBB 599 QC
+9.  TU; CQ K1ABC
+-------------------------------------------------------------------------
+
+
+NA VHF Contest
+-------------------------------------------------------------------------
+    Run station               S+P station              i3
+-------------------------------------------------------------------------
+1.  CQ K1ABC/R FN54                                     0
+2.                            K1ABC W9XYZ EN37          0
+3.  W9XYZ K1ABC R FN54                                  2
+4.                            K1ABC W9XYZ RR73          0
+5.  CQ K1ABC/R FN54                                     0
+-------------------------------------------------------------------------
+1.  CQ K1ABC FN42                                       0
+2.                            <K1ABC> W9XYZ/R EN47      5
+3.  W9XYZ K1ABC R FN42                                  0
+4.                            DE W9XYZ/R RR73           0
+5.  CQ K1ABC FN42                                       0
+-------------------------------------------------------------------------
+
+
+
+EU VHF+ Contest
+-------------------------------------------------------------------------
+    Run station               S+P station              i3
+-------------------------------------------------------------------------
+1.  CQ G4ABC IO91                                       0
+2.                            G4ABC PA9XYZ JO22         0
+3.  PA9XYZ 590003 IO91NP                                6
+4.                            G4ABC R 570007 JO22DB     6
+5.  PA9XYZ G4ABC RR73                                   0

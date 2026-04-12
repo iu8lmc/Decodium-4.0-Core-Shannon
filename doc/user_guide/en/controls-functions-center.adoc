@@ -1,0 +1,70 @@
+// Status=edited
+
+At the center of the main window are a number of controls used when
+making QSOs.  Controls not relevant to a particular mode or submode
+may be disabled or removed from the display.
+
+//.Misc Controls Center
+image::misc-controls-center.png[align="center",alt="Misc Controls Center"]
+
+* Check *Tx even/1st* to transmit in even-numbered UTC minutes or
+sequences, starting at 0.  Uncheck this box to transmit in the odd
+sequences.  The correct selection is made automatically when you
+double-click on a decoded text line, as described in the
+<<TUTORIAL,Basic Operating Tutorial>>.
+
+* Tx and Rx audio frequencies can be set automatically by
+double-clicking decoded text or a signal in the waterfall.  The
+frequencies can also be adjusted using the spinner controls.
+
+* You can force Tx frequency to the current Rx frequency by clicking
+the triangle to the left of *F Tol*, or the reverse transformation by
+clicking the corresponding downward-pointing button. Your on-the-air
+frequency (normally that of your lowest tone) is the sum of dial
+frequency and audio Tx frequency.
+
+* Check the box *Hold Tx Freq* to ensure that the specified Tx
+frequency is not changed automatically when you double-click on
+decoded text or a signal in the waterfall.
+
+* For modes lacking a multi-decode feature, or when *Enable
+  VHF/UHF/Microwave features* has been checked on the *File | Settings
+  | General* tab, the *F Tol* control sets a frequency tolerance range
+  over which decoding is attempted, centered on the Rx frequency.
+
+* The *Report* control lets you change an automatically inserted
+signal report. Typical reports for the various modes fall in the range
+–30 to +20 dB.
+
+
++
+
+TIP: Consider reducing power if your QSO partner reports your signal above -5 dB in one of the _WSJT-X_ slow modes.  These are supposed to be weak signal modes!
+
+* In some circumstances, especially on VHF and higher bands, you can
+select a supported submode of the active mode by using the *Submode*
+control.  The *Sync* control sets a minimum threshold for establishing
+time and frequency synchronization with a received signal.
+
+* Spinner control *T/R nn s* sets sequence lengths for transmission
+and reception in Q65, FST4, MSK144, and the fast JT9 submodes.
+
+* Spinner control *Tx CQ nnn*, activated by a checkbox to its right,
+facilitates calling CQ on a conventional calling frequency and
+conducting any resulting QSOs on a different dial frequency. Its use
+is described in the section on <<OFFSET_CQ,MSK144>>.
+
+* Checkboxes at bottom center of the main window control special
+features for particular operating modes:
+
+** *Sh* enables shorthand messages in JT4, JT65, Q65, and MSK144
+
+** *Fast* enables fast JT9 submodes
+
+** *Auto Seq* enables auto-sequencing of Tx messages
+
+** *Call 1st* enables automatic response to the first decoded
+responder to your CQ
+
+** *Tx6* toggles between two types of shorthand messages in JT4 and
+    Q65 modes

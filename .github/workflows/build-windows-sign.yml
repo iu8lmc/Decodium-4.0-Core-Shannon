@@ -1,0 +1,237 @@
+name: Build Windows + SignPath Code Signing
+
+on:
+  workflow_dispatch:
+
+env:
+  BUILD_TAG: ${{ github.run_number }}
+
+jobs:
+  build-windows:
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            msystem: MINGW64
+            prefix: mingw-w64-x86_64
+            dist_dir: dist_64bit
+            installer_suffix: x64
+          - arch: x86
+            msystem: MINGW32
+            prefix: mingw-w64-i686
+            dist_dir: dist_32bit
+            installer_suffix: x86
+
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: >-
+            ${{ matrix.prefix }}-toolchain
+            ${{ matrix.prefix }}-cmake
+            ${{ matrix.prefix }}-qt5-base
+            ${{ matrix.prefix }}-qt5-multimedia
+            ${{ matrix.prefix }}-qt5-serialport
+            ${{ matrix.prefix }}-qt5-websockets
+            ${{ matrix.prefix }}-qt5-svg
+            ${{ matrix.prefix }}-qt5-tools
+            ${{ matrix.prefix }}-fftw
+            ${{ matrix.prefix }}-libhamlib
+            ${{ matrix.prefix }}-libusb
+            ${{ matrix.prefix }}-boost
+            make
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "MinGW Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Fortran library (sequential)
+        run: mingw32-make -C build -j1 wsjt_fort wsjt_fort_omp
+
+      - name: Build applications
+        run: mingw32-make -C build -j$(nproc) decodium jt9 wsprd message_aggregator udp_daemon
+
+      - name: Prepare distribution
+        run: |
+          DIST="${{ matrix.dist_dir }}"
+          mkdir -p "$DIST"/{platforms,audio,imageformats,sqldrivers,bearer,styles,mediaservice,sounds,Palettes}
+
+          # Copy executables
+          cp build/decodium.exe build/jt9.exe build/wsprd.exe \
+             build/message_aggregator.exe build/udp_daemon.exe "$DIST/"
+
+          # Copy hamlib tools if present
+          for tool in rigctl-decodium rigctld-decodium rigctlcom-decodium; do
+            [ -f "build/$tool.exe" ] && cp "build/$tool.exe" "$DIST/"
+          done
+
+          # Copy ChronoGPS if present
+          [ -f "ChronoGPS.exe" ] && cp ChronoGPS.exe "$DIST/"
+
+          # Qt and MinGW DLLs
+          QTDIR="/${{ matrix.msystem }}"
+          cp "$QTDIR"/bin/Qt5Core.dll "$QTDIR"/bin/Qt5Gui.dll \
+             "$QTDIR"/bin/Qt5Widgets.dll "$QTDIR"/bin/Qt5Network.dll \
+             "$QTDIR"/bin/Qt5Multimedia.dll "$QTDIR"/bin/Qt5SerialPort.dll \
+             "$QTDIR"/bin/Qt5WebSockets.dll "$QTDIR"/bin/Qt5Sql.dll \
+             "$QTDIR"/bin/Qt5Svg.dll "$QTDIR"/bin/Qt5PrintSupport.dll "$DIST/"
+
+          # MinGW runtime DLLs
+          cp "$QTDIR"/bin/libgcc_s_*.dll "$QTDIR"/bin/libstdc++-6.dll \
+             "$QTDIR"/bin/libwinpthread-1.dll "$QTDIR"/bin/libgfortran-5.dll \
+             "$QTDIR"/bin/libgomp-1.dll "$QTDIR"/bin/libquadmath-0.dll "$DIST/" 2>/dev/null || true
+
+          # Other required DLLs
+          for dll in libfftw3f-3 libfftw3f_threads-3 libhamlib-4 libusb-1.0 \
+                     libboost_log-mt libboost_log_setup-mt libboost_filesystem-mt libboost_thread-mt \
+                     zlib1 libbz2-1 liblzma-5 libpcre2-8-0 libpcre2-16-0 \
+                     libpng16-16 libjpeg-8 libfreetype-6 libharfbuzz-0 libgraphite2 \
+                     libiconv-2 libintl-8 libglib-2.0-0 libmd4c libdouble-conversion \
+                     libsqlite3-0 libbrotlicommon libbrotlidec libzstd; do
+            [ -f "$QTDIR/bin/${dll}.dll" ] && cp "$QTDIR/bin/${dll}.dll" "$DIST/" 2>/dev/null || true
+          done
+
+          # ICU DLLs
+          cp "$QTDIR"/bin/libicu*.dll "$DIST/" 2>/dev/null || true
+
+          # SSL DLLs
+          cp "$QTDIR"/bin/libssl*.dll "$QTDIR"/bin/libcrypto*.dll "$DIST/" 2>/dev/null || true
+
+          # Qt plugins
+          cp "$QTDIR"/share/qt5/plugins/platforms/qwindows.dll "$DIST/platforms/"
+          cp "$QTDIR"/share/qt5/plugins/audio/*.dll "$DIST/audio/" 2>/dev/null || true
+          cp "$QTDIR"/share/qt5/plugins/imageformats/*.dll "$DIST/imageformats/" 2>/dev/null || true
+          cp "$QTDIR"/share/qt5/plugins/sqldrivers/*.dll "$DIST/sqldrivers/" 2>/dev/null || true
+          cp "$QTDIR"/share/qt5/plugins/bearer/*.dll "$DIST/bearer/" 2>/dev/null || true
+          cp "$QTDIR"/share/qt5/plugins/styles/*.dll "$DIST/styles/" 2>/dev/null || true
+          cp "$QTDIR"/share/qt5/plugins/mediaservice/*.dll "$DIST/mediaservice/" 2>/dev/null || true
+
+          # Data files
+          cp cty.dat ALLCALL7.TXT "$DIST/" 2>/dev/null || true
+          [ -f "artwork/ft2logo.png" ] && cp artwork/ft2logo.png "$DIST/"
+          cp sounds/*.wav "$DIST/sounds/" 2>/dev/null || true
+          cp Palettes/*.pal "$DIST/Palettes/" 2>/dev/null || true
+
+          echo "=== Distribution contents ==="
+          find "$DIST" -name "*.exe" | sort
+          echo "Total files: $(find "$DIST" -type f | wc -l)"
+
+      - name: Upload unsigned artifact
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-unsigned-${{ matrix.installer_suffix }}
+          if-no-files-found: error
+          path: ${{ matrix.dist_dir }}
+
+  sign:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    strategy:
+      matrix:
+        arch: [x64, x86]
+
+    steps:
+      - name: Download unsigned artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: decodium-unsigned-${{ matrix.arch }}
+          path: unsigned-${{ matrix.arch }}
+
+      - name: Repackage for SignPath
+        run: |
+          cd unsigned-${{ matrix.arch }}
+          zip -r ../decodium-${{ matrix.arch }}.zip .
+
+      - name: Upload artifact for SignPath
+        id: upload-for-signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-to-sign-${{ matrix.arch }}
+          path: decodium-${{ matrix.arch }}.zip
+
+      - name: Submit signing request to SignPath
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+          organization-id: '${{ vars.SIGNPATH_ORGANIZATION_ID }}'
+          project-slug: 'decodium'
+          signing-policy-slug: >-
+            ${{ startsWith(github.ref, 'refs/tags/v')
+                && 'release-signing'
+                || 'test-signing' }}
+          github-artifact-id: '${{ steps.upload-for-signing.outputs.artifact-id }}'
+          wait-for-completion: true
+          output-artifact-directory: 'signed-${{ matrix.arch }}'
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-signed-${{ matrix.arch }}
+          path: signed-${{ matrix.arch }}
+          if-no-files-found: error
+
+  package:
+    needs: sign
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout (for .iss files)
+        uses: actions/checkout@v4
+
+      - name: Download signed x64
+        uses: actions/download-artifact@v4
+        with:
+          name: decodium-signed-x64
+          path: dist_64bit
+
+      - name: Download signed x86
+        uses: actions/download-artifact@v4
+        with:
+          name: decodium-signed-x86
+          path: dist_32bit
+
+      - name: Build installers with Inno Setup
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" decodium_x64.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" decodium_x86.iss
+        shell: pwsh
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-installers
+          path: |
+            Decodium_3.0_*_Setup.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Decodium_3.0_*_Setup.exe
+          draft: true
+          generate_release_notes: true

@@ -1,0 +1,381 @@
+#include "FoxLog.hpp"
+
+#include <stdexcept>
+#include <utility>
+#include <QString>
+#include <QDateTime>
+#include <QSqlDatabase>
+#include <QSqlTableModel>
+#include <QSqlRecord>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QTextStream>
+#include <QDebug>
+#include "Logger.hpp"
+#include "Configuration.hpp"
+#include "Radio.hpp"
+#include "qt_db_helpers.hpp"
+#include "pimpl_impl.hpp"
+
+class FoxLog::impl final
+  : public QSqlTableModel
+{
+  Q_OBJECT
+
+public:
+  impl (Configuration const * configuration);
+
+  QVariant data (QModelIndex const& index, int role) const
+  {
+    auto value = QSqlTableModel::data (index, role);
+    if (index.column () == fieldIndex ("when") && Qt::DisplayRole == role)
+      {
+        QLocale locale;
+        value = locale.toString (QDateTime::fromMSecsSinceEpoch (value.toULongLong () * 1000ull, Qt::UTC), locale.dateFormat (QLocale::ShortFormat) + " hh:mm:ss");
+      }
+    return value;
+  }
+
+  Configuration const * configuration_;
+  QSqlQuery mutable dupe_query_;
+  QSqlQuery mutable export_query_;
+  // queries for rates
+  QSqlQuery mutable rate_n_query_;
+  QSqlQuery mutable rate60m_query_;
+  QString rate();
+};
+
+#include "FoxLog.moc"
+
+namespace 
+{
+  QString exportable_operator_call (QString const& operator_call, QString const& station_call)
+  {
+    auto const safeOperator = operator_call.trimmed ().toUpper ();
+    auto const safeStation = station_call.trimmed ().toUpper ();
+    if (safeOperator.isEmpty ()) {
+      return {};
+    }
+
+    auto const operatorBase = Radio::base_callsign (safeOperator).trimmed ().toUpper ();
+    auto const stationBase = Radio::base_callsign (safeStation).trimmed ().toUpper ();
+    if (operatorBase.isEmpty () || !Radio::is_callsign (operatorBase)) {
+      return {};
+    }
+
+    if (!stationBase.isEmpty () && operatorBase == stationBase) {
+      return {};
+    }
+
+    return safeOperator;
+  }
+
+  QString const fox_log_ddl {
+                             "CREATE %1 TABLE fox_log%2 ("
+                             "	id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+                             "	\"when\" DATETIME NOT NULL,"
+                             "	call VARCHAR(20) NOT NULL,"
+                             "	grid VARCHAR(4),"
+                             "	report_sent VARCHAR(3),"
+                             "	report_rcvd VARCHAR(3),"
+                             "	band VARCHAR(6) NOT NULL"
+                             ")"
+  };
+}
+
+FoxLog::impl::impl (Configuration const * configuration)
+  : configuration_ {configuration}
+{
+  if (!database ().tables ().contains ("fox_log"))
+    {
+      QSqlQuery query;
+      SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                       fox_log_ddl.arg ("").arg (""));
+    }
+  else
+    {
+      QSqlQuery query;
+      // query to check if table has a unique constraint
+      SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                       "SELECT COUNT(*)"
+                       "       FROM sqlite_master"
+                       "    WHERE"
+                       "       type = 'index' AND tbl_name = 'fox_log'");
+      query.next ();
+      if (query.value (0).toInt ())
+        {
+          // update to new schema with no dupe disallowing unique
+          // constraint
+          database ().transaction ();
+          SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                           fox_log_ddl.arg ("TEMPORARY").arg ("_backup"));
+          SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                           "INSERT INTO fox_log_backup SELECT * from fox_log");
+          SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                           "DROP TABLE fox_log");
+          SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                           fox_log_ddl.arg ("").arg (""));
+          SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                           "INSERT INTO fox_log SELECT * from fox_log_backup");
+          SQL_error_check (query, static_cast<bool (QSqlQuery::*) (QString const&)> (&QSqlQuery::exec),
+                           "DROP TABLE fox_log_backup");
+          database ().commit ();
+        }
+    }
+
+  SQL_error_check (dupe_query_, &QSqlQuery::prepare,
+                   "SELECT "
+                   "    COUNT(*) "
+                   "  FROM "
+                   "    fox_log "
+                   "  WHERE "
+                   "    call = :call "
+                   "    AND band = :band");
+
+  SQL_error_check (export_query_, &QSqlQuery::prepare,
+                   "SELECT "
+                   "    band"
+                   "    , \"when\""
+                   "    , call"
+                   "    , grid"
+                   "    , report_sent"
+                   "    , report_rcvd "
+                   "  FROM "
+                   "    fox_log "
+                   "  ORDER BY "
+                   "    \"when\"");
+
+  SQL_error_check (rate_n_query_, &QSqlQuery::prepare,
+                   "SELECT "
+                   " \"when\""
+                   "  FROM "
+                   "    fox_log "
+                   "  ORDER BY "
+                   "    \"when\" DESC"
+                   "  LIMIT :limitn"
+  );
+
+  SQL_error_check (rate60m_query_, &QSqlQuery::prepare,
+                   "SELECT "
+                   " COUNT() "
+                   "  FROM "
+                   "    fox_log "
+                   " where \"when\" > :one_hour_ago"
+                   "  ORDER BY "
+                   "    \"when\" DESC"
+  );
+  setEditStrategy (QSqlTableModel::OnFieldChange);
+  setTable ("fox_log");
+  setHeaderData (fieldIndex ("when"), Qt::Horizontal, tr ("Date & Time(UTC)"));
+  setHeaderData (fieldIndex ("call"), Qt::Horizontal, tr ("Call"));
+  setHeaderData (fieldIndex ("grid"), Qt::Horizontal, tr ("Grid"));
+  setHeaderData (fieldIndex ("report_sent"), Qt::Horizontal, tr ("Sent"));
+  setHeaderData (fieldIndex ("report_rcvd"), Qt::Horizontal, tr ("Rcvd"));
+  setHeaderData (fieldIndex ("band"), Qt::Horizontal, tr ("Band"));
+
+  // This descending order by time is important, it makes the view
+  // place the latest row at the top, without this the model/view
+  // interactions are both sluggish and unhelpful.
+  setSort (fieldIndex ("when"), Qt::DescendingOrder);
+
+  SQL_error_check (*this, &QSqlTableModel::select);
+}
+
+QString FoxLog::rate()
+{
+  return QString("Last 10: %1, Last 100: %2, Last 60m: %3").arg(QString::number(this->rate_last_n(10),'f',0),
+                                               QString::number(this->rate_last_n(100),'f',0),
+                                               QString::number(this->rate_60m()));
+}
+
+FoxLog::FoxLog (Configuration const * configuration)
+  : m_ {configuration}
+{
+}
+
+FoxLog::~FoxLog ()
+{
+}
+
+QSqlTableModel * FoxLog::model ()
+{
+  return &*m_;
+}
+
+namespace
+{
+  void set_value_maybe_null (QSqlRecord& record, QString const& name, QString const& value)
+  {
+    if (value.size ())
+      {
+        record.setValue (name, value);
+      }
+    else
+      {
+        record.setNull (name);
+      }
+  }
+}
+
+bool FoxLog::add_QSO (QDateTime const& when, QString const& call, QString const& grid
+                      , QString const& report_sent, QString const& report_received
+                      , QString const& band)
+{
+  auto record = m_->record ();
+  if (!when.isNull ())
+    {
+      record.setValue ("when", when.toMSecsSinceEpoch () / 1000);
+    }
+  else
+    {
+      record.setNull ("when");
+    }
+  set_value_maybe_null (record, "call", call);
+  set_value_maybe_null (record, "grid", grid);
+  set_value_maybe_null (record, "report_sent", report_sent);
+  set_value_maybe_null (record, "report_rcvd", report_received);
+  set_value_maybe_null (record, "band", band);
+  if (m_->isDirty ())
+    {
+      m_->revert ();            // discard any uncommitted changes
+    }
+  m_->setEditStrategy (QSqlTableModel::OnManualSubmit);
+  ConditionalTransaction transaction {*m_};
+  auto ok = m_->insertRecord (-1, record);
+  if (ok)
+    {
+      ok = transaction.submit (false);
+    }
+  m_->setEditStrategy (QSqlTableModel::OnFieldChange);
+  return ok;
+}
+
+bool FoxLog::dupe (QString const& call, QString const& band) const
+{
+  m_->dupe_query_.bindValue (":call", call);
+  m_->dupe_query_.bindValue (":band", band);
+  SQL_error_check (m_->dupe_query_, static_cast<bool (QSqlQuery::*) ()> (&QSqlQuery::exec));
+  m_->dupe_query_.next ();
+  return m_->dupe_query_.value (0).toInt ();
+}
+
+void FoxLog::reset ()
+{
+  // synchronize model
+  while (m_->canFetchMore ()) m_->fetchMore ();
+  if (m_->rowCount ())
+    {
+      m_->setEditStrategy (QSqlTableModel::OnManualSubmit);
+      ConditionalTransaction transaction {*m_};
+      SQL_error_check (*m_, &QSqlTableModel::removeRows, 0, m_->rowCount (), QModelIndex {});
+      transaction.submit ();
+      m_->select ();            // to refresh views
+      m_->setEditStrategy (QSqlTableModel::OnFieldChange);
+    }
+}
+
+int FoxLog::rate_60m()
+{
+  int rate60m = 0;
+  qlonglong const& one_hour_ago = QDateTime::currentDateTime().addSecs(-3600).toMSecsSinceEpoch () / 1000;
+
+  // query the 60m rate
+  m_->rate60m_query_.bindValue (":one_hour_ago", one_hour_ago);
+  SQL_error_check (m_->rate60m_query_, static_cast<bool (QSqlQuery::*) ()> (&QSqlQuery::exec));
+  m_->rate60m_query_.next ();
+  rate60m = m_->rate60m_query_.value (0).toLongLong();
+  return rate60m;
+  //
+}
+
+double FoxLog::rate_last_n(int n)
+{
+  double rate_interval = 0;
+
+  qlonglong const& secs_now = QDateTime::currentDateTime().toMSecsSinceEpoch () / 1000;
+
+  // get last n or up to n
+  m_->rate_n_query_.bindValue (":limitn", n);
+  SQL_error_check (m_->rate_n_query_, static_cast<bool (QSqlQuery::*) ()> (&QSqlQuery::exec));
+
+  m_->rate_n_query_.next();
+  if (!m_->rate_n_query_.isValid()) {
+    LOG_ERROR(QString("rate_n result is not valid. Last error %1").arg(m_->rate_n_query_.lastError().text()));
+    return 0.0;
+  }
+  // size / (time_now - time_of_first)
+  m_->rate_n_query_.last();
+  rate_interval = secs_now - m_->rate_n_query_.value (0).toLongLong ();
+  if (rate_interval == 0) return 0.0;
+
+  m_->rate_n_query_.first(); // count the records
+
+  int size = 1;
+  while (m_->rate_n_query_.next() && m_->rate_n_query_.isValid()) size++;
+  return (size/rate_interval) * 3600;
+}
+
+namespace
+{
+  struct ADIF_field
+  {
+    explicit ADIF_field (QString const& name, QString const& value)
+      : name_ {name}
+      , value_ {value}
+    {
+    }
+
+    QString name_;
+    QString value_;
+  };
+
+  QTextStream& operator << (QTextStream& os, ADIF_field const& field)
+  {
+    if (field.value_.size ())
+      {
+        os << QString {"<%1:%2>%3 "}.arg (field.name_).arg (field.value_.size ()).arg (field.value_);
+      }
+    return os;
+  }
+}
+
+void FoxLog::export_qsos (QTextStream& out) const
+{
+  out << "Decodium v3.0 SE KP5 FT8 DXpedition Mode Fox Log\n<eoh>";
+
+  SQL_error_check (m_->export_query_, static_cast<bool (QSqlQuery::*) ()> (&QSqlQuery::exec));
+  auto record = m_->export_query_.record ();
+  auto band_index = record.indexOf ("band");
+  auto when_index = record.indexOf ("when");
+  auto call_index = record.indexOf ("call");
+  auto grid_index = record.indexOf ("grid");
+  auto sent_index = record.indexOf ("report_sent");
+  auto rcvd_index = record.indexOf ("report_rcvd");
+  while (m_->export_query_.next ())
+    {
+      auto when = QDateTime::fromMSecsSinceEpoch (m_->export_query_.value (when_index).toULongLong () * 1000ull, Qt::UTC);
+      auto const opCall = exportable_operator_call (m_->configuration_->opCall (),
+                                                    m_->configuration_->my_callsign ());
+      out << '\n'
+          << ADIF_field {"band", m_->export_query_.value (band_index).toString ()}
+          << ADIF_field {"mode", "FT8"}
+          << ADIF_field {"qso_date", when.toString ("yyyyMMdd")}
+          << ADIF_field {"time_on", when.toString ("hhmmss")}
+          << ADIF_field {"call", m_->export_query_.value (call_index).toString ()}
+          << ADIF_field {"gridsquare", m_->export_query_.value (grid_index).toString ()}
+          << ADIF_field {"rst_sent", m_->export_query_.value (sent_index).toString ()}
+          << ADIF_field {"rst_rcvd", m_->export_query_.value (rcvd_index).toString ()}
+          << ADIF_field {"station_callsign", m_->configuration_->my_callsign ()}
+          << ADIF_field {"my_gridsquare", m_->configuration_->my_grid ()};
+      if (!opCall.isEmpty ())
+        {
+          out << ADIF_field {"operator", opCall};
+        }
+      out << "<eor>";
+    }
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
+  out << endl;
+#else
+  out << Qt::endl;
+#endif
+}

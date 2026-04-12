@@ -1,0 +1,59 @@
+			  To Do for FT8++
+			  ---------------
+			  
+The following list is for informtion and general guidance.  Everything
+is subject to change, and not all ideas are necessarily good ones!
+
+1. Nomenclature and parameters for message types
+   - Old-style = classic 72-bit JT-style source-encoding
+        FT8:    (174,87) code: 72-bit info, i3bit, CRC12, isync=1
+    MSK144: (128,80) code: 72-bit info, CRC8
+   - New-style
+        FT8:    (174,91) code: 74+3+14, sync uses isync=2
+        MSK144: (128,90) code: 74+3+13
+
+2. (K1JT) For backward compatibility (good for, say, 6 months only?),
+by default we'll generate old-style messages where possible, new-style
+messages where they are needed.  We'll decode both old and new types.
+
+3. (K1JT -- DONE) Two new checkboxes on Advanced tab to enable 77-bit
+messages:
+  - "Always generate new-style (77-bit) messages."
+  - "Decode only 77-bit messages
+
+4. (K9AN -- MOSTLY DONE) New-style messages can be as long as 37
+characters.  We'll need to allow for that in a number of places.
+
+5. (K9AN -- DONE) Subroutine genft8() will need to parse the message to be
+transmitted, determine the effective message type i3 and possibly
+subtype, n3.  It will then generate itone, calling genft8_174_91(() if
+needed.
+
+6. (K1JT) Code to generate the user-readable messages for each
+specialized type of operating, e.g., NA VHF contest, EU VHF contest,
+ARRL Field Day, ARRL RTTY Roundup, use of nonstandard calls.
+
+7. (??) Code to do the necessary auto-sequencing for each specialized
+type of operating.
+
+8. (K9AN -- MOSTLY DONE) What's needed for MSK144 with LDPC(128,90) ?
+Still need to work  on Sh messages. How will genmsk_128_90 know when to
+generate a Sh message? 
+
+9. (K9AN) Work on the implementation of AP decoding. For which message types
+should AP be implemented? For each message type/QSO state that will use 
+AP decoding, need to create an AP decoding table that defines the number and 
+type of AP decoding passes. 
+
+==========================================================================
+The following are just ideas:
+
+- Options to sort/filter decoded signals
+
+- New Fox message type using constant-envelope waveform and higher
+  symbol rate to accommodate multiple simultaneous QSOs.  RR73 sent to
+  0-5 calls, report sent to 0-5 calls.  Decoding uses AP for missing
+  calls, thereby effectively making lower-rate codes when not all
+  slots are used.
+
+- Hound should send spots of Fox to PSK Reporter.

@@ -1,0 +1,123 @@
+build/
+build-mac/
+build-codex-check/
+build-win-mingw/
+.DS_Store
+~*
+TAGS
+tags
+GPATH
+GRTAGS
+GTAGS
+*~
+junk*
+jnq*
+*.o
+*.mod
+*.pro.user
+*.bak
+__pycache__
+
+# Build directories
+build/
+build32/
+cmake-build-debug/
+cmake-build-release/
+CMakeFiles/
+
+# Distribution directories
+dist_32bit/
+dist_64bit/
+release-*/
+Decodium3_FT2_x64/
+Decodium_3.0_*/
+docker-output/
+build-arm-output/
+
+# Installer and archive artifacts
+*.exe
+!artwork/*.exe
+*.zip
+*.rar
+*.pkg.tar.zst
+
+# Fortran temp
+lib/77bit/tmp
+lib/tmp
+fnd
+
+# Plugin artifacts
+ft2_plugin/
+ft2_plugin.rar
+
+# Claude / IDE temp files
+.claude/
+tmpclaude-*
+.zip
+.idea/
+
+# Build output directories (mingw64, ucrt64, etc.)
+build_mingw64/
+build_ucrt64/
+build2/
+build2_*/
+build4/
+build5/
+build5r/
+build-bridge/
+bridge/
+dist_clean/
+gcctest/
+hamlib_shim/
+prebuilt/
+$ROOT/
+Decodium_4.0_CoreShannon_x64/
+
+# Log / debug output files
+*.log
+autogen_err.txt
+boost_install.txt
+both_cc1.txt
+c_err.txt
+cc1*.txt
+cc1plus*.txt
+autogen_syspath_out.txt
+build2_out.txt
+
+# Temp scripts and tools
+check_*.bat
+check_*.sh
+check_*.ps1
+configure_decodium*.bat
+configure_mingw64.bat
+configure_ucrt64.bat
+deploy_*.bat
+do_find_exe.bat
+fix_qsizetype.py
+run_decodium*.bat
+run_mingw64.bat
+t_simple.cpp
+
+# Android / mobile artifacts
+android/
+decodium3-debug.apk
+appverifUI.dll
+
+# Runtime stubs (auto-generated)
+decodium_common_blocks.c
+decodium_fortran_stubs.cpp
+decodium_qml.rc
+libhamlib-4.def
+
+# Temporary scripts
+sign_all.bat
+
+# DXped certificate manager sensitive/runtime files
+tools/dxped_private.pem
+tools/dxped_config.json
+tools/dxped_database.json
+tools/verified_dxpeds.json
+tools/*.dxcert
+*.dxcert
+dist-windows-x64/
+output/

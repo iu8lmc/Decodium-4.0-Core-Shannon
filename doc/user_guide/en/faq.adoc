@@ -1,0 +1,109 @@
+// Status: edited
+
+////
+Questions:
+ Should be short one-liners (in the .adoc file) ending with ?::
+ If your question is too long for one line, consider multiple questions or rephrase.
+
+Answers:
+ Can be bullets or paragraphs. Bullets make for easier reading.
+
+Bullet Usage:
+ *  = a circle bullet single intent
+ ** = circle bullet double indent
+ .  = should be avoided as the questions are numbered
+ .. = bullet a, b, c, and so on, double indent
+
+Alternatives: Use a * Bullet, followed by .. for example, then have
+a multi-section answer using the * as the section header
+ 
+ * Section Header 1
+ .. Possible Answer a
+ .. Possible Answer b
+ * Section Header 2
+ .. Possible Answer a
+ .. Possible Answer b
+ 
+Link Usage:
+ Use the common/links.adoc for href links to maintain consistency. Try to avoid
+ apostrophes ` or ' as it breaks AsciiDoc syntax without special escaping 
+ and they do not translate into other languages well.
+
+////
+[qanda]
+My displayed spectrum is flatter when I do not check the *Flatten* box. What's wrong?::
+
+_WSJT-X_ does not expect a steep filter edge within the displayed
+passband. Use a wider IF filter or reduce the displayed passband by
+decreasing *Bins/Pixel*, increasing *Start*, or reducing the width of
+the *Wide Graph*.  You might also choose to re-center the filter
+passband, if such control is available.
+
+How should I configure _WSJT-X_ to run multiple instances?::
+
+Start _WSJT-X_ from a command-prompt window, assigning each a unique
+identifier as in the following two-instance example.  This procedure
+will isolate the *Settings* file and the writable file location for
+each instance of _WSJT-X_.
+
+ wsjtx --rig-name=TS590
+ wsjtx --rig-name=FT847
+
+I am getting a "Network Error - SSL/TLS support not installed" message. What should I do?::
+
+You need to install suitable _OpenSSL_ libraries - see <<OPENSSL,Instructions to install _OpenSSL_>>.
+
+I occasionally get Rig Control Errors if I adjust my Icom rig's VFO. What's wrong?::
+
+By default, most Icom transceivers have *CI-V Transceive Mode" enabled. This will cause unsolicited CAT traffic from the rig that disrupts CAT
+control by a PC. Disable this option in the rig's menu.
+
+I want to control my transceiver with another application as well as _WSJT-X_, is that possible?::
+
+This only possible to do reliably via some kind of rig control server.
+That server must be able to accept both _WSJT-X_ and the other
+application(s) as clients. Using a dumb serial port splitter like the
+VSPE tool is not supported; it may work but it is not reliable due to
+unmanaged CAT control collisions. Applications like the _Hamlib Rig
+Control Server (rigctld)_, _{omnirig}_, and _{dxlsuite} Commander_ are
+potentially suitable; _WSJT-X_ can act as a client to them all.
+
+Rig control through _OmniRig_ seems to fail when I click *Test CAT*. What can I do about it?::
+
+_Omni-Rig_ apparently has a bug that appears when you click *Test
+CAT*.  Forget using *Test CAT* and just click *OK*.  _Omni-Rig_ then
+behaves normally.
+
+I am running _WSJT-X_ under Ubuntu.  The program starts, but the menu bar is missing from the top of the main window and the hot-keys don't work.::
+
+Ubuntu's new "`Unity`" desktop puts the menu for the currently active
+window at the top of the primary display screen.  You can restore menu
+bars to their traditional locations by typing the following in a
+command-prompt window:
+
+ sudo apt remove appmenu-qt5
+
++
+Alternatively, you can disable the common menu bar for just _WSJT-X_
+by starting the application with the environment variable
+QT_QPA_PLATFORMTHEME set to empty (the space after the '=' character
+is necessary):
+
+ QT_QPA_PLATFORMTHEME= wsjtx
+
+I am running _WSJT-X_ on Linux using a KDE desktop. Why does the
+*Configurations* menu misbehave?::
+
+The  KDE  development  team  have  added code  to  Qt  that  tries  to
+automatically add  shortcut accelerator keys to all buttons including
+popup menu buttons. This interferes with operation of the application
+(many other Qt applications have  similar issues with KDE). Until this
+is fixed  by the KDE team  you must disable this  feature. Edit the
+file `~/.config/kdeglobals` and add a section containing the following:
+
+ [Development]
+ AutoCheckAccelerators=false
+
++
+See https://stackoverflow.com/a/32711483 and
+https://bugs.kde.org/show_bug.cgi?id=337491 for more details.

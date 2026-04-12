@@ -1,0 +1,50 @@
+// Status=review
+
+The WSJT-X Wide Graph window displays the frequency spectrum of
+received audio. Usually, the upper portion shows a waterfall plot of
+the frequency spectrum (a spectrogram) and a line plot of the current
+or average spectrum. Controls at the bottom of the window are used to
+set up the displayed audio frequency range, color palette, and scaling
+of the spectrum displays.  A control *Spec nn%* at the bottom right
+lets you adjust the vertical fraction of the window occupied by the
+spectrum line plot.  It is important to set appropriate lower and
+upper audio frequency limits for the Wide Graph because these limits
+define the FT8 decoder's search window. For this tutorial, the limits
+will be set to cover 100-3300 Hz:
+
+- Set *Start* = 100 Hz.
+
+- Set *Bins/Pixel* = 5. Smaller or larger values make the Wide Graph
+cover a smaller/larger frequency range.
+
+- Use the mouse to grab the left or right edge of the *Wide Graph*,
+and adjust its width so that the upper frequency limit is about 3300
+Hz.
+
+- Set *N Avg* = 2. This number determines how many spectra are
+averaged to produce each line in the spectrogram.  Smaller values make
+the spectrogram scroll and update more frequently, resulting in
+signals being more spread out in the vertical (time) direction. Larger
+values make it easier to detect very weak signals.
+
+The *Palette* setting controls the color scheme used for the spectrogram: 
+
+- Set *Palette* = Fldigi 
+
+When *Flatten* is checked, _WSJT-X_ attempts to correct for slope or
+curvature in the receiver's passband shape.
+
+- *Flatten* = checked 
+
+The line plot can be set to display the current (un-averaged) spectrum or the cumulative (averaged)
+spectrum:
+
+- Select *Cumulative* for data display
+- Set the *Gain* and *Zero* sliders for the waterfall and spectrum to near midscale
+
+The *Spec nn%* setting determines what fraction of the vertical extent of the Wide Graph will
+be used for the line plot of the spectrum. Setting *Spec* to 0 will eliminate the line plot and
+a setting of 100 will eliminate the spectrogram and show only the line plot:
+
+- Set *Spec* = 50% 
+

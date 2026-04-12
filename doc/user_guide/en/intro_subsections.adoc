@@ -1,0 +1,73 @@
+=== Documentation Conventions
+
+This guide includes many screen shots to illustrate user settings and
+program features.  Keep in mind that _WSJT-X_ is a multi-platform
+application; the detailed appearance of windows and user controls
+will be different in Windows, Linux, or macOS environments.
+The underlying functionality is the same on all operating systems,
+however.  Where desirable we call special attention to important
+platform differences.
+
+Most people access the _WSJT-X User Guide_ primarily through a
+browser. Use the browser's search function, generally invoked from the
+keyboard with the keys CTRL+F, to search the guide for help on a
+particular topic or keyword.
+
+The names of _WSJT-X_ windows, menus, and on-screen controls are
+displayed in this manual in boldface type, as in *Wide Graph*.  File
+names and information entered via keyboard is shown in a monospace
+font, for example `all.txt`.
+
+
+In this manual the following icons call attention to particular types
+of information:
+
+TIP: *Tips* on program features or capabilities that might otherwise
+be overlooked. 
+
+NOTE: *Notes* containing information that may be of interest to
+particular classes of users.
+
+IMPORTANT: *Warnings* about usage that could lead to undesired
+consequences.
+
+=== User Interface in Other Languages
+
+The _WSJT-X_ user interface (UI) is now available in many languages.
+When a translated UI is available for the computer's default System
+Language, it will appear automatically on program startup. The UI
+language may be overridden if desired by starting _WSJT-X_ with a
+command line option. For example, to start _WSJT-X_ with its user
+interface in Spanish or Japanese, start a command-prompt window and
+enter one of these the commands:
+
+`wsjtx --language es`
+
+`wsjtx --language ja`
+
+The top portion of the main window will then look like one of the
+following examples:
+
+image::Main_Window_es.png[align="center"]
+
+image::Main_Window_ja.png[align="center"]
+
+=== How You Can Contribute
+
+_WSJT-X_ is part of an open-source project released under the
+{gnu_gpl} (GPLv3). If you have programming or documentation skills or
+would like to contribute to the project in other ways, please make
+your interests known to the development team.  We especially encourage
+those with translation skills to volunteer their help, either for
+this _User Guide_ or for the program's user interface.
+
+The project's source-code repository can be found at {devrepo}. Bug
+reports and suggestions for new features, improvements to the _WSJT-X
+User Guide_, etc., may be sent to one of the email lists listed in the
+<<SUPPORT,Support>> section. You must join the group in order to post
+messages to the email list.
+
+=== License
+
+Before using _WSJT-X_, please read our licensing terms
+<<LICENSE,here>>.

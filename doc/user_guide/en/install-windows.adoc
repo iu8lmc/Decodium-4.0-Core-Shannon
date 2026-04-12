@@ -1,0 +1,89 @@
+// Status=edited
+
+Download and execute the package file {win32} (Windows 7 or later,
+32-bit) or {win64} (Windows 7 or later, 64-bit) following these
+instructions:
+
+* Install _WSJT-X_ into its own directory, for example `C:\WSJTX` or `C:\WSJT\WSJTX`, rather than the conventional location `C:\Program
+  Files ...\WSJTX`.
+
+* All program files relating to _WSJT-X_ are stored in the chosen
+  installation directory and its subdirectories.
+
+* Logs and other writeable files are normally found in the
+  directory +
+
+`C:\Users\<username>\AppData\Local\WSJT-X`.
+
+TIP: Your computer may be configured so that this directory is
+     "`invisible`".  It's there, however, and accessible.  An
+     alternative (shortcut) directory name is
+     `"%LocalAppData%\WSJT-X\"`.
+
+* The built-in Windows facility for time synchronization is usually
+  not adequate.  We recommend the program _Meinberg NTP Client_: see
+  {ntpsetup} for downloading and installation instructions. Recent
+  versions of Windows are now shipped with a more capable Internet
+  time synchronization service that is suitable if configured
+  appropriately. We do not recommend SNTP time setting tools or others
+  that make periodic correction steps; _WSJT-X_ requires that the PC
+  clock be monotonically increasing and smoothly continuous.
+
+NOTE: Having a PC clock that appears to be synchronized to UTC is not
+      sufficient.  "`Monotonically increasing`" means that the clock
+      must not be stepped backwards. "`Smoothly continuous`" means
+      that time must increase at a nearly constant rate, without
+      steps.  Any necessary clock corrections must be applied by
+      adjusting the rate of increase, thereby correcting
+      synchronization errors gradually.
+
+[[OPENSSL]]
+  
+* _WSJT-X_ uses the _OpenSSL_ libraries, and these are usually
+installed by defajult. If an incompatible OpenSSL version is already
+installed on your system. you will see the following error message
+shortly after requesting a fetch of the latest LoTW users database. To
+fix this problem, install the _OpenSSL_ libraries.
+
+image::LoTW_TLS_error.png[align="center",alt="SSL/TLS"]
+
+You can download a suitable _OpenSSL_ package for Windows from
+{win_openssl_packages}; you need the latest *Windows Light*
+version. For the 32-bit _WSJT-X_ build, use the latest Win32 v1.1.1
+version of the _OpenSSL_ libraries, for the 64-bit _WSJT-X_ use the
+latest Win64 v1.1.1 version of the _OpenSSL_ libraries (Note: it is OK
+to install both versions on a 64-bit system) which, at the time of
+writing, were {win32_openssl} and {win64_openssl} respectively.
+
+Install the package and accept the default options, including the
+option to copy the _OpenSSL_ DLLs to the Windows system
+directory. There is no obligation to donate to the _OpenSSL_
+project. Un-check all the donation options if desired. +
+
+NOTE: If you still get the same network error after installing the
+      _OpenSSL_ libraries then you also need to install the
+      {msvcpp_redist} component. From the download page select
+      `vcredist_x86.exe` for use with the 32-bit _WSJT-X_ build or
+      `vcredist_x64.exe` with the 64-bit build, then run it to
+      install.
+
+TIP: If you cannot install the _OpenSSL_ libraries or do not have an
+     Internet connection on the computer used to run
+     _WSJT-X_ {VERSION_MAJOR}.{VERSION_MINOR}, you can download
+     the _LoTW_ file manually. Go to
+     https://lotw.arrl.org/lotw-user-activity.csv in a web browser,
+     download the file, then move it to the _WSJT-X_ log files
+     directory. This directory can be opened by selecting
+     *File|Open log directory* from the main menu.
+
+* _WSJT-X_ expects your sound card to do its raw sampling at 48000 Hz.
+  To ensure that this will be so when running under recent versions of
+  Windows, open the system's *Sound* control panel and select in turn
+  the *Recording* and *Playback* tabs. Click *Properties*, then
+  *Advanced*, and select *16 bit, 48000 Hz (DVD Quality)*. Switch off
+  all audio enhancement features for these devices.
+
+* You can uninstall _WSJT-X_ by clicking its *Uninstall* link in the
+Windows *Start* menu, or by using *Uninstall a Program* on the
+*Windows Control Panel | Programs and Features* option or in
+*File | Settings | Apps*.

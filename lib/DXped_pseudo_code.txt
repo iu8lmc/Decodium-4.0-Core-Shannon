@@ -1,0 +1,71 @@
+Auto-Sequencing algorithm for DXpedition station:
+
+Start:
+    CQMsg = "CQ KH1DX"   (or "CQ UP KH1DX", "CQ 116 KH1DX", etc.)
+    TxMsg = CQMsg
+    Ntry = 0
+    QCALL = ""                                        # Callsign of current QSO partner
+    go to Transmit
+
+Transmit:
+    TX                                                # (... takes 13.6 s)
+    go to Receive
+
+Receive:
+    RX                                                # (... takes ~14 s)
+    N = number of decodes                             # RxMsg[i], i=1,N
+    if(N == 0)
+        go to Transmit
+    J = index of a reply from current QCALL           # RxMsg[J] = "KH1DX QCALL R<rpt>"
+
+    if(QCALL == "")                                   # No QSO in progress
+        Select new QCALL                              # Op chooses a caller
+	if(QCALL == "")
+	    TxMsg = CQMsg                             # No callers, we'll CQ again
+    else                                              # QSO in progress
+        if(J >= 1)                                    # Expected message was received
+            log the QSO with QCALL
+	    QCALL = ""
+	    Select new QCALL                          # Op chooses a new caller
+	    if(QCALL != "")
+	        TxMsg = "73 NOW QCALL <rpt>"          # Start a new QSO
+	    else
+                TxMsg = "73 " + CQMsg                 # No callers, we'll CQ again
+        else
+            Ntry = Ntry + 1                           # Expected msg not received
+	    if(Ntry <= NtryMax)
+	        go to Transmit                        # Ask for a repeat
+	    else
+		QCALL = ""                            # Max tries exceeded, abort this QSO
+	        Select new QCALL                      # Choose a new caller
+	        if(QCALL != "")
+	            TxMsg = "NIL NOW QCALL <rpt>"     # Start a new QSO
+	        else
+                    TxMsg = "NIL " + CQMSG            # No callers, we'll CQ again
+    go to Transmit
+
+
+Auto-Sequencing algorithm for those calling the DXpedition:
+
+Start:
+    TxMsg = "KH1DX MyCall"
+    InQSO = false
+
+Transmit:
+    TX                                                # (... takes 13.6 s)
+    go to Receive
+
+Receive:
+    RX                                                # (... takes ~14 s)
+    if(RxMsg[i] contains "MyCall <rpt>")
+        InQSO = true
+        TxMsg = "KH1DX MyCall R<rpt>"
+	go to Transmit
+
+    if(RxMsg[i] contains "<rpt>")
+        TxEnable = false
+	go to Receive
+
+    if(RxMsg[i] contains "CQ KH1DX")
+        TxEnable = true
+	go to Transmit

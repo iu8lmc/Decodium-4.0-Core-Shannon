@@ -1,0 +1,66 @@
+        	    Bit packing of SuperFox QPC Messages
+-----------------------------------------------------------------------------
+The IV3NWV Q-ary Polar Code has parameters (n,k) = (127,50).  The last
+three 7-bit information symbols convey a 21-bit CRC based on the first
+47 symbols.  Thus, each Super Fox transmission carries a payload of
+47*7=329 bits.  On a modern x86 processor the decoder executes in
+deterministic time around 5 ms per decode, and always produces a
+result.  The CRC test rejects all but around 1 in two million false
+decodes.
+
+Bit fields are labeled with tags as defined in the QEX article "The
+FT4 and FT8 Communication Protocols" by Franke, Somerville, and Taylor
+in QEX for July/August 2020, available on the WSJT web site here:
+https://wsjt.sourceforge.io/FT4_FT8_QEX.pdf.  As one example, the tag
+'c28' denotes a standard callsign, which requires 28 bits.
+
+=============================================================================
+i3 = 0: Standard message: FoxCall, up to 9 HoundCalls, up to 4 signal
+reports, "MoreCQs" flag, a digital signature, and a 3-bit message type.
+-----------------------------------------------------------------------------
+  F  H1  H2  H3  H4  H5  H6  H7  H8  H9 R6 R7 R8 R9   U  Q   D   M      Type
+c28 c28 c28 c28 c28 c28 c28 c28 c28 c28 r5 r5 r5 r5  u5 q1 d20  i3=0  Std Msg
+                                    280         300 305    326 329
+=============================================================================
+i3 = 1: If Fox uses a compound callsign we have space for only 8 Hound calls.
+Otherwise like type i3=0.
+-----------------------------------------------------------------------------
+ FC  H1  H2  H2  H4  H5  H6  H7  H8 R5 R6 R7 R8       U  Q   D   M
+c58 c28 c28 c28 c28 c28 c28 c28 c28 r5 r5 r5 r5      u3 q1 d20  i3=1
+ 58                             282         302     305    326 329
+=============================================================================
+i3 = 2: A free text message with up to 26 characters can be transmitted along
+with messages to as many as 4 Hounds conveying either reports or RR73s.
+-----------------------------------------------------------------------------
+  F  H1  H2  H3  H4 R1 R2 R3 R4           T   T       U  Q   D   M     Type
+c28 c28 c28 c28 c28 r5 r5 r5 r5         t71 t71      u3 q1 d20  i3=2  FT+4H
+                140         160             302     305    326 329
+=============================================================================
+i3 = 3: Message "CQ FoxCall Grid <Free text>"
+-----------------------------------------------------------------------------
+ FC   G   T   T                                       U  Q   D   M      Type
+c58 g15 t71 t71                                     u90 q1 d20  i3=3   CQ FT
+ 58  73 144 215                                     305    326 329
+=============================================================================
+
+D  Digital signature (20 bits)
+F  Fox call (28 bits)
+FC Compound Fox call (58 bits)
+G  Grid locator (15 bits)
+H  Hound call (28 bits)
+M  Message type (3 bits)
+Q  MoreCQs flag
+R  Report, (5 bits: -18 to +12 dB, or RR73)
+T  Free text, up to 26 characters total
+U  Unused bits
+
+Unused callsign slots are set to the numerical value for "QU1RKS", and
+ignored when received. Similarly for unused t71 slots.  Unused report
+slots are set to 0 (-20 dB).  "CQ FoxCall" will be displayed along
+with other messages if the "q1" bit is 1.
+
+The SuperFox decoder displays its results with a separate line for each Hound.
+Thus, the old-style message "K1ABC RR73; W9XYZ <VP8PJ> -14" becomes
+
+K1ABC VP8PJ RR73
+W9XYZ VP8PJ -14

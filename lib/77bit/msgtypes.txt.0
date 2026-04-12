@@ -1,0 +1,23 @@
+i3 n3
+--------------------------------------------------------------------------------------
+0   0 FREE TEXT MSG                        71               0   71
+0   1 K1ABC RR73; W9XYZ <KH1/KH7Z> -11     28 28 10 5       1   71   DXpedition Mode
+0   2 PA3XYZ/P R 590003 IO91NP             28 1 1 3 12 25   2   70   EU VHF contest (2)
+0   3 WA9XYZ KA1ABC R 16A EMA              28 28 1 4 3 7    3   71   ARRL Field Day
+0   4 WA9XYZ KA1ABC R 32A EMA              28 28 1 4 3 7    4   71   ARRL Field Day
+1     WA9XYZ/R KA1ABC/R R FN42             28 1 28 1 1 15       74   Standard msg
+2     TU; W9XYZ K1ABC R 579 MA             1 28 28 1 3 13       74   ARRL RTTY contest
+3     <WA9XYZ> PJ4/KA1ABC R-11             13 53 1 1 6          74   Nonstandard calls
+4     PA3XYZ/P GM4ABC/P R IO91             28 1 28 1 1 15       74   EU VHF contest
+
+0   0 HELLO    WORLD 1
+0   0 hello    world    2
+
+0   1 K1ABC RR73; W9XYZ <VP2E/KA1ABC> -11
+0   2 PA3XYZ 590003 IO91NP
+0   3 WA9XYZ KA1ABC 16A EMA
+0   4 WA9XYZ KA1ABC 32A EMA
+1     WA9XYZ/R KA1ABC/R R FN42
+2     W9XYZ K1ABC 579 MA
+3     PJ4/KA1ABC <WA9XYZ> -11
+4     PA3XYZ/P GM4ABC/P R IO91

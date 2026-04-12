@@ -1,0 +1,226 @@
+// Status=edited
+
+Menus at top of the main window offer many options for configuration
+and operation. Some are self-explanatory; additional details for
+others are provided below. Keyboard shortcuts for some frequently
+used menu items are listed at the right edge of the menu.
+
+=== _WSJT-X_ menu
+image::MacAppMenu.png[align="left",alt="Mac App Menu"]
+
+This menu appears on the Macintosh only. *Settings* appears here,
+labeled as *Preferences*, rather than on the *File* menu.  *About WSJT-X* appears here rather than on the *Help* menu.
+
+[[FILE_MENU]]
+=== File menu
+image::file-menu.png[align="left",alt="File Menu"]
+
+[[CONFIG_MENU]]
+=== Configuration Menu
+image::config-menu.png[align="left",alt="File Menu"]
+
+Some users prefer to create and use entries on the *Configurations*
+menu for switching between modes.  Simply *Clone* the *Default* entry,
+*Rename* it as desired, and then make all desired settings for that
+configuration. All settings will be restored whenever you select that
+configuration.
+
+As well as switching between configurations while running _WSJT-X_, you
+can also start the application from the command line in any desired
+configuration.  Use the command-line option
+`--config <configuration-name>`, or `-c` for short, as in these
+examples for configurations named `FT8` and `Echo`:
+
+ wsjtx --config FT8
+ wsjtx -c Echo
+
+[[VIEW_MENU]]
+=== View Menu
+
+Most items on the *View* menu can be clicked to display a specified
+window. Some are self-explanatory or described in detail elsewhere
+in this guide; additional details for others are included below.
+
+image::view-menu.png[align="left",alt="View Menu"]
+
+.Active Stations
+
+*Active Stations* is a window with two distinct purposes. The first
+can help you work the most distant stations, in particular for the
+distance-scored ARRL International Digital Contest. You can set the
+maximum length of the list and the maximum "`Age`" of displayed
+decodes, measured in Rx sequences.  You can request display of only
+ready-to-be-called stations: those whose most recent transmission is a
+CQ, RR73, or 73 message. For the ARRL International Digital Contest
+the window displays scoring *Rate* (points in the most recent hour),
+your total accumulated *Score*, and the number of *Band Changes* in
+the past hour.
+
+image::active_stations.png[align="center",alt="Active Stations"]
+
+When _WSJT-X_ is used together with sister program _QMAP_, the *Active
+Stations* window displays the frequencies, SNRs, Q65 sub-modes, and
+Maidenhead locators for stations recently decoded by _QMAP_ over its
+full 90 kHz bandwidth. Stations using a 30-second sub-mode of Q65 are
+highlighted in yellow. You can limit the displayed list by checking
+the *Wanted only* and/or *CQ only* boxes. The total number of QSOs
+found in `wsjtx.log` is shown, for example to follow your progress
+in an EME contest.  
+
+image::active_stations_QMAP.png[align="center"]
+
+.SWL Mode
+
+*SWL Mode* reduces the main window to show just the menus, decodes
+windows, and status bar. You may find this useful when running
+multiple instances of the application. The size and location of the
+main window are saved and recalled independently for this view.
+
+image::view_SWL.png[align="left",alt="View SWL"]
+
+.Message Creator, QSY Monitor, and Enable Message Popups
+
+A special messaging system can be used to invite your QSO partner to
+move to another band or mode (for example, during a contest), or to
+convey some short canned messages. There are two main parts, the
+*Message Creator* and the *QSY Monitor*. Received messages are
+displayed in popup windows.
+
+Use the Message Creator to create and send these special messages with
+just a few clicks. When using this feature for the first time, make
+sure that your IARU Region has been set (upper right on the *File |
+Settings | General* tab). Activate the *Message Creator* window by
+checking its name on the *View* menu. Four tabs are available: HF,
+VHF, EME and General:
+
+image::mc3.png[align="center",alt="Creator Tabs"]
+
+To send a message, select the appropriate tab and then the band, mode,
+and kHz part of frequency for a QSY request, or a canned message from
+the *General* tab. The actual message to be sent will be shown in the
+field labeled *Message* on each tab. Click *Send Message* to have this
+message conveyed in your next scheduled transmission. *Enable Tx* will
+be activated automatically, and your message will be sent to the
+callsign in the *DX Call* field of the main window.  The example below
+shows the creation of a message to W3SZ asking him to QSY to 145.550
+using FM.
+
+image::mc4.png[align="center",alt="Creator window"]
+
+To prepare for receiving special messages, check *Enable Message
+Popups* on the *View* menu. A screenshot showing the example message
+sent to W3SZ is shown below. As recipient, W3SZ can click *Reply Yes*
+or *Reply No*, and his reply message will be sent in the next Tx
+interval to the callsign present in the recipient's DX callsign box.
+
+image::mc6.png[align="center",alt="Received message"]
+
+TIP: After use, the Message System text remains in the Tx 6 field.  Tx
+6 can be reset to the standard CQ message by clicking the *Generate
+Std Msgs* 
+
+You can view messages sent to other stations, as well as to yourself.
+To do so, check *QSY Monitor* on the *View* menu. An example showing a
+number of received messages is shown below.
+
+image::mc7.png[align="center",alt="QSY Monitor"]
+
+[[BAND_BUTTONS]]
+.Band Buttons
+
+Optional band select buttons can be switched on or off from the *View*
+menu. Two sets of buttons are available. Check *Band Buttons* to get
+an HF-oriented set for 160 m through 70 cm, and also *VHF / UHF
+Buttons* to display a set for 8 m through 24 GHz.  Clicking on a band
+button switches the program to a mode-dependent default frequency
+selected from the frequency table for that band. In FT8 mode,
+right-clicking a band button will set dial frequency to the
+conventional DXpedition frequency (or on 6 m, to the intercontinental
+frequency). To define your own preferred default frequencies, check
+the relevant *Pref* boxes on the <<BAND_SETTINGS,*File | Settings |
+Frequencies*>> tab.
+
+image::bandbutton1.png[align="center",alt="bandbutton1"]
+
+.Dark Style
+
+Select *Dark Style* to switch to a dark-background theme for all
+windows.  To make it effective you will probably want to redefine your
+color settings.
+
+image::dark.png[align="center"]
+
+[[FILTERS_MENU]]
+=== Filters Menu
+
+image::filters-menu.png[align="left"]
+
+The *Filters* menu lets you control a wide variety of
+message-filtering options. Many of them are defined on the
+<<FILTERS,*File | Settings | Filters*>> tab.  You can hide, ignore, or
+highlight stations worked before on the current band, worked today or
+yesterday, or those present in the Ignore List. A checkbox labelled
+*BP* on the main window (just left of the *Log QSO* button) allows all
+filtering options to be bypassed temporarily with a single click. This
+action can be used, for example, if you have filtered out your own
+continent to display only DX stations but now wish to monitor all band
+activity.
+
+[[MODE_MENU]]
+=== Mode Menu
+image::mode-menu.png[align="left",alt="Mode Menu"]
+
+[[DECODE_MENU]]
+=== Decode Menu
+
+All _WSJT-X_ modes offer *Fast*, *Normal*, and *Deep* decoding
+options. *Deep* usually provides the best sensitivity, at the cost
+of slower processing and a slightly higher probability of false
+decodes. 
+
+In FT8 mode you can select a multithreaded decoder with many additional
+options. You may wish to experiment with the various possibilities
+to obtain best overall performance in your setup. In general we find
+the multithreaded decoder yields a greater number of decodes on a busy
+band, while the single-threaded *Deep* setting is best for extreme
+weak signal work.
+
+image::decode-menu.png[align="left",alt="Decode Menu"]
+
+*Full Duplex Mode* can also be selected from the *Decode* menu. Audio
+input can be taken from a second local receiver or from a WebSDR on
+the internet. Duplex operation works for slow modes (FT8, FT4, Q65, …
+) and fast modes like MSK144. Your own transmitted messages will be
+highlighted in the *Band Activity* window in the color you selected
+for "Transmitted message" on the *File | Settings | Colors* tab.
+
+An additional option to disable mouse clicks on the waterfall, visible
+only when Q65 mode is selected, and VHF Features are enabled, can be 
+selected to prevent inadvertent mouse clicks on the waterfall from 
+changing the Rx and/or Tx offset frequencies.  When selected, frequency
+changes can still be made using the mouse by holding down the ALT key.
+
+[[SAVE_MENU]]
+[[SAVE-WAV]]
+=== Save Menu
+image::save-menu.png[align="left",alt="Save Menu"]
+
+You can control the types of information that _WSJT-X saves during an
+operating session, perhaps for future analysis or diagnostic purposes.
+For example, check *Save decoded* to save audio files for all
+receiving sequences producing at least one decode. The file `ALL.TXT`
+is a record of everything you have transmitted or received. You can
+choose to have it automatically split into smaller chunks by month or
+year, or to disable it entirely. Some diagnostic logging of events
+always takes place. *Diagnostic mode* lets you collect more data to
+troubleshoot problems with the program, or with its communication with
+your rig.
+
+image::diagnostic.png[align="center",alt="Diagnostic mode"]
+
+=== Tools Menu
+image::tools-menu.png[align="left",alt="Tools Menu"]
+
+[[HELP_MENU]]
+=== Help Menu
+image::help-menu.png[align="left",alt="Help Menu"]

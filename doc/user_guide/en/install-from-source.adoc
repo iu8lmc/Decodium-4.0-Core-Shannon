@@ -1,0 +1,31 @@
+// Status=edited
+
+Source code for _WSJT-X_ is available from a public repository at
+{devrepo}. To compile the program, at a minimum you must install the
+following packages:
+
+- Git
+- Qt 5.2 or later
+- g++ 4.8 or later
+- gfortran 4.8 or later
+- fftw3
+- MinGW (for Windows only)
+
+Source code for _WSJT-X_ v{VERSION} can be downloaded with the command:
+
+=====
+git clone git://git.code.sf.net/p/wsjt/wsjtx
+cd wsjtx
+git checkout wsjtx-{VERSION}
+=====
+
+and for the current development branch:
+
+=====
+git clone git://git.code.sf.net/p/wsjt/wsjtx
+=====
+
+If you are interested in contributing to the development and
+documentation of _WSJT_ and its sister programs, please join the
+developer's email list {devmail} and let us know of your areas of
+interest.

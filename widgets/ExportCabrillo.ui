@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ExportCabrillo</class>
+ <widget class="QDialog" name="ExportCabrillo">
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QFormLayout" name="formLayout">
+     <item row="0" column="0">
+      <widget class="QLabel" name="location_label">
+       <property name="text">
+        <string>Location:</string>
+       </property>
+       <property name="buddy">
+        <cstring>location_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QLineEdit" name="location_line_edit">
+       <property name="text">
+        <string>SNJ</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="contest_label">
+       <property name="text">
+        <string>Contest:</string>
+       </property>
+       <property name="buddy">
+        <cstring>contest_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="contest_line_edit">
+       <property name="text">
+        <string>ARRL-RTTY</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="call_label">
+       <property name="text">
+        <string>Callsign:</string>
+       </property>
+       <property name="buddy">
+        <cstring>call_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QLineEdit" name="call_line_edit">
+       <property name="text">
+        <string/>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="category_op_label">
+       <property name="text">
+        <string>Category-Operator: </string>
+       </property>
+       <property name="buddy">
+        <cstring>category_op_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <widget class="QLineEdit" name="category_op_line_edit">
+       <property name="text">
+        <string>SINGLE-OP</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="0">
+      <widget class="QLabel" name="category_xmtr_label">
+       <property name="text">
+        <string>Category-Transmitter:</string>
+       </property>
+       <property name="buddy">
+        <cstring>category_xmtr_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="1">
+      <widget class="QLineEdit" name="category_xmtr_line_edit">
+       <property name="text">
+        <string>ONE</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="0">
+      <widget class="QLabel" name="category_pwr_label">
+       <property name="text">
+        <string>Category-Power:</string>
+       </property>
+       <property name="buddy">
+        <cstring>category_pwr_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="1">
+      <widget class="QLineEdit" name="category_pwr_line_edit">
+       <property name="text">
+        <string>LOW</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="0">
+      <widget class="QLabel" name="category_assisted_label">
+       <property name="text">
+        <string>Category-Assisted:</string>
+       </property>
+       <property name="buddy">
+        <cstring>category_assisted_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="1">
+      <widget class="QLineEdit" name="category_assisted_line_edit">
+       <property name="text">
+        <string>NON-ASSISTED</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="0">
+      <widget class="QLabel" name="category_band_label">
+       <property name="text">
+        <string>Category-Band:</string>
+       </property>
+       <property name="buddy">
+        <cstring>category_band_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="1">
+      <widget class="QLineEdit" name="category_band_line_edit">
+       <property name="text">
+        <string>ALL</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="0">
+      <widget class="QLabel" name="claimed_label">
+       <property name="text">
+        <string>Claimed-Score:</string>
+       </property>
+       <property name="buddy">
+        <cstring>claimed_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="1">
+      <widget class="QLineEdit" name="claimed_line_edit">
+       <property name="text">
+        <string/>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="9" column="0">
+      <widget class="QLabel" name="operators_label">
+       <property name="text">
+        <string>Operators:</string>
+       </property>
+       <property name="buddy">
+        <cstring>operators_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="9" column="1">
+      <widget class="QLineEdit" name="operators_line_edit">
+       <property name="text">
+        <string/>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="10" column="0">
+      <widget class="QLabel" name="club_label">
+       <property name="text">
+        <string>Club:</string>
+       </property>
+       <property name="buddy">
+        <cstring>club_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="10" column="1">
+      <widget class="QLineEdit" name="club_line_edit">
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="11" column="0">
+      <widget class="QLabel" name="name_label">
+       <property name="text">
+        <string>Name:</string>
+       </property>
+       <property name="buddy">
+        <cstring>name_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="11" column="1">
+      <widget class="QLineEdit" name="name_line_edit">
+       <property name="text">
+        <string/>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="12" column="0">
+      <widget class="QLabel" name="addr_1_label">
+       <property name="text">
+        <string>Address:</string>
+       </property>
+       <property name="buddy">
+        <cstring>addr_1_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="12" column="1">
+      <widget class="QLineEdit" name="addr_1_line_edit">
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="13" column="0">
+      <widget class="QLabel" name="addr_2_label">
+       <property name="text">
+        <string>Address:</string>
+       </property>
+       <property name="buddy">
+        <cstring>addr_2_line_edit</cstring>
+       </property>
+      </widget>
+     </item>
+     <item row="13" column="1">
+      <widget class="QLineEdit" name="addr_2_line_edit">
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Save</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>ExportCabrillo</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>ExportCabrillo</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

@@ -1,0 +1,403 @@
+//status: edited
+
+[[PROTOCOL_OVERVIEW]]
+=== Overview
+
+All QSO modes use structured messages that compress
+user-readable information into fixed-length packets.  JT4, JT9, and JT65
+use 72-bit payloads.  Standard messages consist of two
+28-bit fields normally used for callsigns and a 15-bit field for a
+grid locator, report, acknowledgment, or 73.  An additional bit flags
+a message containing arbitrary free text, up to 13 characters.
+Special cases allow other information such as add-on callsign prefixes
+(e.g., ZA/K1ABC) or suffixes (e.g., K1ABC/P) to be encoded. The basic
+aim is to compress the most common messages used for minimally valid
+QSOs into a fixed 72-bit length.
+
+Information payloads for FST4, FT4, FT8, Q65, and MSK144 contain 77 bits.
+The 5 additional bits are used to flag special message types used for
+nonstandard callsigns, contest exchanges, FT8 DXpedition Mode, and a
+few other possibilities.  Full details have been published in QEX, see
+{ft4_ft8_protocols}.
+
+A standard amateur callsign consists of a one- or two-character
+prefix, at least one of which must be a letter, followed by a digit
+and a suffix of one to three letters. Within these rules, the number
+of possible callsigns is equal to 37×36×10×27×27×27, or somewhat over
+262 million. (The numbers 27 and 37 arise because in the first and
+last three positions a character may be absent, or a letter, or
+perhaps a digit.) Since 2^28^ is more than 268 million, 28 bits are
+enough to encode any standard callsign uniquely. Similarly, the number
+of 4-digit Maidenhead grid locators on earth is 180×180 = 32,400,
+which is less than 2^15^ = 32,768; so a grid locator requires 15 bits.
+
+Some 6 million of the possible 28-bit values are not needed for
+callsigns.  A few of these slots are assigned to special message
+components such as `CQ`, `DE`, and `QRZ`. `CQ` may be followed by three
+digits to indicate a desired callback frequency. (If K1ABC transmits
+on a standard calling frequency such as 50.280, and sends `CQ 290 K1ABC
+FN42`, it means that s/he will listen on 50.290 and respond there to
+any replies.) A numerical signal report of the form `–nn` or
+`R–nn` can be sent in place of a grid locator.  (As originally
+defined, numerical signal reports `nn` were required to fall between -01
+and -30 dB.  Recent program versions 2.3 and later accommodate reports between
+-50 and +49 dB.) A country prefix or portable suffix may be
+attached to one of the callsigns.  When this feature is used, the
+additional information is sent in place of the grid locator or by
+encoding additional information into some of the 6 million available
+slots mentioned above.
+
+As a convenience for sending directed CQ messages, the 72-bit
+compression algorithm supports messages starting with `CQ AA` through
+`CQ ZZ`.  These message fragments are encoded internally as if they
+were the callsigns `E9AA` through `E9ZZ`.  Upon reception they are
+converted back to the form `CQ AA` through `CQ ZZ`, for display to the
+user.
+
+To be useful on channels with low signal-to-noise ratio, this kind of
+lossless message compression requires use of a strong forward error
+correcting (FEC) code.  Different codes are used for each mode.
+Accurate synchronization of time and frequency is required between
+transmitting and receiving stations.  As an aid to the decoders, each
+protocol includes a "`sync vector`" of known symbols interspersed with
+the information-carrying symbols.  Generated waveforms for all of the
+_WSJT-X_ modes have continuous phase and constant envelope.
+
+[[SLOW_MODES]]
+=== Slow Modes
+
+[[FST4PRO]]
+==== FST4
+
+FST4 offers T/R sequence lengths of 15, 30, 60, 120, 300, 900, and
+1800 seconds.  Submodes are given names like FST4-60, FST4-120, etc.,
+the appended numbers indicating sequence length in seconds.  A 24-bit
+cyclic redundancy check (CRC) is appended to the 77-bit message
+payload to create a 101-bit message-plus-CRC word.  Forward error
+correction is accomplished using a (240,101) LDPC code.  Transmissions
+consist of 160 symbols: 120 information-carrying symbols of two bits
+each, interspersed with five groups of eight predefined
+synchronization symbols.  Modulation uses 4-tone frequency-shift
+keying (4-GFSK) with Gaussian smoothing of frequency transitions.
+
+[[FT4PRO]]
+==== FT4
+
+Forward error correction (FEC) in FT4 uses a low-density parity check
+(LDPC) code with 77 information bits, a 14-bit cyclic redundancy check
+(CRC), and 83 parity bits making a 174-bit codeword.  It is thus
+called an LDPC (174,91) code.  Synchronization uses four 4×4 Costas
+arrays, and ramp-up and ramp-down symbols are inserted at the start
+and end of each transmission.  Modulation is 4-tone frequency-shift
+keying (4-GFSK) with Gaussian smoothing of frequency transitions.  The
+keying rate is 12000/576 = 20.8333 baud.  Each transmitted symbol
+conveys two bits, so the total number of channel symbols is 174/2 + 16
++ 2 = 105.  The total bandwidth is 4 × 20.8333 = 83.3 Hz.
+
+[[FT8PRO]]
+==== FT8
+
+FT8 uses the same LDPC (174,91) code as FT4.  Modulation is 8-tone
+frequency-shift keying (8-GFSK) at 12000/1920 = 6.25 baud.
+Synchronization uses 7×7 Costas arrays at the beginning, middle, and
+end of each transmission.  Transmitted symbols carry three bits, so
+the total number of channel symbols is 174/3 + 21 = 79.  The total
+occupied bandwidth is 8 × 6.25 = 50 Hz.
+
+[[JT4PRO]]
+==== JT4
+
+FEC in JT4 uses a strong convolutional code with constraint length
+K=32, rate r=1/2, and a zero tail. This choice leads to an encoded
+message length of (72+31) x 2 = 206 information-carrying bits.
+Modulation is 4-tone frequency-shift keying (4-FSK) at 11025 / 2520 =
+4.375 baud.  Each symbol carries one information bit (the most
+significant bit) and one synchronizing bit.  The two 32-bit
+polynomials used for convolutional encoding have hexadecimal values
+0xf2d05351 and 0xe4613c47, and the ordering of encoded bits is
+scrambled by an interleaver.  The pseudo-random sync vector is the
+following sequence (60 bits per line):
+
+ 000011000110110010100000001100000000000010110110101111101000
+ 100100111110001010001111011001000110101010101111101010110101
+ 011100101101111000011011000111011101110010001101100100011111
+ 10011000011000101101111010
+
+
+[[JT9PRO]]
+==== JT9
+
+FEC in JT9 uses the same strong convolutional code as JT4: constraint
+length K=32, rate r=1/2, and a zero tail, leading to an encoded
+message length of (72+31) × 2 = 206 information-carrying
+bits. Modulation is nine-tone frequency-shift keying, 9-FSK at
+12000.0/6912 = 1.736 baud.  Eight tones are used for data, one for
+synchronization. Eight data tones means that three data bits are
+conveyed by each transmitted information symbol. Sixteen symbol
+intervals are devoted to synchronization, so a transmission requires a
+total of 206 / 3 + 16 = 85 (rounded up) channel symbols. The sync
+symbols are those numbered 1, 2, 5, 10, 16, 23, 33, 35, 51, 52, 55,
+60, 66, 73, 83, and 85 in the transmitted sequence.  Tone spacing of
+the 9-FSK modulation for JT9A is equal to the keying rate, 1.736 Hz.
+The total occupied bandwidth is 9 × 1.736 = 15.6 Hz.
+
+[[JT65PRO]]
+==== JT65
+
+A detailed description of the JT65 protocol was published in
+{jt65protocol} for September-October, 2005. A Reed Solomon (63,12)
+error-control code converts 72-bit user messages into sequences of 63
+six-bit information-carrying symbols.  These are interleaved with
+another 63 symbols of synchronizing information according to the
+following pseudo-random sequence:
+
+ 100110001111110101000101100100011100111101101111000110101011001
+ 101010100100000011000000011010010110101010011001001000011111111
+
+
+The synchronizing tone is normally sent in each interval having a
+"`1`" in the sequence. Modulation is 65-FSK at 11025/4096 = 2.692
+baud.  Frequency spacing between tones is equal to the keying rate for
+JT65A, and 2 and 4 times larger for JT65B and JT65C, respectively.
+For EME QSOs the
+signal report OOO is sometimes used instead of numerical signal
+reports. It is conveyed by reversing sync and data positions in the
+transmitted sequence.  Shorthand messages for RO, RRR, and 73 dispense
+with the sync vector entirely and use time intervals of 16384/11025 =
+1.486 s for pairs of alternating tones. The lower frequency is the
+same as that of the sync tone used in long messages, and the frequency
+separation is 110250/4096 = 26.92 Hz multiplied by n for JT65A, with n
+= 2, 3, 4 used to convey the messages RO, RRR, and 73, respectively.
+
+[[Q65_PROTOCOL]]
+==== Q65
+
+Q65 is intended for scatter, EME, and other extreme weak-signal
+applications.  Forward error correction (FEC) uses a specially
+designed (65,15) block code with six-bit symbols.  Two symbols are
+“punctured” from the code and not transmitted, thereby yielding an
+effective (63,13) code with a payload of k = 13 information symbols
+conveyed by n = 63 channel symbols.  The punctured symbols consist of
+a 12-bit CRC computed from the 13 information symbols.  The CRC is
+used to reduce the false-decode rate to a very low value.  A 22-symbol
+pseudo-random sequence spread throughout a transmission is sent as
+“tone 0” and used for synchronization.  The total number of channel
+symbols in a Q65 transmission is thus 63 + 22 = 85.  Q65 offers T/R
+sequence lengths of 15, 30, 60, 120, and 300 s, and submodes A - E
+have tone spacings 1, 2, 4, 8, and 16 times the symbol rate.  Submode
+designations include a number for sequence length and a letter for
+tone spacing, as in Q65-15A, Q65-120C, etc.  Occupied bandwidths are
+65 times the tone spacing, ranging from 19 Hz (Q65-300A) to a maximum
+of 1733 Hz (Q65-15C, Q65-30D, and Q65-60E).  
+
+[[WSPR_PROTOCOL]]
+==== WSPR
+
+WSPR is designed for probing potential radio propagation paths using
+low power beacon-like transmissions. WSPR signals convey a callsign,
+Maidenhead grid locator, and power level using a compressed data
+format with strong forward error correction and narrow-band 4-FSK
+modulation. The protocol is effective at signal-to-noise ratios as low
+as –31 dB in a 2500 Hz bandwidth.
+
+WSPR messages can have one of three possible formats illustrated by
+the following examples:
+
+ - Type 1: K1ABC FN42 37
+ - Type 2: PJ4/K1ABC 37
+ - Type 3: <PJ4/K1ABC> FK52UD 37
+ 
+Type 1 messages contain a standard callsign, a 4-character Maidenhead
+grid locator, and power level in dBm. Type 2 messages omit the grid
+locator but include a compound callsign, while type 3 messages replace
+the callsign with a 15-bit hash code and include a 6-character locator
+as well as the power level. Lossless compression techniques squeeze
+all three message types into exactly 50 bits of user
+information. Standard callsigns require 28 bits and 4-character grid
+locators 15 bits.  In Type 1 messages, the remaining 7 bits convey the
+power level. In message types 2 and 3 these 7 bits convey power level
+along with an extension or re-definition of fields normally used for
+callsign and locator. Together, these compression techniques amount to
+“source encoding” the user message into the smallest possible number
+of bits.
+
+WSPR uses a convolutional code with constraint length K=32 and rate
+r=1/2. Convolution extends the 50 user bits into a total of (50 + K –
+1) × 2 = 162 one-bit symbols. Interleaving is applied to scramble the
+order of these symbols, thereby minimizing the effect of short bursts
+of errors in reception that might be caused by fading or interference.
+The data symbols are combined with an equal number of synchronizing
+symbols, a pseudo-random pattern of 0’s and 1’s.  The 2-bit
+combination for each symbol is the quantity that determines which of
+four possible tones to transmit in any particular symbol
+interval. Data information is taken as the most significant bit, sync
+information the least significant. Thus, on a 0 – 3 scale, the tone
+for a given symbol is twice the value (0 or 1) of the data bit, plus
+the sync bit.
+
+[[FST4WPRO]]
+==== FST4W
+
+FST4W offers T/R sequence lengths of 120, 300, 900, and 1800 seconds.
+Submodes are given names like FST4W-120, FST4W-300, etc., the appended
+numbers indicating sequence length in seconds.  Message payloads
+contain 50 bits, and a 24-bit cyclic redundancy check (CRC) appended
+to create a 74-bit message-plus-CRC word.  Forward error correction
+is accomplished using a (240,74) LDPC code.  Transmissions consist of
+160 symbols: 120 information-carrying symbols of two bits each,
+interspersed with five groups of eight predefined synchronization
+symbols.  Modulation uses 4-tone frequency-shift keying (4-GFSK) with
+Gaussian smoothing of frequency transitions.
+
+[[SLOW_SUMMARY]]
+==== Summary
+
+Table 7 provides a brief summary of parameters for the slow modes in
+_WSJT-X_.  Parameters K and r specify the constraint length and rate
+of the convolutional codes; n and k specify the sizes of the
+(equivalent) block codes; Q is the alphabet size for the
+information-carrying channel symbols; Sync Energy is the fraction of
+transmitted energy devoted to synchronizing symbols; and S/N Threshold
+is the signal-to-noise ratio (in a 2500 Hz reference bandwidth) above
+which the probability of decoding is 50% or higher.
+
+[[SLOW_TAB]]
+.Parameters of Slow Modes
+[width="100%",cols="3h,^3,^2,^1,6*^2",frame=topbot,options="header"]
+|===
+|Mode |FEC Type |(n,k) | Q|Modulation type|Keying rate (Baud)|Bandwidth (Hz)
+|Sync Energy|Tx Duration (s)|S/N Threshold (dB)
+|FST4-15   |LDPC |  (240,101)| 4| 4-GFSK| 16.67 | 66.7 | 0.25| 9.6  | -20.7
+|FST4-30   |LDPC |  (240,101)| 4| 4-GFSK|  7.14  | 28.6  | 0.25| 22.4  | -24.2
+|FST4-60   |LDPC |  (240,101)| 4| 4-GFSK|  3.09  | 12.4  | 0.25| 51.8  | -28.1
+|FST4-120  |LDPC |  (240,101)| 4| 4-GFSK|  1.46  |  5.9  | 0.25| 109.3 | -31.3
+|FST4-300  |LDPC |  (240,101)| 4| 4-GFSK|  0.558  |  2.2  | 0.25| 286.7 | -35.3
+|FST4-900  |LDPC |  (240,101)| 4| 4-GFSK|  0.180 |  0.72 | 0.25| 887.5 | -40.2
+|FST4-1800 |LDPC |  (240,101)| 4| 4-GFSK|  0.089 |  0.36 | 0.25| 1792.0| -43.2
+|FT4  |LDPC |(174,91)| 4| 4-GFSK| 20.83 | 83.3 | 0.15| 5.04 | -17.5
+|FT8  |LDPC |(174,91)| 8| 8-GFSK| 6.25 | 50.0 | 0.27| 12.6 | -21
+|JT4A |K=32, r=1/2|(206,72)| 2| 4-FSK| 4.375| 17.5 | 0.50| 47.1 | -23
+|JT9A |K=32, r=1/2|(206,72)| 8| 9-FSK| 1.736| 15.6 | 0.19| 49.0 | -26
+|JT65A |RS|(63,12) |64|65-FSK| 2.692| 177.6 | 0.50| 46.8 | -25
+|Q65-15A |QRA|(63,13) |64|65-FSK|6.667|433|0.26| 12.8| -22.2
+|Q65-30A |QRA|(63,13) |64|65-FSK|3.333|217|0.26| 25.5| -24.8
+|Q65-60A |QRA|(63,13) |64|65-FSK|1.667|108|0.26| 51.0| -27.6
+|Q65-120A|QRA|(63,13) |64|65-FSK|0.750| 49|0.26|113.3| -30.8
+|Q65-300A|QRA|(63,13) |64|65-FSK|0.289| 19|0.26|293.8| -33.8
+| WSPR |K=32, r=1/2|(162,50)| 2| 4-FSK| 1.465| 5.9 | 0.50|110.6 | -31
+|FST4W-120  |LDPC |  (240,74)| 4| 4-GFSK|  1.46  |  5.9  | 0.25| 109.3 | -32.8
+|FST4W-300  |LDPC |  (240,74)| 4| 4-GFSK|  0.558  |  2.2  | 0.25| 286.7 | -36.8
+|FST4W-900  |LDPC |  (240,74)| 4| 4-GFSK|  0.180 |  0.72 | 0.25| 887.5 | -41.7
+|FST4W-1800 |LDPC |  (240,74)| 4| 4-GFSK|  0.089 |  0.36 | 0.25| 1792.0| -44.8
+|===
+
+ LDPC = Low Density Parity Check
+ RS = Reed Solomon
+ QRA = Q-ary Repeat Accumulate
+
+Submodes of JT4, JT9, and JT65 offer wider tone spacings for
+circumstances that may require them, such as significant Doppler spread.
+Table 8 summarizes the tone spacings, bandwidths, and approximate
+threshold sensitivities of the various submodes when spreading is
+comparable to tone spacing.
+
+[[SLOW_SUBMODES]]
+.Parameters of Slow Submodes JT4, JT9, and JT65 with Selectable Tone Spacings
+[width="50%",cols="h,3*^",frame=topbot,options="header"]
+|===
+|Mode  |Tone Spacing  |BW (Hz)|S/N (dB)
+|JT4A  |4.375|  17.5  |-23
+|JT4B  |8.75 |  30.6  |-22
+|JT4C  |17.5 |  56.9  |-21
+|JT4D  |39.375| 122.5 |-20
+|JT4E  |78.75|  240.6 |-19
+|JT4F  |157.5|  476.9 |-18
+|JT4G  |315.0|  949.4 |-17
+|JT9A  |1.736|  15.6  |-26
+|JT9B  |3.472|  29.5  |-26
+|JT9C  |6.944|  57.3  |-25
+|JT9D  |13.889| 112.8 |-24
+|JT9E  |27.778| 224.0 |-23
+|JT9F  |55.556| 446.2 |-22
+|JT9G  |111.111|890.6 |-21
+|JT9H  |222.222|1779.5|-20
+|JT65A |2.692| 177.6  |-25
+|JT65B |5.383| 352.6  |-25
+|JT65C |10.767| 702.5 |-25
+|===
+
+.Parameters of Q65 Submodes
+[width="100%",cols="h,5*^",frame=topbot,options="header"]
+|===
+|T/R Period (s)  |A Spacing Width (Hz)|B Spacing Width (Hz)|C Spacing Width (Hz)|D Spacing Width (Hz)|E Spacing Width (Hz)
+|15|6.67 &#160; &#160; 433|13.33 &#160; &#160; 867|26.67 &#160; &#160; 1733|N/A|N/A
+|30|3.33 &#160; &#160; 217|6.67 &#160; &#160; 433|13.33 &#160; &#160; 867| 26.67 &#160; &#160; 1733| N/A
+|60|1.67 &#160; &#160; 108|3.33 &#160; &#160; 217|6.67 &#160; &#160; 433|13.33 &#160; &#160; 867|26.67 &#160; &#160; 1733
+|120|0.75 &#160; &#160; 49|1.50 &#160; &#160; 98|3.00 &#160; &#160; 195|6.00 &#160; &#160; 390| 12.00 &#160; &#160; 780
+|300|0.29 &#160; &#160; 19|0.58 &#160; &#160; 38|1.16 &#160; &#160; 75|2.31 &#160; &#160; 150|4.63 &#160; &#160; 301
+|===
+
+[[FAST_MODES]]
+=== Fast Modes
+
+==== JT9
+
+The JT9 slow modes all use keying rate 12000/6912 = 1.736 baud.  By contrast, with
+the *Fast* setting submodes JT9E-H adjust the keying rate to match the
+increased tone spacings.  Message durations are therefore much
+shorter, and they are sent repeatedly throughout each Tx sequence.
+For details see Table 9, below.
+
+==== MSK144
+
+Standard MSK144 messages are structured in the same way as in FT8,
+with 77 bits of user information.  Forward error correction is
+implemented by first augmenting the 77 message bits with a 13-bit
+cyclic redundancy check (CRC) calculated from the message bits. The
+CRC is used to detect and eliminate most false decodes at the
+receiver. The resulting 90-bit augmented message is mapped to a
+128-bit codeword using a (128,90) binary low-density-parity-check
+(LDPC) code designed by K9AN specifically for this purpose.  Two 8-bit
+synchronizing sequences are added to make a message frame 144 bits
+long.  Modulation is Offset Quadrature Phase-Shift Keying (OQPSK) at
+2000 baud. Even-numbered bits are conveyed over the in-phase channel,
+odd-numbered bits on the quadrature channel.  Individual symbols are
+shaped with half-sine profiles, thereby ensuring a generated waveform
+with constant envelope, equivalent to a Minimum Shift Keying (MSK)
+waveform.  Frame duration is 72 ms, so the effective character
+transmission rate for standard messages is up to 250 cps.
+
+MSK144 also supports short-form messages that can be used after QSO
+partners have exchanged both callsigns.  Short messages consist of 4
+bits encoding R+report, RRR, or 73, together with a 12-bit hash code
+based on the ordered pair of "`to`" and "`from`" callsigns.  Another
+specially designed LDPC (32,16) code provides error correction, and an
+8-bit synchronizing vector is appended to make up a 40-bit frame.
+Short-message duration is thus 20 ms, and short messages can be
+decoded from very short meteor pings.
+
+The 72 ms or 20 ms frames of MSK144 messages are repeated without gaps
+for the full duration of a transmission cycle. For most purposes, a
+cycle duration of 15 s is suitable and recommended for MSK144.
+
+The modulated MSK144 signal occupies the full bandwidth of a SSB
+transmitter, so transmissions are always centered at audio frequency
+1500 Hz. For best results, transmitter and receiver filters should be
+adjusted to provide the flattest possible response over the range
+300Hz to 2700Hz. The maximum permissible frequency offset between you
+and your QSO partner ± 200 Hz.
+
+==== Summary
+
+.Parameters of Fast Modes
+[width="90%",cols="3h,^3,^2,^1,5*^2",frame="topbot",options="header"]
+|===
+|Mode     |FEC Type   |(n,k)   | Q|Modulation Type|Keying rate (Baud)
+|Bandwidth (Hz)|Sync Energy|Tx Duration (s)
+|JT9E     |K=32, r=1/2|(206,72)| 8| 9-FSK| 25.0 |  225  | 0.19| 3.400 
+|JT9F     |K=32, r=1/2|(206,72)| 8| 9-FSK| 50.0 |  450  | 0.19| 1.700 
+|JT9G     |K=32, r=1/2|(206,72)| 8| 9-FSK|100.0 |  900  | 0.19| 0.850 
+|JT9H     |K=32, r=1/2|(206,72)| 8| 9-FSK|200.0 | 1800  | 0.19| 0.425 
+|MSK144   |LDPC       |(128,90)| 2| OQPSK| 2000 | 2400  | 0.11| 0.072 
+|MSK144 Sh|LDPC       |(32,16) | 2| OQPSK| 2000 | 2400  | 0.20| 0.020 
+|===

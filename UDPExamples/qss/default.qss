@@ -1,0 +1,13 @@
+/* default stylesheet for the message aggregator application */
+
+[transmitting="true"] {
+       background-color: yellow
+}
+
+[decoding="true"] {
+       background-color: cyan
+}
+
+[watchdog_timeout="true"] {
+       background-color: red
+}

@@ -1,0 +1,156 @@
+name: Build WSJTX 3.0 Linux
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            gfortran \
+            cmake \
+            python3 \
+            ca-certificates \
+            curl \
+            qtbase5-dev \
+            qtmultimedia5-dev \
+            libqt5serialport5-dev \
+            libqt5websockets5-dev \
+            libqt5svg5-dev \
+            libqt5sql5-sqlite \
+            qttools5-dev \
+            qttools5-dev-tools \
+            libfftw3-dev \
+            libusb-1.0-0-dev \
+            libudev-dev \
+            libboost-log-dev \
+            libboost-filesystem-dev \
+            libboost-thread-dev \
+            portaudio19-dev \
+            libreadline-dev \
+            texinfo \
+            pkg-config
+
+      - name: Build and install latest Hamlib
+        run: |
+          set -euo pipefail
+          echo "Using Hamlib ${HAMLIB_TAG}"
+
+          cd /tmp
+          wget -q "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix=/usr/local --disable-static --enable-shared
+          make -j"$(nproc)"
+          sudo make install
+          sudo ldconfig
+
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+          pkg-config --modversion hamlib
+          /usr/local/bin/rigctl --version || rigctl --version
+
+      - name: Configure CMake
+        run: |
+          cmake -B build-linux -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DCMAKE_PREFIX_PATH=/usr/local \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Fortran library (sequential for module dependencies)
+        run: make -C build-linux -j1 wsjt_fort_omp
+
+      - name: Build applications
+        run: make -C build-linux -j$(nproc) wsjtx jt9 wsprd message_aggregator
+
+      - name: Verify executables
+        run: |
+          echo "=== Built executables ==="
+          file build-linux/ft2 build-linux/jt9 build-linux/wsprd build-linux/message_aggregator
+          ls -lh build-linux/ft2 build-linux/jt9 build-linux/wsprd build-linux/message_aggregator
+
+      - name: Create distribution package
+        run: |
+          DIST_DIR="wsjtx_dist_linux"
+          rm -rf "$DIST_DIR"
+          mkdir -p "$DIST_DIR/bin" "$DIST_DIR/share/wsjtx"
+
+          # Executables
+          cp build-linux/ft2 build-linux/jt9 build-linux/wsprd build-linux/message_aggregator "$DIST_DIR/bin/"
+          strip "$DIST_DIR/bin/"*
+
+          # Data files
+          cp cty.dat "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
+          cp -r sounds "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
+          cp -r Palettes "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
+
+          # Launcher script
+          cat > "$DIST_DIR/ft2.sh" << 'LAUNCHER'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          export PATH="$DIR/bin:$PATH"
+          export WSJTX_DATA_DIR="$DIR/share/wsjtx"
+          exec "$DIR/bin/ft2" "$@"
+          LAUNCHER
+          chmod +x "$DIST_DIR/ft2.sh"
+
+          # Runtime dependency installer for target machines
+          cat > "$DIST_DIR/install-deps.sh" << 'DEPS'
+          #!/bin/bash
+          echo "Installing WSJTX runtime dependencies..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+              libqt5core5a \
+              libqt5gui5 \
+              libqt5widgets5 \
+              libqt5network5 \
+              libqt5multimedia5 \
+              libqt5serialport5 \
+              libqt5websockets5 \
+              libqt5printsupport5 \
+              libqt5sql5 \
+              libqt5sql5-sqlite \
+              libqt5svg5 \
+              libfftw3-single3 \
+              libhamlib4 \
+              libusb-1.0-0 \
+              libudev1 \
+              libboost-log1.74.0 \
+              libboost-filesystem1.74.0 \
+              libportaudio2 \
+              libgfortran5 \
+              libgomp1
+          echo "Done. Run ./ft2.sh to start."
+          DEPS
+          chmod +x "$DIST_DIR/install-deps.sh"
+
+          # Create tarball
+          tar czf wsjtx_3.0_linux_x86_64.tar.gz "$DIST_DIR"
+          echo "=== Package created ==="
+          ls -lh wsjtx_3.0_linux_x86_64.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wsjtx_3.0_linux_x86_64
+          path: wsjtx_3.0_linux_x86_64.tar.gz

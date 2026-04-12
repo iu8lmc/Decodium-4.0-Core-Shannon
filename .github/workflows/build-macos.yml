@@ -1,0 +1,177 @@
+name: Build macOS Release
+
+on:
+  push:
+    branches: [master, merge/raptor-v110-port]
+  workflow_dispatch:
+
+env:
+  RELEASE_VERSION: "1.6.0"
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
+
+jobs:
+  build-macos:
+    name: "${{ matrix.platform_id }}"
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            platform_id: macos-tahoe-arm64
+            os_name: tahoe
+            arch: arm64
+            deployment_target: "11.0"
+            experimental: false
+          - runner: macos-15
+            platform_id: macos-sequoia-arm64
+            os_name: sequoia
+            arch: arm64
+            deployment_target: "11.0"
+            experimental: false
+          - runner: macos-15-intel
+            platform_id: macos-sequoia-x86_64
+            os_name: sequoia
+            arch: x86_64
+            deployment_target: "10.12"
+            experimental: false
+          - runner: macos-15-intel
+            platform_id: macos-monterey-x86_64
+            os_name: monterey
+            arch: x86_64
+            deployment_target: "12.0"
+            experimental: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install qt@5 gcc fftw libusb boost pkg-config create-dmg dylibbundler
+
+          QT5_PREFIX=$(brew --prefix qt@5)
+          GCC_PREFIX=$(brew --prefix gcc)
+          GFORTRAN=$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1)
+
+          if [ -z "${GFORTRAN}" ]; then
+            echo "gfortran not found in ${GCC_PREFIX}/bin"
+            exit 1
+          fi
+
+          echo "${QT5_PREFIX}/bin" >> "${GITHUB_PATH}"
+          echo "CMAKE_PREFIX_PATH=${QT5_PREFIX}" >> "${GITHUB_ENV}"
+          echo "QT5_PREFIX=${QT5_PREFIX}" >> "${GITHUB_ENV}"
+          echo "FC=${GFORTRAN}" >> "${GITHUB_ENV}"
+
+          "${GFORTRAN}" --version
+          "${QT5_PREFIX}/bin/qmake" -v
+
+      - name: Build and install Hamlib
+        run: |
+          set -euo pipefail
+          HAMLIB_PREFIX="${RUNNER_TEMP}/hamlib-prefix"
+
+          echo "Using Hamlib ${HAMLIB_TAG}"
+          cd "${RUNNER_TEMP}"
+          curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+
+          HAMLIB_LIBRARY="$(find "${HAMLIB_PREFIX}/lib" -maxdepth 1 -name 'libhamlib*.dylib' | head -n1 || true)"
+          if [ -z "${HAMLIB_LIBRARY}" ]; then
+            echo "Unable to locate libhamlib*.dylib under ${HAMLIB_PREFIX}/lib"
+            exit 1
+          fi
+
+          echo "${HAMLIB_PREFIX}/bin" >> "${GITHUB_PATH}"
+          echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "${GITHUB_ENV}"
+          echo "CMAKE_PREFIX_PATH=${QT5_PREFIX};${HAMLIB_PREFIX}" >> "${GITHUB_ENV}"
+          echo "Hamlib_INCLUDE_DIR=${HAMLIB_PREFIX}/include" >> "${GITHUB_ENV}"
+          echo "Hamlib_LIBRARY=${HAMLIB_LIBRARY}" >> "${GITHUB_ENV}"
+          echo "RIGCTL_EXE=${HAMLIB_PREFIX}/bin/rigctl" >> "${GITHUB_ENV}"
+          echo "RIGCTLD_EXE=${HAMLIB_PREFIX}/bin/rigctld" >> "${GITHUB_ENV}"
+          echo "RIGCTLCOM_EXE=${HAMLIB_PREFIX}/bin/rigctlcom" >> "${GITHUB_ENV}"
+
+          "${HAMLIB_PREFIX}/bin/rigctl" --version
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.deployment_target }} \
+            -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" \
+            -DHamlib_INCLUDE_DIR="${Hamlib_INCLUDE_DIR}" \
+            -DHamlib_LIBRARY="${Hamlib_LIBRARY}" \
+            -DRIGCTL_EXE="${RIGCTL_EXE}" \
+            -DRIGCTLD_EXE="${RIGCTLD_EXE}" \
+            -DRIGCTLCOM_EXE="${RIGCTLCOM_EXE}" \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF \
+            -DCMAKE_INSTALL_PREFIX=/tmp/ft2_install
+
+      - name: Build
+        run: |
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+
+      - name: Install
+        run: |
+          cmake --install build
+
+      - name: Normalize app bundle
+        run: |
+          scripts/normalize-macos-app.sh /tmp/ft2_install/ft2.app
+
+      - name: Package app bundle
+        run: |
+          APP_DIR=/tmp/ft2_install/ft2.app
+          if [ ! -d "${APP_DIR}" ]; then
+            echo "Missing app bundle at ${APP_DIR}"
+            exit 1
+          fi
+
+          PKG_ROOT=/tmp/ft2-release-${{ matrix.platform_id }}
+          rm -rf "${PKG_ROOT}"
+          mkdir -p "${PKG_ROOT}"
+          cp -R "${APP_DIR}" "${PKG_ROOT}/"
+
+          TAR_NAME=ft2-v${RELEASE_VERSION}-${{ matrix.platform_id }}.tar.gz
+          (cd /tmp && tar czf "${TAR_NAME}" "ft2-release-${{ matrix.platform_id }}")
+
+          ZIP_NAME=ft2-v${RELEASE_VERSION}-${{ matrix.platform_id }}.zip
+          ditto -c -k --sequesterRsrc --keepParent "${PKG_ROOT}/ft2.app" "/tmp/${ZIP_NAME}"
+
+          shasum -a 256 "/tmp/${TAR_NAME}" "/tmp/${ZIP_NAME}" > "/tmp/ft2-v${RELEASE_VERSION}-${{ matrix.platform_id }}.sha256"
+          ls -lh "/tmp/${TAR_NAME}" "/tmp/${ZIP_NAME}" "/tmp/ft2-v${RELEASE_VERSION}-${{ matrix.platform_id }}.sha256"
+
+      - name: Verify executables
+        run: |
+          file /tmp/ft2_install/ft2.app/Contents/MacOS/ft2
+          file /tmp/ft2_install/ft2.app/Contents/MacOS/jt9
+          ls -lh /tmp/ft2_install/ft2.app/Contents/MacOS
+
+      - name: Upload tar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ft2-v${{ env.RELEASE_VERSION }}-${{ matrix.platform_id }}-tar
+          path: /tmp/ft2-v${{ env.RELEASE_VERSION }}-${{ matrix.platform_id }}.tar.gz
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ft2-v${{ env.RELEASE_VERSION }}-${{ matrix.platform_id }}-zip
+          path: /tmp/ft2-v${{ env.RELEASE_VERSION }}-${{ matrix.platform_id }}.zip
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: ft2-v${{ env.RELEASE_VERSION }}-${{ matrix.platform_id }}-sha256
+          path: /tmp/ft2-v${{ env.RELEASE_VERSION }}-${{ matrix.platform_id }}.sha256

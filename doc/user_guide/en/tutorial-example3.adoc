@@ -1,0 +1,127 @@
+// Status=review
+.Main Window:
+- Click the *Stop* button on the main window to halt any data acquisition.  
+- Select *FT8* from the *Mode* menu and *Deep* from the *Decode* menu.
+- Double-click on *Erase* to clear both text windows.
+
+.Open a Wave File:
+
+- Select *File | Open* and navigate to
++...\save\samples\FT8\210703_133430.wav+.  The waterfall and *Band
+Activity/Rx Frequency* windows should look something like the
+following screen shots:
+
+- You may want to pretend you are K1JT
+by entering that callsign temporarily as *My Call* on the 
+*Settings | General* tab.  Your results should then be identical to
+those shown in the screen shot below. Don't forget to change *My Call*
+back to your own call when you are done!
+
+[[X15]]
+image::ft8_decodes.png[align="left"]
+
+
+.Decoding Overview
+
+Decoding takes place at the end of a receive sequence. With *Decode* set
+to *Deep*, three decoding passes will be done and the *Decode* button on the 
+main window will illuminate three times, once for each pass. 
+The first decoding attempt in each pass is done at the selected Rx frequency,
+indicated by the U-shaped green marker on the waterfall frequency
+scale. All decodes appear in the left (*Band Activity*) window. The right
+(*Rx Frequency*) text window displays any decodes obtained at the current
+Rx frequency along with any decodes addressed to *My Call* (K1JT in this case).
+The red marker on the waterfall scale indicates your
+Tx frequency.
+
+Twenty-one FT8 signals are decoded from the example file. The number
+of decodes is shown in a box at the bottom of the main window.  When
+this file was recorded HA5WA was finishing a QSO with K1JT, and his 73
+message is shown in red because it is addressed to *My Call* (in this
+case K1JT).  By default, lines containing CQ are highlighted in green,
+and lines with *My Call* (K1JT) in red. Notice that K1JT now has two
+additional callers; HA0DU and EA3AGB.
+
+[[X13]]
+.Decoding Controls
+
+To gain some feeling for controls frequently used when making QSOs,
+try double-clicking with the mouse on the decoded text lines and on the
+waterfall spectral display. You should be able to confirm the
+following behavior:
+
+- Double-click on one of the decoded CQ messages highlighted in
+green. These actions produce the following results:
+
+** Callsign and locator of the station calling CQ are copied to the *DX
+Call* and *DX Grid* entry fields. 
+
+** Messages are generated for a standard minimal QSO.
+
+** The *Tx even* box is checked or cleared appropriately, so that you
+will transmit in the proper (odd or even) minutes.
+
+** The Rx frequency marker is moved to the frequency of the CQing
+station.
+
+** You can modify the double-click behavior by holding down the
+*Shift* key to move only the Tx frequency or the *Ctrl* key to move
+both Rx and Tx frequencies. (On a Mac computer, use the *Command* key
+instead of *Ctrl*). 
+
+** In addition, if *Double-click on call sets Tx enable* is checked on the 
+*Settings | General* tab then *Enable Tx* will be activated
+so that a transmission will start automatically at the proper time.
+
+
++
+
+NOTE: You can prevent your Tx frequency from being changed by checking the
+box *Hold Tx Freq*.
+
+- Double-click on the decoded message `K1JT HA0DU KN07`, highlighted
+in red.  Results will be similar to those in the previous step. The Tx
+frequency (red marker) is not moved unless *Shift* or *Ctrl* is held
+down.  Messages highlighted in red are usually in response to your own
+CQ or from a tail-ender, and you probably want your Tx frequency to
+stay where it was.
+
+- Click with the mouse anywhere on the waterfall display. The green Rx
+frequency marker will jump to your selected frequency, and the Rx
+frequency control on the main window will be updated accordingly.
+
+- Do the same thing with the *Shift* key held down.  Now the red Tx
+frequency marker and its associated control on the main window will
+follow your frequency selections.
+
+- Do the same thing with the *Ctrl* key held down.  Now both colored 
+markers and both spinner controls will follow your selections.
+
+- Double-clicking at any frequency on the waterfall does all the
+things just described and also invokes the decoder in a small range
+around the Rx frequency.  To decode a particular signal, double-click
+near the left edge of its waterfall trace.
+
+- Ctrl-double-click on a signal to set both Rx and Tx frequencies and
+decode at the new frequency.
+
+- Click *Erase* to clear the right window. 
+
+- Double-click *Erase* to clear both text windows.
+
+TIP: To avoid QRM from competing callers, it is usually best 
+to answer a CQ on a different frequency from that of the CQing
+station.  The same is true when you tail-end another QSO.  Choose a Tx
+frequency that appears to be not in use.  You might want to check the
+box *Hold Tx Freq*.
+
+TIP: Keyboard shortcuts *Shift+F11* and *Shift+F12* provide an easy
+way to move your Tx frequency down or up in 60 Hz steps.
+
+TIP: Sliders and spinner controls respond to *Arrow* key presses
+and *Page Up/Down* key presses, with the *Page* keys moving the
+controls in larger steps.  You can also type numbers directly into
+the spinner controls or use the mouse wheel.
+
+TIP: An online {ft8_tips} by ZL2IFB offers many additional tips on
+operating procedures.

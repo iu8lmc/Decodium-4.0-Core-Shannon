@@ -1,0 +1,56 @@
+image::settings-advanced.png[align="center",alt="Settings Advanced"]
+
+.JT65 VHF/UHF/Microwave decoding parameters
+
+- *Random erasure patterns* logarithmically scales the number of
+pseudo-random trials used by the Franke-Taylor JT65 decoder.  Larger
+numbers give slightly better sensitivity but take longer.  For most
+purposes a good setting is 6 or 7.
+
+- *Aggressive decoding level* sets the threshold for acceptable
+decodes using Deep Search.  Higher numbers will display results 
+with lower confidence levels.
+
+- Check *Two-pass decoding* to enable a second decoding pass after
+signals producing first-pass decodes have been subtracted from the
+received data stream.
+
+.Miscellaneous
+
+- Set a positive number in *Degrade S/N of .wav file* to add known
+amounts of pseudo-random noise to data read from a .wav file.  To
+ensure that the resulting S/N degradation is close to the requested
+number of dB, set *Receiver bandwidth* to your best estimate of the
+receiver's effective noise bandwidth.
+
+- Set *Tx delay* to a number larger than the default 0.2 s to create
+a larger delay between execution of a command to enable PTT and onset
+of Tx audio.  
+
++
+
+IMPORTANT: For the health of your T/R relays and external
+preamplifier, we strongly recommend using a hardware sequencer and
+testing to make sure that sequencing is correct.
+
+- Check *x 2 Tone spacing* or *x 4 Tone spacing* to generate Tx audio
+with twice or four times the normal tone spacing.  This feature is
+intended for use with specialized LF/MF transmitters that divide
+generated frequencies by 2 or 4 as part of the transmission process.
+
+_Special Operating Activity_
+
+- Check this box and select the type of activity to enable
+auto-generation of special message formats for contesting and
+DXpeditions.  For *ARRL Field Day*, enter your operating Class and
+ARRL/RAC section; for *FT Roundup*, enter your state or province.
+Use “DX” for section or state if you are not in the US or Canada.  In
+the FT Roundup, Stations in Alaska and Hawaii should enter “DX”.
+
+- Check *Fox* if you are a DXpedition station operating in FT8
+DXpedition Mode, and *SuperFox mode* if you are using that variation.
+Check *Hound* if you wish to make QSOs with such a DXpedition.  Be
+sure to read the FT8 DXpedition Mode User Guide and the SuperFox User
+Guide, as appropriate. Both guides are available directly from the
+*Help* menu.
+

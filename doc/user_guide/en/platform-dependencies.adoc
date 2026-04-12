@@ -1,0 +1,42 @@
+// Status=review
+
+A few _WSJT-X_ features are not relevant to all operating platforms,
+or may behave differently in Windows, Linux, and macOS. In particular,
+standard locations of a number files are system-dependent.
+
+
+.Windows
+
+- *Settings:*               %LOCALAPPDATA%\WSJT-X\WSJT-X.ini
+- *Log directory:*          %LOCALAPPDATA%\WSJT-X\
+- *Default save directory:* %LOCALAPPDATA%\WSJT-X\save\
+
+.Windows, when using "--rig-name=xxx"
+
+- *Settings:*               %LOCALAPPDATA%\WSJT-X - xxx\WSJT-X - xxx.ini
+- *Log directory:*          %LOCALAPPDATA%\WSJT-X - xxx\
+- *Default save directory:* %LOCALAPPDATA%\WSJT-X - xxx\save\
+
+.Linux
+
+- *Settings:*               ~/.config/WSJT-X.ini
+- *Log directory:*          ~/.local/share/WSJT-X/
+- *Default save directory:* ~/.local/share/WSJT-X/save/
+
+.Linux, when using "--rig-name=xxx"
+
+- *Settings:*               ~/.config/WSJT-X - xxx.ini
+- *Log directory:*          ~/.local/share/WSJT-X - xxx/
+- *Default save directory:* ~/.local/share/WSJT-X - xxx/save/
+
+.macOS
+
+- *Settings:*               ~/Library/Preferences/WSJT-X.ini
+- *Log directory:*          ~/Library/Application Support/WSJT-X/
+- *Default save directory:* ~/Library/Application Support/WSJT-X/save/
+
+.macOS, when using "--rig-name=xxx"
+
+- *Settings:*               ~/Library/Preferences/WSJT-X - xxx.ini
+- *Log directory:*          ~/Library/Application Support/WSJT-X - xxx/
+- *Default save directory:* ~/Library/Application Support/WSJT-X - xxx/save/

@@ -1,0 +1,14 @@
+=== Keyboard Shortcuts
+
+Select *Keyboard shortcuts* from the *Help* menu (or use function key
+*F3*) to display the following list of quick-action shortcuts:
+
+image::keyboard-shortcuts.png[align="left",alt="Keyboard Shortcuts"]
+
+
+Select *Special Mouse Commands* from the *Help* menu (or use function key
+*F5*) to display the following list of mouse commands:
+
+=== Special Mouse Commands
+image::special-mouse-commands.png[align="left",alt="Special Mouse Commands"]
+

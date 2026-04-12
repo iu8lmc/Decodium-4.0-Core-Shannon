@@ -1,0 +1,77 @@
+Building the MS Windows portaudio DLL with ASIO Support
+=======================================================
+
+Some MAP65  users may not be  able to use WDM/KS  hosted audio devices
+due to sharing issues with other applications, to circumvent this they
+can build a version of the  portaudio DLL with ASIO support. We cannot
+provide a  portaudio DLL with ASIO  support as the Steinberg  ASIO SDK
+license  prevents redistribution  of drivers  or hosting  applications
+without a commercial license agreement,  nor is the Steinberg ASIO SDK
+license  compatible with  the GPL  v3 license  that MAP65  is released
+under.  Users  may build  a  portaudio  DLL themselves,  strictly  for
+personal use, under the terms of the Steinberg ASIO license.
+
+Building portaudio on  MS Windows is done most easily  using the MinGW
+(GNU) tool-chain which can be installed  on MS Windows using the MSYS2
+unix  like  environment  which  in turn  includes  a  package  manager
+(pacman)  that allows  simple installation  of necessary  prerequisite
+packages like the  MinGW 64-bit tool-chain. To  install MSYS2 download
+the latest 64-bit installer from the MSYS2 project web site. This page
+contains links to the installer  download and detailed instructions to
+install and bring up-to-date the base MSYS2 packages.
+
+https://www.msys2.org/wiki/MSYS2-installation/
+
+Take particular care  to restart the MSYS2 shell  window when directed
+to.
+
+The first step is to  install some prerequisite packages which contain
+the tools needed  to prepare and build the portaudio  DLL. Execute the
+following command to do that:
+
+  pacman -S make diffutils unzip mingw-w64-x86_64-gcc sed tar curl
+
+Once  MSYS2  is installed  and  the  prerequisite packages  above  are
+installed you will find a new Windows Start Menu entry labelled "MSYS2
+MinGW 64-bit",  use that to start  a fresh MSYS2 shell  window for the
+rest of these instructions.
+
+Then make directories to put downloaded sources in and for building:
+
+  mkdir -p ~/src ~/build/portaudio
+
+Fetch and  unpack the Steinberg  ASIO SDK  (note the ASIO  SDK license
+document   included,   particularly   that   it   strictly   disallows
+redistribution of  the DLL  we will be  building here),  and portaudio
+sources:
+
+  curl -Lo ~/src/asiosdk.zip https://www.steinberg.net/asiosdk
+  (cd ~/src ; unzip asiosdk.zip)
+  curl -O --output-dir ~/src \
+    http://files.portaudio.com/archives/pa_stable_v190700_20210406.tgz
+  tar -C ~/src -xf ~/src/pa_stable_v190700_20210406.tgz
+
+Patch and build the portaudio library:
+
+  sed -i -e 's/-luuid//g' ~/src/portaudio/configure
+  cd ~/build/portaudio
+  ~/src/portaudio/configure --with-winapi=wmme,directx,wdmks,asio \
+    --with-asiodir=$HOME/src/asiosdk_2.3.3_2019-06-14 \
+    --disable-static --enable-shared
+  make -j
+
+You can check  the library build is working by  running a test program
+that was also built:
+
+  bin/pa_devs
+
+which should list every audio device on your system by every host API,
+if all  is well that should  include the audio devices  on your system
+with ASIO drivers.
+
+Copy the new portaudio DLL to your WSJT-X/MAP65 installation directory:
+
+  cp lib/.libs/libportaudio-2.dll /c/WSJT/wsjtx/bin/
+
+Note that if you  upgrade WSJT-X you will need to  copy this DLL again
+since it will be overwritten by one with no ASIO support.

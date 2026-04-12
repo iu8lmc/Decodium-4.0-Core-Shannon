@@ -1,0 +1,64 @@
+// Status=review
+
+[[FIG_BAND_SETTINGS]]
+
+By default, the *Working Frequencies* table contains a list of
+frequencies conventionally used for specific modes.  Conventions may
+change with time, or by user preference; you can modify the frequency
+table as desired.
+
+image::settings-frequencies.png[align="center",alt="Frequency Screen"]
+
+- To change an existing entry, double-click to edit it, type a desired
+frequency in MHz or select from the drop-down list of options, then
+hit *Enter* on the keyboard.  You can mark an entry as *Preferred*,
+provide a descriptive label, and indicate starting and ending dates
+and times for it to be displayed on the band-select control.  The
+program will format your changed entries appropriately.
+
+- To add a new entry, right-click anywhere on the frequency table and
+select *Insert*.  Enter your desired information and click *OK*.  The
+table may include more than one frequency for a given mode and band.
+
+image::Add_Frequency.png[align="center",alt="Add Frequency window"]
+
+- To delete an entry, right-click it and select *Delete*. Multiple
+entries can be deleted in a single operation by selecting them before
+right-clicking.
+
+- Right-click anywhere within the table body and click *Reset* button
+to return the table to its default configuration.
+
+Other  more  advanced  maintenance  operations are  available  on  the
+right-click context popup menu.
+
+_Frequency Calibration_: If you have calibrated your radio using WWV
+or other reliable frequency references, or perhaps with the technique
+described in {fmt_wspr}, enter the measured values for _Intercept_ A
+and _Slope_ B in the equation
+
+ Dial error = A + B*f
+
+where "`Dial error`" and A are in Hz, f is frequency in MHz, and B is
+in parts per million (ppm). Frequency values sent to the radio and
+received from it will then be adjusted so that frequencies displayed
+by _WSJT-X_ are accurate.
+
+_Station Information_: You can save *Band*, *Offset* and *Antenna
+Description* information for your station.  The antenna information
+will be included in reception reports sent to {pskreporter}.  By
+default the frequency offset for each band is zero.  Nonzero offsets
+may be added if (for example) a <<VHF_SETUP,transverter>> is in use.
+
+- To simplify things you might want to delete any unwanted bands --
+for example, bands where you have no equipment.  Then click on a
+*Frequency* entry and type *Ctrl+A* to "`select all,`" and
+drag-and-drop the entries onto the _Station Information_ table.  You
+can then add any transverter offsets and antenna details.
+
+- To avoid typing the same information many times, you can
+drag-and-drop entries between the lines of the _Station Information_
+table.
+
+- When all settings have been configured to your liking, click *OK* to
+dismiss the *Settings* window.

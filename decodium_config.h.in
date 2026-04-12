@@ -1,0 +1,82 @@
+#ifndef DECODIUM_CONFIG_H__
+#define DECODIUM_CONFIG_H__
+
+#ifdef __cplusplus
+extern "C"  {
+#endif
+
+#ifndef TO_STRING__
+#define TO_STRING_IMPL__(x) #x
+#define TO_STRING__(x) TO_STRING_IMPL__(x)
+#endif
+
+#define PROJECT_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define PROJECT_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define PROJECT_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define PROJECT_VERSION_TWEAK @PROJECT_VERSION_TWEAK@
+#define BUILD_TYPE_REVISION "@BUILD_TYPE_REVISION@"
+#ifndef FORK_RELEASE_VERSION
+#define FORK_RELEASE_VERSION "@FORK_RELEASE_VERSION@"
+#endif
+
+#cmakedefine CMAKE_INSTALL_DATAROOTDIR "@CMAKE_INSTALL_DATAROOTDIR@"
+#cmakedefine CMAKE_INSTALL_DOCDIR "@CMAKE_INSTALL_DOCDIR@"
+#cmakedefine CMAKE_INSTALL_DATADIR "@CMAKE_INSTALL_DATADIR@"
+#cmakedefine CMAKE_PROJECT_NAME "@CMAKE_PROJECT_NAME@"
+#cmakedefine PROJECT_VENDOR "@PROJECT_VENDOR@"
+#cmakedefine PROJECT_NAME "@PROJECT_NAME@"
+#cmakedefine PROJECT_COPYRIGHT "@PROJECT_COPYRIGHT@"
+#cmakedefine PROJECT_MANUAL "@PROJECT_MANUAL@"
+#cmakedefine PROJECT_HOMEPAGE "@PROJECT_HOMEPAGE@"
+#cmakedefine PROJECT_MANUAL_DIRECTORY_URL "@PROJECT_MANUAL_DIRECTORY_URL@"
+#cmakedefine PROJECT_SAMPLES_URL "@PROJECT_SAMPLES_URL@"
+#cmakedefine PROJECT_DESCRIPTION "@PROJECT_DESCRIPTION@"
+#cmakedefine CMAKE_SOURCE_DIR "@CMAKE_SOURCE_DIR@"
+
+#cmakedefine01 HAVE_HAMLIB_OLD_CACHING
+#cmakedefine01 HAVE_HAMLIB_CACHING
+
+#cmakedefine HAVE_STDIO_H 1
+#cmakedefine STDC_HEADERS 1
+#cmakedefine HAVE_STDLIB_H 1
+#cmakedefine HAVE_UNISTD_H 1
+#cmakedefine HAVE_SYS_IOCTL_H 1
+#cmakedefine HAVE_FCNTL_H 1
+#cmakedefine HAVE_SYS_STAT_H 1
+#cmakedefine HAVE_LINUX_PPDEV_H 1
+#cmakedefine HAVE_DEV_PPBUS_PPI_H 1
+
+#cmakedefine01 WSJT_SHARED_RUNTIME
+#cmakedefine01 WSJT_TRACE_CAT
+#cmakedefine01 WSJT_TRACE_CAT_POLLS
+#cmakedefine01 WSJT_SOFT_KEYING
+#cmakedefine01 WSJT_ENABLE_EXPERIMENTAL_FEATURES
+#cmakedefine01 WSJT_RIG_NONE_CAN_SPLIT
+#cmakedefine01 WSJT_TRACE_UDP
+
+/* consistent UNICODE behaviour */
+#ifndef UNICODE
+#	undef _UNICODE
+#else
+#	ifndef _UNICODE
+#		define _UNICODE
+#	endif
+#endif
+
+  /* typedef for consistent gfortran ABI for charlen type hidden arguments */
+#if __GNUC__ > 7         ||  defined(__clang__)
+#if defined(__cplusplus) && !defined(__clang__)
+#include <cstddef>
+#else
+#include <stddef.h>
+#endif
+  typedef size_t fortran_charlen_t;
+#else
+  typedef int fortran_charlen_t;
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

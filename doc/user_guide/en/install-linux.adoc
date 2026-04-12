@@ -1,0 +1,64 @@
+// Status=edited
+
+Debian, Ubuntu, and other Debian-based systems including Raspberry Pi OS:
+
+NOTE: Our binary installer packages are targeted for
+one contemporary version of a Linux distribution. Although these may
+work on newer Linux versions or even different distributions, it is
+unlikely that they work on older versions. Check the notes provided
+with the release for details of the targeted Linux distributions and
+versions. If the binary package is not compatible with your Linux
+distribution or version, you must build the application from sources.
+
+* 64-bit Intel/AMD: {debian64}
+- To install:
++
+[example]
+sudo dpkg -i wsjtx_{VERSION}_amd64.deb
+
+* 32-bit ARM hardware FP: {raspbian}
+- To install:
++
+[example]
+sudo dpkg -i wsjtx_{VERSION}_armhf.deb
+
+* 64-bit ARM: {raspbian64}
+- To install:
++
+[example]
+sudo dpkg -i wsjtx_{VERSION}_arm64.deb
+
+* Uninstall for any of the above platforms:
++
+[example]
+sudo dpkg -P wsjtx
+
+You may also need to execute the following command in a terminal:
+
+....
+sudo apt install libgfortran5 libqt5widgets5 libqt5network5 \
+     libqt5printsupport5 libqt5multimedia5-plugins libqt5serialport5 \
+     libqt5sql5-sqlite libfftw3-single3 libgomp1 libboost-all-dev \
+     libusb-1.0-0 libportaudio2
+....
+
+Fedora, CentOS, Red Hat, and other rpm-based systems:
+
+* 64-bit: {fedora64}
+- To install:
++
+[example]
+sudo rpm -i wsjtx-{VERSION}-x86_64.rpm
+
+* Uninstall:
++
+[example]
+sudo rpm -e wsjtx
+
+You may also need to execute the following command in a terminal:
+
+....
+sudo dnf install libgfortran fftw-libs-single qt5-qtbase \
+     qt5-qtmultimedia qt5-qtserialport qt5-qtsvg \
+     qt5-qtserialport libgomp boost libusbx portaudio
+....

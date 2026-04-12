@@ -1,0 +1,49 @@
+i3 n3 isync  Operating activity, Message Type
+-----------------------------------------------------------
+ 0  0   1    Std QSO msg (bit 72=0)
+ 0  0   1    Free text   (bit 72=1)
+ 0  1   1    Fox DXpedition msg with "RR73;"
+-----------------------------------------------------------
+ 1  0   2    Std QSO msg
+ 0  1   2    Fox DXpedition msg with "RR73;"
+ 1  *   2    NA VHF contest
+ 2  *   2    EU VHF contest (Tx1, Tx6)
+ 0  2   2    EU VHF contest (Tx2, Tx3)
+ 0  3   2    ARRL Field Day (1-16 transmitters)
+ 0  4   2    ARRL Field Day (17-32 transmitters)
+ 3  *   2    ARRL RTTY Roundup
+ 4  *   2    Compound and non-standard calls 
+-----------------------------------------------------------
+* ==> "don't care" (types i3=1,2,3,4 do not have subtypes)
+-----------------------------------------------------------
+
+A. Required GUI Additions (after July 3):
+
+   1. Entry widgets for fixed parts of contest exchanges: comboBoxes
+      for ARRL section, US State/Canadian Province, number of 
+      transmitters and entry Class for Field Day.
+      
+   2. Spinner control for serial numbers: used for EU_VHF_Contest,
+      and for DX stations in RTTYroundup.
+
+B. Code near the end of GenStdMsgs():
+
+   1. if(m_config.bNA_VHF_Contest()): do as with present checkbox
+   2. if(m_config.bEU_VHF_Contest()): make EU_VHF messages
+   3. if(m_config.bFieldDay()): make FD messages
+   4. if(m_config.bRTTYroundup()): make RR messages
+   5. if MyCall or DXcall is compound or nonstandard, make new msgs
+
+C. Code just before calling genft8_():
+
+   1. m_i3=0, m_n3=0, m_isync=1
+   2. if(check m_config.bGenerate77()) m_isync=2
+   3. if msg is not an old-style standard msg, see if it's valid
+      as a 77-bit msg
+   4. if NO: transmit as Free Text
+      if YES: set i3, n3, and isync=2
+      
+D. Auto-sequencer code
+
+   1. Probably lots of changes needed: details TBD, after we make the
+      new messages work with Auto-Seq off.

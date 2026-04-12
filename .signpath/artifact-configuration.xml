@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- SignPath artifact configuration for Decodium 3.0 FT2 Raptor -->
+<!-- Describes which files inside the uploaded ZIP artifact should be signed -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <!-- Main application executables -->
+    <pe-file path="decodium.exe">
+      <authenticode-sign hash-algorithm="sha256"
+                         description="Decodium 3.0 FT2 Raptor - Digital Communication Client"
+                         description-url="https://github.com/iu8lmc/Decodium-3.0-Codename-Raptor" />
+    </pe-file>
+
+    <pe-file path="jt9.exe">
+      <authenticode-sign hash-algorithm="sha256"
+                         description="Decodium JT9 Decoder Engine"
+                         description-url="https://github.com/iu8lmc/Decodium-3.0-Codename-Raptor" />
+    </pe-file>
+
+    <pe-file path="wsprd.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <pe-file path="message_aggregator.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <pe-file path="udp_daemon.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <pe-file path="ChronoGPS.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <!-- Hamlib utilities -->
+    <pe-file path="rigctl-decodium.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <pe-file path="rigctld-decodium.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <pe-file path="rigctlcom-decodium.exe" min-matches="0">
+      <authenticode-sign hash-algorithm="sha256" />
+    </pe-file>
+
+    <!-- Third-party DLLs: verify they are NOT signed (MinGW runtime, Qt, etc.) -->
+    <!-- We do not sign third-party DLLs as they are not our code -->
+    <pe-file path="*.dll" max-matches="unbounded" min-matches="0">
+      <!-- Skip DLLs - they are third-party MinGW/Qt runtime -->
+    </pe-file>
+
+    <!-- Qt plugin DLLs in subdirectories -->
+    <directory path="platforms" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="audio" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="imageformats" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="sqldrivers" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="bearer" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="styles" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="mediaservice" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+    <directory path="printsupport" min-matches="0">
+      <pe-file path="*.dll" max-matches="unbounded" min-matches="0" />
+    </directory>
+  </zip-file>
+</artifact-configuration>

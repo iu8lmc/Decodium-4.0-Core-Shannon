@@ -1,0 +1,69 @@
+// Status=edited
+
+The following controls appear just under the decoded text windows on
+the main screen. The top row appears only if *Band Buttons* is checked
+on the *View* menu, and some controls on the second row are visible
+only when a relevant mode is in use.
+
+//.Main UI 
+image::main-ui-controls.png[align="center",width=650,alt="Main UI Controls"]
+
+* When *CQ only* is checked, only messages from stations calling CQ are displayed in the left text panel.
+
+* When *BP* is checked, active filtering options are bypassed and all
+decoded messages will be displayed.
+
+* *Log QSO* raises a dialog window pre-filled with known information
+about a QSO you have nearly completed.  You can edit or add to this
+information before clicking *OK* to log the QSO.  If you check *Prompt
+me to log QSO* on the *File | Settings | Reporting* tab, the program
+raises the confirmation screen automatically when you send a message
+containing +73+. For additional details see <<LOGGING,*Logging*>>.
+
+* *Stop* terminates normal data acquisition in case you want to
+freeze the waterfall or open and explore a previously recorded audio
+file.
+
+* *Monitor* toggles normal receive operation on or off.  This button
+is highlighted in green when _WSJT-X_ is receiving. and in yellow if
+audio file saving has been selected on the *Save* menu.  If you are
+using CAT control, toggling *Monitor* OFF relinquishes control of the
+rig; if *Monitor returns to last used frequency* is selected on the
+*File | Settings | General* tab, toggling *Monitor* back ON will
+return to the original frequency.
+
+* *Erase*: Click to clear the right text window, double-click to clear
+the left window. If *Alternate Erase button behavior* is checked on
+the *File | Settings | General* tab, left-click clears the left
+window, right-click clears the right window, and double-click clears
+both.
+
+* *Clear Avg* is displayed only in modes that support message
+averaging.  Click the button to erase the accumulating message
+information, thus preparing to start a new average.
+
+* *Avg nn* sets the number of consecutive *Echo* cycles to be averaged.
+
+* *Decode* tells the program to repeat the decoding procedure at the
+Rx frequency (green marker on waterfall scale), using the most recently
+completed sequence of received data.  
+
+* *Enable Tx* toggles automatic T/R sequencing mode on or off. The
+button is highlighted in red when ON, or orange if *Wait and Pounce*
+has been set.  A transmission will start at the beginning of the
+selected odd or even sequence, or immediately if appropriate.
+Toggling the button to OFF during a transmission allows the current
+transmission to finish.
+
+* *Halt Tx* terminates a transmission immediately and disables
+automatic T/R sequencing.
+
+* *Tune* toggles the program into Tx mode and generates an unmodulated
+carrier at the specified Tx frequency (red marker on waterfall scale).
+This process is useful for adjusting an antenna tuner or tuning an
+amplifier.  The button is highlighted in red while *Tune* is active.
+Toggle the button a second time or click *Halt Tx* to terminate the
+*Tune* process.  
+
+* Uncheck the box *Menus* to make the top-of-window menus disappear,
+leaving more vertical space for decoded messages.

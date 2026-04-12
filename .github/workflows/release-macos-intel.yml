@@ -1,0 +1,218 @@
+name: Release macOS Intel
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (leave empty to use fork_release_version.txt)"
+        required: false
+        default: ""
+      publish_release:
+        description: "Publish GitHub release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  HAMLIB_TAG: "4.7.0"
+  HAMLIB_VERSION: "4.7.0"
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset_suffix }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            compat_macos: "15.0"
+            asset_suffix: "macos-sequoia-x86_64"
+            experimental: false
+          - runner: macos-15-intel
+            compat_macos: "12.0"
+            asset_suffix: "macos-monterey-x86_64"
+            experimental: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select version
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ -f fork_release_version.txt ]]; then
+            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          else
+            VERSION="0.0.0-ci-${GITHUB_SHA::7}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Using version: ${VERSION}"
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install qt gcc fftw libusb boost pkg-config create-dmg dylibbundler
+
+          GCC_PREFIX="$(brew --prefix gcc)"
+          GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
+          if [[ -z "${GFORTRAN}" ]]; then
+            echo "gfortran not found under ${GCC_PREFIX}/bin"
+            exit 1
+          fi
+          echo "FC=${GFORTRAN}" >> "$GITHUB_ENV"
+          "${GFORTRAN}" --version
+
+          QT_PREFIX="$(brew --prefix qt)"
+          echo "${QT_PREFIX}/bin" >> "$GITHUB_PATH"
+          echo "QT_PREFIX=${QT_PREFIX}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "$GITHUB_ENV"
+          qmake6 -v
+
+      - name: Build and install Hamlib
+        run: |
+          set -euo pipefail
+          HAMLIB_PREFIX="${RUNNER_TEMP}/hamlib-prefix"
+
+          echo "Using Hamlib ${HAMLIB_TAG}"
+          cd "${RUNNER_TEMP}"
+          curl -fsSL -o "hamlib-${HAMLIB_VERSION}.tar.gz" "https://github.com/Hamlib/Hamlib/releases/download/${HAMLIB_TAG}/hamlib-${HAMLIB_VERSION}.tar.gz"
+          tar -xzf "hamlib-${HAMLIB_VERSION}.tar.gz"
+          cd "hamlib-${HAMLIB_VERSION}"
+          ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+
+          HAMLIB_LIBRARY="$(find "${HAMLIB_PREFIX}/lib" -maxdepth 1 -name 'libhamlib*.dylib' | head -n1 || true)"
+          if [[ -z "${HAMLIB_LIBRARY}" ]]; then
+            echo "Unable to locate libhamlib*.dylib under ${HAMLIB_PREFIX}/lib"
+            exit 1
+          fi
+
+          echo "${HAMLIB_PREFIX}/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=${HAMLIB_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX};${HAMLIB_PREFIX}" >> "$GITHUB_ENV"
+          echo "Hamlib_INCLUDE_DIR=${HAMLIB_PREFIX}/include" >> "$GITHUB_ENV"
+          echo "Hamlib_LIBRARY=${HAMLIB_LIBRARY}" >> "$GITHUB_ENV"
+          echo "RIGCTL_EXE=${HAMLIB_PREFIX}/bin/rigctl" >> "$GITHUB_ENV"
+          echo "RIGCTLD_EXE=${HAMLIB_PREFIX}/bin/rigctld" >> "$GITHUB_ENV"
+          echo "RIGCTLCOM_EXE=${HAMLIB_PREFIX}/bin/rigctlcom" >> "$GITHUB_ENV"
+
+          "${HAMLIB_PREFIX}/bin/rigctl" --version
+
+      - name: Build release assets
+        run: |
+          EXTRA_ARGS=()
+          if [[ "${{ matrix.experimental }}" == "true" ]]; then
+            echo "Experimental legacy build enabled for ${{ matrix.asset_suffix }}; skipping strict compatibility gate."
+            EXTRA_ARGS+=(--skip-compat-check)
+          fi
+          scripts/release-macos.sh "${VERSION}" \
+            --compat-macos "${{ matrix.compat_macos }}" \
+            --asset-suffix "${{ matrix.asset_suffix }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            "${EXTRA_ARGS[@]}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}
+          if-no-files-found: error
+          path: |
+            build/decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.dmg
+            build/decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.zip
+            build/decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}-sha256.txt
+
+  publish:
+    name: Publish GitHub release
+    needs: [build]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ -z "${VERSION}" && -f fork_release_version.txt ]]; then
+            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using version: ${VERSION}"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: decodium3-ft2-${{ steps.version.outputs.version }}-macos-*x86_64
+          merge-multiple: true
+          path: release-assets
+
+      - name: Validate assets
+        run: |
+          ls -lh release-assets
+          VERSION="${{ steps.version.outputs.version }}"
+          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
+          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.zip"
+          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
+          if [[ -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
+                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
+                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
+            echo "Monterey Intel artifact detected and will be published."
+          else
+            echo "Monterey Intel artifact not produced in this run (experimental target)."
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REPO="${GITHUB_REPOSITORY}"
+
+          NOTES_FILE="$(mktemp)"
+          NOTES_TEMPLATE="doc/GITHUB_RELEASE_BODY_${VERSION}.md"
+          if [[ -f "${NOTES_TEMPLATE}" ]]; then
+            cp "${NOTES_TEMPLATE}" "${NOTES_FILE}"
+          elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
+            cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
+          else
+            printf "# Decodium 3 FT2 %s\n\nSee CHANGELOG.md for details.\n" "${VERSION}" > "${NOTES_FILE}"
+          fi
+
+          ASSETS=(
+            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
+            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.zip"
+            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
+          )
+          if [[ -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
+                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
+                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
+            ASSETS+=(
+              "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.dmg"
+              "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.zip"
+              "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt"
+            )
+          fi
+
+          if gh release view "${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" "${ASSETS[@]}" --repo "${REPO}" --clobber
+            gh release edit "${VERSION}" --repo "${REPO}" --notes-file "${NOTES_FILE}"
+          else
+            gh release create "${VERSION}" "${ASSETS[@]}" \
+              --repo "${REPO}" \
+              --title "Decodium 3 FT2 ${VERSION} (macOS Intel)" \
+              --notes-file "${NOTES_FILE}"
+          fi
+
+          rm -f "${NOTES_FILE}"

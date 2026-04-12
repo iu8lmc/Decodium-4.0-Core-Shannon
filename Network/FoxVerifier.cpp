@@ -1,0 +1,182 @@
+#include "FoxVerifier.hpp"
+#ifdef DECODIUM_NO_BOOST_LOG
+#  include <QDebug>
+#  define LOG_INFO(x) qDebug() << (x)
+#else
+#  include "Logger.hpp"
+#endif
+
+FoxVerifier::FoxVerifier(QString user_agent, QNetworkAccessManager *manager,QString base_url, QString callsign, QDateTime timestamp, QString code, unsigned int hz=750) : QObject(nullptr)
+{
+  manager_ = manager;
+  reply_ = nullptr;
+  finished_ = false;
+  errored_ = false;
+  callsign_ = callsign;
+  code_ = code;
+  ts_ = timestamp;
+  hz_ = hz;
+
+  // make sure we URLencode the callsign, for things like E51D/MM
+  QString encodedCall = QString::fromUtf8(QUrl::toPercentEncoding(callsign));
+  QString url = QString("%1/check/").arg(base_url) + encodedCall + QString("/%1/%2.text").arg(timestamp.toString(Qt::ISODate)).arg(code);
+  q_url_ = QUrl(url);
+  LOG_INFO(QString("FoxVerifier: prepared request to host %1").arg(q_url_.host()).toUtf8().constData());
+  if (manager_ == nullptr) {
+    LOG_INFO("FoxVerifier: manager is null, creating new one");
+    manager_ = new QNetworkAccessManager(this);
+  }
+  if (q_url_.isValid()) {
+    request_ = QNetworkRequest(q_url_);
+    request_.setRawHeader( "User-Agent" , user_agent.toUtf8());
+    request_.setRawHeader( "Accept" , "*/*" );
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    request_.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+#else
+    request_.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                          QNetworkRequest::NoLessSafeRedirectPolicy);
+#endif
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    request_.setTransferTimeout(FOXVERIFIER_DEFAULT_TIMEOUT_MSEC);
+#endif
+
+    reply_ =  manager_->get(request_);
+    if (!reply_)
+      {
+        errored_ = true;
+        error_reason_ = QStringLiteral("FoxVerifier: network request creation failed");
+        finished_ = true;
+        return;
+      }
+    connect(reply_, &QNetworkReply::finished, this, &FoxVerifier::httpFinished);
+    connect(reply_, &QObject::destroyed, this, [this] () { reply_ = nullptr; });
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    connect(reply_, &QNetworkReply::errorOccurred, this, &FoxVerifier::errorOccurred);
+#endif
+    connect(reply_, &QNetworkReply::redirected, this, &FoxVerifier::httpRedirected);
+    connect(reply_, &QNetworkReply::encrypted, this, &FoxVerifier::httpEncrypted);
+#if QT_CONFIG(ssl)
+    connect(reply_, &QNetworkReply::sslErrors, this, &FoxVerifier::sslErrors);
+#else
+    LOG_INFO("FoxVerifier: ssl not supported");
+#endif
+
+  } else {
+    LOG_INFO(QString("FoxVerifier: url invalid").toUtf8().constData());
+  }
+}
+
+FoxVerifier::~FoxVerifier() {
+  if (reply_ && reply_->isRunning())
+    {
+      reply_->abort();
+    }
+}
+
+bool FoxVerifier::finished() {
+  return finished_;
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+void FoxVerifier::errorOccurred(QNetworkReply::NetworkError code)
+{
+  if (!reply_)
+    {
+      errored_ = true;
+      error_reason_ = QStringLiteral("FoxVerifier: reply destroyed before error handling");
+      finished_ = true;
+      return;
+    }
+  int status =  reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+  QString reason = reply_->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString();
+  errored_ = true;
+  error_reason_ = reply_->errorString();
+  if (reply_->error() != QNetworkReply::NoError) {
+
+    LOG_INFO(QString("FoxVerifier: errorOccurred status %1 error [%2][%3] isFinished %4 isrunning %5 code %6").arg(status).arg(
+            reason).arg(error_reason_).arg(reply_->isFinished()).arg(reply_->isRunning()).arg(code).toUtf8().constData());
+    return;
+  }
+  // TODO emit
+}
+#endif
+
+void FoxVerifier::httpFinished()
+{
+  if (!reply_)
+    {
+      errored_ = true;
+      error_reason_ = QStringLiteral("FoxVerifier: missing reply at completion");
+      finished_ = true;
+      return;
+    }
+  int status =  reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+  QString reason = reply_->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString();
+  if (reply_->error() != QNetworkReply::NoError) {
+    LOG_INFO(QString("FoxVerifier: httpFinished error:[%1 - %2] msg:[%3]").arg(status).arg(reason).arg(reply_->errorString()).toUtf8().constData());
+    reply_->abort();
+    emit verifyError(status, ts_, callsign_, code_, hz_, reply_->errorString());
+  }
+  return_value = reply_->read(1024); // limit amount we get
+  LOG_INFO(QString("FoxVerifier: httpFinished status:[%1 - %2] body_length:[%3]")
+           .arg(status).arg(reason).arg(return_value.size()).toUtf8().constData());
+  finished_ = true;
+  reply_->deleteLater();
+  if (status >= 200 && status <= 299) {
+    emit verifyComplete(status, ts_, callsign_, code_, hz_, return_value);
+  }
+}
+
+void FoxVerifier::sslErrors(const QList<QSslError> & errors)
+{
+  if (!reply_)
+    {
+      errored_ = true;
+      error_reason_ = QStringLiteral("FoxVerifier: SSL errors without active reply");
+      finished_ = true;
+      return;
+    }
+  QString details;
+  for (auto const& error : errors)
+    {
+      if (!details.isEmpty ()) details += "; ";
+      details += QString {"%1 (%2)"}
+        .arg (error.errorString ())
+        .arg (static_cast<int> (error.error ()));
+    }
+  LOG_INFO(QString("FoxVerifier: sslErrors - refusing insecure TLS certificate: %1").arg(details).toUtf8().constData());
+
+  // Security hardening: do not bypass TLS verification.
+  if (reply_ && reply_->isRunning())
+    {
+      reply_->abort();
+    }
+}
+
+void FoxVerifier::httpRedirected(const QUrl &url) {
+  LOG_INFO(QString("FoxVerifier: redirected to host %1").arg(url.host()).toUtf8().constData());
+}
+
+void FoxVerifier::httpEncrypted() {
+  LOG_INFO("FoxVerifier: httpEncrypted");
+}
+
+QString FoxVerifier::formatDecodeMessage(QDateTime ts, QString callsign, unsigned int hz_, QString const& verify_message) {
+  //"172100 -00  0.0  750 ~  K8R VERIFIED"
+  QTime rx_time = ts.time();
+  QString hz=QString("%1").arg(hz_, 4, 10 ); // insert Hz
+  if (verify_message.endsWith(" VERIFIED")) {
+    return QString("%1   0  0.0 %2 ~  %3 verified").arg(rx_time.toString("hhmmss")).arg(hz).arg(callsign);
+  } else
+    if (verify_message.endsWith(" INVALID"))
+    {
+      return QString("%1   0  0.0 %2 ~  %3 invalid").arg(rx_time.toString("hhmmss")).arg(hz).arg(callsign);
+    }
+    else
+      return QString{};
+}
+
+QString FoxVerifier::default_url() {
+  return QString(FOXVERIFIER_DEFAULT_BASE_URL);
+}

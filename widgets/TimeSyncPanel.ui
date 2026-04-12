@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TimeSyncPanel</class>
+ <widget class="QDialog" name="TimeSyncPanel">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>380</width>
+    <height>520</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Time Synchronization</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog { background-color: #2b2b2b; color: #ddd; }
+QGroupBox { border: 1px solid #555; border-radius: 4px; margin-top: 8px; padding-top: 12px; color: #ccc; }
+QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
+QPushButton { background-color: #444; color: #ddd; border: 1px solid #666; border-radius: 3px; padding: 4px 12px; }
+QPushButton:hover { background-color: #555; }
+QCheckBox { color: #ddd; }
+QLineEdit { background-color: #333; color: #ddd; border: 1px solid #555; border-radius: 2px; padding: 2px 4px; }
+QLabel { color: #ddd; }</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>6</number>
+   </property>
+   <property name="leftMargin">
+    <number>10</number>
+   </property>
+   <property name="topMargin">
+    <number>10</number>
+   </property>
+   <property name="rightMargin">
+    <number>10</number>
+   </property>
+   <property name="bottomMargin">
+    <number>10</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="lblUtcClock">
+     <property name="text">
+      <string>00:00:00.000 UTC</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">font-family: Consolas, 'Courier New', monospace; font-size: 24pt; font-weight: bold; color: #00ff00; background-color: #1a1a1a; padding: 8px; border-radius: 4px;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lblUtcDate">
+     <property name="text">
+      <string>2026-01-01</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">font-size: 14pt; color: #aaa;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lblSystemClock">
+     <property name="text">
+      <string>System: 00:00:00.000</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">font-size: 10pt; color: #888;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupNtp">
+     <property name="title">
+      <string>NTP Status</string>
+     </property>
+     <layout class="QFormLayout" name="formLayoutNtp">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelStatus">
+        <property name="text">
+         <string>Status:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="lblNtpStatus">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelOffset">
+        <property name="text">
+         <string>Offset:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="lblNtpOffset">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelLastSync">
+        <property name="text">
+         <string>Last sync:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="lblLastSync">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupDrift">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="title">
+      <string>Soundcard Drift</string>
+     </property>
+     <layout class="QFormLayout" name="formLayoutDrift">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelDriftPpm">
+        <property name="text">
+         <string>Drift:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="lblDriftPpm">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelDriftPeriod">
+        <property name="text">
+         <string>Per period:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="lblDriftPerPeriod">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupDecodeTiming">
+     <property name="title">
+      <string>Decode Timing</string>
+     </property>
+     <layout class="QFormLayout" name="formLayoutDecodeTiming">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelAvgDt">
+        <property name="text">
+         <string>Avg DT:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="lblAvgDt">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelDtCorrection">
+        <property name="text">
+         <string>DT Correction:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="lblDtCorrection">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelDecodeCount">
+        <property name="text">
+         <string>Decodes used:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="lblDecodeCount">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="labelDecodeLatency">
+        <property name="text">
+         <string>Decode latency:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLabel" name="lblDecodeLatency">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="labelLastDts">
+        <property name="text">
+         <string>Last DTs:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QLabel" name="lblLastDts">
+        <property name="text">
+         <string>--</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="labelConvergence">
+        <property name="text">
+         <string>Convergence:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QLabel" name="lblConvergence">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="labelEmaFactor">
+        <property name="text">
+         <string>EMA factor:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QLabel" name="lblEmaFactor">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0">
+       <widget class="QLabel" name="labelDriftApplied">
+        <property name="text">
+         <string>SC drift comp:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QLabel" name="lblDriftApplied">
+        <property name="text">
+         <string>--</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="0">
+       <widget class="QLabel" name="labelWarning">
+        <property name="text">
+         <string>Warning:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="1">
+       <widget class="QLabel" name="lblWarning">
+        <property name="text">
+         <string>--</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupControls">
+     <property name="title">
+      <string>Controls</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutControls">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutControls">
+        <item>
+         <widget class="QCheckBox" name="cbNtpEnabled">
+          <property name="text">
+           <string>NTP Enabled</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSyncNow">
+          <property name="text">
+           <string>Sync Now</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutServer">
+        <item>
+         <widget class="QLabel" name="labelServer">
+          <property name="text">
+           <string>Server:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="editCustomServer">
+          <property name="placeholderText">
+           <string>(auto - pool.ntp.org)</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupHistory">
+     <property name="title">
+      <string>Offset History</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutHistory">
+      <item>
+       <widget class="QListWidget" name="listHistory">
+        <property name="minimumHeight">
+         <number>80</number>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QListWidget { background-color: #1a1a1a; color: #ddd; border: 1px solid #444; font-family: Consolas, 'Courier New', monospace; font-size: 9pt; }</string>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::NoSelection</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnClearHistory">
+     <property name="text">
+      <string>Clear History</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

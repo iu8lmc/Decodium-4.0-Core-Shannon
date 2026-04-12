@@ -1,0 +1,503 @@
+_WSJT-X_ supports a number of modes and features designed for use on
+the VHF and higher bands:
+
+- *FT4*, for contesting
+
+- *FT8*, for fast QSOs with weak, fading signals
+
+- *JT4*, for EME on the microwave bands
+
+- *JT9 fast modes*, for scatter propagation on VHF bands
+
+- *JT65*, for EME on VHF and higher bands
+
+- *Q65*, for ionospheric scatter, tropospheric scatter, rain scatter, 
+TEP, and EME
+
+- *MSK144*, for meteor scatter
+
+- *Doppler tracking*, which is especially important for EME on bands
+1.2 GHz and higher.
+
+- *Echo* mode, for detecting and measuring your own lunar echoes
+
+[[VHF_SETUP]]
+=== VHF Setup
+
+To activate the VHF-and-up features:
+
+- On the *File | Settings | General* tab check *Enable VHF and submode
+features*.
+
+- For EME, check *Decode after EME delay* to allow for the path
+delay on received lunar echoes.
+
+- If you will use automatic Doppler tracking and your radio accepts
+frequency-setting commands while transmitting, check *Allow Tx
+frequency changes while transmitting*.  Transceivers known to permit
+such changes include the IC-735, IC-756 Pro II, IC-910-H, IC-9700,
+FT-847, TS-590S, TS-590SG, TS-2000 (with Rev 9 or later firmware
+upgrade), Flex 1500 and 5000, HPSDR, Anan-10, Anan-100, and KX3.  To
+gain full benefit of Doppler tracking your radio should allow
+CAT-controlled frequency changes in 1 Hz steps.
+
+NOTE: If your radio does not accept commands to change frequency
+while transmitting, Doppler tracking will be approximated with a
+single Tx frequency adjustment before a transmission starts, using a
+value computed for the middle of the Tx period.
+
+- On the *Radio* tab select *Split Operation* (use *Rig* or *Fake
+It*. You may need to experiment with both options to find the one that
+works best with your radio). *Fake it* is provided to allow the
+necessary changes in receive and transmit frequencies for rigs that
+have only one VFO accessible via CAT. It accomplishes this by sending
+the required transmit frequency shortly before the start of the
+transmit period.  Functionally there is no difference in operation of
+*Rig* or *Fake it*, except possibly for timing details.
+
+image::Split_settings.png[align="center",alt="Split Settings"]
+
+Successful setting of split operation can be verified by checking that 
+S is embedded in the indicator between the band combo box and the dial frequency
+indicator. In some circumstances the S may only appear after a frequency or 
+band change.  If the S is not present, Doppler correction will not function.
+
+image::letter-s.png[align="center",alt="Split Settings"]
+
+- On the right side of the lower main window select *Tab 1* to present
+the traditional format for entering and choosing Tx messages.  The
+main window will reconfigure itself as necessary to display controls
+supporting the features of each mode.
+
+- If you are using a transverter, set the appropriate frequency offset
+on the *File | Settings | Frequencies* tab.  Offset is defined as
+(transceiver dial reading) minus (on-the-air frequency).  For example,
+when using a 144 MHz radio at 10368 MHz, *Offset (MHz)* = (144 -
+10368) = -10224.  If the band is already in the table, you can edit
+the offset by double clicking on the offset field.  Otherwise a new
+band can be added by right clicking in the table and selecting
+*Insert*.
+
+image::Add_station_info.png[align="center",alt="Station information"]
+
+- On the *View* menu, select *Astronomical data* to display a window
+with important information for tracking the Moon and performing
+automatic Doppler control.  The right-hand portion of the window
+becomes visible when you check *Doppler tracking*.
+
+image::Astronomical_data.png[align="center",alt="Astronomical data"]
+
+Five different types of Doppler tracking are provided:
+
+- Select *Full Doppler to DX Grid* if you know your QSO partner's locator
+and he/she will not be using any Doppler control.
+
+- Select *Own Echo* to enable EME Doppler tracking of your receive
+frequency to your own echo frequency. Your Tx frequency will remain fixed
+and is set to the Sked frequency.  This mode can be used when announcing 
+your CQ call on a specific frequency and listening on your own echo
+frequency.  It can also be used for echo testing with Echo mode.
+
+- Select *Constant frequency on Moon (CFOM)* to correct for your own one-way
+Doppler shift to or from the Moon.  If your QSO partner does the same
+thing, both stations will have the required Doppler compensation.
+Moreover, anyone else using this option will hear both of you
+without the need for manual frequency changes.
+
+- Select *On Dx Echo* when your QSO partner announces his/her transmit
+frequency and that they are listening on their own echo
+frequency. When clicked, this Doppler method will set your rig
+frequency on receive to correct for the mutual Doppler shift. On
+transmit, your rig frequency will be set so that your QSO partner will
+receive you on the same frequency as they receive their own echo.
+Sked frequency in this case is set to that announced by your QSO
+partner.
+
+- Select *Call DX* after tuning the radio manually to find a station,
+with the Doppler mode initially set to *None*. You may be tuning the band
+looking for random stations, or to a frequency where a station has been
+seen on an SDR display.  It is usually necessary to hold down the Ctrl key
+while tuning the radio. From the moment *Call DX* is pressed, your 
+transmit frequency is set so that your echo will fall on the same 
+frequency you (and the DX station) are listening. 
+
+NOTE: All the above Doppler methods assume that RIT in the receiver is
+set to zero.
+
+- See <<ASTRODATA,Astronomical Data>> for details on the quantities
+displayed in this window.
+
+=== JT4
+
+JT4 is designed especially for EME on the microwave bands, 2.3 GHz and
+above.
+
+- Select *JT4* from the *Mode* menu.  The central part of the main
+window will look something like this:
+
+image::VHF_controls.png[align="center",alt="VHF Controls"]
+
+- Select the desired *Submode*, which determines the spacing of
+transmitted tones. Wider spacings are used on the higher microwave
+bands to allow for larger Doppler spreads. For example, submode JT4F
+is generally used for EME on the 5.7 and 10 GHz bands.
+
+- For EME QSOs some operators use short-form JT4 messages consisting
+of a single tone.  To activate automatic generation of these messages,
+check the box labeled *Sh*. This also enables the generation of a
+single tone at 1000Hz by selecting Tx6, to assist in finding signals
+initially.  The box labeled *Tx6* toggles the Tx6 message from 1000Hz
+to 1250Hz to indicate to the other station that you are ready to
+receive messages.
+
+- Select *Deep* from the *Decode* menu.  You may also choose to
+*Enable averaging* over successive transmissions and/or *Enable deep
+search* (correlation decoding).
+
+image::decode-menu.png[align="center",alt="Decode Menu"]
+
+The following screen shot shows one transmission from a 10 GHz EME
+QSO using submode JT4F.
+
+image::JT4F.png[align="center",alt="JT4F"]
+
+[[VHF_JT65]]
+=== JT65
+
+In many ways JT65 operation on VHF and higher bands is similar to HF
+usage, but a few important differences should be noted.  Typical
+VHF/UHF operation involves only a single signal (or perhaps two or
+three) in the receiver passband.  We recommend that you check *Single
+decode* on the *Settings | General* tab, and do not check *Two pass
+decoding* on the *Advanced* tab.  With VHF features enabled the JT65
+decoder will respond to special message formats often used for EME:
+the OOO signal report and two-tone shorthand messages for RO, RRR, and
+73.  These messages are always enabled for reception; they will be
+automatically generated for transmission if you check the shorthand
+message box *Sh*.  *Deep* on the *Decode* menu will be automatically
+selected.  You may optionally include *Enable averaging*, *Enable Deep
+search*, *Enable AP*, and *Auto Clear Avg after decode*.
+
+The following screen shot shows three transmissions from a 144 MHz EME
+QSO using submode JT65B and shorthand messages.  Take note of the
+colored tick marks on the Wide Graph frequency scale.  The green
+marker at 1220 Hz indicates the selected QSO frequency (the frequency
+of the JT65 Sync tone) and the *F Tol* range.  A green tick at 1575 Hz
+marks the frequency of the highest JT65 data tone.  Orange markers
+indicate the frequency of the upper tone of the two-tone signals for
+RO, RRR, and 73.
+
+image::JT65B.png[align="center",alt="JT65B"]
+
+=== Q65
+
+Q65 is designed for fast-fading signals: EME, tropospheric scatter,
+rain scatter, ionospheric scatter, trans-equatorial propagation (TEP),
+and the like.  The following screen shot shows the Wide Graph and
+decoded text windows after processing a Q65-60A sequence received via
+EME on 6 meters, by W7GJ Transmissions are decoded from N0TB, N8JX,
+W1VD, and VE1JF, all by the EME path.
+
+image::Q65-60A_EME_6m.png[align="center"]
+
+The Q65 decoder takes advantage of _a priori_ (AP) information such as
+the encoded forms of one's own callsign and the message word `CQ`.  In
+normal usage, as a QSO progresses AP information increases to include
+the callsign of the station being worked and perhaps his/her 4-digit
+grid locator.  The decoder takes advantage of whatever AP information
+is currently available.
+
+Here's a similar screen shot for a 6 m ionospheric scatter signal over
+the 1155 km path from K9AN to K1JT, using submode Q65-30A. The
+received signal was barely audible most of the time.
+
+image::Q65_6m_ionoscatter.png[align="center",alt="Q65"]
+
+For Q65 EME QSOs on the microwave bands, some operators
+use short-form messages consisting of a single tone.  To activate
+automatic generation of these messages, check the box labeled *Sh*.
+This also enables the generation of a single tone at 1000Hz by
+selecting Tx6, to assist in finding signals initially.  The box
+labeled *Tx6* switches the Tx6 message from 1000Hz to 1250Hz to
+indicate to the other station that you are ready to receive messages.
+These short-form messages are not decoded automatically, and
+auto-sequencing will not respond to them.  You must recognize and
+interpret them yourself.
+
+=== MSK144
+
+Meteor scatter QSOs can be made any time on the VHF bands at distances
+up to about 2100 km (1300 miles). Completing a QSO takes longer in the
+evening than in the morning, longer at higher frequencies, and longer
+at distances close to the upper limit. But with patience, 100 W or
+more, and a single yagi it can usually be done, even on bands as high
+as 432 MHz. The following screen shot shows two 15-second reception
+intervals containing MSK144 signals from three different stations.
+
+image::MSK144.png[align="center",alt="MSK144"]
+
+Unlike other _WSJT-X_ modes, the MSK144 decoder operates in real time
+during the reception sequence.  Decoded messages will appear on your
+screen almost as soon as you hear them.
+
+To configure _WSJT-X_ for MSK144 operation:
+
+- Select *MSK144* from the *Mode* menu.
+
+- Select *Fast* from the *Decode* menu.
+
+- Set the audio receiving frequency to *Rx 1500 Hz*.
+
+- Set frequency tolerance to *F Tol 100*.
+
+- Set the *T/R* sequence duration to 15 s or 30s according to local standards.
+
+- To match decoding depth to your computer's capability, click
+*Monitor* (if it's not already green) to start a receiving sequence.
+Observe the percentage figure displayed on the _Receiving_ label in
+the Status Bar:
+
+image::Rx_pct_MSK144.png[align="center",alt="MSK144 Percent CPU"]
+
+- The displayed number (here 17%) indicates the fraction of available
+time being used for execution of the MSK144 real-time decoder.  If
+this number is well below 100%, you may increase the decoding depth
+from *Fast* to *Normal* or *Deep*, and increase *F Tol* from 100 to
+200 Hz. Most modern multi-core computers can easily handle the optimum
+parameters *Deep* and *F Tol 200*.
+
+- T/R sequences of 15 seconds or less requires selecting your
+transmitted messages very quickly.  Check *Auto Seq* to have the
+computer make the necessary decisions automatically, based on the
+messages received.
+
+- For operation at 144 MHz or above you may find it helpful to use
+short-format *Sh* messages for Tx3, Tx4, and Tx5.  These messages are
+20 ms long, compared with 72 ms for full-length MSK144 messages.
+Their information content is a 12-bit hash of the two callsigns,
+rather than the callsigns themselves, plus a 4-bit numerical report,
+RRR, or 73.  Only the intended recipient can decode short-messages.
+They will be displayed with the callsigns enclosed in <> angle
+brackets, as in the following model QSO
+
+ CQ K1ABC FN42
+                    K1ABC W9XYZ EN37
+ W9XYZ K1ABC +02
+                    <K1ABC W9XYZ> R+03
+ <W9XYZ K1ABC> RRR
+                    <K1ABC W9XYZ> 73
+
++
+
+NOTE: There is little or no advantage to using MSK144 *Sh*
+messages at 50 or 70 MHz.  At these frequencies, most pings are long
+enough to support standard messages -- which have the advantage of
+being readable by anyone listening in.
+
+[[OFFSET_CQ]]
+.Offset CQ
+
+The use of this feature is recommended when the calling channel is busy, 
+as it allows QSOs to be conducted on a frequency of your choice free of QRM.
+For example, if you wish to call CQ on 144.360MHz and conduct your QSO on 144.388MHz,
+follow the steps below:
+
+- Tune your radio to 144.388MHz
+
+- Click the checkbox to the right of the *Tx CQ nnn* control, as shown below.
+
+- Use the spinner in this control to set a value of 360.  Values between 010 and 999 
+are accepted.
+
+Your CQ message in *Tx6* containing your offset frequency will then be transmitted 
+at 144.360, and your radio will be set to 144.388MHz on receive when your CQ call completes.
+Subsequent QSO messages will be transmitted on 144.388MHz.
+
+image::CQoffset_cb.png[align="center",alt="CQoffset_cb"]
+
+
+On reception, when you double-click on a
+message like `CQ nnn K1ABC FN42` your rig will QSY to the specified QSO frequency.
+Thr QSO will then take place on that frequency.
+
+NOTE: These features are available in the fast JT9 submodes as
+well as MSK144. For them to work you must have a CAT controlled radio 
+and *Split operation* activated on the *File | Settings | Radio* tab.
+
+- Normally WSJT-X will send only one 73 message. When copy is marginal
+and repeat transmissions often required, it may be desirable to send
+more than one. Check the box *MSK144/Q65: Tx until 73 is received* in
+the *File | Settings | General* Behavior group. A maximum of ten
+attempts will be made before it times out if a 73 message has not yet
+been received. You can use *Wait & Reply* in case this is still
+not enough.
+
+=== Echo Mode
+
+*Echo* mode provides tools for two types of measurements: lunar echoes
+of your own transmitted signal, and broadband noise power received
+from the Sun, Moon, and other sources including ambient-temperature
+ground and nearby objects. Such measurements are widely used for
+optimizing a station's capabilities for Earth-Moon-Earth (EME)
+communication. In addition, you can generate lunar echoes of short
+alphanumeric messages for demonstration and amusement purposes.
+
+For quantitative measurements the Echo-mode transmission is a
+fixed-frequency 1500 Hz tone lasting 2.048 s. After sending it
+_WSJT-X_ switches back to receive, records the lunar echo about 2.5 s
+later, computes its spectrum, and displays results. The program takes
+care of necessary T/R switching and frequency adjustments for Doppler
+compensation. To make such measurements, be sure to check *Enable VHF
+and submode features* on the *File | Settings | General* tab.  Set
+*Split Operation* to *Rig* or *Fake It* on the *Settings | Radio* tab,
+*Doppler tracking* and *Own Echo* or *Constant frequency on Moon* on
+the *Astronomical Data* window.
+
+.Fixed Tone Echoes
+
+Select *Fixed Tone* on the main window, point your antenna at the
+Moon, and click *Enable Tx* to start a sequence of measurements.  Each
+Echo-mode cycle takes 6 seconds. The average echo spectrum will be
+displayed in the *Echo Graph* window, and measurements appear in the
+main window. If echoes are strong enough they will be visible in the
+waterfall, centered at 1500 Hz. A spinner control labeled *Avg* (to
+the left of the *Decode* button) controls averaging of successive Echo
+sequences. Displayed SNR and the plotted Echo spectrum will be
+averaged over the selected number of sequences.
+
+image::Echo_1296.png[align="center",alt="Echo 144 MHz"]
+
+Each echo cycle produces a line of data in the main window with the
+following information:
+
+ UTC       Time in hhmmss format
+ Hour      UTC in hours and decimal fraction
+ Level     Relative received noise power (dB)
+ Doppler   EME Doppler shift at center of lunar disk
+ Width     EME Doppler spread over full lunar disk
+ N         Number of accumulated echo or monitor cycles
+ Q         Estimated quality of averaged data on a 0 – 10 scale
+ DF        Offset of spectral peak from 1500 Hz
+ SNR       Average signal-to-noise ratio (dB/2500 Hz)
+ dBerr     Estimated uncertainty of SNR
+
+.MFSK Echoes
+
+In addition to the traditional Echo mode, for amusement you can
+transmit short messages (up to six alphanumeric characters) and
+receive their echoes, using either multi-tone frequency-shift keying
+or standard Morse code.  For the former, select *MFSK*, set a suitable
+tone spacing at least one-third of the expected Doppler spread, and
+enter your callsign in the field provided. If your radio's dial
+frequency is controlled in 10 Hz steps, use tone spacing of at least
+20 Hz.
+
+image::Echo_controls.png[align="center",alt="Echo controls"]
+
+After you click *Enable Tx*, _WSJT-X_ will send a sequence of six
+tones, each lasting 0.341 s, to convey the characters in the entry
+field. Message encoding is trivial, with no forward error correction:
+each tone has a frequency offset from 1500 Hz corresponding to the
+position of that character in the sequence
+0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ. Lines displayed in the main text
+window will then include three additional items:
+
+ DT        Timing offset (s), for diagnostic purposes
+ TS        Tone spacing (Hz)
+ EchoMsg   Decoded MFSK message
+ 
+Note that when *MFSK* is selected and *Avg* is set to anything larger
+than 1, the decoded echo message will be averaged indefinitely, until
+you click *Clear Avg*.
+
+Here's an example of *MFSK* echo testing at 10 GHz, from DL3WDG. You
+can easily see the five distinct callsign characters 3 D G L W (in
+order of increasing tone frequency) in the waterfall. The spectrum
+plotted in the *Echo Graph* window is the average of all six tones,
+with their individual frequency offsets removed. The full width of the
+echo signal near the baseline is very close to the predicted value, 66
+Hz.
+
+image::Echo_10GHz.png[align="center",alt="Echo 10 GHz"]
+
+.CW Echoes
+
+Select *CW* to send a short message by Morse code, repeated with the
+usual 6 s Echo cycle. If you can hear your own echoes, this feature is
+especially good for demonstration purposes. Code speed will be
+automatically adjusted so the message just fits into the allotted
+2.048 s Tx interval. The most useful CW messages will be short and
+simple, such as “O” or “OO”.
+
+System timing details are important. Echo-mode features work best when
+the station's T/R switch-over times are no longer than a few hundred
+milliseconds in each direction. In most amateur EME setups these times
+are determined by programmed software delays, response time of a 
+CAT-controlled transceiver, and any hardware sequencers in use.
+
+Most Echo-mode features require Doppler compensation via CAT control
+of your radio. You may find it important to experiment with software
+options that affect system timing. Use the radio’s Monitor function
+(or listen on another receiver) to make sure that in *MFSK* mode you
+transmit all six tones at their full programmed length. Try sending
+message sequence “07ELSZ”, for example. *Tx delay* (set on the *File |
+Settings | Advanced* tab) should be no larger than necessary.
+Experiment with setting *Split Operation* to both *Rig* and *Fake It*
+on the *File | Settings | Radio* tab. Doppler tracking by *Own Echo*
+might work better than *Constant Frequency on Moon*.
+
+Measurements of noise from the Sun, Moon, and ground are made relative
+to that from a suitable "cold sky" direction. For example, you may
+want to make potential improvements to your system that will maximize
+the difference between *Level* when pointed at the Sun, and when
+pointed away by several beamwidths or more. Click *Monitor* to start a
+continuous sequence of noise measurements.
+
+=== Tips for EME
+
+Until the advent of Q65, digital EME has mostly been done with JT65A
+on the 50 MHz band, JT65B on 144 and 432 MHz, and JT65C on 1296 MHz.
+On higher microwave bands typical choices have been JT65C, one of the
+wider JT4 submodes, or QRA64, depending on the expected 
+Doppler spread.  We now recommend a suitable submode of Q65 (which has
+replaced QRA64) for EME on any VHF or higher band: for example,
+Q65-60A on 50 and 144 MHz, Q65-60B on 432 MHz, Q65-60C on 1296 MHz
+and 2.3 GHz, Q65-60D on 3.4 and 5.7 GHz, Q65-60D or E on 10 GHz, and
+Q65-60E on 24 GHz and higher bands. 
+
+JT4, JT65, and Q65 offer message averaging -- the summation of
+successive transmissions conveying the same message -- to enable
+decodes at signal-to-noise ratios several dB below the threshold for
+a single transmission.  JT4 and JT65 also allow *Deep Search* decoding,
+in which the decoder hypothesizes messages containing known or
+previously decoded callsigns and tests them for reliability using a
+correlation algorithm.  JT65 and Q65 offer _a priori_ (AP)
+decoding, which takes advantage of naturally accumulating information
+during a QSO. These options can be activated from the *Decode* menu.
+
+With a CAT-controlled radio, _WSJT-X_ can be used to compensate for
+changing Doppler shifts during a CW EME QSO. This capability is
+especially useful on the higher microwave bands, where Doppler shifts
+are large. Put your rig in CW mode and set the option *File | Settings
+| Radio | Mode | None* to prevent _WSJT-X_ from trying to change the
+operating mode. Use the *Tune* button to switch between receiving and
+transmitting. No tones will be transmitted as the rig is in CW mode;
+but importantly WSJT-X knows you are transmitting and adjusts the dial
+frequency as needed for the currently selected Doppler tracking mode.
+Click *Tune* again to revert to receive mode, reactivating the proper
+Doppler corrections for receiving.
+
+_WSJT-X_ supports the use of large additional offsets in dial
+frequency for transmitting and receiving -- for example, to allow EME
+QSOs between countries with amateur frequency allocations at 2304 and 2320
+MHz. To use the feature, first set the Sked frequency to the frequency
+you want to use for receiving in the normal way. Next, select the
+amount you want your transmitted frequency to be shifted.  The figure
+below shows an example of a station receiving on 1296 MHz and
+transmitting on 1298 MHz. In this case, a Tx shift of +2 MHz has been
+selected.
+
+image::shift2.png[align="center",alt="Split Settings"]
+
+TIP: To avoid the dial frequency indicator turning red, you may want
+to add both transmit and receive frequencies to the Frequencies Table.

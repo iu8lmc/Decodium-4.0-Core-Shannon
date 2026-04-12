@@ -1,0 +1,41 @@
+i3.n3 Err Message to be encoded                 Decoded message
+--------------------------------------------------------------------------------
+ 1.       CQ K1ABC FN42                         CQ K1ABC FN42                        
+ 1.       K1ABC W9XYZ EN37                      K1ABC W9XYZ EN37                     
+ 1.       W9XYZ K1ABC -11                       W9XYZ K1ABC -11                      
+ 1.       K1ABC W9XYZ R-09                      K1ABC W9XYZ R-09                     
+ 1.       W9XYZ K1ABC RRR                       W9XYZ K1ABC RRR                      
+ 1.       K1ABC W9XYZ 73                        K1ABC W9XYZ 73                       
+ 1.       CQ K1ABC FN42                         CQ K1ABC FN42                        
+ 1.       K1ABC W9XYZ -09                       K1ABC W9XYZ -09                      
+ 1.       W9XYZ K1ABC R-11                      W9XYZ K1ABC R-11                     
+ 1.       K1ABC W9XYZ RR73                      K1ABC W9XYZ RR73                     
+ 1.       W9XYZ K1ABC 73                        W9XYZ K1ABC 73                       
+ 4.       CQ KH1/KH7Z                           CQ KH1/KH7Z                          
+ 1.       KH7Z K1ABC FN42                       KH7Z K1ABC FN42                      
+ 1.       K1ABC KH7Z -12                        K1ABC KH7Z -12                       
+ 1.       KH7Z K1ABC R-14                       KH7Z K1ABC R-14                      
+ 0.1      K1ABC RR73; W9XYZ <KH1/KH7Z> -08      K1ABC RR73; W9XYZ <KH1/KH7Z> -08     
+ 1.       CQ FD K1ABC FN42                      CQ FD K1ABC FN42                     
+ 0.3      K1ABC W9XYZ 6A WI                     K1ABC W9XYZ 6A WI                    
+ 0.3      W9XYZ K1ABC R 2B EMA                  W9XYZ K1ABC R 2B EMA                 
+ 1.       K1ABC W9XYZ RR73                      K1ABC W9XYZ RR73                     
+ 1.       CQ TEST K1ABC/R FN42                  CQ TEST K1ABC/R FN42                 
+ 1.       K1ABC/R W9XYZ EN37                    K1ABC/R W9XYZ EN37                   
+ 1.       W9XYZ K1ABC/R R FN42                  W9XYZ K1ABC/R R FN42                 
+ 1.       K1ABC/R W9XYZ RR73                    K1ABC/R W9XYZ RR73                   
+ 1.       CQ TEST K1ABC FN42                    CQ TEST K1ABC FN42                   
+ 3.       K1ABC W9XYZ 579 WI                    K1ABC W9XYZ 579 WI                   
+ 3.       W9XYZ K1ABC R 589 MA                  W9XYZ K1ABC R 589 MA                 
+ 1.       K1ABC W9XYZ RR73                      K1ABC W9XYZ RR73                     
+ 2.       CQ G4ABC/P IO91                       CQ G4ABC/P IO91                      
+ 2.       G4ABC/P PA9XYZ JO22                   G4ABC/P PA9XYZ JO22                  
+ 0.2      PA9XYZ 590003 IO91NP                  PA9XYZ 590003 IO91NP                 
+ 0.2      G4ABC/P R 570007 JO22DB               G4ABC/P R 570007 JO22DB              
+ 2.       PA9XYZ G4ABC/P RR73                   PA9XYZ G4ABC/P RR73                  
+ 4.       CQ PJ4/K1ABC                          CQ PJ4/K1ABC                         
+ 4.       <PJ4/K1ABC> W9XYZ                     <PJ4/K1ABC> W9XYZ                    
+ 1.       W9XYZ K1ABC -11                       W9XYZ K1ABC -11                      
+ 1.       K1ABC W9XYZ R-09                      K1ABC W9XYZ R-09                     
+ 4.       W9XYZ <PJ4/K1ABC> RRR                 W9XYZ <PJ4/K1ABC> RRR                
+ 4.       <PJ4/K1ABC> W9XYZ 73                  <PJ4/K1ABC> W9XYZ 73                 

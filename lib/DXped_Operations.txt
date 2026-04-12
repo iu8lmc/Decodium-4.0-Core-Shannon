@@ -1,0 +1,186 @@
+                    White Paper: FT8 for DXpeditions
+		  -----------------------------------
+		  Joe Taylor, K1JT - October 27, 2017
+
+Assumptions:
+
+1. WSJT-X will have two distinct options that enable the maximum-rate
+QSO exchanges described below.  Fox must select "Fox"; all Hounds must
+select "Hound".
+
+2. There will be an announced basic dial frequency for each band, say
+f0=14082 kHz for 20m.  This is the basic Channel.
+
+3. Fox always transmits in the 1st sequence, 200-800 Hz above f0.
+
+4. Hounds call in 2nd sequence, 1000-5000 Hz above f0. Hounds
+transmitting below f0+1000 Hz will not be answered.
+
+5. If found necessary, additional Channels may be defined in which
+Hounds can transmit.  (However, I suggest that CQ-by-call-area may
+be easier to implement and use; and the software could be made to
+prevent Hounds in the wrong area from transmitting.)
+
+6. Ideally, Fox and Hounds should all use CAT control configured with
+*Split Operation* set to *Rig* or *Fake It*, and transceiver dial
+frequencies should best be calibrated to within a few Hz.  (WSJT-X
+provides tools that make this fairly easy to do.)
+
+
+When Fox is running a pileup, QSOs will look something like the
+following exchanges.  Here I've assumed the Fox callsign is KH1DX,
+his locator AJ10:
+
+------------------------------------------------------------------------
+    Fox                              Hounds
+------------------------------------------------------------------------
+1.  CQ KH1DX AJ10
+2.                                   KH1DX K1ABC FN42, KH1DX W9XYZ EN37, ...
+3.  K1ABC KH1DX -13
+4.                                   KH1DX K1ABC R-11
+5.  K1ABC RR73; W9XYZ <KH1DX> -17
+6.                                   ... no copy from W9XYZ ...
+7.  W9XYZ KH1DX -17
+8.                                   ... no copy from W9XYZ ...
+9.  G4AAA KH1DX -11
+10.                                  KH1DX G4AAA R-03
+11. G4AAA RR73; DL3BBB <KH1DX> -12
+12.                                  KH1DX DL3BBB R-09			 
+13. DL3BBB RR73; DE <KH1DX>
+14. ...
+------------------------------------------------------------------------
+
+All messages except those containing "<...>" are standard FT8 messages
+(i3bit=0, iFreeText=0).  Hounds transmit only standard messages.
+
+Fox transmits standard messages and also special messages with
+i3bit=1.  The special messages contain a callsign whose completed QSO
+is being acknowledged; a callsign for the next station to be worked; a
+hash code corresponding to the Fox callsign; and a signal report.
+Users will see the Fox callsign enclosed in angle brackets, <KH1DX>.
+The 72-bit message payload contains two 28-bit callsigns, a 10-bit
+hash code, and a 6-bit signal report.  If no call has been queued up
+by Fox for the next QSO, the acknowledgment message takes the
+abbreviated form shown in line 13 above.
+
+When a Hound receives a message with i3bit=1, the decoder interprets
+the remaining 72 bits as described above.  If the 10-bit hash code
+matches that for Fox's callsign, the message is displayed as in the
+QSO exchanges shown above.  Otherwise the message is considered a
+false decode and is not displayed.
+
+
+Station Setup and Operation for FOX
+-----------------------------------
+
+A wide Rx bandwidth (up to 5 kHz) is selected.  The basic dial
+frequency is set 1 kHz above f0 (thus 14083 kHz in my example) and the
+audio TxFreq somewhere between -200 and -800 Hz.  (Yes, negative
+numbers are OK.  *Split Operation* will reset the Tx dial frequency as
+needed and will keep the generated Tx audio frequency between 1500 and
+2000 Hz.)  Hounds with audio TxFreq set to N Hz will be received by Fox
+at N-1000 Hz.
+
+WSJT-X at Fox will maintain and display a list of all decoded Hounds
+calling Fox in the past 2 to 4 Rx cycles.  The list might look
+something like this (but typically will be much longer):
+
+----------------------------
+Call        Grid  Rpt  Freq
+----------------------------
+AA2UK       FM29  -11   240
+AD9H        EN61  +02  1260
+K0TPP       EM48  -15  1980
+N2BJ        EN61  +11   540
+N4NDR       EL98  -17  4620
+NX4E        EM70  +00  3780
+ON3LA       JN29  -10  3300  
+PD9BG       JO21  -21  2100
+PJ4/KA1XYZ  FK60  -07  1020
+VE1SKY      FN74  +03  1620
+WB2REM      EL97  -13  3060
+...
+----------------------------
+
+Fox can choose to have the list sorted on any column.
+
+Fox selects a Hound to call next by clicking on a line.  Or he can hit
+"F1" to have the program select a caller according to one of these
+criteria (maybe others as well?):
+
+ - Weakest caller
+ - Strongest caller
+ - Strongest one below -N dB (with N selectable)
+ - Choose a call at random
+ - Random choice with S/N between snrMin and snrMax dB.
+
+After a particular Hound has been called, Fox's Auto-Sequencer looks
+for a response containing "R+rpt" originating from that same callsign.
+If such a message is received, Fox's next transmission will be the
+special "acknowledge-and-call-next" type, with i3bit=1.  If the
+expected message is not received, as in example line 6 above, the
+report is sent to the same station again.  If the second attempt fails
+and another Hound callsign has been queued up, the QSO is aborted and
+the next Hound is called.
+
+
+Station Setup and Operation for Hounds
+--------------------------------------
+
+Dial frequency is set to f0, 14082 kHz in my example. Rx bandwidth and
+displayed range on the Wide Graph can be anything convenient, say 200
+to 2600 Hz.  (Signal from Fox will be expected between 200 and 800
+Hz.)  Enter callsign and locator of Fox on WSJT-X main window as *DX
+Call* and *DX Grid*.  Choose a TxFreq offset of 1000 + 60*N for some N
+in the range 1 to 80 (maybe even higher?).  Move TxFreq as desired,
+hoping to find a clear slot, by using Shift+F11 and Shift+F12.
+
+ - Hit F1 to call Fox in your next Tx sequence.  Yes, you must hit F1
+   repeatedly, in order to keep calling.
+   
+ - The Auto-sequencer will watch for a decoded message that contains
+   "MyCall DXcall rpt" or "MyCall <DXcall> rpt".  When one of these is
+   received, your next transmission will be "DXcall MyCall R+rpt",
+   sent automatically.
+
+ - After you send the "R+rpt" message, AutoSeq will watch for a
+   message that starts with "MyCall RR73; ...".  When that is
+   received, you're in his log, and you'll be prompted to log the QSO.
+
+Random thoughts
+---------------
+
+Fox's decoder has access to signals in a 4 kHz (maybe even 5 kHz?)
+window.  At 60 Hz intervals, that's enough for around 65 (or 80?)
+non-overlapping Hound signals.  If the pileup becomes too deep, more
+spectrum might be used; but note that WSJT-X can't access more than 5
+kHz at one time.  A better solution might be for Fox to call "CQ n
+KH1DX AJ10", where n is a single digit indicating call area.  The
+decoder could then limit the list of eligible calls to those in the
+specified call area.  After decoding such a CQ, the software at Hound
+could refuse to transmit unless MyCall falls in the specified call
+area.  (Other special CQ formats can be imagined that would limit the
+eligible Hound callsigns even further.)
+
+We haven't thought much, yet, about logging issues for Fox.  I imagine
+we could do what's necessary to join a N1MM+ logging network, if that's
+deemed desirable.
+
+A few questions:
+
+Q1: Should the Auto-Sequencer allow for other cases in which a QSO has
+been initiated by Fox, but one of next two messages is not copied by
+either Fox or Hound?  For example, what if K1ABC does not copy message
+#5?  Should he keep sending his message "KH1DX K1ABC R-11" ?  If Fox
+receives this message again, should he acknowledge again?  And poor
+W9XYZ, who never received an acknowledgment, will probably keep
+sending "KH1DX W9XYZ R-19", or whatever.  If Fox eventually copies the
+message, should the program remember that W9XYZ had been called, and
+thus send him an acknowledgment?
+
+Q2: Should we provide a stack for several to-be-called callsigns,
+rather than just one?  Should re-ordering of calls in the stack be
+permitted?
+
+Q3: Can we handle WSJT-X "Type 1" and "Type 2" compound callsigns, for
+Hounds?

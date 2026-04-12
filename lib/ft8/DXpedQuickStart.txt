@@ -1,0 +1,126 @@
+		Quick Start for DXpedition Mode
+		-------------------------------
+
+These notes are intended for operators already familiar with WSJT-X
+and FT8 mode.  QSOs between the Dxpedition ("Fox") and other stations
+("Hounds") are completed with as little as one transmission per Hound,
+as in the following examples:
+
+----------------------------------------------------------------------------
+    Fox (300-600 Hz)                 Hounds
+----------------------------------------------------------------------------
+1.  CQ KH1DX AJ10
+2.                                   KH1DX K1ABC FN42, KH1DX W9XYZ EN37, ...
+3.  K1ABC KH1DX -13
+4.                                   KH1DX K1ABC R-11
+5.  K1ABC RR73; W9XYZ <KH1DX> -17
+6.                                   KH1DX W9XYZ R-16
+7.  W9XYZ RR73; G4AAA <KH1DX> -09
+8.  ...
+----------------------------------------------------------------------------
+
+Everybody sets dial frequency to an agreed number and uses CAT control
+with Split Operation (either *Rig* or *Fake It*).  Fox transmits up to
+5 signals simultaneously, at audio frequencies 300, 360, ... 540
+Hz.  Hounds make initial calls (e.g., line 2 above) anywhere in the
+range 1000 - 4000 Hz.  They send "R+rpt" 350 Hz above the frequency
+where Fox called them.
+
+
+INSTRUCTIONS FOR FOX
+--------------------
+
+1. Start WSJT-X in FT8 mode.  Select *Fox* on the *Settings ->
+Advanced tab*.  On the main window, check *Tx even/1st*, *Auto Seq*,
+and *Hold Tx Freq*; uncheck *Call 1st*.  Set *Tx 300 Hz* and select
+Tab 3.
+
+2. In Fox mode the left window (called "Band Activity" in normal FT8
+mode) is labeled "Stations calling DXpedition <MyCall>".  It will be
+filled with a sorted list of calling Hounds.  You can sort by Call,
+Grid, S/N, Distance, or Random order by using the comboBox at top
+right of Tab 3.  You can limit the displayed Hound callsigns to those
+no stronger than *Max dB*.  Fox might use this feature to discourage
+Hounds from engaging in a QRO arms race.
+
+3. *N Slots* sets the number of simultaneous Fox signals to be used.
+Fox carries out as many as *N Slots* QSOs simultaneously.
+
+4. *Repeats* sets the maximum number of repeat transmissions of the
+same message.  A QSO is aborted when this number would be exceeded.
+
+5. The *CQ* comboBox on Tab 3 offers a selection of directed CQ
+messages.  *Reset* clears the QSO queue.
+
+6. The Fox operator's main task is to select Hounds to be called and
+worked.  The text box on Tab 3 holds the "QSO queue": a list of Hound
+calls to be worked.  Hit Enter to select the top callsign from the
+sorted list of callers (left window), or double-click on any
+particular call.  Either actiion moves that Hound into the "QSO
+queue".
+
+7. The right window displays decodes of signals below 1000 Hz.
+Normally these should include only Hound messages containing "R+rpt"
+and Fox's own transmissions.
+
+8. To get things started, toggle *Enable Tx* to red.  If a Hound call
+is available in the QSO queue, that station will be called.  If the
+QSO queue is empty, Fox calls CQ.
+
+9. If you're using Nslots = 2 or higher, your signal no longer has
+a constant envelope.  To avoid producing intermod sidebands you need
+to ensure linearity in your Tx system.  One way to get things about right
+is to use the WSJT-X *Tune* button to generate a pure tone.  Reduce the
+Tx audio level until your power output decreases by 10% or so.  Use this
+level for your Fox transmissions.
+
+NOTE: If you are generating Nslots signals, the average power in each one
+will be 1/Nslots^2 of its normal value for single-signal transmissions.
+
+Nslots  Relative dB
+-------------------
+  1        0
+  2       -6
+  3      -9.5
+  4      -12
+  5      -14
+
+
+The following features are not yet implemented for Fox:
+
+1. Enforce all required settings
+2. Tx message timeout
+3. Manual abort of selected QSO
+4. All Tx and Rx messages to all.txt
+5. Additional sort criteria for Hound calls
+6. Selectable timeout for keeping Hounds in the sorted list
+7. Display number of active callers
+8. Display QSO rate
+
+
+INSTRUCTIONS FOR HOUND
+----------------------
+
+1. Start WSJT-X in FT8 mode.  Select *Hound* On the *Settings ->
+Advanced* tab.  On the main window check *Auto Seq* and uncheck *Tx
+even/1st*, *Call 1st*, and *Hold Tx Freq*.  Set *Tx nnnn Hz* to some
+frequency between 1000 and 4000 Hz, and select *Tab 1*.  Enter Fox's
+callsign and locator in DX Call and DX Grid, select Tx1, and start
+*Monitor*.
+
+2. When you have copied Fox, hit *Enable Tx* to call him.  You may
+keep calling until he answers.  You may wish to move your TxFreq
+around, hoping to find a clear calling frequency.
+
+3. When you are called by Fox with a signal report, your next
+transmission will automatically be sent as Tx3 ("R+rpt").  When Fox
+receives that message he responds with "RR73", and your QSO is
+complete!
+
+
+The following features are not yet implemented for Hound:
+
+1. Force all required settings
+2. React properly to directed CQs from Fox
+3. Disable Tx2, 4, 5, 6
+4. For Tx1, enforce TxFreq >= 1000 Hz

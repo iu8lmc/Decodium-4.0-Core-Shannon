@@ -1,0 +1,23 @@
+//status: edited
+
+Information on completed QSOs is saved to files in comma-separated
+text format (`wsjtx.log`) and ADIF format (`wsjtx_log.adi`). Initiate
+logging by clicking the *Log QSO* button, or by having checked *Prompt
+me to log QSO* on the *File | Settings | Reporting* tab. Several other
+options are available: for example, check *Special operating activity
+to comments* to add information about the special activity to the
+logged *Comments* field.
+
+image::logging-options.png[align="center",alt="Log QSO"]
+
+Most fields in the *Log QSO* window will be pre-filled with known
+information about the QSO, and you can manually enter additional
+information. Start date and time are determined when sent the *Tx 2*
+or *Tx 3* message, backed up by one or two sequence lengths,
+respectively.  (Note that the actual start time may have been earlier
+if repeats of early transmissions were required.) End date and time
+are set when the *Log QSO* screen is invoked. Choosing "Satellite" for
+*Prop Mode* activates the *Satellite* field so you can identify the
+particular satellite.
+
+image::log-qso.png[align="center",alt="Log QSO"]

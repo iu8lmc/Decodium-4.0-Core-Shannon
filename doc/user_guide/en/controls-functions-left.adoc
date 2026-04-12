@@ -1,0 +1,62 @@
+// Status=edited
+
+Controls related to frequency selection, received audio level, the
+station being called, and date and time are found in the lower
+left-hand section of the main window.  Buttons are provided for making
+quick changes among the modes FT8, FT4, MSK144, Q65, JT65, Echo, and
+for toggling FT8 Hound mode ON or OFF. If *Enable Wait features* is
+checked on the *File | Settings | General* tab and a callsign is
+present in the *DX Call* box, the *DX Call* button turns yellow to
+warn that your station is primed to transmit.
+
+//.Misc Controls Left
+image::misc-main-ui.png[align="center",alt="Misc Menu Items"]
+
+* A drop-down list of frequencies and bands at upper left lets you
+select the operating band. It also sets dial frequency to a value
+taken from the *File | Settings | Frequencies* tab.  If CAT control is
+active, the radio's dial frequency is set accordingly; if not, you
+must tune the radio manually.
+
+* Alternatively, you can enter a frequency (in MHz) or band name in
+recognized ADIF format, for example 630m, 20m, or 70cm.  The band-name
+format works only if a working frequency has been set for that band
+and mode, in which case the first such match (or your preferred match)
+is selected.
+
+* You can also enter a frequency increment in kHz above the currently
+displayed integer MHz. For example, if the displayed frequency is
+10,368.100, enter `165k` to QSY to 10,368.165.
+
+* When the mouse pointer is placed over the dial frequency indicator,
+mouse buttons (left and right) and the scroll wheel can be used to
+adjust the dial frequency in 1 kHz increments. 
+
+* A small colored circle appears in green if the CAT control is
+activated and functional.  The green circle contains the character S
+if the rig is detected to be in *Split* mode.  The circle turns red if
+you have requested CAT control but communication with the radio has
+been lost.
+
+TIP: Many Icom rigs cannot be queried for split status, current VFO or
+split transmit frequency. When using _WSJT-X_ with such radios you
+should not change the current VFO, split status or dial frequency
+using controls on the radio.
+
+* If *DX Grid* contains a valid Maidenhead locator, the corresponding
+great-circle azimuth and distance from your location are displayed 
+below the *DX Call* and *DX Grid* entry fields.
+
+* The program can maintain and make use of a database of callsigns and
+locators for future reference.  Click *Add* to insert the present call
+and locator in the database; click *Lookup* to retrieve the locator
+for a previously stored call.  This feature is mainly useful for
+situations in which the number of active stations is modest and
+reasonably stable, such as EME (Earth-Moon-Earth) communication.  The
+callsign file name is `CALL3.TXT`, and you can download examples from
+the *File | Settings | Colors* tab.
+
+* You can invoke on-line searches for details about a station with a
+simple mouse click. Right-click on the *Lookup* button to search for
+the DX Call on `qrz.com`, the *Add* button for `hamqth.com`, and the
+*Ignore* button `qrzcq.com`.

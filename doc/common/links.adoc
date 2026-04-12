@@ -1,0 +1,141 @@
+////
+Link file to hold all links
+File Location: ./doc/common/links.adoc
+Usage example: include::../common/links.adoc[]
+Syntax: [link-id] [link] [displayed text]
+
+Example:
+:pskreporter: https://pskreporter.info/pskmap.html[PSK Reporter]
+
+[link-id] = :pskreporter:
+[link] https://pskreporter.info/pskmap.html
+[displayed text] PSK Reporter
+
+Perform searches from the doc root directory: doc
+Search: grep -rl --exclude-dir="*\.git" {pskreporter} .
+	grep -rl --exclude-dir="*\.git" PSK Reporter .
+	grep -rl --exclude-dir="*\.git" {devrepo} .
+        grep -rl --exclude-dir="*\.git" {kvasd} .
+        grep -rl --exclude-dir="*\.git" {ntpsetup} .
+
+Include links.adoc: grep -rl --exclude-dir="*\.git" pskreporter .
+Exclude links.adoc: grep -rl --exclude-dir="*\.git" {pskreporter} .
+
+Note(s):
+a). Don't forget a space then "." at the end.
+
+b). To include links.adoc file itself, remove the brackets {} from
+the pattern search:
+
+c). Look at each of the files listed to ensure the [displayed text]
+still makes sense in the caption.  If not, just add another link. Be
+aware of the translators requirements by trying to keep the displayed
+text language agnostic or neutral e.g.  use a proper noun like a
+persons name or a document title in the language of the linked
+document. Do not use plain English generic words for link text link
+"here".
+
+d). Edit lines as needed. Keeping them in alphabetic order help see dupes.
+
+////
+
+// General URL's
+//:launchpadac6sl: https://launchpad.net/~jnogatch/+archive/wsjtx[WSJT-X Linux Packages]
+:alarmejt: http://f5jmh.free.fr/index.php?page=english[AlarmeJT]
+:asciidoc_cheatsheet: https://powerman.name/doc/asciidoc[AsciiDoc Cheatsheet]
+:asciidoc_help: https://www.methods.co.nz/asciidoc/userguide.html[AsciiDoc User Guide]
+:asciidoc_questions: https://www.methods.co.nz/asciidoc/faq.html[AsciiDoc FAQ]
+:asciidoc_syntax: http://xpt.sourceforge.net/techdocs/nix/tool/asciidoc-syn/ascs01-AsciiDocMarkupSyntaxQuickSummary/single/[AsciiDoc Syntax]
+:asciidoctor_style: https://asciidoctor.org/docs/asciidoc-writers-guide/#delimited-blocks[AsciiDoctor Styles Guide]
+:asciidoctor_syntax: https://asciidoctor.org/docs/asciidoc-writers-guide/#delimited-blocks[AsciiDoctor Syntax Guide]
+:cc_by_sa: https://creativecommons.org/licenses/by-sa/3.0/[Commons Attribution-ShareAlike 3.0 Unported License]
+:debian32: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx_{VERSION}_i386.deb[wsjtx_{VERSION}_i386.deb]
+:debian64: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx_{VERSION}_amd64.deb[wsjtx_{VERSION}_amd64.deb]
+:raspbian: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx_{VERSION}_armhf.deb[wsjtx_{VERSION}_armhf.deb]
+:raspbian64: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx_{VERSION}_arm64.deb[wsjtx_{VERSION}_arm64.deb]
+:debian: https://www.debian.org/[Debian]
+:dev_guide: https://wsjt.sourceforge.io/wsjtx-doc/wsjt-dev-guide.html[Dev-Guide]
+:devsvn: https://sourceforge.net/p/wsjt/wsjt/HEAD/tree/[Devel-SVN]
+:devrepo: https://sourceforge.net/p/wsjt/wsjtx/ci/master/tree/[SourceForge]
+:dimension4: http://www.thinkman.com/dimension4/[Thinking Man Software]
+:download: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx.html[Download Page]
+:dxatlas: http://www.dxatlas.com/[Afreet Software, Inc.]
+:dxlcommander: https://www.dxlabsuite.com/commander/[Commander]
+:dxlsuite: https://www.dxlabsuite.com/[DX Lab Suite]
+:fedora32: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx-{VERSION}-i686.rpm[wsjtx-{VERSION}-i686.rpm]
+:fedora64: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx-{VERSION}-x86_64.rpm[wsjtx-{VERSION}-x86_64.rpm]
+:fmt_arrl: https://www.arrl.org/frequency-measuring-test[ARRL FMT Info]
+:fmt_group: https://groups.yahoo.com/neo/groups/FMT-nuts/info[FMT Group]
+:fmt_k5cm: http://www.k5cm.com/[FMT Event Info]
+:fmt_wspr: https://wsjt.sourceforge.io/FMT_User.pdf[Accurate Frequency Measurements with your WSPR Setup]
+:ft4_protocol: https://wsjt.sourceforge.io/FT4_Protocol.pdf[The FT4 Protocol for Digital Contesting]
+:ft4_ft8_protocols: https://wsjt.sourceforge.io/FT4_FT8_QEX.pdf[The FT4 and FT8 Communication Protocols]
+:ft8_tips: https://www.g4ifb.com/FT8_Hinson_tips_for_HF_DXers.pdf[FT8 Operating Guide]
+:ft8_DXped: https://wsjt.sourceforge.io/FT8_DXpedition_Mode.pdf[FT8 DXpedition Mode]
+:gnu_gpl: https://www.gnu.org/licenses/gpl-3.0.txt[GNU General Public License]
+:homepage: https://wsjt.sourceforge.io/index.html[WSJT Home Page]
+:hrd: http://www.hrdsoftwarellc.com/[Ham Radio Deluxe]
+:jt4eme: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/WSJT-X_1.6.0_for_JT4_v7.pdf[Using WSJT-X for JT4 EME Operation]
+:jt65protocol: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/JT65.pdf[QEX]
+:jtalert: https://hamapps.com/[JTAlert]
+:launchpadki7mt: https://launchpad.net/~ki7mt[KI7MT PPA's]
+:log4om: https://www.log4om.com[Log4OM]
+:lunarEchoes: https://wsjt.sourceforge.io/LunarEchoes_QEX.pdf[QEX]
+:msk144: https://wsjt.sourceforge.io/MSK144_Protocol_QEX.pdf[QEX]
+:msvcpp_redist: https://www.microsoft.com/en-ph/download/details.aspx?id=40784[Microsoft VC++ 2013 Redistributable]
+:msys_url: https://sourceforge.net/projects/mingwbuilds/files/external-binary-packages/[MSYS Download]
+:n1mm_logger: https://n1mm.hamdocs.com/tiki-index.php[N1MM Logger+]
+:ntpsetup: https://www.satsignal.eu/ntp/setup.html[Network Time Protocol Setup]
+:osx_instructions: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/OSX_Readme[Mac OS X Install Instructions]
+:ppa: https://en.wikipedia.org/wiki/Personal_Package_Archive[PPA]
+:projsummary: https://sourceforge.net/projects/wsjt/[Project Summary]
+:pskreporter: https://pskreporter.info/pskmap.html[PSK Reporter]
+:sourceforge: https://sourceforge.net/user/registration[SourceForge]
+:sourceforge-jtsdk: https://sourceforge.net/projects/jtsdk[SourceForge JTSDK]
+:ubuntu_sdk: https://launchpad.net/~ubuntu-sdk-team/+archive/ppa[Ubuntu SDK Notice]
+:win_openssl_packages: https://slproweb.com/products/Win32OpenSSL.html[Windows OpenSSL Packages]
+:win32_openssl: https://sourceforge.net/projects/wsjt-x-improved/files/Additional%20Files/OpenSSL/Win32OpenSSL_Light-1_1_1a.msi/download[Win32 OpenSSL Light Package]
+:win64_openssl: https://sourceforge.net/projects/wsjt-x-improved/files/Additional%20Files/OpenSSL/Win64OpenSSL_Light-1_1_1a.msi[Win64 OpenSSL Light Package]
+:writelog: https://writelog.com/[Writelog]
+:wsjtx_group: https://wsjtx.groups.io/g/main[WSJTX Group]
+:wsjt_group:  https://groups.io/g/wsjtgroup[WSJT Group]
+:wsjtx_group2: https://groups.io/g/wsjtgroup/join[join the group]
+:wsjtx: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx.html[WSJT-X]
+:wspr0_guide: https://wsjt.sourceforge.io/WSPR0_Instructions.TXT[WSPR0 Guide]
+:wspr: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wspr.html[WSPR Home Page]
+:wsprnet: https://wsprnet.org/drupal/[WSPRnet]
+:wsprnet_activity: https://wsprnet.org/drupal/wsprnet/activity[WSPRnet Activity page]
+
+// Download Links
+:cty_dat: https://www.country-files.com/bigcty/cty.dat/[Amateur Radio Country Files]
+:jtbridge: https://jt-bridge.eller.nu/[JT-Bridge]
+:jtsdk_doc: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/JTSDK-DOC.exe[Download]
+:jtsdk_installer: https://sourceforge.net/projects/jtsdk/files/win32/2.0.0/JTSDK-2.0.0-B2-Win32.exe/download[Download]
+:jtsdk_omnirig: https://sourceforge.net/projects/jtsdk/files/win32/2.0.0/base/contrib/OmniRig.zip/download[Download]
+:jtsdk_py: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/JTSDK-PY.exe[Download]
+:jtsdk_qt: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/JTSDK-QT.exe[Download]
+:jtsdk_vcredist: https://sourceforge.net/projects/jtsdk/files/win32/2.0.0/base/contrib/vcredist_x86.exe/download[Download]
+:nh6z: http://www.nh6z.net/Amatuer_Radio_Station_NH6Z/Other_Peoples_Software.html[here]
+:omnirig: http://www.dxatlas.com/OmniRig/Files/OmniRig.zip[Omni-Rig]
+:osx: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx-{VERSION}-Darwin.dmg[wsjtx-{VERSION}-Darwin.dmg]
+:QRA64_EME: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/QRA64_EME.pdf[QRA64 for microwave EME]
+:svn: https://subversion.apache.org/packages.html#windows[Subversion]
+:win32: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx-{VERSION}-win32.exe[wsjtx-{VERSION}-win32.exe]
+:win64: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/wsjtx-{VERSION}-win64.exe[wsjtx-{VERSION}-win64.exe]
+:wsjt-devel: https://sourceforge.net/projects/wsjt/lists/wsjt-devel/[wsjt-devel]
+:wsjt-x-improved-community: https://sourceforge.net/projects/wsjt-x-improved/lists/wsjt-x-improved-community/[wsjt-x-improved-community]
+:wsjt_repo: https://sourceforge.net/p/wsjt/wsjt_orig/ci/master/tree/[WSJT Source Repository]
+:wspr_code: https://sourceforge.net/projects/wsjt/files/wsjtx-{VERSION}/WSPRcode.exe[WSPRcode.exe]
+:wspr_svn: https://sourceforge.net/p/wsjt/wspr/ci/master/tree/[WSPR Source Repository]
+
+// MAIL-TO links
+:alex_efros: mailto:powerman@powerman.name[Alex Efros]
+:bill_somerville: mailto:g4wjs -at- c l a s s d e s i g n -dot- com [G4WJS]
+:dev_mail_list: https://sourceforge.net/mailarchive/forum.php?forum_name=wsjt-devel[WSJT Developers Email List]
+:dev_mail_svn: https://sourceforge.net/auth/subscriptions/[WSJT SVN Archives]
+:devmail: mailto:wsjt-devel@lists.sourceforge.net[wsjt-devel@lists.sourceforge.net]
+:devmail1: mailto:wsjt-devel@lists.sourceforge.net[Post Message]
+:wsjtgroup_mail: mailto:wsjtgroup@groups.io[Post Message]
+:greg_beam: mailto:ki7mt@yahoo.com[KI7MT]
+:joe_taylor: mailto:joe@princeton.edu[K1JT]
+:stuart_rackman: mailto:srackham@gmail.com[Stuart Rackham]

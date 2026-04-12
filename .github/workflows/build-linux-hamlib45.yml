@@ -1,0 +1,154 @@
+name: Build Linux Experimental (Hamlib 4.5.5)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Experimental version (e.g. 1.6.0-hamlib45)"
+        required: true
+        default: "1.6.0-hamlib45"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Linux AppImage with Hamlib 4.5.5
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            gfortran \
+            cmake \
+            pkg-config \
+            qtbase5-dev \
+            qtmultimedia5-dev \
+            libqt5multimedia5-plugins \
+            libqt5serialport5-dev \
+            libqt5websockets5-dev \
+            libqt5svg5-dev \
+            libqt5sql5-sqlite \
+            qttools5-dev \
+            qttools5-dev-tools \
+            libfftw3-dev \
+            libusb-1.0-0-dev \
+            libudev-dev \
+            libboost-log-dev \
+            libboost-filesystem-dev \
+            libboost-thread-dev \
+            portaudio19-dev \
+            libreadline-dev \
+            desktop-file-utils \
+            patchelf \
+            wget \
+            file \
+            libfuse2 \
+            texinfo
+
+      - name: Build and Install Hamlib 4.5.5
+        run: |
+          wget https://github.com/Hamlib/Hamlib/releases/download/4.5.5/hamlib-4.5.5.tar.gz
+          tar -xzf hamlib-4.5.5.tar.gz
+          cd hamlib-4.5.5
+          ./configure --prefix=/usr --disable-static
+          make -j$(nproc)
+          sudo make install
+
+      - name: Configure CMake
+        run: |
+          cmake -B build-appimage -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DFORK_RELEASE_VERSION="${{ github.event.inputs.version }}" \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DWSJT_BUILD_UTILS=OFF
+
+      - name: Build Fortran library
+        run: make -C build-appimage -j1 wsjt_fort_omp
+
+      - name: Build applications
+        run: make -C build-appimage -j"$(nproc)" wsjtx jt9 wsprd message_aggregator
+
+      - name: Assemble AppDir
+        run: |
+          APPDIR="${PWD}/AppDir"
+          rm -rf "${APPDIR}"
+          mkdir -p "${APPDIR}/usr/bin"
+          mkdir -p "${APPDIR}/usr/share/applications"
+          mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
+          mkdir -p "${APPDIR}/usr/share/wsjtx"
+
+          cp build-appimage/ft2 build-appimage/jt9 build-appimage/wsprd build-appimage/message_aggregator "${APPDIR}/usr/bin/"
+          cp cty.dat "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
+          cp contrib/Ephemeris/JPLEPH "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
+          cp -r sounds "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
+          cp -r Palettes "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
+          cp icons/Unix/wsjtx_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/ft2.png"
+
+          cat > "${APPDIR}/usr/share/applications/ft2.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Decodium FT2 (Experimental)
+          Comment=Amateur Radio Weak Signal Operating (Hamlib 4.5.5)
+          Exec=ft2
+          Icon=ft2
+          Terminal=false
+          Categories=AudioVideo;Audio;HamRadio;
+          StartupNotify=true
+          DESKTOP
+
+          cat > "${APPDIR}/AppRun" <<'APPRUN'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export WSJTX_DATA_DIR="${HERE}/usr/share/wsjtx"
+          exec "${HERE}/usr/bin/ft2" "$@"
+          APPRUN
+          chmod +x "${APPDIR}/AppRun"
+
+      - name: Build AppImage
+        run: |
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export QMAKE=/usr/lib/qt5/bin/qmake
+          export ARCH=x86_64
+
+          sudo mkdir -p /usr/lib/x86_64-linux-gnu/qt5/plugins/mediaservice
+
+          mkdir -p tools
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O tools/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage -O tools/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x tools/linuxdeploy-x86_64.AppImage tools/linuxdeploy-plugin-qt-x86_64.AppImage
+          sudo install -m 0755 tools/linuxdeploy-plugin-qt-x86_64.AppImage /usr/local/bin/linuxdeploy-plugin-qt
+
+          ./tools/linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/ft2.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/ft2.png \
+            --executable AppDir/usr/bin/ft2 \
+            --executable AppDir/usr/bin/jt9 \
+            --executable AppDir/usr/bin/wsprd \
+            --executable AppDir/usr/bin/message_aggregator \
+            --plugin qt \
+            --output appimage
+
+          APPIMAGE_NAME="decodium3-ft2-experimental-linux-x86_64.AppImage"
+          APPIMAGE_SRC="$(find . -maxdepth 1 -name '*.AppImage' ! -name 'linuxdeploy*.AppImage' | head -n1)"
+          mv "${APPIMAGE_SRC}" "${APPIMAGE_NAME}"
+          sha256sum "${APPIMAGE_NAME}" > "${APPIMAGE_NAME}.sha256.txt"
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium3-ft2-experimental-linux-x86_64
+          path: |
+            decodium3-ft2-experimental-linux-x86_64.AppImage
+            decodium3-ft2-experimental-linux-x86_64.AppImage.sha256.txt

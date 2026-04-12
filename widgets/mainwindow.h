@@ -1,0 +1,1637 @@
+// -*- Mode: C++ -*-
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
+
+#include <QMainWindow>
+#include <QByteArray>
+#include <QString>
+#include <QStringList>
+#include <QLabel>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QThread>
+#include <QProcess>
+#include <QProgressBar>
+#include <QTimer>
+#include <QDateTime>
+#include <QList>
+#include <QAudioDevice>
+#include <QStringList>
+#include <QScopedPointer>
+#include <QDir>
+#include <QProgressDialog>
+#include <QAbstractSocket>
+#include <QHostAddress>
+#include <QPointer>
+#include <QSet>
+#include <QHash>
+#include <QVector>
+#include <QScrollBar>
+#include <QQueue>
+#include <QMap>
+#include <QFuture>
+#include <QFutureWatcher>
+#include <QMetaObject>
+#include <QThreadPool>
+#include <QDateTime>
+#include <QSaveFile>
+#include <QUrl>
+#include <QNetworkReply>
+
+#include "DXpedCertificate.hpp"
+#include "DecodiumCertificate.hpp"
+#include "MultiGeometryWidget.hpp"
+#include "NonInheritingProcess.hpp"
+#include "Audio/AudioDevice.hpp"
+#include "commons.h"
+#include "Radio.hpp"
+#include "models/Modes.hpp"
+#include "models/FrequencyList.hpp"
+#include "Configuration.hpp"
+#include "WSPR/WSPRBandHopping.hpp"
+#include "Transceiver/Transceiver.hpp"
+#include "DisplayManual.hpp"
+#include "Network/PSKReporter.hpp"
+#include "Network/Cloudlog.hpp"
+#include "logbook/logbook.h"
+#include "astro.h"
+#include "widgets/QSYMessageCreator.h"
+#include "widgets/QSYMessage.h"
+#include "widgets/qsymonitor.h"
+#include "widgets/TimeSyncPanel.h"
+#include "widgets/FT2QsoFlowPolicy.h"
+#include "MessageBox.hpp"
+#include "Network/NetworkAccessManager.hpp"
+#include "Network/NtpClient.hpp"
+
+#define NUM_JT4_SYMBOLS 206                //(72+31)*2, embedded sync
+#define NUM_JT65_SYMBOLS 126               //63 data + 63 sync
+#define NUM_JT9_SYMBOLS 85                 //69 data + 16 sync
+#define NUM_WSPR_SYMBOLS 162               //(50+31)*2, embedded sync
+#define NUM_MSK144_SYMBOLS 144             //s8 + d48 + s8 + d80
+#define NUM_Q65_SYMBOLS 85                 //63 data + 22 sync
+#define NUM_FT8_SYMBOLS 79
+#define NUM_SUPERFOX_SYMBOLS 153
+#define NUM_FT4_SYMBOLS 105
+#define NUM_FT2_SYMBOLS 103              // FT2 sync+data symbols; Modulator adds +2 ramp symbols internally
+#define NUM_FST4_SYMBOLS 160             //240/2 data + 5*8 sync
+#define NUM_CW_SYMBOLS 250
+#define MAX_NUM_SYMBOLS 250
+#define TX_SAMPLE_RATE 48000
+#define NRING 3456000
+#define MAX_HOUNDS_IN_QUEUE 10
+
+#define INCR_LOG_FNAME "lotw.adi"           //avt 9/23/25
+#define INCR_LOG_TMP_FNAME "lotw.adi.tmp"   //avt 9/23/25
+#define TEMP_LOG_FNAME "lotwreport.adi"     //avt 9/23/25
+#define FULL_LOG_FNAME "decodium_log.adi"      //avt 9/23/25
+#define FULL_LOG_TMP_FNAME "decodium_log.adi.tmp"  //avt 9/23/25
+//#define DEBUG_LOG_FNAME "debug.txt"
+#define TEMP_LOG_QSL_FNAME "lotwreport_qsl.adi"  //avt 9/23/25
+
+extern int itone[MAX_NUM_SYMBOLS];   //Audio tones for all Tx symbols
+extern int icw[NUM_CW_SYMBOLS];      //Dits for CW ID
+
+//--------------------------------------------------------------- MainWindow
+namespace Ui {
+  class MainWindow;
+}
+
+class QProcessEnvironment;
+class QSplashScreen;
+class QSettings;
+class QLineEdit;
+class QFont;
+class QHostInfo;
+class DisplayText;
+class EchoGraph;
+class FastGraph;
+class WideGraph;
+class LogQSO;
+class Transceiver;
+class MessageAveraging;
+class ActiveStations;
+class FoxLogWindow;
+class CabrilloLogWindow;
+class ColorHighlighting;
+class MessageClient;
+class QTime;
+class WSPRBandHopping;
+class HelpTextWindow;
+class WSPRNet;
+class QMediaDevices;
+class SoundOutput;
+class Modulator;
+class SoundInput;
+class Detector;
+class SampleDownloader;
+class MultiSettings;
+class EqualizationToolsDialog;
+class DecodedText;
+class Cloudlog;
+class WorldMapWidget;
+class IonosphericForecastWindow;
+class DXClusterWindow;
+class RemoteCommandServer;
+namespace decodium { namespace ft2 { class FT2DecodeWorker; } }
+namespace decodium { namespace ft4 { class FT4DecodeWorker; } }
+namespace decodium { namespace fst4 { class FST4DecodeWorker; } }
+namespace decodium { namespace ft8 { class FT8DecodeWorker; } }
+namespace decodium { namespace jt9fast { class JT9FastDecodeWorker; } }
+namespace decodium { namespace q65 { class Q65DecodeWorker; } }
+namespace decodium { namespace msk144 { class MSK144DecodeWorker; } }
+namespace decodium { namespace legacyjt { class LegacyJtDecodeWorker; } }
+namespace decodium { namespace wspr { class WSPRDecodeWorker; } }
+namespace decodium { namespace rtty { class RTTYDetector; class RTTYModulator; } }
+
+class AsyncModeWidget;
+class RTTYTerminalWidget;
+
+class MainWindow
+  : public MultiGeometryWidget<3, QMainWindow>
+{
+  Q_OBJECT;
+
+public:
+  using Frequency = Radio::Frequency;
+  using FrequencyDelta = Radio::FrequencyDelta;
+  using Mode = Modes::Mode;
+  using SpecOp = Configuration::SpecialOperatingActivity;
+
+  explicit MainWindow(QDir const& temp_directory, bool multiple, MultiSettings *,
+                      unsigned downSampleFactor,
+                      QSplashScreen *, QProcessEnvironment const&,
+                      QWidget *parent = nullptr);
+  ~MainWindow();
+
+  int decoderBusy () const {return m_decoderBusy;}
+  QString legacyCallsign() const;
+  QString legacyGrid() const;
+  QString legacyMode() const;
+  QString legacyRigName() const;
+  Frequency legacyDialFrequency() const;
+  int legacyRxFrequency() const;
+  int legacyTxFrequency() const;
+  QString legacyAudioInputDeviceName() const;
+  QString legacyAudioOutputDeviceName() const;
+  int legacyAudioInputChannel() const;
+  int legacyAudioOutputChannel() const;
+  int legacyRxInputLevel() const;
+  QString legacyWaterfallPalette() const;
+  bool legacyMonitoring() const;
+  bool legacyTransmitting() const;
+  bool legacyTuning() const;
+  bool legacyCatConnected() const;
+  double legacySignalLevel() const;
+  int legacyBandActivityRevision() const;
+  QStringList legacyBandActivityLines() const;
+  int legacyRxFrequencyRevision() const;
+  QStringList legacyRxFrequencyLines() const;
+  QString legacyTxMessage(int index) const;
+  int legacyCurrentTx() const;
+  QString legacyAdifLogPath() const;
+  int legacyTxOutputAttenuation() const;
+  void legacyClearBandActivity();
+  void legacySetMode(QString const& mode);
+  void legacySetDialFrequency(Frequency frequency);
+  void legacySetMonitoring(bool enabled);
+  void legacySetAutoSeq(bool enabled);
+  void legacySetTxEnabled(bool enabled);
+  void legacySetAutoCq(bool enabled);
+  void legacySetRxFrequency(int frequencyHz);
+  void legacySetTxFrequency(int frequencyHz);
+  void legacySetRigPtt(bool enabled);
+  void legacySetAudioInputDeviceName(QString const& name);
+  void legacySetAudioOutputDeviceName(QString const& name);
+  void legacySetAudioInputChannel(int channel);
+  void legacySetAudioOutputChannel(int channel);
+  void legacySetRxInputLevel(int value);
+  void legacySetTxOutputAttenuation(int value);
+  void legacySetDxCall(QString const& call);
+  void legacySetDxGrid(QString const& grid);
+  void legacySetTxMessage(int index, QString const& message);
+  void legacySelectTxMessage(int index);
+  void legacyGenerateStandardMessages();
+  void legacyStartTune(bool enabled);
+  void legacyStopTransmission();
+  void legacyArmCurrentTx();
+  void legacyLogQso();
+  void legacySetWaterfallPalette(QString const& palette);
+  void legacyOpenSettings(int tabIndex = -1);
+  void legacyOpenTimeSyncPanel();
+  void legacyRetryRigConnection();
+  bool legacyAlt12Enabled() const;
+  void legacySetAlt12Enabled(bool enabled);
+  bool legacyTxFirst() const;
+  void legacySetTxFirst(bool enabled);
+  void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
+  void legacySetEmbeddedMode(bool enabled);
+  void legacyShutdownForEmbedding();
+
+public slots:
+  void showSoundInError(const QString& errorMsg);
+  void showSoundOutError(const QString& errorMsg);
+  void showStatusMessage(const QString& statusMsg);
+  void dataSink(qint64 frames);
+  void fastSink(qint64 frames);
+  void tci_mod_active(bool on);
+  void diskDat();
+  void freezeDecode(int n);
+  void guiUpdate();
+  void doubleClickOnCall (Qt::KeyboardModifiers);
+  void doubleClickOnCall2(Qt::KeyboardModifiers);
+  void doubleClickOnFoxQueue(Qt::KeyboardModifiers);
+  void doubleClickOnFoxInProgress(Qt::KeyboardModifiers modifiers);
+  void doubleClickOnCallerQueue(Qt::KeyboardModifiers);
+  void readFromStdout();
+  void setXIT(int n, Frequency base = 0u);
+  void setFreq4(int rxFreq, int txFreq);
+  void msgAvgDecode2();
+  void fastPick(int x0, int x1, int y);
+
+private:
+  enum class DecoderBackend
+  {
+    InProcess
+  };
+
+  enum class DecodedRowSource
+  {
+    InProcess
+  };
+
+  enum class DecodedRowAction
+  {
+    Continue,
+    ReturnFromReader
+  };
+
+  struct PreparedDecodedRow;
+
+  void change_layout (std::size_t) override;
+  void keyPressEvent (QKeyEvent *) override;
+  void closeEvent(QCloseEvent *) override;
+  void childEvent(QChildEvent *) override;
+  bool eventFilter(QObject *, QEvent *) override;
+  void restartConfiguredAudioStreams (bool resume_monitor);
+  void armAudioInputHealthChecks (qint64 baseline_ms);
+  void refreshConfiguredAudioDevicesAfterHotplug (QString const& reason);
+  void showQSYMessage(QString message);
+  void handleDoubleClickOnCall (Qt::KeyboardModifiers modifiers, bool fromBandActivityWindow);
+  bool singleDecodeColumnFlowEnabled () const { return false; }
+  DisplayText * secondaryDecodeView () const;
+  void applySingleDecodeColumnFlowLayout ();
+  void applyRttyTerminalLayout ();
+  DecoderBackend decoderBackendForMode (QString const& mode) const;
+  void requestSubprocessDecodeStart (qint32 ihsym);
+  bool cancelPendingInProcessDecode ();
+  void requestInProcessFt2Decode ();
+  void requestInProcessFt4Decode ();
+  void requestInProcessFst4Decode ();
+  void requestInProcessFt8Decode ();
+  void requestInProcessJt9FastDecode ();
+  void requestInProcessQ65Decode ();
+  void requestInProcessMsk144Decode ();
+  void requestInProcessLegacyJtDecode ();
+  void requestInProcessWsprDecode ();
+  bool takeNextDecodedTransportRow (QQueue<QByteArray>& splitDecodeQueue, QByteArray& line_read, QString& all_decodes);
+  bool prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, DecodedRowSource source,
+                          PreparedDecodedRow& prepared, DecodedRowAction& action);
+  void processFastDecodedRows (QStringList const& rows);
+  void processFt2AsyncDecodedRows (QStringList const& rows);
+  void processFt2DecodedRows (quint64 serial, QStringList const& rows);
+  void processFt4DecodedRows (quint64 serial, QStringList const& rows);
+  void processFst4DecodedRows (quint64 serial, QStringList const& rows);
+  void processFt8DecodedRows (quint64 serial, QStringList const& rows);
+  void processJt9FastDecodedRows (quint64 serial, QStringList const& rows);
+  void processQ65DecodedRows (quint64 serial, QStringList const& rows);
+  void processMsk144DecodedRows (quint64 serial, QStringList const& rows);
+  void processLegacyJtDecodedRows (quint64 serial, QStringList const& rows);
+  void processWsprDecodedRows (quint64 serial, QStringList const& rows,
+                               QStringList const& diagnostics, int exitCode);
+  void processWsprDecoderLine (QString const& line);
+  void finishWsprDecode ();
+  void updateAsyncL2ControlsVisibility ();
+  void selectBandFrequency (Frequency preferredFrequency, Frequency fallbackFrequency);
+  bool shouldSuppressNearDuplicateDecode (DecodedText const& decodedtext);
+  void pruneNearDuplicateDecodeCache (qint64 nowMs);
+  void applyRttyModemConfiguration ();
+  double configuredRttyBaudRate () const;
+  double configuredRttyMarkTone () const;
+  double configuredRttySpaceTone () const;
+  double configuredRttyStopBits () const;
+  QString configuredRttySummaryText () const;
+  QString expandRttyPlaceholders (QString text) const;
+  void transmitRttyText(QString const& text);
+  bool prepareRttyTransmission(QString const& text);
+  void finishRttyTransmission();
+  void resetRttyTransmissionState();
+
+private slots:
+  void initialize_fonts ();
+  void ScrollBarPosition(int n);
+  void on_actionUse_Dark_Style_triggered (bool checked);
+  void on_actionBand_Buttons_triggered ();
+  void on_actionVHF_UHF_Buttons_triggered ();
+  void on_pb160_clicked();
+  void on_pb80_clicked();
+  void on_pb60_clicked();
+  void on_pb40_clicked();
+  void on_pb30_clicked();
+  void on_pb20_clicked();
+  void on_pb17_clicked();
+  void on_pb15_clicked();
+  void on_pb12_clicked();
+  void on_pb10_clicked();
+  void on_pb8_clicked();
+  void on_pb6_clicked();
+  void on_pb2_clicked();
+  void on_pb70_clicked();
+  void on_pb50_clicked();
+  void on_pb4_clicked();
+  void on_pb144_clicked();
+  void on_pb220_clicked();
+  void on_pb432_clicked();
+  void on_pb902_clicked();
+  void on_pb23_clicked();
+  void on_pb13_clicked();
+  void on_pb9_clicked();
+  void on_pb5G_clicked();
+  void on_pb10G_clicked();
+  void on_pb24G_clicked();
+  void check_button_color();
+  void stopWRTimeout();
+  void stopWCTimeout();
+  void pauseCurrentTxCycleForWaitFeatures(QString const& reason);
+  void bandHoppingTimer();
+  void bandHopping();
+  void on_houndButton_clicked(bool checked);
+  void on_cbHoldTxFreq_clicked (bool);
+  void on_cbDualCarrier_toggled (bool checked);
+  void on_cbAsyncDecode_toggled (bool checked);
+  void on_cbManualTx_toggled (bool checked);
+  void on_cbSpeedyContest_toggled (bool checked);
+  void on_cbDigitalMorse_toggled (bool checked);
+  void on_ft8Button_clicked();
+  void on_ft4Button_clicked();
+  void on_ft2Button_clicked();
+  void on_autoCQButton_clicked(bool checked);
+  void on_dxpedButton_clicked(bool checked);
+  void updateQueueTabVisibility();
+  void on_msk144Button_clicked();
+  void on_q65Button_clicked();
+  void on_jt65Button_clicked();
+  void on_echoButton_clicked();
+  void on_pb15A_clicked();
+  void on_pb15C_clicked();
+  void on_pb30B_clicked();
+  void on_pb60C_clicked();
+  void on_pb60D_clicked();
+  void on_pb60E_clicked();
+  void on_tx1_editingFinished();
+  void on_tx2_editingFinished();
+  void on_tx3_editingFinished();
+  void on_tx4_editingFinished();
+  void on_tx5_currentTextChanged (QString const&);
+  void on_tx6_editingFinished();
+  void on_actionSettings_triggered();
+  void on_monitorButton_clicked (bool);
+  void onApplicationStateChanged (Qt::ApplicationState state);
+  void on_actionWorld_Map_toggled (bool checked);
+  void on_actionIonospheric_Forecast_triggered (bool checked);
+  void on_actionDX_Cluster_triggered (bool checked);
+  void on_actionAbout_triggered();
+  void on_actionCheck_for_Updates_triggered();
+  void on_autoButton_clicked (bool);
+  void on_stopTxButton_clicked();
+  void on_stopButton_clicked();
+  void on_pbBandHopping_clicked();
+  void on_actionRelease_Notes_triggered ();
+  void on_actionFT8_DXpedition_Mode_User_Guide_triggered();
+  void on_actionSuperFox_User_Guide_triggered();
+  void on_actionQSG_FST4_triggered();
+  void on_actionQSG_Q65_triggered();
+  void on_actionQSG_X250_M3_triggered();
+  void on_actionQuick_Start_Guide_to_WSJT_X_2_7_and_QMAP_triggered();
+  void on_actionWSJT_X_improved_Home_Page_triggered();
+  void on_actionThe_additional_features_of_wsjt_x_improved_triggered();
+  void on_actionRecommended_Audio_Settings_triggered();
+  void on_actionRig_Control_Errors_triggered();
+  void on_actionOnline_User_Guide_triggered();
+  void on_actionLocal_User_Guide_triggered();
+  void on_actionWide_Waterfall_triggered();
+  void on_actionOpen_triggered();
+  void on_actionOpen_next_in_directory_triggered();
+  void on_actionDecode_remaining_files_in_directory_triggered();
+  void on_actionDelete_all_wav_files_in_SaveDir_triggered();
+  void on_actionOpen_log_directory_triggered ();
+  void on_actionLaunchChronoGPS_triggered ();
+  void on_actionNone_triggered();
+  void on_actionSave_all_triggered();
+  void on_actionDefault_event_logging_triggered();
+  void on_actionDiagnostic_mode_triggered();
+  void on_actionDisable_event_logging_triggered();
+  void on_actionKeyboard_shortcuts_triggered();
+  void on_actionSpecial_mouse_commands_triggered();
+  void on_actionSolve_FreqCal_triggered();
+  void on_actionLoad_Decodium_Certificate_triggered();
+  void on_actionLoad_DXped_Certificate_triggered();
+  void on_actionDXped_Certificate_Manager_triggered();
+  void on_actionCopyright_Notice_triggered();
+  void on_actionSWL_Mode_triggered (bool checked);
+  void on_DecodeButton_clicked (bool);
+  void on_actionUpload_to_LOTW_triggered();   //avt 9/23/25
+  void on_actionDownload_from_LOTW_triggered(); //avt 9/23/25
+  void decode();
+  void decodeBusy(bool b);
+  void on_EraseButton_clicked();
+  void band_activity_cleared ();
+  void rx_frequency_activity_cleared ();
+  void on_txFirstCheckBox_stateChanged(int arg1);
+  void set_dateTimeQSO(int m_ntx);
+  void set_ntx(int n);
+  void on_txrb1_toggled(bool status);
+  void on_txrb1_doubleClicked ();
+  void on_txrb2_toggled(bool status);
+  void on_txrb3_toggled(bool status);
+  void on_txrb4_toggled(bool status);
+  void on_txrb4_doubleClicked ();
+  void on_txrb5_toggled(bool status);
+  void on_txrb5_doubleClicked ();
+  void on_txrb6_toggled(bool status);
+  void on_txb1_clicked();
+  void on_txb1_doubleClicked ();
+  void on_txb2_clicked();
+  void on_txb3_clicked();
+  void on_txb4_clicked();
+  void on_txb4_doubleClicked ();
+  void on_txb5_clicked();
+  void on_txb5_doubleClicked ();
+  void on_txb6_clicked();
+  void on_lookupButton_clicked();
+  void on_addButton_clicked();
+  void on_ignoreButton_clicked();
+  void on_comboBoxCQ_activated ();
+  void on_DX_Call_Button_clicked (bool checked);
+  void wheelEvent(QWheelEvent *event) override;
+  void mousePressEvent(QMouseEvent *event) override;
+  void on_dxCallEntry_textChanged (QString const&);
+  void on_dxGridEntry_textChanged (QString const&);
+  void on_dxCallEntry_editingFinished();
+  void on_dxCallEntry_returnPressed ();
+  void on_genStdMsgsPushButton_clicked();
+  void on_logQSOButton_clicked();
+  void read_txLog();
+  void on_actionErase_Tx_Log_triggered();
+  void read_ignoreList();
+  void addCallsignToignoreList();
+  void on_actionErase_Ignore_List_triggered();
+  void read_ALLCALL7();
+  void remove_old_files(const QString &directoryPath, int daysOld);
+  void on_actionJT9_triggered();
+  void on_actionJT65_triggered();
+  void on_actionJT4_triggered();
+  void on_actionFT2_triggered();
+  void on_actionFT4_triggered();
+  void on_actionFT8_triggered();
+  void on_actionFST4_triggered();
+  void on_actionFST4W_triggered();
+  void on_actionRTTY_triggered();
+  void on_TxFreqSpinBox_valueChanged(int arg1);
+  void on_actionSave_decoded_triggered();
+  void on_actionQuickDecode_toggled (bool);
+  void on_actionMediumDecode_toggled (bool);
+  void on_actionDeepestDecode_toggled (bool);
+
+  //ft8md
+  void on_actionDecFT8cycles1_triggered();
+  void on_actionDecFT8cycles2_triggered();
+  void on_actionDecFT8cycles3_triggered();
+  void on_actionRXfLow_triggered();
+  void on_actionRXfMedium_triggered();
+  void on_actionRXfHigh_triggered();
+  void on_actionMTAuto_triggered();
+  void on_actionMT1_triggered();
+  void on_actionMT2_triggered();
+  void on_actionMT3_triggered();
+  void on_actionMT4_triggered();
+  void on_actionMT5_triggered();
+  void on_actionMT6_triggered();
+  void on_actionMT7_triggered();
+  void on_actionMT8_triggered();
+  void on_actionMT9_triggered();
+  void on_actionMT10_triggered();
+  void on_actionMT11_triggered();
+  void on_actionMT12_triggered();
+  void on_actionFT8SensMin_toggled(bool checked);
+  void on_actionlowFT8thresholds_toggled(bool checked);
+  void on_actionFT8subpass_toggled(bool checked);
+  void on_actionStartTwoStage_toggled(bool checked);
+  void on_actionStartThreeStage_toggled(bool checked);
+  void on_actionStartEarly_toggled(bool checked);
+  void on_actionStartNormal_toggled(bool checked);
+  void on_actionStartLate_toggled(bool checked);
+  void on_actionFT8WidebandDXCallSearch_toggled(bool checked);
+  void on_actionUse_multithreaded_FT8_decoder_triggered(bool checked);
+  //ft8md
+
+  void bumpFqso(int n);
+  void on_actionErase_ALL_TXT_triggered();
+  void on_reset_cabrillo_log_action_triggered ();
+  void on_actionErase_decodium_log_adi_triggered();
+  void on_actionErase_WSPR_hashtable_triggered();
+  void on_actionErase_list_of_Q65_callers_triggered();
+  void on_actionExport_Cabrillo_log_triggered();
+  void startTx2();
+  void startWsprDecode();
+  void stopTx();
+  void stopTx2();
+  void on_rptSpinBox_valueChanged(int n);
+  void killFile();
+  void on_tuneButton_clicked (bool);
+  void on_pbR2T_clicked();
+  void on_pbT2R_clicked();
+  void acceptQSO (QDateTime const&, QString const& call, QString const& grid
+                  , Frequency dial_freq, QString const& mode
+                  , QString const& rpt_sent, QString const& rpt_received
+                  , QString const& tx_power, QString const& comments
+                  , QString const& name, QDateTime const& QSO_date_on, QString const& operator_call
+                  , QString const& my_call, QString const& my_grid
+                  , QString const& exchange_sent, QString const& exchange_rcvd
+                  , QString const& propmode, QString const& satellite
+                  , QString const& sat_mode
+                  , QString const& freqRx, QByteArray const& ADIF);
+  void on_bandComboBox_currentIndexChanged (int index);
+  void on_bandComboBox_editTextChanged (QString const& text);
+  void on_bandComboBox_activated (int index);
+  void on_readFreq_clicked();
+  void on_RxFreqSpinBox_valueChanged(int n);
+  void on_outAttenuation_valueChanged (int);
+  void rigOpen ();
+  void handle_transceiver_update (Transceiver::TransceiverState const&);
+  void handle_transceiver_failure (QString const& reason);
+  void handle_leavingSettings();
+  void refreshWriteableDataDirCache();
+  void on_actionAstronomical_data_toggled (bool);
+  void on_actionQSYMessage_Creator_triggered();
+  void on_actionQSY_Monitor_triggered();
+  void on_actionTime_Sync_triggered();
+  void alertQSYmessage();
+  void on_actionShort_list_of_add_on_prefixes_and_suffixes_triggered();
+  void band_changed (Frequency);
+  void monitor (bool);
+  void end_tuning ();
+  void stop_tuning ();
+  void stopTuneATU();
+  void auto_tx_mode(bool);
+  void on_actionMessage_averaging_triggered();
+  void on_actionActiveStations_triggered();
+  void on_contest_log_action_triggered ();
+  void on_fox_log_action_triggered ();
+  void on_actionColors_triggered();
+  void on_actionInclude_averaging_toggled (bool);
+  void on_actionInclude_correlation_toggled (bool);
+  void on_actionEnable_AP_DXcall_toggled (bool);
+  void on_actionAuto_Clear_Avg_toggled (bool);
+  void VHF_features_enabled(bool b);
+  void on_sbSubmode_valueChanged(int n);
+  void on_cbSendMsg_toggled(bool b);
+  void on_cbShMsgs_toggled(bool b);
+  void on_cbSWL_toggled(bool b);
+  void on_cbTx6_toggled(bool b);
+  void on_cbMenus_toggled(bool b);
+  void on_cbCQonly_toggled(bool b);
+  void on_cbAutoSeq_toggled(bool b);
+  void networkError (QString const&);
+  void on_ClrAvgButton_clicked();
+  void on_actionWSPR_triggered();
+  void on_syncSpinBox_valueChanged(int n);
+  void on_TxPowerComboBox_currentIndexChanged(int);
+  void on_sbTxPercent_valueChanged(int n);
+  void on_cbUploadWSPR_Spots_toggled(bool b);
+  void WSPR_config(bool b);
+  void uploadWSPRSpots (bool direct_post = false, QString const& decode_text = QString {});
+  void TxAgain();
+  void uploadResponse(QString const& response);
+  void on_WSPRfreqSpinBox_valueChanged(int n);
+  void on_sbFST4W_RxFreq_valueChanged(int n);
+  void on_sbFST4W_FTol_valueChanged(int n);
+  void on_pbTxNext_clicked(bool b);
+  void on_actionEcho_Graph_triggered();
+  void on_actionEcho_triggered();
+  void on_actionFast_Graph_triggered();
+  void fast_decode_done();
+  void on_actionMeasure_reference_spectrum_triggered();
+  void on_actionErase_reference_spectrum_triggered();
+  void on_actionMeasure_phase_response_triggered();
+  void on_sbTR_valueChanged (int);
+  void on_sbTR_FST4W_valueChanged (int);
+  void on_sbFtol_valueChanged (int);
+  void on_cbFast9_clicked(bool b);
+  void on_sbCQTxFreq_valueChanged(int n);
+  void on_cbCQTx_toggled(bool b);
+  void on_actionMSK144_triggered();
+  void on_actionQ65_triggered();
+  void on_actionFreqCal_triggered();
+  void splash_done ();
+  void on_measure_check_box_stateChanged (int);
+  void on_sbNlist_valueChanged(int n);
+  void on_sbNslots_valueChanged(int n);
+  void on_sbF_Low_valueChanged(int n);
+  void on_sbF_High_valueChanged(int n);
+  void chk_FST4_freq_range();
+  void on_pbFoxReset_clicked();
+  void on_pbFreeText_clicked();
+  void FoxReset(QString reason);
+  void on_comboBoxHoundSort_activated (int index);
+  void not_GA_warning_message ();
+  void checkMSK144ContestType();
+  void on_pbBestSP_clicked();
+  void on_RoundRobin_currentTextChanged(QString text);
+  void setTxMsg(int n);
+  bool stdCall(QString const& w);
+  void remote_configure (QString const& mode, quint32 frequency_tolerance, QString const& submode
+                         , bool fast_mode, quint32 tr_period, quint32 rx_df, QString const& dx_call
+                         , QString const& dx_grid, bool generate_messages);
+  void callSandP2(int nline);
+  void refreshHoundQueueDisplay();
+  void queueActiveWindowHound2(QString text);
+  void update_tx5(const QString &qsy_text);
+  void reply_tx5(const QString &qsy_text);
+  void setQSYMessageCreatorStatus(const bool &QSYMessageCreatorValue);
+  void showExternalCtrlDisconnect();     //avt 12/16/21
+  void on_rbFixedTone_toggled(bool b);
+  void on_rbEchoMessage_toggled(bool b);
+  void on_rbEchoCW_toggled(bool b);
+  void on_leEchoMessage_textChanged();
+  void downloadQsoComplete(bool result);  //avt 10/2/25
+  void downloadQslComplete(bool result);  //avt 10/2/25
+  void onNtpOffsetUpdated(double offsetMs);
+  void onNtpSyncStatusChanged(bool synced, QString const& statusText);
+  void onSoundcardDriftUpdated(double driftMsPerPeriod, double driftPpm);
+  void onRemoteSelectCallerDue(QString const& commandId, QString const& call, QString const& grid);
+  void onRemoteSetModeRequested(QString const& commandId, QString const& mode);
+  void onRemoteSetBandRequested(QString const& commandId, QString const& band);
+  void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
+  void onRemoteSetTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
+  void onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAutoCqRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAutoSpotRequested(QString const& commandId, bool enabled);
+  void onRemoteSetMonitoringRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAsyncL2Requested(QString const& commandId, bool enabled);
+  void onRemoteSetDualCarrierRequested(QString const& commandId, bool enabled);
+  void onRemoteSetAlt12Requested(QString const& commandId, bool enabled);
+  void onRemoteSetManualTxRequested(QString const& commandId, bool enabled);
+  void onRemoteSetSpeedyContestRequested(QString const& commandId, bool enabled);
+  void onRemoteSetDigitalMorseRequested(QString const& commandId, bool enabled);
+  void onRemoteSetQuickQsoRequested(QString const& commandId, bool enabled);
+  void onRemoteSetFt2QsoMessageCountRequested(QString const& commandId, int count);
+  void onMapContactClicked(QString const& call, QString const& grid);
+  void onRemoteWaterfallStreamingChanged(bool enabled);
+  void onWideGraphWaterfallRow(QByteArray const& rowLevels,
+                               int startFrequencyHz,
+                               int spanHz,
+                               int rxFrequencyHz,
+                               int txFrequencyHz,
+                               QString const& mode);
+
+private:
+  Q_SIGNAL void initializeAudioOutputStream (QAudioDevice,
+      unsigned channels, unsigned msBuffered) const;
+  Q_SIGNAL void stopAudioOutputStream () const;
+  Q_SIGNAL void startAudioInputStream (QAudioDevice const&,
+      int framesPerBuffer, AudioDevice * sink,
+      unsigned downSampleFactor, AudioDevice::Channel) const;
+  Q_SIGNAL void suspendAudioInputStream () const;
+  Q_SIGNAL void resumeAudioInputStream () const;
+  Q_SIGNAL void startDetector (AudioDevice::Channel) const;
+  Q_SIGNAL void FFTSize (unsigned) const;
+  Q_SIGNAL void detectorClose () const;
+  Q_SIGNAL void finished () const;
+  Q_SIGNAL void transmitFrequency (double) const;
+  Q_SIGNAL void endTransmitMessage (bool quick = false) const;
+  Q_SIGNAL void tune (bool = true) const;
+  Q_SIGNAL void sendPrecomputedWave (QString mode, QVector<float> wave) const;
+  Q_SIGNAL void sendMessage (QString mode, unsigned symbolsLength,
+      double framesPerSymbol, double frequency, double toneSpacing,
+      SoundOutput *, AudioDevice::Channel = AudioDevice::Mono,
+      bool synchronize = true, bool fastMode = false, double dBSNR = 99.,
+                             int TRperiod=60) const;
+  Q_SIGNAL void outAttenuationChanged (qreal) const;
+  Q_SIGNAL void toggleShorthand () const;
+  Q_SIGNAL void reset_audio_input_stream (bool report_dropped_frames) const;
+  Q_SIGNAL void download_finished (bool) const;  //avt 10/2/25
+  Q_SIGNAL void legacyWaterfallRowReady (QByteArray const& rowLevels,
+                                         int startFrequencyHz,
+                                         int spanHz,
+                                         int rxFrequencyHz,
+                                         int txFrequencyHz,
+                                         QString const& mode) const;
+  Q_SIGNAL void legacyWarningRaised (QString const& title,
+                                     QString const& summary,
+                                     QString const& details) const;
+  Q_SIGNAL void legacyRigErrorRaised (QString const& title,
+                                      QString const& summary,
+                                      QString const& details) const;
+  Q_SIGNAL void legacyPreferencesRequested () const;
+
+private:
+  void set_mode (QString const& mode);
+  QString startup_mode_for_frequency (Frequency dial_frequency) const;
+  void maybe_apply_startup_mode_from_rig_frequency (Frequency dial_frequency);
+  void astroUpdate ();
+  void writeAllTxt(QString message);
+  void auto_sequence (DecodedText const& message, unsigned start_tolerance, unsigned stop_tolerance);
+  void trim_view (bool b);
+  void foxTest();
+  void setColorHighlighting();
+  void chkFT4();
+  bool elide_tx1_not_allowed () const;
+  void readWidebandDecodes();
+  void configActiveStations();
+  void sfox_tx();
+  bool play_DXcall = false;
+  bool inSettings = false;
+
+  QProcessEnvironment const& m_env;
+  NetworkAccessManager m_network_manager;
+  bool m_valid;
+  QSplashScreen * m_splash;
+  QString m_revision;
+  bool m_multiple;
+  MultiSettings * m_multi_settings;
+  QPushButton * m_configurations_button;
+  QSettings * m_settings;
+  bool m_dataSinkShuttingDown {false};
+  QScopedPointer<Ui::MainWindow> ui;
+  QMetaObject::Connection m_applicationStateChangedConnection;
+  QMetaObject::Connection m_detectorFramesWrittenConnection;
+  QMetaObject::Connection m_tciFramesWrittenConnection;
+
+  Configuration m_config;
+  QString m_writeableDataDirPath;
+  QByteArray m_writeableDataDirNativePath;
+  QByteArray m_refspecNativePath;
+  bool m_logbookRead;          //avt 9/23/25
+  LogBook m_logBook;            // must be after Configuration construction
+  Cloudlog m_cloudlog;
+  WSPRBandHopping m_WSPR_band_hopping;
+  bool m_WSPR_tx_next;
+  MessageBox m_rigErrorMessageBox;
+  bool m_embeddedShellMode {false};
+  bool m_forceLegacySettingsDialog {false};
+  bool m_embeddedFt2MonitorPrepared {false};
+  QScopedPointer<SampleDownloader> m_sampleDownloader;
+  QScopedPointer<EqualizationToolsDialog> m_equalizationToolsDialog;
+
+  QScopedPointer<WideGraph> m_wideGraph;
+  QScopedPointer<EchoGraph> m_echoGraph;
+  QScopedPointer<FastGraph> m_fastGraph;
+  QScopedPointer<LogQSO> m_logDlg;
+  QScopedPointer<Astro> m_astroWidget;
+  QScopedPointer<QSYMessageCreator> m_QSYMessageCreatorWidget;
+  QScopedPointer<QSYMessage> m_QSYMessageWidget;
+  QScopedPointer<QSYMonitor> m_qsymonitorWidget;
+  QScopedPointer<TimeSyncPanel> m_timeSyncPanel;
+  QScopedPointer<HelpTextWindow> m_shortcuts;
+  QScopedPointer<HelpTextWindow> m_prefixes;
+  QScopedPointer<HelpTextWindow> m_mouseCmnds;
+  QScopedPointer<MessageAveraging> m_msgAvgWidget;
+  QScopedPointer<ActiveStations> m_ActiveStationsWidget;
+  QPointer<WorldMapWidget> m_worldMapWidget;
+  QScopedPointer<IonosphericForecastWindow> m_ionosphericForecastWindow;
+  QScopedPointer<DXClusterWindow> m_dxClusterWindow;
+  QHash<QString, QString> m_worldMapGridByCall;
+  bool m_worldMapCall3Loaded {false};
+  QScopedPointer<FoxLogWindow> m_foxLogWindow;
+  QScopedPointer<CabrilloLogWindow> m_contestLogWindow;
+  QScopedPointer<ColorHighlighting> m_colorHighlighting;
+  QScopedPointer<RTTYTerminalWidget> m_rttyTerminal;
+  QScopedPointer<decodium::rtty::RTTYDetector> m_rttyDetector;
+  QScopedPointer<decodium::rtty::RTTYModulator> m_rttyModulator;
+  QString m_rttyQueuedText;
+  unsigned m_rttyTciSymbolsLength {0};
+  double m_rttyTciFramesPerSymbol {0.0};
+  bool m_rttyManualTxActive {false};
+  Transceiver::TransceiverState m_rigState;
+  Frequency  m_lastDialFreq;
+  QString m_lastBand;
+  QString m_lastCallsign;
+  Frequency  m_dialFreqRxWSPR;  // best guess at WSPR QRG
+  bool m_QSYMessageCreatorValue = false;
+  bool m_qsymonitorValue = false;
+
+  Detector * m_detector;
+  unsigned m_FFTSize;
+  SoundInput * m_soundInput;
+  QMediaDevices * m_mediaDevices;
+  int m_legacyRxInputLevel {50};
+  Modulator * m_modulator;
+  SoundOutput * m_soundOutput;
+  int m_rx_audio_buffer_frames;
+  int m_tx_audio_buffer_frames;
+  qint64 m_last_audio_frame_ms;
+  qint64 m_last_tx_audio_rebind_ms;
+  qint64 m_last_wake_audio_rebind_ms;
+  Qt::ApplicationState m_last_application_state;
+  qint64 m_ptt_request_ms;
+  QThread m_audioThread;
+
+  qint64  m_msErase;
+  qint64  m_secBandChanged;
+  qint64  m_msDecStarted; //ft8md
+  qint64  m_freqMoon;
+  qint64  m_fullFoxCallTime;
+  qint64  m_msEchoTxStart=0;
+
+  Frequency m_freqNominal;
+  Frequency m_freqNominalPeriod;
+  Frequency m_freqTxNominal;
+  quint64 m_msk144basefreq;
+  quint64 m_msk144oldfreq;
+  quint64  m_mslastTX;   //ft8md
+  qint32  m_nlasttx;     //ft8md
+  qint32  m_lapmyc;      //ft8md
+  Astro::Correction m_astroCorrection;
+  bool m_reverse_Doppler;
+
+  double  m_tRemaining;
+  double  m_TRperiod;
+  double  m_fSpread;
+  double  m_fSpreadSelf {0.0};
+  double  m_fSpreadDx   {0.0};
+  double  m_s6;
+  double  m_fDither;
+  double  m_fAudioShift;
+
+  float   m_DTtol;
+  float   m_t0;
+  float   m_t1;
+  float   m_t0Pick;
+  float   m_t1Pick;
+  float   m_fCPUmskrtd;
+  float   m_tEcho=0;
+
+  qint32  m_waterfallAvg;
+  qint32  m_ntx;
+  bool m_gen_message_is_cq;
+  bool m_send_RR73;
+  qint32  m_timeout;
+  qint32  m_XIT;
+  qint32  m_setftx;
+  qint32  m_ndepth;
+  qint32  m_ncandthin; //ft8md
+
+  //ft8md
+  qint32  m_nFT8Cycles;
+  qint32  m_nFT8SWLCycles;
+  qint32  m_nFT8RXfSens;
+  qint32  m_ft8threads;
+  qint32  m_ft8Sensitivity;
+  qint32  m_ft8DecoderStart;
+  qint32  m_nsecBandChanged;
+  //ft8md
+
+  qint32  m_sec0;
+  qint32  m_RxLog;
+  qint32  m_nutc0;
+  qint32  m_ntr;
+  qint32  m_tx;
+  quint64  m_mslastMon;
+  int     m_addtx;
+  quint32 m_delay;
+  qint32  m_hsym;
+  qint32  m_nsps;
+  qint32  m_hsymStop;
+  qint32  m_inGain;
+  qint32  m_ncw;
+  qint32  m_secID;
+  qint32  m_idleMinutes;
+  qint32  m_nSubMode;
+  qint32  m_nclearave;
+  qint32  m_minSync;
+  qint32  m_dBm;
+  qint32  m_nWSPRdecodes;
+  qint32  m_k0;
+  qint32  m_kdone;
+  qint32  m_nPick;
+  FrequencyList_v2_101::const_iterator m_frequency_list_fcal_iter;
+  qint32  m_nTx73;
+  qint32  m_UTCdisk;
+  QDateTime    m_UTCdiskDateTime;
+  qint32  m_wait;
+  qint32  m_isort;
+  qint32  m_max_dB;
+  qint32  m_nDXped=0;
+  qint32  m_nSortedHounds=0;
+  qint32  m_nHoundsCalling=0;
+  qint32  m_Nlist=12;
+  qint32  m_Nslots=3;
+  qint32  m_Nslots0=0;
+  qint32  m_nFoxMsgTimes[5]={0,0,0,0,0};
+  qint32  m_tAutoOn;
+  qint32  m_tFoxTx=0;
+  qint32  m_tFoxTx0=0;
+  qint32  m_maxStrikes=3;      //Max # of repeats: 3 strikes and you're out
+  qint32  m_maxFoxWait=3;      //Max wait time for expected Hound replies
+  qint32  m_foxCQtime=10;      //CQs at least every 5 minutes
+  qint32  m_tFoxTxSinceCQ=999; //Fox Tx cycles since most recent CQ
+  qint32  m_nFoxFreq;          //Audio freq at which Hound received a call from Fox
+  qint32  m_nSentFoxRrpt=0;    //Serial number for next R+rpt Hound will send to Fox
+  qint32  m_txRetryCount {0};  // Consecutive Tx retry counter for auto-sequence timeout
+  qint32  m_lastNtx {-1};     // Last Tx number sent (for retry detection)
+  qint32  m_cqRetryCount {0}; // CQ (Tx6) retry counter for period toggle
+  static constexpr int MAX_TX_RETRIES = 5;    // Tx2/Tx3/Tx4 retries before returning to CQ
+  static constexpr int MAX_CQ_RETRIES = 10;   // CQ retries before toggling Tx Even/1st
+  int  m_autoCQPeriodsMissed   {0};           // RX periods senza risposta dal caller corrente
+  bool m_receivedReplyThisPeriod {false};     // flag reset ogni periodo RX
+  static constexpr int MAX_MISSED_PERIODS = MAX_TX_RETRIES;
+  qint32  m_kin0=0;
+  qint32  m_earlyDecode=41;
+  qint32  m_earlyDecode2=47;
+  qint32  m_nDecodes=0;
+  qint32  m_maxPoints=-1;
+  qint32  m_latestDecodeTime=-1;
+  qint32  m_points=-99;
+  qint32  m_score=0;
+  qint32  m_fDop=0;
+  qint32  m_echoSec0=0;
+  qint32  m_fetched=0;
+  qint32  m_position;
+
+  bool    m_btxok;		//True if OK to transmit
+  bool    m_diskData;
+  bool    m_loopall;
+  bool    m_decoderBusy;
+  bool    m_txFirst;
+  bool    m_auto;
+  bool    m_restart;
+  bool    m_startAnother;
+
+  // start ft8md
+  bool    m_FT8EarlyStart;   
+  bool    m_FT8WideDxCallSearch; 
+  bool    m_skipTx1;
+  bool    m_swl; 
+  bool    m_filter;
+  bool    m_agcc;
+  bool    m_hint;
+  bool	  m_multithreadFT8; 
+  bool 	  m_houndMode;
+  bool    m_commonFT8b;
+  bool	  m_manualDecode;   
+  bool	  m_modeChanged;   
+  bool    m_bMyCallStd;
+  bool    m_bHisCallStd;
+  bool    m_multInst;
+  bool    m_bandChanged;
+  bool 	  m_lasthint; 
+  // end ft8md
+
+  bool    m_saveDecoded;
+  bool    m_saveAll;
+  bool    m_widebandDecode;
+  bool    m_call3Modified;
+  bool    m_dataAvailable;
+  bool    m_bDecoded;
+  bool    m_noSuffix;
+  bool    m_sentFirst73;
+  bool	  m_tci_mod_active;
+  bool    m_tci;
+  bool    m_tci_audio;
+  int     m_currentMessageType;
+  QString m_currentMessage;
+  int     m_lastMessageType;
+  QString m_lastMessageSent;
+  QString m_tBlankLine;
+  bool    m_bShMsgs;
+  bool    m_bSWL;
+  bool    m_uploadWSPRSpots;
+  bool    m_uploading;
+  bool    m_grid6;
+  bool    m_tuneup;
+  bool    m_bTxTime;
+  bool    m_rxDone;
+  bool    m_bSimplex; // not using split even if it is available
+  bool    m_bEchoTxOK;
+  bool    m_bTransmittedEcho;
+  bool    m_bEchoTxed;
+  bool    m_bFastMode;
+  bool    m_bFast9;
+  bool    m_bFastDecodeCalled;
+  bool    m_bDoubleClickAfterCQnnn;
+  bool    m_bRefSpec;
+  bool    m_bClearRefSpec;
+  bool    m_bTrain;
+  bool    m_bUseRef;
+  bool    m_bFastDone;
+  bool    m_bAltV;
+  bool    m_bNoMoreFiles;
+  bool    m_bDoubleClicked;
+  bool    m_bCallingCQ;
+  bool    m_autoCQ;
+  bool    m_ft2DeferredLogPending {false};   // AutoCQ: delay log/CQ restart while repeating RR73/73
+  bool    m_logAfterOwn73 {false};           // Partner already closed; send our final 73 once, then log immediately
+  QString m_autoCqLockedCall;
+  QString m_autoCqLockedGrid;
+  int     m_autoCqLockedNtx {6};
+  int     m_autoCqLockedProgress {0};
+  QQueue<QString> m_callerQueue;
+  void enqueueCaller (QString const& call, int freq, int snr = -99, float dt = 0.0f);
+  void processNextInQueue ();
+  void refreshCallerQueueDisplay ();
+  bool legacyWidgetLogicallyVisible (QWidget const * widget) const;
+  bool legacyAutoSeqEnabled () const;
+  bool legacyRespondSelectionEnabled () const;
+  bool isRecentAutoCqDuplicate (QString const& call) const;
+  void rememberRecentAutoCqAbandoned (QString const& call, Frequency dialFreq, QString const& mode);
+  void rememberRecentAutoCqWorked (QString const& call, Frequency dialFreq, QString const& mode);
+  void removeCallerFromQueue (QString const& call);
+  void capturePendingAutoLogSnapshot ();
+  void clearPendingAutoLogSnapshot ();
+  void armLateAutoLogSnapshot ();
+  void clearLateAutoLogSnapshot ();
+  void clearAutoCqPartnerLock ();
+  void updateAutoCqPartnerLock ();
+  void restoreAutoCqPartnerLock ();
+  void setAutoSpotEnabled(bool enabled, bool fromRemote = false);
+  void sendClusterAutoSpot(QString const& call,
+                           QString const& grid,
+                           Frequency dialFreq,
+                           QString const& mode,
+                           QString const& rptSent,
+                           QString const& rptRcvd);
+
+  // DX-pedition 2-slot
+  struct DXpedSlot {
+    QString   call;
+    int       freq          {0};
+    int       txStep        {0};  // 2=Tx2, 3=Tx3, 5=Tx5, 0=slot libero
+    int       missedPeriods {0};
+    int       snr           {-99};
+    float     dt            {0.0f}; // DT misurato del caller (seconds)
+    QString   rptSent;
+    QString   rptRcvd;
+    QDateTime dateTimeOn;
+    DXpedSlot() = default;
+    DXpedSlot(QString c, int f, int t, int m, int s, float d = 0.0f)
+      : call{c}, freq{f}, txStep{t}, missedPeriods{m}, snr{s}, dt{d} {}
+  };
+  bool      m_bDXpedMode      {false};
+  int       m_dxpedCQcounter  {0};   // piggyback CQ ogni N periodi TX
+  DXpedSlot m_dxpedSlots[3];
+  void dxpedFillEmptySlots ();
+  bool loadDecodiumCertificateFile (QString const& path, bool rememberPath, bool interactive);
+  void autoLoadDecodiumCertificate ();
+  void updateDecodiumCertificateStatus ();
+  void ensureUpdateCheckAction ();
+  void scheduleStartupUpdateCheck ();
+  void startUpdateCheck (bool manual);
+  void handleUpdateCheckReply (QPointer<QNetworkReply>, bool manual);
+  QUrl bestReleaseDownloadUrl (QJsonObject const& release, QString * assetName = nullptr) const;
+  void showUpdateAvailableDialog (QString const& latestVersion, QUrl const& downloadUrl,
+                                  QString const& downloadLabel, QUrl const& releaseUrl,
+                                  QString const& releaseName, QString const& releaseNotes);
+  bool shouldPromptForUpdate (QString const& latestVersion) const;
+  void dxpedLoadCertificate ();
+  void dxpedLoadSlot   (int slot);
+  int  dxpedTxSequencer();
+  void dxpedRxProcess  (QString const& call, QString const& rptRcvd = QString());
+  void dxpedAutoSequence (DecodedText const& msg);
+  void dxpedLogQSO       (int slot);
+  DXpedCertificate m_dxpedCert;
+  bool      m_bDXpedCertified {false};
+  DecodiumCertificate m_decodiumCert;
+  QString   m_decodiumCertPath;
+  QPointer<QNetworkReply> m_updateCheckReply;
+  bool      m_updateCheckInteractivePending {false};
+
+  bool    m_bAutoReply;
+  QString m_lastloggedcall; //ft8md
+  QHash<QString, QDateTime> m_recentAutoCqAbandonedUtcByKey;
+  QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
+  QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
+  bool    m_autoSpotEnabled {false};
+  bool    m_bCheckedContest;
+  bool    m_bWarnedSplit=false;
+  bool    m_bTUmsg;
+  bool    m_bBestSPArmed=false;
+  bool    m_bOK_to_chk=false;
+  bool    m_bSentReport=false;
+  bool    m_discard_decoded_hounds_this_cycle=false;     // if something changes, like frequency, discard decoded messages that may be in-flight.
+  QString m_checkCmd;             //avt 10/2/25
+  bool    m_dblClk;               //avt 10/2/25
+  QString m_dxCall;               //avt 10/2/25
+  bool    m_bOffset;              //avt 10/2/25
+  bool    m_txHaltClk;            //avt 10/2/25
+  bool    m_enableButtonNotify;   //avt 1/23/24
+  bool    m_txEnableClk;          //avt 1/28/24
+  bool    m_listenMode;           //avt 2/1/24
+  QString m_myContinent;          //avt 5/6/24
+  int     m_incrLogCount;         //avt 9/23/25
+  bool    dlQsoReqReply;          //avt 9/23/25
+  bool    dlQslReqReply;          //avt 9/23/25
+  bool    m_nonQsl;               //avt 9/23/25
+  bool    m_debugLog;             //avt 9/29/25
+  bool    m_firstLotwDl;          //avt 9/29/25
+
+  SpecOp  m_specOp;
+
+  QSaveFile sav_file;     //avt 10/2/25
+  bool url_valid;         //avt 10/2/25
+  QUrl current_url;       //avt 10/2/25 may be a redirect
+  int redirect_count;     //avt 10/2/25
+  QByteArray download_post_data_;
+  QByteArray download_content_type_;
+  bool download_strict_https_same_host_ {false};
+  QString download_expected_host_;
+  
+  enum
+    {
+      CALLING,
+      REPLYING,
+      REPORT,
+      ROGER_REPORT,
+      ROGERS,
+      SIGNOFF
+    }
+    m_QSOProgress;        //State machine counter
+
+  enum {CALL, GRID, DXCC, MULT};
+
+  int			m_ihsym;
+  int			m_nzap;
+  int			m_npts8;
+  float		m_px;
+  float   m_pxmax;
+  float		m_df3;
+  int			m_iptt0;
+  bool		m_btxok0;
+  int			m_nsendingsh;
+  double	m_onAirFreq0;
+  bool		m_first_error;
+  int     m_rigAutoRetryCount {0};
+
+  char    m_msg[100][80];
+
+  // labels in status bar
+  QLabel tx_status_label;
+  QLabel config_label;
+  QLabel mode_label;
+  QLabel last_tx_label;
+  QLabel auto_tx_label;
+  QLabel band_hopping_label;
+  QLabel ndecodes_label;
+  QLabel dt_correction_label;
+  QLabel decodium_cert_label;
+  QProgressBar progressBar;
+  QLabel watchdog_label;
+
+  QFuture<void> m_wav_future;
+  QFutureWatcher<void> m_wav_future_watcher;
+  QFutureWatcher<void> watcher3;
+  QTimer m_asyncDecodeTimer;
+  QTimer m_asyncTxGuardTimer;
+  QThread m_ft2DecodeThread;
+  decodium::ft2::FT2DecodeWorker * m_ft2DecodeWorker {nullptr};
+  quint64 m_ft2DecodeSerial {0};
+  bool m_ft2DecodePending {false};
+  int m_ft2DecodePendingUtc {0};
+  QThread m_ft4DecodeThread;
+  decodium::ft4::FT4DecodeWorker * m_ft4DecodeWorker {nullptr};
+  quint64 m_ft4DecodeSerial {0};
+  bool m_ft4DecodePending {false};
+  QThread m_fst4DecodeThread;
+  decodium::fst4::FST4DecodeWorker * m_fst4DecodeWorker {nullptr};
+  quint64 m_fst4DecodeSerial {0};
+  bool m_fst4DecodePending {false};
+  QThread m_ft8DecodeThread;
+  decodium::ft8::FT8DecodeWorker * m_ft8DecodeWorker {nullptr};
+  quint64 m_ft8DecodeSerial {0};
+  bool m_ft8DecodePending {false};
+  QThread m_jt9FastDecodeThread;
+  decodium::jt9fast::JT9FastDecodeWorker * m_jt9FastDecodeWorker {nullptr};
+  quint64 m_jt9FastDecodeSerial {0};
+  bool m_jt9FastDecodePending {false};
+  QThread m_q65DecodeThread;
+  decodium::q65::Q65DecodeWorker * m_q65DecodeWorker {nullptr};
+  quint64 m_q65DecodeSerial {0};
+  bool m_q65DecodePending {false};
+  QThread m_msk144DecodeThread;
+  decodium::msk144::MSK144DecodeWorker * m_msk144DecodeWorker {nullptr};
+  quint64 m_msk144DecodeSerial {0};
+  bool m_msk144DecodePending {false};
+  QThread m_legacyJtDecodeThread;
+  decodium::legacyjt::LegacyJtDecodeWorker * m_legacyJtDecodeWorker {nullptr};
+  quint64 m_legacyJtDecodeSerial {0};
+  bool m_legacyJtDecodePending {false};
+  QThread m_wsprDecodeThread;
+  decodium::wspr::WSPRDecodeWorker * m_wsprDecodeWorker {nullptr};
+  quint64 m_wsprDecodeSerial {0};
+  bool m_wsprDecodePending {false};
+  QQueue<QByteArray> m_decodedTransportQueue;
+  bool m_wasTransmitting {false};
+  qint64 m_asyncTxStartMs {0};
+  qint64 m_asyncRxStartMs {0};
+  bool m_asyncL2DefaultAppliedForCurrentFt2 {false};
+  short int m_asyncAudio[90000];     // ring buffer ~7.5s at 12kHz
+  int m_asyncAudioPos {0};           // write position in ring buffer
+  bool m_bAsyncDecoding {false};     // async decode in progress
+  QSet<QString> m_asyncDedupeSet;    // deduplication within sliding window
+  QDateTime m_asyncDedupeLastCleared;
+  // Unified async dedup cache: key -> strongest SNR seen in the recent window.
+  struct DedupeEntry { int snr; qint64 msec; };
+  QHash<QString, DedupeEntry> m_decodeDedup;
+  qint64 m_decodeDedupLastPurge {0};
+
+  // Async confirmation filter: weak decodes must be seen 2x before display.
+  struct PendingDecode { QString msg; int freq; int snr; qint64 msec; int count; };
+  QList<PendingDecode> m_asyncPending;
+  bool isDuplicateDecode(QString const& message);
+  bool asyncConfirmDecode(QString const& message, int freq, int snr);
+  bool m_bAsyncTxArmed {false};       // async TX ready after guard timer
+  bool m_bSpeedyContest {false};      // FT2: bypass guard/period wait for instant TX
+  bool m_bDigitalMorse {false};       // FT2: preload on click, fire on Space/TX NOW
+  bool m_bTxPreloaded {false};        // FT2 D-CW message prepared, awaiting manual fire
+  Ft2QsoMessageProfile m_ft2QsoMessageProfile {Ft2QsoMessageProfile::Full5};
+  bool m_ft2QuickPeerSignaled {false};
+  QMap<QString, qint64> m_qsoCooldown;
+  AsyncModeWidget * m_asyncVis {nullptr};
+
+  struct DecodeDedupeEntry
+  {
+    qint64 lastSeenMs {0};
+    int bestSnr {-99};
+  };
+  QHash<QString, DecodeDedupeEntry> m_decodeDedupeCache;
+  qint64 m_decodeDedupeLastPruneMs {0};
+  int m_decodeDedupeWindowMs {5000};   // keep strongest duplicate within 5 seconds
+
+  // Manual TX Timing (contest skill mode)
+  bool m_bManualTxPending {false};    // decode received, waiting for operator TX
+  QTimer m_manualTxWindowTimer;       // countdown timer for TX window
+  QTimer m_txRdyBlinkTimer;           // blink timer for FT2 D-CW TX NOW button
+  qint64 m_manualTxWindowStartMs {0}; // when the TX window opened
+  QFutureWatcher<QString> m_saveWAVWatcher;
+
+  NonInheritingProcess p3;
+
+  QProcess p2;
+  QProcess p4;
+  QProcess *upLotw;    //avt 9/23/25
+
+  WSPRNet *wsprNet;
+
+  QTimer m_guiTimer;
+  QTimer m_decoderWatchdog;
+  QTimer stopWRTimer;               //Wait & Reply
+  QTimer stopWCTimer;               //Wait & Call
+  QTimer ptt1Timer;                 //StartTx delay
+  QTimer ptt0Timer;                 //StopTx delay
+  QTimer logQSOTimer;
+  QTimer killFileTimer;
+  QTimer tuneButtonTimer;
+  QTimer uploadTimer;
+  QTimer tuneATU_Timer;
+  QTimer TxAgainTimer;
+  QTimer minuteTimer;
+  QTimer splashTimer;
+  QTimer p1Timer;
+  QTimer externalCtrlTimer;     //avt 12/16/21
+
+  QString m_path;
+  QString m_baseCall;
+  QString m_hisCall;
+  QString m_hisGrid;
+  bool m_pendingAutoLogValid {false};
+  QString m_pendingAutoLogCall;
+  QString m_pendingAutoLogGrid;
+  QString m_pendingAutoLogRptSent;
+  QString m_pendingAutoLogRptRcvd;
+  QString m_pendingAutoLogXSent;
+  QString m_pendingAutoLogXRcvd;
+  QDateTime m_pendingAutoLogOn;
+  Radio::Frequency m_pendingAutoLogDialFreq {0};
+  bool m_lateAutoLogValid {false};
+  QString m_lateAutoLogCall;
+  QString m_lateAutoLogGrid;
+  QString m_lateAutoLogRptSent;
+  QString m_lateAutoLogRptRcvd;
+  QString m_lateAutoLogXSent;
+  QString m_lateAutoLogXRcvd;
+  QDateTime m_lateAutoLogOn;
+  Radio::Frequency m_lateAutoLogDialFreq {0};
+  QDateTime m_lateAutoLogExpires;
+  QString m_appDir;
+  QString m_cqStr;
+  QString m_palette;
+  QString m_dateTime;
+  QString m_mode;
+  QString m_modeTx;//ft8md
+  bool m_startupModeAutoPending {true};
+  qint64 m_startupModeAutoUntilMs {0};
+  QString m_fnameWE;            // save path without extension
+  QString m_rpt;
+  QString m_nextRpt;
+  QString m_rptSent;
+  QString m_rptRcvd;
+  QString m_qsoStart;
+  QString m_qsoStop;
+  QStringList m_wsprDecodeArguments;
+  QString m_msgSent0;
+  QString m_calls;
+  QString m_CQtype;
+  QString m_opCall;
+  QString m_houndCallers;        //Sorted list of Hound callers
+  QString m_fm0;
+  QString m_fm1;
+  QString m_xSent;               //Contest exchange sent
+  QString m_xRcvd;               //Contest exchange received
+  QString m_currentBand;
+  QString m_currentBandPeriod;
+  QString m_nextCall;
+  QString m_nextGrid;
+  QString m_fileDateTime;
+  QString m_inQSOwith;
+  QString m_BestCQpriority;
+  QString m_deCall;
+  QString m_deGrid;
+  QString m_freeTextMsg;
+  QString m_freeTextMsg0;
+  QString m_ready2call[50];
+  QString m_callers[50];
+
+  QSet<QString> m_pfx;
+  QSet<QString> m_sfx;
+
+  struct FoxQSO       //Everything we need to know about QSOs in progress (or recently logged).
+  {
+    QString grid;       //Hound's declared locator
+    QString sent;       //Report sent to Hound
+    QString rcvd;       //Report received from Hound
+    qint32  ncall;      //Number of times report sent to Hound
+    qint32  nRR73;      //Number of times RR73 sent to Hound
+    qint32  tFoxRrpt;   //m_tFoxTx (Fox Tx cycle counter) when R+rpt was received from Hound
+    qint32  tFoxTxRR73; //m_tFoxTx when RR73 was sent to Hound
+  };
+
+  QMap<QString,FoxQSO> m_foxQSO;       //Key = HoundCall, value = parameters for QSO in progress
+  QMap<QString,QString> m_loggedByFox; //Key = HoundCall, value = logged band
+  QMap<QString,qint32> m_annotated_callsigns;  //Key = HoundCall, value = provided by api call
+
+  struct FixupQSO       //Info for fixing Fox's log from file "FoxQSO.txt"
+  {
+    QString grid;       //Hound's declared locator
+    QString sent;       //Report sent to Hound
+    QString rcvd;       //Report received from Hound
+    QDateTime QSO_time;
+  };
+  QMap<QString,FixupQSO> m_fixupQSO;       //Key = HoundCall, value = info for QSO in progress
+
+  struct ActiveCall
+  {
+    QString grid4;
+    QString bands;
+    qint32 az;
+    qint32 points;
+  };
+  QMap<QString,ActiveCall> m_activeCall;   //Key = callsign, value = grid4, az, points for ARRL_DIGI
+
+  struct EMECall
+  {
+    QString grid4;
+    double frx;
+    double fsked;
+    qint32 nsnr;
+    qint32 t;
+    bool worked;
+    bool ready2call;
+    QString submode;
+  };
+  QMap<QString,EMECall> m_EMECall;
+
+  QMap<QString,bool> m_EMEworked;
+
+  struct RecentCall
+  {
+    qint64 dialFreq;
+    qint32 audioFreq;
+    qint32 snr;
+    qint32 decodeTime;
+    bool   txEven;
+    bool   ready2call;
+  };
+  QMap<QString,RecentCall> m_recentCall;   //Key = callsign, value = snr, dialFreq, audioFreq, decodeTime
+  struct ARRL_logged
+  {
+    QDateTime time;
+    QString band;
+    qint32 points;
+  };
+  QList<ARRL_logged> m_arrl_log;
+
+  QQueue<QString> m_houndQueue;        //Selected Hounds available for starting a QSO
+  QQueue<QString> m_foxQSOinProgress;  //QSOs in progress: Fox has sent a report
+  QQueue<qint64>  m_foxRateQueue;
+
+  QDateTime m_dateTimeQSOOn;
+  QDateTime m_dateTimeLastTX;
+  QDateTime m_dateTimeSentTx3;
+  QDateTime m_dateTimeRcvdRR73;
+  QDateTime m_dateTimeBestSP;
+  QDateTime m_dateTimeSeqStart;        //Nominal start time of Rx sequence about to be decoded
+
+  QString m_QSOText;
+  unsigned m_downSampleFactor;
+  QThread::Priority m_audioThreadPriority;
+  bool m_bandEdited;
+  bool m_splitMode;
+  bool m_monitoring=false;
+  bool m_echoRunning=false;
+  bool m_tx_when_ready;
+  bool m_transmitting;
+  bool m_tune;
+  bool m_tx_watchdog;           // true when watchdog triggered
+  bool m_block_pwr_tooltip;
+  bool m_PwrBandSetOK;
+  bool m_bDisplayedOnce;
+  Frequency m_lastMonitoredFrequency;
+  double m_toneSpacing;
+  int m_firstDecode;
+  QProgressDialog m_optimizingProgress;
+  QTimer m_heartbeat;
+  MessageClient * m_messageClient;
+  QPointer<RemoteCommandServer> m_remoteCommandServer;
+  QCheckBox * m_autoSpotCheckBox {nullptr};
+  bool m_remoteWaterfallStreamingEnabled {false};
+  QString m_mapLastClickCall;
+  qint64 m_mapLastClickMs {0};
+  QString m_pendingAsyncL2MessageLine;
+  QString m_pendingAsyncL2Call;
+  Qt::KeyboardModifiers m_pendingAsyncL2Modifiers {Qt::NoModifier};
+  bool m_pendingAsyncL2FromRxWindow {false};
+  QString m_asyncL2PinnedCall;
+  QDateTime m_asyncL2PinnedUntil;
+  PSKReporter m_psk_Reporter;
+  DisplayManual m_manual;
+  QHash<QString, QVariant> m_pwrBandTxMemory; // Remembers power level by band
+  QHash<QString, QVariant> m_pwrBandTuneMemory; // Remembers power level by band for tuning
+  QByteArray m_geometryNoControls;
+  QVector<double> m_phaseEqCoefficients;
+  bool m_block_udp_status_updates;
+  bool m_useDarkStyle;
+  bool m_externalCtrl;         //avt  10/1/25
+  bool m_autoButtonState;     //avt 10/2/25
+
+  //---- DT Display (no correction applied) ----
+  QVector<double> m_dtSamples;        // DT values collected in current period
+  double m_dtCorrection_ms {0.0};     // accumulated correction (display only)
+  double m_dtSmoothFactor {0.3};      // EMA smoothing factor
+  int m_dtMinSamples {3};             // minimum decodes before computing
+  bool m_dtFeedbackEnabled {true};    // enables DT collection & display
+  int m_dtLastSampleCount {0};        // sample count for display
+
+  qint64 m_decodeStartMs {0};         // timestamp when decode was triggered
+  double m_lastDecodeLatencyMs {0.0}; // last decode cycle latency
+  double m_avgDtValue {0.0};          // EMA of DT values across periods
+  int m_totalDecodesForDt {0};        // total decodes used for DT calculation
+  int m_ntpDtDivergenceCount {0};     // consecutive NTP/DT divergence periods
+
+  // NTP Time Synchronization
+  NtpClient *m_ntpClient {nullptr};
+  double m_ntpOffset_ms {0.0};
+  bool m_ntpEnabled {false};
+  QString m_ntpCustomServer;
+  QCheckBox ntp_checkbox;
+  QLineEdit ntp_server_edit;
+  QLabel ntp_status_label;
+
+  //---------------------------------------------------- private functions
+  void readSettings();
+  void set_application_font (QFont const&);
+  void setDecodedTextFont (QFont const&);
+  void writeSettings();
+  void createStatusBar();
+  void updateStatusBar();
+  void genStdMsgs(QString rpt, bool unconditional = false);
+  void genCQMsg();
+  void clearDX ();
+  void lookup();
+  void ba2msg(QByteArray ba, char* message);
+  void msgtype(QString t, QLineEdit* tx);
+  void stub();
+  void statusChanged();
+  void fixStop();
+  bool shortList(QString callsign) const;
+  void transmit (double snr = 99.);
+  void rigFailure (QString const& reason, bool allowAutoRetry = false);
+  void pskSetLocal ();
+  void pskPost(DecodedText const& decodedtext);
+  void displayDialFrequency ();
+  void transmitDisplay (bool);
+  void processMessage(DecodedText const& message, Qt::KeyboardModifiers = Qt::NoModifier);
+  void replyToCQ (QTime, qint32 snr, float delta_time, quint32 delta_frequency, QString const& mode, QString const& message_text, bool low_confidence, quint8 modifiers);
+  void locationChange(QString const& location);
+  void updateWorldMapFromDecode(DecodedText const& decoded_text);
+  void replayDecodes ();
+  void postDecode (bool is_new, DecodedText decoded_text);  //avt 12/5/20
+  void enqueueDecode (DecodedText decoded_text, bool modifier, bool autoGen, bool isDx, bool isNewCallOnBand, bool isNewCall, bool isNewCountryOnBand, bool isNewCountry, QString country, QString continent, int az, int dist);   //avt 5/7/24
+  void postWSPRDecode (bool is_new, QStringList message_parts);
+  void enable_DXCC_entity (bool on);
+  void switch_mode (Mode);
+  void WSPR_scheduling ();
+  void freqCalStep();
+  void setRig (Frequency = 0);  // zero frequency means no change
+  void WSPR_history(Frequency dialFreq, int ndecodes);
+  QString beacon_start_time (int n = 0);
+  QString WSPR_message();
+  void fast_config(bool b);
+  void CQTxFreq();
+  void useNextCall();
+  void abortQSO();
+  void updateRate();
+  void write_all(QString txRx, QString message);
+  bool isWorked(int itype, QString key, float fMHz=0, QString="");
+
+  QString save_wave_file (QString const& name
+                          , short const * data
+                          , int samples
+                          , QString const& my_callsign
+                          , QString const& my_grid
+                          , QString const& mode
+                          , qint32 sub_mode
+                          , Frequency frequency
+                          , QString const& his_call
+                          , QString const& his_grid) const;
+  void hound_reply ();
+  QString sortHoundCalls(QString t, int isort, int max_dB);
+  void rm_tb4(QString houndCall);
+  void read_wav_file (QString const& fname);
+  void decodeDone ();
+  void applyDtFeedback ();
+  bool subProcessFailed (QProcess *, int exit_code, QProcess::ExitStatus);
+  void subProcessError (QProcess *, QProcess::ProcessError);
+  void statusUpdate () const;
+  void update_watchdog_label ();
+  void invalidate_frequencies_filter ();
+  void on_the_minute ();
+  void add_child_to_event_filter (QObject *);
+  void remove_child_from_event_filter (QObject *);
+  void setup_status_bar (bool vhf);
+  void tx_watchdog (bool triggered);
+  qint64  nWidgets(QString t);
+  void displayWidgets(qint64 n);
+  QChar current_submode () const; // returns QChar {0} if submode is not appropriate
+  void write_transmit_entry (QString const& file_name);
+  void selectHound(QString t, bool bTopQueue);
+  void removeHoundFromCallingList(QString callsign);
+  void houndCallers();
+  void updateFoxQSOsInProgressDisplay();
+  void foxQueueTopCallCommand();
+  void foxRxSequencer(QString msg, QString houndCall, QString rptRcvd);
+  void foxTxSequencer();
+  void foxGenWaveform(int i,QString fm);
+  void writeFoxQSO (QString const& msg);
+  void update_foxLogWindow_rate();
+  bool is77BitMode () const;
+  void cease_auto_Tx_after_QSO ();
+  Q_SLOT void ARRL_Digi_Display();
+  void ARRL_Digi_Update(DecodedText dt);
+  void activeWorked(QString call, QString band);
+  void read_log();
+  void refreshPileupList();
+  QString userAgent();
+  void handleVerifyMsg(int status, QDateTime ts, QString callsign, QString code, unsigned int hz, QString const &response);
+  void writeFoxTxMsgs();
+#ifdef FOX_OTP
+  QString foxOTPcode();
+#endif
+  void process_autoButton(bool checked); //avt 1/23/24
+  void setMyContinent();    //avt 5/6/24updateLotwCtrls()
+  bool is_externalCtrlMode() const;     //avt 12/5/20
+  void initExternalCtrl();     //avt 12/5/20
+  void externalCtrlDisconnected();  //avt 12/16/21
+  void debugToFile(QString str);        //avt 12/6/23
+  void debugAutoCq(QString const& event, QString const& details = QString {});
+  bool ft2AutoSeqEnabled() const;
+  void setCallPriority(QString call, int txFirst);   //avt 12/7/23
+  void download (QUrl);     //avt 9/23/25
+  void reply_finished (QPointer<QNetworkReply>);     //avt 9/23/25
+  void download_store (QPointer<QNetworkReply>);     //avt 9/23/25
+  void download_abort (QPointer<QNetworkReply>);     //avt 9/23/25
+  void load_finished (bool);     //avt 9/23/25
+  void uploadLotwFinished(int, QProcess::ExitStatus);      //avt 9/23/25
+  void lotwError (QProcess *, QProcess::ProcessError);      //avt 9/23/25
+  void cleanupAdiBackupFiles();      //avt 9/23/25
+  void downloadQslOnly();      //avt 9/23/25
+  void updateLotwCtrls();      //avt 9/23/25
+  void logIncremental(QString, QString);      //avt 9/25/25
+  void setIncrLogCount();    //avt 9/25/25
+};
+
+extern void getDev(int* numDevices,char hostAPI_DeviceName[][50],
+                   int minChan[], int maxChan[],
+                   int minSpeed[], int maxSpeed[]);
+extern int next_tx_state(int pctx);
+
+#endif // MAINWINDOW_H

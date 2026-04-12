@@ -1,0 +1,37 @@
+_WSJT-X_ can be configured to issue audible alerts when messages with
+specified content are decoded. This feature requires computer access
+to at least two audio output devices: one for transmitted audio, and a
+different one for audible alerts. The device for transmitted audio is
+selected on the *Audio* tab; alerts are always played on the *Default*
+audio device, most commonly the loudspeaker of your computer.  To
+activate audio alerts, check any desired boxes on the *Alerts* menu
+and click the button *Enable Audio Alerts*.
+
+
+image::settings-alerts.png[align="center",alt="Settings Alerts"]
+
+
+Categories above the line require checking the box *Show DXCC, grid
+and worked before status* in the *Display* section of the *File |
+Settings | General* tab. To identify what triggered one of these
+alerts, ensure that corresponding categories in the *File | Settings |
+Colors* tab are selected. Use the checkboxes *Highlight DX Call in
+message* and *Highlight DX Grid in message* in the *Display* section
+of *File | Settings | General* to help identify what triggered an
+alert for *DX Call or DX Grid in message*.
+
+TIP: If a callsign appears in the Ignore list or falls in a checked
+*Ignore ...* category on the *Filters* menu, no alert sounds will be
+played unless you have checked the *BP* (Bypass) checkbox. This
+feature can be used to mute the alerts for a certain callsign with one
+click on the *Ignore* button (just below the *DX Grid* box on the main
+window). To reset everything and reactivate the alert, click on *File
+| Erase Ignore List* or uncheck the *Filters | Ignore ...* item.
+
+IMPORTANT: Before using of audio alerts, make sure they are played
+only on your local speaker and _not_ sent to the transmitter!  You can
+check by right-clicking on the *Band Hopping* button in Tab 3, as
+shown below. A test message will then be played.
+
+image::testalerts.png[align="center",alt="testalerts"]
+

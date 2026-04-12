@@ -1,0 +1,119 @@
+task:
+  name: Build macOS x86_64
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-ventura-xcode:15.1
+  timeout_in: 90m
+
+  env:
+    HOMEBREW_NO_AUTO_UPDATE: 1
+    HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+  install_deps_script:
+    - brew install qt@5 gcc fftw hamlib libusb boost pkg-config
+    # Ensure gfortran is in PATH
+    - GCC_PREFIX=$(brew --prefix gcc)
+    - GFORTRAN=$(ls ${GCC_PREFIX}/bin/gfortran-* 2>/dev/null | head -1)
+    - if [ -n "$GFORTRAN" ]; then sudo ln -sf "$GFORTRAN" /usr/local/bin/gfortran; fi
+    - gfortran --version
+    - echo "Qt5 prefix:"
+    - brew --prefix qt@5
+
+  patch_sources_script:
+    # Hamlib compat: rig_get_conf2 -> rig_get_conf (for Hamlib < 4.5)
+    - |
+      sed -i '' \
+        's/rig_get_conf2 (rig_.data (), token, value.data (),value.length())/rig_get_conf (rig_.data (), token, value.data ())/' \
+        Transceiver/HamlibTransceiver.cpp
+      echo "Patched HamlibTransceiver.cpp"
+    # PSKReporter::setLocalStation: add 5th argument
+    - |
+      sed -i '' \
+        's/m_psk_Reporter.setLocalStation(m_config.my_callsign (), m_config.my_grid (), antenna_description, rig_information);/m_psk_Reporter.setLocalStation(m_config.my_callsign (), m_config.my_grid (), antenna_description, rig_information, QString{"Decodium 3 FT2 v" + version() + " " + m_revision}.simplified());/' \
+        widgets/mainwindow.cpp
+      echo "Patched mainwindow.cpp"
+
+  configure_script:
+    - QT5_PREFIX=$(brew --prefix qt@5)
+    - |
+      cmake -B build -G "Unix Makefiles" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="${QT5_PREFIX}" \
+        -DWSJT_GENERATE_DOCS=OFF \
+        -DWSJT_SKIP_MANPAGES=ON \
+        -DWSJT_BUILD_UTILS=OFF \
+        -DCMAKE_INSTALL_PREFIX=/tmp/wsjtx_install
+
+  build_fortran_script:
+    - make -C build -j1 wsjt_fort wsjt_fort_omp wsjt_cxx
+
+  build_all_script:
+    - make -C build -j$(sysctl -n hw.ncpu)
+
+  install_script:
+    - make -C build install
+
+  package_script:
+    - |
+      APP_DIR=/tmp/wsjtx_install/wsjtx.app/Contents
+      DIST_DIR=/tmp/wsjtx_dist_macos
+      mkdir -p ${DIST_DIR}/bin ${DIST_DIR}/share
+
+      # Copy executables
+      for exe in wsjtx jt9 wsprd message_aggregator udp_daemon wsjtx_app_version fmtave fcal fmeasure; do
+        if [ -f ${APP_DIR}/MacOS/${exe} ]; then
+          cp ${APP_DIR}/MacOS/${exe} ${DIST_DIR}/bin/
+          strip ${DIST_DIR}/bin/${exe} 2>/dev/null || true
+          echo "Packed: ${exe}"
+        fi
+      done
+
+      # Copy rigctl utilities
+      for exe in rigctl-wsjtx rigctld-wsjtx rigctlcom-wsjtx; do
+        if [ -f ${APP_DIR}/MacOS/${exe} ]; then
+          cp ${APP_DIR}/MacOS/${exe} ${DIST_DIR}/bin/
+          strip ${DIST_DIR}/bin/${exe} 2>/dev/null || true
+          echo "Packed: ${exe}"
+        fi
+      done
+
+      # Copy data files
+      [ -f ${APP_DIR}/MacOS/ALLCALL7.TXT ] && cp ${APP_DIR}/MacOS/ALLCALL7.TXT ${DIST_DIR}/bin/
+      [ -d ${APP_DIR}/MacOS/sounds ] && cp -r ${APP_DIR}/MacOS/sounds ${DIST_DIR}/bin/
+      [ -d ${APP_DIR}/Resources ] && cp -r ${APP_DIR}/Resources/* ${DIST_DIR}/share/ 2>/dev/null || true
+
+      # Launcher script
+      cat > ${DIST_DIR}/wsjtx.sh << 'LAUNCHER'
+      #!/bin/bash
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      export PATH="${SCRIPT_DIR}/bin:${PATH}"
+      export DYLD_LIBRARY_PATH="${SCRIPT_DIR}/lib:${DYLD_LIBRARY_PATH}"
+      exec "${SCRIPT_DIR}/bin/wsjtx" "$@"
+      LAUNCHER
+      chmod +x ${DIST_DIR}/wsjtx.sh
+
+      # Runtime dependency installer
+      cat > ${DIST_DIR}/install-deps.sh << 'DEPS'
+      #!/bin/bash
+      echo "Installing WSJTX 3.0 runtime dependencies via Homebrew..."
+      brew install qt@5 fftw hamlib libusb boost gcc
+      echo ""
+      echo "Dependencies installed. Run ./wsjtx.sh to start WSJTX 3.0"
+      DEPS
+      chmod +x ${DIST_DIR}/install-deps.sh
+
+      # Create tarball
+      cd /tmp
+      tar czf decodium3_ft2_v3.0_macos_x86_64.tar.gz wsjtx_dist_macos/
+
+      echo "=== Package created ==="
+      ls -lh decodium3_ft2_v3.0_macos_x86_64.tar.gz
+
+  verify_script:
+    - file /tmp/wsjtx_dist_macos/bin/wsjtx || true
+    - file /tmp/wsjtx_dist_macos/bin/jt9 || true
+    - ls -lh /tmp/wsjtx_dist_macos/bin/
+    - tar tzf /tmp/decodium3_ft2_v3.0_macos_x86_64.tar.gz | head -30
+
+  tarball_artifacts:
+    path: /tmp/decodium3_ft2_v3.0_macos_x86_64.tar.gz
+    type: application/gzip

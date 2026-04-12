@@ -1,0 +1,39 @@
+// Status=edited
+
+Controls used for messages to be transmitted appear on *Tab 1*, which
+provides six fields for message entry.  Pre-formatted messages for the
+standard minimal QSO are generated when you click *Generate Std Msgs*
+or double-click on a received message in one of the decoded text
+windows.
+
+//.Traditional Message Menu
+image::traditional-msg-box.png[align="center",alt="Traditional Message Menu"]
+
+* Select the next message to be transmitted (at the start of your next
+Tx sequence) by clicking the radio button in the *Next* column.
+
+* To change to a specified Tx message immediately during a
+transmission, click a rectangular button in the *Now* column.
+Changing a Tx message in mid-stream slightly reduces the chance of
+a correct decode, but it is usually OK if done in the first 10-20% of a transmission.
+
+* All six Tx message fields are editable.  You can modify an
+automatically generated message or enter a desired message, keeping in
+mind the limits on message content.  See <<PROTOCOLS,Protocol
+Specifications>> for details.
+
+* Click the pull-down arrow for message #5 to select one of the
+stored messages entered on the *Files | Settings | Tx Macros* tab.
+Pressing *Enter* on a modified message #5 automatically adds that
+message to the stored macros.
+
+* In some circumstances it may be desirable to make your QSOs as short
+as possible.  To configure the program to start contacts with message
+#2, disable message #1 by double-clicking its radio-button in the
+*Next* column or *Tx 1* button in the *Now* column.  Similarly, to
+send RR73 rather than RRR for message #4, double-click one of its
+buttons.
+
+TIP: During a transmission the actual message being sent is displayed
+in the first box of the status bar (bottom-left corner of the main
+screen).

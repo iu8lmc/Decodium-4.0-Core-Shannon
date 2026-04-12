@@ -1,0 +1,81 @@
+// Status=review
+
+*_WSJT-X_* is an open source computer program designed to facilitate
+basic amateur radio communication using very weak signals. The first
+four letters in the program name stand for "`**W**eak **S**ignal
+communication by K1**JT**,`" while the suffix "`*-X*`" indicates that
+_WSJT-X_ started as an extended branch of an earlier program, _WSJT_,
+which was first released by Joe Taylor, K1JT, in 2001.  Bill
+Somerville, G4WJS, Steve Franke, K9AN, and Nico Palermo, IV3NWV, have
+been major contributors to development of _WSJT-X_ since 2013, 2015,
+and 2016, respectively. Bill Somerville died unexpectedly in December
+2021; Uwe Risse, DG2YCB, joined the core development team soon
+afterward, followed by Brian Moran, N9ADG in 2022, John Nelson, G4KLA
+and Charlie Suckling, DL3WDG in 2024, and Roger Rehr, W3SZ, in
+2025. Over the years many other hams have contributed to _WSJT-X_
+development in more limited ways. We are extremely grateful for all of
+these contributions.
+
+_WSJT-X_ provides flexible rig control for nearly all modern radios
+used by amateurs and a wide variety of special aids such as automatic
+Doppler tracking for Earth-Moon-Earth (EME) QSOs and lunar-Echo
+testing.  The program analyzes received passbands up to 5 kHz wide and
+runs equally well on Windows, Macintosh, and Linux systems.
+
+*_WSJT-X Improved_* was developed by Uwe Risse, DG2YCB, starting in
+2020, and since 2021 it has evolved cooperatively with _WSJT-X_.  The
+_Improved_ versions build on the _WSJT-X_ code base and offer three
+different arrangements of main-window controls as well as new
+features for enhanced operational functionality.  Compatibility
+between _WSJT-X Improved_ and standard _WSJT-X_ has been carefully
+maintained, so that user transitions between the two programs are
+straightforward. Optional settings, station logs, and the like are
+consistently preserved and used by both program versions. Innovations
+from _WSJT-X Improved_ have been ported back into _WSJT-X_ at various
+times; with program release 3.0, all features of _WSJT-X_ and _WSJT-X
+Improved_ have been fully merged. Indeed, _WSJT-X 3.0_ and the _WSJT-X
+Improved 3.0_ version with original user interface are now
+identical. This _WSJT-X User Guide_ applies equally to both programs,
+and we use the _Improved_ label only when necessary to make clear
+distinctions between the programs.
+
+Development of both _WSJT-X_ and _WSJT-X Improved_ will continue. The
+_Improved_ version provides a familiar platform for trying out and
+optimizing possible new features. Updates and new releases of _WSJT-X
+Improved_ will be more frequent than those for standard _WSJT-X_. If
+you are interested in trying and using the very latest features you
+should watch for releases of _WSJT-X Improved_. Successful innovations
+will be incorporated in _WSJT-X_.
+
+*Version Numbers* for our programs have major, minor, and patch
+numbers separated by periods: for example, _WSJT-X 2.7.0_ or _WSJT-X
+Improved 2.7.0_. Temporary release candidates are sometimes made in
+advance of a new general-availability (GA) release, in order to obtain
+user feedback. Release candidates are given version labels such as
+2.7.0-rc1, 2.7.0-rc2, etc., leading up to the general availability
+(GA) release of version 2.7.0. Release candidates should be used only
+during a defined testing period, and they carry an implicit obligation
+to provide feedback to the program developers. Release candidates
+should not be used on the air after a GA release with the same number.
+
+*_MAP65_* and *_QMAP_* are companion programs written by K1JT to
+facilitate Earth-Moon-Earth (EME, or "Moonbounce") communication with
+digital protocols developed for _WSJT_ and _WSJT-X_. When used with
+radio-frequency hardware providing coherent signal channels for two
+orthogonal polarizations, _MAP65_ can yield automatic
+polarization-matched reception for every JT65 or Q65 signal in a 90
+kHz sub-band. _QMAP_ uses a single polarization channel and only the
+Q65 mode, also covering a 90 kHz sub-band. It works cooperatively with
+_WSJT-X_ to provide automatic Doppler compensation and other features
+important for EME, especially on 1296 MHz and higher amateur bands.
+These programs are installed automatically along with _WSJT-X_
+(but _MAP65_ only on the Windows platform).
+
+*_Hamlib_* is an independent, open-source software library that
+provides a consistent Application Programming Interface (API) for
+computer control of radios used by hams. _Hamlib_ is essential to all
+features of _WSJT-X_ that control your radio, and the latest stable
+version is included with all of our program releases. Like _WSJT-X_,
+_Hamlib_ is under constant development by a group of volunteers.  When
+necessary -- perhaps when you acquire a very new radio -- you can
+update your active _Hamlib_ version from within _WSJT-X_.

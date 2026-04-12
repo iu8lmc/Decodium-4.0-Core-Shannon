@@ -1,0 +1,27 @@
+If *Show distance/azimuth with grid* is checked, decoded messages
+including the transmitting station's locator will be displayed with
+the calculated distance and great-circle azimuth from your
+location.
+
+image::showgrid1.png[align="center",alt="showgrid1"]
+
+Check *Align DXCC / distance / azimuth* to keep DXCC names or
+principal prefixes as well as distance and azimuth in an aligned table
+form. Two spin boxes allow further configuration of your preferred
+layout: the first sets the number of spaces between the decoded
+message and the DXCC name; the second sets the number of spaces
+between the DXCC and the distance/azimuth field.
+
+The following screen shot shows an example *Band Activity* pane with
+*Show distance in messages with grid*, *Show azimuth in messages with
+grid* and *Align DXCC / distance / azimuth* enabled.
+
+image::showgrid2.png[align="center",alt="showgrid2"]
+
+US States can be optionally appended to the decoded messages.  Check
+*Map Grid locator to U.S. State* to do this for CQ calls only, or
+*Show U.S. States in messages with grid* to include all messages
+containing a grid locator. Where a grid locator's region overlaps more
+than one State, all possibilities are presented.
+
+image::USstates.png[align="center",alt="USstates"]

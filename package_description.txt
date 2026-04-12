@@ -1,0 +1,20 @@
+Decodium is a weak-signal amateur radio application fork maintained by
+9H1SR for macOS and Linux. It is based on Decodium 3 / WSJT-X lineage
+and is packaged in this repository for Apple Silicon, Intel macOS,
+Linux x86_64 AppImage, and Linux aarch64 AppImage users.
+.
+The fork focuses on practical FT2/FT4 operating improvements while
+continuing a broader native C++ migration of the legacy JT stack. The
+current release line includes promoted JT65 runtime work, expanded JT9
+fast/wide native decoder building blocks, fixes for non-standard or
+special-event callsign replies, and portability hardening for GCC 14,
+Ubuntu, and Debian Trixie ARM64 build environments.
+.
+Decodium provides wideband spectral displays, CAT control for modern
+radios, online integrations such as PSK Reporter and DX services, and
+release packaging tuned for macOS and Linux users. The repository also
+contains multilingual release notes and startup guidance for macOS
+quarantine handling and Linux AppImage execution.
+.
+Be sure to read the release notes and documentation shipped with the
+fork before deploying it in station use.

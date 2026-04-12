@@ -1,0 +1,16 @@
+// Status=review
+
+[[DOWNLOAD_SAMPLES]]
+=== Download Samples
+
+The following steps will download sample audio Wave files that were
+originally recorded by _WSJT-X_. These files can be opened and
+processed at another time, to partially simulate real-time operation.
+ 
+- Select *Download samples...* from the *Help* menu.
+
+- Download some or all of the available sample files using checkboxes
+on the screen shown below.  For this tutorial you will need at least
+the FT8 files.
+
+image::download_samples.png[width=400,align="center",alt="Download Samples"]
