@@ -152,7 +152,7 @@ jobs:
       - name: Build Decodium
         run: |
           set -euo pipefail
-          cmake --build build-windows --target decodium --parallel "$(nproc)"
+          cmake --build build-windows --target decodium_app --parallel "$(nproc)"
 
       - name: Prepare portable bundle
         run: |
