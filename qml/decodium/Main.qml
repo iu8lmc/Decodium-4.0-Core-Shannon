@@ -2183,7 +2183,7 @@ ApplicationWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             rigControlMinimized = false
-                            rigControlDialog.open()
+                            settingsDialog.openTab(1)
                         }
                     }
 
@@ -4254,7 +4254,7 @@ ApplicationWindow {
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
-                    rigControlDialog.open()
+                    settingsDialog.openTab(1)
                 }
             }
 
@@ -4410,7 +4410,7 @@ ApplicationWindow {
             timeSyncPanelVisible = true
         }
         function onCatSettingsRequested() {
-            rigControlDialog.open()
+            settingsDialog.openTab(1)
         }
         function onRigErrorRaised(title, summary, details) {
             if (bridge.catBackend === "native") return

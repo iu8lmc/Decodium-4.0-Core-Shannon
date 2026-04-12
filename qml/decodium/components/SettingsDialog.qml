@@ -32,6 +32,11 @@ Dialog {
 
     onAboutToShow: ensureInitialPosition()
 
+    function openTab(index) {
+        tabStack.currentIndex = index
+        open()
+    }
+
     // ── Theme colors ─────────────────────────────────────────────────────
     property color bgDeep:        bridge.themeManager.bgDeep
     property color bgMedium:      bridge.themeManager.bgMedium
