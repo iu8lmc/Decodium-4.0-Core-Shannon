@@ -1,0 +1,6 @@
+.gitattributes	export-ignore
+/samples	export-ignore
+/lib/fsk4hf	export-ignore
+/lib/fsk4hf	export-ignore
+/robots		export-ignore
+/plots		export-ignore

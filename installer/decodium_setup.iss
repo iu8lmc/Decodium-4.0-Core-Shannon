@@ -5,7 +5,7 @@
   #define AppName "Decodium"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.2"
+  #define AppVersion "1.0.4"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "IU8LMC"
@@ -61,50 +61,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Eseguibile principale
-Source: "{#BuildDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; Copia l'intero bundle portabile già preparato da windeployqt.
+; In questo modo installer e portable restano sempre allineati 1:1.
+Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Tutte le DLL nella root del build dir (Qt6, MinGW runtime, lib*)
-Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
-
-; File dati principali
-Source: "{#BuildDir}\cty.dat"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#BuildDir}\ALLCALL7.TXT"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; File licenza fuori dal bundle
 Source: "{#SourceRoot}\COPYING"; DestDir: "{app}"; DestName: "COPYING.txt"; Flags: ignoreversion skipifsourcedoesntexist
-
-; Plugin Qt — platforms (qwindows.dll, ecc.)
-Source: "{#BuildDir}\platforms\*"; DestDir: "{app}\platforms"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Plugin Qt — stili
-Source: "{#BuildDir}\styles\*"; DestDir: "{app}\styles"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Plugin Qt — imageformats
-Source: "{#BuildDir}\imageformats\*"; DestDir: "{app}\imageformats"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Plugin Qt — tls (OpenSSL)
-Source: "{#BuildDir}\tls\*"; DestDir: "{app}\tls"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Plugin Qt — networkinformation
-Source: "{#BuildDir}\networkinformation\*"; DestDir: "{app}\networkinformation"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Plugin Qt — generic
-Source: "{#BuildDir}\generic\*"; DestDir: "{app}\generic"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Plugin Qt — qmltooling
-Source: "{#BuildDir}\qmltooling\*"; DestDir: "{app}\qmltooling"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Moduli QML (mshv, QtQuick, QtQml, ecc.)
-Source: "{#BuildDir}\qml\*"; DestDir: "{app}\qml"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; Qt QML modules folder
-Source: "{#BuildDir}\Qt\*"; DestDir: "{app}\Qt"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-
-; Traduzioni
-Source: "{#BuildDir}\*.qm"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-
-; Risorse runtime
-Source: "{#BuildDir}\sounds\*"; DestDir: "{app}\sounds"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-Source: "{#BuildDir}\Palettes\*"; DestDir: "{app}\Palettes"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"
