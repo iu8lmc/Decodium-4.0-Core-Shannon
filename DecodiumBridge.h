@@ -51,6 +51,8 @@ namespace decodium {
   namespace fst4    { class FST4DecodeWorker;      struct DecodeRequest; }
 }
 
+class RemoteCommandServer;
+
 class DecodiumBridge : public QObject
 {
     Q_OBJECT
@@ -663,6 +665,8 @@ public slots:
     // Settings
     Q_INVOKABLE void saveSettings();
     Q_INVOKABLE void loadSettings();
+    Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
+    Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
     Q_INVOKABLE QVariantMap loadWindowState(const QString& key) const;
     Q_INVOKABLE void saveWindowState(const QString& key,
                                      int x,
@@ -784,6 +788,7 @@ signals:
     void statusMessage(const QString& msg);
     void errorMessage(const QString& msg);
     void warningRaised(const QString& title, const QString& summary, const QString& details);
+    void quitRequested();
     void setupSettingsRequested(int tabIndex);
     void timeSyncSettingsRequested();
     void catSettingsRequested();
@@ -993,6 +998,8 @@ private:
     DecodiumOmniRigManager*       m_omniRigCat    {nullptr};
     DecodiumTransceiverManager*   m_hamlibCat     {nullptr};
     QString                       m_catBackend    {"native"};
+    bool                          m_suppressCatErrors {false};
+    RemoteCommandServer*          m_remoteServer {nullptr};
     DecodiumDxCluster*    m_dxCluster     {nullptr};
     DecodiumPskReporterLite* m_pskReporter {nullptr};
     DecodiumCloudlogLite*    m_cloudlog    {nullptr};

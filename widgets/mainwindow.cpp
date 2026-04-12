@@ -1964,6 +1964,20 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_externalCtrl {false},    //avt 10/1/25 external controller is connected
   m_autoButtonState {false}   //avt 10/2/25
 {
+  if (auto * app = QCoreApplication::instance ())
+    {
+      auto const embedded_shell = app->property ("decodiumEmbeddedLegacyShell");
+      if (embedded_shell.isValid ())
+        {
+          m_embeddedShellMode = embedded_shell.toBool ();
+        }
+      auto const embedded_rig = app->property ("decodiumEmbeddedLegacyRigControlEnabled");
+      if (embedded_rig.isValid ())
+        {
+          m_embeddedRigControlEnabled = embedded_rig.toBool ();
+        }
+    }
+
   ui->setupUi(this);
   refreshWriteableDataDirCache ();
 #if defined(Q_OS_MAC)
@@ -2208,7 +2222,14 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   mem_qmap.unlock();
 
   // Closedown.
-  connect (ui->actionExit, &QAction::triggered, this, &QMainWindow::close);
+  connect (ui->actionExit, &QAction::triggered, this, [this] {
+    if (m_embeddedShellMode)
+      {
+        Q_EMIT legacyQuitRequested ();
+        return;
+      }
+    close ();
+  });
 
   // parts of the rig error message box that are fixed
   m_rigErrorMessageBox.setInformativeText (tr ("Do you want to reconfigure the radio interface?"));
@@ -3393,13 +3414,15 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   if (!m_tci_audio) {
     bool const startup_monitor_requested =
         !(m_config.monitor_off_at_startup () || m_mode == "Echo");
-    restartConfiguredAudioStreams (m_monitoring);
+    if (!m_embeddedShellMode) {
+      restartConfiguredAudioStreams (m_monitoring);
+    }
     Q_EMIT transmitFrequency (ui->TxFreqSpinBox->value () - m_XIT);
 
     // Startup robustness: replicate the reliable Preferences->OK reopen path
     // so RX audio comes up even when the initial CoreAudio bind races startup.
     QTimer::singleShot (1500, this, [this, startup_monitor_requested] {
-      if (m_tci_audio || m_transmitting || !m_valid) {
+      if (m_embeddedShellMode || m_tci_audio || m_transmitting || !m_valid) {
         return;
       }
 
@@ -3421,7 +3444,10 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
   // this must be done before initializing the mode as some modes need
   // to turn off split on the rig e.g. WSPR
-  m_config.transceiver_online ();
+  if (!(m_embeddedShellMode && !m_embeddedRigControlEnabled))
+    {
+      m_config.transceiver_online ();
+    }
   bool vhf {m_config.enable_VHF_features ()};
 
   ui->txFirstCheckBox->setChecked(m_txFirst);
@@ -4004,24 +4030,40 @@ void MainWindow::legacySetRigPtt(bool enabled)
 void MainWindow::legacySetAudioInputDeviceName(QString const& name)
 {
   m_config.set_audio_input_device (name);
+  if (m_embeddedShellMode && !m_monitoring)
+    {
+      return;
+    }
   restartConfiguredAudioStreams (m_monitoring);
 }
 
 void MainWindow::legacySetAudioOutputDeviceName(QString const& name)
 {
   m_config.set_audio_output_device (name);
+  if (m_embeddedShellMode && !m_monitoring)
+    {
+      return;
+    }
   restartConfiguredAudioStreams (m_monitoring);
 }
 
 void MainWindow::legacySetAudioInputChannel(int channel)
 {
   m_config.set_audio_input_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 1)));
+  if (m_embeddedShellMode && !m_monitoring)
+    {
+      return;
+    }
   restartConfiguredAudioStreams (m_monitoring);
 }
 
 void MainWindow::legacySetAudioOutputChannel(int channel)
 {
   m_config.set_audio_output_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 3)));
+  if (m_embeddedShellMode && !m_monitoring)
+    {
+      return;
+    }
   restartConfiguredAudioStreams (m_monitoring);
 }
 
@@ -4379,6 +4421,17 @@ void MainWindow::legacySetTxFirst(bool enabled)
     }
 
   ui->txFirstCheckBox->setChecked(enabled);
+}
+
+void MainWindow::legacySetRigControlEnabled(bool enabled)
+{
+  m_embeddedRigControlEnabled = enabled;
+  if (!enabled)
+    {
+      m_rigAutoRetryCount = 0;
+      m_first_error = true;
+      m_config.transceiver_offline ();
+    }
 }
 
 void MainWindow::legacyRaiseWarning(QString const& title,
@@ -6777,7 +6830,7 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
 
 void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
 {
-  if (m_tci_audio || m_config.audio_input_device ().isNull ())
+  if (m_embeddedShellMode || m_tci_audio || m_config.audio_input_device ().isNull ())
     {
       return;
     }
@@ -7171,7 +7224,10 @@ void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settin
       VHF_features_enabled(b);
     }
 
-    m_config.transceiver_online ();
+    if (!(m_embeddedShellMode && !m_embeddedRigControlEnabled))
+      {
+        m_config.transceiver_online ();
+      }
     if(!m_bFastMode) setXIT (ui->TxFreqSpinBox->value ());
     if ((m_config.single_decode () && !m_mode.startsWith ("FST4")) || m_mode=="JT4") {
       ui->lh_decodes_title_label->setText(tr ("Single-Period Decodes"));
@@ -14120,6 +14176,24 @@ void MainWindow::guiUpdate()
           });
         }
 #endif
+
+      if (m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio)
+        {
+          int const fallback_ms = (m_mode == "FT2" || m_mode == "FT4")
+              ? 20
+              : qMax (0, int (1000.0 * m_config.txDelay ()));
+          QTimer::singleShot (fallback_ms, this, [this, fallback_ms] () {
+            if (m_tx_when_ready && g_iptt == 1 && !m_tci_audio
+                && m_embeddedShellMode && !m_embeddedRigControlEnabled)
+              {
+                debugToFile (QString {"txFallback  startTx2 without legacy CAT confirm mode:%1 after:%2ms"}
+                                 .arg (m_mode)
+                                 .arg (fallback_ms));
+                startTx2 ();
+                m_tx_when_ready = false;
+              }
+          });
+        }
 
       // Async FT2: force TX stop when waveform is expected to be complete.
       if (asyncBypass && !m_tune) {
@@ -21583,6 +21657,10 @@ void MainWindow::on_stopTxButton_clicked()                    // Stop Tx
 
 void MainWindow::rigOpen ()
 {
+  if (m_embeddedShellMode && !m_embeddedRigControlEnabled)
+    {
+      return;
+    }
   update_dynamic_property (ui->readFreq, "state", "warning");
   ui->readFreq->setText ("");
   ui->readFreq->setEnabled (true);
@@ -21608,7 +21686,8 @@ void MainWindow::on_readFreq_clicked()
 {
   if (m_transmitting) return;
 
-  if (m_config.transceiver_online ())
+  if (!(m_embeddedShellMode && !m_embeddedRigControlEnabled)
+      && m_config.transceiver_online ())
     {
       m_config.sync_transceiver (true, true);
     }
@@ -21770,7 +21849,10 @@ void MainWindow::handle_transceiver_update (Transceiver::TransceiverState const&
       // initializing
       m_rigAutoRetryCount = 0;
       m_first_error = true;
-      on_monitorButton_clicked (!(m_config.monitor_off_at_startup() or m_mode=="Echo"));
+      if (!m_embeddedShellMode)
+        {
+          on_monitorButton_clicked (!(m_config.monitor_off_at_startup() or m_mode=="Echo"));
+        }
     }
   if (s.frequency () != old_state.frequency () || s.split () != m_splitMode)
     {
@@ -21819,6 +21901,13 @@ void MainWindow::handle_transceiver_update (Transceiver::TransceiverState const&
 
 void MainWindow::handle_transceiver_failure (QString const& reason)
 {
+  if (m_embeddedShellMode && !m_embeddedRigControlEnabled)
+    {
+      qDebug() << "MainWindow::handle_transceiver_failure ignored in embedded CAT-bypass mode" << reason;
+      m_rigAutoRetryCount = 0;
+      m_first_error = true;
+      return;
+    }
   update_dynamic_property (ui->readFreq, "state", "error");
   ui->readFreq->setEnabled (true);
   qDebug() << "MainWindow::handle_transceiver_failure fired";
@@ -23773,7 +23862,8 @@ void MainWindow::setRig (Frequency f)
     m_freqNominal = m_frequency_list_fcal_iter->frequency_ - ui->RxFreqSpinBox->value ();
   }
   if(m_transmitting && !m_config.tx_QSY_allowed ()) return;
-  if ((m_monitoring || m_transmitting) && m_config.transceiver_online ())
+  if (!(m_embeddedShellMode && !m_embeddedRigControlEnabled)
+      && (m_monitoring || m_transmitting) && m_config.transceiver_online ())
     {
       if (m_transmitting && m_config.split_mode () && !(m_config.superFox() && m_specOp==SpecOp::FOX))
         {

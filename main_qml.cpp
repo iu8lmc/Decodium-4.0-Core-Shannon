@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
     L("QApplication OK");
     QApplication::setStyle(QStyleFactory::create("Fusion"));
     app.setApplicationName("Decodium");
-    app.setApplicationVersion("4.0.0");
+    app.setApplicationVersion(QStringLiteral(FORK_RELEASE_VERSION));
     app.setOrganizationName("IU8LMC");
     app.setOrganizationDomain("decodium.iu8lmc.it");
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {

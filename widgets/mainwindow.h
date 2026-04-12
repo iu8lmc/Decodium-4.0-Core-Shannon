@@ -224,6 +224,7 @@ public:
   void legacySetAlt12Enabled(bool enabled);
   bool legacyTxFirst() const;
   void legacySetTxFirst(bool enabled);
+  void legacySetRigControlEnabled(bool enabled);
   void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
   void legacySetEmbeddedMode(bool enabled);
   void legacyShutdownForEmbedding();
@@ -734,6 +735,7 @@ private:
                                       QString const& summary,
                                       QString const& details) const;
   Q_SIGNAL void legacyPreferencesRequested () const;
+  Q_SIGNAL void legacyQuitRequested () const;
 
 private:
   void set_mode (QString const& mode);
@@ -779,6 +781,7 @@ private:
   bool m_WSPR_tx_next;
   MessageBox m_rigErrorMessageBox;
   bool m_embeddedShellMode {false};
+  bool m_embeddedRigControlEnabled {true};
   bool m_forceLegacySettingsDialog {false};
   bool m_embeddedFt2MonitorPrepared {false};
   QScopedPointer<SampleDownloader> m_sampleDownloader;

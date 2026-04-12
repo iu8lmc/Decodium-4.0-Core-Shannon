@@ -1450,7 +1450,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.openSetupSettings()
+                                onClicked: settingsDialog.openTab(0)
                             }
 
                             ToolTip.visible: settingsMA.containsMouse
@@ -1691,7 +1691,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.openCatSettings()
+                                onClicked: settingsDialog.openTab(1)
                             }
 
                             ToolTip.visible: catMA.containsMouse
@@ -2183,7 +2183,7 @@ ApplicationWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             rigControlMinimized = false
-                            rigControlDialog.open()
+                            settingsDialog.openTab(1)
                         }
                     }
 
@@ -4254,7 +4254,7 @@ ApplicationWindow {
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
-                    bridge.openSetupSettings(1)
+                    settingsDialog.openTab(1)
                 }
             }
 
@@ -4381,6 +4381,11 @@ ApplicationWindow {
         id: rigControlDialog
     }
 
+    // Settings Dialog (sostituisce il legacy WSJT-X settings)
+    SettingsDialog {
+        id: settingsDialog
+    }
+
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato
     Connections {
         target: bridge
@@ -4392,6 +4397,9 @@ ApplicationWindow {
             warningDialog.open()
         }
         function onWarningRaised(title, summary, details) {
+            // Quando il CAT nativo gestisce il rig, i warning Hamlib dal legacy
+            // backend sono falsi positivi (conflitto porta COM) — li ignoriamo.
+            if (bridge.catBackend === "native") return
             warningDialogTitle = title
             warningDialogSummary = summary
             warningDialogDetails = details
@@ -4401,10 +4409,17 @@ ApplicationWindow {
         function onTimeSyncSettingsRequested() {
             timeSyncPanelVisible = true
         }
+        function onSetupSettingsRequested(tabIndex) {
+            settingsDialog.openTab(tabIndex)
+        }
         function onCatSettingsRequested() {
-            rigControlDialog.open()
+            settingsDialog.openTab(1)
+        }
+        function onQuitRequested() {
+            mainWindow.close()
         }
         function onRigErrorRaised(title, summary, details) {
+            if (bridge.catBackend === "native") return
             rigErrorDialogTitle = title
             rigErrorSummary = summary
             rigErrorDetails = details

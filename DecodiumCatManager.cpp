@@ -20,6 +20,13 @@ bool isYaesuRig(QString const& rigName)
         || normalized.contains(QStringLiteral("FT"));
 }
 
+bool isKenwoodRig(QString const& rigName)
+{
+    QString const normalized = normalizedRigName(rigName);
+    return normalized.contains(QStringLiteral("KENWOOD"))
+        || normalized.contains(QStringLiteral("TS-"));
+}
+
 bool supportsYaesuDataPtt(QString const& rigName)
 {
     QString const normalized = normalizedRigName(rigName);
@@ -39,6 +46,16 @@ bool isLikelyDataMode(QString const& mode)
 
 QByteArray nativePttOnCommand(QString const& rigName, QString const& mode)
 {
+    // Kenwood TS-590S/SG, TS-480, TS-2000, TS-890S:
+    //   TX;  / TX0; = trasmette da MIC
+    //   TX1; = trasmette da DATA (USB audio / connettore DATA posteriore)
+    // Decodium invia sempre l'audio via USB/sound card → percorso DATA.
+    // Serve TX1; in qualsiasi modo (USB, DATA-U, DATA-L) per instradare
+    // l'audio dal codec USB invece che dal MIC.
+    if (isKenwoodRig(rigName)) {
+        return QByteArrayLiteral("TX1;");
+    }
+
     if (isYaesuRig(rigName)) {
         if (supportsYaesuDataPtt(rigName) && isLikelyDataMode(mode)) {
             return QByteArrayLiteral("TX1;");
@@ -293,6 +310,8 @@ void DecodiumCatManager::setRigPtt(bool on)
         if (!m_connected) return;
         QByteArray const cmd = on ? nativePttOnCommand(m_rigName, m_mode)
                                   : QByteArrayLiteral("RX;");
+        QByteArray logMsg = "CAT cmd=[" + cmd + "] rig=[" + m_rigName.toLatin1() + "] mode=[" + m_mode.toLatin1() + "]";
+        catLog(logMsg.constData());
         bool written = (m_serial && m_serial->isOpen()) ? (m_serial->write(cmd) > 0) : false;
         if (m_serial)
             m_serial->flush();

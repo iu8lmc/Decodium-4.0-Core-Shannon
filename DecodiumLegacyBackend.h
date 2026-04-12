@@ -16,7 +16,7 @@ class DecodiumLegacyBackend final : public QObject
     Q_OBJECT
 
 public:
-    explicit DecodiumLegacyBackend(QObject* parent = nullptr);
+    explicit DecodiumLegacyBackend(bool rigControlEnabled = true, QObject* parent = nullptr);
     ~DecodiumLegacyBackend() override;
 
     bool available() const { return m_available; }
@@ -82,6 +82,7 @@ public:
     void retryRigConnection();
     void setAlt12Enabled(bool enabled);
     void setTxFirst(bool enabled);
+    void setRigControlEnabled(bool enabled);
 
 Q_SIGNALS:
     void waterfallRowReady(QByteArray const& rowLevels,
@@ -91,6 +92,7 @@ Q_SIGNALS:
                            int txFrequencyHz,
                            QString const& mode) const;
     void preferencesRequested() const;
+    void quitRequested() const;
     void warningRaised(QString const& title,
                        QString const& summary,
                        QString const& details) const;

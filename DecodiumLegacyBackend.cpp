@@ -270,7 +270,7 @@ QPalette embeddedLegacyWidgetPalette(QPalette base)
 }
 }
 
-DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
+DecodiumLegacyBackend::DecodiumLegacyBackend(bool rigControlEnabled, QObject* parent)
     : QObject(parent)
 {
     m_app = qobject_cast<QApplication*>(QCoreApplication::instance());
@@ -291,6 +291,7 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
         m_app->setApplicationVersion(QStringLiteral("4.0.0"));
     }
     m_app->setProperty("decodiumEmbeddedLegacyShell", true);
+    m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", rigControlEnabled);
 
     try {
         m_multiSettings = std::make_unique<MultiSettings>();
@@ -324,6 +325,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                 SIGNAL(legacyPreferencesRequested()),
                 this,
                 SIGNAL(preferencesRequested()));
+        connect(m_mainWindow,
+                SIGNAL(legacyQuitRequested()),
+                this,
+                SIGNAL(quitRequested()));
         m_available = true;
 
         // Prevent legacy startup options from auto-starting monitor behind the
@@ -337,10 +342,12 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
         applyEmbeddedWidgetTheme();
     } catch (std::exception const& e) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
         m_failureReason = QString::fromLocal8Bit(e.what());
         m_available = false;
     } catch (...) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
         m_failureReason = QStringLiteral("Unknown exception while creating legacy backend");
         m_available = false;
     }
@@ -359,6 +366,7 @@ DecodiumLegacyBackend::~DecodiumLegacyBackend()
     m_mainWindow = nullptr;
     if (m_app) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
     }
 }
 
@@ -726,6 +734,13 @@ void DecodiumLegacyBackend::setTxFirst(bool enabled)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetTxFirst(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setRigControlEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetRigControlEnabled(enabled);
     }
 }
 
