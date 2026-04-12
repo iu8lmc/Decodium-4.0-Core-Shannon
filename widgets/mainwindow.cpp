@@ -76,6 +76,7 @@
 #include <QComboBox>
 #include <QMessageBox>
 #include <QMenu>
+#include <QMediaDevices>
 #include <QLocale>
 #include <QSplashScreen>
 #include <QUdpSocket>
@@ -100,6 +101,7 @@
 #include "PrecisionTime.hpp"
 
 #include "helper_functions.h"
+#include "MessageBox.hpp"
 #include "revision_utils.hpp"
 #include "qt_helpers.hpp"
 #include "Network/NetworkAccessManager.hpp"
@@ -1757,6 +1759,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_detector {new Detector {RX_SAMPLE_RATE, double(NTMAX), downSampleFactor}},
   m_FFTSize {6192 / 2},         // conservative value to avoid buffer overruns
   m_soundInput {new SoundInput},
+  m_mediaDevices {nullptr},
   m_modulator {new Modulator {TX_SAMPLE_RATE, NTMAX}},
   m_soundOutput {new SoundOutput},
   m_rx_audio_buffer_frames {0},
@@ -2024,6 +2027,19 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_applicationStateChangedConnection =
       connect (qApp, &QGuiApplication::applicationStateChanged,
                this, &MainWindow::onApplicationStateChanged);
+
+  m_mediaDevices = new QMediaDevices {this};
+  auto scheduleAudioHotplugRefresh = [this] (QString const& reason) {
+    QTimer::singleShot (300, this, [this, reason] {
+      refreshConfiguredAudioDevicesAfterHotplug (reason);
+    });
+  };
+  connect (m_mediaDevices, &QMediaDevices::audioInputsChanged, this, [scheduleAudioHotplugRefresh] {
+    scheduleAudioHotplugRefresh (QStringLiteral ("inputs"));
+  });
+  connect (m_mediaDevices, &QMediaDevices::audioOutputsChanged, this, [scheduleAudioHotplugRefresh] {
+    scheduleAudioHotplugRefresh (QStringLiteral ("outputs"));
+  });
 
   // NTP Time Synchronization
   m_ntpClient = new NtpClient(this);
@@ -3980,6 +3996,11 @@ void MainWindow::legacySetTxFrequency(int frequencyHz)
   onRemoteSetTxFrequencyRequested(QString {}, frequencyHz);
 }
 
+void MainWindow::legacySetRigPtt(bool enabled)
+{
+  m_config.transceiver_ptt(enabled);
+}
+
 void MainWindow::legacySetAudioInputDeviceName(QString const& name)
 {
   m_config.set_audio_input_device (name);
@@ -4004,6 +4025,93 @@ void MainWindow::legacySetAudioOutputChannel(int channel)
   restartConfiguredAudioStreams (m_monitoring);
 }
 
+void MainWindow::refreshConfiguredAudioDevicesAfterHotplug (QString const& reason)
+{
+  if (!m_valid || QCoreApplication::closingDown () || m_tci_audio)
+    {
+      return;
+    }
+
+  auto const saved_input_name = m_settings->value ("SoundInName").toString ().trimmed ();
+  auto const saved_output_name = m_settings->value ("SoundOutName").toString ().trimmed ();
+  auto const input_devices = QMediaDevices::audioInputs ();
+  auto const output_devices = QMediaDevices::audioOutputs ();
+
+  auto has_device_named = [] (QList<QAudioDevice> const& devices, QString const& name) {
+    if (name.isEmpty ())
+      {
+        return false;
+      }
+    Q_FOREACH (auto const& device, devices)
+      {
+        if (device.description () == name)
+          {
+            return true;
+          }
+      }
+    return false;
+  };
+
+  bool rebound_input = false;
+  if (!saved_input_name.isEmpty () && QStringLiteral ("TCI audio") != saved_input_name
+      && has_device_named (input_devices, saved_input_name))
+    {
+      auto const before = m_config.audio_input_device ().description ();
+      m_config.set_audio_input_device (saved_input_name);
+      rebound_input = !m_config.audio_input_device ().isNull ()
+                      && m_config.audio_input_device ().description () == saved_input_name
+                      && (before != m_config.audio_input_device ().description ()
+                          || m_monitoring);
+    }
+
+  bool rebound_output = false;
+  if (!saved_output_name.isEmpty () && QStringLiteral ("TCI audio") != saved_output_name
+      && has_device_named (output_devices, saved_output_name))
+    {
+      auto const before = m_config.audio_output_device ().description ();
+      m_config.set_audio_output_device (saved_output_name);
+      rebound_output = !m_config.audio_output_device ().isNull ()
+                       && m_config.audio_output_device ().description () == saved_output_name
+                       && before != m_config.audio_output_device ().description ();
+    }
+
+  if (!rebound_input && !rebound_output)
+    {
+      return;
+    }
+
+  debugToFile (QString {"audioHotplg reason:%1 monitor:%2 in:%3 out:%4"}
+                 .arg (reason)
+                 .arg (m_monitoring)
+                 .arg (m_config.audio_input_device ().isNull ()
+                         ? QString {"<null>"}
+                         : m_config.audio_input_device ().description ())
+                 .arg (m_config.audio_output_device ().isNull ()
+                         ? QString {"<null>"}
+                         : m_config.audio_output_device ().description ()));
+
+  if (m_monitoring)
+    {
+      restartConfiguredAudioStreams (true);
+      if (rebound_input)
+        {
+          armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
+          showStatusMessage (tr ("Audio input refreshed after device reconnect."));
+        }
+      else
+        {
+          showStatusMessage (tr ("Audio output refreshed after device reconnect."));
+        }
+    }
+  else if (rebound_output && !m_config.audio_output_device ().isNull ())
+    {
+      Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
+                                          , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                          , m_tx_audio_buffer_frames);
+      showStatusMessage (tr ("Audio output refreshed after device reconnect."));
+    }
+}
+
 void MainWindow::legacySetRxInputLevel(int value)
 {
   int const bounded = qBound (0, value, 100);
@@ -4015,16 +4123,45 @@ void MainWindow::legacySetRxInputLevel(int value)
   float const inputGain = bounded <= 50
       ? static_cast<float> (bounded / 50.0)
       : static_cast<float> (1.0 + ((bounded - 50.0) / 50.0) * 3.0);
+  int const sampleDb = inputGain <= 0.0001f
+      ? -60
+      : qBound(-60, qRound(20.0 * std::log10(static_cast<double>(inputGain))), 12);
+  // RX level now acts on the captured samples directly. Keep legacy DSP extra
+  // gain neutral so waterfall, S-meter and decode all track the same signal.
   m_inGain = 0;
+  debugToFile(QString{"legacyRxLvl  ui:%1 linear:%2 sampleDb:%3 dspDb:%4"}
+                .arg(bounded)
+                .arg(inputGain, 0, 'f', 3)
+                .arg(sampleDb)
+                .arg(m_inGain));
+  auto applyGain = [this] (QObject * target, auto updater) {
+    if (!target) {
+      return;
+    }
+
+    if (target->thread () == QThread::currentThread () || !m_audioThread.isRunning ()) {
+      updater ();
+      return;
+    }
+
+    QMetaObject::invokeMethod (target, updater, Qt::BlockingQueuedConnection);
+  };
+
   if (m_detector) {
-    m_detector->setInputGainLinear (inputGain);
+    QPointer<Detector> detector {m_detector};
+    applyGain (m_detector, [detector, inputGain] {
+      if (detector) {
+        detector->applyInputGainLinear (inputGain);
+      }
+    });
   }
   if (m_soundInput) {
-    QMetaObject::invokeMethod (m_soundInput, [this, inputGain] {
-      if (m_soundInput) {
-        m_soundInput->setInputGain (inputGain);
+    QPointer<SoundInput> soundInput {m_soundInput};
+    applyGain (m_soundInput, [soundInput, inputGain] {
+      if (soundInput) {
+        soundInput->setInputGain (inputGain);
       }
-    }, Qt::QueuedConnection);
+    });
   }
 }
 
@@ -4687,7 +4824,9 @@ void MainWindow::writeSettings()
 void MainWindow::update_tx5(const QString &qsy_text)
 {
   if (m_hisCall=="") {
-    QMessageBox::warning(this, "Decodium v3.0 FT2 Raptor","There must be a callsign in the\n DX Call Box to send QSY Request");
+    MessageBox::warning_message(this,
+                                tr("Decodium v3.0 FT2 Raptor"),
+                                tr("There must be a callsign in the\n DX Call Box to send QSY Request"));
   } else {
     QString text = qsy_text;
     ui->tx6->setText(text.replace("$DX",m_hisCall));
@@ -26686,9 +26825,7 @@ void MainWindow::on_actionDiagnostic_mode_triggered()
     static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::ConfigLocation)}.absoluteFilePath ("decodium_log_config.ini")};
 #endif
     if(!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-      QMessageBox mb;
-      mb.setText("Cannot write decodium_log_config.ini file");
-      mb.exec();
+      MessageBox::critical_message(this, tr("Cannot write decodium_log_config.ini file"));
       return;
     }
     QString instance = "";
@@ -26746,9 +26883,7 @@ void MainWindow::on_actionDisable_event_logging_triggered()
     static QFile f {QDir {QStandardPaths::writableLocation (QStandardPaths::ConfigLocation)}.absoluteFilePath ("decodium_log_config.ini")};
 #endif
     if(!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-      QMessageBox mb;
-      mb.setText("Cannot write decodium_log_config.ini file");
-      mb.exec();
+      MessageBox::critical_message(this, tr("Cannot write decodium_log_config.ini file"));
       return;
     }
     QString EventConfig = (

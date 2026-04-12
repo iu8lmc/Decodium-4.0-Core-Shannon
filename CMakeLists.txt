@@ -1601,7 +1601,7 @@ add_custom_target (sync_decodium_qml ALL
   COMMENT "Syncing QML files to build output"
 )
 add_dependencies (decodium_qml sync_decodium_qml)
-add_custom_target (decodium
+add_custom_target (decodium_app
   DEPENDS decodium_qml sync_decodium_qml
 )
 add_custom_command (TARGET decodium_qml POST_BUILD

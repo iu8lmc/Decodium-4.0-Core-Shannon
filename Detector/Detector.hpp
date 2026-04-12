@@ -30,6 +30,7 @@ public:
 
   Q_SIGNAL void framesWritten (qint64) const;
   Q_SLOT void setBlockSize (unsigned);
+  Q_SLOT void applyInputGainLinear (float gain);
 
 protected:
   qint64 readData (char * /* data */, qint64 /* maxSize */) override

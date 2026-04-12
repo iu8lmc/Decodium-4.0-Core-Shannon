@@ -371,7 +371,7 @@ public:
         {
             if (start_date_time_edit_->dateTime() > end_date_time_edit_->dateTime())
             {
-                QMessageBox::warning(this, tr("Invalid Date Range"), tr("Start date must be before end date"));
+                MessageBox::warning_message(this, tr("Invalid Date Range"), tr("Start date must be before end date"));
                 button_box->button(QDialogButtonBox::Ok)->setEnabled(false);
                 return;
             }
@@ -3822,13 +3822,13 @@ void Configuration::impl::set_rig_invariants ()
       }
       ui_->test_CAT_push_button->setEnabled (true);
       ui_->test_PTT_push_button->setEnabled (false);
-      // DX Lab proxy path: keep Front/Rear selection editable so preference
-      // can be saved in settings even when CAT mic-data capability is unknown.
-      bool allow_tx_audio_source =
-          rig.startsWith ("DX Lab")
-          || (transceiver_factory_.has_CAT_PTT_mic_data (rig)
-              && TransceiverFactory::PTT_method_CAT == ptt_method);
-      ui_->TX_audio_source_group_box->setEnabled (allow_tx_audio_source);
+      // Keep Front/Rear selection editable for any real rig.
+      // Several Windows paths (Hamlib/proxy backends and some rigs with
+      // incomplete capability reporting) can still make use of the saved
+      // preference even when the static CAT mic/data capability probe says
+      // "unsupported". Backends that truly do not support the distinction
+      // simply ignore the value at runtime.
+      ui_->TX_audio_source_group_box->setEnabled (true);
       if (port_type != last_port_type_)
         {
           last_port_type_ = port_type;

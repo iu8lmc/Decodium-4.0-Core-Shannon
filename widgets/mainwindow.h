@@ -119,6 +119,7 @@ class QTime;
 class WSPRBandHopping;
 class HelpTextWindow;
 class WSPRNet;
+class QMediaDevices;
 class SoundOutput;
 class Modulator;
 class SoundInput;
@@ -199,6 +200,7 @@ public:
   void legacySetAutoCq(bool enabled);
   void legacySetRxFrequency(int frequencyHz);
   void legacySetTxFrequency(int frequencyHz);
+  void legacySetRigPtt(bool enabled);
   void legacySetAudioInputDeviceName(QString const& name);
   void legacySetAudioOutputDeviceName(QString const& name);
   void legacySetAudioInputChannel(int channel);
@@ -273,6 +275,7 @@ private:
   bool eventFilter(QObject *, QEvent *) override;
   void restartConfiguredAudioStreams (bool resume_monitor);
   void armAudioInputHealthChecks (qint64 baseline_ms);
+  void refreshConfiguredAudioDevicesAfterHotplug (QString const& reason);
   void showQSYMessage(QString message);
   void handleDoubleClickOnCall (Qt::KeyboardModifiers modifiers, bool fromBandActivityWindow);
   bool singleDecodeColumnFlowEnabled () const { return false; }
@@ -821,6 +824,7 @@ private:
   Detector * m_detector;
   unsigned m_FFTSize;
   SoundInput * m_soundInput;
+  QMediaDevices * m_mediaDevices;
   int m_legacyRxInputLevel {50};
   Modulator * m_modulator;
   SoundOutput * m_soundOutput;

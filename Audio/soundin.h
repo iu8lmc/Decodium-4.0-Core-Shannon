@@ -9,6 +9,7 @@
 #include <QScopedPointer>
 #include <QPointer>
 #include <QAudioSource>
+#include <QAudioDevice>
 
 #include "Audio/AudioDevice.hpp"
 
@@ -58,6 +59,10 @@ private:
   QPointer<AudioDevice> m_sink;
   qint64 cummulative_lost_usec_;
   float m_inputGain {1.0f};
+  QString m_deviceDescription;
+  int m_sampleRate {0};
+  int m_channelCount {0};
+  int m_channelSelector {static_cast<int>(AudioDevice::Mono)};
 };
 
 #endif

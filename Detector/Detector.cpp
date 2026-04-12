@@ -1,14 +1,26 @@
 #include "Detector.hpp"
 #include "Fil4Filter.hpp"
+#include <algorithm>
 #include <QDateTime>
 #include <QtAlgorithms>
 #include <QDebug>
+#include <QtGlobal>
 #include <math.h>
 #include "commons.h"
 
 #include "moc_Detector.cpp"
 
 extern dec_data_t dec_data;
+
+namespace
+{
+short scale_and_clamp_sample (short sample, float ratio)
+{
+  return static_cast<short> (qBound (-32768,
+                                     qRound (static_cast<float> (sample) * ratio),
+                                     32767));
+}
+}
 
 Detector::Detector (unsigned frameRate, double periodLengthInSeconds,
                     unsigned downSampleFactor, QObject * parent)
@@ -48,6 +60,46 @@ void Detector::clear ()
 
   // fill buffer with zeros (G4WJS commented out because it might cause decoder hangs)
   // qFill (dec_data.d2, dec_data.d2 + sizeof (dec_data.d2) / sizeof (dec_data.d2[0]), 0);
+}
+
+void Detector::applyInputGainLinear (float gain)
+{
+  float const bounded_gain = qMax (0.0f, gain);
+  float const previous_gain = inputGainLinear ();
+  if (qAbs (bounded_gain - previous_gain) < 0.0005f)
+    {
+      setInputGainLinear (bounded_gain);
+      return;
+    }
+
+  int constexpr kMaxKin = NTMAX * RX_SAMPLE_RATE;
+  int const kin = qBound (0, dec_data.params.kin, kMaxKin);
+
+  if (bounded_gain <= 0.0001f)
+    {
+      std::fill (dec_data.d2, dec_data.d2 + kin, 0);
+      if (m_buffer && m_bufferPos)
+        {
+          std::fill (m_buffer.data (), m_buffer.data () + m_bufferPos, 0);
+        }
+    }
+  else if (previous_gain > 0.0001f)
+    {
+      float const ratio = bounded_gain / previous_gain;
+      for (int i = 0; i < kin; ++i)
+        {
+          dec_data.d2[i] = scale_and_clamp_sample (dec_data.d2[i], ratio);
+        }
+      if (m_buffer && m_bufferPos)
+        {
+          for (unsigned i = 0; i < m_bufferPos; ++i)
+            {
+              m_buffer[i] = scale_and_clamp_sample (m_buffer[i], ratio);
+            }
+        }
+    }
+
+  setInputGainLinear (bounded_gain);
 }
 
 qint64 Detector::writeData (char const * data, qint64 maxSize)

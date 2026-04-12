@@ -562,6 +562,13 @@ void DecodiumLegacyBackend::setTxFrequency(int frequencyHz)
     }
 }
 
+void DecodiumLegacyBackend::setRigPtt(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetRigPtt(enabled);
+    }
+}
+
 void DecodiumLegacyBackend::setAudioInputDeviceName(const QString& name)
 {
     if (m_mainWindow) {
