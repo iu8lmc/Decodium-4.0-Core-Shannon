@@ -705,15 +705,23 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // Remote Web Console (webapp)
     {
         auto const env = QProcessEnvironment::systemEnvironment();
-        auto const wsPortText = env.value(QStringLiteral("FT2_REMOTE_WS_PORT"));
+        QSettings webSettings("Decodium", "Decodium3");
+        // Env vars hanno priorità, fallback su QSettings dal pannello Webapp
+        bool const webAppEnabledInSettings = webSettings.value(QStringLiteral("WebAppEnabled"), false).toBool();
+        auto wsPortText = env.value(QStringLiteral("FT2_REMOTE_WS_PORT"));
+        if (wsPortText.isEmpty() && webAppEnabledInSettings)
+            wsPortText = webSettings.value(QStringLiteral("WebAppWsPort"), QStringLiteral("19090")).toString();
         if (!wsPortText.isEmpty()) {
             bool wsPortOk = false;
             auto const wsPort = wsPortText.toUInt(&wsPortOk);
             if (wsPortOk && wsPort > 0 && wsPort <= 65535u) {
-                auto const bindText = env.value(QStringLiteral("FT2_REMOTE_WS_BIND"), QStringLiteral("127.0.0.1"));
+                auto bindText = env.value(QStringLiteral("FT2_REMOTE_WS_BIND"));
+                if (bindText.isEmpty()) bindText = webSettings.value(QStringLiteral("WebAppBind"), QStringLiteral("127.0.0.1")).toString();
                 QHostAddress bindAddress(bindText);
-                auto const authUser = env.value(QStringLiteral("FT2_REMOTE_WS_USER"), QStringLiteral("admin"));
-                auto const authToken = env.value(QStringLiteral("FT2_REMOTE_WS_TOKEN"));
+                auto authUser = env.value(QStringLiteral("FT2_REMOTE_WS_USER"));
+                if (authUser.isEmpty()) authUser = webSettings.value(QStringLiteral("WebAppUser"), QStringLiteral("admin")).toString();
+                auto authToken = env.value(QStringLiteral("FT2_REMOTE_WS_TOKEN"));
+                if (authToken.isEmpty()) authToken = webSettings.value(QStringLiteral("WebAppToken")).toString();
                 bool const remoteExposed = (bindAddress != QHostAddress::LocalHost && bindAddress != QHostAddress(QStringLiteral("::1")));
                 if (remoteExposed && authToken.size() < 12) {
                     bridgeLog("Remote Web disabled: token must be at least 12 characters on LAN/WAN bind.");
@@ -744,15 +752,20 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                     m_remoteServer->setAuthUser(authUser);
                     if (!authToken.isEmpty()) m_remoteServer->setAuthToken(authToken);
 
+                    auto guardText = env.value(QStringLiteral("FT2_REMOTE_GUARD_PRE_MS"));
+                    if (guardText.isEmpty()) guardText = webSettings.value(QStringLiteral("WebAppGuardMs"), QStringLiteral("300")).toString();
                     bool guardOk = false;
-                    auto const guardMs = env.value(QStringLiteral("FT2_REMOTE_GUARD_PRE_MS"), QStringLiteral("300")).toInt(&guardOk);
+                    auto const guardMs = guardText.toInt(&guardOk);
                     if (guardOk) m_remoteServer->setGuardPreMs(guardMs);
+                    auto ageText = env.value(QStringLiteral("FT2_REMOTE_MAX_AGE_MS"));
+                    if (ageText.isEmpty()) ageText = webSettings.value(QStringLiteral("WebAppMaxAgeMs"), QStringLiteral("7500")).toString();
                     bool ageOk = false;
-                    auto const maxAgeMs = env.value(QStringLiteral("FT2_REMOTE_MAX_AGE_MS"), QStringLiteral("7500")).toInt(&ageOk);
+                    auto const maxAgeMs = ageText.toInt(&ageOk);
                     if (ageOk) m_remoteServer->setMaxCommandAgeMs(maxAgeMs);
 
                     quint16 httpPort = 0;
-                    auto const httpPortText = env.value(QStringLiteral("FT2_REMOTE_HTTP_PORT"));
+                    auto httpPortText = env.value(QStringLiteral("FT2_REMOTE_HTTP_PORT"));
+                    if (httpPortText.isEmpty()) httpPortText = webSettings.value(QStringLiteral("WebAppHttpPort")).toString();
                     if (!httpPortText.isEmpty()) {
                         bool httpOk = false;
                         auto const hp = httpPortText.toUInt(&httpOk);
@@ -769,9 +782,11 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 
                     if (!m_remoteServer->start(static_cast<quint16>(wsPort), bindAddress, httpPort)) {
                         bridgeLog("Remote WS disabled: failed to bind " + bindAddress.toString() + ":" + QString::number(wsPort));
+                        webSettings.setValue(QStringLiteral("WebAppActive"), false);
                     } else {
                         bridgeLog("Remote Web Console running: ws://" + bindAddress.toString() + ":" + QString::number(m_remoteServer->wsPort())
                                   + "  http://" + bindAddress.toString() + ":" + QString::number(m_remoteServer->httpPort()));
+                        webSettings.setValue(QStringLiteral("WebAppActive"), true);
                     }
                 }
             }
@@ -4649,6 +4664,10 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         bool isMyCall   = !m_callsign.isEmpty() && msg.contains(m_callsign, Qt::CaseInsensitive);
         QString fromCall = extractDecodedCallsign(msg, isCQ);
 
+        // Filtri "Solo CQ" e "Solo My Call"
+        if (m_filterCqOnly && !isCQ && !isMyCall) continue;
+        if (m_filterMyCallOnly && !isMyCall) continue;
+
         QVariantMap entry;
         entry["time"]    = f[0];
         entry["db"]      = f[1];
@@ -4801,6 +4820,10 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
 
         bool isCQ     = msg.startsWith("CQ ", Qt::CaseInsensitive) || msg == "CQ";
         bool isMyCall = !m_callsign.isEmpty() && msg.contains(m_callsign, Qt::CaseInsensitive);
+
+        if (m_filterCqOnly && !isCQ && !isMyCall) continue;
+        if (m_filterMyCallOnly && !isMyCall) continue;
+
         QVariantMap entry;
         entry["time"]    = f[0];
         entry["db"]      = f[1];
@@ -4928,6 +4951,9 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
         bool isCQ     = msg.startsWith("CQ ", Qt::CaseInsensitive) || msg == "CQ";
         bool isMyCall = !m_callsign.isEmpty() && msg.contains(m_callsign, Qt::CaseInsensitive);
         QString fromCall = extractDecodedCallsign(msg, isCQ);
+
+        if (m_filterCqOnly && !isCQ && !isMyCall) continue;
+        if (m_filterMyCallOnly && !isMyCall) continue;
 
         QVariantMap entry;
         entry["time"]       = f[0];

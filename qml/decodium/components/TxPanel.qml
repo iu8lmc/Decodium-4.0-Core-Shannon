@@ -711,7 +711,7 @@ Item {
 
                 TextField {
                     id: dxCallField
-                    Layout.preferredWidth: 100
+                    Layout.preferredWidth: 140
                     Layout.preferredHeight: 32
                     text: engine ? engine.dxCall : ""
                     placeholderText: "Call"
@@ -741,7 +741,7 @@ Item {
 
                 TextField {
                     id: dxGridField
-                    Layout.preferredWidth: 65
+                    Layout.preferredWidth: 80
                     Layout.preferredHeight: 32
                     text: engine ? engine.dxGrid : ""
                     placeholderText: "Grid"

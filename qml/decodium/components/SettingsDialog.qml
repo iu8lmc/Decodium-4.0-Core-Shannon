@@ -124,7 +124,7 @@ Dialog {
                     spacing: 2
 
                     Repeater {
-                        model: ["Stazione","Radio","Audio","TX","Display","Decodifica","Reporting","Colori","Avanzate","Alerts","Filtri"]
+                        model: ["Stazione","Radio","Audio","TX","Display","Decodifica","Reporting","Colori","Avanzate","Alerts","Filtri","Webapp"]
                         delegate: Rectangle {
                             width: parent.width; height: 36; radius: 6
                             color: tabStack.currentIndex === index ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (tabMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
@@ -349,6 +349,18 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
+                        // Network Port (visibile per Hamlib network/TCI)
+                        Text { text: "Network Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100
+                            visible: bridge.catManager && (bridge.catManager.portType === "network" || bridge.catManager.portType === "tci") }
+                        TextField {
+                            visible: bridge.catManager && (bridge.catManager.portType === "network" || bridge.catManager.portType === "tci")
+                            text: bridge.catManager ? bridge.catManager.networkPort : "localhost:4532"
+                            Layout.fillWidth: true; Layout.columnSpan: 3; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "localhost:4532"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: { if (bridge.catManager) bridge.catManager.networkPort = text }
+                        }
+
                         Text { text: "Baud Rate:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: baudCombo
@@ -566,7 +578,7 @@ Dialog {
                         Text { text: "Input Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: audioInChCombo
-                            model: ["Mono","Left","Right"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Mono","Left","Right","Both"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: bridge.audioInputChannel
                             onActivated: bridge.audioInputChannel = currentIndex
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -591,7 +603,7 @@ Dialog {
                         Text { text: "Output Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: audioOutChCombo
-                            model: ["Mono","Left","Right"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Mono","Left","Right","Both"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: bridge.audioOutputChannel
                             onActivated: bridge.audioOutputChannel = currentIndex
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -687,7 +699,7 @@ Dialog {
                         Text { text: "TX Delay (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txDelaySpin
-                            from: 0; to: 30; value: Number(bridge.getSetting("TXDelay", 2)); editable: true
+                            from: 0; to: 30; value: Number(bridge.getSetting("TXDelay", 0)); editable: true
                             implicitHeight: controlHeight; Layout.fillWidth: true
                             onValueChanged: bridge.setSetting("TXDelay", value)
                             contentItem: TextInput { text: txDelaySpin.textFromValue(txDelaySpin.value, txDelaySpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txDelaySpin.editable; validator: txDelaySpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
@@ -1457,6 +1469,14 @@ Dialog {
                             onValueChanged: bridge.setSetting("UDPTTL", value)
                             contentItem: TextInput { text: udpTtlSpin.textFromValue(udpTtlSpin.value, udpTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpTtlSpin.editable; validator: udpTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        Text { text: "Outgoing Interface:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        TextField {
+                            text: bridge.getSetting("UDPInterface", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "es. eth0, 192.168.1.x (vuoto = default)"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("UDPInterface", text)
                         }
 
                         Text { text: "Accept UDP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -2367,6 +2387,130 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                    }
+                }
+
+                // ═══════════ TAB 11 — WEBAPP ═══════════
+                ScrollView {
+                    clip: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                    GridLayout {
+                        width: parent.width - 20
+                        columns: 4; columnSpacing: 10; rowSpacing: 8
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+
+                        // ── Remote Web Console ──
+                        Text { text: "REMOTE WEB CONSOLE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        // Abilitazione webapp
+                        Text { text: "Abilita Webapp:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        CheckBox {
+                            checked: bridge.getSetting("WebAppEnabled", false)
+                            onCheckedChanged: bridge.setSetting("WebAppEnabled", checked)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: "Avvia automaticamente al prossimo avvio"; color: textSecondary; font.pixelSize: 11; leftPadding: 24; verticalAlignment: Text.AlignVCenter }
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // WS Port
+                        Text { text: "WebSocket Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField {
+                            id: wsPortField
+                            text: bridge.getSetting("WebAppWsPort", "19090"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "19090"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("WebAppWsPort", text)
+                        }
+                        // HTTP Port
+                        Text { text: "HTTP Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField {
+                            id: httpPortField
+                            text: bridge.getSetting("WebAppHttpPort", "19091"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "19091"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("WebAppHttpPort", text)
+                        }
+
+                        // Bind Address
+                        Text { text: "Bind Address:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField {
+                            id: bindField
+                            text: bridge.getSetting("WebAppBind", "127.0.0.1"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "127.0.0.1 (locale) o 0.0.0.0 (LAN)"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("WebAppBind", text)
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // ── Autenticazione ──
+                        Text { text: "AUTENTICAZIONE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: "Username:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField {
+                            text: bridge.getSetting("WebAppUser", "admin"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "admin"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("WebAppUser", text)
+                        }
+                        Text { text: "Token:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField {
+                            text: bridge.getSetting("WebAppToken", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "min 12 caratteri per accesso LAN"
+                            echoMode: TextInput.Password
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("WebAppToken", text)
+                        }
+
+                        // ── Timing ──
+                        Text { text: "TIMING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: "Guard Pre (ms):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        SpinBox {
+                            from: 50; to: 2000; value: Number(bridge.getSetting("WebAppGuardMs", 300)); editable: true
+                            implicitHeight: controlHeight; Layout.fillWidth: true
+                            onValueChanged: bridge.setSetting("WebAppGuardMs", value)
+                            contentItem: TextInput { text: parent.textFromValue(parent.value, parent.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !parent.editable; validator: parent.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+                        Text { text: "Max Age (ms):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        SpinBox {
+                            from: 1000; to: 30000; value: Number(bridge.getSetting("WebAppMaxAgeMs", 7500)); editable: true
+                            implicitHeight: controlHeight; Layout.fillWidth: true
+                            onValueChanged: bridge.setSetting("WebAppMaxAgeMs", value)
+                            contentItem: TextInput { text: parent.textFromValue(parent.value, parent.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !parent.editable; validator: parent.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        // ── Info ──
+                        Text { text: "INFO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text {
+                            Layout.columnSpan: 4; Layout.fillWidth: true
+                            wrapMode: Text.WordWrap; font.pixelSize: 11; color: textSecondary
+                            text: "Configura i parametri sopra e abilita la webapp. Al prossimo avvio di Decodium " +
+                                  "il server web si avvierà automaticamente.\n\n" +
+                                  "Apri nel browser:  http://" + bindField.text + ":" + httpPortField.text + "/\n\n" +
+                                  "Per accesso da LAN usa 0.0.0.0 come bind e imposta un token di almeno 12 caratteri."
+                        }
+
+                        // ── Stato ──
+                        Text { text: "STATO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Row {
+                            Layout.columnSpan: 4; spacing: 8
+                            Rectangle { width: 12; height: 12; radius: 6; color: bridge.getSetting("WebAppActive", false) ? accentGreen : "#f44336"; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                text: bridge.getSetting("WebAppActive", false) ? "Webapp attiva" : "Webapp non attiva — abilita e riavvia Decodium"
+                                color: bridge.getSetting("WebAppActive", false) ? accentGreen : textSecondary; font.pixelSize: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
                     }
                 }
 

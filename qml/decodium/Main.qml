@@ -1691,7 +1691,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.openCatSettings()
+                                onClicked: settingsDialog.openTab(1)
                             }
 
                             ToolTip.visible: catMA.containsMouse
@@ -3925,17 +3925,8 @@ ApplicationWindow {
                 }
             }
 
-            // Queue Panel (between decode panels and TX panel)
-            QueuePanel {
-                id: queuePanelComponent
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: txPanelContainer.top
-                anchors.bottomMargin: 4
-                height: 140
-                engine: bridge
-                visible: bridge.multiAnswerMode
-            }
+            // Queue Panel disabilitato — queue e slot già visibili nella barra principale
+            // QueuePanel { id: queuePanelComponent; visible: false }
 
             // TX Panel Container (resizable at bottom) - delegates to HvTxW via bridge
             Rectangle {
@@ -7269,7 +7260,7 @@ ApplicationWindow {
         visible: timeSyncPanelVisible
         z: 200
         x: mainWindow.width - width - 12
-        y: 100
+        y: 10
         width: 360
         height: timeSyncLoader.item ? timeSyncLoader.item.implicitHeight : 28
 
