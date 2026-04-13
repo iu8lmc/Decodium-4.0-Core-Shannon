@@ -52,7 +52,7 @@ Window {
     readonly property int bandGapWidth: compactBandColumns ? 6 : 10
     readonly property int bandDxccWidth: compactBandColumns ? 92 : 132
     readonly property int bandAzWidth: compactBandColumns ? 42 : 52
-    readonly property int bandMessageMinWidth: compactBandColumns ? 72 : 140
+    readonly property int bandMessageMinWidth: compactBandColumns ? 100 : 140
     readonly property real rightPanelWidth: width * 0.5
     readonly property bool compactRxColumns: rightPanelWidth < 420
     readonly property bool compactRxHeader: rightPanelWidth < 340
@@ -202,8 +202,8 @@ Window {
         z: 1000
         width: tooltipLabel.width + 16
         height: tooltipLabel.height + 10
-        color: "#e0202020"
-        border.color: "#606060"
+        color: Qt.rgba(0.08, 0.08, 0.08, 0.88)
+        border.color: Qt.rgba(0.4, 0.4, 0.4, 0.7)
         border.width: 1
         radius: 4
 
@@ -313,7 +313,7 @@ Window {
                             Text {
                                 text: "UTC"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: secondaryCyan
                                 Layout.preferredWidth: decodeWindow.bandUtcWidth
@@ -321,7 +321,7 @@ Window {
                             Text {
                                 text: "dB"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: secondaryCyan
                                 horizontalAlignment: Text.AlignRight
@@ -330,7 +330,7 @@ Window {
                             Text {
                                 text: "DT"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: secondaryCyan
                                 horizontalAlignment: Text.AlignRight
@@ -339,7 +339,7 @@ Window {
                             Text {
                                 text: "Freq"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: secondaryCyan
                                 horizontalAlignment: Text.AlignRight
@@ -349,7 +349,7 @@ Window {
                             Text {
                                 text: "Message"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: secondaryCyan
                                 Layout.fillWidth: true
@@ -361,7 +361,7 @@ Window {
                                     anchors.fill: parent
                                     text: "DXCC"
                                     font.family: "Consolas"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 11
                                     font.bold: true
                                     color: secondaryCyan
                                     horizontalAlignment: Text.AlignHCenter
@@ -375,7 +375,7 @@ Window {
                                     anchors.fill: parent
                                     text: "Az"
                                     font.family: "Consolas"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 11
                                     font.bold: true
                                     color: secondaryCyan
                                     horizontalAlignment: Text.AlignHCenter
@@ -680,7 +680,7 @@ Window {
                             Text {
                                 text: "UTC"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: primaryBlue
                                 Layout.preferredWidth: decodeWindow.rxUtcWidth
@@ -688,7 +688,7 @@ Window {
                             Text {
                                 text: "dB"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: primaryBlue
                                 horizontalAlignment: Text.AlignRight
@@ -697,7 +697,7 @@ Window {
                             Text {
                                 text: "DT"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: primaryBlue
                                 horizontalAlignment: Text.AlignRight
@@ -707,7 +707,7 @@ Window {
                             Text {
                                 text: "Message"
                                 font.family: "Consolas"
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.bold: true
                                 color: primaryBlue
                                 Layout.fillWidth: true

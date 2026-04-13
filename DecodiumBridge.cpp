@@ -2267,8 +2267,16 @@ void DecodiumBridge::startTx()
             bridgeLog("SoundInput suspended during TX (sync mode)");
         }
 
-        // Aggiungi TX entry alla decode list solo per il primo invio (non per retry)
-        if (m_txRetryCount <= 1) {
+        // Aggiungi TX entry alla decode list solo se il messaggio è diverso dall'ultimo TX
+        {
+        bool skipTxEntry = false;
+        for (int di = qMax(0, m_decodeList.size() - 3); di < m_decodeList.size(); ++di) {
+            QVariantMap prev = m_decodeList[di].toMap();
+            if (prev.value("isTx").toBool() && prev.value("message").toString() == msg) {
+                skipTxEntry = true; break;
+            }
+        }
+        if (!skipTxEntry) {
             QVariantMap txEntry;
             txEntry["time"]     = QDateTime::currentDateTimeUtc().toString("HHmmss");
             txEntry["db"]       = "TX";
@@ -2293,7 +2301,7 @@ void DecodiumBridge::startTx()
             txEntry["isB4"]           = false;
             m_decodeList.append(txEntry);
             emit decodeListChanged();
-        } // if txRetryCount <= 1
+        } // if !skipTxEntry
         }
 
         unsigned symbolsLength = 79;
@@ -2370,8 +2378,16 @@ void DecodiumBridge::startTx()
     m_transmitting = true;
     emit transmittingChanged();
 
-    // Aggiungi entry TX alla decode list solo per il primo invio (non retry)
-    if (m_txRetryCount <= 1) {
+    // Aggiungi entry TX solo se messaggio diverso dall'ultimo TX nella lista
+    {
+    bool skipTxEntry = false;
+    for (int di = qMax(0, m_decodeList.size() - 3); di < m_decodeList.size(); ++di) {
+        QVariantMap prev = m_decodeList[di].toMap();
+        if (prev.value("isTx").toBool() && prev.value("message").toString() == msg) {
+            skipTxEntry = true; break;
+        }
+    }
+    if (!skipTxEntry) {
         QVariantMap txEntry;
         txEntry["time"]     = QDateTime::currentDateTimeUtc().toString("HHmmss");
         txEntry["db"]       = "TX";
@@ -2396,6 +2412,7 @@ void DecodiumBridge::startTx()
         txEntry["isB4"]          = false;
         m_decodeList.append(txEntry);
         emit decodeListChanged();
+    } // if !skipTxEntry
     }
 
     // Pulizia risorse TX precedenti
@@ -3707,14 +3724,14 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         // TX5 (73) inviato >=1 volta → QSO completo (una 73 basta, non serve ripetere)
         if (m_currentTx == 5 && m_nTx73 >= 1) {
             bridgeLog("checkAndStartPeriodicTx: nTx73=" + QString::number(m_nTx73) +
-                      " >= 5 → QSO completo (TX5 timeout)");
+                      " >= 1 → QSO completo (TX5 sent)");
             if (!m_dxCall.isEmpty()) {
                 capturePendingAutoLogSnapshot();
                 logQso();
             }
+            m_qsoLogged = false;  // reset per il prossimo QSO
             setTxEnabled(false);
             if (m_qsoProgress != 6) { m_qsoProgress = 6; emit qsoProgressChanged(); } // IDLE_QSO
-            // clearDX: azzera contatori e DX prima di processare coda o CQ
             m_nTx73 = 0;
             m_txRetryCount = 0;
             m_lastNtx = -1;
@@ -3950,6 +3967,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
             capturePendingAutoLogSnapshot();
             logQso();
         }
+        m_qsoLogged = false;  // reset per il prossimo QSO
         // QSO finito: disabilita TX automatico
         setTxEnabled(false);
         if (m_qsoProgress != 6) { m_qsoProgress = 6; emit qsoProgressChanged(); } // IDLE_QSO
@@ -3981,6 +3999,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
                 capturePendingAutoLogSnapshot();
                 logQso();
             }
+            m_qsoLogged = false;  // reset per il prossimo QSO
             setTxEnabled(false);
             if (m_qsoProgress != 6) { m_qsoProgress = 6; emit qsoProgressChanged(); }
             m_nTx73 = 0; m_txRetryCount = 0; m_lastNtx = -1; m_lastCqPidx = -1;

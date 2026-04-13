@@ -47,7 +47,7 @@ Dialog {
     property color textPrimary:   bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color glassBorder:   bridge.themeManager.glassBorder
-    readonly property int controlHeight: 32
+    readonly property int controlHeight: 36
     readonly property int controlFontSize: 12
 
     // ── Preset colors for color pickers ──────────────────────────────────

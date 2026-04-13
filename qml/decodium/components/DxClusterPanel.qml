@@ -186,7 +186,7 @@ Rectangle {
 
         delegate: Rectangle {
             width:  spotList.width
-            height: 26
+            height: 28
             color: {
                 if (rowMouse.containsMouse)
                     return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
@@ -265,7 +265,7 @@ Rectangle {
                     Text {
                         anchors.centerIn: parent
                         text: modelData["mode"] || "?"
-                        color: textPrimary; font.pixelSize: 9; font.bold: true
+                        color: textPrimary; font.pixelSize: 10; font.bold: true
                     }
                 }
                 Text {

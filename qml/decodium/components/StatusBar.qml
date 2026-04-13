@@ -120,7 +120,7 @@ Rectangle {
 
         // Status indicators
         RowLayout {
-            spacing: 12
+            spacing: 8
 
             // MON indicator
             Rectangle {
@@ -237,7 +237,7 @@ Rectangle {
 
                     Text {
                         text: "FT"
-                        font.pixelSize: 8
+                        font.pixelSize: 9
                         font.bold: true
                         color: ftThreadsLed.isActive ? "#ff9800" : textSecondary
                     }

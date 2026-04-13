@@ -3016,7 +3016,8 @@ ApplicationWindow {
                         }
                         for (var i = 0; i < bridge.decodeList.length; i++) {
                             var item = bridge.decodeList[i]
-                            if (decodePanel.isAtRxFrequency(item.freq, item)) {
+                            // Mostra decode alla freq RX + tutti i TX (sempre visibili)
+                            if (item.isTx || decodePanel.isAtRxFrequency(item.freq, item)) {
                                 appendUnique(item)
                             }
                         }
@@ -3517,11 +3518,7 @@ ApplicationWindow {
                                         spacing: 1
                                         cacheBuffer: 3000
                                         interactive: true
-                                        // Auto-scroll solo quando non in TX (evita blocco scroll durante trasmissione)
-                                        onCountChanged: {
-                                            if (!bridge.transmitting)
-                                                Qt.callLater(positionViewAtEnd)
-                                        }
+                                        onCountChanged: Qt.callLater(positionViewAtEnd)
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
 
@@ -3825,7 +3822,10 @@ ApplicationWindow {
                                         spacing: 1
                                         onCountChanged: positionViewAtEnd()
 
+                                        // Reattivo: si aggiorna quando la decodeList cambia
+                                        property int _ver: decodePanel.decodeListVersion
                                         model: {
+                                            void(_ver)  // forza ricalcolo quando _ver cambia
                                             return decodePanel.currentRxDecodes()
                                         }
 
@@ -4410,6 +4410,17 @@ ApplicationWindow {
     Connections {
         target: bridge
         function onErrorMessage(msg) {
+            // Ignora TUTTI gli errori rig/Hamlib/CAT/COM quando il CAT nativo gestisce il rig
+            // Questi vengono dal legacy backend che tenta di connettersi sulla stessa porta
+            if (bridge.catBackend === "native") {
+                var lower = msg.toLowerCase()
+                if (lower.indexOf("hamlib") >= 0 || lower.indexOf("com") >= 0 ||
+                    lower.indexOf("access") >= 0 || lower.indexOf("cat failure") >= 0 ||
+                    lower.indexOf("cat ") >= 0 || lower.indexOf("rig") >= 0 ||
+                    lower.indexOf("serial") >= 0 || lower.indexOf("timed out") >= 0 ||
+                    lower.indexOf("kenwood") >= 0 || lower.indexOf("communication") >= 0)
+                    return
+            }
             warningDialogTitle = "Errore"
             warningDialogSummary = msg
             warningDialogDetails = ""

@@ -128,7 +128,7 @@ Item {
 
                         Rectangle {
                             width: Math.min(440, topControlsFlow.width)
-                            height: 28
+                            height: 32
                             radius: 4
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
                             border.color: glassBorder

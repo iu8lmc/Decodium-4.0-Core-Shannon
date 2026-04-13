@@ -55,20 +55,20 @@ Item {
                 spacing: 6
 
                 // Palette
-                Text { text: "Palette:"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Palette:"; color: textSec; font.pixelSize: 11 }
                 ComboBox {
                     id: paletteCombo
                     Layout.preferredWidth: 106
                     model: waterfallDisplay.paletteNames
                     currentIndex: Math.max(0, bridge.uiPaletteIndex)
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     onActivated: {
                         waterfallDisplay.paletteIndex = currentIndex
                         bridge.uiPaletteIndex = currentIndex
                         mainWindow.scheduleSave()
                     }
                     background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
-                    contentItem: Text { text: paletteCombo.displayText; font.pixelSize: 10; color: textPrimary; verticalAlignment: Text.AlignVCenter; leftPadding: 4 }
+                    contentItem: Text { text: paletteCombo.displayText; font.pixelSize: 11; color: textPrimary; verticalAlignment: Text.AlignVCenter; leftPadding: 4 }
                 }
 
                 // Auto Range
@@ -80,16 +80,16 @@ Item {
                     ToolTip.visible: autoRangeCheck.hovered
                     ToolTip.delay: 400
                     indicator: Rectangle {
-                        implicitWidth: 14; implicitHeight: 14; radius: 2
+                        implicitWidth: 18; implicitHeight: 18; radius: 2
                         color: autoRangeCheck.checked ? "#00e676" : Qt.rgba(30/255,45/255,70/255,0.9)
                         border.color: "#00e676"; border.width: 1
                         Text { anchors.centerIn: parent; text: "A"; color: "black"; font.pixelSize: 9; font.bold: true; visible: autoRangeCheck.checked }
                     }
                 }
-                Text { text: "Auto"; color: autoRangeCheck.checked ? "#00e676" : textSec; font.pixelSize: 10 }
+                Text { text: "Auto"; color: autoRangeCheck.checked ? "#00e676" : textSec; font.pixelSize: 11 }
 
                 // TX brackets toggle
-                Text { text: "[ ]"; color: txBracketsCheck.checked ? accentGreen : textSec; font.pixelSize: 10; font.bold: true }
+                Text { text: "[ ]"; color: txBracketsCheck.checked ? accentGreen : textSec; font.pixelSize: 11; font.bold: true }
                 CheckBox {
                     id: txBracketsCheck
                     checked: true
@@ -113,16 +113,16 @@ Item {
                     ToolTip.visible: peakHoldCheck.hovered
                     ToolTip.delay: 400
                     indicator: Rectangle {
-                        implicitWidth: 14; implicitHeight: 14; radius: 2
+                        implicitWidth: 18; implicitHeight: 18; radius: 2
                         color: peakHoldCheck.checked ? "#ffcc00" : Qt.rgba(30/255,45/255,70/255,0.9)
                         border.color: "#ffcc00"; border.width: 1
                         Text { anchors.centerIn: parent; text: "P"; color: "#262626"; font.pixelSize: 9; font.bold: true; visible: peakHoldCheck.checked }
                     }
                 }
-                Text { text: "Peak"; color: peakHoldCheck.checked ? "#ffcc00" : textSec; font.pixelSize: 10 }
+                Text { text: "Peak"; color: peakHoldCheck.checked ? "#ffcc00" : textSec; font.pixelSize: 11 }
 
                 // Zoom
-                Text { text: "Zoom"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Zoom"; color: textSec; font.pixelSize: 11 }
                 Slider {
                     id: zoomSlider
                     Layout.preferredWidth: 70
@@ -141,13 +141,13 @@ Item {
                         color: zoomSlider.pressed ? accentGreen : accentCyan
                     }
                 }
-                Text { text: zoomSlider.value.toFixed(1)+"×"; color: accentCyan; font.pixelSize: 10; width: 28 }
+                Text { text: zoomSlider.value.toFixed(1)+"×"; color: accentCyan; font.pixelSize: 11; width: 28 }
 
                 // dBm live noise floor
                 Text {
                     text: waterfallDisplay.measuredFloor.toFixed(0) + "dBm"
                     color: "#00e676"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     ToolTip.text: "Noise floor misurato"
                     ToolTip.visible: nfLabel.containsMouse
                     ToolTip.delay: 400
