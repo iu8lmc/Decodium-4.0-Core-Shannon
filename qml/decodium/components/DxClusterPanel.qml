@@ -23,101 +23,131 @@ Rectangle {
     border.color:  glassBorder
     border.width:  1
     radius:        8
-    width:         460
-    height:        320
+    width:         580
+    height:        480
 
     // ── header ──────────────────────────────────────────────────────────────
     Rectangle {
         id: header
-        width: parent.width; height: 34
+        width: parent.width; height: 40
         color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
         radius: 8
-        // bottom corners piatti
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 8; color: parent.color }
 
+        // Zona drag solo nella parte sinistra del titolo
         MouseArea {
-            anchors.fill: parent
+            anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+            width: parent.width * 0.4
             drag.target: root
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0
             drag.maximumX: root.parent ? root.parent.width - root.width : root.x
             drag.minimumY: 0
             drag.maximumY: root.parent ? root.parent.height - 50 : root.y
-            hoverEnabled: true
             cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-            onPressed: root.z = 250
+            onPressed: root.z = 9001
         }
 
-        RowLayout {
-            anchors { fill: parent; leftMargin: 10; rightMargin: 6 }
+        // Titolo (a sinistra)
+        Row {
+            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 10
             spacing: 6
+            Rectangle { width: 8; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter
+                color: bridge.dxClusterConnected ? "#00e676" : "#ef5350" }
+            Text { text: "DX Cluster"; color: secondaryCyan; font.bold: true; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: bridge.dxClusterConnected ? bridge.dxClusterHost : ""; color: textSecondary; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
+        }
 
-            // stato connessione
+        // Pulsanti a destra (z alto per essere sopra tutto)
+        Row {
+            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.rightMargin: 6
+            spacing: 6
+            z: 10
+
+            // Pulsante CONNETTI grande
             Rectangle {
-                width: 8; height: 8; radius: 4
-                color: bridge.dxCluster && bridge.dxCluster.connected ? "#00e676" : "#ef5350"
-            }
-            Text {
-                text: "DX Cluster"
-                color: secondaryCyan; font.bold: true; font.pixelSize: 12
-            }
-            Text {
-                text: bridge.dxCluster && bridge.dxCluster.connected
-                      ? "● " + bridge.dxCluster.host
-                      : "disconnesso"
-                color: textSecondary; font.pixelSize: 10
-            }
-            Item { Layout.fillWidth: true }
-
-            // contatore spot
-            Text {
-                text: (bridge.dxCluster && bridge.dxCluster.spots ? bridge.dxCluster.spots.length : 0) + " spot"
-                color: textSecondary; font.pixelSize: 10
-            }
-
-            // pulsante Connetti / Disconnetti
-            Rectangle {
-                width: 72; height: 22; radius: 4
-                color: connMouse.containsMouse
-                       ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
-                       : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
-                border.color: secondaryCyan; border.width: 1
-                MouseArea {
-                    id: connMouse; anchors.fill: parent; hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (!bridge.dxCluster) return
-                        if (bridge.dxCluster.connected)
-                            bridge.dxCluster.disconnectCluster()
-                        else
-                            bridge.dxCluster.connectCluster()
-                    }
-                }
+                width: 90; height: 28; radius: 6
+                color: connBtnArea.pressed ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.5)
+                     : connBtnArea.containsMouse ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.35)
+                     : Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.15)
+                border.color: bridge.dxClusterConnected ? "#f44336" : accentGreen
+                border.width: 2
                 Text {
                     anchors.centerIn: parent
-                    text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnetti" : "Connetti"
-                    color: secondaryCyan; font.pixelSize: 10
+                    text: bridge.dxClusterConnected ? "Disconnetti" : "Connetti"
+                    color: bridge.dxClusterConnected ? "#f44336" : accentGreen
+                    font.pixelSize: 11; font.bold: true
+                }
+                MouseArea {
+                    id: connBtnArea; anchors.fill: parent; hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (bridge.dxClusterConnected) {
+                            bridge.disconnectDxCluster()
+                        } else {
+                            var h = hostField.text ? hostField.text.trim() : "dx.iz7auh.net"
+                            var p = portField.text ? parseInt(portField.text) : 8000
+                            if (!h) h = "dx.iz7auh.net"
+                            if (!p || p <= 0) p = 8000
+                            bridge.connectDxCluster(h, p)
+                        }
+                    }
                 }
             }
 
-            // pulsante chiudi
+            // Pulsante chiudi
             Rectangle {
-                width: 22; height: 22; radius: 4
-                color: closeMouse.containsMouse ? Qt.rgba(1, 0.2, 0.2, 0.4) : "transparent"
+                width: 28; height: 28; radius: 6
+                color: closeArea.containsMouse ? Qt.rgba(1, 0.2, 0.2, 0.4) : "transparent"
+                border.color: closeArea.containsMouse ? "#f44336" : glassBorder
+                Text { anchors.centerIn: parent; text: "✕"; color: closeArea.containsMouse ? "#f44336" : textSecondary; font.pixelSize: 13 }
                 MouseArea {
-                    id: closeMouse; anchors.fill: parent; hoverEnabled: true
+                    id: closeArea; anchors.fill: parent; hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.closeRequested()
                 }
-                Text { anchors.centerIn: parent; text: "✕"; color: textSecondary; font.pixelSize: 11 }
             }
+        }
+    }
+
+    // ── barra connessione (host + port + connetti) ────────────────────────
+    Rectangle {
+        id: connBar
+        anchors.top: header.bottom
+        width: parent.width; height: 36
+        color: Qt.rgba(0, 0, 0, 0.3)
+
+        RowLayout {
+            anchors.fill: parent; anchors.margins: 4; spacing: 4
+
+            Text { text: "Host:"; color: textSecondary; font.pixelSize: 10 }
+            TextField {
+                id: hostField
+                Layout.fillWidth: true; implicitHeight: 28; leftPadding: 6; font.pixelSize: 12
+                color: textPrimary; placeholderText: "dx.iz7auh.net"
+                text: bridge.dxClusterHost || "dx.iz7auh.net"
+                background: Rectangle { color: Qt.rgba(0,0,0,0.4); border.color: glassBorder; radius: 3 }
+                onEditingFinished: bridge.dxClusterHost = text
+            }
+            Text { text: ":"; color: textSecondary; font.pixelSize: 10 }
+            TextField {
+                id: portField
+                implicitWidth: 60; implicitHeight: 28; leftPadding: 6; font.pixelSize: 12
+                color: textPrimary; placeholderText: "8000"
+                text: String(bridge.dxClusterPort || 8000)
+                background: Rectangle { color: Qt.rgba(0,0,0,0.4); border.color: glassBorder; radius: 3 }
+                validator: IntValidator { bottom: 1; top: 65535 }
+                onEditingFinished: bridge.dxClusterPort = parseInt(text)
+            }
+
+            // Pulsante connetti rimosso — usa quello nell'header
         }
     }
 
     // ── colonne header tabella ───────────────────────────────────────────────
     Rectangle {
         id: colHeader
-        anchors.top: header.bottom
+        anchors.top: connBar.bottom
         width: parent.width; height: 22
         color: Qt.rgba(0, 0, 0, 0.25)
 
@@ -146,7 +176,7 @@ Rectangle {
         }
         clip: true
         model: {
-            var all = bridge.dxCluster ? bridge.dxCluster.spots : []
+            var all = bridge.dxClusterSpots || []
             if (root.modeFilter === "") return all
             return all.filter(function(s) { return s["mode"] === root.modeFilter })
         }
@@ -156,7 +186,7 @@ Rectangle {
 
         delegate: Rectangle {
             width:  spotList.width
-            height: 22
+            height: 26
             color: {
                 if (rowMouse.containsMouse)
                     return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
@@ -334,4 +364,128 @@ Rectangle {
     }
 
     property string modeFilter: ""
+
+    // ── Terminal Telnet ──────────────────────────────────────────────────
+    property bool terminalVisible: false
+    property var terminalLines: []
+
+    Connections {
+        target: bridge.dxCluster
+        function onStatusUpdate(msg) {
+            var lines = root.terminalLines.slice()
+            lines.push(msg)
+            if (lines.length > 200) lines = lines.slice(lines.length - 200)
+            root.terminalLines = lines
+        }
+    }
+
+    Rectangle {
+        visible: root.terminalVisible
+        anchors.left: parent.left; anchors.right: parent.right
+        anchors.bottom: terminalInput.top
+        anchors.top: filterRow.bottom
+        anchors.margins: 4
+        color: Qt.rgba(0, 0, 0, 0.85)
+        border.color: secondaryCyan; border.width: 1; radius: 4
+
+        Flickable {
+            id: termFlick
+            anchors.fill: parent; anchors.margins: 4
+            contentHeight: termText.implicitHeight
+            clip: true
+            flickableDirection: Flickable.VerticalFlick
+
+            Text {
+                id: termText
+                width: parent.width
+                text: root.terminalLines.join("\n")
+                color: "#00ff88"; font.family: "Consolas"; font.pixelSize: 11
+                wrapMode: Text.WrapAnywhere
+            }
+
+            onContentHeightChanged: {
+                if (contentHeight > height)
+                    contentY = contentHeight - height
+            }
+        }
+    }
+
+    // Campo input comandi telnet
+    Rectangle {
+        id: terminalInput
+        visible: root.terminalVisible
+        anchors.left: parent.left; anchors.right: parent.right
+        anchors.bottom: parent.bottom; anchors.margins: 4
+        height: 30; radius: 4
+        color: Qt.rgba(0, 0, 0, 0.7); border.color: secondaryCyan; border.width: 1
+
+        RowLayout {
+            anchors.fill: parent; anchors.margins: 2; spacing: 4
+
+            Text { text: ">"; color: secondaryCyan; font.family: "Consolas"; font.pixelSize: 13; font.bold: true; Layout.leftMargin: 4 }
+
+            TextInput {
+                id: cmdInput
+                Layout.fillWidth: true; Layout.fillHeight: true
+                color: "#00ff88"; font.family: "Consolas"; font.pixelSize: 12
+                verticalAlignment: TextInput.AlignVCenter
+                clip: true
+                onAccepted: {
+                    if (text.trim().length > 0 && bridge.dxCluster) {
+                        bridge.dxCluster.sendCommand(text.trim())
+                        var lines = root.terminalLines.slice()
+                        lines.push("> " + text.trim())
+                        root.terminalLines = lines
+                        text = ""
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 50; height: 22; radius: 4
+                color: termBtnMA.containsMouse ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) : "transparent"
+                border.color: secondaryCyan; border.width: 1
+                Text { anchors.centerIn: parent; text: "Invia"; color: secondaryCyan; font.pixelSize: 10 }
+                MouseArea { id: termBtnMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: cmdInput.accepted()
+                }
+            }
+        }
+    }
+
+    // Pulsante toggle terminale nell'header
+    Rectangle {
+        anchors.right: parent.right; anchors.top: parent.top
+        anchors.rightMargin: 40; anchors.topMargin: 6
+        width: 24; height: 24; radius: 4
+        color: root.terminalVisible ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) : Qt.rgba(1,1,1,0.05)
+        border.color: root.terminalVisible ? secondaryCyan : glassBorder
+        Text { anchors.centerIn: parent; text: ">_"; color: root.terminalVisible ? secondaryCyan : textSecondary; font.pixelSize: 10; font.bold: true }
+        MouseArea {
+            id: termToggleMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+            onClicked: root.terminalVisible = !root.terminalVisible
+        }
+        ToolTip.visible: termToggleMA.containsMouse
+        ToolTip.text: "Terminal Telnet"
+    }
+
+    // ── Handle di ridimensionamento (angolo basso-destro) ────────────────────
+    MouseArea {
+        anchors.right: parent.right; anchors.bottom: parent.bottom
+        width: 18; height: 18
+        cursorShape: Qt.SizeFDiagCursor
+        property point startPos
+        property real startW; property real startH
+        onPressed: function(mouse) { startPos = Qt.point(mouse.x, mouse.y); startW = root.width; startH = root.height }
+        onPositionChanged: function(mouse) {
+            if (!pressed) return
+            var dx = mouse.x - startPos.x; var dy = mouse.y - startPos.y
+            root.width  = Math.max(400, startW + dx)
+            root.height = Math.max(250, startH + dy)
+        }
+        Rectangle {
+            anchors.fill: parent; color: "transparent"
+            Text { anchors.centerIn: parent; text: "⤡"; color: textSecondary; font.pixelSize: 12; opacity: 0.5 }
+        }
+    }
 }

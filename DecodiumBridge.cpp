@@ -675,8 +675,39 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_omniRigCat      = new DecodiumOmniRigManager(this);
     m_hamlibCat       = new DecodiumTransceiverManager(this);
     m_dxCluster       = new DecodiumDxCluster(this);
+    connect(m_dxCluster, &DecodiumDxCluster::statusUpdate, this, [](const QString& msg) {
+        qDebug() << "[DxCluster]" << msg;
+    });
+    connect(m_dxCluster, &DecodiumDxCluster::errorOccurred, this, [this](const QString& msg) {
+        qDebug() << "[DxCluster ERROR]" << msg;
+        emit errorMessage("DX Cluster: " + msg);
+    });
+    connect(m_dxCluster, &DecodiumDxCluster::connectedChanged, this, [this]() {
+        qDebug() << "[DxCluster] connected =" << m_dxCluster->connected();
+        emit dxClusterConnectedChanged();
+    });
+    connect(m_dxCluster, &DecodiumDxCluster::spotsChanged, this, [this]() {
+        emit dxClusterSpotsChanged();
+    });
     m_activeStations  = new ActiveStationsModel(this);
     m_alertManager    = new DecodiumAlertManager(this);
+
+    // DX Cluster: auto-connect all'avvio se abilitato
+    QTimer::singleShot(4000, this, [this]() {
+        if (!m_dxCluster || m_callsign.isEmpty()) return;
+        m_dxCluster->setCallsign(m_callsign);
+        QSettings s("Decodium", "Decodium3");
+        if (s.value("DXCluster/autoConnect", false).toBool()) {
+            QString h = s.value("DXCluster/host", m_dxCluster->host()).toString();
+            int p = s.value("DXCluster/port", m_dxCluster->port()).toInt();
+            if (!h.isEmpty() && p > 0) {
+                m_dxCluster->setHost(h);
+                m_dxCluster->setPort(p);
+                bridgeLog("DX Cluster auto-connect: " + h + ":" + QString::number(p));
+                m_dxCluster->connectCluster();
+            }
+        }
+    });
 
 #if defined(Q_OS_MAC)
     m_useLegacyTxBackend = true;
@@ -1488,6 +1519,7 @@ void DecodiumBridge::setCallsign(const QString& v) {
         m_callsign = v;
         emit callsignChanged();
         if (m_pskReporter) m_pskReporter->setLocalStation(m_callsign, m_grid);
+        if (m_dxCluster)   m_dxCluster->setCallsign(m_callsign);
         regenerateTxMessages();
     }
 }
@@ -1893,6 +1925,7 @@ void DecodiumBridge::setAutoCqRepeat(bool v)
         m_autoCqRepeat = v;
         if (m_autoCqRepeat) {
             clearManualTxHold(QStringLiteral("autocq-enabled"));
+            m_autoCqCycleCount = 0;  // reset contatore cicli
         }
         if (m_autoCqRepeat && !m_autoSeq) {
             // AutoCQ must always behave like legacy auto-reply mode.
@@ -2226,6 +2259,14 @@ void DecodiumBridge::startTx()
         m_transmitting = true;
         emit transmittingChanged();
 
+        // Anti-collisione: ferma l'ingresso audio durante TX per evitare
+        // che il decoder processi il nostro stesso tono come segnale ricevuto.
+        // Eccezione: FT2 async è full-duplex, RX deve continuare durante TX.
+        if (m_soundInput && !(m_mode == "FT2" && m_asyncTxEnabled)) {
+            m_soundInput->suspend();
+            bridgeLog("SoundInput suspended during TX (sync mode)");
+        }
+
         {
             QVariantMap txEntry;
             txEntry["time"]     = QDateTime::currentDateTimeUtc().toString("HHmmss");
@@ -2409,6 +2450,11 @@ void DecodiumBridge::startTx()
                         m_transmitting = false;
                         emit transmittingChanged();
                         emit statusMessage("TX completato");
+                        // Anti-collisione: riattiva ingresso audio (solo se era stato sospeso)
+                        if (m_soundInput && !(m_mode == "FT2" && m_asyncTxEnabled)) {
+                            m_soundInput->resume();
+                            bridgeLog("SoundInput resumed after TX complete");
+                        }
                         // Segna timestamp fine TX per guard timer FT2 async (Shannon m_asyncTxGuardTimer)
                         if (m_mode == "FT2" && m_asyncTxEnabled)
                             m_asyncLastTxEndMs = QDateTime::currentMSecsSinceEpoch();
@@ -2515,6 +2561,11 @@ void DecodiumBridge::stopTx()
         m_transmitting = false;
         emit transmittingChanged();
         emit statusMessage("TX fermato");
+        // Anti-collisione: riattiva ingresso audio dopo TX (solo se era stato sospeso)
+        if (m_soundInput && !(m_mode == "FT2" && m_asyncTxEnabled)) {
+            m_soundInput->resume();
+            bridgeLog("SoundInput resumed after TX");
+        }
     }
 }
 
@@ -2799,6 +2850,31 @@ void DecodiumBridge::setCatBackend(const QString& v)
     s2.setValue("catBackend", m_catBackend);
 }
 
+
+void DecodiumBridge::connectDxCluster(const QString& host, int port)
+{
+    if (!m_dxCluster) return;
+    // Se host/port vuoti dal QML, leggi dai QSettings
+    QString h = host.trimmed();
+    int p = port;
+    if (h.isEmpty() || p <= 0) {
+        QSettings s("Decodium", "Decodium3");
+        if (h.isEmpty()) h = s.value("DXCluster/host", m_dxCluster->host()).toString();
+        if (p <= 0) p = s.value("DXCluster/port", m_dxCluster->port()).toInt();
+    }
+    if (h.isEmpty()) h = "dx.iz7auh.net";
+    if (p <= 0) p = 8000;
+    m_dxCluster->setHost(h);
+    m_dxCluster->setPort(p);
+    if (!m_callsign.isEmpty()) m_dxCluster->setCallsign(m_callsign);
+    bridgeLog("connectDxCluster: " + h + ":" + QString::number(p) + " as " + m_callsign);
+    m_dxCluster->connectCluster();
+}
+
+void DecodiumBridge::disconnectDxCluster()
+{
+    if (m_dxCluster) m_dxCluster->disconnectCluster();
+}
 
 QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultValue) const
 {
@@ -3136,14 +3212,16 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
     if (!hisGrid.isEmpty()) setDxGrid(hisGrid);
     else if (!m_dxGrid.isEmpty()) hisGrid = m_dxGrid;
 
+    // Sempre resettare contatori su double-click (anche se stessa stazione)
+    m_nTx73 = 0;
+    m_txRetryCount = 0;
+    m_lastNtx = -1;
+    m_lastCqPidx = -1;
+    m_txWatchdogTicks = 0;
+    m_autoCQPeriodsMissed = 0;
+    m_qsoLogged = false;
+    clearPendingAutoLogSnapshot();
     if (newQso) {
-        m_nTx73 = 0;
-        m_txRetryCount = 0;
-        m_lastNtx = -1;
-        m_lastCqPidx = -1;
-        m_txWatchdogTicks = 0;
-        m_autoCQPeriodsMissed = 0;
-        clearPendingAutoLogSnapshot();
         clearAutoCqPartnerLock();
     }
 
@@ -3611,20 +3689,24 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             return;
         }
     } else {
-        // QSO response: Shannon m_asyncTxGuardTimer 100ms dopo fine TX
-        qint64 msNow    = QDateTime::currentMSecsSinceEpoch();
-        qint64 guardMs  = 100;
-        if (m_asyncLastTxEndMs > 0 && (msNow - m_asyncLastTxEndMs) < guardMs) {
-            return;  // in guard PTT
+        // FT2 async guard dopo TX:
+        // - 200ms PTT debounce (sempre)
+        // - Se è un RETRY dello stesso step: attendi 1 periodo per dare tempo al decode
+        qint64 msNow = QDateTime::currentMSecsSinceEpoch();
+        if (m_asyncLastTxEndMs > 0) {
+            qint64 elapsed = msNow - m_asyncLastTxEndMs;
+            if (elapsed < 200) return;  // PTT debounce
+            // Retry guard: se stiamo per rimandare lo stesso step, aspetta 1 periodo
+            if (m_currentTx == m_lastNtx && elapsed < periodMsForMode(m_mode)) return;
         }
     }
 
     if (m_txEnabled && !m_tx1.isEmpty()) {
-        // TX5 (73) inviato >=5 volte → QSO completo (allineato a macOS/Repo2: nTx73 >= 5)
-        if (m_currentTx == 5 && m_nTx73 >= 5) {
+        // TX5 (73) inviato >=1 volta → QSO completo (una 73 basta, non serve ripetere)
+        if (m_currentTx == 5 && m_nTx73 >= 1) {
             bridgeLog("checkAndStartPeriodicTx: nTx73=" + QString::number(m_nTx73) +
                       " >= 5 → QSO completo (TX5 timeout)");
-            if ((m_directLogQso || m_autoCqRepeat) && !m_dxCall.isEmpty()) {
+            if (!m_dxCall.isEmpty()) {
                 capturePendingAutoLogSnapshot();
                 logQso();
             }
@@ -3647,10 +3729,10 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             return;
         }
 
-        // === Shannon: maxCallerRetries (5 tentativi per step, poi si ferma) ===
-        // Eccezione: CQ (TX6) in AutoCQ mode non ha retry limit — continua indefinitamente
+        // === Retry limit: solo in AutoCQ, chiamata manuale non ha limiti ===
         bool isCqAutoCq = (m_currentTx == 6 && m_autoCqRepeat);
-        if (!isCqAutoCq && m_currentTx == m_lastNtx && m_txRetryCount >= m_maxCallerRetries) {
+        bool applyRetryLimit = m_autoCqRepeat && !isCqAutoCq;
+        if (applyRetryLimit && m_currentTx == m_lastNtx && m_txRetryCount >= m_maxCallerRetries) {
             bridgeLog("checkAndStartPeriodicTx: retry limit " +
                       QString::number(m_maxCallerRetries) + " su TX" +
                       QString::number(m_currentTx) + " → halt");
@@ -3670,8 +3752,27 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             if (m_multiAnswerMode && !m_callerQueue.isEmpty()) {
                 processNextInQueue();
             } else if (m_autoCqRepeat && !m_tx6.isEmpty()) {
-                advanceQsoState(6);  // CQ
-                startTx();
+                ++m_autoCqCycleCount;
+                bridgeLog("AutoCQ cycle " + QString::number(m_autoCqCycleCount) +
+                          " / " + (m_autoCqMaxCycles > 0 ? QString::number(m_autoCqMaxCycles) : "inf"));
+                if (m_autoCqMaxCycles > 0 && m_autoCqCycleCount >= m_autoCqMaxCycles) {
+                    bridgeLog("AutoCQ: max cycles reached, stopping");
+                    setAutoCqRepeat(false);
+                    setTxEnabled(false);
+                    return;
+                }
+                if (m_autoCqPauseSec > 0) {
+                    bridgeLog("AutoCQ: pausing " + QString::number(m_autoCqPauseSec) + "s before next CQ");
+                    QTimer::singleShot(m_autoCqPauseSec * 1000, this, [this]() {
+                        if (m_autoCqRepeat && !m_transmitting) {
+                            advanceQsoState(6);
+                            startTx();
+                        }
+                    });
+                } else {
+                    advanceQsoState(6);  // CQ
+                    startTx();
+                }
             }
             return;
         }
@@ -3704,6 +3805,37 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     // f = [time, snr, dt, df, message, aptype, quality, freq]
     // Corrisponde a GitHub processDecodedMessage()
     if (f.size() < 5) return;
+
+    // Anti-collisione: non processare decode mentre stiamo trasmettendo.
+    // Eccezione: FT2 async è full-duplex, i decode durante TX sono legittimi.
+    if (m_transmitting && !(m_mode == "FT2" && m_asyncTxEnabled)) {
+        bridgeLog("autoSequenceStep: skipped (TX active, sync mode): " + f[4]);
+        return;
+    }
+
+    // Pulizia periodica cooldown map (previene memory leak su sessioni lunghe)
+    {
+        qint64 nowPurge = QDateTime::currentMSecsSinceEpoch();
+        for (auto it = m_qsoCooldown.begin(); it != m_qsoCooldown.end(); )
+            (nowPurge - it.value() > 30000) ? it = m_qsoCooldown.erase(it) : ++it;
+    }
+
+    // Anti-collisione: deduplicazione — ignora decode identici processati di recente.
+    // FT2 async: il time cambia ad ogni decode, quindi deduplicare solo sul messaggio.
+    // FT8 sync: time+message per permettere stesso messaggio in periodi diversi.
+    {
+        bool isFt2Async = (m_mode == "FT2" && m_asyncTxEnabled);
+        QString dedupeKey = isFt2Async ? f[4] : (f[0] + "|" + f[4]);
+        int dedupeWindowMs = isFt2Async ? 2000 : 4000;  // FT2: 2s (dedup veloce), FT8: 4s
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (m_lastAutoSeqKey == dedupeKey && (now - m_lastAutoSeqMs) < dedupeWindowMs) {
+            bridgeLog("autoSequenceStep: dedupe skip: " + f[4]);
+            return;
+        }
+        m_lastAutoSeqKey = dedupeKey;
+        m_lastAutoSeqMs = now;
+    }
+
     QString msg = f[4].trimmed();
     QStringList parts = msg.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     if (parts.size() < 2) return;
@@ -3718,21 +3850,22 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         from = parts[0];
     }
 
-    // FT2 QSO cooldown: Shannon m_qsoCooldown — ignora 73/RR73 da stazione già chiusa (<30s)
-    // In FT2 async lo stesso 73 viene decodificato ogni ~4s; senza cooldown si fa loop infinito
+    // QSO cooldown: ignora 73/RR73 ripetuti da stazione con cui il QSO è chiuso
+    // Previene loop su decode ripetuti dello stesso messaggio finale
     QString last_word = parts.last();
     bool is_73 = (last_word.compare("73",   Qt::CaseInsensitive) == 0 ||
                   last_word.compare("RR73",  Qt::CaseInsensitive) == 0 ||
                   last_word.compare("RRR",   Qt::CaseInsensitive) == 0);
-    if (is_73 && m_mode == "FT2" && m_asyncTxEnabled && !from.isEmpty()) {
+    if (is_73 && !from.isEmpty()) {
         qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-        // purge entries scadute (>30s)
+        int cooldownMs = (m_mode == "FT2" && m_asyncTxEnabled) ? 8000 : 20000;
+        // purge entries scadute
         for (auto it = m_qsoCooldown.begin(); it != m_qsoCooldown.end(); ) {
-            if (nowMs - it.value() > 30000) it = m_qsoCooldown.erase(it);
+            if (nowMs - it.value() > cooldownMs) it = m_qsoCooldown.erase(it);
             else ++it;
         }
         if (m_qsoCooldown.contains(from)) {
-            bridgeLog("FT2 cooldown: ignoro " + last_word + " da " + from + " (QSO recente)");
+            bridgeLog("QSO cooldown: ignoro " + last_word + " da " + from);
             return;
         }
     }
@@ -3811,7 +3944,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         // FT2 async: aggiungi al cooldown per evitare re-triggering sullo stesso 73
         if (m_mode == "FT2" && m_asyncTxEnabled && !from.isEmpty())
             m_qsoCooldown[from] = QDateTime::currentMSecsSinceEpoch();
-        if ((m_directLogQso || m_autoCqRepeat) && !m_dxCall.isEmpty()) {
+        if (!m_dxCall.isEmpty()) {
             capturePendingAutoLogSnapshot();
             logQso();
         }
@@ -3837,9 +3970,25 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         return;
     } else if (last.compare("RR73", Qt::CaseInsensitive) == 0 ||
                last.compare("RRR",  Qt::CaseInsensitive) == 0) {
+        // Se siamo già in SIGNOFF (abbiamo già mandato 73), il QSO è completo — non rimandare 73
+        if (m_qsoProgress >= 5 && m_nTx73 >= 1) {
+            bridgeLog("autoSeq: ricevuto RR73 ma già in SIGNOFF con nTx73=" + QString::number(m_nTx73) + " → QSO completo");
+            if (!from.isEmpty())
+                m_qsoCooldown[from] = QDateTime::currentMSecsSinceEpoch();
+            if (!m_dxCall.isEmpty()) {
+                capturePendingAutoLogSnapshot();
+                logQso();
+            }
+            setTxEnabled(false);
+            if (m_qsoProgress != 6) { m_qsoProgress = 6; emit qsoProgressChanged(); }
+            m_nTx73 = 0; m_txRetryCount = 0; m_lastNtx = -1; m_lastCqPidx = -1;
+            clearAutoCqPartnerLock();
+            setDxCall(QString()); setDxGrid(QString());
+            if (m_autoCqRepeat) { advanceQsoState(6); setTxEnabled(true); }
+            return;
+        }
         bridgeLog("autoSeq: ricevuto RR73 → TX5 (73)");
-        // FT2 async: aggiungi al cooldown (Shannon: addCallerToCooldown quando riceve RR73)
-        if (m_mode == "FT2" && m_asyncTxEnabled && m_qsoProgress >= 2 && !from.isEmpty())
+        if (!from.isEmpty())
             m_qsoCooldown[from] = QDateTime::currentMSecsSinceEpoch();
         nextTx = 5;
     } else if (last.compare("TU", Qt::CaseInsensitive) == 0 && parts.size() >= 4) {
@@ -3893,17 +4042,20 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     }
 
     if (nextTx > 0) {
-        // Deduplicazione FT2 async: stesso step già in corso → ignora (evita loop)
-        if (nextTx == m_currentTx && m_txRetryCount > 0) {
+        // Deduplicazione: se stiamo già trasmettendo o abbiamo già impostato
+        // lo stesso TX step → non avanzare di nuovo (evita loop in FT2 async)
+        if (nextTx == m_currentTx && (m_transmitting || m_txEnabled)) {
             bridgeLog("autoSeq: nextTx=" + QString::number(nextTx) +
-                      " già corrente con retry=" + QString::number(m_txRetryCount) + ", skip");
+                      " già attivo (transmitting=" + QString::number(m_transmitting) +
+                      " txEnabled=" + QString::number(m_txEnabled) + "), skip");
             return;
         }
-        // Shannon: avanza stato + resetta retry counter + watchdog
-        advanceQsoState(nextTx);
+        // Resetta contatori PRIMA di avanzare stato (evita race condition)
         m_txRetryCount = 0;
-        // Shannon (linea 9681): tx_watchdog(false) → reset watchdog quando risposta valida
         m_txWatchdogTicks = 0;
+        m_qsoLogged = false;  // nuovo step → permetti log
+        // Avanza stato QSO
+        advanceQsoState(nextTx);
         // Resetta guard FT2: risposta ricevuta → ritrasmetti subito
         m_asyncLastTxEndMs = 0;
         // Shannon: auto_tx_mode(true) — abilita TX dopo risposta valida da DX
@@ -4030,7 +4182,10 @@ void DecodiumBridge::loadSettings()
     m_wsprUploadEnabled = s.value("wsprUploadEnabled", false).toBool();
     if (m_wsprUploader) m_wsprUploader->setEnabled(m_wsprUploadEnabled);
     // DX Cluster
-    if (m_dxCluster) m_dxCluster->loadSettings();
+    if (m_dxCluster) {
+        m_dxCluster->loadSettings();
+        if (!m_callsign.isEmpty()) m_dxCluster->setCallsign(m_callsign);
+    }
     // UI state
     m_uiSpectrumHeight  = s.value("uiSpectrumHeight",  150).toInt();
     m_uiPaletteIndex    = s.value("uiPaletteIndex",    3).toInt();
@@ -4308,6 +4463,12 @@ QString DecodiumBridge::ensureAdifLogPath()
 
 void DecodiumBridge::logQso()
 {
+    // Anti-doppio log: previeni log multipli dello stesso QSO
+    if (m_qsoLogged) {
+        bridgeLog("logQso: skipped (already logged this QSO)");
+        return;
+    }
+
     if (usingLegacyBackendForTx()) {
         bridgeLog("logQso: delegating to legacy backend");
         syncLegacyBackendState();
@@ -4409,6 +4570,7 @@ void DecodiumBridge::logQso()
         clearLateAutoLogSnapshot();
     }
     clearPendingAutoLogSnapshot();
+    m_qsoLogged = true;  // impedisce doppio log per questo QSO
     emit statusMessage("QSO loggato: " + logDxCall);
 }
 
@@ -4506,6 +4668,31 @@ bool looksLikeCallsignToken(const QString& token)
 
 }
 
+// Estrae il secondo callsign dal messaggio (quello a destra).
+// "CQ IU8LMC JN70" → IU8LMC (primo call dopo CQ)
+// "IU8LMC 9H1SR -05" → 9H1SR (secondo call)
+// "9H1SR IU8LMC R-05" → IU8LMC (secondo call)
+static QString extractRightCallsign(const QString& msg)
+{
+    QStringList parts = msg.toUpper().split(' ', Qt::SkipEmptyParts);
+    if (parts.isEmpty()) return {};
+
+    // Raccogli tutti i token che sembrano callsign
+    QStringList calls;
+    for (const QString& p : parts) {
+        if (p == "CQ" || p == "DX" || p == "QRZ" || p == "DE" || p == "TEST") continue;
+        if (looksLikeCallsignToken(p))
+            calls.append(p);
+    }
+
+    // Ritorna l'ultimo callsign trovato (il più a destra)
+    if (calls.size() >= 2)
+        return calls[1];   // secondo call = destra
+    if (calls.size() == 1)
+        return calls[0];   // CQ con un solo call
+    return {};
+}
+
 QString DecodiumBridge::extractDecodedCallsign(const QString& msg, bool isCQ) const
 {
     QStringList parts = msg.toUpper().split(' ', Qt::SkipEmptyParts);
@@ -4565,12 +4752,16 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     bool isB4 = !fromCall.isEmpty() && m_workedCalls.contains(fromCall);
     bool isLotw = m_lotwEnabled && !fromCall.isEmpty() && m_lotwUsers.contains(fromCall);
 
+    // DXCC lookup: usa il callsign di DESTRA nel messaggio (il secondo call)
+    QString rightCall = extractRightCallsign(msg);
+    if (rightCall.isEmpty()) rightCall = fromCall;
+
     QString dxCountry;
     QString dxContinent;
     QString dxPrefix;
     bool dxIsNewCountry = false;
-    if (m_dxccLookup && m_dxccLookup->isLoaded() && !fromCall.isEmpty()) {
-        DxccEntity ent = m_dxccLookup->lookup(fromCall);
+    if (m_dxccLookup && m_dxccLookup->isLoaded() && !rightCall.isEmpty()) {
+        DxccEntity ent = m_dxccLookup->lookup(rightCall);
         if (ent.isValid()) {
             dxCountry = ent.name;
             dxContinent = ent.continent;
@@ -4590,7 +4781,7 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     entry["isB4"] = isB4;
     entry["isLotw"] = isLotw;
     entry["dxCountry"] = dxCountry;
-    entry["dxCallsign"] = fromCall;
+    entry["dxCallsign"] = rightCall;
     entry["dxContinent"] = dxContinent;
     entry["dxPrefix"] = dxPrefix;
     entry["dxIsWorked"] = isB4;
@@ -4748,9 +4939,9 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             }
         }
     }
-    // Shannon: max 5000 righe per lista decode (documento().setMaximumBlockCount(5000))
-    if (m_decodeList.size() > 5000)
-        m_decodeList = m_decodeList.mid(m_decodeList.size() - 5000);
+    // Cap lista decode per performance QML ListView
+    if (m_decodeList.size() > 1500)
+        m_decodeList = m_decodeList.mid(m_decodeList.size() - 1500);
 
     // Shannon (linea 9699): auto-seq attiva se m_auto=true e cbAutoSeq checked
     // Processa qualsiasi messaggio che contiene il nostro callsign — identico a Shannon

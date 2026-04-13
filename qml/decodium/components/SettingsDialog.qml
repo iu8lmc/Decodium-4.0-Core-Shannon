@@ -1431,6 +1431,60 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
+                        // ── DX Cluster ──
+                        Text { text: "DX CLUSTER"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: "Host:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        TextField {
+                            text: bridge.dxCluster && bridge.dxCluster.host ? bridge.dxCluster.host : "dxc.va7dx.com"
+                            Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            color: textPrimary; font.pixelSize: controlFontSize; placeholderText: "dxc.va7dx.com"
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: { if (bridge.dxCluster) bridge.dxCluster.host = text }
+                        }
+                        Text { text: "Porta:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        SpinBox {
+                            from: 1; to: 65535; value: bridge.dxCluster && bridge.dxCluster.port ? bridge.dxCluster.port : 7300; editable: true
+                            implicitHeight: controlHeight; Layout.fillWidth: true
+                            onValueChanged: { if (bridge.dxCluster) bridge.dxCluster.port = value }
+                            contentItem: TextInput { text: parent.textFromValue(parent.value, parent.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !parent.editable; validator: parent.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        // Pulsante connetti + auto-connect
+                        Text { text: ""; Layout.preferredWidth: 100 }
+                        Row {
+                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 10
+                            Button {
+                                implicitWidth: 130; implicitHeight: controlHeight
+                                text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnetti" : "Connetti ora"
+                                font.pixelSize: 12; font.bold: true
+                                background: Rectangle {
+                                    color: bridge.dxCluster && bridge.dxCluster.connected ? Qt.rgba(1,0.3,0.3,0.25) : Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.25)
+                                    border.color: bridge.dxCluster && bridge.dxCluster.connected ? "#f44336" : accentGreen
+                                    border.width: 2; radius: 6
+                                }
+                                contentItem: Text {
+                                    text: parent.text; font: parent.font
+                                    color: bridge.dxCluster && bridge.dxCluster.connected ? "#f44336" : accentGreen
+                                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    if (bridge.dxCluster && bridge.dxCluster.connected)
+                                        bridge.disconnectDxCluster()
+                                    else
+                                        bridge.connectDxCluster(bridge.dxCluster.host, bridge.dxCluster.port)
+                                }
+                            }
+                            CheckBox {
+                                checked: bridge.getSetting("DXCluster/autoConnect", false)
+                                onCheckedChanged: bridge.setSetting("DXCluster/autoConnect", checked)
+                                indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                contentItem: Text { text: "Auto-connect all'avvio"; color: textSecondary; font.pixelSize: 11; leftPadding: 24; verticalAlignment: Text.AlignVCenter }
+                            }
+                        }
+
                         // ── UDP Server ──
                         Text { text: "UDP SERVER"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }

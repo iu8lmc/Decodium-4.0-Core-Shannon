@@ -23,7 +23,7 @@
 
 class ActiveStationsModel;
 class DecodiumAlertManager;
-class DecodiumDxCluster;
+#include "DecodiumDxCluster.h"
 class DecodiumPskReporterLite;
 class DecodiumCloudlogLite;
 class DecodiumWsprUploader;
@@ -130,6 +130,9 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool autoSeq          READ autoSeq          WRITE setAutoSeq          NOTIFY autoSeqChanged)
     Q_PROPERTY(bool txEnabled        READ txEnabled        WRITE setTxEnabled        NOTIFY txEnabledChanged)
     Q_PROPERTY(bool autoCqRepeat     READ autoCqRepeat     WRITE setAutoCqRepeat     NOTIFY autoCqRepeatChanged)
+    Q_PROPERTY(int  maxCallerRetries READ maxCallerRetries WRITE setMaxCallerRetries NOTIFY maxCallerRetriesChanged)
+    Q_PROPERTY(int  autoCqMaxCycles  READ autoCqMaxCycles  WRITE setAutoCqMaxCycles  NOTIFY autoCqMaxCyclesChanged)
+    Q_PROPERTY(int  autoCqPauseSec   READ autoCqPauseSec   WRITE setAutoCqPauseSec   NOTIFY autoCqPauseSecChanged)
     Q_PROPERTY(bool avgDecodeEnabled READ avgDecodeEnabled WRITE setAvgDecodeEnabled NOTIFY avgDecodeEnabledChanged)
     Q_PROPERTY(int  txPeriod         READ txPeriod         WRITE setTxPeriod         NOTIFY txPeriodChanged)
     Q_PROPERTY(bool alt12Enabled     READ alt12Enabled     WRITE setAlt12Enabled     NOTIFY alt12EnabledChanged)
@@ -210,6 +213,10 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(DecodiumOmniRigManager*       omniRigCat      READ omniRigCat      CONSTANT)
     Q_PROPERTY(DecodiumTransceiverManager*   hamlibCat       READ hamlibCat       CONSTANT)
     Q_PROPERTY(DecodiumDxCluster*   dxCluster       READ dxCluster       CONSTANT)
+    Q_PROPERTY(bool dxClusterConnected READ dxClusterConnected NOTIFY dxClusterConnectedChanged)
+    Q_PROPERTY(QVariantList dxClusterSpots READ dxClusterSpots NOTIFY dxClusterSpotsChanged)
+    Q_PROPERTY(QString dxClusterHost READ dxClusterHost WRITE setDxClusterHost NOTIFY dxClusterHostChanged)
+    Q_PROPERTY(int dxClusterPort READ dxClusterPort WRITE setDxClusterPort NOTIFY dxClusterPortChanged)
     // WSPR upload
     Q_PROPERTY(bool wsprUploadEnabled READ wsprUploadEnabled WRITE setWsprUploadEnabled NOTIFY wsprUploadEnabledChanged)
 
@@ -358,6 +365,12 @@ public:
     void setTxEnabled(bool v);
     bool autoCqRepeat()      const { return m_autoCqRepeat; }
     void setAutoCqRepeat(bool v);
+    int  maxCallerRetries()  const { return m_maxCallerRetries; }
+    void setMaxCallerRetries(int v) { if (m_maxCallerRetries != v) { m_maxCallerRetries = qBound(1, v, 99); emit maxCallerRetriesChanged(); } }
+    int  autoCqMaxCycles()   const { return m_autoCqMaxCycles; }
+    void setAutoCqMaxCycles(int v) { if (m_autoCqMaxCycles != v) { m_autoCqMaxCycles = qBound(0, v, 999); emit autoCqMaxCyclesChanged(); } }
+    int  autoCqPauseSec()    const { return m_autoCqPauseSec; }
+    void setAutoCqPauseSec(int v) { if (m_autoCqPauseSec != v) { m_autoCqPauseSec = qBound(0, v, 300); emit autoCqPauseSecChanged(); } }
     bool avgDecodeEnabled()  const { return m_avgDecodeEnabled; }
     void setAvgDecodeEnabled(bool v){ if (m_avgDecodeEnabled != v) { m_avgDecodeEnabled = v; emit avgDecodeEnabledChanged(); } }
     int  txPeriod()          const { return m_txPeriod; }
@@ -601,6 +614,16 @@ public slots:
     Q_INVOKABLE void setTxAudioFreqFromClick(int f) { setTxFrequency(f); }
     Q_INVOKABLE void setRxAudioFreqFromClick(int f) { setRxFrequency(f); }
 
+    // DX Cluster
+    Q_INVOKABLE void connectDxCluster(const QString& host, int port);
+    Q_INVOKABLE void disconnectDxCluster();
+    bool dxClusterConnected() const { return m_dxCluster && m_dxCluster->connected(); }
+    QVariantList dxClusterSpots() const { return m_dxCluster ? m_dxCluster->spots() : QVariantList{}; }
+    QString dxClusterHost() const { return m_dxCluster ? m_dxCluster->host() : QString{}; }
+    int dxClusterPort() const { return m_dxCluster ? m_dxCluster->port() : 8000; }
+    void setDxClusterHost(const QString& h) { if (m_dxCluster) { m_dxCluster->setHost(h); emit dxClusterHostChanged(); } }
+    void setDxClusterPort(int p) { if (m_dxCluster) { m_dxCluster->setPort(p); emit dxClusterPortChanged(); } }
+
     // Decode
     Q_INVOKABLE void clearDecodeList();
     Q_INVOKABLE void clearDecodes() { clearDecodeList(); }
@@ -760,6 +783,9 @@ signals:
     void autoSeqChanged();
     void txEnabledChanged();
     void autoCqRepeatChanged();
+    void maxCallerRetriesChanged();
+    void autoCqMaxCyclesChanged();
+    void autoCqPauseSecChanged();
     void avgDecodeEnabledChanged();
     void txPeriodChanged();
     void alt12EnabledChanged();
@@ -770,6 +796,10 @@ signals:
     void catConnectedChanged();
     void catRigNameChanged();
     void catModeChanged();
+    void dxClusterConnectedChanged();
+    void dxClusterSpotsChanged();
+    void dxClusterHostChanged();
+    void dxClusterPortChanged();
     void ledCoherentAveragingChanged();
     void ledNeuralSyncChanged();
     void ledTurboFeedbackChanged();
@@ -1063,7 +1093,13 @@ private:
     int  m_txRetryCount     {0};   // quante volte abbiamo inviato m_lastNtx senza risposta
     int  m_lastNtx          {-1};  // ultimo TX number inviato
     int  m_lastCqPidx       {-1};  // period index dell'ultimo CQ inviato (evita CQ consecutivi)
-    int  m_maxCallerRetries {5};   // macOS v1.4.5+: MAX_TX_RETRIES=5 (Shannon aveva 3)
+    QString m_lastAutoSeqKey;      // deduplicazione autoSequenceStep
+    qint64  m_lastAutoSeqMs {0};   // timestamp ultima deduplicazione
+    bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
+    int  m_maxCallerRetries {3};   // max tentativi TX per step prima di fermarsi
+    int  m_autoCqMaxCycles  {0};   // 0 = infinito, >0 = max cicli CQ
+    int  m_autoCqPauseSec   {0};   // pausa (s) tra cicli CQ (0 = nessuna pausa)
+    int  m_autoCqCycleCount {0};   // contatore cicli CQ corrente
     int  m_txWatchdogTicks  {0};   // tick watchdog a 250ms (240 tick = 60s)
     static constexpr int TX_WATCHDOG_MAX = 240; // 60s @ 250ms
 

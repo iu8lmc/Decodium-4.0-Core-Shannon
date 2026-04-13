@@ -28,13 +28,13 @@ public:
     QString     host()      const { return m_host; }
     void        setHost(const QString& v)
     {
-        if (m_host != v) { m_host = v; emit hostChanged(); }
+        if (m_host != v) { m_host = v; emit hostChanged(); saveSettings(); }
     }
 
     int         port()      const { return m_port; }
     void        setPort(int v)
     {
-        if (m_port != v) { m_port = v; emit portChanged(); }
+        if (m_port != v) { m_port = v; emit portChanged(); saveSettings(); }
     }
 
     QString     callsign()  const { return m_callsign; }
@@ -88,8 +88,8 @@ private:
     QString      m_rxBuf;
     bool         m_connected  {false};
     bool         m_loginSent  {false};
-    QString      m_host      {"dxc.va7dx.com"};
-    int          m_port      {7300};
+    QString      m_host      {"dx.iz7auh.net"};
+    int          m_port      {8000};
     QString      m_callsign;
     QVariantList m_spots;      // newest spot is appended at the back
 };

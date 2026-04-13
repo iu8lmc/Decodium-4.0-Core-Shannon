@@ -546,7 +546,7 @@ Window {
                                             font.pixelSize: 11
                                             color: modelData.dxIsNewCountry ? colorNewCountry :
                                                    modelData.dxIsMostWanted ? colorMostWanted : textSecondary
-                                            horizontalAlignment: Text.AlignHCenter
+                                            horizontalAlignment: Text.AlignRight
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideRight
                                         }

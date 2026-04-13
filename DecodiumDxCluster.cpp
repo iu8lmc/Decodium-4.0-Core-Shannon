@@ -34,15 +34,26 @@ DecodiumDxCluster::~DecodiumDxCluster()
 
 void DecodiumDxCluster::connectCluster()
 {
+    qDebug() << "DxCluster::connectCluster() called — host:" << m_host << "port:" << m_port << "call:" << m_callsign;
+
+    // Se il socket è in uno stato stale (non Unconnected), resettalo
     if (m_socket && m_socket->state() != QAbstractSocket::UnconnectedState) {
-        emit statusUpdate(tr("Already connected or connecting."));
-        return;
+        qDebug() << "DxCluster: socket state =" << m_socket->state() << "— resetting";
+        m_socket->abort();
+        m_socket->deleteLater();
+        m_socket = nullptr;
+        m_connected = false;
+        m_loginSent = false;
+        emit connectedChanged();
     }
 
     if (m_callsign.trimmed().isEmpty()) {
-        emit errorOccurred(tr("Callsign not set. Please set your callsign before connecting."));
+        emit errorOccurred(tr("Callsign non impostato. Configura il callsign in Impostazioni → Stazione."));
+        emit statusUpdate(tr("ERRORE: callsign vuoto — impossibile connettersi."));
         return;
     }
+
+    emit statusUpdate(tr("Tentativo connessione a %1:%2 come %3...").arg(m_host).arg(m_port).arg(m_callsign));
 
     if (!m_socket) {
         m_socket = new QTcpSocket(this);
@@ -63,13 +74,12 @@ void DecodiumDxCluster::connectCluster()
     m_socket->connectToHost(m_host, static_cast<quint16>(m_port));
 
     // Async; onConnected() or onError() will fire via the event loop.
-    // The socket internally applies a connection timeout (default ~30 s on
-    // Windows). We request an explicit 10-second abort via a single-shot timer.
-    QTimer::singleShot(10000, this, [this]() {
+    // Timeout 20s per server lenti (alcuni cluster hanno handshake lungo)
+    QTimer::singleShot(20000, this, [this]() {
         if (m_socket &&
             m_socket->state() == QAbstractSocket::ConnectingState) {
             m_socket->abort();
-            emit errorOccurred(tr("Connection to %1:%2 timed out.").arg(m_host).arg(m_port));
+            emit errorOccurred(tr("Connection to %1:%2 timed out (20s).").arg(m_host).arg(m_port));
         }
     });
 }
@@ -112,9 +122,10 @@ void DecodiumDxCluster::clearSpots()
 
 void DecodiumDxCluster::onConnected()
 {
+    qDebug() << "DxCluster::onConnected() — TCP connection established to" << m_host << m_port;
     m_connected = true;
     emit connectedChanged();
-    emit statusUpdate(tr("Connected to %1:%2. Waiting for login prompt…").arg(m_host).arg(m_port));
+    emit statusUpdate(tr("Connesso a %1:%2 — attendo prompt login…").arg(m_host).arg(m_port));
 }
 
 void DecodiumDxCluster::onDisconnected()
@@ -153,13 +164,24 @@ void DecodiumDxCluster::onReadyRead()
 
     // Keep only the unprocessed tail in the buffer.
     m_rxBuf = m_rxBuf.mid(pos);
+
+    // Il prompt "login: " spesso arriva SENZA newline.
+    // Se abbiamo dati residui nel buffer che sembrano un prompt, processiamoli.
+    if (!m_loginSent && !m_rxBuf.trimmed().isEmpty()) {
+        QString tail = m_rxBuf.trimmed().toLower();
+        if (tail.endsWith(":") || tail.endsWith(">") || tail.contains("login")) {
+            processLine(m_rxBuf.trimmed());
+            m_rxBuf.clear();
+        }
+    }
 }
 
 void DecodiumDxCluster::onError(QAbstractSocket::SocketError socketError)
 {
-    Q_UNUSED(socketError)
+    qDebug() << "DxCluster::onError() — socketError:" << socketError;
     const QString msg = m_socket ? m_socket->errorString() : tr("Unknown socket error");
-    emit errorOccurred(tr("Socket error: %1").arg(msg));
+    emit errorOccurred(tr("Errore socket: %1").arg(msg));
+    emit statusUpdate(tr("ERRORE: %1").arg(msg));
 
     // Reset state; the socket stays alive so the user can retry.
     m_connected = false;
@@ -173,19 +195,38 @@ void DecodiumDxCluster::onError(QAbstractSocket::SocketError socketError)
 
 void DecodiumDxCluster::processLine(const QString& line)
 {
-    // ---- Login prompt detection ----
-    // Cluster servers typically send something like:
-    //   "login: ", "Please enter your call: ", "your callsign: ", etc.
-    if (!m_loginSent) {
-        const QString lower = line.toLower();
-        if (lower.contains("login")   ||
-            lower.contains("call")    ||
-            lower.contains("please")) {
+    // Emetti ogni riga raw per il terminal telnet
+    emit statusUpdate(line);
 
+    // ---- Login prompt detection ----
+    // Cluster servers tipicamente mandano un messaggio di benvenuto e poi
+    // un prompt come "login: " o "callsign: ". Dobbiamo aspettare il prompt
+    // finale (che termina con ": " o "> ") prima di mandare il callsign.
+    // Esempio IZ7AUH: "Welcome to..." poi "Please enter..." poi "login: "
+    if (!m_loginSent) {
+        const QString trimmed = line.trimmed();
+        const QString lower = trimmed.toLower();
+        // Il prompt di login è tipicamente una riga corta che termina con ":" o ">"
+        // Esempio: "login:", "callsign:", "Username:", ">"
+        bool isLoginPrompt = (lower == "login:" ||
+                              lower.endsWith("login:") ||
+                              lower.endsWith("callsign:") ||
+                              lower.endsWith("username:") ||
+                              (lower.endsWith(":") && lower.length() < 40) ||
+                              (lower.endsWith(">") && lower.length() < 20));
+        if (isLoginPrompt) {
             QString loginLine = m_callsign.trimmed() + "\r\n";
             m_socket->write(loginLine.toUtf8());
+            m_socket->flush();
             m_loginSent = true;
-            emit statusUpdate(tr("Login sent (%1).").arg(m_callsign.trimmed()));
+            emit statusUpdate(tr("Login: %1 → %2:%3").arg(m_callsign.trimmed()).arg(m_host).arg(m_port));
+            // Invia SET/NOECHO per evitare double echo dal server
+            QTimer::singleShot(2000, this, [this]() {
+                if (m_socket && m_socket->state() == QAbstractSocket::ConnectedState) {
+                    m_socket->write("SET/NOECHO\r\n");
+                    m_socket->flush();
+                }
+            });
             return;
         }
     }
@@ -301,8 +342,11 @@ void DecodiumDxCluster::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
     s.beginGroup("DXCluster");
-    if (s.contains("host"))     setHost(s.value("host").toString());
-    if (s.contains("port"))     setPort(s.value("port").toInt());
+    setHost(s.value("host", "dx.iz7auh.net").toString());
+    int savedPort = s.value("port", 8000).toInt();
+    // Migrazione: se la vecchia porta era 7300 (default WSJT-X), usa 8000
+    if (savedPort == 7300 && m_host.contains("iz7auh")) savedPort = 8000;
+    setPort(savedPort);
     if (s.contains("callsign")) setCallsign(s.value("callsign").toString());
     s.endGroup();
 }

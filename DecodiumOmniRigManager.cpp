@@ -89,18 +89,31 @@ void DecodiumOmniRigManager::connectRig()
 
     // Verifica stato
     int status = m_rig->property("Status").toInt();
-    // ST_ONLINE = 4, ST_NOTCONFIGURED = 0, ST_DISABLED = 1, ST_PORTBUSY = 2, ST_NOTRESPONDING = 3
-    if (status == 0) {
-        emit errorOccurred("OmniRig: rig non configurato. Configura il rig in OmniRig.exe.");
-        delete m_rig; m_rig = nullptr;
-        delete m_omniRig; m_omniRig = nullptr;
-        return;
+    // ST_NOTCONFIGURED = 0, ST_DISABLED = 1, ST_PORTBUSY = 2, ST_NOTRESPONDING = 3, ST_ONLINE = 4
+    QString statusName;
+    switch (status) {
+    case 0: statusName = "Non configurato"; break;
+    case 1: statusName = "Disabilitato"; break;
+    case 2: statusName = "Porta occupata"; break;
+    case 3: statusName = "Non risponde"; break;
+    case 4: statusName = "Online"; break;
+    default: statusName = "Sconosciuto (" + QString::number(status) + ")"; break;
+    }
+
+    if (status != 4) {
+        emit errorOccurred("OmniRig: stato rig = " + statusName +
+                           ". Verifica che OmniRig.exe sia configurato e il rig acceso.");
+        if (status == 0 || status == 1) {
+            delete m_rig; m_rig = nullptr;
+            delete m_omniRig; m_omniRig = nullptr;
+            return;
+        }
+        // Per PORTBUSY e NOTRESPONDING: tentiamo comunque (potrebbe riprendersi)
     }
 
     m_connected = true;
     emit connectedChanged();
-    emit statusUpdate("OmniRig connesso: " + m_rigName +
-                      " (stato: " + QString::number(status) + ")");
+    emit statusUpdate("OmniRig connesso: " + m_rigName + " — " + statusName);
 
     // Lettura immediata frequenza
     onPollTimer();
@@ -165,15 +178,23 @@ void DecodiumOmniRigManager::onPollTimer()
 
 void DecodiumOmniRigManager::setRigFrequency(double hz)
 {
-    if (!m_rig || m_rig->isNull()) return;
+    if (!m_rig || m_rig->isNull()) {
+        emit errorOccurred("OmniRig: impossibile impostare frequenza — rig non connesso");
+        return;
+    }
     m_rig->setProperty("FreqA", hz);
+    emit statusUpdate("OmniRig: freq → " + QString::number(hz / 1e6, 'f', 6) + " MHz");
 }
 
 void DecodiumOmniRigManager::setRigPtt(bool on)
 {
-    if (!m_rig || m_rig->isNull()) return;
+    if (!m_rig || m_rig->isNull()) {
+        emit errorOccurred("OmniRig: impossibile PTT — rig non connesso");
+        return;
+    }
     // OmniRig: Ptt property  0=RX  1=TX
     m_rig->setProperty("Ptt", on ? 1 : 0);
+    emit statusUpdate(on ? "OmniRig: PTT ON" : "OmniRig: PTT OFF");
     if (m_pttActive != on) {
         m_pttActive = on;
         emit pttActiveChanged();

@@ -2085,11 +2085,23 @@ ApplicationWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: dxClusterPanelVisible = !dxClusterPanelVisible
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton) {
+                                // Destro: disconnetti
+                                bridge.disconnectDxCluster()
+                            } else {
+                                // Sinistro: mostra pannello e connetti se non connesso
+                                dxClusterPanelVisible = true
+                                if (bridge.dxCluster && !bridge.dxCluster.connected) {
+                                    bridge.connectDxCluster(bridge.dxCluster.host, bridge.dxCluster.port)
+                                }
+                            }
+                        }
                     }
 
                     ToolTip.visible: dxcBtnMA.containsMouse
-                    ToolTip.text: "DX Cluster — apri pannello spot"
+                    ToolTip.text: "DX Cluster\nSinistro: apri + connetti\nDestro: disconnetti"
                     ToolTip.delay: 400
 
                     Behavior on color { ColorAnimation { duration: 150 } }
@@ -2613,7 +2625,7 @@ ApplicationWindow {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: contentArea.height - txPanelContainer.height - (queuePanelComponent.visible ? 152 : 12)
+                height: contentArea.height - txPanelContainer.height - 12
                 orientation: Qt.Vertical
 
                 // Magnetic snap points for waterfall height
@@ -2624,8 +2636,9 @@ ApplicationWindow {
                 handle: Rectangle {
                     id: splitHandle
                     implicitWidth: 10
-                    implicitHeight: 14
+                    implicitHeight: 20
                     color: SplitHandle.hovered || SplitHandle.pressed ? "#00e6e6" : "#505070"
+                    Behavior on color { ColorAnimation { duration: 150 } }
 
                     // Magnetic snap indicator (glows when near snap point)
                     property bool nearSnapPoint: {
@@ -2897,7 +2910,7 @@ ApplicationWindow {
                 Rectangle {
                     id: decodePanel
                     SplitView.fillHeight: true
-                    SplitView.minimumHeight: 150
+                    SplitView.minimumHeight: 80
                     color: "transparent"
 
                     // Current active period tracking
@@ -2906,15 +2919,25 @@ ApplicationWindow {
                     property real periodLength: bridge.mode === "FT2" ? 3.75 : (bridge.mode === "FT4" ? 7.5 : 15)  // FT2=3.75s, FT4=7.5s, FT8=15s
 
                     // IU8LMC: Reactive property for all decodes (Band Activity)
-                    property var allDecodes: []
+                    property var allDecodes: bridge.decodeList
                     property int decodeListVersion: 0
+                    property int lastSyncCount: 0
 
-                    // Update decode list when decodeList changes
+                    // Update decode list incrementalmente (solo nuovi elementi)
                     Connections {
                         target: bridge
                         function onDecodeListChanged() {
                             decodePanel.decodeListVersion++
-                            decodePanel.allDecodes = bridge.decodeList
+                            var src = bridge.decodeList
+                            var prevCount = decodePanel.lastSyncCount
+                            if (src.length < prevCount) {
+                                // Lista troncata: refresh completo
+                                decodePanel.allDecodes = src
+                            } else if (src.length > prevCount) {
+                                // Solo nuovi: aggiorna riferimento (QML ListView diff)
+                                decodePanel.allDecodes = src
+                            }
+                            decodePanel.lastSyncCount = src.length
                         }
                     }
 
@@ -3492,7 +3515,9 @@ ApplicationWindow {
                                         clip: true
                                         model: decodePanel.allDecodes
                                         spacing: 1
-                                        onCountChanged: positionViewAtEnd()
+                                        cacheBuffer: 2000
+                                        reuseItems: true
+                                        onCountChanged: Qt.callLater(positionViewAtEnd)
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
 
@@ -3566,7 +3591,7 @@ ApplicationWindow {
                                                         font.family: "Consolas"
                                                         font.pixelSize: Math.round(11 * fs)
                                                         color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary
-                                                        horizontalAlignment: Text.AlignHCenter
+                                                        horizontalAlignment: Text.AlignRight
                                                         verticalAlignment: Text.AlignVCenter
                                                         elide: Text.ElideRight
                                                     }
@@ -3885,7 +3910,7 @@ ApplicationWindow {
                 id: verticalResizeHandle
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: queuePanelComponent.visible ? queuePanelComponent.top : txPanelContainer.top
+                anchors.bottom: txPanelContainer.top
                 anchors.bottomMargin: 2
                 height: 8
                 color: vertResizeMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
@@ -6702,6 +6727,8 @@ ApplicationWindow {
                         clip: true
                         spacing: 1
                         model: decodePanel.allDecodes
+                        cacheBuffer: 2000
+                        reuseItems: true
                         ScrollBar.vertical: ScrollBar { active: true }
 
                         delegate: Rectangle {
@@ -7370,8 +7397,8 @@ ApplicationWindow {
     DxClusterPanel {
         id: dxClusterOverlay
         visible: dxClusterPanelVisible
-        z: 210
-        x: mainWindow.width - width - 12
+        z: 9000
+        x: Math.max(0, mainWindow.width - width - 12)
         y: 60
         onCloseRequested: dxClusterPanelVisible = false
     }

@@ -466,7 +466,7 @@ Item {
                                     boldLabel: engine && engine.autoCqRepeat
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Auto CQ Repeat\n(Chiama CQ automaticamente fino a risposta)"
+                                ToolTip.text: "Auto CQ — Click sinistro: ON/OFF\nClick destro: opzioni"
                                 ToolTip.delay: 500
 
                                 onClicked: {
@@ -474,6 +474,80 @@ Item {
                                         if (!engine.autoSeq && !engine.autoCqRepeat)
                                             engine.autoSeq = true
                                         engine.autoCqRepeat = !engine.autoCqRepeat
+                                    }
+                                }
+                            }
+
+                            // Menu tasto destro: opzioni AutoCQ
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.RightButton
+                                onClicked: autoCqMenu.popup()
+                            }
+
+                            Menu {
+                                id: autoCqMenu
+                                width: 280
+
+                                background: Rectangle {
+                                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.96)
+                                    border.color: successGreen; border.width: 1; radius: 8
+                                }
+
+                                Column {
+                                    width: parent.width - 16
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    padding: 8
+                                    spacing: 10
+
+                                    Text { text: "Auto CQ — Opzioni"; color: successGreen; font.pixelSize: 13; font.bold: true }
+                                    Rectangle { width: parent.width; height: 1; color: Qt.rgba(successGreen.r, successGreen.g, successGreen.b, 0.3) }
+
+                                    // Max tentativi TX per step
+                                    Row {
+                                        spacing: 8
+                                        Text { text: "Max tentativi TX:"; color: textSecondary; font.pixelSize: 12; width: 140; anchors.verticalCenter: parent.verticalCenter }
+                                        SpinBox {
+                                            from: 1; to: 20; value: engine ? engine.maxCallerRetries : 3
+                                            width: 100; height: 30
+                                            onValueChanged: { if (engine) engine.maxCallerRetries = value }
+                                            contentItem: Text { text: parent.textFromValue(parent.value, parent.locale); color: textPrimary; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                                        }
+                                    }
+
+                                    // Max cicli CQ (0 = infinito)
+                                    Row {
+                                        spacing: 8
+                                        Text { text: "Max cicli CQ:"; color: textSecondary; font.pixelSize: 12; width: 140; anchors.verticalCenter: parent.verticalCenter }
+                                        SpinBox {
+                                            from: 0; to: 999; value: engine ? engine.autoCqMaxCycles : 0
+                                            width: 100; height: 30
+                                            onValueChanged: { if (engine) engine.autoCqMaxCycles = value }
+                                            contentItem: Text { text: parent.value === 0 ? "∞" : parent.textFromValue(parent.value, parent.locale); color: textPrimary; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                                        }
+                                    }
+
+                                    // Pausa tra cicli (secondi)
+                                    Row {
+                                        spacing: 8
+                                        Text { text: "Pausa tra cicli (s):"; color: textSecondary; font.pixelSize: 12; width: 140; anchors.verticalCenter: parent.verticalCenter }
+                                        SpinBox {
+                                            from: 0; to: 300; value: engine ? engine.autoCqPauseSec : 0
+                                            width: 100; height: 30
+                                            onValueChanged: { if (engine) engine.autoCqPauseSec = value }
+                                            contentItem: Text { text: parent.value === 0 ? "no" : parent.textFromValue(parent.value, parent.locale); color: textPrimary; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                                        }
+                                    }
+
+                                    Rectangle { width: parent.width; height: 1; color: Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.2) }
+                                    Text {
+                                        text: "Max tentativi: dopo N chiamate senza risposta si ferma.\n" +
+                                              "Max cicli CQ: 0 = infinito. Conta i QSO completati.\n" +
+                                              "Pausa: secondi di attesa tra un ciclo CQ e il successivo."
+                                        color: textSecondary; font.pixelSize: 10; wrapMode: Text.WordWrap; width: parent.width
                                     }
                                 }
                             }
