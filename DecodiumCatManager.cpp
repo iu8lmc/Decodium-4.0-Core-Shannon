@@ -317,11 +317,45 @@ void DecodiumCatManager::setRigPtt(bool on)
             m_serial->flush();
         catLog(written ? "TX/RX scritto OK" : "ERRORE scrittura seriale");
         emit statusUpdate("CAT PTT: " + QString::fromLatin1(cmd));
-    } else if (m_pttMethod == "DTR" && m_serial && m_serial->isOpen()) {
-        // DTR/RTS funzionano appena la porta è aperta (no handshake necessario)
-        m_serial->setDataTerminalReady(on);
-    } else if (m_pttMethod == "RTS" && m_serial && m_serial->isOpen()) {
-        m_serial->setRequestToSend(on);
+    } else if (m_pttMethod == "DTR" || m_pttMethod == "RTS") {
+        // DTR/RTS PTT: usa porta separata se configurata, altrimenti la porta CAT
+        bool useSeparatePort = (!m_pttPort.isEmpty() && m_pttPort != "CAT" && m_pttPort != m_serialPort);
+        QSerialPort* pttSerial = m_serial;
+
+        if (useSeparatePort) {
+            // Apri/chiudi porta PTT separata
+            if (!m_pttSerial) {
+                m_pttSerial = new QSerialPort(this);
+                m_pttSerial->setPortName(m_pttPort);
+                m_pttSerial->setBaudRate(9600);
+                m_pttSerial->setDataBits(QSerialPort::Data8);
+                m_pttSerial->setParity(QSerialPort::NoParity);
+                m_pttSerial->setStopBits(QSerialPort::OneStop);
+                m_pttSerial->setFlowControl(QSerialPort::NoFlowControl);
+                if (!m_pttSerial->open(QIODevice::ReadWrite)) {
+                    emit errorOccurred("PTT: impossibile aprire " + m_pttPort + " — " + m_pttSerial->errorString());
+                    delete m_pttSerial; m_pttSerial = nullptr;
+                    return;
+                }
+                catLog(("PTT porta separata aperta: " + m_pttPort).toLatin1().constData());
+            }
+            pttSerial = m_pttSerial;
+        }
+
+        if (pttSerial && pttSerial->isOpen()) {
+            if (m_pttMethod == "DTR")
+                pttSerial->setDataTerminalReady(on);
+            else
+                pttSerial->setRequestToSend(on);
+            catLog(on ? "DTR/RTS PTT ON" : "DTR/RTS PTT OFF");
+        }
+
+        // Chiudi porta PTT separata quando si spegne PTT
+        if (!on && m_pttSerial && useSeparatePort) {
+            m_pttSerial->close();
+            delete m_pttSerial;
+            m_pttSerial = nullptr;
+        }
     }
     if (m_pttActive != on) { m_pttActive = on; emit pttActiveChanged(); }
 }

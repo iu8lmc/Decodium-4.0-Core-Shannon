@@ -178,4 +178,5 @@ private:
     QStringList m_portList;
     bool    m_catAutoConnect {false};
     bool    m_audioAutoStart {false};
+    QSerialPort* m_pttSerial {nullptr};  // porta separata per PTT DTR/RTS
 };

@@ -1333,7 +1333,7 @@ void DecodiumBridge::syncLegacyBackendState()
     }
 
     updateInt(m_rxFrequency, m_legacyBackend->rxFrequency(), [this]() { emit rxFrequencyChanged(); });
-    updateInt(m_txFrequency, qBound(0, m_legacyBackend->txFrequency(), 3000), [this]() { emit txFrequencyChanged(); });
+    updateInt(m_txFrequency, qBound(0, m_legacyBackend->txFrequency(), 5000), [this]() { emit txFrequencyChanged(); });
     updateInt(m_txPeriod, m_legacyBackend->txFirst() ? 1 : 0, [this]() { emit txPeriodChanged(); });
     updateBool(m_alt12Enabled, m_legacyBackend->alt12Enabled(), [this]() { emit alt12EnabledChanged(); });
     updateTxMessage(m_tx1, m_legacyBackend->txMessage(1),
@@ -1649,7 +1649,7 @@ void DecodiumBridge::setRxFrequency(int f)
 
 void DecodiumBridge::setTxFrequency(int f)
 {
-    f = qBound(0, f, 3000);
+    f = qBound(0, f, 5000);
     if (m_txFrequency != f) {
         m_txFrequency = f;
         emit txFrequencyChanged();

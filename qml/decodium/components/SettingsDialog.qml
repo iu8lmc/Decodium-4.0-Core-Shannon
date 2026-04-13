@@ -154,7 +154,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Dettagli Stazione ──
                         Text { text: "DETTAGLI STAZIONE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -268,7 +268,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Backend CAT ──
                         Text { text: "BACKEND CAT"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -388,6 +388,24 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
+                        // PTT Port (per DTR/RTS su porta separata)
+                        Text { text: "PTT Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        ComboBox {
+                            id: pttPortCombo
+                            model: {
+                                var ports = bridge.catManager ? bridge.catManager.portList : []
+                                return ["CAT"].concat(ports)
+                            }
+                            Layout.fillWidth: true; implicitHeight: controlHeight; editable: true
+                            Component.onCompleted: { if (bridge.catManager) { var i = find(bridge.catManager.pttPort); if (i >= 0) currentIndex = i; else editText = bridge.catManager.pttPort } }
+                            onActivated: { if (bridge.catManager) bridge.catManager.pttPort = currentText }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            contentItem: TextField { leftPadding: 8; text: pttPortCombo.editText; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: "transparent" } }
+                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
+                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
+
                         Text { text: "Poll Interval (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: pollSpin
@@ -557,7 +575,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Dispositivi Audio ──
                         Text { text: "DISPOSITIVI AUDIO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -678,7 +696,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Frequenza e Timing ──
                         Text { text: "FREQUENZA E TIMING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -863,7 +881,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Font ──
                         Text { text: "FONT"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -1057,7 +1075,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Parametri Decodifica ──
                         Text { text: "PARAMETRI DECODIFICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -1233,7 +1251,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Servizi di Rete ──
                         Text { text: "SERVIZI DI RETE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -1567,7 +1585,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Colori Decodifica ──
                         Text { text: "COLORI DECODIFICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -1784,7 +1802,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Avvio ──
                         Text { text: "AVVIO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -2097,7 +2115,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Audio Alerts ──
                         Text { text: "AUDIO ALERTS"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -2228,7 +2246,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Blacklist ──
                         Text { text: "BLACKLIST"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
@@ -2452,7 +2470,7 @@ Dialog {
                     GridLayout {
                         width: parent.width - 20
                         columns: 4; columnSpacing: 10; rowSpacing: 8
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; bottomMargin: 40 }
 
                         // ── Remote Web Console ──
                         Text { text: "REMOTE WEB CONSOLE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
