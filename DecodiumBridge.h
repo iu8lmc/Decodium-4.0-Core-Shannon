@@ -470,9 +470,9 @@ public:
     bool    alertOnMyCall()  const { return m_alertOnMyCall; }
     void    setAlertOnMyCall(bool v){ if (m_alertOnMyCall!=v){m_alertOnMyCall=v;emit alertOnMyCallChanged();} }
     bool    recordRxEnabled()const { return m_recordRxEnabled; }
-    void    setRecordRxEnabled(bool v){ if (m_recordRxEnabled!=v){m_recordRxEnabled=v;emit recordRxEnabledChanged();} }
+    void    setRecordRxEnabled(bool v);
     bool    recordTxEnabled()const { return m_recordTxEnabled; }
-    void    setRecordTxEnabled(bool v){ if (m_recordTxEnabled!=v){m_recordTxEnabled=v;emit recordTxEnabledChanged();} }
+    void    setRecordTxEnabled(bool v);
     QString stationName() const { return m_stationName; }
     void    setStationName(const QString& v){ if (m_stationName!=v){m_stationName=v;emit stationNameChanged();} }
     QString stationQth() const { return m_stationQth; }
@@ -617,6 +617,8 @@ public slots:
     Q_INVOKABLE void openTimeSyncSettings();
     Q_INVOKABLE void openCatSettings();
     Q_INVOKABLE void retryRigConnection();
+    Q_INVOKABLE void connectDxCluster();
+    Q_INVOKABLE void disconnectDxCluster();
 
     // PSK Reporter
     Q_INVOKABLE void searchPskReporter(const QString& callsign);
@@ -633,6 +635,12 @@ public slots:
 
     // B6 — cty.dat update
     Q_INVOKABLE void checkCtyDatUpdate();
+    Q_INVOKABLE void downloadCall3Txt();
+    Q_INVOKABLE void openHamlibUpdatePage();
+    Q_INVOKABLE QStringList networkInterfaceNames() const;
+    Q_INVOKABLE QString udpInterfaceName() const;
+    Q_INVOKABLE void setUdpInterfaceName(const QString& name);
+    Q_INVOKABLE int remoteWebSocketPort() const;
 
     // B8 — Alert sounds
     Q_INVOKABLE void playAlert(const QString& alertType);
@@ -1084,6 +1092,7 @@ private:
     bool    m_alertOnMyCall {false};
     bool    m_recordRxEnabled {false};
     bool    m_recordTxEnabled {false};
+    bool    m_autoRxRecordingActive {false};
     QString m_stationName;
     QString m_stationQth;
     QString m_stationRigInfo;

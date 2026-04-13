@@ -71,7 +71,7 @@ if (_use_threads)
     list (APPEND _thread_libs ${_lib}_threads)
   endforeach (_lib ${_libraries})
   set (_libraries ${_thread_libs} ${_libraries})
-endif (NOT WIN32 AND _use_threads)
+endif ()
 
 # Keep a list of variable names that we need to pass on to
 # find_package_handle_standard_args().

@@ -99,6 +99,7 @@ Q_SIGNALS:
     void rigErrorRaised(QString const& title,
                         QString const& summary,
                         QString const& details) const;
+    void pttRequested(bool enabled) const;
 
 private:
     void applyEmbeddedWidgetTheme();

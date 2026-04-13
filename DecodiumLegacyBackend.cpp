@@ -329,6 +329,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(bool rigControlEnabled, QObject* pa
                 SIGNAL(legacyQuitRequested()),
                 this,
                 SIGNAL(quitRequested()));
+        connect(m_mainWindow,
+                SIGNAL(legacyPttRequested(bool)),
+                this,
+                SIGNAL(pttRequested(bool)));
         m_available = true;
 
         // Prevent legacy startup options from auto-starting monitor behind the

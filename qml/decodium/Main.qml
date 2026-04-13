@@ -204,6 +204,15 @@ ApplicationWindow {
     property string warningDialogSummary: ""
     property string warningDialogDetails: ""
     property bool warningDialogDetailsVisible: false
+    property string statusToastText: ""
+    property bool statusToastVisible: false
+
+    Timer {
+        id: statusToastTimer
+        interval: 2600
+        repeat: false
+        onTriggered: statusToastVisible = false
+    }
 
     // WAV file open dialog - single file
     FileDialog {
@@ -1463,23 +1472,23 @@ ApplicationWindow {
                             Layout.fillHeight: true
                             radius: 3
                             color: recMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
-                                   (bridge.wavManager && bridge.wavManager.recording ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent")
-                            border.color: bridge.wavManager && bridge.wavManager.recording ? "#f44336" : "transparent"
-                            border.width: bridge.wavManager && bridge.wavManager.recording ? 1 : 0
+                                   (bridge.recordRxEnabled ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent")
+                            border.color: bridge.recordRxEnabled ? "#f44336" : "transparent"
+                            border.width: bridge.recordRxEnabled ? 1 : 0
 
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
                                 Text {
-                                    text: bridge.wavManager && bridge.wavManager.recording ? "●" : "○"
+                                    text: bridge.recordRxEnabled ? "●" : "○"
                                     font.pixelSize: 12
-                                    color: bridge.wavManager && bridge.wavManager.recording ? "#f44336" : textPrimary
+                                    color: bridge.recordRxEnabled ? "#f44336" : textPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                                 Text {
                                     text: "REC"
                                     font.pixelSize: 9
-                                    color: bridge.wavManager && bridge.wavManager.recording ? "#f44336" : textPrimary
+                                    color: bridge.recordRxEnabled ? "#f44336" : textPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
@@ -1489,12 +1498,12 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.wavManager.recording ? bridge.wavManager.stopRecording() : bridge.wavManager.startRecording()
+                                onClicked: bridge.recordRxEnabled = !bridge.recordRxEnabled
                             }
 
                             ToolTip.visible: recMA.containsMouse
-                            ToolTip.text: bridge.wavManager && bridge.wavManager.recording ?
-                                          "Recording: " + bridge.wavManager.recordedSeconds + "s" : "Start Recording"
+                            ToolTip.text: bridge.recordRxEnabled ?
+                                          "Registrazione RX attiva" : "Avvia registrazione RX"
                         }
 
                         // Open WAV for decode
@@ -3011,6 +3020,34 @@ ApplicationWindow {
                         return merged
                     }
 
+                    function passesBandActivityFilters(item) {
+                        if (!item)
+                            return false
+                        if (item.isTx)
+                            return true
+                        var cqOnly = bridge.filterCqOnly
+                        var myCallOnly = bridge.filterMyCallOnly
+                        if (!cqOnly && !myCallOnly)
+                            return true
+                        var isCq = !!item.isCQ
+                        var isMyCall = !!item.isMyCall
+                        if (cqOnly && myCallOnly)
+                            return isCq || isMyCall
+                        if (cqOnly)
+                            return isCq
+                        return isMyCall
+                    }
+
+                    function filteredBandActivityDecodes() {
+                        var filtered = []
+                        for (var i = 0; i < decodePanel.allDecodes.length; ++i) {
+                            var item = decodePanel.allDecodes[i]
+                            if (decodePanel.passesBandActivityFilters(item))
+                                filtered.push(item)
+                        }
+                        return filtered
+                    }
+
                     function formatUtcForDisplay(timeStr) {
                         var digits = String(timeStr || "").replace(/[^0-9]/g, "")
                         if (digits.length >= 6)
@@ -3376,7 +3413,7 @@ ApplicationWindow {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: decodePanel.allDecodes.length + " decodes"
+                                            text: decodePanel.filteredBandActivityDecodes().length + " decodes"
                                             font.pixelSize: 10
                                             color: textSecondary
                                         }
@@ -3490,7 +3527,7 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         anchors.margins: 2
                                         clip: true
-                                        model: decodePanel.allDecodes
+                                        model: decodePanel.filteredBandActivityDecodes()
                                         spacing: 1
                                         onCountChanged: positionViewAtEnd()
 
@@ -4415,8 +4452,14 @@ ApplicationWindow {
         function onCatSettingsRequested() {
             settingsDialog.openTab(1)
         }
+        function onStatusMessage(msg) {
+            statusToastText = msg
+            statusToastVisible = true
+            statusToastTimer.restart()
+        }
         function onQuitRequested() {
             mainWindow.close()
+            Qt.callLater(function() { Qt.quit() })
         }
         function onRigErrorRaised(title, summary, details) {
             if (bridge.catBackend === "native") return
@@ -6716,7 +6759,7 @@ ApplicationWindow {
                         anchors.margins: 4
                         clip: true
                         spacing: 1
-                        model: decodePanel.allDecodes
+                        model: decodePanel.filteredBandActivityDecodes()
                         ScrollBar.vertical: ScrollBar { active: true }
 
                         delegate: Rectangle {
@@ -7319,6 +7362,33 @@ ApplicationWindow {
             active: activeStationsPanelVisible
             source: "../panels/ActiveStationsPanel.qml"
         }
+
+        Rectangle {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 6
+            width: 22
+            height: 22
+            radius: 4
+            color: activeStationsCloseMA.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+            border.color: Qt.rgba(0, 188, 212, 0.35)
+            z: 210
+
+            Text {
+                anchors.centerIn: parent
+                text: "X"
+                font.pixelSize: 10
+                color: secondaryCyan
+            }
+
+            MouseArea {
+                id: activeStationsCloseMA
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: activeStationsPanelVisible = false
+            }
+        }
     }
 
     // CallerQueuePanel — visibile solo in Fox mode, angolo in basso a destra
@@ -7389,6 +7459,35 @@ ApplicationWindow {
         x: mainWindow.width - width - 12
         y: 60
         onCloseRequested: dxClusterPanelVisible = false
+    }
+
+    Rectangle {
+        id: statusToast
+        visible: statusToastVisible && statusToastText.length > 0
+        z: 240
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 18
+        width: Math.min(mainWindow.width - 40, Math.max(260, toastLabel.implicitWidth + 32))
+        height: toastLabel.implicitHeight + 18
+        radius: 10
+        color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.96)
+        border.color: secondaryCyan
+        border.width: 1
+        opacity: visible ? 1 : 0
+
+        Behavior on opacity { NumberAnimation { duration: 140 } }
+
+        Text {
+            id: toastLabel
+            anchors.centerIn: parent
+            width: parent.width - 24
+            text: statusToastText
+            wrapMode: Text.Wrap
+            horizontalAlignment: Text.AlignHCenter
+            font.pixelSize: 12
+            color: textPrimary
+        }
     }
 
     // ── Splash Screen Decodium 4.0 Core Shannon ─────────────────────────────

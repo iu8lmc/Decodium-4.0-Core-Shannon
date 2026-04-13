@@ -3,6 +3,7 @@
 // Usa QAxObject (COM/ActiveX) per connettersi a OmniRig.exe (Windows only)
 // Stessa interfaccia pubblica di DecodiumCatManager / DecodiumTransceiverManager.
 #include <QObject>
+#include <QSerialPort>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -76,8 +77,8 @@ public:
     QString     networkPort()   const { return {}; }
     QString     tciPort()       const { return {}; }
     QString     pttMethod()     const { return m_pttMethod; }
-    QString     pttPort()       const { return "CAT"; }
-    QString     splitMode()     const { return "none"; }
+    QString     pttPort()       const { return m_pttPort; }
+    QString     splitMode()     const { return m_splitMode; }
     int         pollInterval()  const { return m_pollInterval; }
     QString     portType()      const { return "none"; }   // nessuna porta diretta
 
@@ -85,18 +86,20 @@ public:
     double      txFrequency()   const { return m_txFrequency; }
     QString     mode()          const { return m_mode; }
     bool        pttActive()     const { return m_pttActive; }
-    bool        split()         const { return false; }
+    bool        split()         const { return m_splitMode != QStringLiteral("none"); }
 
     QStringList rigList()       const { return {"OmniRig Rig 1","OmniRig Rig 2"}; }
-    QStringList portList()      const { return {}; }
+    QStringList portList()      const { return m_portList; }
     QStringList baudList()      const { return {}; }
     QStringList pttMethodList() const { return {"CAT","DTR","RTS"}; }
-    QStringList splitModeList() const { return {"none"}; }
+    QStringList splitModeList() const { return {"none","rig"}; }
 
     bool catAutoConnect()       const { return m_catAutoConnect; }
     bool audioAutoStart()       const { return m_audioAutoStart; }
 
-    bool canPtt()               const { return m_connected; }
+    bool canPtt()               const { return m_pttMethod == QStringLiteral("CAT")
+                                               ? m_connected
+                                               : (!m_pttPort.isEmpty() && m_pttPort != QStringLiteral("CAT")); }
 
     // ── Setter (stub per compatibilità interfaccia) ───────────────────────────
     void setRigName(const QString& v)     { if (m_rigName != v) { m_rigName = v; emit rigNameChanged(); } }
@@ -112,18 +115,18 @@ public:
     void setNetworkPort(const QString&)   {}
     void setTciPort(const QString&)       {}
     void setPttMethod(const QString& v)   { if (m_pttMethod != v) { m_pttMethod = v; emit pttMethodChanged(); } }
-    void setPttPort(const QString&)       {}
-    void setSplitMode(const QString&)     {}
+    void setPttPort(const QString& v)     { if (m_pttPort != v) { m_pttPort = v; emit pttPortChanged(); } }
+    void setSplitMode(const QString& v)   { if (m_splitMode != v) { m_splitMode = v; emit splitModeChanged(); } }
     void setPollInterval(int v)           { if (m_pollInterval != v) { m_pollInterval = v; emit pollIntervalChanged(); applyPollInterval(); } }
     void setCatAutoConnect(bool v)        { if (m_catAutoConnect != v) { m_catAutoConnect = v; emit catAutoConnectChanged(); } }
     void setAudioAutoStart(bool v)        { if (m_audioAutoStart != v) { m_audioAutoStart = v; emit audioAutoStartChanged(); } }
 
     // ── Comandi invokable ─────────────────────────────────────────────────────
     Q_INVOKABLE void setRigFrequency(double hz);
-    Q_INVOKABLE void setRigTxFrequency(double)    {}
+    Q_INVOKABLE void setRigTxFrequency(double hz);
     Q_INVOKABLE void setRigMode(const QString&)   {}
     Q_INVOKABLE void setRigPtt(bool on);
-    Q_INVOKABLE void refreshPorts()               {}
+    Q_INVOKABLE void refreshPorts();
     Q_INVOKABLE void saveSettings();
     Q_INVOKABLE void loadSettings();
 
@@ -164,21 +167,27 @@ private slots:
 
 private:
     void applyPollInterval();
+    bool ensurePttPortOpen();
+    void closePttPort();
     QString modeFromParam(int param) const;
 
     QAxObject* m_omniRig   {nullptr};
     QAxObject* m_rig        {nullptr};
+    QSerialPort* m_pttSerial{nullptr};
     QTimer*    m_pollTimer  {nullptr};
 
     bool    m_connected     {false};
     QString m_rigName       {"OmniRig Rig 1"};
     QString m_pttMethod     {"CAT"};
+    QString m_pttPort       {"CAT"};
+    QString m_splitMode     {"none"};
     int     m_pollInterval  {2};
 
     double  m_frequency     {0.0};
     double  m_txFrequency   {0.0};
     QString m_mode;
     bool    m_pttActive     {false};
+    QStringList m_portList;
 
     bool    m_catAutoConnect{false};
     bool    m_audioAutoStart{false};

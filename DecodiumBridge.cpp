@@ -32,18 +32,22 @@
 #include <QGuiApplication>
 #include <QApplication>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QSet>
 #include <QSettings>
 #include <QNetworkAccessManager>
+#include <QNetworkInterface>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QStandardPaths>
 #include <QDir>
 #include <QTimeZone>
+#include <QUrl>
 #include "Network/FoxVerifier.hpp"
 #include "wsjtx_config.h"
 #include <QFile>
 #include <QFileInfo>
+#include <QDataStream>
 #include <QTextStream>
 #include <QAudioDevice>
 #include <QAudioFormat>
@@ -80,6 +84,108 @@ static void bridgeLog(const char* msg) {
 }
 static void bridgeLog(const QString& s) { bridgeLog(s.toLocal8Bit().constData()); }
 static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceFound = nullptr);
+
+static void beginConfiguredSettingsGroup(QSettings& settings)
+{
+    auto const* app = QCoreApplication::instance();
+    if (!app) {
+        return;
+    }
+    QString const configName = app->property("decodiumConfigName").toString().trimmed();
+    if (configName.isEmpty()) {
+        return;
+    }
+    settings.beginGroup(QStringLiteral("MultiSettings"));
+    settings.beginGroup(configName);
+}
+
+static QString recordingsDirectoryPath()
+{
+    QString const dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                        + QStringLiteral("/Decodium/recordings");
+    QDir().mkpath(dir);
+    return dir;
+}
+
+static bool writeMono16WavFile(const QString& path, const QVector<float>& samples, int sampleRate)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
+    QVector<qint16> pcm;
+    pcm.reserve(samples.size());
+    for (float const sample : samples) {
+        float const clamped = std::max(-1.0f, std::min(1.0f, sample));
+        pcm.append(static_cast<qint16>(std::lround(clamped * 32767.0f)));
+    }
+
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    quint32 const dataSize = static_cast<quint32>(pcm.size() * sizeof(qint16));
+    quint32 const riffSize = 36u + dataSize;
+
+    file.write("RIFF", 4);
+    stream << riffSize;
+    file.write("WAVE", 4);
+    file.write("fmt ", 4);
+    stream << quint32(16) << quint16(1) << quint16(1)
+           << quint32(sampleRate)
+           << quint32(sampleRate * sizeof(qint16))
+           << quint16(sizeof(qint16))
+           << quint16(16);
+    file.write("data", 4);
+    stream << dataSize;
+    if (!pcm.isEmpty()) {
+        file.write(reinterpret_cast<const char*>(pcm.constData()), dataSize);
+    }
+    return file.error() == QFile::NoError;
+}
+
+static QString writeTxRecording(const QString& mode, const QVector<float>& samples)
+{
+    QString const filePath = recordingsDirectoryPath()
+                             + QStringLiteral("/decodium_tx_%1_%2.wav")
+                                   .arg(mode.toLower(),
+                                        QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz")));
+    return writeMono16WavFile(filePath, samples, 48000) ? filePath : QString {};
+}
+
+static QVector<float> buildTxWaveForMessage(const QString& mode, const QString& msg, int txFrequency, QString* errorMessage = nullptr)
+{
+    QVector<float> wave;
+    float const freq = static_cast<float>(txFrequency);
+
+    if (mode == QStringLiteral("FT2")) {
+        auto const enc = decodium::txmsg::encodeFt2(msg);
+        if (!enc.ok) {
+            if (errorMessage) *errorMessage = QStringLiteral("Codifica FT2 fallita: ") + msg;
+            return {};
+        }
+        wave = decodium::txwave::generateFt2Wave(enc.tones.constData(), 103, 4 * 288, 48000.0f, freq);
+    } else if (mode == QStringLiteral("FT4")) {
+        auto const enc = decodium::txmsg::encodeFt4(msg);
+        if (!enc.ok) {
+            if (errorMessage) *errorMessage = QStringLiteral("Codifica FT4 fallita: ") + msg;
+            return {};
+        }
+        wave = decodium::txwave::generateFt4Wave(enc.tones.constData(), 105, 4 * 576, 48000.0f, freq);
+    } else {
+        auto const enc = decodium::txmsg::encodeFt8(msg);
+        if (!enc.ok) {
+            if (errorMessage) *errorMessage = QStringLiteral("Codifica FT8 fallita: ") + msg;
+            return {};
+        }
+        wave = decodium::txwave::generateFt8Wave(enc.tones.constData(), 79, 7680, 2.0f, 48000.0f, freq);
+    }
+
+    if (wave.isEmpty() && errorMessage) {
+        *errorMessage = QStringLiteral("Generazione onda TX fallita");
+    }
+    return wave;
+}
 
 static QString stripLegacyDecodeAppendage(QString line)
 {
@@ -682,6 +788,11 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_activeStations  = new ActiveStationsModel(this);
     m_alertManager    = new DecodiumAlertManager(this);
 
+    connect(m_dxCluster, &DecodiumDxCluster::statusUpdate,
+            this, [this](const QString& msg) { emit statusMessage(QStringLiteral("DX Cluster: ") + msg); });
+    connect(m_dxCluster, &DecodiumDxCluster::errorOccurred,
+            this, [this](const QString& msg) { emit errorMessage(QStringLiteral("DX Cluster: ") + msg); });
+
 #if defined(Q_OS_MAC)
     m_useLegacyTxBackend = true;
 #endif
@@ -709,15 +820,43 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // Remote Web Console (webapp)
     {
         auto const env = QProcessEnvironment::systemEnvironment();
-        auto const wsPortText = env.value(QStringLiteral("FT2_REMOTE_WS_PORT"));
+        QSettings remoteSettings(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        beginConfiguredSettingsGroup(remoteSettings);
+
+        bool const remoteEnabled = remoteSettings.value(QStringLiteral("RemoteWebEnabled"), false).toBool();
+        QString wsPortText = env.value(QStringLiteral("FT2_REMOTE_WS_PORT"));
+        if (wsPortText.isEmpty() && remoteEnabled) {
+            bool httpOk = false;
+            int const httpPort = remoteSettings.value(QStringLiteral("RemoteHttpPort"), 19091).toInt(&httpOk);
+            if (httpOk && httpPort > 1 && httpPort <= 65535) {
+                wsPortText = QString::number(httpPort - 1);
+            }
+        }
+
         if (!wsPortText.isEmpty()) {
             bool wsPortOk = false;
             auto const wsPort = wsPortText.toUInt(&wsPortOk);
             if (wsPortOk && wsPort > 0 && wsPort <= 65535u) {
-                auto const bindText = env.value(QStringLiteral("FT2_REMOTE_WS_BIND"), QStringLiteral("127.0.0.1"));
+                QString bindText = env.value(QStringLiteral("FT2_REMOTE_WS_BIND"));
+                if (bindText.isEmpty()) {
+                    bindText = remoteSettings.value(QStringLiteral("RemoteWsBind"), remoteEnabled ? QStringLiteral("0.0.0.0")
+                                                                                                  : QStringLiteral("127.0.0.1")).toString().trimmed();
+                }
+                if (bindText.isEmpty()) {
+                    bindText = QStringLiteral("127.0.0.1");
+                }
                 QHostAddress bindAddress(bindText);
-                auto const authUser = env.value(QStringLiteral("FT2_REMOTE_WS_USER"), QStringLiteral("admin"));
-                auto const authToken = env.value(QStringLiteral("FT2_REMOTE_WS_TOKEN"));
+                QString authUser = env.value(QStringLiteral("FT2_REMOTE_WS_USER"));
+                if (authUser.isEmpty()) {
+                    authUser = remoteSettings.value(QStringLiteral("RemoteUser"), QStringLiteral("admin")).toString().trimmed();
+                }
+                if (authUser.isEmpty()) {
+                    authUser = QStringLiteral("admin");
+                }
+                QString authToken = env.value(QStringLiteral("FT2_REMOTE_WS_TOKEN"));
+                if (authToken.isEmpty()) {
+                    authToken = remoteSettings.value(QStringLiteral("RemoteToken"), QString()).toString();
+                }
                 bool const remoteExposed = (bindAddress != QHostAddress::LocalHost && bindAddress != QHostAddress(QStringLiteral("::1")));
                 if (remoteExposed && authToken.size() < 12) {
                     bridgeLog("Remote Web disabled: token must be at least 12 characters on LAN/WAN bind.");
@@ -756,7 +895,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                     if (ageOk) m_remoteServer->setMaxCommandAgeMs(maxAgeMs);
 
                     quint16 httpPort = 0;
-                    auto const httpPortText = env.value(QStringLiteral("FT2_REMOTE_HTTP_PORT"));
+                    QString httpPortText = env.value(QStringLiteral("FT2_REMOTE_HTTP_PORT"));
+                    if (httpPortText.isEmpty()) {
+                        httpPortText = remoteSettings.value(QStringLiteral("RemoteHttpPort"), 19091).toString();
+                    }
                     if (!httpPortText.isEmpty()) {
                         bool httpOk = false;
                         auto const hp = httpPortText.toUInt(&httpOk);
@@ -1133,6 +1275,20 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                 this, [this]() {
                     emit quitRequested();
                 });
+        connect(m_legacyBackend, &DecodiumLegacyBackend::pttRequested,
+                this, [this](bool enabled) {
+                    if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
+                        bridgeLog("Legacy PTT request ignored: legacy rig control fallback owns PTT");
+                        return;
+                    }
+                    if (!activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+                        bridgeLog("Legacy PTT request dropped: active CAT backend cannot PTT enabled=" +
+                                  QString::number(enabled));
+                        return;
+                    }
+                    bridgeLog("Legacy requested bridge PTT=" + QString::number(enabled));
+                    activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, enabled, m_omniRigCat, m_legacyBackend);
+                });
 
         bridgeLog(m_useLegacyTxBackend
                       ? QStringLiteral("Legacy backend enabled for macOS TX/Tune using ft2 profile")
@@ -1382,6 +1538,26 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
     if (bandChanged) {
         m_legacyBandActivityRevision = bandRevision;
         QVariantList const mirroredDecodes = mirrorLegacyDecodeLines(m_legacyBackend->bandActivityLines(), false);
+        if (m_activeStations) {
+            m_activeStations->clear();
+            for (QVariant const& item : mirroredDecodes) {
+                QVariantMap const entry = item.toMap();
+                if (entry.value(QStringLiteral("isTx")).toBool()) {
+                    continue;
+                }
+                QString const fromCall = entry.value(QStringLiteral("fromCall")).toString().trimmed().toUpper();
+                if (fromCall.isEmpty() ||
+                    (!m_callsign.isEmpty() && fromCall.compare(m_callsign.trimmed(), Qt::CaseInsensitive) == 0)) {
+                    continue;
+                }
+                m_activeStations->addStation(fromCall,
+                                             entry.value(QStringLiteral("freq")).toInt(),
+                                             entry.value(QStringLiteral("db")).toInt(),
+                                             entry.value(QStringLiteral("dxGrid")).toString(),
+                                             entry.value(QStringLiteral("time")).toString(),
+                                             entry.value(QStringLiteral("isCQ")).toBool());
+            }
+        }
         if (m_decodeList != mirroredDecodes) {
             m_decodeList = mirroredDecodes;
             emit decodeListChanged();
@@ -1499,6 +1675,7 @@ void DecodiumBridge::setCallsign(const QString& v) {
         m_callsign = v;
         emit callsignChanged();
         if (m_pskReporter) m_pskReporter->setLocalStation(m_callsign, m_grid);
+        if (m_dxCluster) m_dxCluster->setCallsign(m_callsign);
         regenerateTxMessages();
     }
 }
@@ -1681,6 +1858,54 @@ void DecodiumBridge::setTxOutputLevel(double v)
     }
 
     emit txOutputLevelChanged();
+}
+
+void DecodiumBridge::setRecordRxEnabled(bool v)
+{
+    if (m_recordRxEnabled == v) {
+        return;
+    }
+
+    m_recordRxEnabled = v;
+    QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
+    s.setValue("recordRxEnabled", m_recordRxEnabled);
+    s.sync();
+
+    if (m_wavManager) {
+        if (m_recordRxEnabled) {
+            if (!m_wavManager->recording()) {
+                m_wavManager->startRecording();
+            }
+            emit statusMessage(QStringLiteral("Registrazione RX avviata: ") + m_wavManager->lastFilePath());
+        } else if (m_wavManager->recording()) {
+            QString const savedPath = m_wavManager->lastFilePath();
+            m_wavManager->stopRecording();
+            emit statusMessage(QStringLiteral("Registrazione RX salvata: ") + savedPath);
+        } else {
+            emit statusMessage(QStringLiteral("Registrazione RX disattivata"));
+        }
+    }
+
+    emit recordRxEnabledChanged();
+}
+
+void DecodiumBridge::setRecordTxEnabled(bool v)
+{
+    if (m_recordTxEnabled == v) {
+        return;
+    }
+
+    m_recordTxEnabled = v;
+    QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
+    s.setValue("recordTxEnabled", m_recordTxEnabled);
+    s.sync();
+
+    emit recordTxEnabledChanged();
+    emit statusMessage(m_recordTxEnabled
+                           ? QStringLiteral("Registrazione TX armata")
+                           : QStringLiteral("Registrazione TX disattivata"));
 }
 
 QStringList DecodiumBridge::audioInputDevices() const { return m_audioInputDevices; }
@@ -2018,6 +2243,10 @@ void DecodiumBridge::startRx()
         syncLegacyBackendTxState();
         m_legacyBackend->setMonitoring(true);
         syncLegacyBackendState();
+        if (m_recordRxEnabled && m_wavManager && !m_wavManager->recording()) {
+            m_wavManager->startRecording();
+            emit statusMessage(QStringLiteral("Registrazione RX avviata: ") + m_wavManager->lastFilePath());
+        }
         emit statusMessage("RX avviato via backend legacy - " + m_mode);
         return;
     }
@@ -2062,6 +2291,11 @@ void DecodiumBridge::startRx()
 
     startAudioCapture();
 
+    if (m_recordRxEnabled && m_wavManager && !m_wavManager->recording()) {
+        m_wavManager->startRecording();
+        emit statusMessage(QStringLiteral("Registrazione RX avviata: ") + m_wavManager->lastFilePath());
+    }
+
     m_decoding = true;
     emit decodingChanged();
     emit statusMessage("RX avviato - " + m_mode);
@@ -2082,6 +2316,11 @@ void DecodiumBridge::stopRx()
         stopAudioCapture();
         m_legacyBackend->setMonitoring(false);
         syncLegacyBackendState();
+        if (m_recordRxEnabled && m_wavManager && m_wavManager->recording()) {
+            QString const savedPath = m_wavManager->lastFilePath();
+            m_wavManager->stopRecording();
+            emit statusMessage(QStringLiteral("Registrazione RX salvata: ") + savedPath);
+        }
         emit statusMessage("RX fermato");
         return;
     }
@@ -2093,6 +2332,11 @@ void DecodiumBridge::stopRx()
     m_asyncDecodeTimer->stop();
     m_asyncDecodePending = false;
     stopAudioCapture();
+    if (m_recordRxEnabled && m_wavManager && m_wavManager->recording()) {
+        QString const savedPath = m_wavManager->lastFilePath();
+        m_wavManager->stopRecording();
+        emit statusMessage(QStringLiteral("Registrazione RX salvata: ") + savedPath);
+    }
 
     m_decoding = false;
     emit decodingChanged();
@@ -2174,39 +2418,32 @@ void DecodiumBridge::startTx()
         return;
     }
 
+    QString txWaveError;
+    QVector<float> wave = buildTxWaveForMessage(m_mode, msg, m_txFrequency, &txWaveError);
+    bridgeLog("startTx: wave.size()=" + QString::number(wave.size()));
+    if (wave.isEmpty()) {
+        emit errorMessage(txWaveError.isEmpty() ? QStringLiteral("Generazione onda TX fallita") : txWaveError);
+        bridgeLog("startTx: wave empty abort");
+        return;
+    }
+    if (m_recordTxEnabled) {
+        QString const savedPath = writeTxRecording(m_mode, wave);
+        if (!savedPath.isEmpty()) {
+            emit statusMessage(QStringLiteral("Registrazione TX salvata: ") + savedPath);
+        } else {
+            emit errorMessage(QStringLiteral("Registrazione TX fallita"));
+        }
+    }
+
     if (usingLegacyBackendForTx()) {
         bridgeLog("startTx: delegating to legacy backend");
         syncLegacyBackendState();
         syncLegacyBackendTxState();
-        if (!useLegacyRigControlFallback(m_legacyBackend, m_catBackend)
-            && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
-        }
         m_legacyBackend->armCurrentTx();
         syncLegacyBackendState();
         emit statusMessage("TX armato via backend legacy: " + msg.trimmed());
         return;
     }
-
-    // Codifica → wave float a 48kHz, campioni in [-1.0, +1.0]
-    QVector<float> wave;
-    const float freq = static_cast<float>(m_txFrequency);
-
-    if (m_mode == "FT2") {
-        auto enc = decodium::txmsg::encodeFt2(msg);
-        if (!enc.ok) { emit errorMessage("Codifica FT2 fallita: " + msg); return; }
-        wave = decodium::txwave::generateFt2Wave(enc.tones.constData(), 103, 4*288, 48000.0f, freq);
-    } else if (m_mode == "FT4") {
-        auto enc = decodium::txmsg::encodeFt4(msg);
-        if (!enc.ok) { emit errorMessage("Codifica FT4 fallita: " + msg); return; }
-        wave = decodium::txwave::generateFt4Wave(enc.tones.constData(), 105, 4*576, 48000.0f, freq);
-    } else { // FT8
-        auto enc = decodium::txmsg::encodeFt8(msg);
-        if (!enc.ok) { emit errorMessage("Codifica FT8 fallita: " + msg); return; }
-        wave = decodium::txwave::generateFt8Wave(enc.tones.constData(), 79, 7680, 2.0f, 48000.0f, freq);
-    }
-    bridgeLog("startTx: wave.size()=" + QString::number(wave.size()));
-    if (wave.isEmpty()) { emit errorMessage("Generazione onda TX fallita"); bridgeLog("startTx: wave empty abort"); return; }
 
 #if defined(Q_OS_MAC)
     {
@@ -2477,18 +2714,6 @@ void DecodiumBridge::startTx()
 void DecodiumBridge::sendTx(int n)
 {
     setCurrentTx(n);
-    if (usingLegacyBackendForTx()) {
-        bridgeLog(QStringLiteral("sendTx: delegating TX%1 to legacy backend").arg(n));
-        syncLegacyBackendState();
-        syncLegacyBackendTxState();
-        if (!useLegacyRigControlFallback(m_legacyBackend, m_catBackend)
-            && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
-        }
-        m_legacyBackend->armCurrentTx();
-        syncLegacyBackendState();
-        return;
-    }
     startTx();
 }
 
@@ -2498,10 +2723,6 @@ void DecodiumBridge::stopTx()
         bridgeLog("stopTx: delegating to legacy backend");
         m_legacyBackend->stopTransmission();
         syncLegacyBackendState();
-        if (!useLegacyRigControlFallback(m_legacyBackend, m_catBackend)
-            && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
-        }
         return;
     }
 
@@ -2831,6 +3052,7 @@ void DecodiumBridge::setCatBackend(const QString& v)
     emit catBackendChanged();
     emit catManagerChanged();
     QSettings s2("Decodium","Decodium3");
+    beginConfiguredSettingsGroup(s2);
     s2.setValue("catBackend", m_catBackend);
     if (m_legacyBackend && m_legacyBackend->available()) {
         m_legacyBackend->setRigControlEnabled(useLegacyRigControlFallback(m_legacyBackend, m_catBackend));
@@ -2841,13 +3063,67 @@ void DecodiumBridge::setCatBackend(const QString& v)
 QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultValue) const
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     return s.value(key, defaultValue);
 }
 
 void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.setValue(key, value);
+}
+
+QStringList DecodiumBridge::networkInterfaceNames() const
+{
+    QStringList names;
+    for (QNetworkInterface const& iface : QNetworkInterface::allInterfaces()) {
+        auto const flags = iface.flags();
+        if (!flags.testFlag(QNetworkInterface::IsUp)) {
+            continue;
+        }
+        if (iface.humanReadableName().trimmed().isEmpty()) {
+            continue;
+        }
+        names << iface.humanReadableName();
+    }
+    names.removeDuplicates();
+    names.sort(Qt::CaseInsensitive);
+    return names;
+}
+
+QString DecodiumBridge::udpInterfaceName() const
+{
+    QVariant const raw = getSetting(QStringLiteral("UDPInterface"));
+    QStringList names;
+    if (raw.canConvert<QStringList>()) {
+        names = raw.toStringList();
+    } else if (!raw.toString().trimmed().isEmpty()) {
+        names = QStringList{raw.toString().trimmed()};
+    }
+    return names.isEmpty() ? QString() : names.first();
+}
+
+void DecodiumBridge::setUdpInterfaceName(const QString& name)
+{
+    QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    beginConfiguredSettingsGroup(s);
+    QString const trimmed = name.trimmed();
+    if (trimmed.isEmpty()) {
+        s.remove(QStringLiteral("UDPInterface"));
+    } else {
+        s.setValue(QStringLiteral("UDPInterface"), QStringList{trimmed});
+    }
+}
+
+int DecodiumBridge::remoteWebSocketPort() const
+{
+    bool ok = false;
+    int const httpPort = getSetting(QStringLiteral("RemoteHttpPort"), 19091).toInt(&ok);
+    if (!ok) {
+        return 19090;
+    }
+    return std::max(1, httpPort - 1);
 }
 
 void DecodiumBridge::saveSettings()
@@ -2863,6 +3139,7 @@ void DecodiumBridge::saveSettings()
     }
 
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.setValue("callsign", m_callsign);
     s.setValue("grid", m_grid);
     s.setValue("frequency", m_frequency);
@@ -2950,6 +3227,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("uiDecodeWinY",      m_uiDecodeWinY);
     s.setValue("uiDecodeWinWidth",  m_uiDecodeWinWidth);
     s.setValue("uiDecodeWinHeight", m_uiDecodeWinHeight);
+    s.sync();
     emit statusMessage("Impostazioni salvate");
 }
 
@@ -3068,6 +3346,23 @@ void DecodiumBridge::retryRigConnection()
         m_omniRigCat->connectRig();
     } else if (m_hamlibCat) {
         m_hamlibCat->connectRig();
+    }
+}
+
+void DecodiumBridge::connectDxCluster()
+{
+    if (!m_dxCluster) {
+        emit errorMessage(QStringLiteral("DX Cluster non disponibile"));
+        return;
+    }
+    m_dxCluster->setCallsign(m_callsign.trimmed());
+    m_dxCluster->connectCluster();
+}
+
+void DecodiumBridge::disconnectDxCluster()
+{
+    if (m_dxCluster) {
+        m_dxCluster->disconnectCluster();
     }
 }
 
@@ -3990,6 +4285,7 @@ void DecodiumBridge::setFontScale(double s)
 void DecodiumBridge::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     m_callsign = s.value("callsign", "IU8LMC").toString();
     m_grid     = s.value("grid", "AA00").toString();
     m_frequency = s.value("frequency", 14074000.0).toDouble();
@@ -4073,7 +4369,12 @@ void DecodiumBridge::loadSettings()
     m_wsprUploadEnabled = s.value("wsprUploadEnabled", false).toBool();
     if (m_wsprUploader) m_wsprUploader->setEnabled(m_wsprUploadEnabled);
     // DX Cluster
-    if (m_dxCluster) m_dxCluster->loadSettings();
+    if (m_dxCluster) {
+        m_dxCluster->loadSettings();
+        // The cluster login should follow the station callsign, not an old
+        // per-cluster value left behind in settings.
+        m_dxCluster->setCallsign(m_callsign);
+    }
     // UI state
     m_uiSpectrumHeight  = s.value("uiSpectrumHeight",  150).toInt();
     m_uiPaletteIndex    = s.value("uiPaletteIndex",    3).toInt();
@@ -4270,6 +4571,7 @@ QVariantMap DecodiumBridge::loadWindowState(const QString& key) const
     }
 
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup(QStringLiteral("WindowState/%1").arg(normalizedKey));
     auto const maybeInsertInt = [&] (const char* field) {
         if (s.contains(QLatin1String(field))) {
@@ -4306,6 +4608,7 @@ void DecodiumBridge::saveWindowState(const QString& key,
     }
 
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup(QStringLiteral("WindowState/%1").arg(normalizedKey));
     s.setValue(QStringLiteral("x"), x);
     s.setValue(QStringLiteral("y"), y);
@@ -4724,15 +5027,14 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         entry["fromCall"] = fromCall;
         enrichDecodeEntry(entry);
 
-        // B9 — Feed ActiveStationsModel: extract callsign from CQ messages
-        if (isCQ && m_activeStations) {
+        // Feed ActiveStationsModel with currently heard callers.
+        if (m_activeStations && !fromCall.isEmpty()
+            && fromCall.compare(m_callsign, Qt::CaseInsensitive) != 0) {
             QString dxGridExtracted = entry.value("dxGrid").toString();
-            if (!fromCall.isEmpty()) {
-                int freqHz = f[7].toInt();
-                QString utc = f[0];
-                int snr = f[1].toInt();
-                m_activeStations->addStation(fromCall, freqHz, snr, dxGridExtracted, utc);
-            }
+            int freqHz = f[7].toInt();
+            QString utc = f[0];
+            int snr = f[1].toInt();
+            m_activeStations->addStation(fromCall, freqHz, snr, dxGridExtracted, utc, isCQ);
         }
 
         // Shannon write_all(): logga OGNI decode in all.txt
@@ -5955,6 +6257,63 @@ void DecodiumBridge::checkCtyDatUpdate()
             }
         }
     });
+}
+
+void DecodiumBridge::downloadCall3Txt()
+{
+    QString const destPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                             + QStringLiteral("/CALL3.TXT");
+    QDir().mkpath(QFileInfo(destPath).absolutePath());
+
+    emit statusMessage(QStringLiteral("Download CALL3.TXT in corso..."));
+
+    QNetworkAccessManager* nam = new QNetworkAccessManager(this);
+    QNetworkReply* reply = nam->get(QNetworkRequest(
+        QUrl(QStringLiteral("https://wsjt-x-improved.sourceforge.io/CALL3.TXT"))));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, destPath, nam]() {
+        reply->deleteLater();
+        nam->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            emit errorMessage(QStringLiteral("Download CALL3.TXT fallito: %1").arg(reply->errorString()));
+            return;
+        }
+
+        QByteArray const data = reply->readAll();
+        if (data.isEmpty()) {
+            emit errorMessage(QStringLiteral("CALL3.TXT scaricato ma vuoto"));
+            return;
+        }
+
+        QFile file(destPath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            emit errorMessage(QStringLiteral("Impossibile scrivere CALL3.TXT: %1").arg(file.errorString()));
+            return;
+        }
+        file.write(data);
+        file.close();
+
+        emit statusMessage(QStringLiteral("CALL3.TXT aggiornato: %1").arg(destPath));
+    });
+}
+
+void DecodiumBridge::openHamlibUpdatePage()
+{
+#if defined(Q_OS_WIN)
+    QUrl const target(QStringLiteral("https://n0nb.users.sourceforge.net/"));
+    emit statusMessage(QStringLiteral("Hamlib: apertura pagina update Windows..."));
+#elif defined(Q_OS_MAC)
+    QUrl const target(QStringLiteral("https://hamlib.github.io/"));
+    emit statusMessage(QStringLiteral("Hamlib: apertura documentazione/update per macOS..."));
+#else
+    QUrl const target(QStringLiteral("https://hamlib.github.io/"));
+    emit statusMessage(QStringLiteral("Hamlib: apertura documentazione/update per Linux..."));
+#endif
+
+    if (!QDesktopServices::openUrl(target)) {
+        emit errorMessage(QStringLiteral("Impossibile aprire la pagina Hamlib: %1").arg(target.toString()));
+    }
 }
 
 QStringList DecodiumBridge::ctyDatSearchPaths() const

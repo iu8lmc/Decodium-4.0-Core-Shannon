@@ -88,9 +88,9 @@ Rectangle {
                     onClicked: {
                         if (!bridge.dxCluster) return
                         if (bridge.dxCluster.connected)
-                            bridge.dxCluster.disconnectCluster()
+                            bridge.disconnectDxCluster()
                         else
-                            bridge.dxCluster.connectCluster()
+                            bridge.connectDxCluster()
                     }
                 }
                 Text {

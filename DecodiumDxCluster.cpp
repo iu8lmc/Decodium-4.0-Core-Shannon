@@ -1,9 +1,44 @@
 #include "DecodiumDxCluster.h"
 #include <QAbstractSocket>
+#include <QCoreApplication>
 #include <QRegularExpression>
 #include <QDateTime>
+#include <QSettings>
 #include <QTimer>
 #include <QDebug>
+
+namespace
+{
+void beginConfiguredSettingsGroup(QSettings& settings)
+{
+    auto const* app = QCoreApplication::instance();
+    if (!app) {
+        return;
+    }
+    QString const configName = app->property("decodiumConfigName").toString().trimmed();
+    if (configName.isEmpty()) {
+        return;
+    }
+    settings.beginGroup(QStringLiteral("MultiSettings"));
+    settings.beginGroup(configName);
+}
+
+QString socketErrorMessage(QAbstractSocket::SocketError error, const QString& fallback)
+{
+    switch (error) {
+    case QAbstractSocket::ConnectionRefusedError:
+        return QObject::tr("Connessione rifiutata");
+    case QAbstractSocket::HostNotFoundError:
+        return QObject::tr("Host non trovato");
+    case QAbstractSocket::NetworkError:
+        return QObject::tr("Errore di rete");
+    case QAbstractSocket::SocketTimeoutError:
+        return QObject::tr("Timeout di connessione");
+    default:
+        return fallback;
+    }
+}
+}
 
 // ---------------------------------------------------------------------------
 // Constructor / Destructor
@@ -35,11 +70,13 @@ DecodiumDxCluster::~DecodiumDxCluster()
 void DecodiumDxCluster::connectCluster()
 {
     if (m_socket && m_socket->state() != QAbstractSocket::UnconnectedState) {
+        setLastStatus(tr("Già connesso o in connessione."));
         emit statusUpdate(tr("Already connected or connecting."));
         return;
     }
 
     if (m_callsign.trimmed().isEmpty()) {
+        setLastStatus(tr("Nominativo mancante. Imposta il callsign in Stazione."));
         emit errorOccurred(tr("Callsign not set. Please set your callsign before connecting."));
         return;
     }
@@ -59,6 +96,7 @@ void DecodiumDxCluster::connectCluster()
     m_loginSent = false;
     m_rxBuf.clear();
 
+    setLastStatus(tr("Connessione a %1:%2 in corso…").arg(m_host).arg(m_port));
     emit statusUpdate(tr("Connecting to %1:%2 …").arg(m_host).arg(m_port));
     m_socket->connectToHost(m_host, static_cast<quint16>(m_port));
 
@@ -69,6 +107,7 @@ void DecodiumDxCluster::connectCluster()
         if (m_socket &&
             m_socket->state() == QAbstractSocket::ConnectingState) {
             m_socket->abort();
+            setLastStatus(tr("Timeout su %1:%2").arg(m_host).arg(m_port));
             emit errorOccurred(tr("Connection to %1:%2 timed out.").arg(m_host).arg(m_port));
         }
     });
@@ -114,6 +153,7 @@ void DecodiumDxCluster::onConnected()
 {
     m_connected = true;
     emit connectedChanged();
+    setLastStatus(tr("Connesso a %1:%2, attendo il prompt di login…").arg(m_host).arg(m_port));
     emit statusUpdate(tr("Connected to %1:%2. Waiting for login prompt…").arg(m_host).arg(m_port));
 }
 
@@ -123,6 +163,7 @@ void DecodiumDxCluster::onDisconnected()
     m_loginSent  = false;
     m_rxBuf.clear();
     emit connectedChanged();
+    setLastStatus(tr("Disconnesso"));
     emit statusUpdate(tr("Disconnected from DX cluster."));
 }
 
@@ -157,8 +198,9 @@ void DecodiumDxCluster::onReadyRead()
 
 void DecodiumDxCluster::onError(QAbstractSocket::SocketError socketError)
 {
-    Q_UNUSED(socketError)
-    const QString msg = m_socket ? m_socket->errorString() : tr("Unknown socket error");
+    const QString fallback = m_socket ? m_socket->errorString() : tr("Unknown socket error");
+    const QString msg = socketErrorMessage(socketError, fallback);
+    setLastStatus(tr("Errore: %1").arg(msg));
     emit errorOccurred(tr("Socket error: %1").arg(msg));
 
     // Reset state; the socket stays alive so the user can retry.
@@ -185,6 +227,7 @@ void DecodiumDxCluster::processLine(const QString& line)
             QString loginLine = m_callsign.trimmed() + "\r\n";
             m_socket->write(loginLine.toUtf8());
             m_loginSent = true;
+            setLastStatus(tr("Login inviato come %1").arg(m_callsign.trimmed()));
             emit statusUpdate(tr("Login sent (%1).").arg(m_callsign.trimmed()));
             return;
         }
@@ -290,19 +333,31 @@ QString DecodiumDxCluster::bandFromFreq(double freqKhz) const
 void DecodiumDxCluster::saveSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup("DXCluster");
     s.setValue("host",     m_host);
     s.setValue("port",     m_port);
     s.setValue("callsign", m_callsign);
     s.endGroup();
+    s.sync();
 }
 
 void DecodiumDxCluster::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup("DXCluster");
     if (s.contains("host"))     setHost(s.value("host").toString());
     if (s.contains("port"))     setPort(s.value("port").toInt());
     if (s.contains("callsign")) setCallsign(s.value("callsign").toString());
     s.endGroup();
+}
+
+void DecodiumDxCluster::setLastStatus(const QString& msg)
+{
+    if (m_lastStatus == msg) {
+        return;
+    }
+    m_lastStatus = msg;
+    emit lastStatusChanged();
 }

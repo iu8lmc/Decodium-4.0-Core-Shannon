@@ -69,7 +69,6 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   {
     QAudioFormat preferred = device.preferredFormat();
     if (preferred.channelCount() > 1 && format.channelCount() == 1) {
-        qDebug() << "SoundInput: device prefers" << preferred.channelCount() << "channels — upgrading from mono to stereo";
         format.setChannelCount(preferred.channelCount());
         // Con stereo bisogna usare Left (non Mono) altrimenti bytesPerFrame()=2
         // e store() leggerebbe male i frame stereo da 4 byte.
@@ -88,6 +87,7 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
                << m_deviceDescription
                << "rate=" << m_sampleRate
                << "channels=" << m_channelCount;
+      cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
       m_sink->setInputGainLinear (m_inputGain);
       return;
     }
@@ -153,8 +153,14 @@ void SoundInput::resume ()
 
   if (m_stream)
     {
+      if (m_stream->state () == QAudio::ActiveState)
+        {
+          cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
+          return;
+        }
       m_stream->start (m_sink);
       checkStream ();
+      cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
     }
 }
 
@@ -205,10 +211,15 @@ void SoundInput::reset (bool report_dropped_frames)
       if (cummulative_lost_usec_ != std::numeric_limits<qint64>::min () && report_dropped_frames)
         {
           auto lost_usec = elapsed_usecs - m_stream->processedUSecs () - cummulative_lost_usec_;
-          if (std::abs (lost_usec) > 5 * 48000)
+          if (lost_usec < 0 || lost_usec > 10 * 1000000ll)
             {
+              cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
+            }
+          else if (lost_usec > 5 * 48000)
+            {
+              auto const lost_frames = qRound64((double(lost_usec) * m_stream->format().sampleRate()) / 1000000.0);
               LOG_ERROR ("Detected excessive dropped audio source samples: "
-                        << m_stream->format ().framesForDuration (lost_usec)
+                        << lost_frames
                          << " (" << std::setprecision (4) << lost_usec / 1.e6 << " S)");
             }
         }

@@ -24,9 +24,28 @@
 #else
 #  define DECODIUM_HAS_QAXOBJECT 0
 #endif
+#include <QCoreApplication>
+#include <QSerialPortInfo>
 #include <QSettings>
 #include <QTimer>
 #include <QDebug>
+
+namespace
+{
+void beginConfiguredSettingsGroup(QSettings& settings)
+{
+    auto const* app = QCoreApplication::instance();
+    if (!app) {
+        return;
+    }
+    QString const configName = app->property("decodiumConfigName").toString().trimmed();
+    if (configName.isEmpty()) {
+        return;
+    }
+    settings.beginGroup(QStringLiteral("MultiSettings"));
+    settings.beginGroup(configName);
+}
+}
 
 #if defined(Q_OS_WIN) && DECODIUM_HAS_QAXOBJECT
 // OmniRig COM ProgID
@@ -52,6 +71,7 @@ DecodiumOmniRigManager::DecodiumOmniRigManager(QObject* parent)
     m_pollTimer = new QTimer(this);
     m_pollTimer->setInterval(m_pollInterval * 1000);
     connect(m_pollTimer, &QTimer::timeout, this, &DecodiumOmniRigManager::onPollTimer);
+    refreshPorts();
     loadSettings();
 }
 
@@ -110,6 +130,7 @@ void DecodiumOmniRigManager::connectRig()
 void DecodiumOmniRigManager::disconnectRig()
 {
     m_pollTimer->stop();
+    closePttPort();
 
     if (m_pttActive) {
         if (m_rig && !m_rig->isNull())
@@ -169,14 +190,55 @@ void DecodiumOmniRigManager::setRigFrequency(double hz)
     m_rig->setProperty("FreqA", hz);
 }
 
+void DecodiumOmniRigManager::setRigTxFrequency(double hz)
+{
+    m_txFrequency = hz;
+    emit txFrequencyChanged();
+    if (!m_rig || m_rig->isNull()) {
+        return;
+    }
+    m_rig->setProperty("FreqB", hz);
+}
+
 void DecodiumOmniRigManager::setRigPtt(bool on)
 {
-    if (!m_rig || m_rig->isNull()) return;
-    // OmniRig: Ptt property  0=RX  1=TX
-    m_rig->setProperty("Ptt", on ? 1 : 0);
+    if (m_pttMethod == QStringLiteral("CAT")) {
+        if (!m_rig || m_rig->isNull()) return;
+        // OmniRig: Ptt property  0=RX  1=TX
+        m_rig->setProperty("Ptt", on ? 1 : 0);
+    } else {
+        if (!ensurePttPortOpen()) {
+            emit errorOccurred(QStringLiteral("OmniRig: impossibile aprire la porta PTT %1").arg(m_pttPort));
+            return;
+        }
+        if (m_pttMethod == QStringLiteral("DTR")) {
+            m_pttSerial->setDataTerminalReady(on);
+        } else if (m_pttMethod == QStringLiteral("RTS")) {
+            m_pttSerial->setRequestToSend(on);
+        }
+    }
     if (m_pttActive != on) {
         m_pttActive = on;
         emit pttActiveChanged();
+    }
+}
+
+void DecodiumOmniRigManager::refreshPorts()
+{
+    QStringList ports;
+    for (const auto& info : QSerialPortInfo::availablePorts()) {
+#if defined(Q_OS_WIN)
+        QString const port = info.portName();
+#else
+        QString const port = info.systemLocation().isEmpty() ? info.portName() : info.systemLocation();
+#endif
+        if (!port.isEmpty()) {
+            ports << port;
+        }
+    }
+    if (ports != m_portList) {
+        m_portList = ports;
+        emit portListChanged();
     }
 }
 
@@ -186,12 +248,45 @@ void DecodiumOmniRigManager::applyPollInterval()
         m_pollTimer->setInterval(m_pollInterval * 1000);
 }
 
+bool DecodiumOmniRigManager::ensurePttPortOpen()
+{
+    if (m_pttPort.isEmpty() || m_pttPort == QStringLiteral("CAT")) {
+        return false;
+    }
+    if (m_pttSerial && m_pttSerial->isOpen() && m_pttSerial->portName() == m_pttPort) {
+        return true;
+    }
+    closePttPort();
+    m_pttSerial = new QSerialPort(this);
+    m_pttSerial->setPortName(m_pttPort);
+    if (!m_pttSerial->open(QIODevice::ReadWrite)) {
+        closePttPort();
+        return false;
+    }
+    return true;
+}
+
+void DecodiumOmniRigManager::closePttPort()
+{
+    if (!m_pttSerial) {
+        return;
+    }
+    if (m_pttSerial->isOpen()) {
+        m_pttSerial->close();
+    }
+    m_pttSerial->deleteLater();
+    m_pttSerial = nullptr;
+}
+
 void DecodiumOmniRigManager::saveSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup("CAT_OmniRig");
     s.setValue("rigName",        m_rigName);
     s.setValue("pttMethod",      m_pttMethod);
+    s.setValue("pttPort",        m_pttPort);
+    s.setValue("splitMode",      m_splitMode);
     s.setValue("pollInterval",   m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
@@ -201,9 +296,12 @@ void DecodiumOmniRigManager::saveSettings()
 void DecodiumOmniRigManager::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup("CAT_OmniRig");
     m_rigName        = s.value("rigName",        "OmniRig Rig 1").toString();
     m_pttMethod      = s.value("pttMethod",       "CAT").toString();
+    m_pttPort        = s.value("pttPort",         "CAT").toString();
+    m_splitMode      = s.value("splitMode",       "none").toString();
     m_pollInterval   = s.value("pollInterval",    2).toInt();
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
@@ -220,6 +318,7 @@ DecodiumOmniRigManager::DecodiumOmniRigManager(QObject* parent)
 {
     m_pollTimer = new QTimer(this);
     m_pollTimer->setInterval(m_pollInterval * 1000);
+    refreshPorts();
     loadSettings();
 }
 
@@ -236,6 +335,7 @@ void DecodiumOmniRigManager::connectRig()
 void DecodiumOmniRigManager::disconnectRig()
 {
     if (m_pollTimer) m_pollTimer->stop();
+    closePttPort();
     if (m_connected) {
         m_connected = false;
         emit connectedChanged();
@@ -246,11 +346,49 @@ void DecodiumOmniRigManager::onPollTimer() {}
 
 void DecodiumOmniRigManager::setRigFrequency(double) {}
 
+void DecodiumOmniRigManager::setRigTxFrequency(double hz)
+{
+    if (!qFuzzyCompare(m_txFrequency, hz)) {
+        m_txFrequency = hz;
+        emit txFrequencyChanged();
+    }
+}
+
 void DecodiumOmniRigManager::setRigPtt(bool on)
 {
+    if (m_pttMethod != QStringLiteral("CAT")) {
+        if (!ensurePttPortOpen()) {
+            emit errorOccurred(QStringLiteral("OmniRig: impossibile aprire la porta PTT %1").arg(m_pttPort));
+            return;
+        }
+        if (m_pttMethod == QStringLiteral("DTR")) {
+            m_pttSerial->setDataTerminalReady(on);
+        } else if (m_pttMethod == QStringLiteral("RTS")) {
+            m_pttSerial->setRequestToSend(on);
+        }
+    }
     if (m_pttActive != on) {
         m_pttActive = on;
         emit pttActiveChanged();
+    }
+}
+
+void DecodiumOmniRigManager::refreshPorts()
+{
+    QStringList ports;
+    for (const auto& info : QSerialPortInfo::availablePorts()) {
+#if defined(Q_OS_WIN)
+        QString const port = info.portName();
+#else
+        QString const port = info.systemLocation().isEmpty() ? info.portName() : info.systemLocation();
+#endif
+        if (!port.isEmpty()) {
+            ports << port;
+        }
+    }
+    if (ports != m_portList) {
+        m_portList = ports;
+        emit portListChanged();
     }
 }
 
@@ -260,12 +398,45 @@ void DecodiumOmniRigManager::applyPollInterval()
         m_pollTimer->setInterval(m_pollInterval * 1000);
 }
 
+bool DecodiumOmniRigManager::ensurePttPortOpen()
+{
+    if (m_pttPort.isEmpty() || m_pttPort == QStringLiteral("CAT")) {
+        return false;
+    }
+    if (m_pttSerial && m_pttSerial->isOpen() && m_pttSerial->portName() == m_pttPort) {
+        return true;
+    }
+    closePttPort();
+    m_pttSerial = new QSerialPort(this);
+    m_pttSerial->setPortName(m_pttPort);
+    if (!m_pttSerial->open(QIODevice::ReadWrite)) {
+        closePttPort();
+        return false;
+    }
+    return true;
+}
+
+void DecodiumOmniRigManager::closePttPort()
+{
+    if (!m_pttSerial) {
+        return;
+    }
+    if (m_pttSerial->isOpen()) {
+        m_pttSerial->close();
+    }
+    m_pttSerial->deleteLater();
+    m_pttSerial = nullptr;
+}
+
 void DecodiumOmniRigManager::saveSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup("CAT_OmniRig");
     s.setValue("rigName",        m_rigName);
     s.setValue("pttMethod",      m_pttMethod);
+    s.setValue("pttPort",        m_pttPort);
+    s.setValue("splitMode",      m_splitMode);
     s.setValue("pollInterval",   m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
@@ -275,9 +446,12 @@ void DecodiumOmniRigManager::saveSettings()
 void DecodiumOmniRigManager::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    beginConfiguredSettingsGroup(s);
     s.beginGroup("CAT_OmniRig");
     m_rigName        = s.value("rigName",        "OmniRig Rig 1").toString();
     m_pttMethod      = s.value("pttMethod",       "CAT").toString();
+    m_pttPort        = s.value("pttPort",         "CAT").toString();
+    m_splitMode      = s.value("splitMode",       "none").toString();
     m_pollInterval   = s.value("pollInterval",    2).toInt();
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();

@@ -38,6 +38,42 @@ Rectangle {
                 font.pixelSize: 10
                 color: "#B0BEC5"
             }
+
+            Rectangle {
+                width: 22
+                height: 22
+                radius: 4
+                color: closeMA.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+                border.color: Qt.rgba(0, 188, 212, 0.3)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "X"
+                    font.family: "Consolas"
+                    font.pixelSize: 10
+                    color: "#00BCD4"
+                }
+
+                MouseArea {
+                    id: closeMA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        var root = activePanel.parent
+                        while (root) {
+                            if (root.hasOwnProperty("visible")) {
+                                root.visible = false
+                            }
+                            if (root.hasOwnProperty("activeStationsPanelVisible")) {
+                                root.activeStationsPanelVisible = false
+                                break
+                            }
+                            root = root.parent
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle { width: parent.width; height: 1; color: Qt.rgba(0, 188, 212, 0.3) }
@@ -119,7 +155,10 @@ Rectangle {
 
             delegate: Rectangle {
                 width: stationList.width
-                height: 20
+                readonly property bool passesCqFilter: !bridge.activeStations || !bridge.activeStations.filterCqOnly || model.isCq
+                readonly property bool passesWantedFilter: !bridge.activeStations || !bridge.activeStations.filterWantedOnly || model.isWanted
+                visible: passesCqFilter && passesWantedFilter
+                height: visible ? 20 : 0
                 color: stnMouse.containsMouse ? Qt.rgba(0, 0.74, 0.84, 0.12) : "transparent"
 
                 RowLayout {

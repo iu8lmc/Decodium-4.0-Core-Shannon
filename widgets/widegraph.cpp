@@ -46,6 +46,9 @@ WideGraph::WideGraph(QSettings * settings, QWidget *parent) :
   connect(ui->widePlot, &CPlotter::waterfallRowAvailable,
           this, &WideGraph::waterfallRowReady);
 
+  connect (ui->paletteComboBox, &QComboBox::textActivated,
+           this, &WideGraph::handlePaletteComboActivated);
+
   {
     //Restore user's settings
     SettingsGroup g {m_settings, "WideGraph"};
@@ -434,7 +437,7 @@ void WideGraph::readPalette ()                                   //readPalette
     }
 }
 
-void WideGraph::on_paletteComboBox_activated (QString const& palette)    //palette selector
+void WideGraph::handlePaletteComboActivated (QString const& palette)    //palette selector
 {
   m_waterfallPalette = palette;
   readPalette();

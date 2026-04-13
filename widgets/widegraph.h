@@ -87,7 +87,7 @@ private slots:
   void on_spec2dComboBox_currentIndexChanged(int);
   void on_fSplitSpinBox_valueChanged(int n);
   void on_fStartSpinBox_valueChanged(int n);
-  void on_paletteComboBox_activated(const QString &palette);
+  void handlePaletteComboActivated(QString const& palette);
   void on_timestampComboBox_currentIndexChanged(int n);
   void on_cbFlatten_toggled(bool b);
   void on_cbRef_toggled(bool b);

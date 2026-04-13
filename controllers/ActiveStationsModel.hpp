@@ -14,6 +14,7 @@ struct StationEntry {
     QString grid;
     QString lastUtc;
     int age = 0;          // periods since last heard
+    bool isCq = false;
     bool isWanted = false;
     bool isNewDxcc = false;
     bool isNewGrid = false;
@@ -39,6 +40,7 @@ public:
         GridRole,
         LastUtcRole,
         AgeRole,
+        IsCqRole,
         IsWantedRole,
         IsNewDxccRole,
         IsNewGridRole,
@@ -61,7 +63,7 @@ public:
     void setFilterWantedOnly(bool v);
 
     Q_INVOKABLE void addStation(const QString &callsign, int freq, int snr,
-                                 const QString &grid, const QString &utc);
+                                 const QString &grid, const QString &utc, bool isCq = false);
     Q_INVOKABLE void ageAllStations();
     Q_INVOKABLE void clear();
     Q_INVOKABLE QString callsignAt(int row) const;

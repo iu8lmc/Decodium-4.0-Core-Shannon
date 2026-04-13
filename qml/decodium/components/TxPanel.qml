@@ -10,6 +10,21 @@ Item {
 
     // Required property - reference to the app engine
     required property var engine
+    property string logPreviewCall: ""
+    property string logPreviewGrid: ""
+    property string logPreviewSent: ""
+    property string logPreviewRcvd: ""
+    property string logPreviewFreq: ""
+    property string logPreviewMode: ""
+
+    function refreshLogPreview() {
+        logPreviewCall = engine && engine.dxCall ? engine.dxCall : ""
+        logPreviewGrid = engine && engine.dxGrid ? engine.dxGrid : ""
+        logPreviewSent = engine && engine.reportSent ? engine.reportSent : ""
+        logPreviewRcvd = engine && engine.reportReceived ? engine.reportReceived : ""
+        logPreviewFreq = engine ? Number(engine.frequency || 0).toFixed(0) : ""
+        logPreviewMode = engine && engine.mode ? engine.mode : ""
+    }
 
     // Convenience aliases
     property var log: engine ? engine.logManager : null
@@ -895,7 +910,13 @@ Item {
                         }
                     }
 
-                    onClicked: if (engine) engine.logQso()
+                    onClicked: {
+                        if (!engine) {
+                            return
+                        }
+                        txPanel.refreshLogPreview()
+                        logConfirmPopup.open()
+                    }
                 }
             }
 
@@ -967,6 +988,95 @@ Item {
 
             }
 
+        }
+    }
+
+    Popup {
+        id: logConfirmPopup
+        parent: Overlay.overlay
+        modal: true
+        focus: true
+        width: 420
+        height: 250
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.round((parent.height - height) / 2) : 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            radius: 10
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.96)
+            border.color: accentGreen
+            border.width: 1
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Text {
+                    text: "Conferma Log QSO"
+                    color: accentGreen
+                    font.pixelSize: 18
+                    font.bold: true
+                }
+
+                Item { Layout.fillWidth: true }
+
+                ToolButton {
+                    text: "✕"
+                    onClicked: logConfirmPopup.close()
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: glassBorder }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 12
+                rowSpacing: 8
+
+                Text { text: "Call:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: logPreviewCall || "-"; color: textPrimary; font.pixelSize: 14; font.bold: true }
+
+                Text { text: "Grid:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: logPreviewGrid || "-"; color: textPrimary; font.pixelSize: 14 }
+
+                Text { text: "Report:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: (logPreviewSent || "-") + " / " + (logPreviewRcvd || "-"); color: textPrimary; font.pixelSize: 14 }
+
+                Text { text: "Mode:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: logPreviewMode || "-"; color: textPrimary; font.pixelSize: 14 }
+
+                Text { text: "Freq:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: logPreviewFreq && logPreviewFreq !== "0" ? logPreviewFreq + " Hz" : "-"; color: textPrimary; font.pixelSize: 14 }
+            }
+
+            Item { Layout.fillHeight: true }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: 10
+
+                Button {
+                    text: "Close"
+                    onClicked: logConfirmPopup.close()
+                }
+
+                Button {
+                    text: "Add"
+                    enabled: logPreviewCall.length > 0
+                    onClicked: {
+                        if (engine) {
+                            engine.logQso()
+                        }
+                        logConfirmPopup.close()
+                    }
+                }
+            }
         }
     }
 
