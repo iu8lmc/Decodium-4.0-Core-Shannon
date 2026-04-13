@@ -3515,9 +3515,13 @@ ApplicationWindow {
                                         clip: true
                                         model: decodePanel.allDecodes
                                         spacing: 1
-                                        cacheBuffer: 2000
-                                        reuseItems: true
-                                        onCountChanged: Qt.callLater(positionViewAtEnd)
+                                        cacheBuffer: 3000
+                                        interactive: true
+                                        // Auto-scroll solo quando non in TX (evita blocco scroll durante trasmissione)
+                                        onCountChanged: {
+                                            if (!bridge.transmitting)
+                                                Qt.callLater(positionViewAtEnd)
+                                        }
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
 
@@ -6727,8 +6731,8 @@ ApplicationWindow {
                         clip: true
                         spacing: 1
                         model: decodePanel.allDecodes
-                        cacheBuffer: 2000
-                        reuseItems: true
+                        cacheBuffer: 3000
+                        interactive: true
                         ScrollBar.vertical: ScrollBar { active: true }
 
                         delegate: Rectangle {

@@ -2267,7 +2267,8 @@ void DecodiumBridge::startTx()
             bridgeLog("SoundInput suspended during TX (sync mode)");
         }
 
-        {
+        // Aggiungi TX entry alla decode list solo per il primo invio (non per retry)
+        if (m_txRetryCount <= 1) {
             QVariantMap txEntry;
             txEntry["time"]     = QDateTime::currentDateTimeUtc().toString("HHmmss");
             txEntry["db"]       = "TX";
@@ -2292,6 +2293,7 @@ void DecodiumBridge::startTx()
             txEntry["isB4"]           = false;
             m_decodeList.append(txEntry);
             emit decodeListChanged();
+        } // if txRetryCount <= 1
         }
 
         unsigned symbolsLength = 79;
@@ -2368,8 +2370,8 @@ void DecodiumBridge::startTx()
     m_transmitting = true;
     emit transmittingChanged();
 
-    // Aggiungi entry TX alla decode list (visibile in RX Frequency e Band Activity)
-    {
+    // Aggiungi entry TX alla decode list solo per il primo invio (non retry)
+    if (m_txRetryCount <= 1) {
         QVariantMap txEntry;
         txEntry["time"]     = QDateTime::currentDateTimeUtc().toString("HHmmss");
         txEntry["db"]       = "TX";
@@ -4906,6 +4908,22 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             }
         }
 
+        // Deduplicazione: non aggiungere se l'ultimo decode ha stesso messaggio
+        {
+            bool isDupe = false;
+            int listSize = m_decodeList.size();
+            for (int di = qMax(0, listSize - 5); di < listSize; ++di) {
+                QVariantMap prev = m_decodeList[di].toMap();
+                if (prev.value("message").toString() == msg &&
+                    prev.value("time").toString() == f[0] &&
+                    !prev.value("isTx").toBool()) {
+                    isDupe = true;
+                    break;
+                }
+            }
+            if (isDupe) continue;
+        }
+
         m_decodeList.append(QVariant(entry));
         changed = true;
 
@@ -5028,6 +5046,12 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = extractDecodedCallsign(msg, isCQ);
         enrichDecodeEntry(entry);
+        // Deduplicazione
+        { bool isDupe = false; int ls = m_decodeList.size();
+          for (int di = qMax(0,ls-5); di < ls; ++di) {
+            QVariantMap p = m_decodeList[di].toMap();
+            if (p.value("message").toString()==msg && !p.value("isTx").toBool()) { isDupe=true; break; }
+          } if (isDupe) continue; }
         m_decodeList.append(QVariant(entry));
         changed = true;
     }
@@ -5159,7 +5183,12 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
         entry["isMyCall"]   = isMyCall;
         entry["fromCall"]   = fromCall;
         enrichDecodeEntry(entry);
-
+        // Deduplicazione
+        { bool isDupe = false; int ls = m_decodeList.size();
+          for (int di = qMax(0,ls-5); di < ls; ++di) {
+            QVariantMap p = m_decodeList[di].toMap();
+            if (p.value("message").toString()==msg && p.value("time").toString()==f[0] && !p.value("isTx").toBool()) { isDupe=true; break; }
+          } if (isDupe) continue; }
         m_decodeList.append(QVariant(entry));
         changed = true;
 
