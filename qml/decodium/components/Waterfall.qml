@@ -15,6 +15,7 @@ Item {
     signal txFrequencySelected(int freq)     // Sinistro = TX
 
     property bool showControls: true
+    property bool useAether: bridge.getSetting("useAetherWaterfall", true)
     property int  minFreq: 200
     property int  maxFreq: 3000
     property int  spectrumHeight: 150
@@ -87,6 +88,35 @@ Item {
                     }
                 }
                 Text { text: "Auto"; color: autoRangeCheck.checked ? "#00e676" : textSec; font.pixelSize: 11 }
+
+                // Blanker toggle (AetherSDR-style)
+                Text { text: "NB"; color: blankerCheck.checked ? "#ff9800" : textSec; font.pixelSize: 11; font.bold: true }
+                CheckBox {
+                    id: blankerCheck
+                    checked: false
+                    onCheckedChanged: waterfallDisplay.blankerEnabled = checked
+                    ToolTip.text: "Waterfall Noise Blanker (AetherSDR)"
+                    ToolTip.visible: blankerCheck.hovered
+                    ToolTip.delay: 400
+                    indicator: Rectangle {
+                        implicitWidth: 18; implicitHeight: 18; radius: 2
+                        color: blankerCheck.checked ? "#ff9800" : Qt.rgba(30/255,45/255,70/255,0.9)
+                        border.color: "#ff9800"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "B"; color: "black"; font.pixelSize: 9; font.bold: true; visible: blankerCheck.checked }
+                    }
+                }
+
+                // AetherSDR toggle
+                Rectangle {
+                    width: aetherToggleText.width + 10; height: 18; radius: 3
+                    color: waterfallPanel.useAether ? Qt.rgba(0,0.8,1,0.25) : Qt.rgba(0.3,0.3,0.3,0.2)
+                    border.color: waterfallPanel.useAether ? "#00ccff" : "#555"
+                    Text { id: aetherToggleText; anchors.centerIn: parent; text: "AetherSDR"; color: waterfallPanel.useAether ? "#00ccff" : textSec; font.pixelSize: 10; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        onClicked: { waterfallPanel.useAether = !waterfallPanel.useAether; bridge.setSetting("useAetherWaterfall", waterfallPanel.useAether) }
+                    }
+                    ToolTip.visible: hovered; ToolTip.text: "Alterna waterfall AetherSDR / SmartSDR"
+                }
 
                 // TX brackets toggle
                 Text { text: "[ ]"; color: txBracketsCheck.checked ? accentGreen : textSec; font.pixelSize: 11; font.bold: true }
@@ -200,11 +230,43 @@ Item {
             Behavior on color { ColorAnimation { duration: 100 } }
         }
 
+        // ── AetherSDR Waterfall ──────────────────────────────────────────
+        AetherWaterfallItem {
+            id: aetherWf
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: waterfallPanel.useAether
+
+            rxFrequency: bridge.rxFrequency
+            txFrequency: bridge.txFrequency
+            autoBlack: autoRangeCheck.checked
+            colorScheme: Math.max(0, bridge.uiPaletteIndex)
+
+            onFrequencyClicked: function(freq) {
+                waterfallPanel.frequencySelected(freq)
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: startText2.width + 40; height: startText2.height + 20
+                color: Qt.rgba(0, 0, 0, 0.85)
+                border.color: "#00E5FF"; border.width: 1; radius: 6
+                visible: !bridge.monitoring
+                Text {
+                    id: startText2
+                    anchors.centerIn: parent
+                    text: "AetherSDR Waterfall\nClicca MONITOR per avviare"
+                    font.pixelSize: 12; color: "#B4B4B4"; horizontalAlignment: Text.AlignHCenter
+                }
+            }
+        }
+
         // ── PanadapterItem — FlexRadio SmartSDR style ─────────────────────
         PanadapterItem {
             id: waterfallDisplay
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: !waterfallPanel.useAether
 
             startFreq:      bridge.nfa
             bandwidth:      bridge.nfb - bridge.nfa
@@ -213,24 +275,21 @@ Item {
             running:        bridge.monitoring
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
-            // Carica valori da Settings al primo avvio
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
             autoRange:      autoRangeCheck.checked
             peakHold:       true
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
 
-            // Salva al bridge con debounce (2s dopo l'ultimo cambio)
             onPaletteIndexChanged: { bridge.uiPaletteIndex = paletteIndex; mainWindow.scheduleSave() }
             onZoomFactorChanged:   { bridge.uiZoomFactor   = zoomFactor;   mainWindow.scheduleSave() }
 
             onFrequencySelected: function(freq) {
-                waterfallPanel.frequencySelected(freq)        // RX
+                waterfallPanel.frequencySelected(freq)
             }
             onTxFrequencySelected: function(freq) {
-                waterfallPanel.txFrequencySelected(freq)      // TX
+                waterfallPanel.txFrequencySelected(freq)
             }
 
-            // Overlay "Start monitoring"
             Rectangle {
                 anchors.centerIn: parent
                 width: startText.width + 40; height: startText.height + 20
@@ -241,28 +300,34 @@ Item {
                     id: startText
                     anchors.centerIn: parent
                     text: "Panadapter 4096-bin · SmartSDR style\nClicca MONITOR per avviare"
-                    font.pixelSize: 12
-                    color: "#B4B4B4"
-                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: 12; color: "#B4B4B4"; horizontalAlignment: Text.AlignHCenter
                 }
             }
         }
     }
 
-    // Sync Bridge → PanadapterItem
+    // Sync Bridge → Waterfalls
     Connections {
         target: bridge
 
-        // Alta risoluzione FFTW 4096 bin — include range frequenze esatto
         function onPanadapterDataReady(dbValues, minDb, maxDb, freqMinHz, freqMaxHz) {
-            waterfallDisplay.addSpectrumData(dbValues, minDb, maxDb, freqMinHz, freqMaxHz)
+            if (waterfallPanel.useAether)
+                aetherWf.addRow(dbValues, minDb, maxDb, freqMinHz, freqMaxHz)
+            else
+                waterfallDisplay.addSpectrumData(dbValues, minDb, maxDb, freqMinHz, freqMaxHz)
         }
-        // Fallback: valori normalizzati 0-1 dal legacy timer
         function onSpectrumDataReady(data) {
             if (!bridge.monitoring) return
-            waterfallDisplay.addSpectrumDataNorm(data)
+            if (!waterfallPanel.useAether)
+                waterfallDisplay.addSpectrumDataNorm(data)
         }
-        function onRxFrequencyChanged() { waterfallDisplay.rxFreq = bridge.rxFrequency }
-        function onTxFrequencyChanged() { waterfallDisplay.txFreq = bridge.txFrequency }
+        function onRxFrequencyChanged() {
+            waterfallDisplay.rxFreq = bridge.rxFrequency
+            aetherWf.rxFrequency = bridge.rxFrequency
+        }
+        function onTxFrequencyChanged() {
+            waterfallDisplay.txFreq = bridge.txFrequency
+            aetherWf.txFrequency = bridge.txFrequency
+        }
     }
 }

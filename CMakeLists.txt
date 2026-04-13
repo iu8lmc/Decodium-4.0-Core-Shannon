@@ -1503,6 +1503,10 @@ add_executable (decodium_qml
   WaterfallItem.hpp
   PanadapterItem.cpp
   PanadapterItem.hpp
+  AetherWaterfall.cpp
+  AetherWaterfall.h
+  AetherWaterfallItem.cpp
+  AetherWaterfallItem.h
   DecodiumAudioSink.h
   Detector/FT8DecodeWorker.cpp
   Detector/FT2DecodeWorker.cpp

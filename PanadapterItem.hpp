@@ -43,6 +43,8 @@ class PanadapterItem : public QQuickItem
     Q_PROPERTY(QStringList paletteNames READ paletteNames CONSTANT)
     Q_PROPERTY(bool  running     READ running     WRITE setRunning     NOTIFY runningChanged)
     Q_PROPERTY(bool  showTxBrackets READ showTxBrackets WRITE setShowTxBrackets NOTIFY showTxBracketsChanged)
+    Q_PROPERTY(bool  blankerEnabled  READ blankerEnabled  WRITE setBlankerEnabled  NOTIFY blankerEnabledChanged)
+    Q_PROPERTY(float blankerThreshold READ blankerThreshold WRITE setBlankerThreshold NOTIFY blankerThresholdChanged)
 
     // ── Read-only status ────────────────────────────────────────────────────
     Q_PROPERTY(float measuredFloor READ measuredFloor NOTIFY measuredFloorChanged)
@@ -72,9 +74,11 @@ public:
     bool  showTxBrackets() const { return m_showTxBrackets; }
     float measuredFloor()  const { return m_measuredFloor; }
     float measuredPeak()   const { return m_measuredPeak; }
+    bool  blankerEnabled()   const { return m_blankerEnabled; }
+    float blankerThreshold() const { return m_blankerThreshold; }
     int   fftBins()        const { return 4096; }
     QStringList paletteNames() const {
-        return {"SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR"};
+        return {"SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR","AetherSDR Default","AetherSDR BlueGreen","AetherSDR Fire","AetherSDR Plasma"};
     }
 
     // ── Setters ─────────────────────────────────────────────────────────────
@@ -94,6 +98,8 @@ public:
     void setPaletteIndex(int v);
     void setRunning(bool v)        { if (m_running!=v){m_running=v;emit runningChanged();} }
     void setShowTxBrackets(bool v) { if (m_showTxBrackets!=v){m_showTxBrackets=v;emit showTxBracketsChanged();markDirty();} }
+    void setBlankerEnabled(bool v)    { if (m_blankerEnabled!=v){m_blankerEnabled=v;emit blankerEnabledChanged();} }
+    void setBlankerThreshold(float v) { if (m_blankerThreshold!=v){m_blankerThreshold=qBound(1.05f,v,3.0f);emit blankerThresholdChanged();} }
 
     // ── Invokable methods ───────────────────────────────────────────────────
     // Chiamato dal bridge: dB raw + range dB + range frequenze exact
@@ -125,6 +131,8 @@ signals:
     void showTxBracketsChanged();
     void measuredFloorChanged();
     void measuredPeakChanged();
+    void blankerEnabledChanged();
+    void blankerThresholdChanged();
     void frequencySelected(int freq);
     void txFrequencySelected(int freq);
 
@@ -184,6 +192,13 @@ private:
     int   m_paletteIndex = 3;   // deskHPSDR default
     bool  m_running      = false;
     bool  m_showTxBrackets = true;
+
+    // Waterfall blanker (AetherSDR-style impulse suppression)
+    bool  m_blankerEnabled   = false;
+    float m_blankerThreshold = 1.3f;
+    float m_baselineMeans[8] = {};
+    int   m_baselineIdx      = 0;
+    int   m_autoBlackCounter = 0;
 
     // ── Stato rendering ─────────────────────────────────────────────────────
     bool  m_spectrumDirty = true;
