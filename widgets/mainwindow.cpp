@@ -787,11 +787,8 @@ static void apply_async_ft2_tdelta (QString& line, qint64 asyncRxStartMs)
 
 static QString udp_client_id_from_application_name ()
 {
-  QString const forcedId = qEnvironmentVariable ("DECO_UDP_CLIENT_ID").trimmed ();
-  if (!forcedId.isEmpty ())
-    {
-      return forcedId;
-    }
+  // Keep WSJT-X compatibility for third-party UDP clients that key off
+  // the traditional application identifier instead of just the schema.
   return QStringLiteral ("WSJTX");
 }
 
@@ -2947,7 +2944,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   txMsgButtonGroup->addButton(ui->txrb5,5);
   txMsgButtonGroup->addButton(ui->txrb6,6);
   set_dateTimeQSO(-1);
-  connect(txMsgButtonGroup,SIGNAL(buttonClicked(int)),SLOT(set_ntx(int)));
+  connect (txMsgButtonGroup, &QButtonGroup::idClicked, this, &MainWindow::set_ntx);
   connect (ui->decodedTextBrowser, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnCall2);
   connect (ui->decodedTextBrowser2, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnCall);
   connect (ui->houndQueueTextBrowser, &DisplayText::selectCallsign, this, &MainWindow::doubleClickOnFoxQueue);
@@ -4024,6 +4021,15 @@ void MainWindow::legacySetTxFrequency(int frequencyHz)
 
 void MainWindow::legacySetRigPtt(bool enabled)
 {
+  requestRigPtt(enabled);
+}
+
+void MainWindow::requestRigPtt(bool enabled)
+{
+  if (m_embeddedShellMode && !m_embeddedRigControlEnabled) {
+    Q_EMIT legacyPttRequested(enabled);
+    return;
+  }
   m_config.transceiver_ptt(enabled);
 }
 
@@ -6928,6 +6934,14 @@ void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
     }
 
   auto const nowMs = QDateTime::currentMSecsSinceEpoch ();
+  auto const recentAudioFrameMs = m_last_audio_frame_ms;
+  bool const audioRecentlyHealthy = m_monitoring
+                                    && recentAudioFrameMs > 0
+                                    && (nowMs - recentAudioFrameMs) < 3000;
+  if (audioRecentlyHealthy)
+    {
+      return;
+    }
   if (nowMs - m_last_wake_audio_rebind_ms < 1500)
     {
       return;
@@ -7120,7 +7134,7 @@ void MainWindow::showQSYMessage(QString message)
 
 void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settings dialog)
 {
-  if (m_embeddedShellMode && !m_forceLegacySettingsDialog)
+  if (m_embeddedShellMode)
     {
       Q_EMIT legacyPreferencesRequested ();
       return;
@@ -7387,7 +7401,7 @@ void MainWindow::ensureUpdateCheckAction ()
 
   auto * action = new QAction {tr ("Check for updates..."), this};
   action->setObjectName ("actionCheck_for_Updates");
-  connect (action, &QAction::triggered, this, &MainWindow::on_actionCheck_for_Updates_triggered);
+  connect (action, &QAction::triggered, this, &MainWindow::handleCheckForUpdatesTriggered);
 
   if (ui->actionAbout)
     {
@@ -7886,7 +7900,7 @@ void MainWindow::handleUpdateCheckReply (QPointer<QNetworkReply> reply, bool man
                              release_notes);
 }
 
-void MainWindow::on_actionCheck_for_Updates_triggered ()
+void MainWindow::handleCheckForUpdatesTriggered ()
 {
   startUpdateCheck (true);
 }
@@ -14157,7 +14171,7 @@ void MainWindow::guiUpdate()
       }
 
       setXIT (ui->TxFreqSpinBox->value ());
-      m_config.transceiver_ptt (true); //Assert the PTT
+      requestRigPtt (true); // Assert the PTT
       m_tx_when_ready = true;
 
 #if defined(Q_OS_LINUX)
@@ -15259,11 +15273,11 @@ void MainWindow::stopTx()
 void MainWindow::stopTx2()
 {
   if (m_tci_audio) {
-      Q_EMIT m_config.transceiver_ptt (false);      //Lower PTT
+      requestRigPtt (false);      // Lower PTT
       monitor (true);
       statusUpdate ();
   } else {
-    m_config.transceiver_ptt (false); //Lower PTT
+    requestRigPtt (false); // Lower PTT
   }
   if (m_mode == "JT9" && m_bFast9
       && legacyAutoSeqEnabled ()  //avt 9/30/25
@@ -20191,7 +20205,7 @@ void MainWindow::transmitRttyText(QString const& text)
   setXIT(ui->TxFreqSpinBox->value());
   setRig();
   g_iptt = 1;
-  m_config.transceiver_ptt(true);
+  requestRigPtt(true);
 
   int const msDelay = qMax(0, int(1000.0 * m_config.txDelay()));
   QTimer::singleShot(msDelay, this, [this] {
@@ -21320,7 +21334,7 @@ void MainWindow::on_actionExport_Cabrillo_log_triggered()
 }
 
 
-void MainWindow::on_actionErase_decodium_log_adi_triggered()
+void MainWindow::handleEraseDecodiumLogAdiTriggered()
 {
   int ret = MessageBox::query_message (this, tr ("Confirm Erase"),
                                        tr ("Are you sure you want to erase file decodium_log.adi?"));
@@ -21346,7 +21360,7 @@ void MainWindow::on_actionOpen_log_directory_triggered ()
   QDesktopServices::openUrl (QUrl::fromLocalFile (m_config.writeable_data_dir ().absolutePath ()));
 }
 
-void MainWindow::on_actionLaunchChronoGPS_triggered ()
+void MainWindow::handleLaunchChronoGPSTriggered ()
 {
   QString chronoPath = QCoreApplication::applicationDirPath () + "/ChronoGPS.exe";
   if (QFile::exists (chronoPath)) {

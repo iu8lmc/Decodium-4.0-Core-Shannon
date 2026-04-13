@@ -24,6 +24,7 @@ QVariant ActiveStationsModel::data(const QModelIndex &index, int role) const
     case GridRole:        return s.grid;
     case LastUtcRole:     return s.lastUtc;
     case AgeRole:         return s.age;
+    case IsCqRole:        return s.isCq;
     case IsWantedRole:    return s.isWanted;
     case IsNewDxccRole:   return s.isNewDxcc;
     case IsNewGridRole:   return s.isNewGrid;
@@ -42,6 +43,7 @@ QHash<int, QByteArray> ActiveStationsModel::roleNames() const
         {GridRole,       "grid"},
         {LastUtcRole,    "lastUtc"},
         {AgeRole,        "age"},
+        {IsCqRole,       "isCq"},
         {IsWantedRole,   "isWanted"},
         {IsNewDxccRole,  "isNewDxcc"},
         {IsNewGridRole,  "isNewGrid"},
@@ -75,7 +77,7 @@ void ActiveStationsModel::setFilterWantedOnly(bool v)
 }
 
 void ActiveStationsModel::addStation(const QString &callsign, int freq, int snr,
-                                      const QString &grid, const QString &utc)
+                                      const QString &grid, const QString &utc, bool isCq)
 {
     int idx = findStation(callsign);
     if (idx >= 0) {
@@ -86,6 +88,7 @@ void ActiveStationsModel::addStation(const QString &callsign, int freq, int snr,
         if (!grid.isEmpty()) s.grid = grid;
         s.lastUtc = utc;
         s.age = 0;
+        s.isCq = isCq;
         s.isWanted = m_wantedCallsigns.contains(callsign.toUpper());
         computePriority(s);
         emit dataChanged(index(idx, 0), index(idx, 0));
@@ -98,6 +101,7 @@ void ActiveStationsModel::addStation(const QString &callsign, int freq, int snr,
         entry.grid = grid;
         entry.lastUtc = utc;
         entry.age = 0;
+        entry.isCq = isCq;
         entry.isWanted = m_wantedCallsigns.contains(entry.callsign);
         computePriority(entry);
 

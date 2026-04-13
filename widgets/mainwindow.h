@@ -402,7 +402,7 @@ private slots:
   void on_actionIonospheric_Forecast_triggered (bool checked);
   void on_actionDX_Cluster_triggered (bool checked);
   void on_actionAbout_triggered();
-  void on_actionCheck_for_Updates_triggered();
+  void handleCheckForUpdatesTriggered();
   void on_autoButton_clicked (bool);
   void on_stopTxButton_clicked();
   void on_stopButton_clicked();
@@ -426,7 +426,7 @@ private slots:
   void on_actionDecode_remaining_files_in_directory_triggered();
   void on_actionDelete_all_wav_files_in_SaveDir_triggered();
   void on_actionOpen_log_directory_triggered ();
-  void on_actionLaunchChronoGPS_triggered ();
+  void handleLaunchChronoGPSTriggered ();
   void on_actionNone_triggered();
   void on_actionSave_all_triggered();
   void on_actionDefault_event_logging_triggered();
@@ -539,7 +539,7 @@ private slots:
   void bumpFqso(int n);
   void on_actionErase_ALL_TXT_triggered();
   void on_reset_cabrillo_log_action_triggered ();
-  void on_actionErase_decodium_log_adi_triggered();
+  void handleEraseDecodiumLogAdiTriggered();
   void on_actionErase_WSPR_hashtable_triggered();
   void on_actionErase_list_of_Q65_callers_triggered();
   void on_actionExport_Cabrillo_log_triggered();
@@ -736,8 +736,10 @@ private:
                                       QString const& details) const;
   Q_SIGNAL void legacyPreferencesRequested () const;
   Q_SIGNAL void legacyQuitRequested () const;
+  Q_SIGNAL void legacyPttRequested (bool enabled) const;
 
 private:
+  void requestRigPtt (bool enabled);
   void set_mode (QString const& mode);
   QString startup_mode_for_frequency (Frequency dial_frequency) const;
   void maybe_apply_startup_mode_from_rig_frequency (Frequency dial_frequency);

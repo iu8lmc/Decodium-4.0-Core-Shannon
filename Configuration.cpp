@@ -583,11 +583,11 @@ private:
   Q_SLOT void on_PTT_port_combo_box_activated (int);
   Q_SLOT void on_CAT_port_combo_box_activated (int);
   Q_SLOT void on_CAT_serial_baud_combo_box_currentIndexChanged (int);
-  Q_SLOT void on_CAT_data_bits_button_group_buttonClicked (int);
-  Q_SLOT void on_CAT_stop_bits_button_group_buttonClicked (int);
-  Q_SLOT void on_CAT_handshake_button_group_buttonClicked (int);
+  Q_SLOT void handleCatDataBitsGroupClicked (int);
+  Q_SLOT void handleCatStopBitsGroupClicked (int);
+  Q_SLOT void handleCatHandshakeGroupClicked (int);
   Q_SLOT void on_CAT_poll_interval_spin_box_valueChanged (int);
-  Q_SLOT void on_split_mode_button_group_buttonClicked (int);
+  Q_SLOT void handleSplitModeGroupClicked (int);
   Q_SLOT void on_test_CAT_push_button_clicked ();
   Q_SLOT void on_test_PTT_push_button_clicked (bool checked);
   Q_SLOT void on_pbTestCloudlog_clicked ();
@@ -597,10 +597,10 @@ private:
   Q_SLOT void on_rig_combo_box_currentIndexChanged (int);
   Q_SLOT void on_refresh_push_button_clicked ();
   Q_SLOT void on_tci_audio_check_box_clicked(bool checked);
-  Q_SLOT void on_TCI_spin_box_valueChanged(double a);
+  Q_SLOT void handleTciSpinBoxValueChanged (int a);
   Q_SLOT void on_add_macro_push_button_clicked (bool = false);
   Q_SLOT void on_delete_macro_push_button_clicked (bool = false);
-  Q_SLOT void on_PTT_method_button_group_buttonClicked (int);
+  Q_SLOT void handlePttMethodGroupClicked (int);
   Q_SLOT void on_add_macro_line_edit_editingFinished ();
   Q_SLOT void delete_macro ();
   void delete_selected_macros (QModelIndexList);
@@ -2479,6 +2479,19 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   ui_->split_mode_button_group->setId (ui_->split_none_radio_button, TransceiverFactory::split_mode_none);
   ui_->split_mode_button_group->setId (ui_->split_rig_radio_button, TransceiverFactory::split_mode_rig);
   ui_->split_mode_button_group->setId (ui_->split_emulate_radio_button, TransceiverFactory::split_mode_emulate);
+
+  connect (ui_->CAT_data_bits_button_group, &QButtonGroup::idClicked,
+           this, &Configuration::impl::handleCatDataBitsGroupClicked);
+  connect (ui_->CAT_stop_bits_button_group, &QButtonGroup::idClicked,
+           this, &Configuration::impl::handleCatStopBitsGroupClicked);
+  connect (ui_->CAT_handshake_button_group, &QButtonGroup::idClicked,
+           this, &Configuration::impl::handleCatHandshakeGroupClicked);
+  connect (ui_->split_mode_button_group, &QButtonGroup::idClicked,
+           this, &Configuration::impl::handleSplitModeGroupClicked);
+  connect (ui_->PTT_method_button_group, &QButtonGroup::idClicked,
+           this, &Configuration::impl::handlePttMethodGroupClicked);
+  connect (ui_->TCI_spin_box, QOverload<int>::of (&QSpinBox::valueChanged),
+           this, &Configuration::impl::handleTciSpinBoxValueChanged);
 
   ui_->special_op_activity_button_group->setId (ui_->rbNA_VHF_Contest, static_cast<int> (SpecialOperatingActivity::NA_VHF));
   ui_->special_op_activity_button_group->setId (ui_->rbEU_VHF_Contest, static_cast<int> (SpecialOperatingActivity::EU_VHF));
@@ -5022,7 +5035,7 @@ void Configuration::impl::on_CAT_serial_baud_combo_box_currentIndexChanged (int 
   set_rig_invariants ();
 }
 
-void Configuration::impl::on_CAT_handshake_button_group_buttonClicked (int /* id */)
+void Configuration::impl::handleCatHandshakeGroupClicked (int /* id */)
 {
   set_rig_invariants ();
 }
@@ -5065,12 +5078,12 @@ void Configuration::impl::on_cbHighDPI_clicked(bool checked)
   }
 }
 
-void Configuration::impl::on_CAT_data_bits_button_group_buttonClicked (int /* id */)
+void Configuration::impl::handleCatDataBitsGroupClicked (int /* id */)
 {
   set_rig_invariants ();
 }
 
-void Configuration::impl::on_CAT_stop_bits_button_group_buttonClicked (int /* id */)
+void Configuration::impl::handleCatStopBitsGroupClicked (int /* id */)
 {
   set_rig_invariants ();
 }
@@ -5080,7 +5093,7 @@ void Configuration::impl::on_CAT_poll_interval_spin_box_valueChanged (int /* val
   set_rig_invariants ();
 }
 
-void Configuration::impl::on_split_mode_button_group_buttonClicked (int /* id */)
+void Configuration::impl::handleSplitModeGroupClicked (int /* id */)
 {
   set_rig_invariants ();
 }
@@ -5140,7 +5153,7 @@ void Configuration::impl::on_force_RTS_combo_box_currentIndexChanged (int /* ind
   set_rig_invariants ();
 }
 
-void Configuration::impl::on_PTT_method_button_group_buttonClicked (int /* id */)
+void Configuration::impl::handlePttMethodGroupClicked (int /* id */)
 {
   set_rig_invariants ();
 }
@@ -5174,7 +5187,7 @@ void Configuration::impl::on_tci_audio_check_box_clicked(bool checked)
   }
 }
 
-void Configuration::impl::on_TCI_spin_box_valueChanged(double a)
+void Configuration::impl::handleTciSpinBoxValueChanged (int a)
 {
   volume_ = a;
 }

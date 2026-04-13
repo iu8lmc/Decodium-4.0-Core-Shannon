@@ -1,6 +1,8 @@
 // main_qml.cpp - QML entry point for Decodium3
 
 #include <QApplication>
+#include <QCommandLineOption>
+#include <QCommandLineParser>
 #include <QMetaType>
 #include <QStyleFactory>
 #include <QQmlApplicationEngine>
@@ -9,6 +11,8 @@
 #include <QDir>
 #include <QFile>
 #include <QLibraryInfo>
+#include <QRegularExpression>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QList>
 #include <atomic>
@@ -111,6 +115,71 @@ int main(int argc, char* argv[])
     app.setApplicationVersion("4.0.0");
     app.setOrganizationName("IU8LMC");
     app.setOrganizationDomain("decodium.iu8lmc.it");
+
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("\nDecodium 4.0 Core Shannon: Digital Modes for Weak Signal Communications in Amateur Radio"));
+    auto const helpOption = parser.addHelpOption();
+    auto const versionOption = parser.addVersionOption();
+
+    QCommandLineOption const rigOption(QStringList {} << "r" << "rig-name",
+                                       QStringLiteral("Where <rig-name> is for multi-instance support."),
+                                       QStringLiteral("rig-name"));
+    QCommandLineOption const configOption(QStringList {} << "c" << "config",
+                                          QStringLiteral("Where <configuration> is an existing one."),
+                                          QStringLiteral("configuration"));
+    QCommandLineOption const languageOption(QStringList {} << "l" << "language",
+                                            QStringLiteral("Where <language> is <lang-code>[-<country-code>]."),
+                                            QStringLiteral("language"));
+    QCommandLineOption const testOption(QStringList {} << "test-mode",
+                                        QStringLiteral("Writable files in test location. Use with caution, for testing only."));
+    parser.addOption(rigOption);
+    parser.addOption(configOption);
+    parser.addOption(languageOption);
+    parser.addOption(testOption);
+
+    if (!parser.parse(app.arguments())) {
+        L(("Command line error: " + parser.errorText()).toLocal8Bit().constData());
+        return -1;
+    }
+    if (parser.isSet(helpOption)) {
+        parser.showHelp(0);
+    }
+    if (parser.isSet(versionOption)) {
+        parser.showVersion();
+    }
+
+    QStandardPaths::setTestModeEnabled(parser.isSet(testOption));
+
+    QString const rigName = parser.value(rigOption).trimmed();
+    if (!rigName.isEmpty()) {
+        if (rigName.contains(QRegularExpression(QStringLiteral(R"([\\/,])")))) {
+            L("Invalid rig name - \\ & / not allowed");
+            return -1;
+        }
+        app.setApplicationName(app.applicationName() + QStringLiteral(" - ") + rigName);
+    }
+    if (parser.isSet(testOption)) {
+        app.setApplicationName(app.applicationName() + QStringLiteral(" - test"));
+    }
+
+    QString configName = parser.value(configOption).trimmed();
+    QSettings rootSettings(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    if (configName.isEmpty()) {
+        configName = rootSettings.value(QStringLiteral("CurrentMultiSettingsConfiguration")).toString().trimmed();
+    }
+    if (configName.isEmpty() && !rigName.isEmpty()) {
+        configName = rigName;
+    }
+    if (!configName.isEmpty()) {
+        app.setProperty("decodiumConfigName", configName);
+        rootSettings.setValue(QStringLiteral("CurrentMultiSettingsConfiguration"), configName);
+        rootSettings.sync();
+    }
+    QString const languageOverride = parser.value(languageOption).trimmed();
+    if (!languageOverride.isEmpty()) {
+        app.setProperty("decodiumLanguageOverride", languageOverride);
+    }
+
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
         g_shuttingDown.store(true, std::memory_order_relaxed);
     });
