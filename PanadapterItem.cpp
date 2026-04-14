@@ -71,45 +71,22 @@ static QRgb hpsdrColor(float p)
     return qRgb((int)((0.75f+0.25f*(1-s))*255),(int)(s*255*.5f),255);
 }
 
-// ─── AetherSDR gradient interpolation ───────────────────────────────────────
-struct GradientStop { float pos; int r, g, b; };
-
-static QRgb interpolateGradient(float p, const GradientStop* stops, int count)
-{
-    if (p <= 0.f) return qRgb(stops[0].r, stops[0].g, stops[0].b);
-    if (p >= 1.f) return qRgb(stops[count-1].r, stops[count-1].g, stops[count-1].b);
-    for (int i = 0; i < count - 1; ++i) {
-        if (p >= stops[i].pos && p <= stops[i+1].pos) {
-            float t = (p - stops[i].pos) / (stops[i+1].pos - stops[i].pos);
-            return qRgb(
-                stops[i].r + (int)((stops[i+1].r - stops[i].r) * t),
-                stops[i].g + (int)((stops[i+1].g - stops[i].g) * t),
-                stops[i].b + (int)((stops[i+1].b - stops[i].b) * t));
-        }
+// ─── AetherSDR / FlexRadio gradient ─────────────────────────────────────────
+struct GradStop { float pos; int r, g, b; };
+static QRgb gradInterp(float p, const GradStop* s, int n) {
+    if (p<=0.f) return qRgb(s[0].r,s[0].g,s[0].b);
+    if (p>=1.f) return qRgb(s[n-1].r,s[n-1].g,s[n-1].b);
+    for (int i=0;i<n-1;++i) if (p<=s[i+1].pos) {
+        float t=(p-s[i].pos)/(s[i+1].pos-s[i].pos);
+        return qRgb(s[i].r+(int)((s[i+1].r-s[i].r)*t),s[i].g+(int)((s[i+1].g-s[i].g)*t),s[i].b+(int)((s[i+1].b-s[i].b)*t));
     }
-    return qRgb(stops[count-1].r, stops[count-1].g, stops[count-1].b);
+    return qRgb(s[n-1].r,s[n-1].g,s[n-1].b);
 }
-
-// AetherSDR Default: black -> dark blue -> blue -> cyan -> green -> yellow -> red
-static const GradientStop aetherDefaultStops[] = {
-    {0.00f, 0,0,0}, {0.15f, 0,0,128}, {0.30f, 0,64,255},
-    {0.45f, 0,200,255}, {0.60f, 0,220,0}, {0.80f, 255,255,0}, {1.00f, 255,0,0}
-};
-// AetherSDR BlueGreen: black -> dark blue -> cyan-green
-static const GradientStop aetherBlueGreenStops[] = {
-    {0.00f, 0,0,0}, {0.25f, 0,0,100}, {0.50f, 0,80,160},
-    {0.75f, 0,180,140}, {1.00f, 100,255,200}
-};
-// AetherSDR Fire: black -> dark red -> orange -> yellow -> cream
-static const GradientStop aetherFireStops[] = {
-    {0.00f, 0,0,0}, {0.25f, 100,0,0}, {0.50f, 200,60,0},
-    {0.75f, 255,200,0}, {1.00f, 255,255,200}
-};
-// AetherSDR Plasma: black -> purple -> magenta -> orange -> yellow
-static const GradientStop aetherPlasmaStops[] = {
-    {0.00f, 0,0,0}, {0.25f, 80,0,120}, {0.50f, 200,0,100},
-    {0.75f, 255,140,0}, {1.00f, 255,255,0}
-};
+static const GradStop kDefault[]={{0,0,0,0},{.15f,0,0,128},{.3f,0,64,255},{.45f,0,200,255},{.6f,0,220,0},{.8f,255,255,0},{1,255,0,0}};
+static const GradStop kBlueGreen[]={{0,0,0,0},{.25f,0,0,100},{.5f,0,80,160},{.75f,0,180,140},{1,100,255,200}};
+static const GradStop kFire[]={{0,0,0,0},{.25f,100,0,0},{.5f,200,60,0},{.75f,255,200,0},{1,255,255,200}};
+static const GradStop kPlasma[]={{0,0,0,0},{.25f,80,0,120},{.5f,200,0,100},{.75f,255,140,0},{1,255,255,0}};
+static const GradStop kFlex[]={{0,0,0,0},{.10f,0,0,30},{.20f,0,0,80},{.30f,0,20,140},{.42f,0,80,200},{.55f,0,180,255},{.68f,0,240,160},{.80f,80,255,0},{.90f,255,255,0},{1,255,80,0}};
 
 // ─── Constructor ────────────────────────────────────────────────────────────
 PanadapterItem::PanadapterItem(QQuickItem* parent)
@@ -151,18 +128,11 @@ void PanadapterItem::buildPalette(int idx)
                                qBound(0,(int)((t*3-1)*255),255),
                                qBound(0,(int)((t*3-2)*255),255));}
         break;
-    case 6: // AetherSDR Default
-        for (int i=0;i<256;++i) m_palette[i]=interpolateGradient(i/255.f, aetherDefaultStops, 7);
-        break;
-    case 7: // AetherSDR BlueGreen
-        for (int i=0;i<256;++i) m_palette[i]=interpolateGradient(i/255.f, aetherBlueGreenStops, 5);
-        break;
-    case 8: // AetherSDR Fire
-        for (int i=0;i<256;++i) m_palette[i]=interpolateGradient(i/255.f, aetherFireStops, 5);
-        break;
-    case 9: // AetherSDR Plasma
-        for (int i=0;i<256;++i) m_palette[i]=interpolateGradient(i/255.f, aetherPlasmaStops, 5);
-        break;
+    case 6: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kDefault,7); break;
+    case 7: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kBlueGreen,5); break;
+    case 8: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kFire,5); break;
+    case 9: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kPlasma,5); break;
+    case 10: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kFlex,10); break;
     default: // 0 — SDR Classic
         for (int i=0;i<256;++i){float t=i/255.f;
             int r,g,b;
@@ -186,7 +156,7 @@ QRgb PanadapterItem::wfColor(float pct) const
 
 void PanadapterItem::setPaletteIndex(int v)
 {
-    v = qBound(0, v, 9);
+    v = qBound(0, v, 10);
     if (m_paletteIndex==v) return;
     m_paletteIndex=v;
     buildPalette(v);
@@ -276,17 +246,6 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
         m_maxDb = m_measuredPeak;
         emit measuredFloorChanged();
         emit measuredPeakChanged();
-    }
-
-    // AetherSDR-style percentile auto-black (every 10 frames)
-    if (m_autoRange && ++m_autoBlackCounter % 10 == 0) {
-        QVector<float> sorted = m_bins;
-        std::sort(sorted.begin(), sorted.end());
-        if (!sorted.isEmpty()) {
-            float p20 = sorted[sorted.size() / 5];  // 20th percentile
-            m_measuredFloor = m_measuredFloor * 0.85f + p20 * 0.15f;
-            emit measuredFloorChanged();
-        }
     }
 
     // Peak hold con decay
@@ -499,6 +458,38 @@ void PanadapterItem::renderSpectrum()
         p.drawText(txX + 3, 24, QString("TX %1").arg(m_txFreq));
     }
 
+    // ── Decode labels: mostra callsign delle stazioni decodificate ─────
+    if (!m_decodeLabels.isEmpty()) {
+        p.setFont(QFont("Consolas", 8, QFont::Bold));
+        for (const auto& v : m_decodeLabels) {
+            QVariantMap d = v.toMap();
+            QString call = d.value("call").toString();
+            int freq = d.value("freq").toInt();
+            bool isCQ = d.value("isCQ").toBool();
+            bool isMyCall = d.value("isMyCall").toBool();
+            int snr = d.value("snr").toInt();
+            if (call.isEmpty() || freq <= 0) continue;
+
+            int lx = fToX(freq);
+            if (lx < 0 || lx >= w) continue;
+
+            // Colore: verde per CQ, rosso per MyCall, ciano per altri
+            QColor col = isCQ ? QColor(0, 230, 100) : (isMyCall ? QColor(255, 80, 80) : QColor(0, 200, 255));
+
+            // Linea verticale sottile alla frequenza
+            p.setPen(QPen(col, 1, Qt::DotLine));
+            p.drawLine(lx, 0, lx, h - 20);
+
+            // Label callsign + SNR
+            QString label = call + " " + QString::number(snr);
+            p.setPen(col);
+            int textX = lx + 2;
+            // Alterna posizione verticale per evitare sovrapposizioni
+            int textY = 10 + (freq % 3) * 10;
+            p.drawText(textX, textY, label);
+        }
+    }
+
     // ── Info in basso a destra ────────────────────────────────────────────
     if (m_autoRange) {
         p.setFont(QFont("Consolas", 8));
@@ -508,32 +499,16 @@ void PanadapterItem::renderSpectrum()
     }
 }
 
+void PanadapterItem::setDecodeLabels(const QVariantList& labels)
+{
+    m_decodeLabels = labels;
+    markDirty();
+}
+
 // ─── Add waterfall row ────────────────────────────────────────────────────────
 void PanadapterItem::addWaterfallRow()
 {
     if (m_waterfallImage.isNull() || m_bins.isEmpty()) return;
-
-    // AetherSDR-style waterfall blanker: detect impulse noise rows
-    if (m_blankerEnabled && !m_bins.isEmpty()) {
-        float rowMean = 0;
-        for (int i = 0; i < m_bins.size(); ++i) rowMean += m_bins[i];
-        rowMean /= m_bins.size();
-
-        float baselineSum = 0;
-        int baselineCount = 0;
-        for (int i = 0; i < 8; ++i) {
-            if (m_baselineMeans[i] != 0) { baselineSum += m_baselineMeans[i]; ++baselineCount; }
-        }
-        float baseline = baselineCount > 0 ? baselineSum / baselineCount : rowMean;
-
-        if (baselineCount >= 4 && rowMean > baseline * m_blankerThreshold) {
-            // Impulse detected: skip this row (use previous)
-            return;
-        }
-        m_baselineMeans[m_baselineIdx % 8] = rowMean;
-        ++m_baselineIdx;
-    }
-
     int w  = m_waterfallImage.width();
     int h  = m_waterfallImage.height();
     if (w <= 0 || h <= 0) return;
@@ -549,13 +524,25 @@ void PanadapterItem::addWaterfallRow()
     float viewCenter = m_dataFreqMin + totalRange * 0.5f + m_panHz;
     float viewStart  = viewCenter - viewRange * 0.5f;
 
+    // BlackLevel: soglia sotto cui tutto è nero (0=nulla, 100=aggressivo)
+    // ColorGain: gamma/contrasto (0=molto gamma, 50=lineare, 100=invertito)
+    // Gamma > 1 comprime i bassi verso il nero → sfondo pulito, segnali netti
+    float blackThresh = m_blackLevel * 0.006f;  // 0.0-0.6 del range normalizzato
+    float gamma = 2.5f - m_colorGain * 0.02f;   // gain 0→gamma 2.5, gain 50→gamma 1.5, gain 100→gamma 0.5
+    if (gamma < 0.3f) gamma = 0.3f;
+
     int row = m_wfWriteRow % h;
     QRgb* line = reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
     for (int x = 0; x < w; ++x) {
         float pixFreq = viewStart + (float)x * viewRange / w;
         int bin = (int)((pixFreq - m_dataFreqMin) / totalRange * nBins);
         bin = qBound(0, bin, nBins - 1);
-        float pct = qBound(0.f, (m_bins[bin] - m_minDb) / range, 1.f);
+        float raw = (m_bins[bin] - m_minDb) / range;
+        // Sottrai la soglia nero e riscala
+        raw = (raw - blackThresh) / (1.0f - blackThresh);
+        if (raw <= 0.f) { line[x] = qRgb(0,0,0); continue; }
+        // Gamma: valori bassi → nero, solo segnali veri → colore
+        float pct = std::pow(qBound(0.f, raw, 1.f), gamma);
         line[x] = wfColor(pct);
     }
     m_wfWriteRow++;

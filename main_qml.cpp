@@ -31,7 +31,6 @@
 #include "Transceiver/TransceiverFactory.hpp"
 #include "WaterfallItem.hpp"
 #include "PanadapterItem.hpp"
-#include "AetherWaterfallItem.h"
 #include "lib/init_random_seed.h"
 
 static void L(const char* msg) {
@@ -112,7 +111,7 @@ int main(int argc, char* argv[])
     L("QApplication OK");
     QApplication::setStyle(QStyleFactory::create("Fusion"));
     app.setApplicationName("Decodium");
-    app.setApplicationVersion("4.0.0");
+    app.setApplicationVersion(QStringLiteral(FORK_RELEASE_VERSION));
     app.setOrganizationName("IU8LMC");
     app.setOrganizationDomain("decodium.iu8lmc.it");
 
@@ -215,7 +214,6 @@ int main(int argc, char* argv[])
 
     qmlRegisterType<WaterfallItem>("Decodium", 1, 0, "WaterfallItem");
     qmlRegisterType<PanadapterItem>("Decodium", 1, 0, "PanadapterItem");
-    qmlRegisterType<AetherWaterfallItem>("Decodium", 1, 0, "AetherWaterfallItem");
     // Registra DecodiumDxCluster come tipo QML non-creabile (accessibile solo come proprietà di bridge)
     qmlRegisterUncreatableType<DecodiumDxCluster>("Decodium", 1, 0, "DecodiumDxCluster",
         "DecodiumDxCluster is created by DecodiumBridge");

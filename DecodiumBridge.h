@@ -1219,10 +1219,18 @@ private:
     int   m_asyncAudioPos {0};   // posizione assoluta (mai resettata, mod ASYNC_BUF_SIZE)
     bool  m_asyncDecodePending {false};  // previene overlap
 
-    // Spectrum ring buffer (last 512 samples, always at 12kHz)
+    // Spectrum ring buffer — buffer circolare separato per waterfall (non consumato dal decoder)
+    static constexpr int WF_RING_SIZE = 16384;  // ~1.37s a 12kHz — sufficiente per FFT 8192
+    short m_wfRing[WF_RING_SIZE] {};
+    int   m_wfRingPos {0};
     QVector<short> m_spectrumBuf;
     static constexpr int SPECTRUM_FFT_SIZE    = 512;   // legacy WaterfallItem
-    static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // nuova alta risoluzione
+    static constexpr int PANADAPTER_FFT_SIZE  = 8192;  // massima risoluzione (~1.46 Hz/bin)
+    QVector<float> m_lastPanadapterData;   // ultimo spettro valido (evita fasce nere)
+    float m_lastPanMinDb {0.f};
+    float m_lastPanMaxDb {0.f};
+    float m_lastPanFreqMin {0.f};
+    float m_lastPanFreqMax {0.f};
 
     QStringList ctyDatSearchPaths() const;
     bool reloadDxccLookup(QString* loadedPath = nullptr);

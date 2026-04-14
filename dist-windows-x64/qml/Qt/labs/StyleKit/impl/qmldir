@@ -1,0 +1,14 @@
+module Qt.labs.StyleKit.impl
+linktarget Qt6::LabsStyleKitImplplugin
+optional plugin labsstylekitimplplugin
+classname Qt_labs_StyleKit_implPlugin
+typeinfo plugins.qmltypes
+depends QtQuick auto
+prefer :/qt-project.org/imports/Qt/labs/StyleKit/impl/
+BackgroundAndIndicatorDelegate 254.0 BackgroundAndIndicatorDelegate.qml
+BackgroundDelegate 254.0 BackgroundDelegate.qml
+FallbackStyle 254.0 FallbackStyle.qml
+HandleDelegate 254.0 HandleDelegate.qml
+IndicatorDelegate 254.0 IndicatorDelegate.qml
+Shadow 254.0 Shadow.qml
+

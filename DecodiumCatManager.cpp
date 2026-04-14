@@ -1,25 +1,10 @@
 #include "DecodiumCatManager.h"
 
-#include <QCoreApplication>
 #include <QSerialPortInfo>
 #include <QSettings>
 
 namespace
 {
-void beginConfiguredSettingsGroup(QSettings& settings)
-{
-    auto const* app = QCoreApplication::instance();
-    if (!app) {
-        return;
-    }
-    QString const configName = app->property("decodiumConfigName").toString().trimmed();
-    if (configName.isEmpty()) {
-        return;
-    }
-    settings.beginGroup(QStringLiteral("MultiSettings"));
-    settings.beginGroup(configName);
-}
-
 QString normalizedRigName(QString const& rigName)
 {
     QString normalized = rigName.trimmed().toUpper();
@@ -119,16 +104,10 @@ void DecodiumCatManager::connectRig()
     auto* serial = new QSerialPort(this);
     serial->setPortName(m_serialPort);
     serial->setBaudRate(m_baudRate);
-    serial->setDataBits(m_dataBits == QStringLiteral("7") ? QSerialPort::Data7 : QSerialPort::Data8);
+    serial->setDataBits(QSerialPort::Data8);
     serial->setParity(QSerialPort::NoParity);
-    serial->setStopBits(m_stopBits == QStringLiteral("2") ? QSerialPort::TwoStop : QSerialPort::OneStop);
-    if (m_handshake == QStringLiteral("xonxoff")) {
-        serial->setFlowControl(QSerialPort::SoftwareControl);
-    } else if (m_handshake == QStringLiteral("hardware")) {
-        serial->setFlowControl(QSerialPort::HardwareControl);
-    } else {
-        serial->setFlowControl(QSerialPort::NoFlowControl);
-    }
+    serial->setStopBits(QSerialPort::OneStop);
+    serial->setFlowControl(QSerialPort::NoFlowControl);
 
     if (!serial->open(QIODevice::ReadWrite)) {
         const QString err = serial->errorString();
@@ -136,8 +115,8 @@ void DecodiumCatManager::connectRig()
         serial->deleteLater();
         return;
     }
-    serial->setDataTerminalReady(m_forceDtr ? m_dtrHigh : true);
-    serial->setRequestToSend(m_forceRts ? m_rtsHigh : true);
+    serial->setDataTerminalReady(true);
+    serial->setRequestToSend(true);
 
     m_serial = serial;
     connect(m_serial, &QSerialPort::readyRead,
@@ -402,14 +381,10 @@ void DecodiumCatManager::refreshPorts()
 void DecodiumCatManager::saveSettings()
 {
     QSettings s("Decodium", "Decodium3");
-    beginConfiguredSettingsGroup(s);
     s.beginGroup("CAT_Native");
     s.setValue("rigName",        m_rigName);
     s.setValue("serialPort",     m_serialPort);
     s.setValue("baudRate",       m_baudRate);
-    s.setValue("dataBits",       m_dataBits);
-    s.setValue("stopBits",       m_stopBits);
-    s.setValue("handshake",      m_handshake);
     s.setValue("pttMethod",      m_pttMethod);
     s.setValue("pttPort",        m_pttPort);
     s.setValue("pollInterval",   m_pollInterval);
@@ -425,14 +400,10 @@ void DecodiumCatManager::saveSettings()
 void DecodiumCatManager::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
-    beginConfiguredSettingsGroup(s);
     s.beginGroup("CAT_Native");
     m_rigName        = s.value("rigName",        "Kenwood TS-590S").toString();
     m_serialPort     = s.value("serialPort",     "COM3").toString();
     m_baudRate       = s.value("baudRate",        57600).toInt();
-    m_dataBits       = s.value("dataBits",       "8").toString();
-    m_stopBits       = s.value("stopBits",       "1").toString();
-    m_handshake      = s.value("handshake",      "none").toString();
     m_pttMethod      = s.value("pttMethod",       "CAT").toString();
     m_pttPort        = s.value("pttPort",         "CAT").toString();
     m_pollInterval   = s.value("pollInterval",    2).toInt();

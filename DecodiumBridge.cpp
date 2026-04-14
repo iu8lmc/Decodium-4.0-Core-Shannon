@@ -865,8 +865,19 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (m_catBackend != backend) return;
             double f = catProp("frequency").toDouble();
-            if (f > 0 && m_frequency != f) { m_frequency = f; emit frequencyChanged(); }
-            m_bandManager->updateFromFrequency(f);
+            if (f > 0 && m_frequency != f) {
+                // Non sovrascrivere la frequenza se l'abbiamo appena impostata noi
+                // (il radio riporta la frequenza FT8 anche se abbiamo chiesto FT2)
+                double diff = std::abs(f - m_frequency);
+                if (diff > 50000.0) {
+                    // Cambio banda dal radio — accetta
+                    m_frequency = f; emit frequencyChanged();
+                    m_bandManager->updateFromFrequency(f);
+                } else if (diff > 1.0) {
+                    // Piccola variazione — aggiorna solo la frequenza, non la banda
+                    m_frequency = f; emit frequencyChanged();
+                }
+            }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::modeChanged, this, [this, backend, catProp]() {
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
@@ -997,9 +1008,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     connect(m_utcTimer, &QTimer::timeout, this, &DecodiumBridge::onUtcTimer);
     m_utcTimer->start();
 
-    // Spectrum timer: emette dati FFT ogni 200ms per la waterfall
+    // Spectrum timer: emette dati FFT per la waterfall (intervallo configurabile)
     m_spectrumTimer = new QTimer(this);
-    m_spectrumTimer->setInterval(200);
+    {
+        QSettings s("Decodium", "Decodium3");
+        int interval = s.value("spectrumInterval", 20).toInt();
+        m_spectrumTimer->setInterval(qBound(10, interval, 500));
+    }
     connect(m_spectrumTimer, &QTimer::timeout, this, &DecodiumBridge::onSpectrumTimer);
 
     // Async decode timer: per FT2 turbo async, decodifica ogni 100ms
@@ -1577,10 +1592,18 @@ void DecodiumBridge::regenerateTxMessages()
 double DecodiumBridge::frequency() const { return m_frequency; }
 void DecodiumBridge::setFrequency(double v) {
     if (!qFuzzyCompare(m_frequency + 1.0, v + 1.0)) {
+        double oldFreq = m_frequency;
         m_frequency = v;
         emit frequencyChanged();
         if (usingLegacyBackendForTx() || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
             m_legacyBackend->setDialFrequency(v);
+        }
+        // Pulisci le finestre decode quando cambia banda (differenza > 100kHz)
+        if (std::abs(v - oldFreq) > 100000.0) {
+            m_decodeList.clear();
+            m_rxDecodeList.clear();
+            emit decodeListChanged();
+            emit rxDecodeListChanged();
         }
     }
     if (m_bandManager) {
@@ -1621,6 +1644,12 @@ void DecodiumBridge::setMode(const QString& v) {
                 m_asyncDecodePending = false;
             }
         }
+        // Pulisci le finestre decode quando cambia modo
+        m_decodeList.clear();
+        m_rxDecodeList.clear();
+        emit decodeListChanged();
+        emit rxDecodeListChanged();
+
         emit modeChanged();
         if (usingLegacyBackendForTx() || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
             m_legacyBackend->setMode(v);
@@ -2848,7 +2877,9 @@ void DecodiumBridge::clearRxDecodes()
         m_legacyRxFrequencyRevision = -1;
     }
     m_rxDecodeList.clear();
+    m_decodeList.clear();
     emit rxDecodeListChanged();
+    emit decodeListChanged();
 }
 
 // ── catBackend switch ─────────────────────────────────────────────────────────
@@ -2905,6 +2936,12 @@ void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
 {
     QSettings s("Decodium", "Decodium3");
     s.setValue(key, value);
+    // Aggiorna il timer spectrum se cambia l'intervallo
+    if (key == "spectrumInterval" && m_spectrumTimer) {
+        int ms = qBound(10, value.toInt(), 500);
+        m_spectrumTimer->setInterval(ms);
+        bridgeLog("Spectrum timer interval: " + QString::number(ms) + "ms");
+    }
 }
 
 void DecodiumBridge::saveSettings()
@@ -5305,30 +5342,66 @@ void DecodiumBridge::onPeriodTimer()
 void DecodiumBridge::onSpectrumTimer()
 {
     if (usingLegacyBackendForTx()) return;
-    if (!m_monitoring || m_audioBuffer.isEmpty()) return;
+    if (!m_monitoring) return;
+
+    // Copia i campioni recenti nel ring buffer waterfall (non viene consumato dal decoder)
     int avail = m_audioBuffer.size();
+    if (avail > 0) {
+        int toCopy = qMin(avail, (int)WF_RING_SIZE);
+        int srcStart = avail - toCopy;
+        for (int i = 0; i < toCopy; ++i) {
+            m_wfRing[m_wfRingPos % WF_RING_SIZE] = m_audioBuffer[srcStart + i];
+            ++m_wfRingPos;
+        }
+    }
+
+    // Usa il ring buffer waterfall per la FFT (sempre pieno, indipendente dal decoder)
+    int wfAvail = qMin(m_wfRingPos, (int)WF_RING_SIZE);
+    if (wfAvail == 0) return;
 
     // ── Legacy 512-bin per WaterfallItem ────────────────────────────────────
     {
-        int start = qMax(0, avail - SPECTRUM_FFT_SIZE);
-        m_spectrumBuf = m_audioBuffer.mid(start, SPECTRUM_FFT_SIZE);
+        // Leggi dal ring buffer waterfall
+        m_spectrumBuf.resize(SPECTRUM_FFT_SIZE);
+        for (int i = 0; i < SPECTRUM_FFT_SIZE; ++i) {
+            int pos = (m_wfRingPos - SPECTRUM_FFT_SIZE + i + WF_RING_SIZE * 2) % WF_RING_SIZE;
+            m_spectrumBuf[i] = m_wfRing[pos];
+        }
         QVector<float> spectrum = computeSpectrum();
         if (!spectrum.isEmpty())
             emit spectrumDataReady(spectrum);
     }
 
-    // ── Alta risoluzione 4096-bin per PanadapterItem ────────────────────────
-    if (avail >= PANADAPTER_FFT_SIZE) {
-        int start = qMax(0, avail - PANADAPTER_FFT_SIZE);
-        m_spectrumBuf = m_audioBuffer.mid(start, PANADAPTER_FFT_SIZE);
-        float minDb = 0.f, maxDb = 0.f;
-        QVector<float> hq = computePanadapter(minDb, maxDb);
-        if (!hq.isEmpty()) {
-            // Passa le frequenze esatte usate per i bin — garantisce allineamento display
-            float freqPerBin = (float)SAMPLE_RATE / PANADAPTER_FFT_SIZE;
-            float freqMinHz = (int)(m_nfa / freqPerBin) * freqPerBin;
-            float freqMaxHz = (int)(m_nfb / freqPerBin) * freqPerBin;
-            emit panadapterDataReady(hq, minDb, maxDb, freqMinHz, freqMaxHz);
+    // ── Alta risoluzione per PanadapterItem ──────────────────────────────────
+    {
+        // Leggi dal ring buffer waterfall — sempre disponibile, mai interrotto
+        int fftLen = PANADAPTER_FFT_SIZE;
+        int usable = qMin(wfAvail, fftLen);
+        if (usable >= 512) {
+            m_spectrumBuf.resize(fftLen);
+            m_spectrumBuf.fill(0);
+            for (int i = 0; i < usable; ++i) {
+                int pos = (m_wfRingPos - usable + i + WF_RING_SIZE * 2) % WF_RING_SIZE;
+                m_spectrumBuf[i] = m_wfRing[pos];
+            }
+
+            float minDb = 0.f, maxDb = 0.f;
+            QVector<float> hq = computePanadapter(minDb, maxDb);
+            if (!hq.isEmpty()) {
+                // Smooth con l'ultimo frame per transizioni uniformi
+                if (m_lastPanadapterData.size() == hq.size()) {
+                    float alpha = (usable >= fftLen) ? 1.0f : 0.7f;
+                    for (int i = 0; i < hq.size(); ++i)
+                        hq[i] = alpha * hq[i] + (1.0f - alpha) * m_lastPanadapterData[i];
+                }
+                m_lastPanadapterData = hq;
+                m_lastPanMinDb = minDb;
+                m_lastPanMaxDb = maxDb;
+                float freqPerBin = (float)SAMPLE_RATE / PANADAPTER_FFT_SIZE;
+                m_lastPanFreqMin = (int)(m_nfa / freqPerBin) * freqPerBin;
+                m_lastPanFreqMax = (int)(m_nfb / freqPerBin) * freqPerBin;
+                emit panadapterDataReady(hq, minDb, maxDb, m_lastPanFreqMin, m_lastPanFreqMax);
+            }
         }
     }
 }

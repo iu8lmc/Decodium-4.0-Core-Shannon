@@ -119,5 +119,3 @@ tools/dxped_database.json
 tools/verified_dxpeds.json
 tools/*.dxcert
 *.dxcert
-dist-windows-x64/
-output/

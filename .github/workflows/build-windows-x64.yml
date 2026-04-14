@@ -1,10 +1,6 @@
 name: Build Windows x64
 
 on:
-  push:
-    tags:
-      - "[0-9]*.[0-9]*.[0-9]*"
-      - "v*"
   pull_request:
   workflow_dispatch:
 

@@ -1,0 +1,39 @@
+module Qt.labs.StyleKit
+linktarget Qt6::LabsStyleKitplugin
+optional plugin labsstylekitplugin
+classname Qt_labs_StyleKitPlugin
+typeinfo plugins.qmltypes
+import QtQuick.Controls.Basic
+prefer :/qt-project.org/imports/Qt/labs/StyleKit/
+ApplicationWindow 254.0 ApplicationWindow.qml
+Button 254.0 Button.qml
+CheckBox 254.0 CheckBox.qml
+ComboBox 254.0 ComboBox.qml
+Frame 254.0 Frame.qml
+ItemDelegate 254.0 ItemDelegate.qml
+ProgressBar 254.0 ProgressBar.qml
+RadioButton 254.0 RadioButton.qml
+RangeSlider 254.0 RangeSlider.qml
+ScrollBar 254.0 ScrollBar.qml
+ScrollIndicator 254.0 ScrollIndicator.qml
+ScrollView 254.0 ScrollView.qml
+Slider 254.0 Slider.qml
+Style 254.0 Style.qml
+StyledItem 254.0 StyledItem.qml
+StyleAnimation 254.0 StyleAnimation.qml
+SpinBox 254.0 SpinBox.qml
+Switch 254.0 Switch.qml
+TextField 254.0 TextField.qml
+TabBar 254.0 TabBar.qml
+TabButton 254.0 TabButton.qml
+ToolBar 254.0 ToolBar.qml
+ToolButton 254.0 ToolButton.qml
+ToolSeparator 254.0 ToolSeparator.qml
+Page 254.0 Page.qml
+Pane 254.0 Pane.qml
+Popup 254.0 Popup.qml
+Label 254.0 Label.qml
+GroupBox 254.0 GroupBox.qml
+TextArea 254.0 TextArea.qml
+depends QtQuick
+

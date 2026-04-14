@@ -7,7 +7,6 @@
 #include "Transceiver/Transceiver.hpp"
 #include "Transceiver/TransceiverBase.hpp"
 
-#include <QCoreApplication>
 #include <QThread>
 #include <QSerialPortInfo>
 #include <QSettings>
@@ -18,20 +17,6 @@
 
 namespace
 {
-void beginConfiguredSettingsGroup(QSettings& settings)
-{
-    auto const* app = QCoreApplication::instance();
-    if (!app) {
-        return;
-    }
-    QString const configName = app->property("decodiumConfigName").toString().trimmed();
-    if (configName.isEmpty()) {
-        return;
-    }
-    settings.beginGroup(QStringLiteral("MultiSettings"));
-    settings.beginGroup(configName);
-}
-
 QString normalizeDevicePath(QString value)
 {
     value = value.trimmed();
@@ -472,7 +457,6 @@ void DecodiumTransceiverManager::saveSettings()
     const QString pttPort = m_pttPort.isEmpty() ? QStringLiteral("CAT") : normalizeDevicePath(m_pttPort);
 
     QSettings s("Decodium", "Decodium3");
-    beginConfiguredSettingsGroup(s);
     s.beginGroup("Transceiver");
     s.setValue("rigName",      m_rigName);
     s.setValue("serialPort",   serialPort);
@@ -498,7 +482,6 @@ void DecodiumTransceiverManager::saveSettings()
 void DecodiumTransceiverManager::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
-    beginConfiguredSettingsGroup(s);
     s.beginGroup("Transceiver");
     auto get = [&](const QString& k, const QVariant& def) { return s.value(k, def); };
     m_serialPort   = normalizeDevicePath(get("serialPort",   m_serialPort).toString());

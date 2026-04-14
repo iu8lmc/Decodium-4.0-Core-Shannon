@@ -43,8 +43,8 @@ class PanadapterItem : public QQuickItem
     Q_PROPERTY(QStringList paletteNames READ paletteNames CONSTANT)
     Q_PROPERTY(bool  running     READ running     WRITE setRunning     NOTIFY runningChanged)
     Q_PROPERTY(bool  showTxBrackets READ showTxBrackets WRITE setShowTxBrackets NOTIFY showTxBracketsChanged)
-    Q_PROPERTY(bool  blankerEnabled  READ blankerEnabled  WRITE setBlankerEnabled  NOTIFY blankerEnabledChanged)
-    Q_PROPERTY(float blankerThreshold READ blankerThreshold WRITE setBlankerThreshold NOTIFY blankerThresholdChanged)
+    Q_PROPERTY(int   colorGain   READ colorGain   WRITE setColorGain   NOTIFY colorGainChanged)
+    Q_PROPERTY(int   blackLevel  READ blackLevel  WRITE setBlackLevel  NOTIFY blackLevelChanged)
 
     // ── Read-only status ────────────────────────────────────────────────────
     Q_PROPERTY(float measuredFloor READ measuredFloor NOTIFY measuredFloorChanged)
@@ -74,12 +74,13 @@ public:
     bool  showTxBrackets() const { return m_showTxBrackets; }
     float measuredFloor()  const { return m_measuredFloor; }
     float measuredPeak()   const { return m_measuredPeak; }
-    bool  blankerEnabled()   const { return m_blankerEnabled; }
-    float blankerThreshold() const { return m_blankerThreshold; }
     int   fftBins()        const { return 4096; }
     QStringList paletteNames() const {
-        return {"SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR","AetherSDR Default","AetherSDR BlueGreen","AetherSDR Fire","AetherSDR Plasma"};
+        return {"SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR",
+                "Aether Default","Aether BlueGreen","Aether Fire","Aether Plasma","FlexRadio"};
     }
+    int   colorGain()      const { return m_colorGain; }
+    int   blackLevel()     const { return m_blackLevel; }
 
     // ── Setters ─────────────────────────────────────────────────────────────
     void setMinDb(float v)         { if (m_minDb!=v){m_minDb=v;emit minDbChanged();markDirty();} }
@@ -98,8 +99,8 @@ public:
     void setPaletteIndex(int v);
     void setRunning(bool v)        { if (m_running!=v){m_running=v;emit runningChanged();} }
     void setShowTxBrackets(bool v) { if (m_showTxBrackets!=v){m_showTxBrackets=v;emit showTxBracketsChanged();markDirty();} }
-    void setBlankerEnabled(bool v)    { if (m_blankerEnabled!=v){m_blankerEnabled=v;emit blankerEnabledChanged();} }
-    void setBlankerThreshold(float v) { if (m_blankerThreshold!=v){m_blankerThreshold=qBound(1.05f,v,3.0f);emit blankerThresholdChanged();} }
+    void setColorGain(int v)       { v=qBound(0,v,100); if(m_colorGain!=v){m_colorGain=v;emit colorGainChanged();markDirty();} }
+    void setBlackLevel(int v)      { v=qBound(0,v,100); if(m_blackLevel!=v){m_blackLevel=v;emit blackLevelChanged();markDirty();} }
 
     // ── Invokable methods ───────────────────────────────────────────────────
     // Chiamato dal bridge: dB raw + range dB + range frequenze exact
@@ -111,6 +112,8 @@ public:
 
     Q_INVOKABLE void resetPeakHold()  { m_peakBins.clear(); markDirty(); }
     Q_INVOKABLE void resetWaterfall();
+    // Mostra callsign decodificati sul grafico spettro
+    Q_INVOKABLE void setDecodeLabels(const QVariantList& labels);
 
 signals:
     void minDbChanged();
@@ -131,10 +134,10 @@ signals:
     void showTxBracketsChanged();
     void measuredFloorChanged();
     void measuredPeakChanged();
-    void blankerEnabledChanged();
-    void blankerThresholdChanged();
     void frequencySelected(int freq);
     void txFrequencySelected(int freq);
+    void colorGainChanged();
+    void blackLevelChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
@@ -193,12 +196,9 @@ private:
     bool  m_running      = false;
     bool  m_showTxBrackets = true;
 
-    // Waterfall blanker (AetherSDR-style impulse suppression)
-    bool  m_blankerEnabled   = false;
-    float m_blankerThreshold = 1.3f;
-    float m_baselineMeans[8] = {};
-    int   m_baselineIdx      = 0;
-    int   m_autoBlackCounter = 0;
+    int   m_colorGain    = 50;
+    int   m_blackLevel   = 15;
+    QVariantList m_decodeLabels;  // [{call:"IU8LMC",freq:1500,snr:-5,isCQ:true}, ...]
 
     // ── Stato rendering ─────────────────────────────────────────────────────
     bool  m_spectrumDirty = true;
