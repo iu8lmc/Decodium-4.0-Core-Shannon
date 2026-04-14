@@ -3081,7 +3081,7 @@ void DecodiumBridge::openSetupSettings(int tabIndex)
                 });
             }
             // Riconnetti il backend attivo dopo la chiusura del dialog Setup.
-            QTimer::singleShot(0, this, [this, nativeCatWasConnected]() {
+            QTimer::singleShot(0, this, [this]() {
                 bridgeLog(QStringLiteral("openSetupSettings: reconnecting active CAT backend after setup"));
                 retryRigConnection();
             });
