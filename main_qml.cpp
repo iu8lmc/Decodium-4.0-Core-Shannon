@@ -15,8 +15,10 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QList>
+#include <QLocale>
 #include <atomic>
 #include <cstdio>
+#include <clocale>
 
 #include "DecodiumBridge.h"
 #include "DecodiumDxCluster.h"
@@ -109,6 +111,12 @@ int main(int argc, char* argv[])
 
     QApplication app(argc, argv);
     L("QApplication OK");
+
+    // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
+    // che usano la virgola e bloccano il parsing di frequenze/configurazioni
+    QLocale::setDefault(QLocale::c());
+    setlocale(LC_NUMERIC, "C");
+
     QApplication::setStyle(QStyleFactory::create("Fusion"));
     app.setApplicationName("Decodium");
     app.setApplicationVersion(QStringLiteral(FORK_RELEASE_VERSION));

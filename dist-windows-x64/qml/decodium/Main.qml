@@ -27,7 +27,12 @@ ApplicationWindow {
         if (state.height !== undefined && state.height > 0) height = state.height
         if (state.x !== undefined) x = state.x
         if (state.y !== undefined) y = state.y
+        // Sicurezza: se la finestra è fuori schermo, riportala al centro
         Qt.callLater(function() {
+            if (x < -100 || y < -100 || x > Screen.desktopAvailableWidth || y > Screen.desktopAvailableHeight) {
+                x = Math.max(0, (Screen.desktopAvailableWidth - width) / 2)
+                y = Math.max(0, (Screen.desktopAvailableHeight - height) / 2)
+            }
             windowStateRestoreInProgress = false
         })
     }
