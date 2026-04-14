@@ -709,10 +709,15 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 
 #if defined(Q_OS_MAC)
     m_useLegacyTxBackend = true;
+    // Su Mac, crea il legacy backend in modo differito per non bloccare l'avvio
+    QTimer::singleShot(3000, this, [this]() {
+        if (m_useLegacyTxBackend && !ensureLegacyBackendAvailable()) {
+            m_useLegacyTxBackend = false;
+        }
+    });
 #endif
-    if (m_useLegacyTxBackend && !ensureLegacyBackendAvailable()) {
-        m_useLegacyTxBackend = false;
-    }
+    // Su Windows/Linux NON creare il legacy backend all'avvio — viene creato lazy
+    // quando l'utente apre Settings/Setup (ensureLegacyBackendAvailable)
 
     // PSK Reporter
     m_pskReporter = new DecodiumPskReporterLite(this);
@@ -1055,7 +1060,8 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     });
 
     loadSettings();
-    enumerateAudioDevices();
+    // Enumerazione audio differita per non bloccare l'avvio della UI
+    QTimer::singleShot(500, this, [this]() { enumerateAudioDevices(); });
 
     // Auto-connect CAT all'avvio se abilitato
     {
