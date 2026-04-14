@@ -1134,6 +1134,15 @@ bool DecodiumBridge::usingLegacyBackendForTx() const
     return m_useLegacyTxBackend && legacyBackendAvailable();
 }
 
+bool DecodiumBridge::useModernSpectrumFeedWithLegacy() const
+{
+#if defined(Q_OS_MAC)
+    return usingLegacyBackendForTx();
+#else
+    return false;
+#endif
+}
+
 bool DecodiumBridge::legacyBackendAvailable() const
 {
     return m_legacyBackend && m_legacyBackend->available();
@@ -2061,14 +2070,30 @@ void DecodiumBridge::startRx()
     if (usingLegacyBackendForTx()) {
         bridgeLog("startRx: delegating monitoring to legacy backend");
         m_periodTimer->stop();
-        m_spectrumTimer->stop();
         m_asyncDecodeTimer->stop();
         m_asyncDecodePending = false;
-        stopAudioCapture();
         syncLegacyBackendState();
         syncLegacyBackendTxState();
         m_legacyBackend->setMonitoring(true);
         syncLegacyBackendState();
+        if (useModernSpectrumFeedWithLegacy()) {
+            updatePeriodTicksMax();
+            m_audioBuffer.clear();
+            m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+            m_spectrumBuf.clear();
+            m_periodTicks = 0;
+            m_wfRingPos = 0;
+            m_lastPanadapterData.clear();
+            m_driftFrameCount = 0;
+            m_driftExpectedFrames = 0;
+            m_driftClock.restart();
+            startAudioCapture();
+            m_spectrumTimer->start();
+            bridgeLog("startRx: modern FFT panadapter feed active alongside legacy RX");
+        } else {
+            m_spectrumTimer->stop();
+            stopAudioCapture();
+        }
         emit statusMessage("RX avviato via backend legacy - " + m_mode);
         return;
     }
@@ -2131,6 +2156,9 @@ void DecodiumBridge::stopRx()
         m_asyncDecodeTimer->stop();
         m_asyncDecodePending = false;
         stopAudioCapture();
+        m_spectrumBuf.clear();
+        m_lastPanadapterData.clear();
+        m_wfRingPos = 0;
         m_legacyBackend->setMonitoring(false);
         syncLegacyBackendState();
         emit statusMessage("RX fermato");
@@ -5341,7 +5369,7 @@ void DecodiumBridge::onPeriodTimer()
 
 void DecodiumBridge::onSpectrumTimer()
 {
-    if (usingLegacyBackendForTx()) return;
+    if (usingLegacyBackendForTx() && !useModernSpectrumFeedWithLegacy()) return;
     if (!m_monitoring) return;
 
     // Copia i campioni recenti nel ring buffer waterfall (non viene consumato dal decoder)
@@ -5418,6 +5446,11 @@ void DecodiumBridge::onLegacyWaterfallRow(QByteArray const& rowLevels,
     Q_UNUSED(mode);
 
     if (!usingLegacyBackendForTx() || rowLevels.isEmpty() || spanHz <= 0)
+        {
+          return;
+        }
+
+    if (useModernSpectrumFeedWithLegacy() && !m_lastPanadapterData.isEmpty())
         {
           return;
         }

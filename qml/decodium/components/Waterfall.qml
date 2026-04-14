@@ -74,7 +74,7 @@ Item {
                 // Auto Range
                 CheckBox {
                     id: autoRangeCheck
-                    checked: !(bridge && bridge.legacyBackendActive)
+                    checked: true
                     onCheckedChanged: waterfallDisplay.autoRange = checked
                     ToolTip.text: "Auto noise floor (IIR)"
                     ToolTip.visible: autoRangeCheck.hovered

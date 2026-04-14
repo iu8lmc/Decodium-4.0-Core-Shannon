@@ -1252,6 +1252,7 @@ private:
     bool legacyBackendAvailable() const;
     bool ensureLegacyBackendAvailable();
     bool usingLegacyBackendForTx() const;
+    bool useModernSpectrumFeedWithLegacy() const;
     void syncLegacyBackendDialogState();
     void syncLegacyBackendTxState();
     void syncLegacyBackendState();

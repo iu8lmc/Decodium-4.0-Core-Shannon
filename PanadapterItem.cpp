@@ -215,7 +215,7 @@ void PanadapterItem::rebuildImages(int w, int h)
 
 // ─── Add spectrum data ───────────────────────────────────────────────────────
 void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
-                                      float /*minDb*/, float /*maxDb*/,
+                                      float minDb, float maxDb,
                                       float freqMinHz, float freqMaxHz)
 {
     QMutexLocker lock(&m_mutex);
@@ -246,6 +246,11 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
         m_maxDb = m_measuredPeak;
         emit measuredFloorChanged();
         emit measuredPeakChanged();
+    } else if (maxDb > minDb) {
+        // Quando auto-range è spento, usa il range reale fornito dal bridge.
+        // Questo evita la saturazione totale con i valori FFT moderni sul path mac legacy.
+        m_minDb = minDb;
+        m_maxDb = maxDb;
     }
 
     // Peak hold con decay
