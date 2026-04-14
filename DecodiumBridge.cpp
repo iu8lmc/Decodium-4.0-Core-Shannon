@@ -621,13 +621,11 @@ static AudioDevice::Channel txOutputChannelForFormat(const QAudioFormat& format)
 // ── helpers PTT / freq che delegano al backend attivo ────────────────────────
 static inline bool useLegacyRigControlFallback(DecodiumLegacyBackend* legacy, const QString& backend)
 {
-#if defined(Q_OS_WIN)
-    return legacy && legacy->available() && backend == QStringLiteral("hamlib");
-#else
+    // Disabilitato su tutte le piattaforme — usa sempre il CAT manager QML
+    // Il legacy fallback causava problemi su Windows (Bug #1: CAT auto-connect non funziona)
     Q_UNUSED(legacy);
     Q_UNUSED(backend);
     return false;
-#endif
 }
 
 static inline bool activeCatCanPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
@@ -4992,15 +4990,14 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             }
         }
 
-        // Deduplicazione: non aggiungere se l'ultimo decode ha stesso messaggio
+        // Deduplicazione: non aggiungere se stesso messaggio negli ultimi 10 decode
+        // In FT2 i timestamp variano → dedup solo sul messaggio
         {
             bool isDupe = false;
             int listSize = m_decodeList.size();
-            for (int di = qMax(0, listSize - 5); di < listSize; ++di) {
+            for (int di = qMax(0, listSize - 10); di < listSize; ++di) {
                 QVariantMap prev = m_decodeList[di].toMap();
-                if (prev.value("message").toString() == msg &&
-                    prev.value("time").toString() == f[0] &&
-                    !prev.value("isTx").toBool()) {
+                if (prev.value("message").toString() == msg && !prev.value("isTx").toBool()) {
                     isDupe = true;
                     break;
                 }
@@ -6264,6 +6261,32 @@ void DecodiumBridge::checkCtyDatUpdate()
                 emit errorMessage("cty.dat scaricato ma il caricamento DXCC è fallito.");
             }
         }
+    });
+}
+
+void DecodiumBridge::downloadCall3Txt()
+{
+    bridgeLog("downloadCall3Txt: starting download");
+    emit statusMessage("Download CALL3.TXT in corso...");
+    auto* mgr = new QNetworkAccessManager(this);
+    auto* reply = mgr->get(QNetworkRequest(QUrl("https://wsjt.sourceforge.io/CALL3.TXT")));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, mgr]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            emit errorMessage("Download CALL3.TXT fallito: " + reply->errorString());
+            reply->deleteLater(); mgr->deleteLater();
+            return;
+        }
+        QByteArray data = reply->readAll();
+        QString path = QCoreApplication::applicationDirPath() + "/CALL3.TXT";
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly)) {
+            f.write(data);
+            f.close();
+            emit statusMessage("CALL3.TXT aggiornato (" + QString::number(data.size()/1024) + " KB)");
+        } else {
+            emit errorMessage("Impossibile salvare CALL3.TXT: " + f.errorString());
+        }
+        reply->deleteLater(); mgr->deleteLater();
     });
 }
 

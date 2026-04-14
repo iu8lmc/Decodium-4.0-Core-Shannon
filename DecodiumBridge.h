@@ -654,8 +654,9 @@ public slots:
     Q_INVOKABLE void decreaseFontScale();
     Q_INVOKABLE void setFontScale(double s);
 
-    // B6 — cty.dat update
+    // B6 — cty.dat / CALL3.TXT update
     Q_INVOKABLE void checkCtyDatUpdate();
+    Q_INVOKABLE void downloadCall3Txt();
 
     // B8 — Alert sounds
     Q_INVOKABLE void playAlert(const QString& alertType);

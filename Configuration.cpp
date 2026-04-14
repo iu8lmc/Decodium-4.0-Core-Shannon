@@ -3401,6 +3401,12 @@ void Configuration::impl::read_settings ()
   x4ToneSpacing_ = settings_->value("x4ToneSpacing",false).toBool ();
   rig_params_.poll_interval = settings_->value ("Polling", 0).toInt ();
   rig_params_.split_mode = settings_->value ("SplitMode", QVariant::fromValue (TransceiverFactory::split_mode_none)).value<TransceiverFactory::SplitMode> ();
+  // Sicurezza: se il valore salvato è incoerente, forza split_mode_none
+  if (rig_params_.split_mode != TransceiverFactory::split_mode_none &&
+      rig_params_.split_mode != TransceiverFactory::split_mode_rig &&
+      rig_params_.split_mode != TransceiverFactory::split_mode_emulate) {
+    rig_params_.split_mode = TransceiverFactory::split_mode_none;
+  }
   opCall_ = settings_->value ("OpCall", "").toString ();
   udp_server_name_ = settings_->value ("UDPServer", "127.0.0.1").toString ();
   udp_interface_names_ = settings_->value ("UDPInterface").toStringList ();
