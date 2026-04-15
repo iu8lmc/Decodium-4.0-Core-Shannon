@@ -58,8 +58,10 @@ jobs:
           ls "$HAMLIB_DIR"
           # Copia headers e lib nel prefix MSYS2
           cp -R "$HAMLIB_DIR"/include/* /mingw64/include/
+          # Le lib GCC (.dll.a) sono in lib/gcc/
+          cp "$HAMLIB_DIR"/lib/gcc/*.a /mingw64/lib/ 2>/dev/null || true
+          cp "$HAMLIB_DIR"/lib/gcc/*.dll.a /mingw64/lib/ 2>/dev/null || true
           cp "$HAMLIB_DIR"/lib/*.a /mingw64/lib/ 2>/dev/null || true
-          cp "$HAMLIB_DIR"/lib/*.dll.a /mingw64/lib/ 2>/dev/null || true
           cp "$HAMLIB_DIR"/bin/*.dll /mingw64/bin/ 2>/dev/null || true
           cp "$HAMLIB_DIR"/bin/*.exe /mingw64/bin/ 2>/dev/null || true
           # Crea pkg-config file
@@ -76,8 +78,11 @@ jobs:
           Cflags: -I${includedir}
           PCEOF
           echo "=== Hamlib installed ==="
-          ls /mingw64/lib/libhamlib* /mingw64/bin/libhamlib* 2>/dev/null
-          ls /mingw64/include/hamlib/ 2>/dev/null
+          ls -la /mingw64/lib/libhamlib* 2>/dev/null || echo "no hamlib in lib"
+          ls -la /mingw64/bin/libhamlib* 2>/dev/null || echo "no hamlib in bin"
+          ls /mingw64/include/hamlib/ 2>/dev/null || echo "no hamlib headers"
+          # Verifica che almeno la dll esista
+          test -f /mingw64/bin/libhamlib-4.dll || { echo "ERROR: libhamlib-4.dll not found"; exit 1; }
 
       - name: Extract version from tag
         id: version
