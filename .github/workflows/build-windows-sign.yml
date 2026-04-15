@@ -42,9 +42,35 @@ jobs:
             mingw-w64-x86_64-qt6-shadertools
             mingw-w64-x86_64-qt6-5compat
             mingw-w64-x86_64-fftw
-            mingw-w64-x86_64-libhamlib
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-boost
+
+      - name: Install Hamlib from source release
+        run: |
+          # Hamlib non è in MSYS2, scarica i binari pre-compilati
+          curl -L -o hamlib.tar.gz https://github.com/Hamlib/Hamlib/releases/download/4.7/hamlib-w64-4.7.tar.gz
+          mkdir -p /tmp/hamlib && tar xzf hamlib.tar.gz -C /tmp/hamlib --strip-components=1
+          # Copia headers e lib nel prefix MSYS2
+          cp -R /tmp/hamlib/include/* /mingw64/include/ 2>/dev/null || true
+          cp /tmp/hamlib/lib/*.dll.a /mingw64/lib/ 2>/dev/null || true
+          cp /tmp/hamlib/lib/*.a /mingw64/lib/ 2>/dev/null || true
+          cp /tmp/hamlib/bin/*.dll /mingw64/bin/ 2>/dev/null || true
+          cp /tmp/hamlib/bin/*.exe /mingw64/bin/ 2>/dev/null || true
+          # Crea pkg-config file
+          mkdir -p /mingw64/lib/pkgconfig
+          cat > /mingw64/lib/pkgconfig/hamlib.pc <<PCEOF
+          prefix=/mingw64
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${prefix}/include
+          Name: Hamlib
+          Description: Ham Radio Control Libraries
+          Version: 4.7
+          Libs: -L\${libdir} -lhamlib
+          Cflags: -I\${includedir}
+          PCEOF
+          echo "Hamlib installed:"
+          ls /mingw64/lib/libhamlib* /mingw64/bin/libhamlib* 2>/dev/null || echo "WARNING: hamlib files not found"
 
       - name: Extract version from tag
         id: version
