@@ -45,32 +45,38 @@ jobs:
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-boost
 
-      - name: Install Hamlib from source release
+      - name: Install Hamlib pre-built binaries
         run: |
-          # Hamlib non è in MSYS2, scarica i binari pre-compilati
-          curl -L -o hamlib.tar.gz https://github.com/Hamlib/Hamlib/releases/download/4.7/hamlib-w64-4.7.tar.gz
-          mkdir -p /tmp/hamlib && tar xzf hamlib.tar.gz -C /tmp/hamlib --strip-components=1
+          # Hamlib non è in MSYS2, scarica i binari pre-compilati w64
+          curl -L -o hamlib-w64.zip https://github.com/Hamlib/Hamlib/releases/download/4.7.0/hamlib-w64-4.7.0.zip
+          mkdir -p /tmp/hamlib
+          unzip -o hamlib-w64.zip -d /tmp/hamlib
+          # La struttura dentro lo zip potrebbe avere una directory root
+          HAMLIB_DIR=$(find /tmp/hamlib -name "include" -type d | head -1 | xargs dirname)
+          echo "Hamlib extracted to: $HAMLIB_DIR"
+          ls "$HAMLIB_DIR"
           # Copia headers e lib nel prefix MSYS2
-          cp -R /tmp/hamlib/include/* /mingw64/include/ 2>/dev/null || true
-          cp /tmp/hamlib/lib/*.dll.a /mingw64/lib/ 2>/dev/null || true
-          cp /tmp/hamlib/lib/*.a /mingw64/lib/ 2>/dev/null || true
-          cp /tmp/hamlib/bin/*.dll /mingw64/bin/ 2>/dev/null || true
-          cp /tmp/hamlib/bin/*.exe /mingw64/bin/ 2>/dev/null || true
+          cp -R "$HAMLIB_DIR"/include/* /mingw64/include/
+          cp "$HAMLIB_DIR"/lib/*.a /mingw64/lib/ 2>/dev/null || true
+          cp "$HAMLIB_DIR"/lib/*.dll.a /mingw64/lib/ 2>/dev/null || true
+          cp "$HAMLIB_DIR"/bin/*.dll /mingw64/bin/ 2>/dev/null || true
+          cp "$HAMLIB_DIR"/bin/*.exe /mingw64/bin/ 2>/dev/null || true
           # Crea pkg-config file
           mkdir -p /mingw64/lib/pkgconfig
-          cat > /mingw64/lib/pkgconfig/hamlib.pc <<PCEOF
+          cat > /mingw64/lib/pkgconfig/hamlib.pc <<'PCEOF'
           prefix=/mingw64
-          exec_prefix=\${prefix}
-          libdir=\${exec_prefix}/lib
-          includedir=\${prefix}/include
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
           Name: Hamlib
           Description: Ham Radio Control Libraries
-          Version: 4.7
-          Libs: -L\${libdir} -lhamlib
-          Cflags: -I\${includedir}
+          Version: 4.7.0
+          Libs: -L${libdir} -lhamlib
+          Cflags: -I${includedir}
           PCEOF
-          echo "Hamlib installed:"
-          ls /mingw64/lib/libhamlib* /mingw64/bin/libhamlib* 2>/dev/null || echo "WARNING: hamlib files not found"
+          echo "=== Hamlib installed ==="
+          ls /mingw64/lib/libhamlib* /mingw64/bin/libhamlib* 2>/dev/null
+          ls /mingw64/include/hamlib/ 2>/dev/null
 
       - name: Extract version from tag
         id: version
