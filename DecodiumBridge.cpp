@@ -1,4 +1,5 @@
 #include "DecodiumBridge.h"
+#include "DecodiumLogging.hpp"
 #include "DecodiumAlertManager.h"
 #include "DecodiumPropagationManager.h"
 #include "DecodiumDxCluster.h"
@@ -52,6 +53,8 @@
 #include <QMediaDevices>
 #include <QRandomGenerator>
 #include <QDebug>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QRegularExpression>
 #include <cstdio>
 #include <cstring>
@@ -64,21 +67,9 @@
 #endif
 #include <vector>
 
-static QString bridgeLogPath()
-{
-#if defined(Q_OS_WIN)
-    return QStringLiteral("C:\\Users\\IU8LMC\\bridge_log.txt");
-#else
-    return QStringLiteral("/tmp/decodium_bridge.log");
-#endif
+static void bridgeLog(const QString& msg) {
+    DIAG_INFO(msg);
 }
-
-static void bridgeLog(const char* msg) {
-    QByteArray path = bridgeLogPath().toLocal8Bit();
-    FILE* f = fopen(path.constData(), "a");
-    if (f) { fputs(msg, f); fputc('\n', f); fclose(f); }
-}
-static void bridgeLog(const QString& s) { bridgeLog(s.toLocal8Bit().constData()); }
 static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceFound = nullptr);
 
 static QString stripLegacyDecodeAppendage(QString line)
@@ -4165,6 +4156,16 @@ void DecodiumBridge::resetLedStatus()
     emit ledNeuralSyncChanged();
     emit ledTurboFeedbackChanged();
     emit coherentCountChanged();
+}
+
+QString DecodiumBridge::diagnosticLogPath() const
+{
+    return DecodiumLogging::diagnosticLogPath();
+}
+
+void DecodiumBridge::openDiagnosticLog() const
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(DecodiumLogging::diagnosticLogPath()));
 }
 
 void DecodiumBridge::increaseFontScale()

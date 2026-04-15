@@ -117,14 +117,21 @@ set (PROJECT_MANUAL_DIRECTORY_URL https://wsjt.sourceforge.io/wsjtx-doc/)
 set (PROJECT_SAMPLES_URL http://downloads.sourceforge.net/project/wsjt/)
 set (PROJECT_SAMPLES_UPLOAD_DEST frs.sourceforge.net:/home/frs/project/wsjt/)
 
-# make sure that the default configuration is a RELEASE
+# make sure that the default configuration is MinSizeRel (-Os)
 if (NOT CMAKE_BUILD_TYPE)
-  set (CMAKE_BUILD_TYPE RELEASE CACHE STRING
-    "Choose the type of build, options are: None Debug Release."
+  set (CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
+    "Choose the type of build, options are: None Debug Release MinSizeRel."
     FORCE)
 endif (NOT CMAKE_BUILD_TYPE)
 if (CMAKE_BUILD_TYPE MATCHES "[Dd][Ee][Bb][Uu][Gg]")
   set (is_debug_build 1)
+endif ()
+
+# Ottimizzazione dimensione: strip + gc-sections
+if (NOT is_debug_build)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections -ffunction-sections")
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdata-sections -ffunction-sections")
+  set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,-s -Wl,--strip-all")
 endif ()
 
 

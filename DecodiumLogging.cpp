@@ -203,6 +203,7 @@ namespace
 
 DecodiumLogging::DecodiumLogging ()
 {
+  s_instance = this;
   auto core = logging::core::get ();
   // Catch relevant exceptions from logging.
   core->set_exception_handler
@@ -275,4 +276,108 @@ DecodiumLogging::~DecodiumLogging ()
   auto core = logging::core::get ();
   core->flush ();
   core->remove_all_sinks ();
+  s_instance = nullptr;
+}
+
+// ── Diagnostic log system ───────────────────────────────────────────────────
+#include <QMutex>
+#include <QDateTime>
+#include <QSysInfo>
+#include <QTimeZone>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QMediaDevices>
+#include <QAudioDevice>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+#include <csignal>
+
+DecodiumLogging* DecodiumLogging::s_instance = nullptr;
+static QMutex g_diagMutex;
+static QFile* g_diagFile = nullptr;
+
+static QString diagDir() { return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation); }
+static QString diagPath() { return QDir(diagDir()).absoluteFilePath("decodium_diagnostic.log"); }
+
+DecodiumLogging* DecodiumLogging::instance() { return s_instance; }
+QString DecodiumLogging::diagnosticLogPath() { return diagPath(); }
+
+QString DecodiumLogging::categoryToString(DiagCategory cat) {
+    switch(cat) {
+    case DiagCategory::INFO: return "INFO"; case DiagCategory::WARNING: return "WARN";
+    case DiagCategory::ERR: return "ERROR"; case DiagCategory::DEBUG: return "DEBUG";
+    case DiagCategory::CAT: return "CAT"; case DiagCategory::AUDIO: return "AUDIO";
+    case DiagCategory::DECODE: return "DECODE"; case DiagCategory::TX: return "TX";
+    case DiagCategory::QML: return "QML"; default: return "???";
+    }
+}
+
+void DecodiumLogging::diag(DiagCategory cat, const QString& message) {
+    QMutexLocker lock(&g_diagMutex);
+    if (!g_diagFile) {
+        QDir().mkpath(diagDir());
+        g_diagFile = new QFile(diagPath());
+        if (!g_diagFile->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            delete g_diagFile; g_diagFile = nullptr; return;
+        }
+    }
+    if (g_diagFile->size() > 5*1024*1024) {
+        g_diagFile->close(); delete g_diagFile; g_diagFile = nullptr;
+        QDir d(diagDir());
+        QFile::remove(d.absoluteFilePath("decodium_diagnostic.3.log"));
+        QFile::rename(d.absoluteFilePath("decodium_diagnostic.2.log"), d.absoluteFilePath("decodium_diagnostic.3.log"));
+        QFile::rename(d.absoluteFilePath("decodium_diagnostic.1.log"), d.absoluteFilePath("decodium_diagnostic.2.log"));
+        QFile::rename(diagPath(), d.absoluteFilePath("decodium_diagnostic.1.log"));
+        g_diagFile = new QFile(diagPath());
+        if (!g_diagFile->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            delete g_diagFile; g_diagFile = nullptr; return;
+        }
+    }
+    QString line = QString("[%1] [%2] %3\n").arg(
+        QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz"),
+        DecodiumLogging::categoryToString(cat), message);
+    g_diagFile->write(line.toUtf8());
+    g_diagFile->flush();
+}
+
+QStringList DecodiumLogging::readLastLines(int n) {
+    QFile f(diagPath());
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+    QStringList all; QTextStream in(&f);
+    while (!in.atEnd()) all.append(in.readLine());
+    return all.mid(qMax(0, all.size() - n));
+}
+
+void DecodiumLogging::logStartupDiagnostics() {
+    diagInfo("========== DECODIUM STARTUP ==========");
+    diagInfo(QString("Qt: %1 | OS: %2 | CPU: %3").arg(qVersion(), QSysInfo::prettyProductName(), QSysInfo::currentCpuArchitecture()));
+    diagInfo(QString("Locale: %1 | TZ: %2").arg(QLocale::system().name(), QString(QTimeZone::systemTimeZone().id())));
+    if (auto* s = QGuiApplication::primaryScreen())
+        diagInfo(QString("Screen: %1x%2 @%3dpi").arg(s->size().width()).arg(s->size().height()).arg(s->logicalDotsPerInch()));
+    for (auto const& d : QMediaDevices::audioInputs()) diagInfo("AudioIn: " + d.description());
+    for (auto const& d : QMediaDevices::audioOutputs()) diagInfo("AudioOut: " + d.description());
+#ifdef Q_OS_WIN
+    MEMORYSTATUSEX m; m.dwLength = sizeof(m); GlobalMemoryStatusEx(&m);
+    diagInfo(QString("RAM: %1 MB free / %2 MB total").arg(m.ullAvailPhys/1048576).arg(m.ullTotalPhys/1048576));
+#endif
+    diagInfo("======================================");
+}
+
+#ifdef Q_OS_WIN
+static LONG WINAPI crashHandler(EXCEPTION_POINTERS* ep) {
+    DecodiumLogging::diag(DiagCategory::ERR, QString("CRASH: code=0x%1").arg(ep->ExceptionRecord->ExceptionCode, 8, 16, QChar('0')));
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#else
+static void signalHandler(int sig) { DecodiumLogging::diag(DiagCategory::ERR, QString("SIGNAL %1").arg(sig)); signal(sig, SIG_DFL); raise(sig); }
+#endif
+
+void DecodiumLogging::installCrashHandler() {
+#ifdef Q_OS_WIN
+    SetUnhandledExceptionFilter(crashHandler);
+#else
+    signal(SIGSEGV, signalHandler); signal(SIGABRT, signalHandler);
+#endif
+    std::set_terminate([]() { DecodiumLogging::diag(DiagCategory::ERR, "std::terminate()"); std::abort(); });
 }

@@ -22,6 +22,7 @@
 
 #include "DecodiumBridge.h"
 #include "DecodiumDxCluster.h"
+#include "DecodiumLogging.hpp"
 #include "MetaDataRegistry.hpp"
 #include "Radio.hpp"
 #include "Configuration.hpp"
@@ -41,6 +42,7 @@ static void L(const char* msg) {
     FILE* f = fopen(logPath.toLocal8Bit().constData(), "a");
     if (f) { fputs(msg, f); fputc('\n', f); fclose(f); }
     std::fprintf(stderr, "%s\n", msg);
+    DIAG_INFO(QString::fromLocal8Bit(msg));
 }
 
 static std::atomic_bool g_shuttingDown {false};
@@ -110,6 +112,7 @@ int main(int argc, char* argv[])
     L("QQuickStyle OK");
 
     QApplication app(argc, argv);
+    DecodiumLogging::installCrashHandler();
     L("QApplication OK");
 
     // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
@@ -192,6 +195,8 @@ int main(int argc, char* argv[])
     });
 
     DecodiumBridge bridge;
+    if (DecodiumLogging::instance())
+        DecodiumLogging::instance()->logStartupDiagnostics();
     L("bridge OK");
 
     // Keep the bridge alive longer than the QML engine. During shutdown QML

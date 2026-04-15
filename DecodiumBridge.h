@@ -649,6 +649,10 @@ public slots:
     Q_INVOKABLE void refreshLedStatus() {}
     Q_INVOKABLE void resetLedStatus();
 
+    // Diagnostic log
+    Q_INVOKABLE QString diagnosticLogPath() const;
+    Q_INVOKABLE void openDiagnosticLog() const;
+
     // Font scale
     Q_INVOKABLE void increaseFontScale();
     Q_INVOKABLE void decreaseFontScale();
