@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- SignPath artifact configuration for Decodium 3.0 FT2 Raptor -->
-<!-- Describes which files inside the uploaded ZIP artifact should be signed -->
+<!-- SignPath artifact configuration for Decodium 4.0 Core Shannon -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <zip-file>
-    <!-- Main application executables -->
+    <!-- Main application executable -->
     <pe-file path="decodium.exe">
       <authenticode-sign hash-algorithm="sha256"
-                         description="Decodium 3.0 FT2 Raptor - Digital Communication Client"
-                         description-url="https://github.com/iu8lmc/Decodium-3.0-Codename-Raptor" />
+                         description="Decodium 4.0 Core Shannon - Digital Modes for Amateur Radio"
+                         description-url="https://github.com/iu8lmc/Decodium-4.0-Core-Shannon" />
     </pe-file>
 
-    <pe-file path="jt9.exe">
+    <pe-file path="jt9.exe" min-matches="0">
       <authenticode-sign hash-algorithm="sha256"
                          description="Decodium JT9 Decoder Engine"
-                         description-url="https://github.com/iu8lmc/Decodium-3.0-Codename-Raptor" />
+                         description-url="https://github.com/iu8lmc/Decodium-4.0-Core-Shannon" />
     </pe-file>
 
     <pe-file path="wsprd.exe" min-matches="0">
