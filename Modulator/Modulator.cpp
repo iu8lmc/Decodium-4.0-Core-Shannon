@@ -168,7 +168,7 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
         {
           requiredSamples = qMax (requiredSamples, static_cast<qint64> (std::ceil (m_TRperiod * 48000.0 - 24000.0)) + 2);
         }
-      int const kFoxWaveSampleCount = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
+      int const kFoxWaveSampleCount = FOXCOM_WAVE_SIZE;
       if (!m_pendingPrecomputedWave.isEmpty () && m_pendingPrecomputedWaveMode == mode)
         {
           int const copySamples = static_cast<int> (

@@ -1756,7 +1756,7 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
         {
           requiredSamples = qMax (requiredSamples, static_cast<qint64> (std::ceil (m_TRperiod * 48000.0 - 24000.0)) + 2);
         }
-      int const kFoxWaveSampleCount = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
+      int const kFoxWaveSampleCount = FOXCOM_WAVE_SIZE;
       int const copySamples = static_cast<int> (qBound<qint64> (qint64(1), requiredSamples, qint64(kFoxWaveSampleCount)));
       m_waveSnapshot.resize (copySamples);
       QReadLocker wave_lock {&fox_wave_lock ()};

@@ -1725,7 +1725,8 @@ bool packSuperFoxMessage (QString const& line, QString const& otpKey, bool bMore
 
 bool generateSuperFoxTx (QString const& otpKey)
 {
-  std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+  foxcom_ensure_wave(&foxcom_);
+  std::fill_n (foxcom_.wave, FOXCOM_WAVE_SIZE, 0.0f);
   std::fill_n (foxcom3_.itone3, kSuperFoxNsym, 0);
   foxcom3_.nslots2 = clamp_int (foxcom_.nslots, 0, 5);
   std::memset (foxcom3_.cmsg2, ' ', sizeof (foxcom3_.cmsg2));
@@ -1748,8 +1749,8 @@ bool generateSuperFoxTx (QString const& otpKey)
     }
 
   build_superfox_channel_symbols (xin, foxcom3_.itone3);
-  generate_superfox_waveform (foxcom3_.itone3, foxcom_.wave,
-                              static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])));
+  foxcom_ensure_wave(&foxcom_);
+  generate_superfox_waveform (foxcom3_.itone3, foxcom_.wave, FOXCOM_WAVE_SIZE);
   return true;
 }
 
@@ -1895,7 +1896,7 @@ extern "C" void foxgen_ (bool* bSuperFox, char const* /*fname*/, fortran_charlen
   fox_bandlimit_inplace (wave, fox_nslots, foxcom_.nfreq, 50.0f);
   normalize_wave (wave);
 
-  int const max_samples = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
+  int const max_samples = FOXCOM_WAVE_SIZE;
   int const copy_samples = std::min (max_samples, (int)wave.size ());
   std::copy_n (wave.constBegin (), copy_samples, foxcom_.wave);
   if (copy_samples < max_samples)
@@ -1912,8 +1913,8 @@ extern "C" void sftx_sub_ (char const* otp_key, fortran_charlen_t len)
 
 extern "C" void sfox_wave_gfsk_ ()
 {
-  generate_superfox_waveform (foxcom3_.itone3, foxcom_.wave,
-                              static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])));
+  foxcom_ensure_wave(&foxcom_);
+  generate_superfox_waveform (foxcom3_.itone3, foxcom_.wave, FOXCOM_WAVE_SIZE);
 }
 
 extern "C" void sfox_gen_gfsk_ (int* idat, float* f0, int* isync, int* itone, std::complex<float>* cdat)
@@ -1952,7 +1953,7 @@ extern "C" void foxgenft2_ ()
   ft2_fox_bandlimit_inplace (wave, fox_nslots, foxcom_.nfreq, 50.0f);
   normalize_wave (wave);
 
-  int const max_samples = static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]));
+  int const max_samples = FOXCOM_WAVE_SIZE;
   int const copy_samples = std::min (max_samples, (int)wave.size ());
   std::copy_n (wave.constBegin (), copy_samples, foxcom_.wave);
   if (copy_samples < max_samples)

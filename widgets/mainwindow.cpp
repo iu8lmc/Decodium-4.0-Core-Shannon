@@ -258,8 +258,9 @@ void clear_precomputed_tx_wave (QString const& mode)
 
 void store_precomputed_tx_wave (QString const& mode, QVector<float> const& wave, bool cache)
 {
-  int constexpr maxSamples {static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]))};
+  int constexpr maxSamples {FOXCOM_WAVE_SIZE};
   int const copySamples = qMin (maxSamples, wave.size ());
+  foxcom_ensure_wave(&foxcom_);
   QWriteLocker waveLock {&fox_wave_lock ()};
   if (copySamples > 0)
     {
@@ -1048,7 +1049,7 @@ namespace
   constexpr int kLateAutoLogGraceWindowSeconds {45};
   constexpr int kDecDataSampleCount {static_cast<int> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0]))};
   constexpr int kMaxCwSymbols {static_cast<int> (sizeof (icw) / sizeof (icw[0]))};
-  constexpr int kFoxWaveSampleCount {static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]))};
+  constexpr int kFoxWaveSampleCount {FOXCOM_WAVE_SIZE};
   struct AllTxtWriterState
   {
     QMutex mutex;
@@ -14560,9 +14561,10 @@ void MainWindow::guiUpdate()
           float f0=ui->TxFreqSpinBox->value() - m_XIT + 1.5*dfreq;
           if(m_mode=="FST4W") f0=ui->WSPRfreqSpinBox->value() - m_XIT + 1.5*dfreq;
           auto const wave = decodium::txwave::generateFst4Wave (itone, nsym, nsps, fsample, hmod, f0);
-          std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+          std::fill_n (foxcom_.wave, FOXCOM_WAVE_SIZE, 0.0f);
+          foxcom_ensure_wave(&foxcom_);
           std::copy_n (wave.constBegin (), qMin (wave.size (),
-                                                 static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0]))),
+                                                 static_cast<qsizetype>(FOXCOM_WAVE_SIZE)),
                        foxcom_.wave);
 
           QString t = QString::fromStdString(message).trimmed();

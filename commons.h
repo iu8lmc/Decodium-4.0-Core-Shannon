@@ -124,8 +124,10 @@ extern struct {
   float red[4096];
 } echocom_;
 
+/* foxcom_block: wave[] allocato dinamicamente per ridurre exe da 410MB a ~80MB */
+enum { FOXCOM_WAVE_SIZE = (160+2)*134400*4 }; /* 87,091,200 float = 332MB */
 typedef struct foxcom_block {
-  float wave[(160+2)*134400*4]; /* (nsym+2)*nsps scaled up to 48kHz */
+  float *wave;    /* allocato lazy: foxcom_ensure_wave() */
   int   nslots;
   int   nfreq;
   int   i3bit[5];
@@ -135,6 +137,17 @@ typedef struct foxcom_block {
   bool  bMoreCQs;
   bool  bSendMsg;
 } foxcom_block_t;
+
+#ifdef __cplusplus
+#include <cstdlib>
+#else
+#include <stdlib.h>
+#endif
+static inline void foxcom_ensure_wave(foxcom_block_t* fc) {
+  if (!fc->wave) {
+    fc->wave = (float*)calloc(FOXCOM_WAVE_SIZE, sizeof(float));
+  }
+}
 
 typedef struct foxcom3_block {
   int nslots2;

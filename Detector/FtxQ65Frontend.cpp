@@ -97,7 +97,7 @@ struct QmapSavecomCommon
 
 extern QmapDecodesCommon decodes_;
 extern QmapDecodes2Common decodes2_;
-extern QmapDatcomCommon datcom2_;
+extern QmapDatcomCommon& datcom2_;
 extern QmapSavecomCommon savecom_;
 
 void ftx_q65_getcand2_c (float const ss[400 * 32768], float savg0[32768],
@@ -121,7 +121,13 @@ extern "C"
 {
 QmapDecodesCommon decodes_ {};
 QmapDecodes2Common decodes2_ {};
-QmapDatcomCommon datcom2_ {};
+// Allocazione dinamica: evita 95MB nel .obj (d4+ss sono ~96MB di zeri)
+static QmapDatcomCommon* datcom2_heap_ = nullptr;
+static QmapDatcomCommon& datcom2_ref_() {
+    if (!datcom2_heap_) datcom2_heap_ = new QmapDatcomCommon{};
+    return *datcom2_heap_;
+}
+QmapDatcomCommon& datcom2_ = datcom2_ref_();
 QmapSavecomCommon savecom_ {};
 }
 
