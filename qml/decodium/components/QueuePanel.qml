@@ -213,28 +213,28 @@ Rectangle {
                                     text: model.call
                                     font.pixelSize: 10
                                     font.bold: true
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: accentGreen
                                     Layout.preferredWidth: 70
                                 }
                                 Text {
                                     text: model.snr
                                     font.pixelSize: 10
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: parseInt(model.snr) >= 0 ? accentGreen : "#f44336"
                                     Layout.preferredWidth: 35
                                 }
                                 Text {
                                     text: model.grid || "-"
                                     font.pixelSize: 10
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: textSecondary
                                     Layout.preferredWidth: 45
                                 }
                                 Text {
                                     text: model.freq
                                     font.pixelSize: 10
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: secondaryCyan
                                     Layout.preferredWidth: 45
                                 }
@@ -353,7 +353,7 @@ Rectangle {
                                     text: model.call
                                     font.pixelSize: 11
                                     font.bold: true
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: "#ff9800"
                                     Layout.preferredWidth: 70
                                 }
@@ -377,7 +377,7 @@ Rectangle {
                                 Text {
                                     text: model.snr
                                     font.pixelSize: 10
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: parseInt(model.snr) >= 0 ? accentGreen : "#f44336"
                                     Layout.preferredWidth: 35
                                 }

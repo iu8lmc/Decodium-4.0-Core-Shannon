@@ -107,13 +107,13 @@ public:
     void setDataBits(const QString& v)    { if (m_dataBits != v)   { m_dataBits = v;   emit dataBitsChanged(); } }
     void setStopBits(const QString& v)    { if (m_stopBits != v)   { m_stopBits = v;   emit stopBitsChanged(); } }
     void setHandshake(const QString& v)   { if (m_handshake != v)  { m_handshake = v;  emit handshakeChanged(); } }
-    void setForceDtr(bool v)              { if (m_forceDtr != v)   { m_forceDtr = v;   emit forceDtrChanged(); } }
-    void setDtrHigh(bool v)               { if (m_dtrHigh != v)    { m_dtrHigh = v;    emit dtrHighChanged(); } }
-    void setForceRts(bool v)              { if (m_forceRts != v)   { m_forceRts = v;   emit forceRtsChanged(); } }
-    void setRtsHigh(bool v)               { if (m_rtsHigh != v)    { m_rtsHigh = v;    emit rtsHighChanged(); } }
+    void setForceDtr(bool v);
+    void setDtrHigh(bool v);
+    void setForceRts(bool v);
+    void setRtsHigh(bool v);
     void setNetworkPort(const QString& v) { if (m_networkPort != v){ m_networkPort = v; emit networkPortChanged(); } }
     void setTciPort(const QString& v)     { if (m_tciPort != v)    { m_tciPort = v;    emit tciPortChanged(); } }
-    void setPttMethod(const QString& v)   { if (m_pttMethod != v)  { m_pttMethod = v;  emit pttMethodChanged(); } }
+    void setPttMethod(const QString& v);
     void setPttPort(const QString& v)     { if (m_pttPort != v)    { m_pttPort = v;    emit pttPortChanged(); } }
     void setSplitMode(const QString& v)   { if (m_splitMode != v)  { m_splitMode = v;  emit splitModeChanged(); } }
     void setPollInterval(int v)           { if (m_pollInterval != v){ m_pollInterval = v; emit pollIntervalChanged(); } }
@@ -170,6 +170,7 @@ signals:
 
 
 private:
+    void enforceCatSerialDefaults();
     std::unique_ptr<DecodiumTransceiverManagerPrivate> d;
 
     bool    m_connected    {false};

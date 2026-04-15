@@ -101,7 +101,7 @@ Item {
                     color: accentGreen
                     font.pixelSize: 14
                     font.bold: true
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                 }
             }
         }

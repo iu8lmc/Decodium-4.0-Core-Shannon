@@ -59,19 +59,19 @@ public:
     QString     handshake()     const { return m_handshake; }
     void        setHandshake(const QString& v)   { if (m_handshake != v)   { m_handshake = v;   emit handshakeChanged(); } }
     bool        forceDtr()      const { return m_forceDtr; }
-    void        setForceDtr(bool v)              { if (m_forceDtr != v)    { m_forceDtr = v;    emit forceDtrChanged(); } }
+    void        setForceDtr(bool v);
     bool        dtrHigh()       const { return m_dtrHigh; }
-    void        setDtrHigh(bool v)               { if (m_dtrHigh != v)     { m_dtrHigh = v;     emit dtrHighChanged(); } }
+    void        setDtrHigh(bool v);
     bool        forceRts()      const { return m_forceRts; }
-    void        setForceRts(bool v)              { if (m_forceRts != v)    { m_forceRts = v;    emit forceRtsChanged(); } }
+    void        setForceRts(bool v);
     bool        rtsHigh()       const { return m_rtsHigh; }
-    void        setRtsHigh(bool v)               { if (m_rtsHigh != v)     { m_rtsHigh = v;     emit rtsHighChanged(); } }
+    void        setRtsHigh(bool v);
     QString     networkPort()   const { return m_networkPort; }
     void        setNetworkPort(const QString& v) { if (m_networkPort != v) { m_networkPort = v; emit networkPortChanged(); } }
     QString     tciPort()       const { return m_tciPort; }
     void        setTciPort(const QString& v)     { if (m_tciPort != v)     { m_tciPort = v;     emit tciPortChanged(); } }
     QString     pttMethod()     const { return m_pttMethod; }
-    void        setPttMethod(const QString& v)   { if (m_pttMethod != v)   { m_pttMethod = v;   emit pttMethodChanged(); } }
+    void        setPttMethod(const QString& v);
     QString     pttPort()       const { return m_pttPort; }
     void        setPttPort(const QString& v)     { if (m_pttPort != v)     { m_pttPort = v;     emit pttPortChanged(); } }
     QString     splitMode()     const { return "none"; }
@@ -146,6 +146,7 @@ private slots:
     void onConnectTimeout();
 
 private:
+    void enforceCatSerialDefaults();
     void sendCommand(const QByteArray& cmd);
     void processResponse(const QByteArray& resp);
     QString parseMode(char code);

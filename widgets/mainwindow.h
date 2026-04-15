@@ -192,6 +192,7 @@ public:
   QString legacyAdifLogPath() const;
   int legacyTxOutputAttenuation() const;
   void legacyClearBandActivity();
+  void legacyClearRxFrequency();
   void legacySetMode(QString const& mode);
   void legacySetDialFrequency(Frequency frequency);
   void legacySetMonitoring(bool enabled);

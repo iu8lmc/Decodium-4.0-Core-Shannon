@@ -143,7 +143,7 @@ Rectangle {
                         return (freq / 1000000).toFixed(6)
                     }
                     font.pixelSize: 20
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.bold: true
                     color: transmitting ? "#ff6b6b" : accentGreen
                     Layout.fillWidth: true
@@ -340,15 +340,15 @@ Rectangle {
 
             // Timezone data
             property var timezones: [
-                { name: "UTC", offset: 0 },
-                { name: "London", offset: 0 },
-                { name: "Rome", offset: 1 },
-                { name: "Moscow", offset: 3 },
-                { name: "Dubai", offset: 4 },
-                { name: "Tokyo", offset: 9 },
-                { name: "Sydney", offset: 11 },
-                { name: "New York", offset: -5 },
-                { name: "Los Angeles", offset: -8 }
+                { name: "UTC", zoneId: "UTC" },
+                { name: "London", zoneId: "Europe/London" },
+                { name: "Rome", zoneId: "Europe/Rome" },
+                { name: "Moscow", zoneId: "Europe/Moscow" },
+                { name: "Dubai", zoneId: "Asia/Dubai" },
+                { name: "Tokyo", zoneId: "Asia/Tokyo" },
+                { name: "Sydney", zoneId: "Australia/Sydney" },
+                { name: "New York", zoneId: "America/New_York" },
+                { name: "Los Angeles", zoneId: "America/Los_Angeles" }
             ]
             property int selectedTz: 0
             property int hours: 0
@@ -365,12 +365,14 @@ Rectangle {
             Component.onCompleted: updateTime()
 
             function updateTime() {
-                var now = new Date()
-                var utc = now.getTime() + (now.getTimezoneOffset() * 60000)
-                var tzTime = new Date(utc + (timezones[selectedTz].offset * 3600000))
-                hours = tzTime.getHours()
-                minutes = tzTime.getMinutes()
-                seconds = tzTime.getSeconds()
+                if (selectedTz < 0 || selectedTz >= timezones.length) {
+                    selectedTz = 0
+                }
+
+                var snapshot = bridge.worldClockSnapshot(timezones[selectedTz].zoneId)
+                hours = snapshot.hours
+                minutes = snapshot.minutes
+                seconds = snapshot.seconds
             }
 
             function nextTimezone() {
@@ -462,7 +464,7 @@ Rectangle {
 
                         Text {
                             font.pixelSize: 14
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.bold: true
                             color: textPrimary
                             text: ("0" + worldClock.hours).slice(-2) + ":" +

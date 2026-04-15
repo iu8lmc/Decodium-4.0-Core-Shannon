@@ -5,6 +5,8 @@
 #include <QCommandLineParser>
 #include <QMetaType>
 #include <QStyleFactory>
+#include <QFont>
+#include <QFontDatabase>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -115,6 +117,11 @@ int main(int argc, char* argv[])
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
 
+    QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+    if (!fixedFontFamily.isEmpty()) {
+        QFont::insertSubstitution(QStringLiteral("Consolas"), fixedFontFamily);
+    }
+
     // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
     // che usano la virgola e bloccano il parsing di frequenze/configurazioni
     QLocale::setDefault(QLocale::c());
@@ -191,6 +198,9 @@ int main(int argc, char* argv[])
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
+        if (auto *instance = QCoreApplication::instance()) {
+            instance->setProperty("decodiumShuttingDown", true);
+        }
         g_shuttingDown.store(true, std::memory_order_relaxed);
     });
 

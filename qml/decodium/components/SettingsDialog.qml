@@ -40,6 +40,23 @@ Dialog {
         return String(controller.rigName)
     }
 
+    function stringListIndexOf(list, value) {
+        if (!list || value === undefined || value === null)
+            return -1
+        var wanted = String(value)
+        var wantedNorm = wanted.trim().toLowerCase()
+        for (var i = 0; i < list.length; ++i) {
+            var candidate = String(list[i])
+            var candidateNorm = candidate.trim().toLowerCase()
+            if (candidate === wanted
+                    || candidateNorm === wantedNorm
+                    || candidateNorm.indexOf(wantedNorm) !== -1
+                    || wantedNorm.indexOf(candidateNorm) !== -1)
+                return i
+        }
+        return -1
+    }
+
     function normalizedRigName(value) {
         return String(value || "").toUpperCase().replace(/[\s_]+/g, "")
     }
@@ -61,8 +78,15 @@ Dialog {
         var controller = activeCatController()
         if (!controller || controller.pttMethod === undefined || controller.pttMethod === null)
             return false
-        var method = String(controller.pttMethod)
+        var method = String(controller.pttMethod).trim().toUpperCase()
         return method === "DTR" || method === "RTS"
+    }
+
+    function pttMethodUsesCatDefaults() {
+        var controller = activeCatController()
+        if (!controller || controller.pttMethod === undefined || controller.pttMethod === null)
+            return false
+        return String(controller.pttMethod).trim().toUpperCase() === "CAT"
     }
 
     function supportsSwrTelemetry() {
@@ -115,6 +139,18 @@ Dialog {
             controller.rtsHigh = highLevel
         }
         scheduleCatPersist()
+    }
+
+    function resetForcedSerialLines() {
+        var controller = activeCatController()
+        if (!controller)
+            return
+        controller.forceDtr = false
+        controller.dtrHigh = false
+        controller.forceRts = false
+        controller.rtsHigh = false
+        forceDtrCombo.currentIndex = 0
+        forceRtsCombo.currentIndex = 0
     }
 
     function openTab(index) {
@@ -690,7 +726,11 @@ Dialog {
                                 return find(bridge.catManager.pttMethod)
                             }
                             onActivated: {
-                                if (bridge.catManager) bridge.catManager.pttMethod = currentText
+                                if (bridge.catManager) {
+                                    bridge.catManager.pttMethod = currentText
+                                    if (settingsDialog.pttMethodUsesCatDefaults())
+                                        settingsDialog.resetForcedSerialLines()
+                                }
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -826,6 +866,7 @@ Dialog {
                         ComboBox {
                             id: forceDtrCombo
                             visible: settingsDialog.usesSerialControls()
+                            enabled: !settingsDialog.pttMethodUsesCatDefaults()
                             model: ["Default","Off","On"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceDtr : false,
                                                                            bridge.catManager ? bridge.catManager.dtrHigh : false))
@@ -840,6 +881,7 @@ Dialog {
                         ComboBox {
                             id: forceRtsCombo
                             visible: settingsDialog.usesSerialControls()
+                            enabled: !settingsDialog.pttMethodUsesCatDefaults()
                             model: ["Default","Off","On"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceRts : false,
                                                                            bridge.catManager ? bridge.catManager.rtsHigh : false))
@@ -1003,7 +1045,7 @@ Dialog {
                             Layout.columnSpan: 3
                             Layout.minimumWidth: wideFieldMinWidth
                             implicitHeight: controlHeight
-                            Component.onCompleted: { var i = find(bridge.audioInputDevice); if (i >= 0) currentIndex = i }
+                            currentIndex: settingsDialog.stringListIndexOf(bridge.audioInputDevices, bridge.audioInputDevice)
                             onActivated: bridge.audioInputDevice = currentText
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: audioInDevCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
@@ -1025,6 +1067,7 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
+                        Item { Layout.columnSpan: 2 }
 
                         Text { text: "Output Device:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
@@ -1034,7 +1077,7 @@ Dialog {
                             Layout.columnSpan: 3
                             Layout.minimumWidth: wideFieldMinWidth
                             implicitHeight: controlHeight
-                            Component.onCompleted: { var i = find(bridge.audioOutputDevice); if (i >= 0) currentIndex = i }
+                            currentIndex: settingsDialog.stringListIndexOf(bridge.audioOutputDevices, bridge.audioOutputDevice)
                             onActivated: bridge.audioOutputDevice = currentText
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: audioOutDevCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
@@ -2591,6 +2634,75 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // ── NTP Time Sync ──
+                        Text { text: "NTP TIME SYNC"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: "Enable NTP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.ntpEnabled
+                            onClicked: bridge.setSetting("NTPEnabled", checked)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text {
+                            text: bridge.ntpEnabled
+                                  ? (bridge.ntpSynced ? "Synced" : "Syncing / waiting reply")
+                                  : "Disabled"
+                            color: bridge.ntpEnabled ? (bridge.ntpSynced ? accentGreen : "#FF9800") : textSecondary
+                            font.pixelSize: 12
+                            Layout.columnSpan: 2
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Text { text: "Custom Server:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        TextField {
+                            id: ntpServerField
+                            text: bridge.getSetting("NTPCustomServer", "")
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 2
+                            implicitHeight: controlHeight
+                            leftPadding: 8
+                            color: textPrimary
+                            font.pixelSize: controlFontSize
+                            placeholderText: "Vuoto = server pubblici automatici"
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onEditingFinished: bridge.setSetting("NTPCustomServer", text.trim())
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: controlHeight
+                            radius: 4
+                            color: ntpSyncNowMouse.containsMouse && bridge.ntpEnabled
+                                   ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.25)
+                                   : bgMedium
+                            border.color: bridge.ntpEnabled ? secondaryCyan : glassBorder
+                            opacity: bridge.ntpEnabled ? 1.0 : 0.55
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Sync Now"
+                                color: bridge.ntpEnabled ? textPrimary : textSecondary
+                                font.pixelSize: 12
+                                font.bold: bridge.ntpEnabled
+                            }
+                            MouseArea {
+                                id: ntpSyncNowMouse
+                                anchors.fill: parent
+                                enabled: bridge.ntpEnabled
+                                hoverEnabled: true
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: bridge.syncNtpNow()
+                            }
+                        }
+
+                        Text {
+                            text: "Lascia il server vuoto per usare automaticamente pool.ntp.org, Apple, Cloudflare e Google."
+                            color: textSecondary
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                            Layout.columnSpan: 4
+                        }
 
                         // ── Clock Compensation ──
                         Text { text: "CLOCK COMPENSATION"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }

@@ -355,6 +355,37 @@ public:
         return b.ft8Freq;
     }
 
+    // Riconosce il modo "nominale" più vicino per una frequenza di dial.
+    // Usato solo per l'auto-selezione iniziale del modo all'avvio.
+    QString detectModeForFrequency(double freqHz) const
+    {
+        if (freqHz <= 0.0) return {};
+
+        double const maxOffsetHz = freqHz >= 50000000.0 ? 1000000.0 : 10000.0;
+        double bestDelta = std::numeric_limits<double>::max();
+        QString bestMode;
+
+        auto consider = [&](double candidateFreq, const QString& candidateMode) {
+            if (candidateFreq <= 0.0) return;
+            double const delta = std::abs(candidateFreq - freqHz);
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                bestMode = candidateMode;
+            }
+        };
+
+        for (const Band& b : m_bands) {
+            consider(b.ft8Freq, QStringLiteral("FT8"));
+            consider(b.ft4Freq, QStringLiteral("FT4"));
+            consider(b.ft2Freq, QStringLiteral("FT2"));
+        }
+
+        if (bestMode.isEmpty() || bestDelta > maxOffsetHz) {
+            return {};
+        }
+        return bestMode;
+    }
+
     // Chiamato dalla bridge quando il modo cambia — aggiorna la frequenza senza cambiare banda
     void updateForMode(const QString& mode)
     {

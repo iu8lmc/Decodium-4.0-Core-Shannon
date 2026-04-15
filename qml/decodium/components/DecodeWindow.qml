@@ -62,6 +62,7 @@ Window {
     readonly property int rxGapWidth: compactRxColumns ? 6 : 10
     readonly property int rxDistanceWidth: compactRxColumns ? 0 : 50
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
+    property int decodeListVersion: 0
 
     // Shannon-compatible color scheme
     readonly property color colorB4:          "#606060"   // Grigio — già lavorato (B4)
@@ -122,6 +123,16 @@ Window {
     // Shannon: RX Frequency window ±200Hz (sbFtol default) + messaggi diretti a noi
     property int rxBandwidth: 200  // Shannon sbFtol default 200Hz
 
+    Connections {
+        target: appEngine
+        function onDecodeListChanged() {
+            decodeWindow.decodeListVersion++
+        }
+        function onRxDecodeListChanged() {
+            decodeWindow.decodeListVersion++
+        }
+    }
+
     // Shannon isAtRxFrequency: dentro finestra ±200Hz OR messaggio per noi
     function isAtRxFrequency(freq, md) {
         var f = parseInt(freq)
@@ -131,7 +142,6 @@ Window {
     }
     function currentRxDecodes() {
         var merged = []
-        var seen = {}
         function utcSortValue(timeStr) {
             var digits = String(timeStr || "").replace(/[^0-9]/g, "")
             if (digits.length >= 6)
@@ -140,27 +150,10 @@ Window {
                 return parseInt(digits + "00")
             return -1
         }
-        function appendUnique(item) {
-            if (!item)
-                return
-            var key = (item.time || "") + "|" +
-                      (item.freq || "") + "|" +
-                      (item.message || "") + "|" +
-                      (item.isTx ? "1" : "0")
-            if (seen[key])
-                return
-            seen[key] = true
-            merged.push(item)
-        }
         if (appEngine.rxDecodeList) {
             for (var j = 0; j < appEngine.rxDecodeList.length; j++) {
-                appendUnique(appEngine.rxDecodeList[j])
-            }
-        }
-        for (var i = 0; i < appEngine.decodeList.length; i++) {
-            var decode = appEngine.decodeList[i]
-            if (isAtRxFrequency(decode.freq, decode)) {
-                appendUnique(decode)
+                if (appEngine.rxDecodeList[j])
+                    merged.push(appEngine.rxDecodeList[j])
             }
         }
         merged.sort(function(a, b) {
@@ -312,7 +305,7 @@ Window {
 
                             Text {
                                 text: "UTC"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: secondaryCyan
@@ -320,7 +313,7 @@ Window {
                             }
                             Text {
                                 text: "dB"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: secondaryCyan
@@ -329,7 +322,7 @@ Window {
                             }
                             Text {
                                 text: "DT"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: secondaryCyan
@@ -338,7 +331,7 @@ Window {
                             }
                             Text {
                                 text: "Freq"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: secondaryCyan
@@ -348,7 +341,7 @@ Window {
                             Item { Layout.preferredWidth: decodeWindow.bandGapWidth }
                             Text {
                                 text: "Message"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: secondaryCyan
@@ -360,7 +353,7 @@ Window {
                                 Text {
                                     anchors.fill: parent
                                     text: "DXCC"
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     font.pixelSize: 10
                                     font.bold: true
                                     color: secondaryCyan
@@ -374,7 +367,7 @@ Window {
                                 Text {
                                     anchors.fill: parent
                                     text: "Az"
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     font.pixelSize: 10
                                     font.bold: true
                                     color: secondaryCyan
@@ -482,7 +475,7 @@ Window {
 
                                     Text {
                                         text: formatUtcForDisplay(modelData.time)
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: textSecondary
                                         Layout.preferredWidth: decodeWindow.bandUtcWidth
@@ -490,7 +483,7 @@ Window {
 
                                     Text {
                                         text: modelData.db
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: parseInt(modelData.db) > -5 ? accentGreen :
                                                parseInt(modelData.db) > -15 ? secondaryCyan :
@@ -501,7 +494,7 @@ Window {
 
                                     Text {
                                         text: modelData.dt
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: textSecondary
                                         horizontalAlignment: Text.AlignRight
@@ -510,7 +503,7 @@ Window {
 
                                     Text {
                                         text: modelData.freq
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: isAtRxFrequency(modelData.freq, modelData) ? primaryBlue : secondaryCyan
                                         font.bold: isAtRxFrequency(modelData.freq, modelData)
@@ -524,7 +517,7 @@ Window {
                                     Text {
                                         id: bandMsgText
                                         text: modelData.message
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
                                                    modelData.dxIsNewCountry || modelData.dxIsMostWanted
@@ -542,7 +535,7 @@ Window {
                                         Text {
                                             anchors.fill: parent
                                             text: modelData.dxCountry || ""
-                                            font.family: "Consolas"
+                                            font.family: "Monospace"
                                             font.pixelSize: 11
                                             color: modelData.dxIsNewCountry ? colorNewCountry :
                                                    modelData.dxIsMostWanted ? colorMostWanted : textSecondary
@@ -558,7 +551,7 @@ Window {
                                         Text {
                                             anchors.fill: parent
                                             text: formatBearingDegrees(modelData.dxBearing)
-                                            font.family: "Consolas"
+                                            font.family: "Monospace"
                                             font.pixelSize: 11
                                             color: secondaryCyan
                                             horizontalAlignment: Text.AlignHCenter
@@ -622,7 +615,7 @@ Window {
                                 Text {
                                     anchors.centerIn: parent
                                     text: appEngine.rxFrequency + " Hz"
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     font.pixelSize: 11
                                     font.bold: true
                                     color: primaryBlue
@@ -634,6 +627,7 @@ Window {
                             // RX Frequency count
                             Text {
                                 text: {
+                                    void(decodeWindow.decodeListVersion)
                                     return currentRxDecodes().length + " msgs"
                                 }
                                 font.pixelSize: 11
@@ -679,7 +673,7 @@ Window {
 
                             Text {
                                 text: "UTC"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: primaryBlue
@@ -687,7 +681,7 @@ Window {
                             }
                             Text {
                                 text: "dB"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: primaryBlue
@@ -696,7 +690,7 @@ Window {
                             }
                             Text {
                                 text: "DT"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: primaryBlue
@@ -706,7 +700,7 @@ Window {
                             Item { Layout.preferredWidth: decodeWindow.rxGapWidth }
                             Text {
                                 text: "Message"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: primaryBlue
@@ -731,9 +725,11 @@ Window {
                             anchors.margins: 4
                             clip: true
                             spacing: 1
+                            property int _ver: decodeWindow.decodeListVersion
 
                             // Filter model to only show messages at RX frequency
                             model: {
+                                void(_ver)
                                 return currentRxDecodes()
                             }
 
@@ -809,7 +805,7 @@ Window {
 
                                     Text {
                                         text: formatUtcForDisplay(modelData.time)
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: textSecondary
                                         Layout.preferredWidth: decodeWindow.rxUtcWidth
@@ -817,7 +813,7 @@ Window {
 
                                     Text {
                                         text: modelData.db
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: parseInt(modelData.db) > -5 ? accentGreen :
                                                parseInt(modelData.db) > -15 ? secondaryCyan :
@@ -828,7 +824,7 @@ Window {
 
                                     Text {
                                         text: modelData.dt
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: textSecondary
                                         horizontalAlignment: Text.AlignRight
@@ -841,7 +837,7 @@ Window {
                                     Text {
                                         id: rxMsgText
                                         text: modelData.message
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         font.pixelSize: 11
                                         font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
                                                    modelData.dxIsNewCountry || modelData.dxIsMostWanted

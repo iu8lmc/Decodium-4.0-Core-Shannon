@@ -76,6 +76,7 @@ public:
     void armCurrentTx();
     void logQso();
     void clearBandActivity();
+    void clearRxFrequency();
     void setWaterfallPalette(const QString& palette);
     void openSettings(int tabIndex = -1);
     void openTimeSyncSettings();

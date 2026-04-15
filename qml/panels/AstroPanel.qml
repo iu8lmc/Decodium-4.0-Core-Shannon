@@ -154,7 +154,7 @@ Rectangle {
             Layout.fillWidth: true
             Text {
                 text: "ASTRO / EME"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 font.letterSpacing: 2
                 font.bold: true
@@ -163,7 +163,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Text {
                 text: phaseText()
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 color: "#90A4AE"
             }
@@ -202,35 +202,35 @@ Rectangle {
             columnSpacing: 8
             rowSpacing: 4
 
-            Text { text: "Az";      font.family: "Consolas"; font.pixelSize: 10; color: "#90A4AE" }
-            Text { text: moonAzimuth.toFixed(1) + "\u00B0"; font.family: "Consolas"; font.pixelSize: 12; color: "#ECEFF1" }
-            Text { text: "El";      font.family: "Consolas"; font.pixelSize: 10; color: "#90A4AE" }
+            Text { text: "Az";      font.family: "Monospace"; font.pixelSize: 10; color: "#90A4AE" }
+            Text { text: moonAzimuth.toFixed(1) + "\u00B0"; font.family: "Monospace"; font.pixelSize: 12; color: "#ECEFF1" }
+            Text { text: "El";      font.family: "Monospace"; font.pixelSize: 10; color: "#90A4AE" }
             Text {
                 text: moonElevation.toFixed(1) + "\u00B0"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 12
                 color: moonElevation > 0 ? "#69F0AE" : "#f44336"
             }
 
-            Text { text: "Doppler"; font.family: "Consolas"; font.pixelSize: 10; color: "#90A4AE" }
-            Text { text: (moonDopplerHz >= 0 ? "+" : "") + moonDopplerHz.toFixed(0) + " Hz"; font.family: "Consolas"; font.pixelSize: 12; color: "#00BCD4" }
-            Text { text: "Sun El";  font.family: "Consolas"; font.pixelSize: 10; color: "#90A4AE" }
+            Text { text: "Doppler"; font.family: "Monospace"; font.pixelSize: 10; color: "#90A4AE" }
+            Text { text: (moonDopplerHz >= 0 ? "+" : "") + moonDopplerHz.toFixed(0) + " Hz"; font.family: "Monospace"; font.pixelSize: 12; color: "#00BCD4" }
+            Text { text: "Sun El";  font.family: "Monospace"; font.pixelSize: 10; color: "#90A4AE" }
             Text {
                 text: sunElevation.toFixed(1) + "\u00B0"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 12
                 color: sunElevation > 0 ? "#FFC107" : "#90A4AE"
             }
 
-            Text { text: "Phase";   font.family: "Consolas"; font.pixelSize: 10; color: "#90A4AE" }
-            Text { text: (moonPhase * 100).toFixed(0) + "%"; font.family: "Consolas"; font.pixelSize: 12; color: "#ECEFF1" }
-            Text { text: "Illum";   font.family: "Consolas"; font.pixelSize: 10; color: "#90A4AE" }
+            Text { text: "Phase";   font.family: "Monospace"; font.pixelSize: 10; color: "#90A4AE" }
+            Text { text: (moonPhase * 100).toFixed(0) + "%"; font.family: "Monospace"; font.pixelSize: 12; color: "#ECEFF1" }
+            Text { text: "Illum";   font.family: "Monospace"; font.pixelSize: 10; color: "#90A4AE" }
             Text {
                 text: {
                     var illum = (1 - Math.cos(moonPhase * 2 * Math.PI)) / 2;
                     return (illum * 100).toFixed(0) + "%";
                 }
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 12
                 color: "#ECEFF1"
             }
@@ -240,7 +240,7 @@ Rectangle {
         Text {
             visible: bridge.grid.length >= 4
             text: "Grid: " + bridge.grid + "  (" + myLat.toFixed(2) + "\u00B0, " + myLon.toFixed(2) + "\u00B0)"
-            font.family: "Consolas"
+            font.family: "Monospace"
             font.pixelSize: 9
             color: "#546E7A"
         }
@@ -257,7 +257,7 @@ Rectangle {
             Text {
                 anchors.centerIn: parent
                 text: moonElevation > 5 ? "EME WINDOW OPEN" : "EME WINDOW CLOSED"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 font.bold: true
                 font.letterSpacing: 1

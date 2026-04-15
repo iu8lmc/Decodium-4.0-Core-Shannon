@@ -18,6 +18,7 @@ Item {
     property int  minFreq: 200
     property int  maxFreq: 3000
     property int  spectrumHeight: 150
+    property bool restoringSettings: false
 
     // Altezza minima/massima del grafico spettro (regolabile tramite drag)
     readonly property int spectrumMinHeight: 60
@@ -32,10 +33,38 @@ Item {
     property color textSec:     Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.6)
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
 
-    // Carica impostazioni panadapter da bridge (salvate via bridge.saveSettings)
-    Component.onCompleted: {
-        if (bridge.uiSpectrumHeight > 0) waterfallPanel.spectrumHeight = bridge.uiSpectrumHeight
+    function applyManualContrast() {
+        if (waterfallDisplay && !autoRangeCheck.checked) {
+            waterfallDisplay.minDb = waterfallDisplay.measuredFloor - (150 - contrastSlider.value)
+        }
     }
+
+    function loadPanadapterSettings() {
+        restoringSettings = true
+        if (bridge.uiSpectrumHeight > 0) waterfallPanel.spectrumHeight = bridge.uiSpectrumHeight
+        paletteCombo.currentIndex = Math.max(0, bridge.getSetting("uiPaletteIndex", bridge.uiPaletteIndex))
+        autoRangeCheck.checked = bridge.getSetting("uiWaterfallAutoRange", true)
+        txBracketsCheck.checked = bridge.getSetting("uiWaterfallShowTxBrackets", true)
+        peakHoldCheck.checked = bridge.getSetting("uiWaterfallPeakHold", true)
+        blackSlider.value = bridge.getSetting("uiWaterfallBlackLevel", 15)
+        gainSlider.value = bridge.getSetting("uiWaterfallColorGain", 50)
+        contrastSlider.value = bridge.getSetting("uiWaterfallContrast", 80)
+        speedSlider.value = bridge.getSetting("spectrumInterval", 20)
+        zoomSlider.value = bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
+
+        waterfallDisplay.paletteIndex = paletteCombo.currentIndex
+        waterfallDisplay.autoRange = autoRangeCheck.checked
+        waterfallDisplay.showTxBrackets = txBracketsCheck.checked
+        waterfallDisplay.peakHold = peakHoldCheck.checked
+        waterfallDisplay.blackLevel = blackSlider.value
+        waterfallDisplay.colorGain = gainSlider.value
+        waterfallDisplay.zoomFactor = zoomSlider.value
+        applyManualContrast()
+        restoringSettings = false
+    }
+
+    Component.onCompleted: Qt.callLater(loadPanadapterSettings)
+    onVisibleChanged: if (visible) Qt.callLater(loadPanadapterSettings)
 
     ColumnLayout {
         anchors.fill: parent
@@ -65,6 +94,7 @@ Item {
                     onActivated: {
                         waterfallDisplay.paletteIndex = currentIndex
                         bridge.uiPaletteIndex = currentIndex
+                        bridge.setSetting("uiPaletteIndex", currentIndex)
                         mainWindow.scheduleSave()
                     }
                     background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
@@ -75,7 +105,17 @@ Item {
                 CheckBox {
                     id: autoRangeCheck
                     checked: true
-                    onCheckedChanged: waterfallDisplay.autoRange = checked
+                    onCheckedChanged: {
+                        waterfallDisplay.autoRange = checked
+                        if (checked) {
+                            waterfallDisplay.maxDb = waterfallDisplay.measuredFloor + 20
+                        } else {
+                            waterfallPanel.applyManualContrast()
+                        }
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallAutoRange", checked)
+                        }
+                    }
                     ToolTip.text: "Auto noise floor (IIR)"
                     ToolTip.visible: autoRangeCheck.hovered
                     ToolTip.delay: 400
@@ -93,7 +133,12 @@ Item {
                 CheckBox {
                     id: txBracketsCheck
                     checked: true
-                    onCheckedChanged: waterfallDisplay.showTxBrackets = checked
+                    onCheckedChanged: {
+                        waterfallDisplay.showTxBrackets = checked
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallShowTxBrackets", checked)
+                        }
+                    }
                     indicator: Rectangle {
                         implicitWidth: 16; implicitHeight: 16; radius: 2
                         color: txBracketsCheck.checked ? accentGreen : Qt.rgba(30/255,45/255,70/255,0.9)
@@ -108,7 +153,12 @@ Item {
                 CheckBox {
                     id: peakHoldCheck
                     checked: true
-                    onCheckedChanged: waterfallDisplay.peakHold = checked
+                    onCheckedChanged: {
+                        waterfallDisplay.peakHold = checked
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallPeakHold", checked)
+                        }
+                    }
                     ToolTip.text: "Peak Hold"
                     ToolTip.visible: peakHoldCheck.hovered
                     ToolTip.delay: 400
@@ -127,7 +177,14 @@ Item {
                     id: zoomSlider
                     Layout.preferredWidth: 70
                     from: 1; to: 8; value: bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0; stepSize: 0.5
-                    onMoved: waterfallDisplay.zoomFactor = value
+                    onValueChanged: {
+                        waterfallDisplay.zoomFactor = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.uiZoomFactor = value
+                            bridge.setSetting("uiZoomFactor", value)
+                            mainWindow.scheduleSave()
+                        }
+                    }
                     background: Rectangle {
                         x: zoomSlider.leftPadding; y: zoomSlider.topPadding + zoomSlider.availableHeight/2 - 2
                         width: zoomSlider.availableWidth; height: 4; radius: 2
@@ -164,7 +221,12 @@ Item {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
                 Text { text: "Black:"; color: "#5888AA"; font.pixelSize: 10 }
                 Slider { id: blackSlider; Layout.preferredWidth: 80; from: 0; to: 100; value: 15; stepSize: 1
-                    onMoved: waterfallDisplay.blackLevel = value
+                    onValueChanged: {
+                        waterfallDisplay.blackLevel = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallBlackLevel", value)
+                        }
+                    }
                     background: Rectangle { x:blackSlider.leftPadding;y:blackSlider.topPadding+blackSlider.availableHeight/2-2;width:blackSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
                     handle: Rectangle { x:blackSlider.leftPadding+blackSlider.visualPosition*(blackSlider.availableWidth-width);y:blackSlider.topPadding+blackSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#5888AA" }
                 }
@@ -172,7 +234,12 @@ Item {
                 Rectangle { width:1;height:14;color:"#333" }
                 Text { text: "Gain:"; color: "#88BBDD"; font.pixelSize: 10 }
                 Slider { id: gainSlider; Layout.preferredWidth: 80; from: 0; to: 100; value: 50; stepSize: 1
-                    onMoved: waterfallDisplay.colorGain = value
+                    onValueChanged: {
+                        waterfallDisplay.colorGain = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallColorGain", value)
+                        }
+                    }
                     background: Rectangle { x:gainSlider.leftPadding;y:gainSlider.topPadding+gainSlider.availableHeight/2-2;width:gainSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
                     handle: Rectangle { x:gainSlider.leftPadding+gainSlider.visualPosition*(gainSlider.availableWidth-width);y:gainSlider.topPadding+gainSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#88BBDD" }
                 }
@@ -182,7 +249,12 @@ Item {
 
                 Text { text: "Contrasto:"; color: "#AA88DD"; font.pixelSize: 10 }
                 Slider { id: contrastSlider; Layout.preferredWidth: 70; from: 10; to: 150; value: 80; stepSize: 1
-                    onMoved: waterfallDisplay.minDb = waterfallDisplay.measuredFloor - (150 - value)
+                    onValueChanged: {
+                        waterfallPanel.applyManualContrast()
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallContrast", value)
+                        }
+                    }
                     background: Rectangle { x:contrastSlider.leftPadding;y:contrastSlider.topPadding+contrastSlider.availableHeight/2-2;width:contrastSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
                     handle: Rectangle { x:contrastSlider.leftPadding+contrastSlider.visualPosition*(contrastSlider.availableWidth-width);y:contrastSlider.topPadding+contrastSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#AA88DD" }
                 }
@@ -192,7 +264,7 @@ Item {
 
                 Text { text: "Vel:"; color: "#DD8866"; font.pixelSize: 10 }
                 Slider { id: speedSlider; Layout.preferredWidth: 60; from: 10; to: 500; value: 20; stepSize: 5
-                    onMoved: bridge.setSetting("spectrumInterval", value)
+                    onValueChanged: if (!waterfallPanel.restoringSettings) bridge.setSetting("spectrumInterval", value)
                     background: Rectangle { x:speedSlider.leftPadding;y:speedSlider.topPadding+speedSlider.availableHeight/2-2;width:speedSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
                     handle: Rectangle { x:speedSlider.leftPadding+speedSlider.visualPosition*(speedSlider.availableWidth-width);y:speedSlider.topPadding+speedSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#DD8866" }
                 }
@@ -266,8 +338,17 @@ Item {
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
 
             // Salva al bridge con debounce (2s dopo l'ultimo cambio)
-            onPaletteIndexChanged: { bridge.uiPaletteIndex = paletteIndex; mainWindow.scheduleSave() }
-            onZoomFactorChanged:   { bridge.uiZoomFactor   = zoomFactor;   mainWindow.scheduleSave() }
+            onPaletteIndexChanged: if (!waterfallPanel.restoringSettings) {
+                bridge.uiPaletteIndex = paletteIndex
+                bridge.setSetting("uiPaletteIndex", paletteIndex)
+                mainWindow.scheduleSave()
+            }
+            onZoomFactorChanged: if (!waterfallPanel.restoringSettings) {
+                bridge.uiZoomFactor = zoomFactor
+                bridge.setSetting("uiZoomFactor", zoomFactor)
+                mainWindow.scheduleSave()
+            }
+            onMeasuredFloorChanged: waterfallPanel.applyManualContrast()
 
             onFrequencySelected: function(freq) {
                 waterfallPanel.frequencySelected(freq)        // RX
