@@ -44,6 +44,7 @@ jobs:
             mingw-w64-x86_64-fftw
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-boost
+            unzip
 
       - name: Install Hamlib pre-built binaries
         run: |
