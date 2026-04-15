@@ -33,6 +33,11 @@ QString normalizeDevicePath(QString value)
     return QStringLiteral("/dev/") + value;
 #endif
 }
+
+bool isCatPttMethod(QString const& value)
+{
+    return value.trimmed().compare(QStringLiteral("CAT"), Qt::CaseInsensitive) == 0;
+}
 }
 
 // ── PIMPL privato ──────────────────────────────────────────────────────────
@@ -86,6 +91,84 @@ DecodiumTransceiverManager::~DecodiumTransceiverManager()
     if (thread) {
         delete thread;
     }
+}
+
+void DecodiumTransceiverManager::enforceCatSerialDefaults()
+{
+    if (!isCatPttMethod(m_pttMethod))
+        return;
+
+    if (m_forceDtr) {
+        m_forceDtr = false;
+        emit forceDtrChanged();
+    }
+    if (m_dtrHigh) {
+        m_dtrHigh = false;
+        emit dtrHighChanged();
+    }
+    if (m_forceRts) {
+        m_forceRts = false;
+        emit forceRtsChanged();
+    }
+    if (m_rtsHigh) {
+        m_rtsHigh = false;
+        emit rtsHighChanged();
+    }
+}
+
+void DecodiumTransceiverManager::setForceDtr(bool v)
+{
+    bool const effective = isCatPttMethod(m_pttMethod) ? false : v;
+    if (m_forceDtr != effective) {
+        m_forceDtr = effective;
+        emit forceDtrChanged();
+    }
+    if (!m_forceDtr && m_dtrHigh) {
+        m_dtrHigh = false;
+        emit dtrHighChanged();
+    }
+}
+
+void DecodiumTransceiverManager::setDtrHigh(bool v)
+{
+    bool const effective = (isCatPttMethod(m_pttMethod) || !m_forceDtr) ? false : v;
+    if (m_dtrHigh != effective) {
+        m_dtrHigh = effective;
+        emit dtrHighChanged();
+    }
+}
+
+void DecodiumTransceiverManager::setForceRts(bool v)
+{
+    bool const effective = isCatPttMethod(m_pttMethod) ? false : v;
+    if (m_forceRts != effective) {
+        m_forceRts = effective;
+        emit forceRtsChanged();
+    }
+    if (!m_forceRts && m_rtsHigh) {
+        m_rtsHigh = false;
+        emit rtsHighChanged();
+    }
+}
+
+void DecodiumTransceiverManager::setRtsHigh(bool v)
+{
+    bool const effective = (isCatPttMethod(m_pttMethod) || !m_forceRts) ? false : v;
+    if (m_rtsHigh != effective) {
+        m_rtsHigh = effective;
+        emit rtsHighChanged();
+    }
+}
+
+void DecodiumTransceiverManager::setPttMethod(const QString& v)
+{
+    QString const normalized = v.trimmed().toUpper();
+    QString const effective = normalized.isEmpty() ? QStringLiteral("CAT") : normalized;
+    if (m_pttMethod != effective) {
+        m_pttMethod = effective;
+        emit pttMethodChanged();
+    }
+    enforceCatSerialDefaults();
 }
 
 // ── rigList ────────────────────────────────────────────────────────────────
@@ -188,6 +271,7 @@ static Transceiver::MODE parseMode(const QString& s)
 static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverManager* m)
 {
     TransceiverFactory::ParameterPack p;
+    bool const catPtt = isCatPttMethod(m->pttMethod());
     p.rig_name      = m->rigName();
     p.serial_port   = normalizeDevicePath(m->serialPort());
     p.network_port  = m->networkPort();
@@ -197,10 +281,10 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.data_bits     = parseData(m->dataBits());
     p.stop_bits     = parseStop(m->stopBits());
     p.handshake     = parseHandshake(m->handshake());
-    p.force_dtr     = m->forceDtr();
-    p.dtr_high      = m->dtrHigh();
-    p.force_rts     = m->forceRts();
-    p.rts_high      = m->rtsHigh();
+    p.force_dtr     = !catPtt && m->forceDtr();
+    p.dtr_high      = !catPtt && m->dtrHigh();
+    p.force_rts     = !catPtt && m->forceRts();
+    p.rts_high      = !catPtt && m->rtsHigh();
     p.ptt_type      = parsePtt(m->pttMethod());
     p.audio_source  = TransceiverFactory::TX_audio_source_front;
     p.split_mode    = parseSplit(m->splitMode());
@@ -453,6 +537,7 @@ void DecodiumTransceiverManager::refreshPorts()
 // ── Persistenza ───────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::saveSettings()
 {
+    bool const catPtt = isCatPttMethod(m_pttMethod);
     const QString serialPort = normalizeDevicePath(m_serialPort);
     const QString pttPort = m_pttPort.isEmpty() ? QStringLiteral("CAT") : normalizeDevicePath(m_pttPort);
 
@@ -464,13 +549,13 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("dataBits",     m_dataBits);
     s.setValue("stopBits",     m_stopBits);
     s.setValue("handshake",    m_handshake);
-    s.setValue("forceDtr",     m_forceDtr);
-    s.setValue("dtrHigh",      m_dtrHigh);
-    s.setValue("forceRts",     m_forceRts);
-    s.setValue("rtsHigh",      m_rtsHigh);
+    s.setValue("forceDtr",     catPtt ? false : m_forceDtr);
+    s.setValue("dtrHigh",      catPtt ? false : m_dtrHigh);
+    s.setValue("forceRts",     catPtt ? false : m_forceRts);
+    s.setValue("rtsHigh",      catPtt ? false : m_rtsHigh);
     s.setValue("networkPort",  m_networkPort);
     s.setValue("tciPort",      m_tciPort);
-    s.setValue("pttMethod",    m_pttMethod);
+    s.setValue("pttMethod",    catPtt ? QStringLiteral("CAT") : m_pttMethod);
     s.setValue("pttPort",      pttPort);
     s.setValue("splitMode",    m_splitMode);
     s.setValue("pollInterval", m_pollInterval);
@@ -495,12 +580,15 @@ void DecodiumTransceiverManager::loadSettings()
     m_rtsHigh      = get("rtsHigh",      m_rtsHigh).toBool();
     m_networkPort  = get("networkPort",  m_networkPort).toString();
     m_tciPort      = get("tciPort",      m_tciPort).toString();
-    m_pttMethod    = get("pttMethod",    m_pttMethod).toString();
+    m_pttMethod    = get("pttMethod",    m_pttMethod).toString().trimmed().toUpper();
+    if (m_pttMethod.isEmpty())
+        m_pttMethod = QStringLiteral("CAT");
     m_pttPort      = normalizeDevicePath(get("pttPort",      m_pttPort).toString());
     m_splitMode    = get("splitMode",    m_splitMode).toString();
     m_pollInterval = get("pollInterval", m_pollInterval).toInt();
     m_catAutoConnect = get("catAutoConnect", m_catAutoConnect).toBool();
     m_audioAutoStart = get("audioAutoStart", m_audioAutoStart).toBool();
+    enforceCatSerialDefaults();
     // setRigName DOPO gli altri per aggiornare portType correttamente
     QString rig = get("rigName", m_rigName).toString();
     s.endGroup();

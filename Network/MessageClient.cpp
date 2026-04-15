@@ -120,6 +120,75 @@ bool is_usable_multicast_interface (QNetworkInterface const& net_if)
   return !is_loopback && is_up && is_running && can_mcast;
 }
 
+QHostAddress select_preferred_udp_address (QString const& requested_name, QList<QHostAddress> const& addresses)
+{
+  if (addresses.isEmpty ())
+    {
+      return {};
+    }
+
+  QString const requested = requested_name.trimmed ();
+  QHostAddress literal;
+  bool const explicit_literal = literal.setAddress (requested);
+  bool const explicit_ipv6 = explicit_literal && literal.protocol () == QAbstractSocket::IPv6Protocol;
+  bool const prefer_loopback_v4 = !explicit_ipv6
+                                  && 0 == requested.compare (QStringLiteral ("localhost"), Qt::CaseInsensitive);
+
+  auto const first_matching = [&] (QAbstractSocket::NetworkLayerProtocol protocol, bool loopback_only) {
+    for (auto const& address : addresses)
+      {
+        if (address.protocol () != protocol)
+          {
+            continue;
+          }
+        if (loopback_only && !address.isLoopback ())
+          {
+            continue;
+          }
+        return address;
+      }
+    return QHostAddress {};
+  };
+
+  if (prefer_loopback_v4)
+    {
+      auto const loopback_v4 = first_matching (QAbstractSocket::IPv4Protocol, true);
+      if (!loopback_v4.isNull ())
+        {
+          return loopback_v4;
+        }
+    }
+
+  if (!explicit_ipv6)
+    {
+      auto const any_v4 = first_matching (QAbstractSocket::IPv4Protocol, false);
+      if (!any_v4.isNull ())
+        {
+          return any_v4;
+        }
+    }
+
+  if (explicit_ipv6)
+    {
+      auto const any_v6 = first_matching (QAbstractSocket::IPv6Protocol, false);
+      if (!any_v6.isNull ())
+        {
+          return any_v6;
+        }
+    }
+
+  if (!explicit_ipv6)
+    {
+      auto const any_v6 = first_matching (QAbstractSocket::IPv6Protocol, false);
+      if (!any_v6.isNull ())
+        {
+          return any_v6;
+        }
+    }
+
+  return addresses.constFirst ();
+}
+
 }
 
 class MessageClient::impl
@@ -266,7 +335,7 @@ void MessageClient::impl::host_info_results (QHostInfo host_info)
       auto const& server_addresses = host_info.addresses ();
       if (server_addresses.size ())
         {
-          server_ = server_addresses[0];
+          server_ = select_preferred_udp_address (host_info.hostName (), server_addresses);
         }
     }
   rebuild_trusted_senders ();

@@ -139,6 +139,125 @@ namespace
       });
     effect->play ();
   }
+
+  QHostAddress select_preferred_udp_address (QString const& requested_name, QList<QHostAddress> const& addresses)
+  {
+    if (addresses.isEmpty ())
+      {
+        return {};
+      }
+
+    QString const requested = requested_name.trimmed ();
+    QHostAddress literal;
+    bool const explicit_literal = literal.setAddress (requested);
+    bool const explicit_ipv6 = explicit_literal && literal.protocol () == QAbstractSocket::IPv6Protocol;
+    bool const prefer_loopback_v4 = !explicit_ipv6
+                                    && 0 == requested.compare (QStringLiteral ("localhost"), Qt::CaseInsensitive);
+
+    auto const first_matching = [&] (QAbstractSocket::NetworkLayerProtocol protocol, bool loopback_only) {
+      for (auto const& address : addresses)
+        {
+          if (address.protocol () != protocol)
+            {
+              continue;
+            }
+          if (loopback_only && !address.isLoopback ())
+            {
+              continue;
+            }
+          return address;
+        }
+      return QHostAddress {};
+    };
+
+    if (prefer_loopback_v4)
+      {
+        auto const loopback_v4 = first_matching (QAbstractSocket::IPv4Protocol, true);
+        if (!loopback_v4.isNull ())
+          {
+            return loopback_v4;
+          }
+      }
+
+    if (!explicit_ipv6)
+      {
+        auto const any_v4 = first_matching (QAbstractSocket::IPv4Protocol, false);
+        if (!any_v4.isNull ())
+          {
+            return any_v4;
+          }
+      }
+
+    if (explicit_ipv6)
+      {
+        auto const any_v6 = first_matching (QAbstractSocket::IPv6Protocol, false);
+        if (!any_v6.isNull ())
+          {
+            return any_v6;
+          }
+      }
+
+    if (!explicit_ipv6)
+      {
+        auto const any_v6 = first_matching (QAbstractSocket::IPv6Protocol, false);
+        if (!any_v6.isNull ())
+          {
+            return any_v6;
+          }
+      }
+
+    return addresses.constFirst ();
+  }
+
+  bool resolve_udp_target (QString const& requested_name, QHostAddress * address, QString * error = nullptr)
+  {
+    if (address)
+      {
+        *address = {};
+      }
+    if (error)
+      {
+        error->clear ();
+      }
+
+    QString const requested = requested_name.trimmed ();
+    if (requested.isEmpty ())
+      {
+        if (error)
+          {
+            *error = QStringLiteral ("Empty host name");
+          }
+        return false;
+      }
+
+    QHostAddress literal;
+    if (literal.setAddress (requested))
+      {
+        if (address)
+          {
+            *address = literal;
+          }
+        return true;
+      }
+
+    auto const info = QHostInfo::fromName (requested);
+    if (QHostInfo::NoError != info.error () || info.addresses ().isEmpty ())
+      {
+        if (error)
+          {
+            *error = info.errorString ().isEmpty ()
+                     ? QStringLiteral ("Host not found")
+                     : info.errorString ();
+          }
+        return false;
+      }
+
+    if (address)
+      {
+        *address = select_preferred_udp_address (requested, info.addresses ());
+      }
+    return address ? !address->isNull () : true;
+  }
 }
 #include "PlotLegacyHelpers.hpp"
 #include "otpgenerator.h"
@@ -2546,7 +2665,15 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
           // Log to N1MM Logger
           if (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ()) {
             QUdpSocket sock;
-            if (-1 == sock.writeDatagram (check.toUtf8() + " <eor>", QHostAddress {m_config.n1mm_server_name ()}, m_config.n1mm_server_port ())) {
+            QHostAddress target;
+            QString resolve_error;
+            if (!resolve_udp_target (m_config.n1mm_server_name (), &target, &resolve_error))
+              {
+                MessageBox::warning_message (this, tr ("Error sending log to N1MM"),
+                                             tr ("Unable to resolve \"%1\": %2")
+                                               .arg (m_config.n1mm_server_name (), resolve_error));
+              }
+            else if (-1 == sock.writeDatagram (check.toUtf8() + " <eor>", target, m_config.n1mm_server_port ())) {
               MessageBox::warning_message (this, tr ("Error sending log to N1MM"), tr ("Write returned \"%1\"").arg (sock.errorString ()));
             }
           }
@@ -3960,6 +4087,13 @@ void MainWindow::legacyClearBandActivity()
   }
 }
 
+void MainWindow::legacyClearRxFrequency()
+{
+  if (ui && ui->decodedTextBrowser2) {
+    ui->decodedTextBrowser2->erase ();
+  }
+}
+
 void MainWindow::legacySetMode(QString const& mode)
 {
   if (mode != m_mode || mode != "FT2")
@@ -4321,6 +4455,15 @@ void MainWindow::legacyGenerateStandardMessages()
 
 void MainWindow::legacyStartTune(bool enabled)
 {
+  if (!enabled) {
+    if (m_tune) {
+      stop_tuning();
+    } else if (ui && ui->tuneButton) {
+      ui->tuneButton->setChecked(false);
+    }
+    return;
+  }
+
   if (ui && ui->tuneButton) {
     ui->tuneButton->setChecked(enabled);
   }
@@ -8935,6 +9078,11 @@ void MainWindow::closeEvent(QCloseEvent * e)
     e->ignore();
     return;
   }
+
+  if (qApp)
+    {
+      qApp->setProperty ("decodiumShuttingDown", true);
+    }
 
   m_valid = false;              // suppresses subprocess errors
   m_dataSinkShuttingDown = true;
@@ -19531,8 +19679,16 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
     if (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ())
       {
         QUdpSocket sock;
-        if (-1 == sock.writeDatagram (ADIF + " <eor>"
-                                      , QHostAddress {m_config.n1mm_server_name ()}
+        QHostAddress target;
+        QString resolve_error;
+        if (!resolve_udp_target (m_config.n1mm_server_name (), &target, &resolve_error))
+          {
+            MessageBox::warning_message (this, tr ("Error sending log to N1MM"),
+                                         tr ("Unable to resolve \"%1\": %2")
+                                           .arg (m_config.n1mm_server_name (), resolve_error));
+          }
+        else if (-1 == sock.writeDatagram (ADIF + " <eor>"
+                                      , target
                                       , m_config.n1mm_server_port ()))
           {
             MessageBox::warning_message (this, tr ("Error sending log to N1MM"),

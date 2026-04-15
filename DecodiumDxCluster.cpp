@@ -6,9 +6,16 @@
 #include <QSettings>
 #include <QTimer>
 #include <QDebug>
+#include <QUrl>
 
 namespace
 {
+QString const kPrimaryClusterHost {QStringLiteral("dx.iz7auh.net")};
+int const kPrimaryClusterPort = 8000;
+QString const kSecondaryClusterHost {QStringLiteral("iq8do.aricaserta.it")};
+int const kSecondaryClusterPort = 7300;
+int const kConnectTimeoutMs = 8000;
+
 void beginConfiguredSettingsGroup(QSettings& settings)
 {
     auto const* app = QCoreApplication::instance();
@@ -38,6 +45,93 @@ QString socketErrorMessage(QAbstractSocket::SocketError error, const QString& fa
         return fallback;
     }
 }
+
+QString normalizeClusterHost(QString host, int* portFromHost = nullptr)
+{
+    if (portFromHost) {
+        *portFromHost = 0;
+    }
+
+    host = host.trimmed();
+    if (host.isEmpty()) {
+        return {};
+    }
+
+    QString probe = host;
+    probe.remove(QRegularExpression(QStringLiteral("\\s+")));
+    if (!probe.contains(QStringLiteral("://"))) {
+        probe.prepend(QStringLiteral("telnet://"));
+    }
+
+    QUrl const url = QUrl::fromUserInput(probe);
+    if (url.isValid() && !url.host().isEmpty()) {
+        if (portFromHost && url.port() > 0) {
+            *portFromHost = url.port();
+        }
+        host = url.host().trimmed();
+    } else {
+        int slashPos = host.indexOf(QLatin1Char('/'));
+        if (slashPos >= 0) {
+            host = host.left(slashPos);
+        }
+
+        int const colonPos = host.lastIndexOf(QLatin1Char(':'));
+        if (colonPos > 0 && host.indexOf(QLatin1Char(':')) == colonPos) {
+            bool ok = false;
+            int const parsedPort = host.mid(colonPos + 1).toInt(&ok);
+            if (ok && portFromHost) {
+                *portFromHost = parsedPort;
+            }
+            if (ok) {
+                host = host.left(colonPos);
+            }
+        }
+    }
+
+    host = host.trimmed();
+    if (host.startsWith(QLatin1Char('[')) && host.endsWith(QLatin1Char(']')) && host.size() > 2) {
+        host = host.mid(1, host.size() - 2);
+    }
+    while (host.endsWith(QLatin1Char('.'))) {
+        host.chop(1);
+    }
+    return host;
+}
+
+bool isDeprecatedClusterEndpoint(const QString& host, int port)
+{
+    return (host.compare(QStringLiteral("www.hamqth.com"), Qt::CaseInsensitive) == 0 && port == 443)
+        || (host.compare(QStringLiteral("ik5pwj-6.dyndns.org"), Qt::CaseInsensitive) == 0 && port == 8000)
+        || (host.compare(QStringLiteral("dxc.sv5fri.eu"), Qt::CaseInsensitive) == 0 && port == 7300);
+}
+
+bool bufferContainsClusterPrompt(const QString& buffer)
+{
+    QString const text = buffer.simplified();
+    QString const lower = text.toLower();
+    return lower.contains(QStringLiteral("login:"))
+        || lower.contains(QStringLiteral("call:"))
+        || lower.contains(QStringLiteral("callsign"))
+        || lower.contains(QStringLiteral("enter your"))
+        || lower.contains(QStringLiteral("please enter"))
+        || text.endsWith(QLatin1Char(':'))
+        || text.endsWith(QLatin1Char('>'))
+        || (lower.contains(QStringLiteral(" de ")) && text.endsWith(QLatin1Char('>')));
+}
+
+void appendUniqueEndpoint(QList<QPair<QString, int>>& endpoints, const QString& host, int port)
+{
+    QString const normalizedHost = normalizeClusterHost(host);
+    int const normalizedPort = qBound(1, port, 65535);
+    if (normalizedHost.isEmpty()) {
+        return;
+    }
+
+    QPair<QString, int> const endpoint {normalizedHost, normalizedPort};
+    if (!endpoints.contains(endpoint)) {
+        endpoints.append(endpoint);
+    }
+}
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +157,137 @@ DecodiumDxCluster::~DecodiumDxCluster()
     }
 }
 
+void DecodiumDxCluster::ensureSocket()
+{
+    if (!m_socket) {
+        m_socket = new QTcpSocket(this);
+        connect(m_socket, &QTcpSocket::connected,
+                this,     &DecodiumDxCluster::onConnected);
+        connect(m_socket, &QTcpSocket::disconnected,
+                this,     &DecodiumDxCluster::onDisconnected);
+        connect(m_socket, &QTcpSocket::readyRead,
+                this,     &DecodiumDxCluster::onReadyRead);
+        connect(m_socket, &QAbstractSocket::errorOccurred,
+                this,     &DecodiumDxCluster::onError);
+    }
+
+    if (!m_connectTimeoutTimer) {
+        m_connectTimeoutTimer = new QTimer(this);
+        m_connectTimeoutTimer->setSingleShot(true);
+        connect(m_connectTimeoutTimer, &QTimer::timeout, this, [this]() {
+            if (!m_connectSequenceActive || !m_socket
+                || m_socket->state() != QAbstractSocket::ConnectingState) {
+                return;
+            }
+
+            m_ignoreNextSocketError = true;
+            QString const reason = tr("Timeout di connessione");
+            m_socket->abort();
+            if (!tryNextConnectionCandidate(reason)) {
+                setLastStatus(tr("Errore: %1").arg(reason));
+                emit errorOccurred(tr("DX Cluster non raggiungibile: %1").arg(reason));
+            }
+        });
+    }
+}
+
+void DecodiumDxCluster::sendLogin()
+{
+    if (!m_socket || m_loginSent || m_callsign.trimmed().isEmpty()) {
+        return;
+    }
+
+    QString const login = m_callsign.trimmed().toUpper();
+    m_socket->write((login + QStringLiteral("\r\n")).toUtf8());
+    m_loginSent = true;
+    setLastStatus(tr("Login inviato come %1").arg(login));
+    emit statusUpdate(tr("Login sent (%1).").arg(login));
+}
+
+QString DecodiumDxCluster::endpointLabel(const QString& host, int port) const
+{
+    return QStringLiteral("%1:%2").arg(host, QString::number(port));
+}
+
+QList<QPair<QString, int>> DecodiumDxCluster::buildConnectionCandidates(const QString& host, int port) const
+{
+    QList<QPair<QString, int>> endpoints;
+
+    QString const normalizedHost = normalizeClusterHost(host);
+    int const normalizedPort = qBound(1, port, 65535);
+
+    auto appendCommonPorts = [&endpoints](const QString& endpointHost, int preferredPort) {
+        appendUniqueEndpoint(endpoints, endpointHost, preferredPort);
+        if (preferredPort != 8000) {
+            appendUniqueEndpoint(endpoints, endpointHost, 8000);
+        }
+        if (preferredPort != 7300) {
+            appendUniqueEndpoint(endpoints, endpointHost, 7300);
+        }
+    };
+
+    if (!normalizedHost.isEmpty() && !isDeprecatedClusterEndpoint(normalizedHost, normalizedPort)) {
+        bool const knownNode = normalizedHost.compare(kPrimaryClusterHost, Qt::CaseInsensitive) == 0
+            || normalizedHost.compare(kSecondaryClusterHost, Qt::CaseInsensitive) == 0;
+        if (knownNode) {
+            appendCommonPorts(normalizedHost, normalizedPort);
+        } else {
+            appendUniqueEndpoint(endpoints, normalizedHost, normalizedPort);
+        }
+    }
+
+    appendCommonPorts(kPrimaryClusterHost, kPrimaryClusterPort);
+    appendCommonPorts(kSecondaryClusterHost, kSecondaryClusterPort);
+
+    return endpoints;
+}
+
+bool DecodiumDxCluster::tryNextConnectionCandidate(const QString& failureReason)
+{
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->stop();
+    }
+
+    if (!m_connectSequenceActive) {
+        return false;
+    }
+
+    if (m_connectionCandidateIndex >= 0
+        && m_connectionCandidateIndex < m_connectionCandidates.size()) {
+        emit statusUpdate(tr("Connection to %1 failed: %2")
+                              .arg(endpointLabel(m_activeHost, m_activePort), failureReason));
+    }
+
+    ++m_connectionCandidateIndex;
+    if (m_connectionCandidateIndex >= m_connectionCandidates.size()) {
+        m_connectSequenceActive = false;
+        m_activeHost.clear();
+        m_activePort = 0;
+        return false;
+    }
+
+    ensureSocket();
+
+    auto const& endpoint = m_connectionCandidates.at(m_connectionCandidateIndex);
+    m_activeHost = endpoint.first;
+    m_activePort = endpoint.second;
+    m_loginSent = false;
+    m_rxBuf.clear();
+    m_ignoreNextSocketError = false;
+
+    if (m_socket->state() != QAbstractSocket::UnconnectedState) {
+        m_socket->abort();
+    }
+
+    setLastStatus(tr("Connessione a %1 in corso…").arg(endpointLabel(m_activeHost, m_activePort)));
+    emit statusUpdate(tr("Connecting to %1 …").arg(endpointLabel(m_activeHost, m_activePort)));
+    m_socket->connectToHost(m_activeHost, static_cast<quint16>(m_activePort));
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->start(kConnectTimeoutMs);
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Public slots
 // ---------------------------------------------------------------------------
@@ -81,42 +306,62 @@ void DecodiumDxCluster::connectCluster()
         return;
     }
 
-    if (!m_socket) {
-        m_socket = new QTcpSocket(this);
-        connect(m_socket, &QTcpSocket::connected,
-                this,     &DecodiumDxCluster::onConnected);
-        connect(m_socket, &QTcpSocket::disconnected,
-                this,     &DecodiumDxCluster::onDisconnected);
-        connect(m_socket, &QTcpSocket::readyRead,
-                this,     &DecodiumDxCluster::onReadyRead);
-        connect(m_socket, &QAbstractSocket::errorOccurred,
-                this,     &DecodiumDxCluster::onError);
+    ensureSocket();
+
+    int portFromHost = 0;
+    QString normalizedHost = normalizeClusterHost(m_host, &portFromHost);
+    int normalizedPort = portFromHost > 0 ? portFromHost : m_port;
+    normalizedPort = qBound(1, normalizedPort > 0 ? normalizedPort : kPrimaryClusterPort, 65535);
+
+    if (isDeprecatedClusterEndpoint(normalizedHost, normalizedPort)) {
+        normalizedHost = kPrimaryClusterHost;
+        normalizedPort = kPrimaryClusterPort;
+        emit statusUpdate(tr("Configured cluster endpoint is legacy/read-only. Using %1 instead.")
+                              .arg(endpointLabel(normalizedHost, normalizedPort)));
     }
 
-    m_loginSent = false;
-    m_rxBuf.clear();
+    if (normalizedHost.isEmpty()) {
+        normalizedHost = kPrimaryClusterHost;
+    }
 
-    setLastStatus(tr("Connessione a %1:%2 in corso…").arg(m_host).arg(m_port));
-    emit statusUpdate(tr("Connecting to %1:%2 …").arg(m_host).arg(m_port));
-    m_socket->connectToHost(m_host, static_cast<quint16>(m_port));
+    bool settingsChanged = false;
+    if (m_host.compare(normalizedHost, Qt::CaseInsensitive) != 0) {
+        m_host = normalizedHost;
+        emit hostChanged();
+        settingsChanged = true;
+    }
+    if (m_port != normalizedPort) {
+        m_port = normalizedPort;
+        emit portChanged();
+        settingsChanged = true;
+    }
+    if (settingsChanged) {
+        saveSettings();
+    }
 
-    // Async; onConnected() or onError() will fire via the event loop.
-    // The socket internally applies a connection timeout (default ~30 s on
-    // Windows). We request an explicit 10-second abort via a single-shot timer.
-    QTimer::singleShot(10000, this, [this]() {
-        if (m_socket &&
-            m_socket->state() == QAbstractSocket::ConnectingState) {
-            m_socket->abort();
-            setLastStatus(tr("Timeout su %1:%2").arg(m_host).arg(m_port));
-            emit errorOccurred(tr("Connection to %1:%2 timed out.").arg(m_host).arg(m_port));
-        }
-    });
+    m_manualDisconnect = false;
+    m_connected = false;
+    emit connectedChanged();
+    m_connectionCandidates = buildConnectionCandidates(m_host, m_port);
+    m_connectionCandidateIndex = -1;
+    m_connectSequenceActive = true;
+    if (!tryNextConnectionCandidate(tr("Nessun motivo specificato"))) {
+        m_connectSequenceActive = false;
+        setLastStatus(tr("Errore: nessun endpoint DX Cluster valido"));
+        emit errorOccurred(tr("DX Cluster configuration is invalid."));
+    }
 }
 
 void DecodiumDxCluster::disconnectCluster()
 {
     if (!m_socket || m_socket->state() == QAbstractSocket::UnconnectedState) {
         return;
+    }
+
+    m_manualDisconnect = true;
+    m_connectSequenceActive = false;
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->stop();
     }
 
     // Politely say goodbye first (best-effort, non-blocking).
@@ -151,18 +396,40 @@ void DecodiumDxCluster::clearSpots()
 
 void DecodiumDxCluster::onConnected()
 {
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->stop();
+    }
+    m_connectSequenceActive = false;
     m_connected = true;
     emit connectedChanged();
-    setLastStatus(tr("Connesso a %1:%2, attendo il prompt di login…").arg(m_host).arg(m_port));
-    emit statusUpdate(tr("Connected to %1:%2. Waiting for login prompt…").arg(m_host).arg(m_port));
+    setLastStatus(tr("Connesso a %1, attendo il prompt di login…")
+                      .arg(endpointLabel(m_activeHost, m_activePort)));
+    emit statusUpdate(tr("Connected to %1. Waiting for login prompt…")
+                          .arg(endpointLabel(m_activeHost, m_activePort)));
 }
 
 void DecodiumDxCluster::onDisconnected()
 {
-    m_connected  = false;
-    m_loginSent  = false;
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->stop();
+    }
+
+    bool const wasConnected = m_connected;
+    m_connected = false;
+    m_loginSent = false;
     m_rxBuf.clear();
-    emit connectedChanged();
+    if (wasConnected) {
+        emit connectedChanged();
+    }
+
+    if (m_connectSequenceActive) {
+        return;
+    }
+
+    if (m_manualDisconnect) {
+        m_manualDisconnect = false;
+    }
+
     setLastStatus(tr("Disconnesso"));
     emit statusUpdate(tr("Disconnected from DX cluster."));
 }
@@ -173,6 +440,10 @@ void DecodiumDxCluster::onReadyRead()
 
     // Append all available bytes to the receive buffer.
     m_rxBuf += QString::fromUtf8(m_socket->readAll());
+
+    if (!m_loginSent && bufferContainsClusterPrompt(m_rxBuf)) {
+        sendLogin();
+    }
 
     // Process every complete line (terminated by \n).
     // We handle both \r\n and bare \n.
@@ -198,15 +469,31 @@ void DecodiumDxCluster::onReadyRead()
 
 void DecodiumDxCluster::onError(QAbstractSocket::SocketError socketError)
 {
+    if (m_ignoreNextSocketError) {
+        m_ignoreNextSocketError = false;
+        return;
+    }
+
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->stop();
+    }
+
     const QString fallback = m_socket ? m_socket->errorString() : tr("Unknown socket error");
     const QString msg = socketErrorMessage(socketError, fallback);
-    setLastStatus(tr("Errore: %1").arg(msg));
-    emit errorOccurred(tr("Socket error: %1").arg(msg));
 
-    // Reset state; the socket stays alive so the user can retry.
+    if (m_connectSequenceActive && !m_connected && tryNextConnectionCandidate(msg)) {
+        return;
+    }
+
+    bool const wasConnected = m_connected;
+    m_connectSequenceActive = false;
     m_connected = false;
     m_loginSent = false;
-    emit connectedChanged();
+    if (wasConnected) {
+        emit connectedChanged();
+    }
+    setLastStatus(tr("Errore: %1").arg(msg));
+    emit errorOccurred(tr("Socket error: %1").arg(msg));
 }
 
 // ---------------------------------------------------------------------------
@@ -223,12 +510,7 @@ void DecodiumDxCluster::processLine(const QString& line)
         if (lower.contains("login")   ||
             lower.contains("call")    ||
             lower.contains("please")) {
-
-            QString loginLine = m_callsign.trimmed() + "\r\n";
-            m_socket->write(loginLine.toUtf8());
-            m_loginSent = true;
-            setLastStatus(tr("Login inviato come %1").arg(m_callsign.trimmed()));
-            emit statusUpdate(tr("Login sent (%1).").arg(m_callsign.trimmed()));
+            sendLogin();
             return;
         }
     }
@@ -339,6 +621,11 @@ void DecodiumDxCluster::saveSettings()
     s.setValue("port",     m_port);
     s.setValue("callsign", m_callsign);
     s.endGroup();
+    s.setValue("DXClusterHost", m_host);
+    s.setValue("DXClusterPort", m_port);
+    if (!m_callsign.trimmed().isEmpty()) {
+        s.setValue("DXClusterViewLogin", m_callsign.trimmed().toUpper());
+    }
     s.sync();
 }
 
@@ -346,11 +633,55 @@ void DecodiumDxCluster::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
     beginConfiguredSettingsGroup(s);
+    QString loadedHost;
+    int loadedPort = 0;
+    QString loadedCallsign;
+
     s.beginGroup("DXCluster");
-    if (s.contains("host"))     setHost(s.value("host").toString());
-    if (s.contains("port"))     setPort(s.value("port").toInt());
-    if (s.contains("callsign")) setCallsign(s.value("callsign").toString());
+    if (s.contains("host")) {
+        loadedHost = s.value("host").toString().trimmed();
+    }
+    if (s.contains("port")) {
+        loadedPort = s.value("port").toInt();
+    }
+    if (s.contains("callsign")) {
+        loadedCallsign = s.value("callsign").toString().trimmed();
+    }
     s.endGroup();
+
+    if (loadedHost.isEmpty()) {
+        loadedHost = s.value("DXClusterHost").toString().trimmed();
+    }
+    if (loadedPort <= 0) {
+        loadedPort = s.value("DXClusterPort", kPrimaryClusterPort).toInt();
+    }
+    if (loadedCallsign.isEmpty()) {
+        loadedCallsign = s.value("DXClusterViewLogin").toString().trimmed();
+    }
+    if (loadedCallsign.isEmpty()) {
+        loadedCallsign = s.value("MyCall").toString().trimmed();
+    }
+
+    int portFromHost = 0;
+    loadedHost = normalizeClusterHost(loadedHost, &portFromHost);
+    if (portFromHost > 0) {
+        loadedPort = portFromHost;
+    }
+    if (loadedHost.isEmpty()) {
+        loadedHost = kPrimaryClusterHost;
+    }
+    loadedPort = qBound(1, loadedPort > 0 ? loadedPort : kPrimaryClusterPort, 65535);
+
+    if (isDeprecatedClusterEndpoint(loadedHost, loadedPort)) {
+        loadedHost = kPrimaryClusterHost;
+        loadedPort = kPrimaryClusterPort;
+    }
+
+    setHost(loadedHost);
+    setPort(loadedPort);
+    if (!loadedCallsign.isEmpty()) {
+        setCallsign(loadedCallsign.trimmed().toUpper());
+    }
 }
 
 void DecodiumDxCluster::setLastStatus(const QString& msg)

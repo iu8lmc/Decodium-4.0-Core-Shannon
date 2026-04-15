@@ -685,6 +685,13 @@ void DecodiumLegacyBackend::clearBandActivity()
     }
 }
 
+void DecodiumLegacyBackend::clearRxFrequency()
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyClearRxFrequency();
+    }
+}
+
 void DecodiumLegacyBackend::setWaterfallPalette(const QString& palette)
 {
     if (m_mainWindow) {

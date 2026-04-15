@@ -52,7 +52,7 @@ Item {
 
             text: message
             readOnly: !isEditable
-            font.family: "Consolas"
+            font.family: "Monospace"
             font.pixelSize: 11
             color: textColor
             selectByMouse: true

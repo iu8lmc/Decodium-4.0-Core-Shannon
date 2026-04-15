@@ -130,6 +130,11 @@ int main(int argc, char *argv[])
   auto const env = QProcessEnvironment::systemEnvironment ();
 
   ExceptionCatchingApplication a(argc, argv);
+  QObject::connect(&a, &QCoreApplication::aboutToQuit, []() {
+    if (auto *instance = QCoreApplication::instance()) {
+      instance->setProperty("decodiumShuttingDown", true);
+    }
+  });
   QApplication::setStyle(QStyleFactory::create("Fusion"));
   try
     {

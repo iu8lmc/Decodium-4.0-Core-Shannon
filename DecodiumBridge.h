@@ -40,6 +40,7 @@ class DecodiumAudioSink;
 class Modulator;
 class QAudioSink;
 class QBuffer;
+class NtpClient;
 namespace decodium {
   namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
   namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; }
@@ -268,10 +269,12 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString driftSeverity            READ driftSeverity            NOTIFY soundcardDriftChanged)
 
     // === A3 — TIME SYNC ===
+    Q_PROPERTY(bool   ntpEnabled     READ ntpEnabled     NOTIFY ntpEnabledChanged)
     Q_PROPERTY(double ntpOffsetMs    READ ntpOffsetMs    NOTIFY ntpOffsetMsChanged)
     Q_PROPERTY(bool   ntpSynced      READ ntpSynced      NOTIFY ntpSyncedChanged)
     Q_PROPERTY(double avgDt          READ avgDt          NOTIFY avgDtChanged)
     Q_PROPERTY(double decodeLatencyMs READ decodeLatencyMs NOTIFY decodeLatencyMsChanged)
+    Q_PROPERTY(int    timeSyncSampleCount READ timeSyncSampleCount NOTIFY timeSyncSampleCountChanged)
 
     // === A4 — FOX/HOUND MODE ===
     Q_PROPERTY(bool        foxMode        READ foxMode        WRITE setFoxMode        NOTIFY foxModeChanged)
@@ -482,8 +485,8 @@ public:
     void    setAlertOnCq(bool v)    { if (m_alertOnCq!=v){m_alertOnCq=v;emit alertOnCqChanged();} }
     bool    alertOnMyCall()  const { return m_alertOnMyCall; }
     void    setAlertOnMyCall(bool v){ if (m_alertOnMyCall!=v){m_alertOnMyCall=v;emit alertOnMyCallChanged();} }
-    bool    recordRxEnabled()const { return m_recordRxEnabled; }
-    void    setRecordRxEnabled(bool v){ if (m_recordRxEnabled!=v){m_recordRxEnabled=v;emit recordRxEnabledChanged();} }
+    bool    recordRxEnabled()const;
+    void    setRecordRxEnabled(bool v);
     bool    recordTxEnabled()const { return m_recordTxEnabled; }
     void    setRecordTxEnabled(bool v){ if (m_recordTxEnabled!=v){m_recordTxEnabled=v;emit recordTxEnabledChanged();} }
     QString stationName() const { return m_stationName; }
@@ -569,10 +572,12 @@ public:
     }
 
     // A3 — Time Sync
+    bool   ntpEnabled()      const { return m_ntpEnabled; }
     double ntpOffsetMs()     const { return m_ntpOffsetMs; }
     bool   ntpSynced()       const { return m_ntpSynced; }
     double avgDt()           const { return m_avgDt; }
     double decodeLatencyMs() const { return m_decodeLatencyMs; }
+    int    timeSyncSampleCount() const { return m_dtLastSampleCount; }
 
     // A4 — Fox/Hound
     bool        foxMode()        const { return m_foxMode; }
@@ -613,8 +618,10 @@ public slots:
     Q_INVOKABLE void refreshAudioDevices();
     Q_INVOKABLE void setTxAudioFreqFromClick(int f) { setTxFrequency(f); }
     Q_INVOKABLE void setRxAudioFreqFromClick(int f) { setRxFrequency(f); }
+    Q_INVOKABLE QVariantMap worldClockSnapshot(const QString& timeZoneId) const;
 
     // DX Cluster
+    Q_INVOKABLE void connectDxCluster();
     Q_INVOKABLE void connectDxCluster(const QString& host, int port);
     Q_INVOKABLE void disconnectDxCluster();
     bool dxClusterConnected() const { return m_dxCluster && m_dxCluster->connected(); }
@@ -638,6 +645,7 @@ public slots:
     // CAT
     Q_INVOKABLE void openSetupSettings(int tabIndex = -1);
     Q_INVOKABLE void openTimeSyncSettings();
+    Q_INVOKABLE void syncNtpNow();
     Q_INVOKABLE void openCatSettings();
     Q_INVOKABLE void retryRigConnection();
 
@@ -695,6 +703,10 @@ public slots:
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE int remoteWebSocketPort() const;
+    Q_INVOKABLE QStringList networkInterfaceNames() const;
+    Q_INVOKABLE QString udpInterfaceName() const;
+    Q_INVOKABLE void setUdpInterfaceName(const QString& name);
     Q_INVOKABLE QVariantMap loadWindowState(const QString& key) const;
     Q_INVOKABLE void saveWindowState(const QString& key,
                                      int x,
@@ -846,10 +858,12 @@ signals:
     // A2 — Soundcard drift
     void soundcardDriftChanged();
     // A3 — Time sync
+    void ntpEnabledChanged();
     void ntpOffsetMsChanged();
     void ntpSyncedChanged();
     void avgDtChanged();
     void decodeLatencyMsChanged();
+    void timeSyncSampleCountChanged();
     // A4 — Fox/Hound
     void foxModeChanged();
     void houndModeChanged();
@@ -933,7 +947,19 @@ private slots:
     void processNextInQueue();   // mainwindow processNextInQueue: auto-handoff al prossimo caller
 
 private:
+    bool isTimeSyncDecodeMode(const QString& mode) const;
+    void applyNtpSettings();
+    void configureNtpClientForMode(const QString& mode);
+    void resetStartupTransientQsoState();
+    void purgePersistentTransientQsoState();
+    void resetTimeSyncDecodeMetrics();
+    void finalizeTimeSyncDecodeCycle(quint64 serial, const QString& decodeMode,
+                                     const QVector<double>& dtSamples);
+    bool shouldTrackDtSample(int snr, double dtValue, const QString& message,
+                             const QString& decodeMode) const;
     QString autoCqBandKeyForFrequency(double freqHz) const;
+    QString startupModeForFrequency(double dialFrequency) const;
+    void maybeApplyStartupModeFromRigFrequency(double dialFrequency);
     QString effectiveAdifLogPath() const;
     QString ensureAdifLogPath();
     bool isRecentAutoCqDuplicate(const QString& call,
@@ -942,6 +968,7 @@ private:
     void rememberRecentAutoCqAbandoned(const QString& call, double freqHz, const QString& mode);
     void rememberRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
     void removeCallerFromQueue(const QString& call);
+    QString inferredPartnerForAutolog() const;
     void capturePendingAutoLogSnapshot();
     void clearPendingAutoLogSnapshot();
     void armLateAutoLogSnapshot();
@@ -957,6 +984,12 @@ private:
     QString m_grid {"JN70"};
     double m_frequency {14074000.0};
     QString m_mode {"FT2"};
+    bool m_startupModeAutoPending {true};
+    qint64 m_startupModeAutoUntilMs {0};
+    bool m_preserveFrequencyOnModeChange {false};
+    bool m_shuttingDown {false};
+    bool m_lastSuccessfulCatConnected {false};
+    QString m_lastSuccessfulCatBackend;
     bool m_monitoring {false};
     bool m_transmitting {false};
     bool m_tuning {false};
@@ -1100,6 +1133,11 @@ private:
     int  m_lastCqPidx       {-1};  // period index dell'ultimo CQ inviato (evita CQ consecutivi)
     QString m_lastAutoSeqKey;      // deduplicazione autoSequenceStep
     qint64  m_lastAutoSeqMs {0};   // timestamp ultima deduplicazione
+    QString m_lastTransmittedMessage;
+    QDateTime m_qsoStartedOn;
+    bool    m_logAfterOwn73 {false};
+    bool    m_ft2DeferredLogPending {false};
+    bool    m_quickPeerSignaled {false};
     bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
     int  m_maxCallerRetries {3};   // max tentativi TX per step prima di fermarsi
     int  m_autoCqMaxCycles  {0};   // 0 = infinito, >0 = max cicli CQ
@@ -1186,11 +1224,19 @@ private:
     QElapsedTimer m_driftClock;
 
     // A3 — Time sync state
+    NtpClient* m_ntpClient      {nullptr};
+    bool   m_ntpEnabled         {false};
+    QString m_ntpCustomServer;
     double m_ntpOffsetMs    {0.0};
     bool   m_ntpSynced      {false};
     double m_avgDt          {0.0};
     double m_decodeLatencyMs{0.0};
-    QElapsedTimer m_decodeElapsed;  // started when decode begins
+    QHash<quint64, qint64> m_decodeStartMsBySerial;
+    QHash<quint64, QString> m_decodeModeBySerial;
+    int    m_dtMinSamples   {3};
+    int    m_dtLastSampleCount {0};
+    int    m_totalDecodesForDt {0};
+    double m_dtSmoothFactor {0.5};
 
     // A4 — Fox/Hound
     bool        m_foxMode   {false};
@@ -1261,9 +1307,15 @@ private:
     void syncLegacyBackendDialogState();
     void syncLegacyBackendTxState();
     void syncLegacyBackendState();
+    void scheduleLegacyStateRefreshBurst();
+    void migrateActiveMonitoringToLegacyBackend();
+    void teardownAudioCapture();
     void reloadBridgeSettingsFromPersistentStore();
     void syncLegacyBackendDecodeList();
     QVariantList mirrorLegacyDecodeLines(QStringList const& lines, bool rxPane) const;
+    bool shouldMirrorToRxPane(const QVariantMap& entry) const;
+    void appendRxDecodeEntry(const QVariantMap& entry);
+    void rebuildRxDecodeList();
     void genStdMsgs(const QString& hisCall, const QString& hisGrid);
     void checkAndStartPeriodicTx();
     void autoSequenceStep(const QStringList& parsedFields);

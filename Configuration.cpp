@@ -297,6 +297,75 @@ namespace
   constexpr quint32 qrg_version {101}; // M.mm
   constexpr quint32 qrg_version_100 {100};
 
+  QHostAddress select_preferred_udp_address (QString const& requested_name, QList<QHostAddress> const& addresses)
+  {
+    if (addresses.isEmpty ())
+      {
+        return {};
+      }
+
+    QString const requested = requested_name.trimmed ();
+    QHostAddress literal;
+    bool const explicit_literal = literal.setAddress (requested);
+    bool const explicit_ipv6 = explicit_literal && literal.protocol () == QAbstractSocket::IPv6Protocol;
+    bool const prefer_loopback_v4 = !explicit_ipv6
+                                    && 0 == requested.compare (QStringLiteral ("localhost"), Qt::CaseInsensitive);
+
+    auto const first_matching = [&] (QAbstractSocket::NetworkLayerProtocol protocol, bool loopback_only) {
+      for (auto const& address : addresses)
+        {
+          if (address.protocol () != protocol)
+            {
+              continue;
+            }
+          if (loopback_only && !address.isLoopback ())
+            {
+              continue;
+            }
+          return address;
+        }
+      return QHostAddress {};
+    };
+
+    if (prefer_loopback_v4)
+      {
+        auto const loopback_v4 = first_matching (QAbstractSocket::IPv4Protocol, true);
+        if (!loopback_v4.isNull ())
+          {
+            return loopback_v4;
+          }
+      }
+
+    if (!explicit_ipv6)
+      {
+        auto const any_v4 = first_matching (QAbstractSocket::IPv4Protocol, false);
+        if (!any_v4.isNull ())
+          {
+            return any_v4;
+          }
+      }
+
+    if (explicit_ipv6)
+      {
+        auto const any_v6 = first_matching (QAbstractSocket::IPv6Protocol, false);
+        if (!any_v6.isNull ())
+          {
+            return any_v6;
+          }
+      }
+
+    if (!explicit_ipv6)
+      {
+        auto const any_v6 = first_matching (QAbstractSocket::IPv6Protocol, false);
+        if (!any_v6.isNull ())
+          {
+            return any_v6;
+          }
+      }
+
+    return addresses.constFirst ();
+  }
+
 }
 
 
@@ -2670,7 +2739,15 @@ Configuration::impl::~impl ()
 {
   transceiver_thread_->quit ();
   transceiver_thread_->wait ();
-  write_settings ();
+  auto const* app = QCoreApplication::instance ();
+  bool const shutting_down =
+    !app
+    || QCoreApplication::closingDown ()
+    || app->property ("decodiumShuttingDown").toBool ();
+  if (!shutting_down)
+    {
+      write_settings ();
+    }
 }
 
 void Configuration::impl::initialize_models ()
@@ -5267,48 +5344,43 @@ void Configuration::impl::on_udp_server_line_edit_textChanged (QString const&)
 
 void Configuration::impl::on_udp_server_line_edit_editingFinished ()
 {
-  if (this->isVisible())
-  {
-    int q1,q2,q3,q4;
-    char tmpbuf[2];
-    int n = sscanf(ui_->udp_server_line_edit->text ().trimmed ().toLatin1(), "%d.%d.%d.%d.%1s", &q1, &q2, &q3, &q4, tmpbuf);
-    const char *iperr;
-    switch(n)
+  if (!this->isVisible () || !udp_server_name_edited_)
     {
-      case 0: iperr = "Error before first number";break;
-      case 1: iperr = "Error between first and second number";break;
-      case 2: iperr = "Error between second and third number";break;
-      case 3: iperr = "Error between third and fourth number";break;
-      case 4: iperr = ""; break;
-      case 5: iperr = "Invalid characters after IP address"; break;
-      default: iperr = "Unknown error parsing network address";
-    }
-    if (n != 4)
-    {
-       MessageBox::warning_message (this, tr ("Error in network address"), tr (iperr));
-       return;
+      return;
     }
 
-  if (udp_server_name_edited_)
+  auto const server = ui_->udp_server_line_edit->text ().trimmed ();
+  QHostAddress ha;
+  if (server.isEmpty ())
     {
-      auto const& server = ui_->udp_server_line_edit->text ().trimmed ();
-      QHostAddress ha {server};
-      if (server.size () && ha.isNull ())
-        {
-          // queue a host address lookup
-          // qDebug () << "server host DNS lookup:" << server;
-#if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
-          dns_lookup_id_ = QHostInfo::lookupHost (server, this, &Configuration::impl::host_info_results);
-#else
-          dns_lookup_id_ = QHostInfo::lookupHost (server, this, SLOT (host_info_results (QHostInfo)));
-#endif
-        }
-      else
-        {
-          check_multicast (ha);
-        }
+      check_multicast (ha);
+      udp_server_name_edited_ = false;
+      return;
     }
-  }
+
+  if (ha.setAddress (server))
+    {
+      check_multicast (ha);
+      udp_server_name_edited_ = false;
+      return;
+    }
+
+  static QRegularExpression const ipv4_like_re {QStringLiteral ("^[0-9.]+$")};
+  if (ipv4_like_re.match (server).hasMatch ())
+    {
+      MessageBox::warning_message (this, tr ("Error in network address"),
+                                   tr ("Invalid IPv4 address"));
+      udp_server_name_edited_ = false;
+      return;
+    }
+
+  // queue a host address lookup for hostnames such as localhost or DNS names
+#if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
+  dns_lookup_id_ = QHostInfo::lookupHost (server, this, &Configuration::impl::host_info_results);
+#else
+  dns_lookup_id_ = QHostInfo::lookupHost (server, this, SLOT (host_info_results (QHostInfo)));
+#endif
+  udp_server_name_edited_ = false;
 }
 
 void Configuration::impl::host_info_results (QHostInfo host_info)
@@ -5325,7 +5397,7 @@ void Configuration::impl::host_info_results (QHostInfo host_info)
       // qDebug () << "message server addresses:" << server_addresses;
       if (server_addresses.size ())
         {
-          check_multicast (server_addresses[0]);
+          check_multicast (select_preferred_udp_address (host_info.hostName (), server_addresses));
         }
     }
 }

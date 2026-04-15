@@ -131,7 +131,9 @@ endif ()
 if (NOT is_debug_build)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections -ffunction-sections")
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdata-sections -ffunction-sections")
-  set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,-s -Wl,--strip-all")
+  if (NOT APPLE)
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,-s -Wl,--strip-all")
+  endif ()
 endif ()
 
 
@@ -657,6 +659,7 @@ set (TOP_LEVEL_RESOURCES
   artwork/ft2logo.png
   contrib/gpl-v3-logo.svg
   artwork/splash.png
+  icons/Darwin/wsjt.iconset/icon_128x128.png
   artwork/maps/earth_2048x1024.jpg
   artwork/maps/world_overlay_2048x1024.png
   )

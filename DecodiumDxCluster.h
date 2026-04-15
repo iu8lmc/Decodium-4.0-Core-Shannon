@@ -3,8 +3,12 @@
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QList>
+#include <QPair>
 #include <QTcpSocket>
 #include <QSettings>
+
+class QTimer;
 
 // Full DX Cluster client (telnet ASCII, port 7300 or 23).
 // Replaces the empty DxClusterManager stub in DecodiumSubManagers.h.
@@ -78,6 +82,11 @@ private slots:
     void onError(QAbstractSocket::SocketError error);
 
 private:
+    void        ensureSocket();
+    void        sendLogin();
+    bool        tryNextConnectionCandidate(const QString& failureReason);
+    QList<QPair<QString, int>> buildConnectionCandidates(const QString& host, int port) const;
+    QString     endpointLabel(const QString& host, int port) const;
     // Process one complete line received from the cluster.
     void processLine(const QString& line);
     // Parse a "DX de …" line into a QVariantMap.
@@ -97,4 +106,12 @@ private:
     QString      m_callsign;
     QString      m_lastStatus;
     QVariantList m_spots;      // newest spot is appended at the back
+    QList<QPair<QString, int>> m_connectionCandidates;
+    int          m_connectionCandidateIndex {-1};
+    QString      m_activeHost;
+    int          m_activePort {0};
+    bool         m_connectSequenceActive {false};
+    bool         m_ignoreNextSocketError {false};
+    bool         m_manualDisconnect {false};
+    QTimer*      m_connectTimeoutTimer {nullptr};
 };

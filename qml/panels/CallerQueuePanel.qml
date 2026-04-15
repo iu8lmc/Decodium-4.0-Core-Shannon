@@ -26,7 +26,7 @@ Rectangle {
 
             Text {
                 text: "FOX CALLER QUEUE"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 font.bold: true
                 color: "#FF9800"
@@ -36,7 +36,7 @@ Rectangle {
 
             Text {
                 text: bridge.callerQueueSize + "/20"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 color: "#B0BEC5"
             }
@@ -83,13 +83,13 @@ Rectangle {
 
                     Text {
                         text: (index + 1) + "."
-                        font.family: "Consolas"; font.pixelSize: 10
+                        font.family: "Monospace"; font.pixelSize: 10
                         color: "#546E7A"; Layout.preferredWidth: 18
                     }
 
                     Text {
                         text: modelData
-                        font.family: "Consolas"; font.pixelSize: 11; font.bold: true
+                        font.family: "Monospace"; font.pixelSize: 11; font.bold: true
                         color: index === 0 ? "#FF9800" : "#ECEFF1"
                         Layout.fillWidth: true
                     }
@@ -118,7 +118,7 @@ Rectangle {
                 anchors.centerIn: parent
                 visible: queueList.count === 0
                 text: "No callers in queue"
-                font.family: "Consolas"; font.pixelSize: 10
+                font.family: "Monospace"; font.pixelSize: 10
                 color: "#546E7A"
             }
         }
