@@ -1,6 +1,6 @@
 # Code Signing Policy
 
-Decodium 3.0 FT2 "Raptor" Windows installers and executables are digitally signed.
+Decodium 4.0 Core Shannon Windows installers and executables are digitally signed.
 
 ## Certificate
 
@@ -47,4 +47,4 @@ If you find a suspicious file claiming to be Decodium, please open an issue on t
 
 ## License
 
-Decodium 3.0 FT2 is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.txt).
+Decodium 4.0 Core Shannon is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.txt).
