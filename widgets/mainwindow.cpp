@@ -14927,7 +14927,7 @@ void MainWindow::guiUpdate()
     // Auto CQ retry logic (only when Auto CQ mode is active)
     if (m_autoCQ && !m_tune) {
       if (m_ntx >= 2 && m_ntx <= 4) {
-        // Rule 1: Tx2/Tx3/Tx4 repeated 3 times without response → return to CQ (Tx6)
+        // Rule 1: Tx2/Tx3/Tx4 repeated 5 times without response → return to CQ (Tx6)
         if (m_ntx == m_lastNtx) {
           ++m_txRetryCount;
           debugAutoCq ("retry-progress",

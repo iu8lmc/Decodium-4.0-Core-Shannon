@@ -11,6 +11,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QMap>
+#include <QPointer>
 #include <QSet>
 #include <QDateTime>
 #include <memory>
@@ -948,6 +949,8 @@ private slots:
     void processNextInQueue();   // mainwindow processNextInQueue: auto-handoff al prossimo caller
 
 private:
+    bool shouldIgnoreDecodeCallbacks() const;
+    void beginDecodeCallbackShutdown();
     bool isTimeSyncDecodeMode(const QString& mode) const;
     void applyNtpSettings();
     void configureNtpClientForMode(const QString& mode);
@@ -976,6 +979,10 @@ private:
     void clearLateAutoLogSnapshot();
     void engageManualTxHold(const QString& reason, bool clearQueue = false);
     void clearManualTxHold(const QString& reason);
+    bool usesDeferredManualSyncTx() const;
+    bool shouldDeferManualSyncTxStart() const;
+    bool tryStartDeferredManualSyncTx();
+    void clearDeferredManualSyncTx(const QString& reason);
     void clearAutoCqPartnerLock();
     void updateAutoCqPartnerLock();
     void restoreAutoCqPartnerLock();
@@ -1035,6 +1042,7 @@ private:
     bool m_autoSeq          {true};
     bool m_txEnabled        {false};
     bool m_manualTxHold     {false};
+    bool m_deferredManualSyncTx {false};
     bool m_autoCqRepeat     {false};
     bool m_avgDecodeEnabled {false};
     int  m_txPeriod         {0};   // 0=even periods, 1=odd periods
@@ -1131,6 +1139,7 @@ private:
     Modulator*         m_modulator   {nullptr};
     DecodiumAudioSink* m_audioSink   {nullptr};
     QAudioSink*        m_txAudioSink  {nullptr};
+    bool               m_rxAudioSuspendedForTx {false};
     QBuffer*           m_txPcmBuffer  {nullptr};
     QByteArray         m_txPcmData;
     QTimer*            m_tuneTimer    {nullptr};
@@ -1153,7 +1162,7 @@ private:
     bool    m_ft2DeferredLogPending {false};
     bool    m_quickPeerSignaled {false};
     bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
-    int  m_maxCallerRetries {3};   // max tentativi TX per step prima di fermarsi
+    int  m_maxCallerRetries {5};   // invii totali per step prima di fermarsi
     int  m_autoCqMaxCycles  {0};   // 0 = infinito, >0 = max cicli CQ
     int  m_autoCqPauseSec   {0};   // pausa (s) tra cicli CQ (0 = nessuna pausa)
     int  m_autoCqCycleCount {0};   // contatore cicli CQ corrente
@@ -1259,7 +1268,7 @@ private:
     static constexpr int FOX_QUEUE_MAX = 20;
 
     // B9 — Active Stations model
-    ActiveStationsModel* m_activeStations {nullptr};
+    QPointer<ActiveStationsModel> m_activeStations;
 
     // ADIF — log lavorato + import
     QSet<QString>    m_workedCalls;   // callsign già lavorati (B4 check)

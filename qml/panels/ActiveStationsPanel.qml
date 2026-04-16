@@ -5,6 +5,7 @@ import QtQuick.Controls
 // ActiveStationsPanel — usa bridge.activeStations (QObject* → ActiveStationsModel)
 Rectangle {
     id: activePanel
+    signal closeRequested()
     color: Qt.rgba(0, 0, 0, 0.75)
     border.color: Qt.rgba(0, 188, 212, 0.4)
     border.width: 1
@@ -59,19 +60,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        var root = activePanel.parent
-                        while (root) {
-                            if (root.hasOwnProperty("visible")) {
-                                root.visible = false
-                            }
-                            if (root.hasOwnProperty("activeStationsPanelVisible")) {
-                                root.activeStationsPanelVisible = false
-                                break
-                            }
-                            root = root.parent
-                        }
-                    }
+                    onClicked: activePanel.closeRequested()
                 }
             }
         }

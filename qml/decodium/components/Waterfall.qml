@@ -363,7 +363,7 @@ Item {
                 width: startText.width + 40; height: startText.height + 20
                 color: Qt.rgba(0, 0, 0, 0.85)
                 border.color: "#00E5FF"; border.width: 1; radius: 6
-                visible: !bridge.monitoring
+                visible: !bridge.monitoring && !bridge.transmitting && !bridge.tuning
                 Text {
                     id: startText
                     anchors.centerIn: parent
