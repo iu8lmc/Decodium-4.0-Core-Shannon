@@ -2878,6 +2878,13 @@ QString DecodiumBridge::dxCall() const { return m_dxCall; }
 void DecodiumBridge::setDxCall(const QString& v) {
     if (m_dxCall != v) {
         m_dxCall = v;
+        // Cambio partner: resetta l'ultimo messaggio trasmesso, altrimenti il
+        // controllo `messageCarries73Payload(m_lastTransmittedMessage)` in
+        // autoSequenceStep ricorderebbe il "73" del QSO precedente e marcherebbe
+        // localSignoffAlreadySent=true al primo decode del nuovo partner,
+        // facendo saltare l'invio del nostro signoff e loggando un QSO
+        // inesistente. Pulizia simmetrica al reset di setDxCall("").
+        m_lastTransmittedMessage.clear();
         emit dxCallChanged();
         if (usingLegacyBackendForTx()) {
             m_legacyBackend->setDxCall(v);
