@@ -5,6 +5,8 @@
 #include <cmath>
 #include <functional>
 #include <QObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QVector>
 #include "Audio/AudioDevice.hpp"
 
@@ -24,9 +26,11 @@ class DecodiumAudioSink : public AudioDevice
 public:
     explicit DecodiumAudioSink(QVector<short>& buffer,
                                unsigned downSampleFactor = 1,
-                               QObject* parent = nullptr)
+                               QObject* parent = nullptr,
+                               QMutex* bufferMutex = nullptr)
         : AudioDevice(parent)
         , m_buffer(buffer)
+        , m_bufferMutex(bufferMutex)
         , m_dsf(downSampleFactor < 1 ? 1 : downSampleFactor)
         , m_dsfCounter(0)
     {
@@ -48,25 +52,36 @@ public:
         QVector<short> tmp(static_cast<int>(numFrames));
         store(data, static_cast<size_t>(numFrames), tmp.data());
 
-        // Decimazione: tieni 1 campione ogni m_dsf
-        const int prevSize = m_buffer.size();
-        for (qint64 i = 0; i < numFrames; ++i) {
-            if (m_dsfCounter == 0) {
-                short s = tmp[static_cast<int>(i)];
-                m_buffer.append(s);
-                if (m_sampleCallback) m_sampleCallback(s);
+        // Sezione critica: append su m_buffer condiviso con il main thread.
+        // Il backend audio Qt6 (PulseAudio/ALSA) può invocare writeData da un
+        // thread proprio anche se il sink ha parent nel main thread, e QVector
+        // non è thread-safe per scritture concorrenti.
+        int prevSize = 0;
+        int newSamples = 0;
+        {
+            QMutexLocker locker(m_bufferMutex);
+            prevSize = m_buffer.size();
+            for (qint64 i = 0; i < numFrames; ++i) {
+                if (m_dsfCounter == 0) {
+                    short s = tmp[static_cast<int>(i)];
+                    m_buffer.append(s);
+                    if (m_sampleCallback) m_sampleCallback(s);
+                }
+                m_dsfCounter = (m_dsfCounter + 1) % m_dsf;
             }
-            m_dsfCounter = (m_dsfCounter + 1) % m_dsf;
+            newSamples = m_buffer.size() - prevSize;
+            // RMS calcolato dentro al lock perché legge constData() del buffer
+            // appena modificato; l'emit del segnale è fuori dal lock.
+            if (newSamples > 0) {
+                double sumSq = 0.0;
+                const short* s = m_buffer.constData() + prevSize;
+                for (int i = 0; i < newSamples; ++i) { double v = s[i]; sumSq += v*v; }
+                m_lastRms = std::sqrt(sumSq / newSamples) / 32768.0;
+            }
         }
 
-        // RMS sui campioni decimati per il meter
-        const int newSamples = m_buffer.size() - prevSize;
         if (newSamples > 0) {
-            double sumSq = 0.0;
-            const short* s = m_buffer.constData() + prevSize;
-            for (int i = 0; i < newSamples; ++i) { double v = s[i]; sumSq += v*v; }
-            double rms = std::sqrt(sumSq / newSamples) / 32768.0;
-            emit audioLevelChanged(rms);
+            emit audioLevelChanged(m_lastRms);
         }
 
         return maxSize;
@@ -77,8 +92,10 @@ signals:
 
 private:
     QVector<short>& m_buffer;
+    QMutex*         m_bufferMutex;  // owned dal chiamante; nullptr = no locking
     unsigned        m_dsf;
     unsigned        m_dsfCounter;
+    double          m_lastRms {0.0};
     std::function<void(short)> m_sampleCallback;
 };
 

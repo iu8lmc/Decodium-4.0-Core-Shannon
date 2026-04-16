@@ -13,6 +13,8 @@
 #include <QMap>
 #include <QSet>
 #include <QDateTime>
+#include <QMutex>
+#include <atomic>
 #include <memory>
 
 #include "DecodiumThemeManager.h"
@@ -1097,6 +1099,11 @@ private:
     int    m_uiDecodeWinHeight {600};
 
     QVector<short> m_audioBuffer;
+    // Protegge m_audioBuffer rispetto al callback DecodiumAudioSink::writeData,
+    // che in alcune piattaforme Qt6 (PulseAudio/ALSA) viene invocato dal thread
+    // interno del backend audio anche quando il sink ha parent nel main thread.
+    // QMutex perché QVector NON è thread-safe per scritture concorrenti.
+    mutable QMutex m_audioBufferMutex;
     quint64 m_decodeSerial {0};
     // Period timer ticks at 250ms; mode determines how many ticks = 1 period
     int m_periodTicks {0};
@@ -1281,7 +1288,11 @@ private:
     // FT2 async ring buffer: ultimi 7.5s di audio (90000 campioni a 12kHz)
     static constexpr int ASYNC_BUF_SIZE = 90000;
     short m_asyncAudio[ASYNC_BUF_SIZE] {};
-    int   m_asyncAudioPos {0};   // posizione assoluta (mai resettata, mod ASYNC_BUF_SIZE)
+    // Modificato dal callback audio (DecodiumAudioSink::setSampleCallback) e
+    // letto dal timer FT2 (onAsyncDecodeTimer). Atomico per garantire una read
+    // coerente dello snapshot della write position; il callback usa fetch_add
+    // implicito via operator++ per l'incremento.
+    std::atomic<int> m_asyncAudioPos {0};   // posizione assoluta (mai resettata, mod ASYNC_BUF_SIZE)
     bool  m_asyncDecodePending {false};  // previene overlap
 
     // Spectrum ring buffer — buffer circolare separato per waterfall (non consumato dal decoder)

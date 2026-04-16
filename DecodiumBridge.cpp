@@ -1014,7 +1014,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         if (m_catConnected)
             activeCatSetFreq(m_nativeCat, m_hamlibCat, m_catBackend, freq, m_omniRigCat, m_legacyBackend);
         if (m_monitoring) {
-            m_audioBuffer.clear();
+            {
+                QMutexLocker locker(&m_audioBufferMutex);
+                m_audioBuffer.clear();
+            }
             m_periodTicks = 0;
         }
     });
@@ -1523,8 +1526,11 @@ void DecodiumBridge::migrateActiveMonitoringToLegacyBackend()
 
     if (useModernSpectrumFeedWithLegacy()) {
         updatePeriodTicksMax();
-        m_audioBuffer.clear();
-        m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+        {
+            QMutexLocker locker(&m_audioBufferMutex);
+            m_audioBuffer.clear();
+            m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+        }
         m_spectrumBuf.clear();
         m_periodTicks = 0;
         m_wfRingPos = 0;
@@ -2301,8 +2307,11 @@ void DecodiumBridge::setMode(const QString& v) {
         // Riavvia la cattura se attiva per adattare il periodo
         if (m_monitoring) {
             m_periodTicks = 0;
-            m_audioBuffer.clear();
-            m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+            {
+                QMutexLocker locker(&m_audioBufferMutex);
+                m_audioBuffer.clear();
+                m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+            }
             // Avvia/ferma async timer in base al modo
             if (m_mode == "FT2") {
                 m_asyncAudioPos = 0;
@@ -2741,8 +2750,11 @@ void DecodiumBridge::startRx()
         syncLegacyBackendState();
         if (useModernSpectrumFeedWithLegacy()) {
             updatePeriodTicksMax();
-            m_audioBuffer.clear();
-            m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+            {
+                QMutexLocker locker(&m_audioBufferMutex);
+                m_audioBuffer.clear();
+                m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+            }
             m_spectrumBuf.clear();
             m_periodTicks = 0;
             m_wfRingPos = 0;
@@ -2764,8 +2776,11 @@ void DecodiumBridge::startRx()
     updatePeriodTicksMax();
     m_monitoring = true;
     emit monitoringChanged();
-    m_audioBuffer.clear();
-    m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+    {
+        QMutexLocker locker(&m_audioBufferMutex);
+        m_audioBuffer.clear();
+        m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+    }
     m_spectrumBuf.clear();
     m_periodTicks = 0;
     // A2 — Reset drift counters
@@ -2788,7 +2803,10 @@ void DecodiumBridge::startRx()
         bridgeLog("startRx: UTC sync wait=" + QString::number(msToNext) + "ms (period=" + QString::number(periodMs) + "ms)");
         QTimer::singleShot(msToNext, this, [this]() {
             if (!m_monitoring) return;
-            m_audioBuffer.clear();
+            {
+                QMutexLocker locker(&m_audioBufferMutex);
+                m_audioBuffer.clear();
+            }
             m_periodTicks = 0;
             m_periodTimer->start();
             bridgeLog("startRx: period timer started at UTC boundary");
@@ -6524,11 +6542,15 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
 void DecodiumBridge::onAsyncDecodeTimer()
 {
     if (m_mode != "FT2" || !m_monitoring || m_asyncDecodePending) return;
-    if (m_asyncAudioPos < 45000) return;  // non abbastanza audio ancora
+    // Snapshot atomico unico: il callback audio (writer) può incrementare
+    // m_asyncAudioPos in qualsiasi momento. Leggiamolo una sola volta per
+    // garantire coerenza tra il check di soglia, il calcolo di start, e
+    // la copia dei 45000 campioni.
+    int const pos = m_asyncAudioPos.load(std::memory_order_acquire);
+    if (pos < 45000) return;  // non abbastanza audio ancora
 
     decodium::ft2::AsyncDecodeRequest req;
     req.audio.resize(45000);
-    int pos   = m_asyncAudioPos;
     int start = (pos - 45000 + ASYNC_BUF_SIZE) % ASYNC_BUF_SIZE;
     for (int i = 0; i < 45000; ++i)
         req.audio[i] = m_asyncAudio[(start + i) % ASYNC_BUF_SIZE];
@@ -6727,14 +6749,18 @@ void DecodiumBridge::onSpectrumTimer()
     if (usingLegacyBackendForTx() && !useModernSpectrumFeedWithLegacy()) return;
     if (!m_monitoring) return;
 
-    // Copia i campioni recenti nel ring buffer waterfall (non viene consumato dal decoder)
-    int avail = m_audioBuffer.size();
-    if (avail > 0) {
-        int toCopy = qMin(avail, (int)WF_RING_SIZE);
-        int srcStart = avail - toCopy;
-        for (int i = 0; i < toCopy; ++i) {
-            m_wfRing[m_wfRingPos % WF_RING_SIZE] = m_audioBuffer[srcStart + i];
-            ++m_wfRingPos;
+    // Copia i campioni recenti nel ring buffer waterfall (non viene consumato dal decoder).
+    // Lock perché il callback del sink può appendere a m_audioBuffer in parallelo.
+    {
+        QMutexLocker locker(&m_audioBufferMutex);
+        int avail = m_audioBuffer.size();
+        if (avail > 0) {
+            int toCopy = qMin(avail, (int)WF_RING_SIZE);
+            int srcStart = avail - toCopy;
+            for (int i = 0; i < toCopy; ++i) {
+                m_wfRing[m_wfRingPos % WF_RING_SIZE] = m_audioBuffer[srcStart + i];
+                ++m_wfRingPos;
+            }
         }
     }
 
@@ -6946,12 +6972,16 @@ void DecodiumBridge::startAudioCapture()
     // Create the audio sink (once, reused across start/stop cycles).
     // downSampleFactor=4: QAudioSource a 48000 Hz → buffer a 12000 Hz
     if (!m_audioSink) {
-        m_audioSink = new DecodiumAudioSink(m_audioBuffer, 4, this);
+        m_audioSink = new DecodiumAudioSink(m_audioBuffer, 4, this, &m_audioBufferMutex);
         // Ring buffer per il path async FT2: ogni campione decimato va anche nel buffer circolare
         // + feed campioni al WavManager per registrazione audio
         m_audioSink->setSampleCallback([this](short s) {
-            m_asyncAudio[m_asyncAudioPos % ASYNC_BUF_SIZE] = s;
-            ++m_asyncAudioPos;
+            // Writer single-thread (callback audio). Pubblichiamo il campione
+            // prima dell'incremento di posizione con release semantics così che
+            // onAsyncDecodeTimer (acquire load) veda dati validi nel range.
+            int const w = m_asyncAudioPos.load(std::memory_order_relaxed);
+            m_asyncAudio[w % ASYNC_BUF_SIZE] = s;
+            m_asyncAudioPos.store(w + 1, std::memory_order_release);
             ++m_driftExpectedFrames;  // A2: count frames for drift detection
             if (m_wavManager) m_wavManager->feedSample(s);
         });
@@ -7051,9 +7081,24 @@ void DecodiumBridge::teardownAudioCapture()
 
 void DecodiumBridge::feedAudioToDecoder()
 {
-    if (m_audioBuffer.isEmpty()) {
-        emit statusMessage("Buffer audio vuoto per questo periodo");
-        return;
+    // Snapshot atomico del buffer audio sotto lock: il callback del sink
+    // (DecodiumAudioSink::writeData) può eseguire append() in parallelo da
+    // un thread del backend audio. Sfruttiamo il copy-on-write di QVector:
+    // l'assegnazione `audioSnapshot = m_audioBuffer` incrementa solo il
+    // refcount; `clear()` poi alloca un nuovo storage vuoto per m_audioBuffer
+    // mentre `audioSnapshot` continua a possedere i dati del periodo appena
+    // chiuso. Tutto il dispatch ai worker usa la snapshot locale, senza tenere
+    // il lock per tutto il routing dei mode.
+    QVector<short> audioSnapshot;
+    {
+        QMutexLocker locker(&m_audioBufferMutex);
+        if (m_audioBuffer.isEmpty()) {
+            emit statusMessage("Buffer audio vuoto per questo periodo");
+            return;
+        }
+        audioSnapshot = m_audioBuffer;
+        m_audioBuffer.clear();
+        m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
     }
 
     m_decoding = true;
@@ -7079,12 +7124,12 @@ void DecodiumBridge::feedAudioToDecoder()
     }
 
     bridgeLog("feedAudioToDecoder: mode=" + m_mode +
-              " samples=" + QString::number(m_audioBuffer.size()) +
+              " samples=" + QString::number(audioSnapshot.size()) +
               " nutc=" + QString::number(nutc));
 
     if (m_mode == "FT8") {
         decodium::ft8::DecodeRequest req;
-        req.serial = serial; req.audio = m_audioBuffer;
+        req.serial = serial; req.audio = audioSnapshot;
         req.nutc = nutc; req.nqsoprogress = 0;
         req.nfqso = nfqso; req.nftx = 0;
         req.nfa = m_nfa; req.nfb = m_nfb;
@@ -7098,7 +7143,7 @@ void DecodiumBridge::feedAudioToDecoder()
 
     } else if (m_mode == "FT2") {
         decodium::ft2::DecodeRequest req;
-        req.serial = serial; req.audio = m_audioBuffer;
+        req.serial = serial; req.audio = audioSnapshot;
         req.nutc = nutc; req.nqsoprogress = 0;
         req.nfqso = nfqso;
         req.nfa = m_nfa; req.nfb = m_nfb;
@@ -7114,7 +7159,7 @@ void DecodiumBridge::feedAudioToDecoder()
 
     } else if (m_mode == "FT4") {
         decodium::ft4::DecodeRequest req;
-        req.serial = serial; req.audio = m_audioBuffer;
+        req.serial = serial; req.audio = audioSnapshot;
         req.nutc = nutc; req.nqsoprogress = 0;
         req.nfqso = nfqso;
         req.nfa = m_nfa; req.nfb = m_nfb;
@@ -7127,7 +7172,7 @@ void DecodiumBridge::feedAudioToDecoder()
 
     } else if (m_mode == "Q65") {
         decodium::q65::DecodeRequest req;
-        req.serial  = serial; req.audio = m_audioBuffer;
+        req.serial  = serial; req.audio = audioSnapshot;
         req.nutc    = nutc;   req.nfqso = nfqso;
         req.nfa     = m_nfa;  req.nfb   = m_nfb;
         req.ndepth  = m_ndepth; req.ncontest = m_ncontest;
@@ -7139,7 +7184,7 @@ void DecodiumBridge::feedAudioToDecoder()
 
     } else if (m_mode == "MSK144") {
         decodium::msk144::DecodeRequest req;
-        req.serial  = serial; req.audio = m_audioBuffer;
+        req.serial  = serial; req.audio = audioSnapshot;
         req.nutc    = nutc;
         req.rxfreq  = m_rxFrequency;
         req.mycall  = m_callsign.toLocal8Bit();
@@ -7163,7 +7208,7 @@ void DecodiumBridge::feedAudioToDecoder()
         decodium::legacyjt::DecodeRequest req;
         req.serial  = serial;
         req.mode    = m_mode;
-        req.audio   = m_audioBuffer;
+        req.audio   = audioSnapshot;
         req.nutc    = nutc;
         req.nfqso   = nfqso;
         req.nfa     = m_nfa;
@@ -7181,7 +7226,7 @@ void DecodiumBridge::feedAudioToDecoder()
         decodium::fst4::DecodeRequest req;
         req.serial  = serial;
         req.mode    = m_mode;
-        req.audio   = m_audioBuffer;
+        req.audio   = audioSnapshot;
         req.nutc    = nutc;
         req.nfa     = m_nfa;
         req.nfb     = m_nfb;
@@ -7203,7 +7248,7 @@ void DecodiumBridge::feedAudioToDecoder()
     } else {
         // Fallback a FT8
         decodium::ft8::DecodeRequest req;
-        req.serial = serial; req.audio = m_audioBuffer;
+        req.serial = serial; req.audio = audioSnapshot;
         req.nutc = nutc; req.nfqso = nfqso;
         req.nfa = m_nfa; req.nfb = m_nfb;
         req.ndepth = m_ndepth;
@@ -7213,8 +7258,8 @@ void DecodiumBridge::feedAudioToDecoder()
         }, Qt::QueuedConnection);
     }
 
-    m_audioBuffer.clear();
-    m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
+    // m_audioBuffer è già stato clear()+reserve() sotto lock all'inizio della
+    // funzione: i nuovi campioni del prossimo periodo si stanno già accumulando.
 }
 
 void DecodiumBridge::updatePeriodTicksMax()
@@ -7884,10 +7929,18 @@ void DecodiumBridge::openWavForDecode(const QString& path)
     emit statusMessage(QString("WAV: %1 campioni @ 12000 Hz → decodifica %2 (%3)...")
                        .arg(samples.size()).arg(m_mode).arg(QFileInfo(path).fileName()));
 
-    // Carica i campioni nel buffer audio e avvia la decodifica
-    m_audioBuffer.resize(samples.size() * static_cast<int>(sizeof(short)));
-    memcpy(m_audioBuffer.data(), samples.constData(),
-           static_cast<size_t>(samples.size()) * sizeof(short));
+    // Carica i campioni nel buffer audio e avvia la decodifica.
+    // QVector<short>::resize() vuole il NUMERO DI ELEMENTI, non byte: in
+    // precedenza si moltiplicava per sizeof(short) raddoppiando inutilmente
+    // la dimensione e lasciando metà buffer a zero. Lock perché la callback
+    // del sink condivide m_audioBuffer (anche se il flusso WAV tipicamente
+    // disabilita la cattura, manteniamo l'invariante).
+    {
+        QMutexLocker locker(&m_audioBufferMutex);
+        m_audioBuffer.resize(samples.size());
+        memcpy(m_audioBuffer.data(), samples.constData(),
+               static_cast<size_t>(samples.size()) * sizeof(short));
+    }
 
     // Avvia feedAudioToDecoder() in modo asincrono per non bloccare la UI
     QMetaObject::invokeMethod(this, [this]() {
