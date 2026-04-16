@@ -1,11 +1,14 @@
 name: Build Windows x64
 
 on:
+  push:
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
+  id-token: write
 
 env:
   HAMLIB_TAG: "4.7.0"
@@ -344,8 +347,96 @@ jobs:
           if-no-files-found: error
           path: installer-output/*.exe
 
-      - name: Publish release assets
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish release assets (unsigned)
+        if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            installer-output/*.exe
+
+  # ── SignPath Code Signing ──────────────────────────────────────────
+  sign:
+    needs: build-windows-x64
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Download portable bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: decodium-windows-x64-portable
+          path: unsigned
+
+      - name: Repackage for SignPath
+        run: |
+          cd unsigned
+          zip -r ../decodium-x64.zip .
+
+      - name: Upload for SignPath
+        id: upload-for-signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-to-sign-x64
+          path: decodium-x64.zip
+
+      - name: Submit signing request
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+          organization-id: '${{ vars.SIGNPATH_ORGANIZATION_ID }}'
+          project-slug: 'decodium'
+          signing-policy-slug: >-
+            ${{ startsWith(github.ref, 'refs/tags/v')
+                && 'release-signing'
+                || 'test-signing' }}
+          github-artifact-id: '${{ steps.upload-for-signing.outputs.artifact-id }}'
+          wait-for-completion: true
+          output-artifact-directory: 'signed'
+
+      - name: Upload signed bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium-signed-x64
+          path: signed
+          if-no-files-found: error
+
+  # ── Build signed installer ────────────────────────────────────────
+  package-signed:
+    needs: sign
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          $VER = "$env:GITHUB_REF" -replace 'refs/tags/v',''
+          echo "version=$VER" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Download signed bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: decodium-signed-x64
+          path: dist-windows-x64
+
+      - name: Build signed installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            /DAppVersion="${{ steps.version.outputs.version }}" `
+            /DBuildDir="dist-windows-x64" `
+            /DSourceRoot="." `
+            /DOutputDir="installer-output" `
+            /DOutputBaseFilename="Decodium_${{ steps.version.outputs.version }}_Setup_x64" `
+            "installer\decodium_setup.iss"
+
+      - name: Create signed release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
