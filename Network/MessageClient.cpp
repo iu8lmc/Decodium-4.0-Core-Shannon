@@ -837,13 +837,16 @@ bool MessageClient::impl::is_trusted_sender (QHostAddress const& sender, port_ty
     {
       return false;
     }
-  if (server_port_ && sender_port != server_port_)
-    {
-      return false;
-    }
+  // Loopback traffic is always trusted, regardless of source port.
+  // This is required for controllers like GridTracker 17+ that send
+  // control packets from an ephemeral port rather than from server_port_.
   if (server_.isLoopback () && sender.isLoopback ())
     {
       return true;
+    }
+  if (server_port_ && sender_port != server_port_)
+    {
+      return false;
     }
   return trusted_senders_.contains (sender);
 }
@@ -863,7 +866,14 @@ bool MessageClient::impl::message_target_matches (QString const& incoming_id) co
 bool MessageClient::impl::control_target_matches (QString const& incoming_id) const
 {
   auto const trimmed = incoming_id.trimmed ();
-  return !trimmed.isEmpty () && 0 == trimmed.compare (id_, Qt::CaseInsensitive);
+  if (trimmed.isEmpty ()) return false;
+  if (0 == trimmed.compare (id_, Qt::CaseInsensitive)) return true;
+  // Accept common WSJT-X compatibility aliases so third-party controllers
+  // (GridTracker, JTAlert, etc.) that address the target as "WSJT-X" or
+  // "WSJTX" still work when our id_ is "Decodium".
+  if (0 == trimmed.compare ("WSJTX", Qt::CaseInsensitive)) return true;
+  if (0 == trimmed.compare ("WSJT-X", Qt::CaseInsensitive)) return true;
+  return false;
 }
 
 bool MessageClient::impl::requires_direct_target (NetworkMessage::Type type) const

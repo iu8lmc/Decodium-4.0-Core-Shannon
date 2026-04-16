@@ -21,39 +21,17 @@ ApplicationWindow {
     property bool windowStateRestoreInProgress: true
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
 
-    // Carica posizione/dimensioni finestre dal bridge
+    // Carica solo dimensioni della finestra dai settings.
+    // La POSIZIONE viene sempre forzata al centro del monitor primario all'avvio:
+    // evita che la finestra resti invisibile per utenti multi-monitor che hanno
+    // scollegato/spento il display su cui era stata posizionata in precedenza.
     Component.onCompleted: {
         var state = bridge.loadWindowState("mainWindow")
         if (state.width !== undefined && state.width > 0) width = state.width
         if (state.height !== undefined && state.height > 0) height = state.height
-        if (state.x !== undefined) x = state.x
-        if (state.y !== undefined) y = state.y
-        // Sicurezza: se la finestra è fuori schermo, riportala al centro
-        Qt.callLater(function() {
-            var centerX = x + width / 2
-            var centerY = y + height / 2
-            var onScreen = false
-            if (Qt.application.screens && Qt.application.screens.length > 0) {
-                for (var i = 0; i < Qt.application.screens.length; ++i) {
-                    var s = Qt.application.screens[i]
-                    if (centerX >= s.virtualX && centerX < s.virtualX + s.width &&
-                        centerY >= s.virtualY && centerY < s.virtualY + s.height) {
-                        onScreen = true
-                        break
-                    }
-                }
-            } else {
-                // Fallback: basic bounds check
-                onScreen = (x >= -100 && y >= -100 &&
-                            x < Screen.desktopAvailableWidth &&
-                            y < Screen.desktopAvailableHeight)
-            }
-            if (!onScreen) {
-                x = Math.max(0, (Screen.desktopAvailableWidth - width) / 2)
-                y = Math.max(0, (Screen.desktopAvailableHeight - height) / 2)
-            }
-            windowStateRestoreInProgress = false
-        })
+        x = Math.max(0, (Screen.desktopAvailableWidth - width) / 2)
+        y = Math.max(0, (Screen.desktopAvailableHeight - height) / 2)
+        windowStateRestoreInProgress = false
     }
 
     // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight
