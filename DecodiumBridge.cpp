@@ -3440,8 +3440,37 @@ void DecodiumBridge::startTx()
     }
 #endif
 
+    bool requestedDeviceFound = false;
+    QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
+    bridgeLog("startTx: outputDevice=[" + m_audioOutputDevice + "] found=" +
+              QString::number(requestedDeviceFound) + " using=[" + outDev.description() + "]");
+    // Log tutti i device di output disponibili
+    {
+        auto outputs = QMediaDevices::audioOutputs();
+        bridgeLog("startTx: available outputs (" + QString::number(outputs.size()) + "):");
+        for (const QAudioDevice& d : outputs)
+            bridgeLog("  - " + d.description());
+    }
+    if (!requestedDeviceFound) {
+        bridgeLog("startTx: requested output device not found, fallback to default: " +
+                  outDev.description() + " requested=[" + m_audioOutputDevice + "]");
+        emit statusMessage("Audio TX non trovato, uso default: " + outDev.description());
+    }
+    const QAudioFormat outFmt = chooseTxAudioFormat(outDev);
+    m_txPcmData = buildTxPcmBuffer(wave, outFmt);
+    if (m_txPcmData.isEmpty()) {
+        bridgeLog("startTx: unable to build PCM buffer for " + audioFormatToString(outFmt));
+        emit errorMessage("Formato audio TX non supportato dal device selezionato");
+        return;
+    }
+
     // === GitHub TxController: aggiorna contatori retry ===
-    // Traccia quante volte abbiamo inviato lo stesso TX step senza risposta
+    // Traccia quante volte abbiamo inviato lo stesso TX step senza risposta.
+    // NOTE: spostato dopo il check su buildTxPcmBuffer/PCM vuoto (sopra) e
+    // prima del PTT SU (sotto). Se la generazione del PCM fallisce, NON
+    // vogliamo gonfiare m_nTx73/m_txRetryCount: contatori "fasulli" causano
+    // finishAutoSequenceQso prematuro (m_nTx73>=1 → log di un QSO che non è
+    // mai partito) e retry-limit anticipato.
     if (m_currentTx == m_lastNtx) {
         ++m_txRetryCount;
     } else {
@@ -3476,30 +3505,6 @@ void DecodiumBridge::startTx()
         m_ft2DeferredLogPending = false;
         capturePendingAutoLogSnapshot();
         logQso();
-    }
-
-    bool requestedDeviceFound = false;
-    QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
-    bridgeLog("startTx: outputDevice=[" + m_audioOutputDevice + "] found=" +
-              QString::number(requestedDeviceFound) + " using=[" + outDev.description() + "]");
-    // Log tutti i device di output disponibili
-    {
-        auto outputs = QMediaDevices::audioOutputs();
-        bridgeLog("startTx: available outputs (" + QString::number(outputs.size()) + "):");
-        for (const QAudioDevice& d : outputs)
-            bridgeLog("  - " + d.description());
-    }
-    if (!requestedDeviceFound) {
-        bridgeLog("startTx: requested output device not found, fallback to default: " +
-                  outDev.description() + " requested=[" + m_audioOutputDevice + "]");
-        emit statusMessage("Audio TX non trovato, uso default: " + outDev.description());
-    }
-    const QAudioFormat outFmt = chooseTxAudioFormat(outDev);
-    m_txPcmData = buildTxPcmBuffer(wave, outFmt);
-    if (m_txPcmData.isEmpty()) {
-        bridgeLog("startTx: unable to build PCM buffer for " + audioFormatToString(outFmt));
-        emit errorMessage("Formato audio TX non supportato dal device selezionato");
-        return;
     }
 
     // PTT SU — prima di avviare l'audio (come GitHub pttAssert())
