@@ -4,9 +4,11 @@
 #include <QDateTime>
 #include <QtAlgorithms>
 #include <QDebug>
+#include <QMutexLocker>
 #include <QtGlobal>
 #include <math.h>
 #include "commons.h"
+#include "Detector/FortranRuntimeGuard.hpp"
 
 #include "moc_Detector.cpp"
 
@@ -109,6 +111,15 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
   qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
   unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
   if(mstr < mstr0) {              //When mstr has wrapped around to 0, restart the buffer
+    // Il reset di kin (e l'azzeramento del buffer) potrebbe sovrascrivere
+    // dec_data.d2 mentre un decoder Fortran legacy (jt9/JT65/FST4/WSPR)
+    // sta ancora processando il periodo precedente. Acquisiamo brevemente il
+    // runtime mutex Fortran in modo che il reset avvenga solo quando nessun
+    // decoder è dentro la sua sezione critica. Costo: l'audio thread può
+    // bloccarsi al boundary di periodo finché il decoder rilascia il lock,
+    // con possibile drop dei primi campioni del nuovo periodo. Trade-off
+    // accettabile rispetto alla corruzione silenziosa dei dati di decodifica.
+    QMutexLocker lock {&decodium::fortran::runtime_mutex ()};
     dec_data.params.kin = 0;
     m_bufferPos = 0;
   }
@@ -116,10 +127,11 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
 
   if (dec_data.params.kin < 0 || dec_data.params.kin > kMaxKin)
     {
-      qWarning () << "Detector: clamping out-of-range kin:" << dec_data.params.kin;
+      qWarning () << "Detector: clamping out-of-range kin:" << dec_data.params.kin
+                  << "(mstr=" << mstr << "period=" << m_period
+                  << "downSampleFactor=" << m_downSampleFactor << ")";
       dec_data.params.kin = qBound (0, dec_data.params.kin, kMaxKin);
     }
-  Q_ASSERT (dec_data.params.kin >= 0);
 
   // no torn frames
   Q_ASSERT (!(maxSize % static_cast<qint64> (bytesPerFrame ())));
