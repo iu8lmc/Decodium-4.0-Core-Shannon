@@ -107,7 +107,12 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
   constexpr int kMaxKin = NTMAX * RX_SAMPLE_RATE;
   static unsigned mstr0=999999;
   qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
-  unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
+  // Guard against m_period==0 during mode transitions: int(1000.0*0) == 0
+  // would turn the modulo below into undefined behaviour (SIGFPE on many
+  // platforms). Fall back to the largest sensible window so the wrap
+  // detector simply never triggers until a valid period is installed.
+  int const periodMs = qMax (1, int (1000.0 * m_period));
+  unsigned mstr = ms0 % periodMs; // ms into the nominal Tx start time
   if(mstr < mstr0) {              //When mstr has wrapped around to 0, restart the buffer
     dec_data.params.kin = 0;
     m_bufferPos = 0;
