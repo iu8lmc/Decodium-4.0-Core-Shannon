@@ -36,17 +36,17 @@ Rectangle {
                 Text { text: "Location:"; font.pixelSize: 12; color: textSecondary }
                 Text {
                     text: appEngine && appEngine.astroManager ? appEngine.astroManager.gridLocator : "----"
-                    font.pixelSize: 14; font.bold: true; font.family: "Consolas"; color: primaryBlue
+                    font.pixelSize: 14; font.bold: true; font.family: "Monospace"; color: primaryBlue
                 }
                 Text { text: "Lat:"; font.pixelSize: 11; color: textSecondary }
                 Text {
                     text: appEngine && appEngine.astroManager ? appEngine.astroManager.latitude.toFixed(2) + "°" : "--"
-                    font.pixelSize: 11; font.family: "Consolas"; color: textPrimary
+                    font.pixelSize: 11; font.family: "Monospace"; color: textPrimary
                 }
                 Text { text: "Lon:"; font.pixelSize: 11; color: textSecondary }
                 Text {
                     text: appEngine && appEngine.astroManager ? appEngine.astroManager.longitude.toFixed(2) + "°" : "--"
-                    font.pixelSize: 11; font.family: "Consolas"; color: textPrimary
+                    font.pixelSize: 11; font.family: "Monospace"; color: textPrimary
                 }
             }
         }
@@ -82,23 +82,23 @@ Rectangle {
                         Text { text: "Azimuth:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.moonAzimuth.toFixed(1) + "°" : "--"
-                            color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                            color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                         }
                         Text { text: "Elevation:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.moonElevation.toFixed(1) + "°" : "--"
                             color: appEngine && appEngine.astroManager && appEngine.astroManager.moonElevation > 0 ? accentGreen : "#f44336"
-                            font.pixelSize: 12; font.family: "Consolas"
+                            font.pixelSize: 12; font.family: "Monospace"
                         }
                         Text { text: "Distance:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? (appEngine.astroManager.moonDistance / 1000).toFixed(0) + " km" : "--"
-                            color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                            color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                         }
                         Text { text: "Phase:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.moonPhase.toFixed(0) + "%" : "--"
-                            color: moonColor; font.pixelSize: 12; font.family: "Consolas"
+                            color: moonColor; font.pixelSize: 12; font.family: "Monospace"
                         }
                     }
                 }
@@ -130,23 +130,23 @@ Rectangle {
                         Text { text: "Azimuth:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.sunAzimuth.toFixed(1) + "°" : "--"
-                            color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                            color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                         }
                         Text { text: "Elevation:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.sunElevation.toFixed(1) + "°" : "--"
                             color: appEngine && appEngine.astroManager && appEngine.astroManager.sunElevation > 0 ? sunColor : "#666"
-                            font.pixelSize: 12; font.family: "Consolas"
+                            font.pixelSize: 12; font.family: "Monospace"
                         }
                         Text { text: "Sunrise:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.sunrise : "--:--"
-                            color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                            color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                         }
                         Text { text: "Sunset:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: appEngine && appEngine.astroManager ? appEngine.astroManager.sunset : "--:--"
-                            color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                            color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                         }
                     }
                 }
@@ -172,12 +172,12 @@ Rectangle {
                     Text { text: "Path Loss:"; color: textSecondary; font.pixelSize: 11 }
                     Text {
                         text: appEngine && appEngine.astroManager ? appEngine.astroManager.emePathLoss.toFixed(1) + " dB" : "--"
-                        color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                        color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                     }
                     Text { text: "Degradation:"; color: textSecondary; font.pixelSize: 11 }
                     Text {
                         text: appEngine && appEngine.astroManager ? appEngine.astroManager.emeDegradation.toFixed(1) + " dB" : "--"
-                        color: textPrimary; font.pixelSize: 12; font.family: "Consolas"
+                        color: textPrimary; font.pixelSize: 12; font.family: "Monospace"
                     }
                 }
             }

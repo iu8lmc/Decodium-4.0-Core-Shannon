@@ -3,6 +3,7 @@
 #include "DecodiumAlertManager.h"
 #include "DecodiumPropagationManager.h"
 #include "DecodiumDxCluster.h"
+#include "Network/MessageClient.hpp"
 #include "DxccLookup.h"
 #include "DecodiumLegacyBackend.h"
 #include "Network/DecodiumPskReporterLite.h"
@@ -868,6 +869,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 #endif
     // Su Windows/Linux NON creare il legacy backend all'avvio — viene creato lazy
     // quando l'utente apre Settings/Setup (ensureLegacyBackendAvailable)
+
+    // Standalone UDP MessageClient — avviato su tutte le piattaforme per
+    // inviare heartbeat/decode/status a programmi esterni (JTAlert, GridTracker…)
+    QTimer::singleShot(2000, this, [this]() { initUdpMessageClient(); });
 
     // PSK Reporter
     m_pskReporter = new DecodiumPskReporterLite(this);
@@ -3695,6 +3700,13 @@ void DecodiumBridge::disconnectDxCluster()
 
 QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultValue) const
 {
+    // For UDP-related keys, read from the legacy INI file which is the
+    // canonical source used by Configuration / MessageClient.
+    if (isLegacySyncKey(key)) {
+        QVariant v = readSettingFromLegacyIni(key);
+        return v.isValid() ? v : defaultValue;
+    }
+
     QSettings s("Decodium", "Decodium3");
     QVariant value = s.value(key);
     if (!value.isValid()) {
@@ -3750,6 +3762,197 @@ void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
                                : QStringLiteral("NTP: server impostato su %1").arg(server));
         }
     }
+
+    // Sync UDP-related keys to the legacy INI file so that the embedded
+    // MainWindow / Configuration / MessageClient can see them.
+    if (isLegacySyncKey(key)) {
+        syncSettingToLegacyIni(key, value);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Legacy INI sync helpers
+// ---------------------------------------------------------------------------
+
+QString DecodiumBridge::legacyIniPath() const
+{
+    auto const& configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    return QDir(configDir).absoluteFilePath(QApplication::applicationName() + QStringLiteral(".ini"));
+}
+
+QString DecodiumBridge::legacyConfigGroupName() const
+{
+    // MultiSettings stores the active configuration name at
+    // MultiSettings/CurrentName inside the INI file.
+    QSettings ini(legacyIniPath(), QSettings::IniFormat);
+    ini.beginGroup(QStringLiteral("MultiSettings"));
+    QString name = ini.value(QStringLiteral("CurrentName")).toString();
+    ini.endGroup();
+    if (name.isEmpty()) {
+        name = QStringLiteral("Default");
+    }
+    return name;
+}
+
+bool DecodiumBridge::isLegacySyncKey(const QString& key) const
+{
+    static QSet<QString> const keys {
+        QStringLiteral("UDPServer"),
+        QStringLiteral("UDPServerPort"),
+        QStringLiteral("UDPListenPort"),
+        QStringLiteral("UDPInterface"),
+        QStringLiteral("UDPTTL"),
+        QStringLiteral("AcceptUDPRequests"),
+        QStringLiteral("udpWindowToFront"),
+        QStringLiteral("udpWindowRestore"),
+    };
+    return keys.contains(key);
+}
+
+void DecodiumBridge::syncSettingToLegacyIni(const QString& key, const QVariant& value)
+{
+    QString const iniPath = legacyIniPath();
+    if (iniPath.isEmpty()) return;
+
+    QSettings ini(iniPath, QSettings::IniFormat);
+    // Settings are stored directly under [General] (the root group)
+    ini.setValue(key, value);
+    ini.sync();
+}
+
+QVariant DecodiumBridge::readSettingFromLegacyIni(const QString& key) const
+{
+    QString const iniPath = legacyIniPath();
+    if (iniPath.isEmpty()) return {};
+
+    QSettings ini(iniPath, QSettings::IniFormat);
+    // Settings are stored directly under [General] (the root group)
+    return ini.value(key);
+}
+
+// ---------------------------------------------------------------------------
+// Standalone UDP MessageClient for WSJT-X protocol
+// ---------------------------------------------------------------------------
+
+void DecodiumBridge::initUdpMessageClient()
+{
+    if (m_udpMessageClient) return;
+
+    // Read UDP settings from the legacy INI (canonical source)
+    QString serverName = getSetting(QStringLiteral("UDPServer"), QStringLiteral("127.0.0.1")).toString();
+    quint16 serverPort = static_cast<quint16>(getSetting(QStringLiteral("UDPServerPort"), 2237).toUInt());
+    quint16 listenPort = static_cast<quint16>(getSetting(QStringLiteral("UDPListenPort"), 0).toUInt());
+    int ttl = getSetting(QStringLiteral("UDPTTL"), 1).toInt();
+    QStringList interfaces;
+    QVariant ifaceVal = readSettingFromLegacyIni(QStringLiteral("UDPInterface"));
+    if (ifaceVal.isValid()) interfaces = ifaceVal.toStringList();
+
+    QString const clientId = QStringLiteral("Decodium");
+    QString const ver = version();
+    QString const rev = QStringLiteral("0");
+
+    m_udpMessageClient = new MessageClient(clientId, ver, rev,
+                                           serverName, serverPort,
+                                           listenPort, interfaces, ttl,
+                                           this);
+
+    connect(m_udpMessageClient, &MessageClient::error, this, [](const QString& msg) {
+        bridgeLog("UDP MessageClient error: " + msg);
+    });
+
+    // Handle incoming reply from external apps (JTAlert etc.)
+    connect(m_udpMessageClient, &MessageClient::reply, this,
+            [this](QTime /*time*/, qint32 /*snr*/, float /*dt*/, quint32 df,
+                   QString const& /*mode*/, QString const& message, bool /*lowConf*/, quint8 /*mods*/) {
+        if (!message.isEmpty()) {
+            bridgeLog("UDP reply received: " + message + " df=" + QString::number(df));
+        }
+    });
+
+    connect(m_udpMessageClient, &MessageClient::halt_tx, this, [this](bool autoOnly) {
+        if (!autoOnly) {
+            bridgeLog("UDP halt_tx received");
+            setTxEnabled(false);
+        }
+    });
+
+    bridgeLog("UDP MessageClient started: server=" + serverName + ":" + QString::number(serverPort)
+              + " listen=" + QString::number(listenPort));
+
+    // Automatically send status updates when key properties change
+    connect(this, &DecodiumBridge::frequencyChanged,    this, &DecodiumBridge::udpSendStatus);
+    connect(this, &DecodiumBridge::modeChanged,         this, &DecodiumBridge::udpSendStatus);
+    connect(this, &DecodiumBridge::monitoringChanged,   this, &DecodiumBridge::udpSendStatus);
+    connect(this, &DecodiumBridge::transmittingChanged, this, &DecodiumBridge::udpSendStatus);
+    connect(this, &DecodiumBridge::decodingChanged,     this, &DecodiumBridge::udpSendStatus);
+    connect(this, &DecodiumBridge::txEnabledChanged,    this, &DecodiumBridge::udpSendStatus);
+
+    // Send initial status
+    udpSendStatus();
+}
+
+void DecodiumBridge::udpSendStatus()
+{
+    if (!m_udpMessageClient) return;
+
+    auto freq = static_cast<MessageClient::Frequency>(qRound64(m_frequency));
+    m_udpMessageClient->status_update(
+        freq,
+        m_mode,                     // mode
+        m_dxCall,                   // dx_call
+        QString(),                  // report
+        m_mode,                     // tx_mode
+        m_txEnabled,                // tx_enabled
+        m_transmitting,             // transmitting
+        m_decoding,                 // decoding
+        static_cast<quint32>(m_rxFrequency),  // rx_df
+        static_cast<quint32>(m_txFrequency),  // tx_df
+        m_callsign,                 // de_call
+        m_grid,                     // de_grid
+        m_dxGrid,                   // dx_grid
+        false,                      // watchdog_timeout
+        QString(),                  // sub_mode
+        false,                      // fast_mode
+        0,                          // special_op_mode
+        0,                          // frequency_tolerance
+        0,                          // tr_period
+        QString(),                  // configuration_name
+        m_lastTransmittedMessage,   // lastTxMsg
+        0,                          // qsoProgress
+        m_txPeriod != 0,            // txFirst
+        false,                      // cqOnly
+        QString(),                  // genMsg
+        false,                      // txHaltClk
+        m_txEnabled,                // txEnableState
+        false,                      // txEnableClk
+        QString(),                  // myContinent
+        false                       // metricUnits
+    );
+}
+
+void DecodiumBridge::udpSendDecode(bool isNew, const QString& rawLine, quint64 serial)
+{
+    if (!m_udpMessageClient) return;
+
+    // Parse the raw decode line: "HHMM  SNR  DT  FREQ ~ MESSAGE"
+    QStringList f = parseFt8Row(rawLine);
+    if (f.size() < 5) return;
+
+    QString timeStr = f[0].trimmed();
+    int snr = f[1].trimmed().toInt();
+    float dt = f[2].trimmed().toFloat();
+    quint32 df = f.size() > 7 ? f[7].trimmed().toUInt() : f[3].trimmed().toUInt();
+    QString message = f[4];
+
+    QTime time;
+    if (timeStr.length() == 4) {
+        time = QTime(timeStr.left(2).toInt(), timeStr.mid(2, 2).toInt());
+    } else {
+        time = QTime::currentTime();
+    }
+
+    m_udpMessageClient->decode(isNew, time, snr, dt, df, m_mode, message, false, false);
+    Q_UNUSED(serial)
 }
 
 int DecodiumBridge::remoteWebSocketPort() const
@@ -3797,13 +4000,25 @@ QStringList DecodiumBridge::networkInterfaceNames() const
 
 QString DecodiumBridge::udpInterfaceName() const
 {
-    QSettings s("Decodium", "Decodium3");
-    QStringList interfaces = s.value(QStringLiteral("UDPInterface")).toStringList();
-    return interfaces.isEmpty() ? QString() : interfaces.constFirst();
+    // Read from legacy INI (canonical source for Configuration/MessageClient)
+    QVariant v = readSettingFromLegacyIni(QStringLiteral("UDPInterface"));
+    if (v.isValid()) {
+        QStringList interfaces = v.toStringList();
+        if (!interfaces.isEmpty()) return interfaces.constFirst();
+    }
+    return {};
 }
 
 void DecodiumBridge::setUdpInterfaceName(const QString& name)
 {
+    QVariant value = name.trimmed().isEmpty()
+        ? QVariant()
+        : QVariant(QStringList{name.trimmed()});
+
+    // Write to legacy INI (canonical source)
+    syncSettingToLegacyIni(QStringLiteral("UDPInterface"), value);
+
+    // Also keep registry copy for backwards compatibility
     QSettings s("Decodium", "Decodium3");
     if (name.trimmed().isEmpty()) {
         s.remove(QStringLiteral("UDPInterface"));
@@ -6143,6 +6358,9 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         m_decodeList.append(QVariant(entry));
         appendRxDecodeEntry(entry);
         changed = true;
+
+        // UDP: invia decode a programmi esterni (JTAlert, GridTracker…)
+        udpSendDecode(true, row, serial);
 
         // PSK Reporter: invia spot se abilitato
         if (m_pskReporterEnabled && m_pskReporter && !m_callsign.isEmpty()) {

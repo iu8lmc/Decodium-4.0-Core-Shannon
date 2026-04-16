@@ -22,7 +22,9 @@ Rectangle {
         : Math.max(0.0, Math.min(1.0, signalLevel / 90.0))
     property bool monitoring: false
     property bool transmitting: false
+    property bool tuning: false
     property bool decoding: false
+    readonly property bool txVisualActive: transmitting || tuning
 
     onDecodingChanged: console.log("StatusBar: decoding =", decoding)
 
@@ -108,7 +110,7 @@ Rectangle {
                         return signalLevel.toFixed(0) + "dB"
                     return "-∞"
                 }
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 color: scaledLevel > 0.9 ? "#f44336" : textSecondary
                 Layout.preferredWidth: 35
@@ -144,15 +146,15 @@ Rectangle {
                 width: 30
                 height: 18
                 radius: 9
-                color: transmitting ? Qt.rgba(244/255, 67/255, 54/255, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                border.color: transmitting ? "#f44336" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+                color: txVisualActive ? Qt.rgba(244/255, 67/255, 54/255, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                border.color: txVisualActive ? "#f44336" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
 
                 Text {
                     anchors.centerIn: parent
                     text: "TX"
                     font.pixelSize: 9
                     font.bold: true
-                    color: transmitting ? "#f44336" : textSecondary
+                    color: txVisualActive ? "#f44336" : textSecondary
                 }
             }
 
@@ -246,7 +248,7 @@ Rectangle {
                         text: ftThreadsLed.threadCount.toString()
                         font.pixelSize: 9
                         font.bold: true
-                        font.family: "Consolas"
+                        font.family: "Monospace"
                         color: ftThreadsLed.isActive ? "#ffffff" : textSecondary
                     }
                 }
@@ -346,7 +348,7 @@ Rectangle {
 
             Text {
                 text: (cpuUsage * 100).toFixed(0) + "%"
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.pixelSize: 10
                 color: cpuUsage > 0.8 ? "#f44336" : textSecondary
                 Layout.preferredWidth: 30

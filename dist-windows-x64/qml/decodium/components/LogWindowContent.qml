@@ -125,9 +125,9 @@ Rectangle {
                 anchors.leftMargin: 8; anchors.rightMargin: 8
                 spacing: 6
 
-                Text { text: (stats.totalQsos || 0) + " QSOs"; font.pixelSize: 11; font.bold: true; font.family: "Consolas"; color: accentGreen }
+                Text { text: (stats.totalQsos || 0) + " QSOs"; font.pixelSize: 11; font.bold: true; font.family: "Monospace"; color: accentGreen }
                 Rectangle { width: 1; height: 16; color: glassBorder }
-                Text { text: (stats.uniqueCalls || 0) + " Calls"; font.pixelSize: 10; font.family: "Consolas"; color: textSecondary }
+                Text { text: (stats.uniqueCalls || 0) + " Calls"; font.pixelSize: 10; font.family: "Monospace"; color: textSecondary }
 
                 Rectangle { width: 1; height: 16; color: glassBorder }
 
@@ -144,7 +144,7 @@ Rectangle {
                         TextField {
                             id: searchField; Layout.fillWidth: true
                             placeholderText: "Search..."
-                            font.pixelSize: 10; font.family: "Consolas"
+                            font.pixelSize: 10; font.family: "Monospace"
                             color: textPrimary; placeholderTextColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
                             onTextChanged: { clearSelection(); refreshLog() }
                             background: Rectangle { color: "transparent" }
@@ -271,13 +271,13 @@ Rectangle {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 0
                         Text { text: index === selectedIndex ? "\u25B6" : ""; font.pixelSize: 7; color: primaryBlue; Layout.preferredWidth: 10 }
-                        Text { text: modelData.dateTime || ""; font.family: "Consolas"; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 105 }
-                        Text { text: modelData.call || ""; font.family: "Consolas"; font.pixelSize: 10; font.bold: true; color: accentGreen; Layout.preferredWidth: 85 }
-                        Text { text: modelData.grid || ""; font.family: "Consolas"; font.pixelSize: 10; color: secondaryCyan; Layout.preferredWidth: 50 }
-                        Text { text: modelData.band || ""; font.family: "Consolas"; font.pixelSize: 10; color: textPrimary; Layout.preferredWidth: 50 }
-                        Text { text: modelData.mode || ""; font.family: "Consolas"; font.pixelSize: 10; color: textPrimary; Layout.preferredWidth: 50 }
-                        Text { text: (modelData.reportSent || "") + "/" + (modelData.reportReceived || ""); font.family: "Consolas"; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 60 }
-                        Text { text: modelData.comment || ""; font.family: "Consolas"; font.pixelSize: 10; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.45); Layout.fillWidth: true; elide: Text.ElideRight }
+                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 105 }
+                        Text { text: modelData.call || ""; font.family: "Monospace"; font.pixelSize: 10; font.bold: true; color: accentGreen; Layout.preferredWidth: 85 }
+                        Text { text: modelData.grid || ""; font.family: "Monospace"; font.pixelSize: 10; color: secondaryCyan; Layout.preferredWidth: 50 }
+                        Text { text: modelData.band || ""; font.family: "Monospace"; font.pixelSize: 10; color: textPrimary; Layout.preferredWidth: 50 }
+                        Text { text: modelData.mode || ""; font.family: "Monospace"; font.pixelSize: 10; color: textPrimary; Layout.preferredWidth: 50 }
+                        Text { text: (modelData.reportSent || "") + "/" + (modelData.reportReceived || ""); font.family: "Monospace"; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 60 }
+                        Text { text: modelData.comment || ""; font.family: "Monospace"; font.pixelSize: 10; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.45); Layout.fillWidth: true; elide: Text.ElideRight }
                     }
                 }
 
@@ -314,7 +314,7 @@ Rectangle {
                             width: 100; height: 26; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editCallF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editCallF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; font.bold: true; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField { id: editCallF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; font.bold: true; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
@@ -325,7 +325,7 @@ Rectangle {
                             width: 60; height: 26; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editGridF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editGridF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField { id: editGridF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
@@ -336,7 +336,7 @@ Rectangle {
                             width: 50; height: 26; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editBandF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editBandF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField { id: editBandF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
@@ -347,7 +347,7 @@ Rectangle {
                             width: 50; height: 26; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editModeF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editModeF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField { id: editModeF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
@@ -358,7 +358,7 @@ Rectangle {
                             width: 45; height: 26; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editSentF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editSentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField { id: editSentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
@@ -369,7 +369,7 @@ Rectangle {
                             width: 45; height: 26; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editRcvdF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editRcvdF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Consolas"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField { id: editRcvdF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
                         }
                     }
 
@@ -388,7 +388,7 @@ Rectangle {
                             Layout.fillWidth: true; height: 22; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editCommentF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editCommentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Consolas"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            TextField { id: editCommentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Monospace"; color: textPrimary; background: Rectangle { color: "transparent" } }
                         }
                     }
 

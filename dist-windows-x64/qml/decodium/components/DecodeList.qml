@@ -58,7 +58,7 @@ Item {
                 // Tempo UTC
                 Text {
                     text: modelData.time || ""
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 11
                     color: modelData.isTx ? errorRed : textSecondary
                     Layout.preferredWidth: 52
@@ -67,7 +67,7 @@ Item {
                 // SNR / TX indicator
                 Text {
                     text: modelData.isTx ? ">>>TX" : (modelData.db + "dB")
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 11
                     font.bold: modelData.isTx
                     color: {
@@ -84,7 +84,7 @@ Item {
                 // Frequenza audio
                 Text {
                     text: modelData.freq + "Hz"
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 11
                     color: modelData.isTx ? errorRed : secondaryCyan
                     Layout.preferredWidth: 54
@@ -96,7 +96,7 @@ Item {
                     text: modelData.dxDistance !== undefined && modelData.dxDistance > 0
                           ? Math.round(modelData.dxDistance) + "km"
                           : ""
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 10
                     color: "#80CBC4"  // teal chiaro
                     Layout.preferredWidth: 52
@@ -106,7 +106,7 @@ Item {
                 // Testo messaggio
                 Text {
                     text: modelData.message || ""
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 12
                     font.bold: modelData.isCQ || modelData.isTx
                     // B7 — C13: applica colori dinamici

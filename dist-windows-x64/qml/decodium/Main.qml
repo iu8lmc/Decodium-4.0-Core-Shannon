@@ -19,6 +19,7 @@ ApplicationWindow {
     visible: true
     title: "Decodium 4.0 — " + bridge.mode + " — " + bridge.callsign
     property bool windowStateRestoreInProgress: true
+    readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
 
     // Carica posizione/dimensioni finestre dal bridge
     Component.onCompleted: {
@@ -29,7 +30,25 @@ ApplicationWindow {
         if (state.y !== undefined) y = state.y
         // Sicurezza: se la finestra è fuori schermo, riportala al centro
         Qt.callLater(function() {
-            if (x < -100 || y < -100 || x > Screen.desktopAvailableWidth || y > Screen.desktopAvailableHeight) {
+            var centerX = x + width / 2
+            var centerY = y + height / 2
+            var onScreen = false
+            if (Qt.application.screens && Qt.application.screens.length > 0) {
+                for (var i = 0; i < Qt.application.screens.length; ++i) {
+                    var s = Qt.application.screens[i]
+                    if (centerX >= s.virtualX && centerX < s.virtualX + s.width &&
+                        centerY >= s.virtualY && centerY < s.virtualY + s.height) {
+                        onScreen = true
+                        break
+                    }
+                }
+            } else {
+                // Fallback: basic bounds check
+                onScreen = (x >= -100 && y >= -100 &&
+                            x < Screen.desktopAvailableWidth &&
+                            y < Screen.desktopAvailableHeight)
+            }
+            if (!onScreen) {
                 x = Math.max(0, (Screen.desktopAvailableWidth - width) / 2)
                 y = Math.max(0, (Screen.desktopAvailableHeight - height) / 2)
             }
@@ -326,6 +345,20 @@ ApplicationWindow {
         badgeHideTimer.restart()
     }
 
+    function shouldShowStatusToast(message) {
+        var lower = String(message || "").toLowerCase()
+        return lower.indexOf("cty.dat") >= 0
+    }
+
+    function showStatusToast(message, color) {
+        if (!message || message.length === 0)
+            return
+        statusToastText = message
+        statusToastColor = color ? color : secondaryCyan
+        statusToastVisible = true
+        statusToastHideTimer.restart()
+    }
+
     // Dock zones positions
     property rect waterfallDockZone: Qt.rect(8, 64, 450, contentArea.height - 108)
 
@@ -349,6 +382,9 @@ ApplicationWindow {
     property color badgeColor: secondaryCyan
     property string badgeIcon: ""
     property bool badgeVisible: false
+    property string statusToastText: ""
+    property color statusToastColor: secondaryCyan
+    property bool statusToastVisible: false
 
     // Main background gradient
     background: Rectangle {
@@ -687,7 +723,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
                     font.pixelSize: 18
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     color: textPrimary
                     placeholderText: ""
                     selectByMouse: true
@@ -892,9 +928,9 @@ ApplicationWindow {
                                 // bridge.frequency is synced with both CAT and BandManager
                                 text: (bridge.frequency / 1000000).toFixed(6)
                                 font.pixelSize: Math.round(26 * fs)
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.bold: true
-                                color: bridge.transmitting ? "#ff6b6b" : accentGreen
+                                color: mainWindow.txVisualActive ? "#ff6b6b" : accentGreen
                                 Layout.fillWidth: true
 
                                 Behavior on color { ColorAnimation { duration: 200 } }
@@ -934,7 +970,7 @@ ApplicationWindow {
                                 text: "TX:"
                                 font.pixelSize: 10
                                 font.bold: true
-                                color: bridge.transmitting ? "#f44336" : textSecondary
+                                color: mainWindow.txVisualActive ? "#f44336" : textSecondary
                             }
                             // TX frequency - click to edit
                             Rectangle {
@@ -943,7 +979,7 @@ ApplicationWindow {
                                 Text {
                                     id: txFreqText; anchors.centerIn: parent
                                     text: bridge.txFrequency + " Hz"
-                                    font.pixelSize: 10; font.family: "Consolas"
+                                    font.pixelSize: 10; font.family: "Monospace"
                                     color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : "#f44336"
                                 }
                                 MouseArea {
@@ -968,7 +1004,7 @@ ApplicationWindow {
                                 Text {
                                     id: rxFreqText; anchors.centerIn: parent
                                     text: bridge.rxFrequency + " Hz"
-                                    font.pixelSize: 10; font.family: "Consolas"
+                                    font.pixelSize: 10; font.family: "Monospace"
                                     color: accentGreen
                                 }
                                 MouseArea {
@@ -1122,7 +1158,7 @@ ApplicationWindow {
                         Text {
                             text: bridge.utcTime
                             font.pixelSize: 8
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.bold: true
                             color: accentGreen
                         }
@@ -1135,11 +1171,11 @@ ApplicationWindow {
                         color: "transparent"
                         border.color: "#f44336"
                         border.width: 3
-                        visible: bridge.transmitting
+                        visible: mainWindow.txVisualActive
                         opacity: 0
 
                         SequentialAnimation on opacity {
-                            running: bridge.transmitting
+                            running: mainWindow.txVisualActive
                             loops: Animation.Infinite
                             NumberAnimation { to: 1.0; duration: 250 }
                             NumberAnimation { to: 0.3; duration: 250 }
@@ -1201,7 +1237,7 @@ ApplicationWindow {
                                             width: 8; height: 8; radius: 4; color: secondaryCyan
                                         }
                                     }
-                                    Text { text: Math.round(bridge.rxInputLevel); color: secondaryCyan; font.pixelSize: 8; font.family: "Consolas"; Layout.preferredWidth: 18 }
+                                    Text { text: Math.round(bridge.rxInputLevel); color: secondaryCyan; font.pixelSize: 8; font.family: "Monospace"; Layout.preferredWidth: 18 }
                                 }
 
                                 RowLayout {
@@ -1229,7 +1265,7 @@ ApplicationWindow {
                                         text: bridge.txOutputLevel > 0 ? ("-" + (bridge.txOutputLevel / 10).toFixed(1)) : "0.0"
                                         color: accentGreen
                                         font.pixelSize: 8
-                                        font.family: "Consolas"
+                                        font.family: "Monospace"
                                         Layout.preferredWidth: 28
                                     }
                                 }
@@ -1468,23 +1504,23 @@ ApplicationWindow {
                             Layout.fillHeight: true
                             radius: 3
                             color: recMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
-                                   (bridge.wavManager && bridge.wavManager.recording ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent")
-                            border.color: bridge.wavManager && bridge.wavManager.recording ? "#f44336" : "transparent"
-                            border.width: bridge.wavManager && bridge.wavManager.recording ? 1 : 0
+                                   (bridge.recordRxEnabled ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent")
+                            border.color: bridge.recordRxEnabled ? "#f44336" : "transparent"
+                            border.width: bridge.recordRxEnabled ? 1 : 0
 
                             Row {
                                 anchors.centerIn: parent
                                 spacing: 2
                                 Text {
-                                    text: bridge.wavManager && bridge.wavManager.recording ? "●" : "○"
+                                    text: bridge.recordRxEnabled ? "●" : "○"
                                     font.pixelSize: 12
-                                    color: bridge.wavManager && bridge.wavManager.recording ? "#f44336" : textPrimary
+                                    color: bridge.recordRxEnabled ? "#f44336" : textPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                                 Text {
                                     text: "REC"
                                     font.pixelSize: 9
-                                    color: bridge.wavManager && bridge.wavManager.recording ? "#f44336" : textPrimary
+                                    color: bridge.recordRxEnabled ? "#f44336" : textPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
@@ -1494,11 +1530,11 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.wavManager.recording ? bridge.wavManager.stopRecording() : bridge.wavManager.startRecording()
+                                onClicked: bridge.recordRxEnabled = !bridge.recordRxEnabled
                             }
 
                             ToolTip.visible: recMA.containsMouse
-                            ToolTip.text: bridge.wavManager && bridge.wavManager.recording ?
+                            ToolTip.text: bridge.recordRxEnabled && bridge.wavManager ?
                                           "Recording: " + bridge.wavManager.recordedSeconds + "s" : "Start Recording"
                         }
 
@@ -1717,15 +1753,15 @@ ApplicationWindow {
                     readonly property int infoColumnWidth: Math.max(116, width - (cardMargins * 2) - analogClockWidth - rowSpacing - 4)
 
                     property var timezones: [
-                        { name: "UTC", offset: 0 },
-                        { name: "London", offset: 0 },
-                        { name: "Rome", offset: 1 },
-                        { name: "Moscow", offset: 3 },
-                        { name: "Dubai", offset: 4 },
-                        { name: "Tokyo", offset: 9 },
-                        { name: "Sydney", offset: 11 },
-                        { name: "New York", offset: -5 },
-                        { name: "Los Angeles", offset: -8 }
+                        { name: "UTC", zoneId: "UTC" },
+                        { name: "London", zoneId: "Europe/London" },
+                        { name: "Rome", zoneId: "Europe/Rome" },
+                        { name: "Moscow", zoneId: "Europe/Moscow" },
+                        { name: "Dubai", zoneId: "Asia/Dubai" },
+                        { name: "Tokyo", zoneId: "Asia/Tokyo" },
+                        { name: "Sydney", zoneId: "Australia/Sydney" },
+                        { name: "New York", zoneId: "America/New_York" },
+                        { name: "Los Angeles", zoneId: "America/Los_Angeles" }
                     ]
                     property int selectedTz: 0
                     property int hours: 0
@@ -1743,16 +1779,15 @@ ApplicationWindow {
                     Component.onCompleted: updateTime()
 
                     function updateTime() {
-                        var now = new Date()
-                        var utc = now.getTime() + (now.getTimezoneOffset() * 60000)
-                        var tzTime = new Date(utc + (timezones[selectedTz].offset * 3600000))
-                        hours = tzTime.getHours()
-                        minutes = tzTime.getMinutes()
-                        seconds = tzTime.getSeconds()
-                        var day = ("0" + tzTime.getDate()).slice(-2)
-                        var month = ("0" + (tzTime.getMonth() + 1)).slice(-2)
-                        var year = tzTime.getFullYear()
-                        dateStr = day + "/" + month + "/" + year
+                        if (selectedTz < 0 || selectedTz >= timezones.length) {
+                            selectedTz = 0
+                        }
+
+                        var snapshot = bridge.worldClockSnapshot(timezones[selectedTz].zoneId)
+                        hours = snapshot.hours
+                        minutes = snapshot.minutes
+                        seconds = snapshot.seconds
+                        dateStr = snapshot.date || ""
                     }
 
                     function nextTimezone() {
@@ -1833,7 +1868,7 @@ ApplicationWindow {
                             font.pixelSize: 22
                             minimumPixelSize: 17
                             fontSizeMode: Text.Fit
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.bold: true
                             color: textPrimary
                             elide: Text.ElideRight
@@ -1850,7 +1885,7 @@ ApplicationWindow {
                             anchors.topMargin: 2
                             text: worldClock.dateStr
                             font.pixelSize: 11
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
                             elide: Text.ElideRight
                         }
@@ -2464,7 +2499,7 @@ ApplicationWindow {
                                     placeholderText: "Callsign..."
                                     font.pixelSize: 11
                                     font.capitalization: Font.AllUppercase
-                                    font.family: "Consolas"
+                                    font.family: "Monospace"
                                     color: textPrimary
                                     background: Rectangle { color: "transparent" }
                                     onAccepted: {
@@ -2944,6 +2979,9 @@ ApplicationWindow {
                             }
                             decodePanel.lastSyncCount = src.length
                         }
+                        function onRxDecodeListChanged() {
+                            decodePanel.decodeListVersion++
+                        }
                     }
 
                     Timer {
@@ -2993,7 +3031,6 @@ ApplicationWindow {
                     }
                     function currentRxDecodes() {
                         var merged = []
-                        var seen = {}
                         function utcSortValue(timeStr) {
                             var digits = String(timeStr || "").replace(/[^0-9]/g, "")
                             if (digits.length >= 6)
@@ -3002,28 +3039,10 @@ ApplicationWindow {
                                 return parseInt(digits + "00")
                             return -1
                         }
-                        function appendUnique(item) {
-                            if (!item)
-                                return
-                            var key = (item.time || "") + "|" +
-                                      (item.freq || "") + "|" +
-                                      (item.message || "") + "|" +
-                                      (item.isTx ? "1" : "0")
-                            if (seen[key])
-                                return
-                            seen[key] = true
-                            merged.push(item)
-                        }
                         if (bridge.rxDecodeList) {
                             for (var j = 0; j < bridge.rxDecodeList.length; j++) {
-                                appendUnique(bridge.rxDecodeList[j])
-                            }
-                        }
-                        for (var i = 0; i < bridge.decodeList.length; i++) {
-                            var item = bridge.decodeList[i]
-                            // Mostra decode alla freq RX + tutti i TX (sempre visibili)
-                            if (item.isTx || decodePanel.isAtRxFrequency(item.freq, item)) {
-                                appendUnique(item)
+                                if (bridge.rxDecodeList[j])
+                                    merged.push(bridge.rxDecodeList[j])
                             }
                         }
                         merged.sort(function(a, b) {
@@ -3207,7 +3226,7 @@ ApplicationWindow {
                             text: timingBar.periodLabel
                             font.pixelSize: 11
                             font.bold: true
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: timingBar.isTxPhase ? "#f44336" : "#4CAF50"
                         }
 
@@ -3219,7 +3238,7 @@ ApplicationWindow {
                             text: timingBar.isTxPhase ? "TX" : "RX"
                             font.pixelSize: 10
                             font.bold: true
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: timingBar.isTxPhase ? "#f44336" : accentGreen
                         }
 
@@ -3230,7 +3249,7 @@ ApplicationWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             text: timingBar.secInPeriod.toFixed(1) + " / " + timingBar.periodLen.toFixed(1) + "s"
                             font.pixelSize: 10
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: textSecondary
                         }
                     }
@@ -3467,19 +3486,19 @@ ApplicationWindow {
                                         anchors.rightMargin: 6
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                        Text { text: "dB"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
-                                        Text { text: "DT"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                        Text { text: "Freq"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                        Text { text: "UTC"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                        Text { text: "DT"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                        Text { text: "Freq"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
+                                        Text { text: "Message"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
                                         Item {
                                             Layout.preferredWidth: period1Panel.dxccColumnWidth
                                             Layout.fillHeight: true
                                             Text {
                                                 anchors.fill: parent
                                                 text: "DXCC"
-                                                font.family: "Consolas"
+                                                font.family: "Monospace"
                                                 font.pixelSize: Math.round(11 * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
@@ -3493,7 +3512,7 @@ ApplicationWindow {
                                             Text {
                                                 anchors.fill: parent
                                                 text: "Az"
-                                                font.family: "Consolas"
+                                                font.family: "Monospace"
                                                 font.pixelSize: Math.round(11 * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
@@ -3582,19 +3601,19 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
-                                                Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                                Text { text: modelData.freq || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                                Text { text: modelData.dt || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                                Text { text: modelData.freq || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: Text.ElideRight }
+                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: Text.ElideRight }
                                                 Item {
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
                                                         anchors.fill: parent
                                                         text: modelData.dxCountry || ""
-                                                        font.family: "Consolas"
+                                                        font.family: "Monospace"
                                                         font.pixelSize: Math.round(11 * fs)
                                                         color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary
                                                         horizontalAlignment: Text.AlignRight
@@ -3608,7 +3627,7 @@ ApplicationWindow {
                                                     Text {
                                                         anchors.fill: parent
                                                         text: formatBearingDegrees(modelData.dxBearing)
-                                                        font.family: "Consolas"
+                                                        font.family: "Monospace"
                                                         font.pixelSize: Math.round(11 * fs)
                                                         color: secondaryCyan
                                                         horizontalAlignment: Text.AlignHCenter
@@ -3737,7 +3756,7 @@ ApplicationWindow {
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: bridge.rxFrequency + " Hz"
-                                                font.family: "Consolas"
+                                                font.family: "Monospace"
                                                 font.pixelSize: 10
                                                 font.bold: true
                                                 color: primaryBlue
@@ -3748,6 +3767,7 @@ ApplicationWindow {
 
                                         Text {
                                             text: {
+                                                void(decodePanel.decodeListVersion)
                                                 return decodePanel.currentRxDecodes().length + " msgs"
                                             }
                                             font.pixelSize: 10
@@ -3815,11 +3835,11 @@ ApplicationWindow {
                                         anchors.rightMargin: 6
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-                                        Text { text: "dB"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
-                                        Text { text: "DT"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                        Text { text: "UTC"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                        Text { text: "DT"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                         Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
+                                        Text { text: "Message"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
                                     }
                                 }
 
@@ -3904,11 +3924,11 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
-                                                Text { text: modelData.dt || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                                Text { text: modelData.dt || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
+                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                                             }
                                         }
 
@@ -4161,6 +4181,7 @@ ApplicationWindow {
             signalLevel: bridge ? bridge.sMeter : 0.0
             monitoring: bridge ? bridge.monitoring : false
             transmitting: bridge ? bridge.transmitting : false
+            tuning: bridge ? bridge.tuning : false
             decoding: bridge ? bridge.decoding : false
             catStatus: bridge && bridge.catConnected ? "Connected" : "Disconnected"
         }
@@ -4365,7 +4386,7 @@ ApplicationWindow {
 
                 Text {
                     text: badgeText
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 36
                     font.bold: true
                     font.letterSpacing: 3
@@ -4374,7 +4395,7 @@ ApplicationWindow {
 
                 Text {
                     text: badgeSubText
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 18
                     color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.8)
                 }
@@ -4397,6 +4418,49 @@ ApplicationWindow {
         opacity: badgeVisible ? 1.0 : 0.0
         Behavior on opacity {
             NumberAnimation { duration: badgeVisible ? 250 : 400; easing.type: badgeVisible ? Easing.OutQuad : Easing.InQuad }
+        }
+    }
+
+    Rectangle {
+        id: statusToast
+        z: 9997
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 72
+        anchors.rightMargin: 24
+        width: Math.min(parent.width * 0.42, 520)
+        implicitHeight: toastContent.implicitHeight + 24
+        radius: 12
+        visible: statusToastVisible
+        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.96)
+        border.color: Qt.rgba(statusToastColor.r, statusToastColor.g, statusToastColor.b, 0.55)
+        border.width: 1
+        opacity: statusToastVisible ? 1.0 : 0.0
+
+        Column {
+            id: toastContent
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 6
+
+            Text {
+                text: "Aggiornamento"
+                font.pixelSize: 12
+                font.bold: true
+                color: statusToastColor
+            }
+
+            Text {
+                width: parent.width
+                text: statusToastText
+                wrapMode: Text.Wrap
+                font.pixelSize: 12
+                color: textPrimary
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation { duration: statusToastVisible ? 180 : 260; easing.type: statusToastVisible ? Easing.OutQuad : Easing.InQuad }
         }
     }
 
@@ -4428,6 +4492,11 @@ ApplicationWindow {
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato
     Connections {
         target: bridge
+        function onStatusMessage(msg) {
+            console.log("[Bridge]", msg)
+            if (shouldShowStatusToast(msg))
+                showStatusToast(msg, secondaryCyan)
+        }
         function onErrorMessage(msg) {
             // Ignora TUTTI gli errori rig/Hamlib/CAT/COM quando il CAT nativo gestisce il rig
             // Questi vengono dal legacy backend che tenta di connettersi sulla stessa porta
@@ -4440,6 +4509,7 @@ ApplicationWindow {
                     lower.indexOf("kenwood") >= 0 || lower.indexOf("communication") >= 0)
                     return
             }
+            console.error("[Bridge ERROR]", msg)
             warningDialogTitle = "Errore"
             warningDialogSummary = msg
             warningDialogDetails = ""
@@ -4458,6 +4528,7 @@ ApplicationWindow {
         }
         function onTimeSyncSettingsRequested() {
             timeSyncPanelVisible = true
+            settingsDialog.openTab(8)
         }
         function onCatSettingsRequested() {
             settingsDialog.openTab(1)
@@ -4642,6 +4713,7 @@ ApplicationWindow {
 
     // QSO Progress Badge - Auto-hide timer
     Timer { id: badgeHideTimer; interval: 2500; onTriggered: badgeVisible = false }
+    Timer { id: statusToastHideTimer; interval: 3200; onTriggered: statusToastVisible = false }
 
     // Main Menu (Hamburger)
     Menu {
@@ -5388,7 +5460,7 @@ ApplicationWindow {
                 text: (Qt.platform.os === "windows"
                        ? "C:/Users/IU8LMC/Documents/" : "~/")
                       + bridge.callsign + "_" + Qt.formatDate(new Date(), "yyyyMMdd") + ".cbr"
-                font.family: "Consolas"; font.pixelSize: 11
+                font.family: "Monospace"; font.pixelSize: 11
                 color: textPrimary
                 background: Rectangle {
                     color: Qt.rgba(1,1,1,0.07); border.color: glassBorder; radius: 4
@@ -5973,7 +6045,7 @@ ApplicationWindow {
                         Text {
                             text: "RX: " + bridge.rxFrequency + " Hz | TX: " + bridge.txFrequency + " Hz"
                             font.pixelSize: 12
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: textSecondary
                         }
 
@@ -6048,7 +6120,7 @@ ApplicationWindow {
                             Text {
                                 text: waterfallDisplayDetached.minFreq + "-" + waterfallDisplayDetached.maxFreq + " Hz"
                                 font.pixelSize: 10
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 color: textSecondary
                             }
                         }
@@ -6168,7 +6240,7 @@ ApplicationWindow {
                         Text {
                             text: "Freq: " + (bridge.frequency / 1000000).toFixed(6) + " MHz"
                             font.pixelSize: 11
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: accentGreen
                         }
 
@@ -6775,9 +6847,9 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
-                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
+                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
+                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                             }
 
                             MouseArea {
@@ -6942,7 +7014,7 @@ ApplicationWindow {
                             Text {
                                 anchors.centerIn: parent
                                 text: bridge.rxFrequency + " Hz"
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: primaryBlue
@@ -6984,7 +7056,9 @@ ApplicationWindow {
                         anchors.margins: 4
                         clip: true
                         spacing: 1
+                        property int _ver: decodePanel.decodeListVersion
                         model: {
+                            void(_ver)
                             return decodePanel.currentRxDecodes()
                         }
                         ScrollBar.vertical: ScrollBar { active: true }
@@ -6999,9 +7073,9 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
-                                Text { text: modelData.db || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: "Consolas"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
+                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
+                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                             }
 
                             MouseArea {

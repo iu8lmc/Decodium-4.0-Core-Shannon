@@ -255,17 +255,20 @@ Rectangle {
 
             // tooltip callsign su hover
             ToolTip {
+                id: spotTooltip
                 visible: rowMouse.containsMouse
                 delay: 500
                 text: {
-                    var c = modelData["dxCall"] || ""
-                    var f = modelData["frequency"] || 0
-                    var sp = modelData["spotter"] || ""
+                    var c = (modelData && modelData["dxCall"]) ? modelData["dxCall"] : ""
+                    var f = (modelData && modelData["frequency"]) ? modelData["frequency"] : 0
+                    var sp = (modelData && modelData["spotter"]) ? modelData["spotter"] : ""
                     return c + "  —  " + f.toFixed(1) + " kHz\nSpotter: " + sp +
                            "\n↵ click = imposta DX call\n↵↵ doppio-click = QSY"
                 }
                 contentItem: Text {
-                    text: parent.text; color: "#ffffff"; font.pixelSize: 11
+                    text: spotTooltip.text || ""
+                    color: "#ffffff"
+                    font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
                 background: Rectangle {

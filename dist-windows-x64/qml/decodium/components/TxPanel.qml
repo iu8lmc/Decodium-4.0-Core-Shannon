@@ -10,6 +10,7 @@ Item {
 
     // Required property - reference to the app engine
     required property var engine
+    readonly property bool txVisualActive: !!(engine && (engine.transmitting || engine.tuning))
     property string logPreviewCall: ""
     property string logPreviewGrid: ""
     property string logPreviewSent: ""
@@ -97,7 +98,7 @@ Item {
                 text: glyph
                 color: foreground
                 font.pixelSize: glyphSize
-                font.family: "Consolas"
+                font.family: "Monospace"
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -105,7 +106,7 @@ Item {
                 text: label
                 color: foreground
                 font.pixelSize: labelSize
-                font.family: "Consolas"
+                font.family: "Monospace"
                 font.bold: boldLabel
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -115,8 +116,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: glassBg
-        border.color: engine && engine.transmitting ? errorRed : glassBorder
-        border.width: engine && engine.transmitting ? 2 : 1
+        border.color: txPanel.txVisualActive ? errorRed : glassBorder
+        border.width: txPanel.txVisualActive ? 2 : 1
         radius: 12
 
         ColumnLayout {
@@ -220,7 +221,7 @@ Item {
                                     return idx >= 0 ? idx : 0
                                 }
                                 onCurrentTextChanged: if (engine && currentText) engine.mode = currentText
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 14
                                 itemHeight: 40
                                 popupMinWidth: 176
@@ -731,7 +732,7 @@ Item {
                     text: engine ? engine.dxCall : ""
                     placeholderText: "Call"
                     font.pixelSize: 12
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     color: textPrimary
 
                     background: Rectangle {
@@ -761,7 +762,7 @@ Item {
                     text: engine ? engine.dxGrid : ""
                     placeholderText: "Grid"
                     font.pixelSize: 12
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     color: textPrimary
 
                     background: Rectangle {
@@ -790,7 +791,7 @@ Item {
                     Layout.preferredHeight: 32
                     text: engine ? engine.reportSent : "-10"
                     font.pixelSize: 12
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     color: textPrimary
 
                     background: Rectangle {
@@ -820,7 +821,7 @@ Item {
                     text: engine ? engine.reportReceived : ""
                     placeholderText: "--"
                     font.pixelSize: 11
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     color: accentGreen
 
                     background: Rectangle {
@@ -863,7 +864,7 @@ Item {
                             Layout.fillWidth: true
                             text: engine ? engine.currentTxMessage : ""
                             color: engine && engine.transmitting ? errorRed : textPrimary
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 11
                             font.bold: engine && engine.transmitting
                             elide: Text.ElideRight
@@ -988,6 +989,25 @@ Item {
 
             }
 
+        }
+
+        Rectangle {
+            id: txPulseOverlay
+            anchors.fill: parent
+            color: "transparent"
+            radius: 12
+            border.color: errorRed
+            border.width: 3
+            visible: txPanel.txVisualActive
+            opacity: 0
+
+            SequentialAnimation on opacity {
+                running: txPanel.txVisualActive
+                loops: Animation.Infinite
+                NumberAnimation { to: 1.0; duration: 250 }
+                NumberAnimation { to: 0.3; duration: 250 }
+                onRunningChanged: if (!running) txPulseOverlay.opacity = 0
+            }
         }
     }
 
@@ -1135,7 +1155,7 @@ Item {
                     width: parent.width
                     text: message
                     color: isTransmitting ? errorRed : textPrimary
-                    font.family: "Consolas"
+                    font.family: "Monospace"
                     font.pixelSize: 9
                     elide: Text.ElideMiddle
                     horizontalAlignment: Text.AlignHCenter

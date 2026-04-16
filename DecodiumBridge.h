@@ -30,6 +30,7 @@ class DecodiumWsprUploader;
 class DxccLookup;
 class DecodiumLegacyBackend;
 class DecodiumPropagationManager;
+class MessageClient;
 
 Q_DECLARE_OPAQUE_POINTER(DecodiumDxCluster*)
 
@@ -980,6 +981,18 @@ private:
     void restoreAutoCqPartnerLock();
     void enqueueCallerInternal(const QString& call, int freq = -1, int snr = -99);
 
+    // Legacy INI sync helpers for UDP settings
+    QString legacyIniPath() const;
+    QString legacyConfigGroupName() const;
+    bool isLegacySyncKey(const QString& key) const;
+    void syncSettingToLegacyIni(const QString& key, const QVariant& value);
+    QVariant readSettingFromLegacyIni(const QString& key) const;
+
+    // Standalone UDP MessageClient for WSJT-X protocol
+    void initUdpMessageClient();
+    void udpSendStatus();
+    void udpSendDecode(bool isNew, const QString& rawLine, quint64 serial);
+
     QString m_callsign {"IU8LMC"};
     QString m_grid {"JN70"};
     double m_frequency {14074000.0};
@@ -1123,6 +1136,7 @@ private:
     QTimer*            m_tuneTimer    {nullptr};
     DecodiumLegacyBackend* m_legacyBackend {nullptr};
     bool m_useLegacyTxBackend {false};
+    MessageClient* m_udpMessageClient {nullptr};
     int  m_legacyBandActivityRevision {-1};
     int  m_legacyRxFrequencyRevision {-1};
 

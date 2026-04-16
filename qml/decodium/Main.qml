@@ -30,7 +30,25 @@ ApplicationWindow {
         if (state.y !== undefined) y = state.y
         // Sicurezza: se la finestra è fuori schermo, riportala al centro
         Qt.callLater(function() {
-            if (x < -100 || y < -100 || x > Screen.desktopAvailableWidth || y > Screen.desktopAvailableHeight) {
+            var centerX = x + width / 2
+            var centerY = y + height / 2
+            var onScreen = false
+            if (Qt.application.screens && Qt.application.screens.length > 0) {
+                for (var i = 0; i < Qt.application.screens.length; ++i) {
+                    var s = Qt.application.screens[i]
+                    if (centerX >= s.virtualX && centerX < s.virtualX + s.width &&
+                        centerY >= s.virtualY && centerY < s.virtualY + s.height) {
+                        onScreen = true
+                        break
+                    }
+                }
+            } else {
+                // Fallback: basic bounds check
+                onScreen = (x >= -100 && y >= -100 &&
+                            x < Screen.desktopAvailableWidth &&
+                            y < Screen.desktopAvailableHeight)
+            }
+            if (!onScreen) {
                 x = Math.max(0, (Screen.desktopAvailableWidth - width) / 2)
                 y = Math.max(0, (Screen.desktopAvailableHeight - height) / 2)
             }

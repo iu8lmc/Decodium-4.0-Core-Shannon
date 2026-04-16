@@ -209,7 +209,7 @@ Dialog {
                         text: astroWindow.hasAstroManager ? astroManager.gridLocator : astroWindow.fallbackGrid
                         font.pixelSize: 14
                         font.bold: true
-                        font.family: "Consolas"
+                        font.family: "Monospace"
                         color: primaryBlue
                     }
 
@@ -228,7 +228,7 @@ Dialog {
                     Text {
                         text: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm") + " UTC"
                         font.pixelSize: 11
-                        font.family: "Consolas"
+                        font.family: "Monospace"
                         color: textSecondary
                     }
                 }
@@ -321,7 +321,7 @@ Dialog {
                         Text { text: "Azimuth:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonAzimuth.toFixed(1) + "°" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -329,7 +329,7 @@ Dialog {
                         Text { text: "Elevation:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonElevation.toFixed(1) + "°" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: astroManager && astroManager.moonElevation > 0 ? accentGreen : "#f44336"
                         }
@@ -337,7 +337,7 @@ Dialog {
                         Text { text: "Distance:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? (astroManager.moonDistance / 1000).toFixed(0) + " Mm" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -345,7 +345,7 @@ Dialog {
                         Text { text: "Doppler:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonDoppler.toFixed(0) + " Hz" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -353,7 +353,7 @@ Dialog {
                         Text { text: "Rise:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonRise + " UTC" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -361,7 +361,7 @@ Dialog {
                         Text { text: "Set:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.moonSet + " UTC" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -397,7 +397,7 @@ Dialog {
                         Text { text: "Azimuth:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunAzimuth.toFixed(1) + "°" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -405,7 +405,7 @@ Dialog {
                         Text { text: "Elevation:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunElevation.toFixed(1) + "°" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: astroManager && astroManager.sunElevation > 0 ? sunColor : textSecondary
                         }
@@ -413,7 +413,7 @@ Dialog {
                         Text { text: "Sunrise:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunrise + " UTC" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -421,7 +421,7 @@ Dialog {
                         Text { text: "Sunset:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.sunset + " UTC" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -491,7 +491,7 @@ Dialog {
                         Text { text: "Path Loss:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.emePathLoss.toFixed(1) + " dB" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -501,7 +501,7 @@ Dialog {
                             text: astroManager
                                   ? (astroManager.emeDoppler >= 0 ? "+" : "") + astroManager.emeDoppler.toFixed(0) + " Hz"
                                   : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -509,7 +509,7 @@ Dialog {
                         Text { text: "Frequency:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: astroManager ? astroManager.frequency.toFixed(3) + " MHz" : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: secondaryCyan
                         }
@@ -519,7 +519,7 @@ Dialog {
                             text: astroManager
                                   ? astroManager.emeWindowStart + " - " + astroManager.emeWindowEnd + " UTC"
                                   : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                             Layout.columnSpan: 3
@@ -558,7 +558,7 @@ Dialog {
                                         propagationManager.updating ? "Updating..." : "Waiting for first update")
                                   : "---"
                             font.pixelSize: 10
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             color: textSecondary
                         }
                     }
@@ -571,7 +571,7 @@ Dialog {
                         Text { text: "Solar Flux:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.solarFlux) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -579,7 +579,7 @@ Dialog {
                         Text { text: "A-Index:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.aIndex) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -587,7 +587,7 @@ Dialog {
                         Text { text: "K-Index:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.kIndex) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -595,7 +595,7 @@ Dialog {
                         Text { text: "X-Ray:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.xRay) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -603,7 +603,7 @@ Dialog {
                         Text { text: "Sunspots:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.sunspots) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -611,7 +611,7 @@ Dialog {
                         Text { text: "Solar Wind:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.solarWind) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -619,7 +619,7 @@ Dialog {
                         Text { text: "MUF:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.muf) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -627,7 +627,7 @@ Dialog {
                         Text { text: "Geomagnetic:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.geomagneticField) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                         }
@@ -635,7 +635,7 @@ Dialog {
                         Text { text: "Signal Noise:"; color: textSecondary; font.pixelSize: 11 }
                         Text {
                             text: propagationManager ? astroWindow.displayPropagationValue(propagationManager.signalNoise) : "---"
-                            font.family: "Consolas"
+                            font.family: "Monospace"
                             font.pixelSize: 12
                             color: textPrimary
                             Layout.columnSpan: 3
@@ -720,7 +720,7 @@ Dialog {
                             Text {
                                 Layout.preferredWidth: 90
                                 text: modelData.band
-                                font.family: "Consolas"
+                                font.family: "Monospace"
                                 font.pixelSize: 12
                                 color: textPrimary
                             }

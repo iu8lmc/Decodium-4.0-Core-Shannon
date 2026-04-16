@@ -345,8 +345,14 @@ void MessageClient::impl::host_info_results (QHostInfo host_info)
 void MessageClient::impl::start ()
 {
   rebuild_trusted_senders ();
+
+  qInfo () << "UDP MessageClient::start server=" << server_.toString ()
+           << "port=" << server_port_
+           << "listen=" << listen_port_;
+
   if (server_.isNull ())
     {
+      qInfo () << "UDP MessageClient: server address is null, closing";
       Q_EMIT self_->close ();
       pending_messages_.clear (); // discard
       return;
@@ -394,7 +400,8 @@ void MessageClient::impl::start ()
         {
           bound = bind (interface_addr);
         }
-      // qDebug () << "Bound to UDP port:" << localPort () << "on:" << localAddress ();
+      qInfo () << "UDP MessageClient: bound to port" << localPort ()
+               << "on" << localAddress ().toString ();
 
       // set multicast TTL to limit scope when sending to multicast
       // group addresses
@@ -402,6 +409,8 @@ void MessageClient::impl::start ()
     }
 
   // send initial heartbeat which allows schema negotiation
+  qInfo () << "UDP MessageClient: sending initial heartbeat to"
+           << server_.toString () << ":" << server_port_;
   heartbeat ();
 
   // clear any backlog

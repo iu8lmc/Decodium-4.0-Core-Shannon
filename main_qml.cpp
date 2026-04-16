@@ -16,6 +16,7 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QLockFile>
 #include <QList>
 #include <QLocale>
 #include <atomic>
@@ -195,6 +196,15 @@ int main(int argc, char* argv[])
     QString const languageOverride = parser.value(languageOption).trimmed();
     if (!languageOverride.isEmpty()) {
         app.setProperty("decodiumLanguageOverride", languageOverride);
+    }
+
+    // Single-instance detection: prevent multiple QML instances from running
+    QDir tempDir{QStandardPaths::writableLocation(QStandardPaths::TempLocation)};
+    QLockFile instanceLock{tempDir.absoluteFilePath(app.applicationName() + QStringLiteral("_qml.lock"))};
+    instanceLock.setStaleLockTime(0);
+    if (!instanceLock.tryLock(500)) {
+        L("Another instance is already running - exiting");
+        return -1;
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {

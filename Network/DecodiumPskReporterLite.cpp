@@ -110,15 +110,29 @@ void DecodiumPskReporterLite::onReplyFinished(QNetworkReply* reply)
 {
     reply->deleteLater();
 
-    if (reply->error() != QNetworkReply::NoError) {
-        const QString msg = reply->errorString();
-        qWarning() << "[PskReporterLite] HTTP error:" << msg;
-
+    auto handleFailure = [this](const QString& msg) {
         const bool wasOk = m_lastSendOk;
         m_lastSendOk = false;
         if (wasOk) emit connectedChanged();
 
-        emit errorOccurred(msg);
+        ++m_consecutiveFailures;
+        if (m_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && !m_autoDisabled) {
+            m_autoDisabled = true;
+            m_enabled = false;
+            const QString note = QStringLiteral(
+                "PSK Reporter Lite auto-disabled after %1 consecutive failures. "
+                "The main IPFIX uploader still works.").arg(m_consecutiveFailures);
+            qWarning() << "[PskReporterLite]" << note;
+            emit errorOccurred(note);
+        } else if (!m_autoDisabled) {
+            emit errorOccurred(msg);
+        }
+    };
+
+    if (reply->error() != QNetworkReply::NoError) {
+        const QString msg = reply->errorString();
+        qWarning() << "[PskReporterLite] HTTP error:" << msg;
+        handleFailure(msg);
         return;
     }
 
@@ -128,6 +142,7 @@ void DecodiumPskReporterLite::onReplyFinished(QNetworkReply* reply)
     if (statusCode == 200) {
         const bool wasOk = m_lastSendOk;
         m_lastSendOk = true;
+        m_consecutiveFailures = 0;
         if (!wasOk) emit connectedChanged();
 
         emit spotsUploaded(m_pendingCount);
@@ -138,12 +153,7 @@ void DecodiumPskReporterLite::onReplyFinished(QNetworkReply* reply)
         const QString msg =
             QStringLiteral("PSK Reporter returned HTTP %1").arg(statusCode);
         qWarning() << "[PskReporterLite]" << msg;
-
-        const bool wasOk = m_lastSendOk;
-        m_lastSendOk = false;
-        if (wasOk) emit connectedChanged();
-
-        emit errorOccurred(msg);
+        handleFailure(msg);
     }
 }
 

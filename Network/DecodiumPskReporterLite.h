@@ -85,9 +85,15 @@ private:
 
     bool m_enabled    {false};
     bool m_lastSendOk {false};
+    int  m_consecutiveFailures {0};
+    bool m_autoDisabled        {false};
 
     // 5 minutes – same cadence as the Shannon IPFIX implementation.
     static constexpr int FLUSH_INTERVAL_MS = 300'000;
+
+    // After this many consecutive HTTP failures, auto-disable the Lite
+    // uploader to stop flooding the log. The main IPFIX uploader still works.
+    static constexpr int MAX_CONSECUTIVE_FAILURES = 3;
 
     static constexpr char PSK_REPORTER_URL[] =
         "http://report.pskreporter.info/mreport.php";

@@ -229,17 +229,17 @@ Popup {
                 // Inline stats
                 Text {
                     text: (stats.totalQsos || 0) + " QSOs"
-                    font.pixelSize: 12; font.bold: true; font.family: "Consolas"
+                    font.pixelSize: 12; font.bold: true; font.family: "Monospace"
                     color: accentGreen
                 }
                 Text {
                     text: (stats.uniqueCalls || 0) + " Calls"
-                    font.pixelSize: 11; font.family: "Consolas"
+                    font.pixelSize: 11; font.family: "Monospace"
                     color: textSecondary
                 }
                 Text {
                     text: (stats.uniqueGrids || 0) + " Grids"
-                    font.pixelSize: 11; font.family: "Consolas"
+                    font.pixelSize: 11; font.family: "Monospace"
                     color: textSecondary
                 }
 
@@ -319,7 +319,7 @@ Popup {
                             id: searchField
                             Layout.fillWidth: true
                             placeholderText: "Search call, grid..."
-                            font.pixelSize: 11; font.family: "Consolas"
+                            font.pixelSize: 11; font.family: "Monospace"
                             color: textPrimary
                             placeholderTextColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
                             onTextChanged: { clearSelection(); refreshLog() }
@@ -493,15 +493,15 @@ Popup {
                             font.pixelSize: 8; color: primaryBlue
                             Layout.preferredWidth: 12
                         }
-                        Text { text: modelData.dateTime || ""; font.family: "Consolas"; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 118 }
-                        Text { text: modelData.call || ""; font.family: "Consolas"; font.pixelSize: 11; font.bold: true; color: accentGreen; Layout.preferredWidth: 100 }
-                        Text { text: modelData.grid || ""; font.family: "Consolas"; font.pixelSize: 11; color: secondaryCyan; Layout.preferredWidth: 60 }
-                        Text { text: modelData.band || ""; font.family: "Consolas"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
-                        Text { text: modelData.mode || ""; font.family: "Consolas"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
-                        Text { text: modelData.reportSent || ""; font.family: "Consolas"; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                        Text { text: modelData.reportReceived || ""; font.family: "Consolas"; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
-                        Text { text: (modelData.distance || 0) > 0 ? modelData.distance + " km" : ""; font.family: "Consolas"; font.pixelSize: 11; color: accentOrange; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
-                        Text { text: modelData.comment || ""; font.family: "Consolas"; font.pixelSize: 11; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.45); Layout.fillWidth: true; elide: Text.ElideRight }
+                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 118 }
+                        Text { text: modelData.call || ""; font.family: "Monospace"; font.pixelSize: 11; font.bold: true; color: accentGreen; Layout.preferredWidth: 100 }
+                        Text { text: modelData.grid || ""; font.family: "Monospace"; font.pixelSize: 11; color: secondaryCyan; Layout.preferredWidth: 60 }
+                        Text { text: modelData.band || ""; font.family: "Monospace"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
+                        Text { text: modelData.mode || ""; font.family: "Monospace"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
+                        Text { text: modelData.reportSent || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
+                        Text { text: modelData.reportReceived || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 45 }
+                        Text { text: (modelData.distance || 0) > 0 ? modelData.distance + " km" : ""; font.family: "Monospace"; font.pixelSize: 11; color: accentOrange; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
+                        Text { text: modelData.comment || ""; font.family: "Monospace"; font.pixelSize: 11; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.45); Layout.fillWidth: true; elide: Text.ElideRight }
                     }
                 }
 
@@ -546,7 +546,7 @@ Popup {
                             border.color: editCall.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editCall; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"; font.bold: true
+                                font.pixelSize: 11; font.family: "Monospace"; font.bold: true
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -563,7 +563,7 @@ Popup {
                             border.color: editGrid.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editGrid; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"
+                                font.pixelSize: 11; font.family: "Monospace"
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -580,7 +580,7 @@ Popup {
                             border.color: editBand.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editBand; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"
+                                font.pixelSize: 11; font.family: "Monospace"
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -597,7 +597,7 @@ Popup {
                             border.color: editMode.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editMode; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"
+                                font.pixelSize: 11; font.family: "Monospace"
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -614,7 +614,7 @@ Popup {
                             border.color: editSent.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editSent; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"
+                                font.pixelSize: 11; font.family: "Monospace"
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -631,7 +631,7 @@ Popup {
                             border.color: editRcvd.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editRcvd; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"
+                                font.pixelSize: 11; font.family: "Monospace"
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -656,7 +656,7 @@ Popup {
                             border.color: editComment.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editComment; anchors.fill: parent; anchors.margins: 2
-                                font.pixelSize: 11; font.family: "Consolas"
+                                font.pixelSize: 11; font.family: "Monospace"
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -753,7 +753,7 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "TOTAL"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.totalQsos || "0"; font.pixelSize: 20; font.bold: true; color: accentGreen; font.family: "Consolas" }
+                    Text { text: stats.totalQsos || "0"; font.pixelSize: 20; font.bold: true; color: accentGreen; font.family: "Monospace" }
                 }
 
                 Rectangle { width: 1; height: 30; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1) }
@@ -761,13 +761,13 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "CALLS"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.uniqueCalls || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: "Consolas" }
+                    Text { text: stats.uniqueCalls || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: "Monospace" }
                 }
 
                 Column {
                     spacing: 0
                     Text { text: "GRIDS"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.uniqueGrids || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: "Consolas" }
+                    Text { text: stats.uniqueGrids || "0"; font.pixelSize: 20; font.bold: true; color: secondaryCyan; font.family: "Monospace" }
                 }
 
                 Rectangle { width: 1; height: 30; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1) }
@@ -775,13 +775,13 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "MAX DIST"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: (stats.maxDistance || 0) + " km"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: "Consolas" }
+                    Text { text: (stats.maxDistance || 0) + " km"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: "Monospace" }
                 }
 
                 Column {
                     spacing: 0
                     Text { text: "FARTHEST"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: stats.farthestCall || "-"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: "Consolas" }
+                    Text { text: stats.farthestCall || "-"; font.pixelSize: 16; font.bold: true; color: accentOrange; font.family: "Monospace" }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -789,7 +789,7 @@ Popup {
                 Column {
                     spacing: 0
                     Text { text: "SHOWING"; font.pixelSize: 8; color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.5); font.letterSpacing: 1; font.bold: true }
-                    Text { text: qsoList.length + " QSOs"; font.pixelSize: 14; font.bold: true; color: textPrimary; font.family: "Consolas" }
+                    Text { text: qsoList.length + " QSOs"; font.pixelSize: 14; font.bold: true; color: textPrimary; font.family: "Monospace" }
                 }
             }
         }
