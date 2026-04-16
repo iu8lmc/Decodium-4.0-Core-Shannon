@@ -44,6 +44,8 @@
 #include <QNetworkRequest>
 #include <QStandardPaths>
 #include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QTimeZone>
 #include "Network/FoxVerifier.hpp"
 #include "wsjtx_config.h"
@@ -7318,11 +7320,17 @@ QVector<float> DecodiumBridge::computePanadapter(float& outMinDb, float& outMaxD
 
     // Usa FFTW se disponibile, altrimenti fallback al DFT interno
 #ifdef FFTW3_SINGLE_FOUND
-    // FFTW plan (cached per performance — nota: non thread-safe senza mutex)
-    static float*         fftIn  = nullptr;
-    static fftwf_complex* fftOut = nullptr;
-    static fftwf_plan     fftPlan = nullptr;
-    static int            lastN   = 0;
+    // FFTW plan (cached per performance). Lo stato statico sotto è condiviso
+    // tra tutti i chiamanti: serializziamo via mutex per evitare data race se
+    // computePanadapter() è invocata da più thread (es. spectrum timer + property
+    // binding QML). Il lock copre l'intero ciclo allocazione/finestratura/execute
+    // perché fftIn/fftOut sono shared workspace dello stesso piano.
+    static QMutex          fftMutex;
+    static float*          fftIn  = nullptr;
+    static fftwf_complex*  fftOut = nullptr;
+    static fftwf_plan      fftPlan = nullptr;
+    static int             lastN   = 0;
+    QMutexLocker           fftLock (&fftMutex);
     if (lastN != N) {
         if (fftPlan) fftwf_destroy_plan(fftPlan);
         if (fftIn)  fftwf_free(fftIn);
