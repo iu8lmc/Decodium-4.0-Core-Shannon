@@ -189,6 +189,37 @@ QHostAddress select_preferred_udp_address (QString const& requested_name, QList<
   return addresses.constFirst ();
 }
 
+QString udp_socket_error_message (QAbstractSocket::SocketError error)
+{
+  switch (error)
+    {
+    case QAbstractSocket::ConnectionRefusedError:
+      return QObject::tr ("UDP connection refused");
+    case QAbstractSocket::RemoteHostClosedError:
+      return QObject::tr ("UDP remote host closed");
+    case QAbstractSocket::HostNotFoundError:
+      return QObject::tr ("UDP host not found");
+    case QAbstractSocket::SocketAccessError:
+      return QObject::tr ("UDP socket access error");
+    case QAbstractSocket::SocketResourceError:
+      return QObject::tr ("UDP socket resource error");
+    case QAbstractSocket::SocketTimeoutError:
+      return QObject::tr ("UDP socket timeout");
+    case QAbstractSocket::DatagramTooLargeError:
+      return QObject::tr ("UDP datagram too large");
+    case QAbstractSocket::NetworkError:
+      return QObject::tr ("UDP network error");
+    case QAbstractSocket::AddressInUseError:
+      return QObject::tr ("UDP address already in use");
+    case QAbstractSocket::SocketAddressNotAvailableError:
+      return QObject::tr ("UDP socket address not available");
+    case QAbstractSocket::UnsupportedSocketOperationError:
+      return QObject::tr ("UDP unsupported socket operation");
+    default:
+      return QObject::tr ("UDP socket error");
+    }
+}
+
 }
 
 class MessageClient::impl
@@ -227,10 +258,21 @@ public:
 
   ~impl ()
   {
-    closedown ();
+    shutting_down_ = true;
+    disconnect ();
+    if (heartbeat_timer_)
+      {
+        heartbeat_timer_->stop ();
+      }
     if (dns_lookup_id_ != -1)
       {
         QHostInfo::abortHostLookup (dns_lookup_id_);
+      }
+    pending_messages_.clear ();
+    last_message_.clear ();
+    if (state () != UnconnectedState)
+      {
+        abort ();
       }
   }
 
@@ -286,6 +328,7 @@ public:
   bool warned_invalid_hmac_ {false};
   bool require_hmac_ {false};
   QByteArray hmac_key_;
+  bool shutting_down_ {false};
 
   // hold messages sent before host lookup completes asynchronously
   QQueue<QByteArray> pending_messages_;
@@ -911,6 +954,12 @@ void MessageClient::impl::heartbeat ()
 
 void MessageClient::impl::closedown ()
 {
+   if (shutting_down_)
+    {
+      pending_messages_.clear ();
+      last_message_.clear ();
+      return;
+    }
    if (server_port_ && !server_.isNull ())
     {
       QByteArray message;
@@ -994,9 +1043,9 @@ MessageClient::MessageClient (QString const& id, QString const& version, QString
 {
   connect (&*m_
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-           , static_cast<void (impl::*) (impl::SocketError)> (&impl::error), [this] (impl::SocketError e)
+           , static_cast<void (impl::*) (impl::SocketError)> (&impl::error), this, [this] (impl::SocketError e)
 #else
-           , &impl::errorOccurred, [this] (impl::SocketError e)
+           , &impl::errorOccurred, this, [this] (impl::SocketError e)
 #endif
                                    {
 #if defined (Q_OS_WIN)
@@ -1005,9 +1054,8 @@ MessageClient::MessageClient (QString const& id, QString const& version, QString
                                        {
 #else
                                        {
-                                         Q_UNUSED (e);
 #endif
-                                         Q_EMIT error (m_->errorString ());
+                                         Q_EMIT error (udp_socket_error_message (e));
                                        }
                                        });
   m_->set_server (server_name, network_interface_names);
