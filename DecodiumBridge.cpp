@@ -7035,12 +7035,14 @@ void DecodiumBridge::onAsyncDecodeTimer()
     // m_asyncAudioPos in qualsiasi momento. Leggiamolo una sola volta per
     // garantire coerenza tra il check di soglia, il calcolo di start, e
     // la copia dei 45000 campioni.
-    int const pos = m_asyncAudioPos.load(std::memory_order_acquire);
+    // uint64_t: wrap-around well-defined; aritmetica unsigned per evitare
+    // indici negativi nel modulo (che produrrebbero OOB).
+    uint64_t const pos = m_asyncAudioPos.load(std::memory_order_acquire);
     if (pos < 45000) return;  // non abbastanza audio ancora
 
     decodium::ft2::AsyncDecodeRequest req;
     req.audio.resize(45000);
-    int start = (pos - 45000 + ASYNC_BUF_SIZE) % ASYNC_BUF_SIZE;
+    uint64_t const start = (pos - 45000) % ASYNC_BUF_SIZE;
     for (int i = 0; i < 45000; ++i)
         req.audio[i] = m_asyncAudio[(start + i) % ASYNC_BUF_SIZE];
 
@@ -7490,7 +7492,8 @@ void DecodiumBridge::startAudioCapture()
             // Writer single-thread (callback audio). Pubblichiamo il campione
             // prima dell'incremento di posizione con release semantics così che
             // onAsyncDecodeTimer (acquire load) veda dati validi nel range.
-            int const w = m_asyncAudioPos.load(std::memory_order_relaxed);
+            // uint64_t: wrap-around well-defined dal memory model C++.
+            uint64_t const w = m_asyncAudioPos.load(std::memory_order_relaxed);
             m_asyncAudio[w % ASYNC_BUF_SIZE] = s;
             m_asyncAudioPos.store(w + 1, std::memory_order_release);
             ++m_driftExpectedFrames;  // A2: count frames for drift detection

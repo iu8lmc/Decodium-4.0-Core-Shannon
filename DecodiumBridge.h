@@ -1301,7 +1301,10 @@ private:
     // letto dal timer FT2 (onAsyncDecodeTimer). Atomico per garantire una read
     // coerente dello snapshot della write position; il callback usa fetch_add
     // implicito via operator++ per l'incremento.
-    std::atomic<int> m_asyncAudioPos {0};   // posizione assoluta (mai resettata, mod ASYNC_BUF_SIZE)
+    // Tipo unsigned 64-bit: a 12 kHz un int signed va in overflow UB dopo
+    // ~50 h di funzionamento continuo. uint64_t copre >48 milioni di anni e
+    // ha wrap-around well-defined per il C++ memory model.
+    std::atomic<uint64_t> m_asyncAudioPos {0};   // posizione assoluta (mai resettata, mod ASYNC_BUF_SIZE)
     bool  m_asyncDecodePending {false};  // previene overlap
 
     // Spectrum ring buffer — buffer circolare separato per waterfall (non consumato dal decoder)
