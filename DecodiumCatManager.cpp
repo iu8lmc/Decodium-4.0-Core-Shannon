@@ -1,4 +1,5 @@
 #include "DecodiumCatManager.h"
+#include "DecodiumLogging.hpp"
 
 #include <QSerialPortInfo>
 #include <QSettings>
@@ -382,25 +383,28 @@ void DecodiumCatManager::setRigFrequency(double hz)
 
 // --- setRigPtt ---
 
-static void catLog(const char* msg) {
-    FILE* f = fopen("C:\\Users\\IU8LMC\\cat_log.txt", "a");
-    if (f) { fputs(msg, f); fputc('\n', f); fclose(f); }
-}
+// Nota: in passato qui esisteva una catLog() che apriva "C:\Users\IU8LMC\cat_log.txt"
+// — path hard-coded della macchina dev, sempre NULL sulle installazioni utente.
+// Sostituita con DIAG_CAT() che instrada al logger diagnostico unificato.
 
 void DecodiumCatManager::setRigPtt(bool on)
 {
-    catLog(on ? "setRigPtt(true)" : "setRigPtt(false)");
+    DIAG_CAT(on ? QStringLiteral("setRigPtt(true)") : QStringLiteral("setRigPtt(false)"));
     if (m_pttMethod == "CAT") {
-        catLog(m_connected ? "CAT: m_connected=true, invio TX/RX" : "CAT: m_connected=false, skip");
+        DIAG_CAT(m_connected ? QStringLiteral("CAT: m_connected=true, invio TX/RX")
+                             : QStringLiteral("CAT: m_connected=false, skip"));
         if (!m_connected) return;
         QByteArray const cmd = on ? nativePttOnCommand(m_rigName, m_mode)
                                   : QByteArrayLiteral("RX;");
-        QByteArray logMsg = "CAT cmd=[" + cmd + "] rig=[" + m_rigName.toLatin1() + "] mode=[" + m_mode.toLatin1() + "]";
-        catLog(logMsg.constData());
+        DIAG_CAT(QStringLiteral("CAT cmd=[%1] rig=[%2] mode=[%3]")
+                     .arg(QString::fromLatin1(cmd))
+                     .arg(m_rigName)
+                     .arg(m_mode));
         bool written = (m_serial && m_serial->isOpen()) ? (m_serial->write(cmd) > 0) : false;
         if (m_serial)
             m_serial->flush();
-        catLog(written ? "TX/RX scritto OK" : "ERRORE scrittura seriale");
+        DIAG_CAT(written ? QStringLiteral("TX/RX scritto OK")
+                         : QStringLiteral("ERRORE scrittura seriale"));
         emit statusUpdate("CAT PTT: " + QString::fromLatin1(cmd));
     } else if (m_pttMethod == "DTR" || m_pttMethod == "RTS") {
         // DTR/RTS PTT: usa porta separata se configurata, altrimenti la porta CAT
@@ -422,7 +426,7 @@ void DecodiumCatManager::setRigPtt(bool on)
                     delete m_pttSerial; m_pttSerial = nullptr;
                     return;
                 }
-                catLog(("PTT porta separata aperta: " + m_pttPort).toLatin1().constData());
+                DIAG_CAT("PTT porta separata aperta: " + m_pttPort);
             }
             pttSerial = m_pttSerial;
         }
@@ -432,7 +436,7 @@ void DecodiumCatManager::setRigPtt(bool on)
                 pttSerial->setDataTerminalReady(on);
             else
                 pttSerial->setRequestToSend(on);
-            catLog(on ? "DTR/RTS PTT ON" : "DTR/RTS PTT OFF");
+            DIAG_CAT(on ? QStringLiteral("DTR/RTS PTT ON") : QStringLiteral("DTR/RTS PTT OFF"));
         }
 
         // Chiudi porta PTT separata quando si spegne PTT
