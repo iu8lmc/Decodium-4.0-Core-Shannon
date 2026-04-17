@@ -7664,7 +7664,19 @@ void DecodiumBridge::feedAudioToDecoder()
     {
         QMutexLocker locker(&m_audioBufferMutex);
         if (m_audioBuffer.isEmpty()) {
-            emit statusMessage("Buffer audio vuoto per questo periodo");
+            // Diagnostica dettagliata: questo path in passato era silenzioso
+            // e mascherava i casi in cui il sink audio era fermo / scollegato.
+            // Emettiamo mode, stato monitor, presenza del sink e se la cattura
+            // era sospesa per TX — così il log basta a capire la causa.
+            QString const reason =
+                QStringLiteral("Buffer audio vuoto (mode=%1 monitor=%2 sink=%3 rxSuspended=%4 driftExpected=%5)")
+                    .arg(m_mode)
+                    .arg(m_monitoring ? "on" : "off")
+                    .arg(m_audioSink ? "alive" : "null")
+                    .arg(m_rxAudioSuspendedForTx ? "yes" : "no")
+                    .arg(static_cast<qint64>(m_driftExpectedFrames.load(std::memory_order_relaxed)));
+            bridgeLog("feedAudioToDecoder: " + reason);
+            emit statusMessage(reason);
             return;
         }
         audioSnapshot = m_audioBuffer;
