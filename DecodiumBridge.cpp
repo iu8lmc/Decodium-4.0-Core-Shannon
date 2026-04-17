@@ -4339,11 +4339,23 @@ void DecodiumBridge::udpSendDecode(bool isNew, const QString& rawLine, quint64 s
     quint32 df = f.size() > 7 ? f[7].trimmed().toUInt() : f[3].trimmed().toUInt();
     QString message = f[4];
 
+    // parseFt8Row restituisce timeStr come "" (async), "HHMM" o "HHMMSS".
+    // Fino a quando FT2 usa HHMMSS, la branch precedente cadeva su
+    // QTime::currentTime() = tempo di PROCESSING, non dello slot → il
+    // downstream (GridTracker, JTAlert) riceveva timestamp in ritardo di
+    // 1-3s rispetto ai decode provenienti da altri WSJT-X sincroni,
+    // da cui il sintomo "UDP lento / tutto fuori tempo" (IW4BFF).
     QTime time;
-    if (timeStr.length() == 4) {
+    if (timeStr.length() == 6) {
+        time = QTime(timeStr.left(2).toInt(),
+                     timeStr.mid(2, 2).toInt(),
+                     timeStr.mid(4, 2).toInt());
+    } else if (timeStr.length() == 4) {
         time = QTime(timeStr.left(2).toInt(), timeStr.mid(2, 2).toInt());
     } else {
-        time = QTime::currentTime();
+        // Fallback: usiamo l'UTC corrente (non il local time) perché il
+        // resto del protocollo WSJT-X UDP scambia QTime sempre in UTC.
+        time = QDateTime::currentDateTimeUtc().time();
     }
 
     m_udpMessageClient->decode(isNew, time, snr, dt, df, m_mode, message, false, false);
