@@ -17,6 +17,33 @@
 
 namespace
 {
+// Hamlib 4.x pollute rigerror() con l'ultimo messaggio rig_debug() invece
+// dello strerror del codice di errore. Quando un'operazione fallisce, il
+// motivo mostrato all'utente può essere una stringa di debug interna tipo
+// "read_string_generic called, rxmax=129 direct=1, expected_len=1" — che
+// non è un errore vero ma solo trace di I/O seriale. Questa funzione la
+// rileva e la sostituisce con un testo piu' comprensibile.
+QString sanitizeHamlibFailure(QString const& reason)
+{
+    static QStringList const debugMarkers = {
+        QStringLiteral("read_string_generic"),
+        QStringLiteral("write_block"),
+        QStringLiteral("tn_"),
+        QStringLiteral("rig_flush"),
+        QStringLiteral("serial_flush"),
+        QStringLiteral("ser_set_"),
+        QStringLiteral("ser_get_"),
+    };
+    for (auto const& marker : debugMarkers) {
+        if (reason.contains(marker, Qt::CaseInsensitive)) {
+            return QObject::tr("Comunicazione CAT interrotta con il rig. "
+                               "Verifica cavo USB, porta COM, baud rate e che "
+                               "il rig sia acceso. (trace hamlib: %1)").arg(reason);
+        }
+    }
+    return reason;
+}
+
 QString normalizeDevicePath(QString value)
 {
     value = value.trimmed();
@@ -401,7 +428,7 @@ void DecodiumTransceiverManager::connectRig()
             this,
             [this](QString const& reason) {
                 d->desired.online(false);
-                emit errorOccurred("CAT failure: " + reason);
+                emit errorOccurred("CAT failure: " + sanitizeHamlibFailure(reason));
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
             },
             Qt::QueuedConnection);
