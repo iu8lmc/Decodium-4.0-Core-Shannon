@@ -61,6 +61,12 @@ Dialog {
         return String(value || "").toUpperCase().replace(/[\s_]+/g, "")
     }
 
+    function rigIsIcom() {
+        var rig = normalizedRigName(activeRigName())
+        return rig.indexOf("ICOM") !== -1 || rig.indexOf("IC-") !== -1 || rig.indexOf("IC7") !== -1
+                || rig.indexOf("IC9") !== -1 || rig.indexOf("IC705") !== -1
+    }
+
     function usesSerialControls() {
         var portType = activeCatPortType()
         return portType === "serial" || portType === "usb"
@@ -661,6 +667,45 @@ Dialog {
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
+
+                        // ── CI-V Address (solo rig ICOM) ──
+                        Text {
+                            visible: settingsDialog.usesSerialControls() && settingsDialog.rigIsIcom()
+                            text: "CI-V Addr:"
+                            color: textSecondary
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 100
+                        }
+                        TextField {
+                            id: civAddrField
+                            visible: settingsDialog.usesSerialControls() && settingsDialog.rigIsIcom()
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 3
+                            Layout.minimumWidth: wideFieldMinWidth
+                            implicitHeight: controlHeight
+                            leftPadding: 8
+                            color: textPrimary
+                            font.pixelSize: controlFontSize
+                            placeholderText: "0x94 (IC-7300)"
+                            selectByMouse: true
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            text: {
+                                if (!bridge.catManager || bridge.catManager.civAddress === undefined)
+                                    return ""
+                                var v = parseInt(bridge.catManager.civAddress)
+                                if (!v) return ""
+                                return "0x" + v.toString(16).toUpperCase().padStart(2, "0")
+                            }
+                            onEditingFinished: {
+                                if (!bridge.catManager) return
+                                var t = text.trim().replace(/^0x/i, "")
+                                var v = parseInt(t, 16)
+                                if (!isNaN(v) && v >= 0 && v <= 0xFF) {
+                                    bridge.catManager.civAddress = v
+                                    settingsDialog.scheduleCatPersist()
+                                }
+                            }
                         }
 
                         Text {
