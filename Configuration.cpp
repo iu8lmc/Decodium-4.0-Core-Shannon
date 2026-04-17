@@ -4272,10 +4272,31 @@ void Configuration::impl::accept ()
   auto temp_rig_params = gather_rig_data ();
 
   // open_rig() uses values from models so we use it to validate the
-  // Transceiver settings before agreeing to accept the configuration
+  // Transceiver settings before agreeing to accept the configuration.
+  //
+  // Storico: il fallimento veniva trattato come rifiuto totale di accept(),
+  // facendo perdere TUTTE le modifiche del dialog (audio, font, e gli stessi
+  // parametri CAT appena editati). Sintomo riportato da IW4BFF: "non
+  // memorizza porta COM / baud rate". In pratica l'utente apriva Settings
+  // con la radio spenta, modificava i parametri, premeva OK → il rig si
+  // rifiutava di aprirsi e TUTTE le modifiche venivano scartate.
+  //
+  // Nuovo comportamento: se l'apertura rig fallisce, chiediamo all'utente
+  // se vuole comunque salvare le impostazioni. Rispondere Sì permette di
+  // preparare la configurazione a radio spenta e riconnettersi in seguito.
+  bool rig_open_failed = false;
   if (temp_rig_params != rig_params_ && !open_rig ())
     {
-      return;			// not accepting
+      if (MessageBox::Yes != MessageBox::query_message (
+              this,
+              tr ("Rig connection failed"),
+              tr ("The transceiver could not be opened with the selected "
+                  "settings.\n\nSave the configuration anyway? You can "
+                  "reconnect later from the main window.")))
+        {
+          return;         // not accepting — user wants to keep editing
+        }
+      rig_open_failed = true;
     }
 
   QDialog::accept();            // do this before accessing custom
@@ -4284,7 +4305,12 @@ void Configuration::impl::accept ()
                                 // the underlying models before we
                                 // access them
 
-  sync_transceiver (true);	// force an update
+  // Skip sync_transceiver se il rig non è aperto: inviare comandi a un
+  // Transceiver inattivo genera solo warning/rumore nel log.
+  if (!rig_open_failed)
+    {
+      sync_transceiver (true);	// force an update
+    }
 
   //
   // from here on we are bound to accept the new configuration
