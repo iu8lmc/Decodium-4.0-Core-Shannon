@@ -1250,7 +1250,10 @@ private:
     // A2 — Soundcard drift detection
     double        m_soundcardDriftPpm {0.0};
     qint64        m_driftFrameCount   {0};
-    qint64        m_driftExpectedFrames {0};
+    // std::atomic: writer è il callback audio del sink (thread audio Qt),
+    // reader è il period timer sul main thread. Accessi relaxed: drift è una
+    // misura statistica, non serve synchronization stretta.
+    std::atomic<qint64> m_driftExpectedFrames {0};
     QElapsedTimer m_driftClock;
 
     // A3 — Time sync state
