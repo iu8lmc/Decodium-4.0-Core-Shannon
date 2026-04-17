@@ -1116,6 +1116,11 @@ private:
     // Period timer ticks at 250ms; mode determines how many ticks = 1 period
     int m_periodTicks {0};
     int m_periodTicksMax {60};   // FT8=60 (15s), FT4=30 (7.5s), FT2=15 (3.75s)
+    // Slot index UTC (= epoch_ms / periodMs). Usato in onPeriodTimer per
+    // rilevare l'attraversamento del boundary UTC senza accumulare drift dal
+    // counter di tick Qt (che può perdere/ritardare scatti sotto event loop
+    // carico — UI, UDP, Hamlib, WebSocket). -1 = non ancora inizializzato.
+    qint64 m_lastPeriodSlot {-1};
     static constexpr int TIMER_MS = 250;
     static constexpr int SAMPLE_RATE = 12000;
 

@@ -1252,6 +1252,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                 m_audioBuffer.clear();
             }
             m_periodTicks = 0;
+            m_lastPeriodSlot = -1;  // next onPeriodTimer tick re-anchors UTC slot
         }
     });
 
@@ -1805,6 +1806,7 @@ void DecodiumBridge::migrateActiveMonitoringToLegacyBackend()
         }
         m_spectrumBuf.clear();
         m_periodTicks = 0;
+        m_lastPeriodSlot = -1;   // re-anchor UTC slot at next tick
         m_wfRingPos = 0;
         m_lastPanadapterData.clear();
         m_driftFrameCount = 0;
@@ -2632,6 +2634,7 @@ void DecodiumBridge::setMode(const QString& v) {
         // Riavvia la cattura se attiva per adattare il periodo
         if (m_monitoring) {
             m_periodTicks = 0;
+            m_lastPeriodSlot = -1;   // re-anchor UTC slot at next tick
             {
                 QMutexLocker locker(&m_audioBufferMutex);
                 m_audioBuffer.clear();
@@ -3094,6 +3097,7 @@ void DecodiumBridge::startRx()
             }
             m_spectrumBuf.clear();
             m_periodTicks = 0;
+            m_lastPeriodSlot = -1;   // re-anchor UTC slot at next tick
             m_wfRingPos = 0;
             m_lastPanadapterData.clear();
             m_driftFrameCount = 0;
@@ -3120,6 +3124,7 @@ void DecodiumBridge::startRx()
     }
     m_spectrumBuf.clear();
     m_periodTicks = 0;
+    m_lastPeriodSlot = -1;   // re-anchor UTC slot at next tick
     // A2 — Reset drift counters
     m_driftFrameCount    = 0;
     m_driftExpectedFrames = 0;
@@ -3145,6 +3150,7 @@ void DecodiumBridge::startRx()
                 m_audioBuffer.clear();
             }
             m_periodTicks = 0;
+            m_lastPeriodSlot = -1;   // re-anchor UTC slot at next tick
             m_periodTimer->start();
             bridgeLog("startRx: period timer started at UTC boundary");
         });
@@ -7194,8 +7200,19 @@ void DecodiumBridge::onFst4DecodeReady(quint64 serial, QStringList rows)
 
 void DecodiumBridge::onPeriodTimer()
 {
+    // Progress bar e watchdog usano il counter di tick (cadenza UI invariata).
+    // La decisione di alimentare il decoder è invece ancorata al boundary UTC
+    // calcolato da QDateTime::currentMSecsSinceEpoch() / periodMs, così il
+    // drift del QTimer (±5–50ms/tick su Windows con event loop carico) non
+    // sfasa più le finestre passate al decoder.
     m_periodTicks++;
-    m_periodProgress = (m_periodTicks * 100) / m_periodTicksMax;
+    qint64 const nowMs     = QDateTime::currentMSecsSinceEpoch();
+    int    const periodMs  = periodMsForMode(m_mode);
+    qint64 const utcSlot   = (periodMs > 0) ? (nowMs / periodMs) : 0;
+    int    const msInSlot  = (periodMs > 0) ? (int)(nowMs % periodMs) : 0;
+    // Progress ancorato all'UTC: l'utente vede la barra sincrona al vero
+    // boundary, non al counter che può driftare.
+    m_periodProgress = (periodMs > 0) ? (msInSlot * 100 / periodMs) : 0;
     emit periodProgressChanged();
 
     // === TX watchdog configurabile (allineato a mainwindow m_txWatchdogMode) ===
@@ -7239,7 +7256,21 @@ void DecodiumBridge::onPeriodTimer()
         m_autoCQPeriodsMissed = 0;
     }
 
-    if (m_periodTicks >= m_periodTicksMax) {
+    // Boundary detection basata su UTC slot: si scatena quando l'index di
+    // slot UTC cambia rispetto all'ultimo registrato. Il counter
+    // m_periodTicksMax resta come fallback/safety net (se per qualche
+    // motivo l'UTC non cambia mai — es. system clock fermo — non vogliamo
+    // perdere il feed del decoder).
+    bool const utcBoundaryCrossed =
+        (m_lastPeriodSlot >= 0) && (utcSlot != m_lastPeriodSlot);
+    bool const tickCounterExpired = (m_periodTicks >= m_periodTicksMax);
+    if (m_lastPeriodSlot < 0) {
+        // Prima chiamata: inizializza lo slot e lascia che il prossimo
+        // boundary sia quello di transizione vera.
+        m_lastPeriodSlot = utcSlot;
+    }
+    if (utcBoundaryCrossed || tickCounterExpired) {
+        m_lastPeriodSlot = utcSlot;
         m_periodTicks = 0;
         m_periodProgress = 0;
         emit periodProgressChanged();
