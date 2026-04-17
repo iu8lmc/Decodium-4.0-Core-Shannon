@@ -6933,6 +6933,14 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         bridgeLog("onFt2AsyncDecodeReady: ignored during shutdown");
         return;
     }
+    // Se l'utente ha cambiato modo mentre il decoder FT2 era ancora in volo,
+    // il worker emette comunque il risultato via Qt::QueuedConnection.
+    // Senza questo guard finiremmo per iniettare spot marker '~' (FT2) nella
+    // decodeList e broadcastarli su WebSocket anche dopo lo switch a FT8/FT4.
+    if (m_mode != QStringLiteral("FT2")) {
+        bridgeLog("onFt2AsyncDecodeReady: ignored, mode changed to " + m_mode);
+        return;
+    }
 
     bridgeLog("onFt2AsyncDecodeReady: rows=" + QString::number(rows.size()));
     if (!rows.isEmpty()) bridgeLog("  async_raw[0]='" + rows[0] + "'");
