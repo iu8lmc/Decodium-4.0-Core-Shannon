@@ -2639,7 +2639,11 @@ void DecodiumBridge::setMode(const QString& v) {
             }
             // Avvia/ferma async timer in base al modo
             if (m_mode == "FT2") {
-                m_asyncAudioPos = 0;
+                // store(release): il writer (callback audio) usa CAS sul commit
+                // di m_asyncAudioPos, quindi questo reset annulla correttamente
+                // eventuali increment in volo — il CAS del writer fallirà e il
+                // campione verrà scartato.
+                m_asyncAudioPos.store(0, std::memory_order_release);
                 m_asyncDecodePending = false;
                 m_asyncDecodeTimer->start();
             } else {
@@ -3147,7 +3151,9 @@ void DecodiumBridge::startRx()
     }
     m_spectrumTimer->start();
     if (m_mode == "FT2") {
-        m_asyncAudioPos = 0;
+        // store(release): vedi commento nel reset di setMode — il writer usa
+        // CAS sul commit e un increment in volo verrà scartato correttamente.
+        m_asyncAudioPos.store(0, std::memory_order_release);
         m_asyncDecodePending = false;
         m_asyncDecodeTimer->start();
     }
@@ -7501,9 +7507,19 @@ void DecodiumBridge::startAudioCapture()
             // prima dell'incremento di posizione con release semantics così che
             // onAsyncDecodeTimer (acquire load) veda dati validi nel range.
             // uint64_t: wrap-around well-defined dal memory model C++.
-            uint64_t const w = m_asyncAudioPos.load(std::memory_order_relaxed);
+            //
+            // Il commit usa compare_exchange per eliminare la race con il reset
+            // m_asyncAudioPos.store(0) eseguito dal main thread al cambio modo.
+            // Senza CAS, il writer potrebbe leggere w=X, il main resettare a 0,
+            // e il writer committare X+1 — annullando il reset.  Con CAS, se il
+            // reset avviene fra load e commit il CAS fallisce e il campione
+            // viene scartato (perdita accettabile durante il boundary di modo).
+            uint64_t w = m_asyncAudioPos.load(std::memory_order_acquire);
             m_asyncAudio[w % ASYNC_BUF_SIZE] = s;
-            m_asyncAudioPos.store(w + 1, std::memory_order_release);
+            m_asyncAudioPos.compare_exchange_strong(
+                w, w + 1,
+                std::memory_order_release,
+                std::memory_order_relaxed);
             ++m_driftExpectedFrames;  // A2: count frames for drift detection
             if (m_wavManager) m_wavManager->feedSample(s);
         });
