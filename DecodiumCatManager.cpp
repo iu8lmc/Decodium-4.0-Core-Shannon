@@ -271,6 +271,23 @@ void DecodiumCatManager::connectRig()
     if (m_serial)
         disconnectRig();
 
+    // Inizializza auto-baud: baud corrente + candidate comuni.
+    // Si attiva solo al primo tentativo utente (indice -1); dopo un fail
+    // iteriamo tramite tryNextAutoBaud() che chiama di nuovo connectRig().
+    if (m_autoBaudIndex < 0) {
+        m_autoBaudCandidates.clear();
+        m_autoBaudCandidates << m_baudRate;
+        for (int b : {9600, 19200, 38400, 57600, 115200}) {
+            if (!m_autoBaudCandidates.contains(b))
+                m_autoBaudCandidates << b;
+        }
+        m_autoBaudIndex = 0;
+        m_autoBaudActive = true;
+        QStringList seq;
+        for (int b : m_autoBaudCandidates) seq << QString::number(b);
+        DIAG_CAT(QStringLiteral("auto-baud: seq = %1").arg(seq.join(',')));
+    }
+
     auto* serial = new QSerialPort(this);
     serial->setPortName(m_serialPort);
     serial->setBaudRate(m_baudRate);
@@ -324,6 +341,14 @@ void DecodiumCatManager::connectRig()
 
 void DecodiumCatManager::disconnectRig()
 {
+    // Quando disconnectRig e' chiamato dall'auto-baud iterator, m_autoBaudActive
+    // rimane true e il tryNextAutoBaud ha gia' schedulato il reconnect.
+    // Se invece e' disconnect utente, lasciamo che connectRig successivo
+    // reinizializzi la sequenza.
+    if (!m_autoBaudActive) {
+        m_autoBaudIndex = -1;
+        m_autoBaudCandidates.clear();
+    }
     if (m_connectTimer) { m_connectTimer->stop(); m_connectTimer->deleteLater(); m_connectTimer = nullptr; }
     if (m_pollTimer) {
         m_pollTimer->stop();
@@ -394,6 +419,13 @@ void DecodiumCatManager::processResponse(const QByteArray& resp)
             if (!m_connected) {
                 // Risposta ricevuta: cancella timeout
                 if (m_connectTimer) { m_connectTimer->stop(); m_connectTimer->deleteLater(); m_connectTimer = nullptr; }
+                // Auto-baud: disabilita e persisti il baud vincente.
+                if (m_autoBaudActive) {
+                    DIAG_CAT(QStringLiteral("auto-baud: riuscito a %1 baud").arg(m_baudRate));
+                    m_autoBaudActive = false;
+                    m_autoBaudIndex = -1;
+                    saveSettings();
+                }
                 m_connected = true;
                 emit connectedChanged();
                 emit statusUpdate("CAT: connesso a " + m_rigName +
@@ -437,14 +469,45 @@ QString DecodiumCatManager::parseMode(char code)
     }
 }
 
+// --- auto-baud ---
+
+bool DecodiumCatManager::tryNextAutoBaud()
+{
+    if (!m_autoBaudActive) return false;
+    int next = m_autoBaudIndex + 1;
+    if (next >= m_autoBaudCandidates.size()) {
+        m_autoBaudActive = false;
+        m_autoBaudIndex = -1;
+        return false;
+    }
+    m_autoBaudIndex = next;
+    int const baud = m_autoBaudCandidates[next];
+    DIAG_CAT(QStringLiteral("auto-baud: tentativo %1/%2 a %3 baud")
+             .arg(next + 1).arg(m_autoBaudCandidates.size()).arg(baud));
+    // Aggiorna temporaneamente il baud ma non chiamare saveSettings (lo salva
+    // solo in caso di successo in processResponse).
+    m_baudRate = baud;
+    emit baudRateChanged();
+    // Chiude la porta corrente e riapre con il nuovo baud.
+    // connectRig() non re-inizializza la sequenza perche' m_autoBaudIndex >= 0.
+    QTimer::singleShot(100, this, [this]{ connectRig(); });
+    return true;
+}
+
 // --- onConnectTimeout ---
 
 void DecodiumCatManager::onConnectTimeout()
 {
     if (m_connected) return;  // già connesso, ignora
+    // Prova il prossimo baud della sequenza auto-detect prima di arrendersi.
+    if (tryNextAutoBaud()) {
+        disconnectRig();
+        return;
+    }
     emit errorOccurred("CAT: nessuna risposta da " + m_rigName +
-                       " su " + m_serialPort + " a " + QString::number(m_baudRate) +
-                       " baud. Verifica porta COM e baud rate nel menu radio.");
+                       " su " + m_serialPort + " dopo tentativi a " +
+                       QString::number(m_autoBaudCandidates.isEmpty() ? m_baudRate : m_autoBaudCandidates.last()) +
+                       " baud. Verifica porta COM, cavo USB e che il rig sia acceso.");
     disconnectRig();
 }
 

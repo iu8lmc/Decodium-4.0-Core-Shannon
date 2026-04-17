@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QList>
 #include <QSerialPort>
 #include <QTimer>
 
@@ -156,6 +157,7 @@ private:
     void processResponse(const QByteArray& resp);
     QString parseMode(char code);
     void applyPollInterval();
+    bool tryNextAutoBaud();     // ritorna true se ha avviato un nuovo tentativo
 
     QSerialPort* m_serial      {nullptr};
     QTimer*      m_pollTimer   {nullptr};
@@ -186,4 +188,10 @@ private:
     bool    m_catAutoConnect {false};
     bool    m_audioAutoStart {false};
     QSerialPort* m_pttSerial {nullptr};  // porta separata per PTT DTR/RTS
+
+    // Auto-baud detection: si avvia alla connessione, itera su candidate bauds
+    // finche' non arriva una risposta o la lista e' esaurita.
+    QList<int> m_autoBaudCandidates;
+    int        m_autoBaudIndex  {-1};
+    bool       m_autoBaudActive {false};
 };
