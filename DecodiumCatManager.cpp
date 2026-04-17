@@ -50,6 +50,56 @@ bool isCatPttMethod(QString const& value)
     return value.trimmed().compare(QStringLiteral("CAT"), Qt::CaseInsensitive) == 0;
 }
 
+// Tabella defaults per rig: baud/dataBits/stopBits/handshake/pttMethod + civAddress (ICOM).
+// Valori allineati alle impostazioni di fabbrica piu' comuni per la porta CAT in modo DATA.
+struct RigDefaults
+{
+    const char* match;     // substring case-insensitive sul nome rig
+    int baud;
+    const char* dataBits;
+    const char* stopBits;
+    const char* handshake;
+    const char* pttMethod;
+    int civAddress;        // 0 se non ICOM
+};
+
+// Ordine: match piu' specifici prima (es. "TS-590SG" prima di "TS-590S").
+static const RigDefaults kRigDefaultsTable[] = {
+    // Kenwood
+    {"TS-590SG",   57600,  "8", "1", "none", "CAT", 0x00},
+    {"TS-590S",    57600,  "8", "1", "none", "CAT", 0x00},
+    {"TS-890S",   115200,  "8", "1", "none", "CAT", 0x00},
+    {"TS-480",     57600,  "8", "1", "none", "CAT", 0x00},
+    {"TS-2000",    57600,  "8", "1", "none", "CAT", 0x00},
+    // Yaesu
+    {"FT-DX101",   38400,  "8", "1", "none", "CAT", 0x00},
+    {"FTDX101",    38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT-DX10",    38400,  "8", "1", "none", "CAT", 0x00},
+    {"FTDX10",     38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT-991A",    38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT-991",     38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT991",      38400,  "8", "1", "none", "CAT", 0x00},
+    // Icom (CI-V) - richiede hamlib per protocollo binario
+    {"IC-7300",    19200,  "8", "1", "none", "CAT", 0x94},
+    {"IC-7600",    19200,  "8", "1", "none", "CAT", 0x7A},
+    {"IC-7610",    19200,  "8", "1", "none", "CAT", 0x98},
+    {"IC-9700",    19200,  "8", "1", "none", "CAT", 0xA2},
+    {"IC-705",     19200,  "8", "1", "none", "CAT", 0xA4},
+    // Elecraft
+    {"K3",         38400,  "8", "1", "none", "CAT", 0x00},
+    {"KX3",        38400,  "8", "1", "none", "CAT", 0x00},
+};
+
+const RigDefaults* findRigDefaults(QString const& rigName)
+{
+    QString const upper = rigName.toUpper();
+    for (auto const& e : kRigDefaultsTable) {
+        if (upper.contains(QString::fromLatin1(e.match).toUpper()))
+            return &e;
+    }
+    return nullptr;
+}
+
 QByteArray nativePttOnCommand(QString const& rigName, QString const& mode)
 {
     // Kenwood TS-590S/SG, TS-480, TS-2000, TS-890S:
@@ -80,10 +130,46 @@ QStringList DecodiumCatManager::rigList() const
     return {
         "Kenwood TS-590S", "Kenwood TS-590SG", "Kenwood TS-480",
         "Kenwood TS-2000", "Kenwood TS-890S",
-        "Icom IC-7300", "Icom IC-7600", "Icom IC-7610", "Icom IC-9700",
+        "Icom IC-7300", "Icom IC-7600", "Icom IC-7610", "Icom IC-9700", "Icom IC-705",
         "Yaesu FT-991", "Yaesu FT-991A", "Yaesu FT-DX10", "Yaesu FT-DX101D",
         "Elecraft K3", "Elecraft KX3",
     };
+}
+
+// --- setRigName + auto-apply defaults ---
+
+void DecodiumCatManager::setRigName(const QString& v)
+{
+    if (m_rigName == v)
+        return;
+    m_rigName = v;
+    emit rigNameChanged();
+    applyRigDefaults(v);
+}
+
+void DecodiumCatManager::applyRigDefaults(const QString& rigName)
+{
+    const RigDefaults* d = findRigDefaults(rigName);
+    if (!d) {
+        DIAG_CAT(QStringLiteral("applyRigDefaults: nessun default per '%1' (usare hamlib)").arg(rigName));
+        return;
+    }
+
+    DIAG_CAT(QStringLiteral("applyRigDefaults: '%1' -> baud=%2 data=%3 stop=%4 handshake=%5 ptt=%6 civ=0x%7")
+                 .arg(rigName)
+                 .arg(d->baud)
+                 .arg(QLatin1String(d->dataBits))
+                 .arg(QLatin1String(d->stopBits))
+                 .arg(QLatin1String(d->handshake))
+                 .arg(QLatin1String(d->pttMethod))
+                 .arg(d->civAddress, 2, 16, QChar('0')));
+
+    setBaudRate(d->baud);
+    setDataBits(QString::fromLatin1(d->dataBits));
+    setStopBits(QString::fromLatin1(d->stopBits));
+    setHandshake(QString::fromLatin1(d->handshake));
+    setPttMethod(QString::fromLatin1(d->pttMethod));
+    setCivAddress(d->civAddress);
 }
 
 // --- ctor/dtor ---
@@ -477,6 +563,7 @@ void DecodiumCatManager::saveSettings()
     s.setValue("baudRate",       m_baudRate);
     s.setValue("pttMethod",      catPtt ? QStringLiteral("CAT") : m_pttMethod);
     s.setValue("pttPort",        m_pttPort);
+    s.setValue("civAddress",     m_civAddress);
     s.setValue("pollInterval",   m_pollInterval);
     s.setValue("forceDtr",       catPtt ? false : m_forceDtr);
     s.setValue("dtrHigh",        catPtt ? false : m_dtrHigh);
@@ -498,6 +585,7 @@ void DecodiumCatManager::loadSettings()
     if (m_pttMethod.isEmpty())
         m_pttMethod = QStringLiteral("CAT");
     m_pttPort        = s.value("pttPort",         "CAT").toString();
+    m_civAddress     = s.value("civAddress",      0).toInt();
     m_pollInterval   = s.value("pollInterval",    2).toInt();
     m_forceDtr       = s.value("forceDtr",        false).toBool();
     m_dtrHigh        = s.value("dtrHigh",         false).toBool();
