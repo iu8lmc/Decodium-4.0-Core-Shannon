@@ -1087,7 +1087,7 @@ private:
     DecodiumCatManager*           m_nativeCat     {nullptr};
     DecodiumOmniRigManager*       m_omniRigCat    {nullptr};
     DecodiumTransceiverManager*   m_hamlibCat     {nullptr};
-    QString                       m_catBackend    {"native"};
+    QString                       m_catBackend    {"hamlib"};
     bool                          m_suppressCatErrors {false};
     RemoteCommandServer*          m_remoteServer {nullptr};
     DecodiumDxCluster*    m_dxCluster     {nullptr};

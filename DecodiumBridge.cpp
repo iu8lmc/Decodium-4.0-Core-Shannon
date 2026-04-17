@@ -6045,7 +6045,11 @@ void DecodiumBridge::loadSettings()
     m_deepSearchEnabled= s.value("deepSearchEnabled", false).toBool();
     m_asyncDecodeEnabled=s.value("asyncDecodeEnabled",false).toBool();
     m_pskReporterEnabled=s.value("pskReporterEnabled",false).toBool();
-    m_catBackend        =s.value("catBackend",        "native").toString();
+    // Default 'hamlib' per nuove installazioni: copre 400+ radio (incluso ICOM
+    // CI-V completo) con molti meno problemi di compatibilita' rispetto al path
+    // nativo che supporta solo comandi ASCII Kenwood/Yaesu. Gli utenti esistenti
+    // mantengono il proprio backend salvato.
+    m_catBackend        =s.value("catBackend",        "hamlib").toString();
     m_lastSuccessfulCatConnected = s.value("lastSuccessfulCatConnected", false).toBool();
     m_lastSuccessfulCatBackend = s.value("lastSuccessfulCatBackend").toString();
     // TX QSO options
