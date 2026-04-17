@@ -7676,7 +7676,13 @@ void DecodiumBridge::feedAudioToDecoder()
     emit decodingChanged();
 
     quint64 serial = ++m_decodeSerial;
-    int     nutc   = QDateTime::currentDateTimeUtc().toString("hhmm").toInt();
+    // FT2 ha periodi di 3.75s: più slot per minuto hanno lo stesso HHMM e
+    // collidono nella mappa m_decodeStartMsBySerial / nella timestamp mostrata.
+    // Per FT2 usiamo HHMMSS (il parser parseFt8Row accetta già 4 o 6 cifre).
+    // FT8/FT4 restano in HHMM per coerenza con il display legacy WSJT-X.
+    QString const utcFmt = (m_mode == QStringLiteral("FT2")) ? QStringLiteral("hhmmss")
+                                                             : QStringLiteral("hhmm");
+    int     nutc   = QDateTime::currentDateTimeUtc().toString(utcFmt).toInt();
     int     nfqso  = (m_nfa + m_nfb) / 2;
 
     if (isTimeSyncDecodeMode(m_mode)) {
