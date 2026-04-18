@@ -4398,7 +4398,12 @@ void Configuration::impl::accept ()
   auto const old_remote_user = remote_user_;
   auto const old_remote_token = remote_token_;
 
-  my_callsign_ = ui_->callsign_line_edit->text ();
+  my_callsign_ = ui_->callsign_line_edit->text ().trimmed ().toUpper ();
+  if (my_callsign_.isEmpty ())
+    {
+      MessageBox::warning_message (this, tr ("Callsign is empty"),
+                                   tr ("Please enter your callsign before saving."));
+    }
   my_grid_ = ui_->grid_line_edit->text ();
   FD_exchange_= ui_->Field_Day_Exchange->text ().toUpper ();
   RTTY_exchange_= ui_->RTTY_Exchange->text ().toUpper ();

@@ -75,8 +75,8 @@ Popup {
 
     // Fallback auto-refresh: catches auto-sequence QSOs that bypass MshvBridge
     Timer {
-        interval: 3000
-        running: logWindow.visible
+        interval: 15000
+        running: logWindow.visible && logWindow.activeFocus
         repeat: true
         onTriggered: refreshLog()
     }
