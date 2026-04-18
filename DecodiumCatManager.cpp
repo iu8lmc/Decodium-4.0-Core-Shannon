@@ -1,6 +1,7 @@
 #include "DecodiumCatManager.h"
 #include "DecodiumLogging.hpp"
 
+#include <cmath>
 #include <QSerialPortInfo>
 #include <QSettings>
 
@@ -355,6 +356,12 @@ void DecodiumCatManager::disconnectRig()
         m_pollTimer->deleteLater();
         m_pollTimer = nullptr;
     }
+    if (m_pttSerial) {
+        if (m_pttSerial->isOpen())
+            m_pttSerial->close();
+        delete m_pttSerial;
+        m_pttSerial = nullptr;
+    }
     if (m_serial) {
         m_serial->blockSignals(true);
         if (m_serial->isOpen())
@@ -396,6 +403,13 @@ void DecodiumCatManager::onReadyRead()
         return;
 
     m_rxBuf += m_serial->readAll();
+
+    // Guard against unbounded buffer growth from corrupted serial data
+    if (m_rxBuf.size() > 4096) {
+        DIAG_CAT("CAT buffer overflow (" + QString::number(m_rxBuf.size()) + " bytes) — flushing");
+        m_rxBuf.clear();
+        return;
+    }
 
     int idx;
     while ((idx = m_rxBuf.indexOf(';')) >= 0) {
@@ -526,7 +540,7 @@ void DecodiumCatManager::onSerialError(QSerialPort::SerialPortError error)
 void DecodiumCatManager::setRigFrequency(double hz)
 {
     if (!m_connected) return;
-    QString cmd = QString("FA%1;").arg(static_cast<long long>(hz), 11, 10, QChar('0'));
+    QString cmd = QString("FA%1;").arg(static_cast<long long>(std::round(hz)), 11, 10, QChar('0'));
     sendCommand(cmd.toLatin1());
 }
 

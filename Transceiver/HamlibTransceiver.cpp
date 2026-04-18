@@ -692,6 +692,7 @@ int HamlibTransceiver::do_start ()
   // Verifica esplicita prima di procedere per evitare access violation nel polling.
   if (!m_->rig_.data () || !m_->rig_.data ()->caps)
     {
+      rig_close (m_->rig_.data ());   // release serial port before throwing
       throw error {tr ("Rig not ready — caps null after open (no response from radio?)")};
     }
 
@@ -990,7 +991,7 @@ void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
               m_->error_check (rig_set_mode (m_->rig_.data (), target_vfo, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting current VFO mode"));
             }
           // set mode on VFOB too if we are in split
-          if (state ().split()) rig_set_mode (m_->rig_.data (), RIG_VFO_B, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting VFOB mode");
+          if (state ().split()) m_->error_check (rig_set_mode (m_->rig_.data (), RIG_VFO_B, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting VFOB mode"));
           update_mode (m);
         }
     }
