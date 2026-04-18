@@ -29,18 +29,24 @@ ApplicationWindow {
         if (Qt.application && Qt.application.screens) {
             for (var i = 0; i < Qt.application.screens.length; ++i) {
                 var screen = Qt.application.screens[i]
-                if (!screen)
-                    continue
-                var g = screen.availableGeometry
-                geometries.push({ x: g.x, y: g.y, width: g.width, height: g.height })
+                if (!screen) continue
+                // Qt 6.x: availableGeometry may not exist on all backends;
+                // fall back to virtualGeometry, then to width/height properties.
+                var g = screen.availableGeometry || screen.virtualGeometry
+                if (g && g.width > 0) {
+                    geometries.push({ x: g.x, y: g.y, width: g.width, height: g.height })
+                } else if (screen.width > 0 && screen.height > 0) {
+                    geometries.push({ x: screen.virtualX || 0, y: screen.virtualY || 0,
+                                      width: screen.width, height: screen.height })
+                }
             }
         }
         if (geometries.length === 0) {
             geometries.push({
                 x: 0,
                 y: 0,
-                width: Screen.desktopAvailableWidth,
-                height: Screen.desktopAvailableHeight
+                width: Screen.desktopAvailableWidth || 1920,
+                height: Screen.desktopAvailableHeight || 1080
             })
         }
         return geometries
