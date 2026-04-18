@@ -107,7 +107,7 @@ bool DecodiumCertificate::load (QString const& filePath)
   m_callsign = call;
   m_tier = (tierStr == "PRO") ? PRO : FREE;
   m_expires = QDate::fromString (expiresStr, "yyyy-MM-dd");
-  m_valid = m_expires.isValid ();
+  m_valid = m_expires.isValid () && !isExpired ();
   m_sourcePath = filePath;
 
   if (m_valid) {
