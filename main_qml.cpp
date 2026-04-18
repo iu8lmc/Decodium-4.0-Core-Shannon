@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLibraryInfo>
+#include <QMessageBox>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
@@ -230,10 +231,14 @@ int main(int argc, char* argv[])
 
     QQmlApplicationEngine engine;
     L("engine OK");
-    engine.setOutputWarningsToStandardError(false);
+    engine.setOutputWarningsToStandardError(true);  // show QML errors on stderr for debugging
     QObject::connect(&engine, &QQmlEngine::warnings, &app,
                      [] (const QList<QQmlError>& warnings) {
         logQmlWarnings(warnings);
+        // Also log to file for remote debugging
+        for (auto const& w : warnings) {
+            qWarning("QML WARNING: %s", qPrintable(w.toString()));
+        }
     });
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
@@ -256,11 +261,28 @@ int main(int argc, char* argv[])
     qmlRegisterUncreatableType<DecodiumDxCluster>("Decodium", 1, 0, "DecodiumDxCluster",
         "DecodiumDxCluster is created by DecodiumBridge");
 
+    // Log any QML component creation failures
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app,
+                     [](QObject *obj, const QUrl &url) {
+        if (!obj) {
+            qCritical("QML FAILED to create object from: %s", qPrintable(url.toString()));
+        } else {
+            qDebug("QML object created OK from: %s", qPrintable(url.toString()));
+        }
+    });
+
+    L("loading QML...");
     engine.load(QUrl::fromLocalFile(qmlPath));
     L("engine.load() returned");
 
     if (engine.rootObjects().isEmpty()) {
-        L("ERROR: rootObjects empty");
+        L("ERROR: rootObjects empty — QML failed to load. Check console for QML errors.");
+        // Show a native error dialog so user knows what happened
+        QMessageBox::critical(nullptr, QStringLiteral("Decodium — QML Error"),
+            QStringLiteral("The user interface failed to load.\n\n"
+                           "This is usually caused by a missing Qt plugin or a corrupted installation.\n\n"
+                           "Try reinstalling Decodium or deleting the qmlcache folder in the install directory.\n\n"
+                           "QML path: %1").arg(qmlPath));
         return -1;
     }
     L("QML OK - entering event loop");
