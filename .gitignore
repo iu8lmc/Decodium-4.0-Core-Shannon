@@ -111,6 +111,12 @@ libhamlib-4.def
 
 # Temporary scripts
 sign_all.bat
+sign_*.bat
+build_installer*.bat
+
+# Code-signing credentials (NEVER commit)
+*.pfx
+*.p12
 
 # DXped certificate manager sensitive/runtime files
 tools/dxped_private.pem

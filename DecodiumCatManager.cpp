@@ -532,9 +532,6 @@ void DecodiumCatManager::setRigFrequency(double hz)
 
 // --- setRigPtt ---
 
-// Nota: in passato qui esisteva una catLog() che apriva "C:\Users\IU8LMC\cat_log.txt"
-// — path hard-coded della macchina dev, sempre NULL sulle installazioni utente.
-// Sostituita con DIAG_CAT() che instrada al logger diagnostico unificato.
 
 void DecodiumCatManager::setRigPtt(bool on)
 {

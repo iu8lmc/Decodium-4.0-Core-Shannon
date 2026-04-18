@@ -3499,8 +3499,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
     decodium::ft2::AsyncDecodeRequest request;
     request.audio.resize (45000);
-    int pos = m_asyncAudioPos;
-    int start = (pos - 45000 + 90000) % 90000;
+    uint64_t pos = m_asyncAudioPos;
+    int start = static_cast<int>((pos - 45000 + 90000) % 90000);
     for (int i = 0; i < 45000; i++) {
       request.audio[i] = m_asyncAudio[(start + i) % 90000];
     }

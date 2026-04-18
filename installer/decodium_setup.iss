@@ -5,7 +5,7 @@
   #define AppName "Decodium"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.10"
+  #define AppVersion "1.0.21"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "IU8LMC"
@@ -32,7 +32,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
-AppPublisherURL=https://github.com/elisir80/Decodium-4.0-Core-Shannon
+AppPublisherURL=https://github.com/iu8lmc/Decodium-4.0-Core-Shannon
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes

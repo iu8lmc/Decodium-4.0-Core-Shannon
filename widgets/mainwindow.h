@@ -1241,7 +1241,7 @@ private:
   qint64 m_asyncRxStartMs {0};
   bool m_asyncL2DefaultAppliedForCurrentFt2 {false};
   short int m_asyncAudio[90000];     // ring buffer ~7.5s at 12kHz
-  int m_asyncAudioPos {0};           // write position in ring buffer
+  uint64_t m_asyncAudioPos {0};      // write position in ring buffer (unsigned to avoid signed overflow UB)
   bool m_bAsyncDecoding {false};     // async decode in progress
   QSet<QString> m_asyncDedupeSet;    // deduplication within sliding window
   QDateTime m_asyncDedupeLastCleared;

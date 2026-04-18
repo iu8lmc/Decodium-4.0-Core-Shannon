@@ -2778,19 +2778,6 @@ void run_main_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq
                           static_cast<float> (ifa), static_cast<float> (ifb),
                           syncmin, static_cast<float> (request.nfqso),
                           kFt8MaxCand, candidate.data (), &ncand, sbase.data ());
-      // --- diagnostics ---
-      {
-        static int dc = 0;
-        if (dc < 6) {
-          ++dc;
-          FILE* f = fopen("C:\\Users\\IU8LMC\\ft8decode_log.txt", "a");
-          if (f) {
-            fprintf(f, "  pass=%d syncmin=%.2f ncand=%d ifa=%d ifb=%d dd[0]=%.1f\n",
-                    ipass, (double)syncmin, ncand, ifa, ifb, state.dd[0]);
-            fclose(f);
-          }
-        }
-      }
 
       for (int icand = 0; icand < ncand; ++icand)
         {

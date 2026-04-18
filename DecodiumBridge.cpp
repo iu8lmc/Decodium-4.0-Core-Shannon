@@ -4235,8 +4235,12 @@ void DecodiumBridge::initUdpMessageClient()
 
     // Read UDP settings from the legacy INI (canonical source)
     QString serverName = getSetting(QStringLiteral("UDPServer"), QStringLiteral("127.0.0.1")).toString();
-    quint16 serverPort = static_cast<quint16>(getSetting(QStringLiteral("UDPServerPort"), 2237).toUInt());
-    quint16 listenPort = static_cast<quint16>(getSetting(QStringLiteral("UDPListenPort"), 0).toUInt());
+    uint rawServerPort = getSetting(QStringLiteral("UDPServerPort"), 2237).toUInt();
+    quint16 serverPort = (rawServerPort >= 1 && rawServerPort <= 65535)
+                         ? static_cast<quint16>(rawServerPort) : 2237;
+    uint rawListenPort = getSetting(QStringLiteral("UDPListenPort"), 0).toUInt();
+    quint16 listenPort = (rawListenPort <= 65535)
+                         ? static_cast<quint16>(rawListenPort) : 0;
     int ttl = getSetting(QStringLiteral("UDPTTL"), 1).toInt();
     QStringList interfaces;
     QVariant ifaceVal = readSettingFromLegacyIni(QStringLiteral("UDPInterface"));
