@@ -275,8 +275,22 @@ int main(int argc, char* argv[])
     });
 
     L("loading QML...");
+    // Watchdog: log if QML loading takes too long (helps diagnose hangs)
+    QElapsedTimer loadTimer;
+    loadTimer.start();
+    QTimer watchdog;
+    watchdog.setInterval(5000);
+    QObject::connect(&watchdog, &QTimer::timeout, [&loadTimer]() {
+        qWarning("QML WATCHDOG: engine.load() still running after %lld ms — possible hang in component init",
+                 loadTimer.elapsed());
+    });
+    watchdog.start();
+
     engine.load(QUrl::fromLocalFile(qmlPath));
-    L("engine.load() returned");
+
+    watchdog.stop();
+    L(("engine.load() returned in " + QByteArray::number(loadTimer.elapsed()) + " ms").constData());
+
 
     if (engine.rootObjects().isEmpty()) {
         L("ERROR: rootObjects empty — QML failed to load. Check console for QML errors.");
