@@ -3281,7 +3281,8 @@ void Configuration::impl::read_settings ()
             }
             else
             {
-              LOG_INFO(QString{"read_settings INVALID FrequenciesForRegionModes"});
+              LOG_ERROR(QString{"read_settings INVALID FrequenciesForRegionModes — resetting to defaults (old key preserved as FrequenciesForRegionModes_backup)"});
+              settings_->setValue ("FrequenciesForRegionModes_backup", settings_->value ("FrequenciesForRegionModes"));
               frequencies_.reset_to_defaults();
             }
         }
@@ -4310,6 +4311,9 @@ void Configuration::impl::accept ()
   if (!rig_open_failed)
     {
       sync_transceiver (true);	// force an update
+      // Flush queued signals so the rig state is synchronized before
+      // the caller acts on the new configuration values.
+      QApplication::processEvents (QEventLoop::ExcludeUserInputEvents, 500);
     }
 
   //
