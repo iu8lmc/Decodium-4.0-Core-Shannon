@@ -32,6 +32,7 @@ class DecodiumCloudlogLite;
 class DecodiumWsprUploader;
 class DxccLookup;
 class DecodiumLegacyBackend;
+#include "DecodiumDiagnostics.h"
 class DecodiumPropagationManager;
 class MessageClient;
 
@@ -191,6 +192,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString logAllTxtPath     READ logAllTxtPath     CONSTANT)
     Q_PROPERTY(QObject* logManager READ logManager CONSTANT)
     Q_PROPERTY(QObject* propagationManager READ propagationManager CONSTANT)
+    Q_PROPERTY(QObject* diagnostics READ diagnostics CONSTANT)
     Q_PROPERTY(int qsoCount READ qsoCount NOTIFY qsoCountChanged)
 
     // === ADIF / LOTW ===
@@ -592,6 +594,7 @@ public:
     int         callerQueueSize()const { return m_callerQueue.size(); }
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
+    QObject*    diagnostics() const { return m_diagnostics; }
     int         qsoCount() const;
 
     // B9 — Active Stations
@@ -616,6 +619,7 @@ public slots:
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
     Q_INVOKABLE void logQso();
     Q_INVOKABLE void shutdown();
+    Q_INVOKABLE void copyToClipboard(const QString &text);
     Q_INVOKABLE void advanceQsoState(int txNum); // GitHub TxController clone
 
     // Audio
@@ -1081,6 +1085,7 @@ private:
 
     DecodiumThemeManager* m_themeManager  {nullptr};
     DecodiumPropagationManager* m_propagationManager {nullptr};
+    DecodiumDiagnostics*        m_diagnostics {nullptr};
     WavManager*           m_wavManager    {nullptr};
     MacroManager*         m_macroManager  {nullptr};
     BandManager*          m_bandManager   {nullptr};

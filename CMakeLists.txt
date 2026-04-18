@@ -1488,6 +1488,7 @@ add_executable (decodium_qml
   main_qml.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodiumDiagnostics.cpp
   DecodiumPropagationManager.cpp
   DecodiumPropagationManager.h
   DecodiumLegacyBackend.cpp

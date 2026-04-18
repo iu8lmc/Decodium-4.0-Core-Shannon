@@ -25,6 +25,7 @@
 #include <clocale>
 
 #include "DecodiumBridge.h"
+#include "DecodiumDiagnostics.h"
 #include "DecodiumDxCluster.h"
 #include "DecodiumLogging.hpp"
 #include "MetaDataRegistry.hpp"
@@ -233,11 +234,13 @@ int main(int argc, char* argv[])
     L("engine OK");
     engine.setOutputWarningsToStandardError(true);  // show QML errors on stderr for debugging
     QObject::connect(&engine, &QQmlEngine::warnings, &app,
-                     [] (const QList<QQmlError>& warnings) {
+                     [&bridge] (const QList<QQmlError>& warnings) {
         logQmlWarnings(warnings);
-        // Also log to file for remote debugging
         for (auto const& w : warnings) {
             qWarning("QML WARNING: %s", qPrintable(w.toString()));
+            // Feed warnings to the in-app diagnostics system
+            if (auto *diag = qobject_cast<DecodiumDiagnostics*>(bridge.diagnostics()))
+                diag->addQmlWarning(w.toString());
         }
     });
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");

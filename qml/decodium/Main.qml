@@ -1542,6 +1542,34 @@ ApplicationWindow {
                             ToolTip.text: "Settings"
                         }
 
+                        // BUG REPORT
+                        Rectangle {
+                            Layout.preferredWidth: 36
+                            Layout.fillHeight: true
+                            radius: 3
+                            color: bugMA.containsMouse ? Qt.rgba(1, 0.47, 0.08, 0.2) :
+                                   (bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? Qt.rgba(1, 0.27, 0.2, 0.25) : "transparent")
+                            border.color: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? "#ff4444" : "transparent"
+                            border.width: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? 1 : 0
+                            Label {
+                                anchors.centerIn: parent
+                                text: bridge.diagnostics && bridge.diagnostics.errorCount > 0
+                                      ? bridge.diagnostics.errorCount : ""
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: "#ff4444"
+                            }
+                            MouseArea {
+                                id: bugMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bugReportDialog.open()
+                            }
+                            ToolTip.visible: bugMA.containsMouse
+                            ToolTip.text: "Bug Report"
+                        }
+
                         // REC
                         Rectangle {
                             Layout.preferredWidth: 50
@@ -4549,6 +4577,11 @@ ApplicationWindow {
     // Settings Dialog (sostituisce il legacy WSJT-X settings)
     SettingsDialog {
         id: settingsDialog
+    }
+
+    // Bug Report Dialog — in-app diagnostics and issue submission
+    BugReportDialog {
+        id: bugReportDialog
     }
 
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato

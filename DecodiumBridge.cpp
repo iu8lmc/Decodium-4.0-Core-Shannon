@@ -1,6 +1,7 @@
 #include "DecodiumBridge.h"
 #include "DecodiumLogging.hpp"
 #include "DecodiumAlertManager.h"
+#include "DecodiumDiagnostics.h"
 #include "DecodiumPropagationManager.h"
 #include "DecodiumDxCluster.h"
 #include "Network/MessageClient.hpp"
@@ -33,6 +34,7 @@
 #include "DecodiumAudioSink.h"
 #include "Radio.hpp"
 
+#include <QClipboard>
 #include <QGuiApplication>
 #include <QApplication>
 #include <QDateTime>
@@ -1021,6 +1023,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 {
     m_themeManager    = new DecodiumThemeManager(this);
     m_propagationManager = new DecodiumPropagationManager(this);
+    m_diagnostics     = new DecodiumDiagnostics(this);
     m_wavManager      = new WavManager(this);
     connect(m_wavManager, &WavManager::recordingChanged, this, [this]() {
         bool const recording = m_wavManager && m_wavManager->recording();
@@ -4560,6 +4563,11 @@ void DecodiumBridge::shutdown()
     else if (m_catBackend == "hamlib" && m_hamlibCat->connected())
         m_hamlibCat->disconnectRig();
     saveSettings();
+}
+
+void DecodiumBridge::copyToClipboard(const QString &text)
+{
+    QGuiApplication::clipboard()->setText(text);
 }
 
 void DecodiumBridge::openSetupSettings(int tabIndex)
