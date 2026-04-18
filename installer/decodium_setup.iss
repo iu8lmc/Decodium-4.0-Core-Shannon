@@ -60,6 +60,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; Pulisci cache QML compilata da versioni precedenti — Qt6 la rigenera
+; automaticamente dal .qml sorgente aggiornato. Senza questo, il vecchio
+; .qmlc può essere caricato al posto del .qml nuovo, causando bug fantasma.
+Type: filesandordirs; Name: "{app}\qml\decodium\*.qmlc"
+Type: filesandordirs; Name: "{app}\qml\decodium\components\*.qmlc"
+Type: filesandordirs; Name: "{app}\qml\decodium\qmlcache"
+Type: filesandordirs; Name: "{app}\qmlcache"
+
 [Files]
 ; Copia l'intero bundle portabile già preparato da windeployqt.
 ; In questo modo installer e portable restano sempre allineati 1:1.

@@ -223,6 +223,11 @@ int main(int argc, char* argv[])
     // bindings still reevaluate while root objects are being torn down.
     // If the context object dies first, QML sees bridge == null and floods the
     // terminal with TypeError messages on exit.
+    // Disable QML disk cache to prevent stale .qmlc files from overriding
+    // updated .qml sources after an upgrade.  The compiled cache is a
+    // micro-optimisation (<50ms) that is not worth the risk of loading old UI.
+    qputenv("QML_DISABLE_DISK_CACHE", "1");
+
     QQmlApplicationEngine engine;
     L("engine OK");
     engine.setOutputWarningsToStandardError(false);
