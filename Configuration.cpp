@@ -3496,8 +3496,8 @@ void Configuration::impl::read_settings ()
   accept_udp_requests_ = settings_->value ("AcceptUDPRequests", true).toBool ();
   udpWindowToFront_ = settings_->value ("udpWindowToFront",false).toBool ();
   udpWindowRestore_ = settings_->value ("udpWindowRestore",false).toBool ();
-  calibration_.intercept = settings_->value ("CalibrationIntercept", 0.).toDouble ();
-  calibration_.slope_ppm = settings_->value ("CalibrationSlopePPM", 0.).toDouble ();
+  calibration_.intercept = qBound (-1000., settings_->value ("CalibrationIntercept", 0.).toDouble (), 1000.);
+  calibration_.slope_ppm = qBound (-200., settings_->value ("CalibrationSlopePPM", 0.).toDouble (), 200.);
   sortAlphabetically_ = settings_->value("SortAlphabetically",true).toBool ();
   hideCARD_ = settings_->value("HideCARD",true).toBool ();
   AzElExtraLines_ = settings_->value("AzElExtraLines",false).toBool ();

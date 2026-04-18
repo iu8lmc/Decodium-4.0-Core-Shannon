@@ -93,7 +93,7 @@ Window {
         var lines = []
 
         // Header: Callsign - Country (Continent)
-        var header = modelData.dxCallsign + " - " + modelData.dxCountry
+        var header = (modelData.dxCallsign || "") + " - " + modelData.dxCountry
         if (modelData.dxContinent) header += " (" + modelData.dxContinent + ")"
         lines.push(header)
 
@@ -393,6 +393,25 @@ Window {
                             clip: true
                             model: appEngine.decodeList
                             spacing: 1
+                            property bool followTail: true
+                            function updateFollowTail() {
+                                followTail = contentHeight <= height + 2
+                                          || contentY >= Math.max(0, contentHeight - height - 8)
+                            }
+                            Component.onCompleted: Qt.callLater(function() {
+                                positionViewAtEnd()
+                                updateFollowTail()
+                            })
+                            onContentYChanged: updateFollowTail()
+                            onHeightChanged: updateFollowTail()
+                            onCountChanged: {
+                                if (followTail) {
+                                    Qt.callLater(function() {
+                                        positionViewAtEnd()
+                                        updateFollowTail()
+                                    })
+                                }
+                            }
 
                             ScrollBar.vertical: ScrollBar {
                                 active: true

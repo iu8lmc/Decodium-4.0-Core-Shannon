@@ -93,7 +93,7 @@ Window {
         var lines = []
 
         // Header: Callsign - Country (Continent)
-        var header = modelData.dxCallsign + " - " + modelData.dxCountry
+        var header = (modelData.dxCallsign || "") + " - " + modelData.dxCountry
         if (modelData.dxContinent) header += " (" + modelData.dxContinent + ")"
         lines.push(header)
 
