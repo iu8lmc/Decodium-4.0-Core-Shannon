@@ -990,8 +990,12 @@ void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
               CAT_TRACE ("rig_set_mode mode=" << rig_strrmode (new_mode));
               m_->error_check (rig_set_mode (m_->rig_.data (), target_vfo, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting current VFO mode"));
             }
-          // set mode on VFOB too if we are in split
-          if (state ().split()) m_->error_check (rig_set_mode (m_->rig_.data (), RIG_VFO_B, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting VFOB mode"));
+          // set mode on TX VFO too if we are in split
+          if (state ().split())
+            {
+              auto tx_vfo = m_->rig_->state.vfo_list & RIG_VFO_B ? RIG_VFO_B : RIG_VFO_SUB;
+              m_->error_check (rig_set_mode (m_->rig_.data (), tx_vfo, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting TX VFO mode"));
+            }
           update_mode (m);
         }
     }
@@ -1170,10 +1174,10 @@ void HamlibTransceiver::do_mode (MODE mode)
 
 void HamlibTransceiver::do_poll ()
 {
-  freq_t f;
-  rmode_t m;
-  pbwidth_t w;
-  split_t s;
+  freq_t f {0};
+  rmode_t m {RIG_MODE_USB};
+  pbwidth_t w {RIG_PASSBAND_NORMAL};
+  split_t s {RIG_SPLIT_OFF};
 
   if (m_->get_vfo_works_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_VFO))
     {

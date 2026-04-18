@@ -1546,14 +1546,23 @@ DecodiumBridge::~DecodiumBridge()
     }
     if (m_modulator && m_modulator->isActive()) m_modulator->stop(true);
     if (m_soundOutput) m_soundOutput->stop();
-    m_workerThread->quit();      m_workerThread->wait(3000);
-    m_workerThreadFt2->quit();   m_workerThreadFt2->wait(3000);
-    m_workerThreadFt4->quit();   m_workerThreadFt4->wait(3000);
-    m_workerThreadQ65->quit();   m_workerThreadQ65->wait(3000);
-    m_workerThreadMsk->quit();        m_workerThreadMsk->wait(3000);
-    m_workerThreadWspr->quit();       m_workerThreadWspr->wait(3000);
-    m_workerThreadLegacyJt->quit();   m_workerThreadLegacyJt->wait(3000);
-    m_workerThreadFst4->quit();       m_workerThreadFst4->wait(3000);
+    auto safeQuitThread = [](QThread *t, const char *name) {
+        if (!t) return;
+        t->quit();
+        if (!t->wait(5000)) {
+            qWarning("~DecodiumBridge: %s did not finish in 5s, terminating", name);
+            t->terminate();
+            t->wait(2000);
+        }
+    };
+    safeQuitThread(m_workerThread,       "ft8");
+    safeQuitThread(m_workerThreadFt2,    "ft2");
+    safeQuitThread(m_workerThreadFt4,    "ft4");
+    safeQuitThread(m_workerThreadQ65,    "q65");
+    safeQuitThread(m_workerThreadMsk,    "msk");
+    safeQuitThread(m_workerThreadWspr,   "wspr");
+    safeQuitThread(m_workerThreadLegacyJt, "legacyJt");
+    safeQuitThread(m_workerThreadFst4,   "fst4");
 }
 
 QObject * DecodiumBridge::propagationManager() const
@@ -6925,8 +6934,10 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
     }
     // Cap lista decode per performance QML ListView
-    if (m_decodeList.size() > 1500)
+    if (m_decodeList.size() > 1500) {
         m_decodeList = m_decodeList.mid(m_decodeList.size() - 1500);
+        changed = true;
+    }
 
     // Shannon (linea 9699): auto-seq attiva se m_auto=true e cbAutoSeq checked
     // Processa qualsiasi messaggio che contiene il nostro callsign — identico a Shannon

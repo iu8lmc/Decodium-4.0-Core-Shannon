@@ -11278,6 +11278,7 @@ void MainWindow::callSandP2(int n)
   if(m_mode=="Q65" and m_specOp==SpecOp::Q65_PILEUP and n < 40) {
     // This code is for 6m EME DXpedition operator
     w=m_callers[n].split(' ', SkipEmptyParts);
+    if (w.size() < 4) return;
     m_deCall=w[2];
     if(bCtrl) {
       // Remove this call from q3list.
@@ -11299,6 +11300,7 @@ void MainWindow::callSandP2(int n)
   }
 
   if(m_mode=="Q65") {
+    if (w.size() < 7) return;
     if(!bCtrl) {                          //Do not reset m_freqNominal if CTRL was down
       double kHz=w[1].toDouble();
       int nMHz=m_freqNominal/1000000;
@@ -11309,6 +11311,7 @@ void MainWindow::callSandP2(int n)
     m_txFirst=(w[6]=="0");
 //    ui->TxFreqSpinBox->setValue(1500);
   } else {
+    if (w.size() < 6) return;
     m_deCall=w[0];
     m_deGrid=w[1];
     ui->RxFreqSpinBox->setValue(w[4].toInt());
