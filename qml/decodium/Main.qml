@@ -17,7 +17,10 @@ ApplicationWindow {
     minimumWidth: 1200
     minimumHeight: 700
     visible: true
-    title: "Decodium 4.0 — " + bridge.mode + " — " + bridge.callsign
+    visibility: Window.Windowed
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+         | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
 
@@ -67,7 +70,9 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        var state = bridge.loadWindowState("mainWindow")
+        console.log("Main.qml Component.onCompleted — restoring window state")
+        var state = {}
+        try { state = bridge.loadWindowState("mainWindow") || {} } catch(e) { console.log("loadWindowState error: " + e) }
         if (state.width !== undefined && state.width > 0) width = state.width
         if (state.height !== undefined && state.height > 0) height = state.height
         var pos
@@ -83,6 +88,13 @@ ApplicationWindow {
         x = pos.x
         y = pos.y
         windowStateRestoreInProgress = false
+
+        // Force window visible on Windows — some WM/GPU combos need explicit calls
+        visible = true
+        show()
+        raise()
+        requestActivate()
+        console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
     // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight

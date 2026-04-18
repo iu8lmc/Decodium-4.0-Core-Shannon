@@ -17,21 +17,84 @@ ApplicationWindow {
     minimumWidth: 1200
     minimumHeight: 700
     visible: true
-    title: "Decodium 4.0 — " + bridge.mode + " — " + bridge.callsign
+    visibility: Window.Windowed
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+         | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
 
-    // Carica solo dimensioni della finestra dai settings.
-    // La POSIZIONE viene sempre forzata al centro del monitor primario all'avvio:
-    // evita che la finestra resti invisibile per utenti multi-monitor che hanno
-    // scollegato/spento il display su cui era stata posizionata in precedenza.
+    function availableScreenGeometries() {
+        var geometries = []
+        if (Qt.application && Qt.application.screens) {
+            for (var i = 0; i < Qt.application.screens.length; ++i) {
+                var screen = Qt.application.screens[i]
+                if (!screen)
+                    continue
+                var g = screen.availableGeometry
+                geometries.push({ x: g.x, y: g.y, width: g.width, height: g.height })
+            }
+        }
+        if (geometries.length === 0) {
+            geometries.push({
+                x: 0,
+                y: 0,
+                width: Screen.desktopAvailableWidth,
+                height: Screen.desktopAvailableHeight
+            })
+        }
+        return geometries
+    }
+
+    function clampWindowPosition(savedX, savedY, winW, winH) {
+        var screens = availableScreenGeometries()
+        var centerX = savedX + winW / 2
+        var centerY = savedY + winH / 2
+
+        for (var i = 0; i < screens.length; ++i) {
+            var g = screens[i]
+            if (centerX >= g.x && centerX < g.x + g.width &&
+                centerY >= g.y && centerY < g.y + g.height) {
+                return {
+                    x: Math.max(g.x, Math.min(savedX, g.x + Math.max(0, g.width - winW))),
+                    y: Math.max(g.y, Math.min(savedY, g.y + Math.max(0, g.height - winH)))
+                }
+            }
+        }
+
+        var fallback = screens[0]
+        return {
+            x: Math.round(fallback.x + Math.max(0, (fallback.width - winW) / 2)),
+            y: Math.round(fallback.y + Math.max(0, (fallback.height - winH) / 2))
+        }
+    }
+
     Component.onCompleted: {
-        var state = bridge.loadWindowState("mainWindow")
+        console.log("Main.qml Component.onCompleted — restoring window state")
+        var state = {}
+        try { state = bridge.loadWindowState("mainWindow") || {} } catch(e) { console.log("loadWindowState error: " + e) }
         if (state.width !== undefined && state.width > 0) width = state.width
         if (state.height !== undefined && state.height > 0) height = state.height
-        x = Math.max(0, (Screen.desktopAvailableWidth - width) / 2)
-        y = Math.max(0, (Screen.desktopAvailableHeight - height) / 2)
+        var pos
+        if (state.x !== undefined && state.y !== undefined) {
+            pos = clampWindowPosition(state.x, state.y, width, height)
+        } else {
+            var fallback = availableScreenGeometries()[0]
+            pos = {
+                x: Math.round(fallback.x + Math.max(0, (fallback.width - width) / 2)),
+                y: Math.round(fallback.y + Math.max(0, (fallback.height - height) / 2))
+            }
+        }
+        x = pos.x
+        y = pos.y
         windowStateRestoreInProgress = false
+
+        // Force window visible on Windows — some WM/GPU combos need explicit calls
+        visible = true
+        show()
+        raise()
+        requestActivate()
+        console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
     // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight
@@ -62,8 +125,11 @@ ApplicationWindow {
         var state = bridge.loadWindowState(key)
         if (state.width !== undefined && state.width > 0) windowRef.width = state.width
         if (state.height !== undefined && state.height > 0) windowRef.height = state.height
-        if (state.x !== undefined) windowRef.x = state.x
-        if (state.y !== undefined) windowRef.y = state.y
+        if (state.x !== undefined && state.y !== undefined) {
+            var pos = clampWindowPosition(state.x, state.y, windowRef.width, windowRef.height)
+            windowRef.x = pos.x
+            windowRef.y = pos.y
+        }
 
         if (detachedPropName && detachedPropName.length > 0) {
             var detached = state.detached !== undefined ? !!state.detached : mainWindow[detachedPropName]
@@ -3520,7 +3586,25 @@ ApplicationWindow {
                                         spacing: 1
                                         cacheBuffer: 3000
                                         interactive: true
-                                        onCountChanged: Qt.callLater(positionViewAtEnd)
+                                        property bool followTail: true
+                                        function updateFollowTail() {
+                                            followTail = contentHeight <= height + 2
+                                                      || contentY >= Math.max(0, contentHeight - height - 8)
+                                        }
+                                        Component.onCompleted: Qt.callLater(function() {
+                                            positionViewAtEnd()
+                                            updateFollowTail()
+                                        })
+                                        onContentYChanged: updateFollowTail()
+                                        onHeightChanged: updateFollowTail()
+                                        onCountChanged: {
+                                            if (followTail) {
+                                                Qt.callLater(function() {
+                                                    positionViewAtEnd()
+                                                    updateFollowTail()
+                                                })
+                                            }
+                                        }
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
 
@@ -4698,12 +4782,42 @@ ApplicationWindow {
         id: mainMenu
         x: 60
         y: 90
+        padding: 6
+        width: 230
+        readonly property real maxVisibleHeight: Math.max(180, mainWindow.height - mainMenu.y - 16)
+        implicitHeight: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, maxVisibleHeight)
         background: Rectangle {
             implicitWidth: 230
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
             border.color: secondaryCyan
             border.width: 1
             radius: 10
+        }
+        contentItem: ListView {
+            clip: true
+            implicitHeight: contentHeight
+            model: mainMenu.contentModel
+            currentIndex: mainMenu.currentIndex
+            spacing: 2
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
+            reuseItems: true
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: 3
+                    color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.32)
+                }
+
+                background: Rectangle {
+                    implicitWidth: 6
+                    radius: 3
+                    color: "transparent"
+                }
+            }
         }
 
         MenuItem {
@@ -6806,6 +6920,7 @@ ApplicationWindow {
                     clip: true
 
                     ListView {
+                        id: period1FloatingList
                         anchors.fill: parent
                         anchors.margins: 4
                         clip: true
@@ -6813,6 +6928,25 @@ ApplicationWindow {
                         model: decodePanel.allDecodes
                         cacheBuffer: 3000
                         interactive: true
+                        property bool followTail: true
+                        function updateFollowTail() {
+                            followTail = contentHeight <= height + 2
+                                      || contentY >= Math.max(0, contentHeight - height - 8)
+                        }
+                        Component.onCompleted: Qt.callLater(function() {
+                            positionViewAtEnd()
+                            updateFollowTail()
+                        })
+                        onContentYChanged: updateFollowTail()
+                        onHeightChanged: updateFollowTail()
+                        onCountChanged: {
+                            if (followTail) {
+                                Qt.callLater(function() {
+                                    positionViewAtEnd()
+                                    updateFollowTail()
+                                })
+                            }
+                        }
                         ScrollBar.vertical: ScrollBar { active: true }
 
                         delegate: Rectangle {
@@ -7416,6 +7550,14 @@ ApplicationWindow {
             anchors.fill: parent
             active: activeStationsPanelVisible
             source: "../panels/ActiveStationsPanel.qml"
+        }
+
+        Connections {
+            target: activeStationsLoader.item
+            ignoreUnknownSignals: true
+            function onCloseRequested() {
+                activeStationsPanelVisible = false
+            }
         }
     }
 
