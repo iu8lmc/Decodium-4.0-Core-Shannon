@@ -25,6 +25,13 @@ Item {
         // IU8LMC: Show newest items at top (list uses append for performance)
         verticalLayoutDirection: ListView.BottomToTop
 
+        // Auto-scroll to newest decode (bottom of model = top of view)
+        onCountChanged: {
+            if (count > 0 && !listView.moving) {
+                Qt.callLater(function() { listView.positionViewAtEnd() })
+            }
+        }
+
         delegate: Rectangle {
             width: listView.width
             height: 32
