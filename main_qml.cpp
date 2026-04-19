@@ -125,6 +125,16 @@ int main(int argc, char* argv[])
         QFont::insertSubstitution(QStringLiteral("Consolas"), fixedFontFamily);
     }
 
+    // Qt6 RHI backend: if the GPU driver is too old or has known issues,
+    // fall back to software rendering to prevent QML hang on startup.
+    // Users can override with QSG_RHI_BACKEND=opengl env var.
+    if (qEnvironmentVariableIsEmpty("QSG_RHI_BACKEND")) {
+        // Check for Intel HD Graphics with low VRAM (known to hang with D3D11 RHI)
+        // Also helps with Remote Desktop, VMs, and headless setups.
+        qputenv("QSG_RHI_BACKEND", "opengl");  // OpenGL is more compatible than D3D11
+        L("RHI backend forced to OpenGL for compatibility");
+    }
+
     // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
     // che usano la virgola e bloccano il parsing di frequenze/configurazioni
     QLocale::setDefault(QLocale::c());
