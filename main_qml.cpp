@@ -249,8 +249,17 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty("bridge", &bridge);
     engine.rootContext()->setContextProperty("appEngine", &bridge);
 
+    // Load BootLoader.qml first — it shows a splash window immediately,
+    // then loads Main.qml asynchronously via Loader { asynchronous: true }.
+    // This guarantees the window appears even if component compilation is slow.
     QString qmlPath = QDir(QCoreApplication::applicationDirPath())
-                          .absoluteFilePath("qml/decodium/Main.qml");
+                          .absoluteFilePath("qml/decodium/BootLoader.qml");
+
+    // Fallback to Main.qml if BootLoader doesn't exist (portable/dev builds)
+    if (!QFile::exists(qmlPath)) {
+        qmlPath = QDir(QCoreApplication::applicationDirPath())
+                      .absoluteFilePath("qml/decodium/Main.qml");
+    }
 
     if (!QFile::exists(qmlPath)) {
         L("QML file NOT FOUND");
