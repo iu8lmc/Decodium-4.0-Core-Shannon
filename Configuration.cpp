@@ -2136,6 +2136,46 @@ namespace
     return QApplication::applicationDirPath ();
 #endif
   }
+
+  QDir embedded_legacy_writeable_data_dir ()
+  {
+    QString const explicit_path =
+      qApp ? qApp->property ("decodiumEmbeddedLegacyDataDir").toString ().trimmed ()
+           : QString {};
+    if (!explicit_path.isEmpty ())
+      {
+        QDir dir {explicit_path};
+        dir.mkpath (QStringLiteral ("."));
+        return dir;
+      }
+
+    QString root = QStandardPaths::writableLocation (QStandardPaths::GenericDataLocation);
+    if (root.isEmpty ())
+      {
+        root = QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation);
+      }
+
+    QString leaf = QApplication::applicationName ().trimmed ();
+    if (leaf.isEmpty ())
+      {
+        leaf = QStringLiteral ("ft2");
+      }
+
+    QDir dir {root};
+    dir.mkpath (leaf);
+    return QDir {dir.absoluteFilePath (leaf)};
+  }
+
+  QDir effective_writeable_data_dir ()
+  {
+    bool const embedded_legacy_shell =
+      qApp && qApp->property ("decodiumEmbeddedLegacyShell").toBool ();
+    if (embedded_legacy_shell)
+      {
+        return embedded_legacy_writeable_data_dir ();
+      }
+    return QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  }
 }
 
 Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network_manager
@@ -2151,7 +2191,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
   , doc_dir_ {doc_path ()}
   , data_dir_ {data_path ()}
   , temp_dir_ {temp_directory}
-  , writeable_data_dir_ {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}
+  , writeable_data_dir_ {effective_writeable_data_dir ()}
   , lotw_users_ {network_manager_}
   , cloudlog_ {self, network_manager_}
   , restart_sound_input_device_ {false}
@@ -2718,7 +2758,7 @@ Configuration::impl::impl (Configuration * self, QNetworkAccessManager * network
       qApp && qApp->property ("decodiumEmbeddedLegacyShell").toBool ();
     if (!embedded_legacy_shell)
       {
-        QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+        QDir dataPath {effective_writeable_data_dir ()};
         QFileInfo ctyInfo (dataPath.absoluteFilePath ("cty.dat"));
         bool const missing = !ctyInfo.exists ();
         bool const stale = ctyInfo.exists ()
@@ -3281,7 +3321,8 @@ void Configuration::impl::read_settings ()
             }
             else
             {
-              LOG_INFO(QString{"read_settings INVALID FrequenciesForRegionModes"});
+              LOG_ERROR(QString{"read_settings INVALID FrequenciesForRegionModes — resetting to defaults (old key preserved as FrequenciesForRegionModes_backup)"});
+              settings_->setValue ("FrequenciesForRegionModes_backup", settings_->value ("FrequenciesForRegionModes"));
               frequencies_.reset_to_defaults();
             }
         }
@@ -3496,8 +3537,8 @@ void Configuration::impl::read_settings ()
   accept_udp_requests_ = settings_->value ("AcceptUDPRequests", true).toBool ();
   udpWindowToFront_ = settings_->value ("udpWindowToFront",false).toBool ();
   udpWindowRestore_ = settings_->value ("udpWindowRestore",false).toBool ();
-  calibration_.intercept = settings_->value ("CalibrationIntercept", 0.).toDouble ();
-  calibration_.slope_ppm = settings_->value ("CalibrationSlopePPM", 0.).toDouble ();
+  calibration_.intercept = qBound (-1000., settings_->value ("CalibrationIntercept", 0.).toDouble (), 1000.);
+  calibration_.slope_ppm = qBound (-200., settings_->value ("CalibrationSlopePPM", 0.).toDouble (), 200.);
   sortAlphabetically_ = settings_->value("SortAlphabetically",true).toBool ();
   hideCARD_ = settings_->value("HideCARD",true).toBool ();
   AzElExtraLines_ = settings_->value("AzElExtraLines",false).toBool ();
@@ -4310,6 +4351,9 @@ void Configuration::impl::accept ()
   if (!rig_open_failed)
     {
       sync_transceiver (true);	// force an update
+      // Flush queued signals so the rig state is synchronized before
+      // the caller acts on the new configuration values.
+      QApplication::processEvents (QEventLoop::ExcludeUserInputEvents, 500);
     }
 
   //
@@ -4398,7 +4442,12 @@ void Configuration::impl::accept ()
   auto const old_remote_user = remote_user_;
   auto const old_remote_token = remote_token_;
 
-  my_callsign_ = ui_->callsign_line_edit->text ();
+  my_callsign_ = ui_->callsign_line_edit->text ().trimmed ().toUpper ();
+  if (my_callsign_.isEmpty ())
+    {
+      MessageBox::warning_message (this, tr ("Callsign is empty"),
+                                   tr ("Please enter your callsign before saving."));
+    }
   my_grid_ = ui_->grid_line_edit->text ();
   FD_exchange_= ui_->Field_Day_Exchange->text ().toUpper ();
   RTTY_exchange_= ui_->RTTY_Exchange->text ().toUpper ();
@@ -4836,7 +4885,7 @@ void Configuration::impl::on_rescan_log_push_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CTY_download_button_clicked (bool /*clicked*/)
 {
   ui_->CTY_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {effective_writeable_data_dir ()};
   cty_download.configure(network_manager_,
                          "https://www.country-files.com/bigcty/cty.dat",
                          dataPath.absoluteFilePath("cty.dat"),
@@ -4900,7 +4949,7 @@ void Configuration::impl::after_CTY_downloaded ()
 void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {effective_writeable_data_dir ()};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4920,7 +4969,7 @@ void Configuration::impl::on_CALL3_download_button_clicked (bool /*clicked*/)
 void Configuration::impl::on_CALL3_EME_download_button_clicked (bool /*clicked*/)
 {
   ui_->CALL3_EME_download_button->setEnabled (false); // disable button until download is complete
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {effective_writeable_data_dir ()};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   if (g.exists()) QFile::rename(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3_backup.tmp");
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
@@ -4942,7 +4991,7 @@ void Configuration::impl::error_during_CALL3_download (QString const& reason)
   MessageBox::warning_message (this, tr ("Error Loading CALL3.TXT file"), reason);
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {effective_writeable_data_dir ()};
   QFile f {dataPath.absolutePath() + "/" + "CALL3.TXT"};
   if (!f.exists()) QFile::copy(dataPath.absolutePath() + "/" + "CALL3_backup.TXT", dataPath.absolutePath() + "/" + "CALL3.TXT");
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
@@ -4959,7 +5008,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 {
   ui_->CALL3_download_button->setEnabled (true);
   ui_->CALL3_EME_download_button->setEnabled (true);
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {effective_writeable_data_dir ()};
   QFile g {dataPath.absolutePath() + "/" + "CALL3_backup.TXT"};
   QFile h {dataPath.absolutePath() + "/" + "CALL3_backup.tmp"};
   if (!g.exists() and h.exists()) {
@@ -4973,7 +5022,7 @@ void Configuration::impl::after_CALL3_downloaded ()
 void Configuration::impl::read_CALL3_version ()
 {
   QString text;
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+  QDir dataPath {effective_writeable_data_dir ()};
   QFile call3file {dataPath.absolutePath() + "/" + "CALL3.TXT"};
     QTextStream call3stream(&call3file);
     if(call3file.open (QIODevice::ReadOnly | QIODevice::Text)) {

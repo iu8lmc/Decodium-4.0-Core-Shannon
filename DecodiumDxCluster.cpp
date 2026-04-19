@@ -555,6 +555,7 @@ QVariantMap DecodiumDxCluster::parseSpotLine(const QString& line) const
 
     const QString spotter   = m.captured(1).toUpper();
     const double  freqKhz   = m.captured(2).toDouble();
+    if (freqKhz <= 0.0) return {};   // reject malformed frequency
     const QString dxCall    = m.captured(3).toUpper();
     const QString comment   = m.captured(4).trimmed();
     const QString time      = m.captured(5);          // e.g. "1234Z"
@@ -592,7 +593,8 @@ QString DecodiumDxCluster::bandFromFreq(double freqKhz) const
 {
     // Boundaries chosen so that any frequency that falls within a standard
     // amateur allocation maps to the correct band name.
-    if      (freqKhz <   2000.0) return "160M";
+    if      (freqKhz <   1800.0) return "UNK";   // below 160m or invalid
+    else if (freqKhz <   2000.0) return "160M";
     else if (freqKhz <   4000.0) return "80M";
     else if (freqKhz <   6000.0) return "60M";
     else if (freqKhz <   8000.0) return "40M";

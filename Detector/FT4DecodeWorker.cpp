@@ -183,7 +183,7 @@ void FT4DecodeWorker::decode (DecodeRequest const& request)
   int nfa = qBound (0, request.nfa, 5000);
   int nfb = qMax (nfa + 50, qBound (0, request.nfb, 5000));
   int ndepth = qBound (1, request.ndepth, 4);
-  int lapcqonly = 0;
+  int lapcqonly = request.lapcqonly ? 1 : 0;
   int ncontest = qBound (0, request.ncontest, 16);
   int nout = 0;
 

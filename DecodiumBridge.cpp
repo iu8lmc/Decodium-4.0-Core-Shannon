@@ -1,6 +1,7 @@
 #include "DecodiumBridge.h"
 #include "DecodiumLogging.hpp"
 #include "DecodiumAlertManager.h"
+#include "DecodiumDiagnostics.h"
 #include "DecodiumPropagationManager.h"
 #include "DecodiumDxCluster.h"
 #include "Network/MessageClient.hpp"
@@ -33,6 +34,7 @@
 #include "DecodiumAudioSink.h"
 #include "Radio.hpp"
 
+#include <QClipboard>
 #include <QGuiApplication>
 #include <QApplication>
 #include <QDateTime>
@@ -56,6 +58,7 @@
 #include <QAudioFormat>
 #include <QAudioSink>
 #include <QBuffer>
+#include <algorithm>
 #include <QMediaDevices>
 #include <QRandomGenerator>
 #include <QDebug>
@@ -151,12 +154,140 @@ static QString normalizeUtcDisplayToken(QString raw)
         return raw.left(6);
     }
     if (raw.size() == 4) {
-        return raw + QStringLiteral("%1").arg(nowUtc.second(), 2, 10, QLatin1Char('0'));
+        return raw;
     }
     if (raw.isEmpty()) {
         return nowUtc.toString(QStringLiteral("HHmmss"));
     }
     return raw;
+}
+
+static QString decodeDedupKey(QString const& time,
+                              QString const& freq,
+                              QString const& message)
+{
+    return normalizeUtcDisplayToken(time).trimmed()
+        + QLatin1Char('|')
+        + freq.trimmed()
+        + QLatin1Char('|')
+        + message.trimmed();
+}
+
+static int legacyDepthBitsToModernDepth(int legacyBits)
+{
+    int depth = legacyBits & 0x7;
+    if (depth <= 0) {
+        depth = 3;
+    }
+    if (legacyBits & 0xF0) {
+        depth = 4;
+    }
+    return qBound(1, depth, 4);
+}
+
+static int modernDepthToLegacyBits(int depth, bool avgDecodeEnabled, bool deepSearchEnabled)
+{
+    int bits = qBound(1, depth, 3);
+    if (avgDecodeEnabled) {
+        bits |= 0x10;
+    }
+    if (deepSearchEnabled) {
+        bits |= 0x20;
+    }
+    return bits;
+}
+
+static QDateTime approxUtcDateTimeForDisplayToken(QString const& utcToken)
+{
+    QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+    QString const normalized = normalizeUtcDisplayToken(utcToken);
+
+    QTime decodedTime;
+    if (normalized.size() >= 6) {
+        decodedTime = QTime::fromString(normalized.left(6), QStringLiteral("hhmmss"));
+    } else if (normalized.size() == 4) {
+        decodedTime = QTime::fromString(normalized, QStringLiteral("hhmm"));
+    }
+
+    if (!decodedTime.isValid()) {
+        return nowUtc;
+    }
+
+    QDate decodedDate = nowUtc.date();
+    if (decodedTime > nowUtc.time().addSecs(60)) {
+        decodedDate = decodedDate.addDays(-1);
+    }
+
+    nowUtc.setDate(decodedDate);
+    nowUtc.setTime(decodedTime);
+    return nowUtc;
+}
+
+static void sortDecodeEntriesChronologically(QVariantList& entries)
+{
+    struct IndexedEntry
+    {
+        QVariantMap entry;
+        int originalIndex {0};
+        QDateTime utc;
+    };
+
+    QVector<IndexedEntry> indexed;
+    indexed.reserve(entries.size());
+    for (int i = 0; i < entries.size(); ++i) {
+        QVariantMap const entry = entries.at(i).toMap();
+        indexed.push_back(IndexedEntry {
+            entry,
+            i,
+            approxUtcDateTimeForDisplayToken(entry.value(QStringLiteral("time")).toString())
+        });
+    }
+
+    std::stable_sort(indexed.begin(), indexed.end(), [] (IndexedEntry const& lhs, IndexedEntry const& rhs) {
+        bool const lhsValid = lhs.utc.isValid();
+        bool const rhsValid = rhs.utc.isValid();
+        if (lhsValid && rhsValid && lhs.utc != rhs.utc) {
+            return lhs.utc < rhs.utc;
+        }
+        if (lhsValid != rhsValid) {
+            return lhsValid;
+        }
+        return lhs.originalIndex < rhs.originalIndex;
+    });
+
+    QVariantList sorted;
+    sorted.reserve(entries.size());
+    for (IndexedEntry const& item : std::as_const(indexed)) {
+        sorted.append(item.entry);
+    }
+    entries = sorted;
+}
+
+static int utcTokenForSlotStart(qint64 slotIndex, int periodMs)
+{
+    if (slotIndex < 0 || periodMs <= 0) {
+        return 0;
+    }
+
+    qint64 const slotStartMs = slotIndex * static_cast<qint64>(periodMs);
+    QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+    if (periodMs < 60000) {
+        return slotTime.hour() * 10000 + slotTime.minute() * 100 + slotTime.second();
+    }
+    return slotTime.hour() * 100 + slotTime.minute();
+}
+
+static QString utcDisplayTokenForSlotStart(qint64 slotIndex, int periodMs)
+{
+    if (slotIndex < 0 || periodMs <= 0) {
+        return QString();
+    }
+
+    qint64 const slotStartMs = slotIndex * static_cast<qint64>(periodMs);
+    QTime const slotTime = QDateTime::fromMSecsSinceEpoch(slotStartMs, Qt::UTC).time();
+    QString const fmt = periodMs < 60000 ? QStringLiteral("HHmmss")
+                                         : QStringLiteral("HHmm");
+    return slotTime.toString(fmt);
 }
 
 struct ParsedAdifRecord
@@ -602,6 +733,44 @@ static QString decodeMirrorEntryKey(QVariantMap const& entry)
            (entry.value("isTx").toBool() ? QStringLiteral("1") : QStringLiteral("0"));
 }
 
+static QString decodeMirrorLooseKey(QVariantMap const& entry)
+{
+    return entry.value("db").toString().trimmed() + "|" +
+           entry.value("dt").toString().trimmed() + "|" +
+           entry.value("freq").toString().trimmed() + "|" +
+           entry.value("message").toString().trimmed() + "|" +
+           (entry.value("isTx").toBool() ? QStringLiteral("1") : QStringLiteral("0"));
+}
+
+static QStringList readTextLinesFromOffset(QString const& path, qint64 startOffset, int maxLines)
+{
+    if (maxLines <= 0 || startOffset < 0) {
+        return {};
+    }
+
+    QFile file(path);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+
+    qint64 const size = file.size();
+    if (startOffset >= size) {
+        file.close();
+        return {};
+    }
+
+    file.seek(startOffset);
+    QByteArray data = file.readAll();
+    file.close();
+
+    QStringList lines = QString::fromUtf8(data).split(QRegularExpression {R"([\r\n]+)"},
+                                                      Qt::SkipEmptyParts);
+    if (lines.size() > maxLines) {
+        lines = lines.mid(lines.size() - maxLines);
+    }
+    return lines;
+}
+
 static QString inferPartnerFromDirectedMessage(QString const& message,
                                               QString const& myCall,
                                               QString const& myBase)
@@ -1021,6 +1190,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 {
     m_themeManager    = new DecodiumThemeManager(this);
     m_propagationManager = new DecodiumPropagationManager(this);
+    m_diagnostics     = new DecodiumDiagnostics(this);
     m_wavManager      = new WavManager(this);
     connect(m_wavManager, &WavManager::recordingChanged, this, [this]() {
         bool const recording = m_wavManager && m_wavManager->recording();
@@ -1304,6 +1474,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             if (c) {
                 m_lastSuccessfulCatConnected = true;
                 m_lastSuccessfulCatBackend = backend;
+                if (!m_lastCatError.isEmpty()) {
+                    m_lastCatError.clear();
+                    emit lastCatErrorChanged();
+                }
                 QSettings s("Decodium", "Decodium3");
                 s.setValue("lastSuccessfulCatConnected", true);
                 s.setValue("lastSuccessfulCatBackend", backend);
@@ -1320,6 +1494,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             if (m_catBackend != backend) return;
             if (m_suppressCatErrors) { bridgeLog("CAT[" + backend + "] error suppressed: " + msg); return; }
             bridgeLog("CAT[" + backend + "] error: " + msg);
+            if (m_lastCatError != msg) {
+                m_lastCatError = msg;
+                emit lastCatErrorChanged();
+            }
             emit errorMessage(msg);
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::statusUpdate, this, [this, backend](const QString& msg) {
@@ -1484,6 +1662,8 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     purgePersistentTransientQsoState();
     m_startupModeAutoPending = true;
     m_startupModeAutoUntilMs = QDateTime::currentMSecsSinceEpoch() + 10000;
+    m_legacyStartupModeGuard = m_mode.trimmed();
+    m_legacyStartupModeGuardUntilMs = QDateTime::currentMSecsSinceEpoch() + 10000;
     // Enumerazione audio differita per non bloccare l'avvio della UI
     QTimer::singleShot(500, this, [this]() { enumerateAudioDevices(); });
 
@@ -1509,9 +1689,23 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                 scheduleLegacyStateRefreshBurst();
             });
         } else if (autoConn || retryLastSuccessfulCat) {
+            m_startupCatRetryCount = 0;
             QTimer::singleShot(1500, this, [this]() {
                 bridgeLog("CAT startup reconnect: retry active backend " + m_catBackend);
+                m_startupCatRetryCount = 1;
                 retryRigConnection();
+                // Se dopo 2500 ms non risulta connesso, proviamo UN solo
+                // retry aggiuntivo con delay più ampio: copre il caso in
+                // cui OmniRig.exe sta ancora rilasciando la porta o ha
+                // bisogno di tempo per inizializzarsi all'avvio di Windows.
+                QTimer::singleShot(2500, this, [this]() {
+                    if (m_shuttingDown) return;
+                    if (m_catConnected) return;
+                    if (m_startupCatRetryCount >= 2) return;
+                    m_startupCatRetryCount = 2;
+                    bridgeLog("CAT startup reconnect: second attempt on " + m_catBackend);
+                    retryRigConnection();
+                });
             });
         }
         Q_UNUSED(activeCat);
@@ -1546,14 +1740,23 @@ DecodiumBridge::~DecodiumBridge()
     }
     if (m_modulator && m_modulator->isActive()) m_modulator->stop(true);
     if (m_soundOutput) m_soundOutput->stop();
-    m_workerThread->quit();      m_workerThread->wait(3000);
-    m_workerThreadFt2->quit();   m_workerThreadFt2->wait(3000);
-    m_workerThreadFt4->quit();   m_workerThreadFt4->wait(3000);
-    m_workerThreadQ65->quit();   m_workerThreadQ65->wait(3000);
-    m_workerThreadMsk->quit();        m_workerThreadMsk->wait(3000);
-    m_workerThreadWspr->quit();       m_workerThreadWspr->wait(3000);
-    m_workerThreadLegacyJt->quit();   m_workerThreadLegacyJt->wait(3000);
-    m_workerThreadFst4->quit();       m_workerThreadFst4->wait(3000);
+    auto safeQuitThread = [](QThread *t, const char *name) {
+        if (!t) return;
+        t->quit();
+        if (!t->wait(5000)) {
+            qWarning("~DecodiumBridge: %s did not finish in 5s, terminating", name);
+            t->terminate();
+            t->wait(2000);
+        }
+    };
+    safeQuitThread(m_workerThread,       "ft8");
+    safeQuitThread(m_workerThreadFt2,    "ft2");
+    safeQuitThread(m_workerThreadFt4,    "ft4");
+    safeQuitThread(m_workerThreadQ65,    "q65");
+    safeQuitThread(m_workerThreadMsk,    "msk");
+    safeQuitThread(m_workerThreadWspr,   "wspr");
+    safeQuitThread(m_workerThreadLegacyJt, "legacyJt");
+    safeQuitThread(m_workerThreadFst4,   "fst4");
 }
 
 QObject * DecodiumBridge::propagationManager() const
@@ -1671,6 +1874,8 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
         }
         m_legacyBackend->setAudioInputChannel(qBound(0, m_audioInputChannel, 1));
         m_legacyBackend->setAudioOutputChannel(qBound(0, m_audioOutputChannel, 3));
+        m_legacyBackend->setDecodeDepthBits(legacyCompatibleDecodeDepthBits());
+        m_legacyBackend->setCqOnly(m_filterCqOnly);
         bridgeLog(QStringLiteral("Legacy backend audio restored: inDev=%1 inChan=%2 outDev=%3 outChan=%4")
                       .arg(m_audioInputDevice,
                            QString::number(m_audioInputChannel),
@@ -1703,10 +1908,14 @@ void DecodiumBridge::syncLegacyBackendDialogState()
     }
     m_legacyBackend->setAudioInputChannel(qBound(0, m_audioInputChannel, 1));
     m_legacyBackend->setAudioOutputChannel(qBound(0, m_audioOutputChannel, 3));
+    m_legacyBackend->setDecodeDepthBits(legacyCompatibleDecodeDepthBits());
+    m_legacyBackend->setCqOnly(m_filterCqOnly);
     m_legacyBackend->setRxInputLevel(qRound(qBound(0.0, m_rxInputLevel, 100.0)));
     int const legacyTxAttn = legacyTxAttenuationFromLevel(m_txOutputLevel);
     m_legacyBackend->setTxOutputAttenuation(legacyTxAttn);
     m_legacyBackend->setMode(m_mode);
+    m_legacyStartupModeGuard = m_mode.trimmed();
+    m_legacyStartupModeGuardUntilMs = QDateTime::currentMSecsSinceEpoch() + 6000;
     m_legacyBackend->setDialFrequency(m_frequency);
     m_legacyBackend->setAutoSeq(m_autoSeq);
     m_legacyBackend->setAlt12Enabled(m_alt12Enabled);
@@ -1884,8 +2093,29 @@ void DecodiumBridge::syncLegacyBackendState()
     updateDouble(m_txOutputLevel, txLevelFromLegacyAttenuation(m_legacyBackend->txOutputAttenuation()),
                  [this]() { emit txOutputLevelChanged(); });
 
-    QString const legacyMode = m_legacyBackend->mode();
+    QString const legacyMode = m_legacyBackend->mode().trimmed();
     if (!legacyMode.isEmpty()) {
+        qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (m_legacyStartupModeGuardUntilMs > 0 && nowMs > m_legacyStartupModeGuardUntilMs) {
+            m_legacyStartupModeGuard.clear();
+            m_legacyStartupModeGuardUntilMs = 0;
+        }
+        bool const legacyStartupModeGuardActive =
+            !m_legacyStartupModeGuard.isEmpty()
+            && m_legacyStartupModeGuardUntilMs > 0
+            && nowMs <= m_legacyStartupModeGuardUntilMs;
+        if (legacyStartupModeGuardActive
+            && legacyMode.compare(m_legacyStartupModeGuard, Qt::CaseInsensitive) != 0) {
+            bridgeLog(QStringLiteral("legacy startup mode guard: ignoring backend mode %1, keeping %2")
+                          .arg(legacyMode, m_legacyStartupModeGuard));
+            m_legacyBackend->setMode(m_legacyStartupModeGuard);
+            return;
+        }
+        if (legacyStartupModeGuardActive
+            && legacyMode.compare(m_legacyStartupModeGuard, Qt::CaseInsensitive) == 0) {
+            m_legacyStartupModeGuard.clear();
+            m_legacyStartupModeGuardUntilMs = 0;
+        }
         if (m_bandManager) {
             m_bandManager->setCurrentMode(legacyMode);
         }
@@ -2002,8 +2232,26 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
     int const rxRevision = m_legacyBackend->rxFrequencyRevision();
     bool const bandChanged = bandRevision != m_legacyBandActivityRevision;
     bool const rxChanged = rxRevision != m_legacyRxFrequencyRevision;
+    QString allTxtRevisionKey;
+    if (isTimeSyncDecodeMode(m_mode)) {
+        QString const path = legacyAllTxtPath().trimmed();
+        if (!path.isEmpty()) {
+            QFileInfo const info(path);
+            if (info.exists()) {
+                allTxtRevisionKey =
+                    info.absoluteFilePath()
+                    + QStringLiteral("|")
+                    + QString::number(info.size())
+                    + QStringLiteral("|")
+                    + QString::number(info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+            } else {
+                allTxtRevisionKey = path;
+            }
+        }
+    }
+    bool const allTxtChanged = allTxtRevisionKey != m_legacyAllTxtRevisionKey;
 
-    if (!bandChanged && !rxChanged) {
+    if (!bandChanged && !rxChanged && !allTxtChanged) {
         return;
     }
 
@@ -2014,21 +2262,52 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
     }
 
-    if (bandChanged) {
+    if (bandChanged || allTxtChanged) {
         m_legacyBandActivityRevision = bandRevision;
-        QVariantList const mirroredDecodes = mirrorLegacyDecodeLines(m_legacyBackend->bandActivityLines(), false);
+        QStringList const bandLines = m_legacyBackend->bandActivityLines();
+        QVariantList mirroredDecodes = augmentLegacyMirrorWithAllTxt(QVariantList {}, false);
+        QVariantList const widgetMirrored = mirrorLegacyDecodeLines(bandLines, false, m_decodeList);
+        if (mirroredDecodes.isEmpty()) {
+            mirroredDecodes = widgetMirrored;
+        } else {
+            QSet<QString> seen;
+            for (QVariant const& value : std::as_const(mirroredDecodes)) {
+                seen.insert(decodeMirrorEntryKey(value.toMap()));
+            }
+            for (QVariant const& value : std::as_const(widgetMirrored)) {
+                QVariantMap const entry = value.toMap();
+                QString const key = decodeMirrorEntryKey(entry);
+                if (seen.contains(key)) {
+                    continue;
+                }
+                seen.insert(key);
+                mirroredDecodes.append(entry);
+            }
+        }
+        sortDecodeEntriesChronologically(mirroredDecodes);
+        if (mirroredDecodes.size() > 1500) {
+            mirroredDecodes = mirroredDecodes.mid(mirroredDecodes.size() - 1500);
+        }
+        bridgeLog(QStringLiteral("legacy-mirror band: raw=%1 mirrored=%2")
+                      .arg(bandLines.size())
+                      .arg(mirroredDecodes.size()));
         if (m_decodeList != mirroredDecodes) {
             m_decodeList = mirroredDecodes;
             emit decodeListChanged();
         }
     }
 
-    if (bandChanged || rxChanged) {
+    if (bandChanged || rxChanged || allTxtChanged) {
         if (rxChanged) {
             m_legacyRxFrequencyRevision = rxRevision;
         }
 
-        QVariantList mergedRxDecodes = mirrorLegacyDecodeLines(m_legacyBackend->rxFrequencyLines(), true);
+        QStringList const rxLines = m_legacyBackend->rxFrequencyLines();
+        QVariantList mergedRxDecodes = mirrorLegacyDecodeLines(rxLines, true, m_rxDecodeList);
+        mergedRxDecodes = augmentLegacyMirrorWithAllTxt(mergedRxDecodes, true);
+        bridgeLog(QStringLiteral("legacy-mirror rx: raw=%1 mirrored=%2")
+                      .arg(rxLines.size())
+                      .arg(mergedRxDecodes.size()));
         QSet<QString> seen;
         for (const QVariant& value : std::as_const(mergedRxDecodes)) {
             seen.insert(decodeMirrorEntryKey(value.toMap()));
@@ -2050,15 +2329,23 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
 
         coalesceRxPaneTxRows(mergedRxDecodes, m_mode);
+        sortDecodeEntriesChronologically(mergedRxDecodes);
+        if (mergedRxDecodes.size() > 1500) {
+            mergedRxDecodes = mergedRxDecodes.mid(mergedRxDecodes.size() - 1500);
+        }
 
         if (m_rxDecodeList != mergedRxDecodes) {
             m_rxDecodeList = mergedRxDecodes;
             emit rxDecodeListChanged();
         }
     }
+
+    m_legacyAllTxtRevisionKey = allTxtRevisionKey;
 }
 
-QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines, bool rxPane) const
+QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines,
+                                                     bool rxPane,
+                                                     QVariantList const& previousEntries) const
 {
     QVariantList mirroredDecodes;
     mirroredDecodes.reserve(lines.size());
@@ -2067,6 +2354,53 @@ QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines, b
     static const QRegularExpression txPattern {
         R"(^(\d{4}|\d{6})\s+Tx\S*\s+(\d+)\s+\S+\s+(.*)$)",
         QRegularExpression::CaseInsensitiveOption
+    };
+    static const QRegularExpression rxPattern {
+        R"(^(\d{4}|\d{6})\s+(-?\d+)\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+\S+\s+(.*)$)",
+        QRegularExpression::CaseInsensitiveOption
+    };
+
+    bool const isTimeSyncMode = isTimeSyncDecodeMode(m_mode);
+    int const periodMs = periodMsForMode(m_mode);
+    QString const currentSlotUtcToken =
+        (isTimeSyncMode && periodMs > 0 && periodMs < 60000)
+        ? utcDisplayTokenForSlotStart(QDateTime::currentMSecsSinceEpoch() / periodMs, periodMs)
+        : QString {};
+
+    auto stabilizeLegacyTimeToken = [&](QVariantMap& entry) {
+        QString const rawTime = normalizeUtcDisplayToken(entry.value(QStringLiteral("time")).toString());
+        if (!(isTimeSyncMode && periodMs > 0 && periodMs < 60000 && rawTime.size() == 4)) {
+            entry[QStringLiteral("time")] = rawTime;
+            return;
+        }
+
+        QString const message = entry.value(QStringLiteral("message")).toString().trimmed();
+        QString const freq = entry.value(QStringLiteral("freq")).toString().trimmed();
+        QString const db = entry.value(QStringLiteral("db")).toString().trimmed();
+        QString const dt = entry.value(QStringLiteral("dt")).toString().trimmed();
+        QString resolvedTime;
+
+        for (auto it = previousEntries.crbegin(); it != previousEntries.crend(); ++it) {
+            QVariantMap const previous = it->toMap();
+            QString const previousTime = normalizeUtcDisplayToken(previous.value(QStringLiteral("time")).toString());
+            if (previousTime.size() < 6 || !previousTime.startsWith(rawTime)) {
+                continue;
+            }
+            if (previous.value(QStringLiteral("message")).toString().trimmed() != message
+                || previous.value(QStringLiteral("freq")).toString().trimmed() != freq
+                || previous.value(QStringLiteral("db")).toString().trimmed() != db
+                || previous.value(QStringLiteral("dt")).toString().trimmed() != dt) {
+                continue;
+            }
+            resolvedTime = previousTime.left(6);
+            break;
+        }
+
+        if (resolvedTime.isEmpty()) {
+            resolvedTime = currentSlotUtcToken;
+        }
+
+        entry[QStringLiteral("time")] = resolvedTime.isEmpty() ? rawTime : resolvedTime;
     };
 
     for (QString rawLine : lines) {
@@ -2101,32 +2435,51 @@ QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines, b
             entry["isMyCall"] = messageContainsCallToken(message, myCallUpper, myBaseUpper);
             entry["fromCall"] = extractDecodedCallsign(message, isCQ);
             entry["forceRxPane"] = rxPane;
+            stabilizeLegacyTimeToken(entry);
             enrichDecodeEntry(entry);
             mirroredDecodes.append(entry);
             continue;
         }
 
-        DecodedText decoded {rawLine};
-        QString const cleanLine = decoded.clean_string().trimmed();
-        if (cleanLine.isEmpty()) {
-            continue;
+        QString timeStr;
+        QString dbStr;
+        QString dtStr;
+        QString freqStr;
+        QString message;
+
+        auto const rxMatch = rxPattern.match(rawLine);
+        if (rxMatch.hasMatch()) {
+            timeStr = normalizeUtcDisplayToken(rxMatch.captured(1));
+            dbStr = rxMatch.captured(2).trimmed();
+            dtStr = rxMatch.captured(3).trimmed();
+            freqStr = rxMatch.captured(4).trimmed();
+            message = rxMatch.captured(5).trimmed();
+        } else {
+            DecodedText decoded {rawLine};
+            QString const cleanLine = decoded.clean_string().trimmed();
+            if (cleanLine.isEmpty()) {
+                continue;
+            }
+
+            int const padding = cleanLine.indexOf(QLatin1Char(' ')) > 4 ? 2 : 0;
+            int const payloadStart = 22 + padding;
+            if (cleanLine.size() <= payloadStart) {
+                continue;
+            }
+
+            timeStr = normalizeUtcDisplayToken(timePrefix.match(cleanLine).hasMatch()
+                                                   ? timePrefix.match(cleanLine).captured(1)
+                                                   : QString {});
+            dbStr = QString::number(decoded.snr());
+            dtStr = QString::number(decoded.dt(), 'f', 1);
+            freqStr = QString::number(decoded.frequencyOffset());
+            message = cleanLine.mid(payloadStart).trimmed();
         }
 
-        int const padding = cleanLine.indexOf(QLatin1Char(' ')) > 4 ? 2 : 0;
-        int const payloadStart = 22 + padding;
-        if (cleanLine.size() <= payloadStart) {
-            continue;
-        }
-
-        QString const message = cleanLine.mid(payloadStart).trimmed();
         if (message.isEmpty()) {
             continue;
         }
 
-        bool const isTx = decoded.isTX();
-        auto const timeMatch = timePrefix.match(cleanLine);
-        QString const timeStr = normalizeUtcDisplayToken(timeMatch.hasMatch() ? timeMatch.captured(1) : QString {});
-        QString const freqStr = QString::number(decoded.frequencyOffset());
         bool const isCQ = message.startsWith("CQ ", Qt::CaseInsensitive)
                        || message == "CQ"
                        || message.startsWith("QRZ ", Qt::CaseInsensitive);
@@ -2136,17 +2489,18 @@ QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines, b
 
         QVariantMap entry;
         entry["time"] = timeStr;
-        entry["db"] = isTx ? QStringLiteral("TX") : QString::number(decoded.snr());
-        entry["dt"] = isTx ? QStringLiteral("0.0") : QString::number(decoded.dt(), 'f', 1);
+        entry["db"] = dbStr;
+        entry["dt"] = dtStr;
         entry["freq"] = freqStr;
         entry["message"] = message;
         entry["aptype"] = QString {};
-        entry["quality"] = isTx ? QString {} : QStringLiteral("100");
-        entry["isTx"] = isTx;
+        entry["quality"] = QStringLiteral("100");
+        entry["isTx"] = false;
         entry["isCQ"] = isCQ;
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = extractDecodedCallsign(message, isCQ);
         entry["forceRxPane"] = rxPane;
+        stabilizeLegacyTimeToken(entry);
         enrichDecodeEntry(entry);
         mirroredDecodes.append(entry);
     }
@@ -2382,7 +2736,9 @@ void DecodiumBridge::maybeApplyStartupModeFromRigFrequency(double dialFrequency)
 bool DecodiumBridge::isTimeSyncDecodeMode(const QString& mode) const
 {
     QString const normalized = mode.trimmed().toUpper();
-    return normalized == QStringLiteral("FT4") || normalized == QStringLiteral("FT8");
+    return normalized == QStringLiteral("FT2")
+        || normalized == QStringLiteral("FT4")
+        || normalized == QStringLiteral("FT8");
 }
 
 void DecodiumBridge::applyNtpSettings()
@@ -2440,7 +2796,10 @@ void DecodiumBridge::configureNtpClientForMode(const QString& mode)
     }
 
     QString const normalized = mode.trimmed().toUpper();
-    if (normalized == QStringLiteral("FT4")) {
+    if (normalized == QStringLiteral("FT2")) {
+        m_ntpClient->setRefreshInterval(60000);
+        m_ntpClient->setMaxRtt(55.0);
+    } else if (normalized == QStringLiteral("FT4")) {
         m_ntpClient->setRefreshInterval(60000);
         m_ntpClient->setMaxRtt(65.0);
     } else if (normalized == QStringLiteral("FT8")) {
@@ -2497,6 +2856,7 @@ void DecodiumBridge::resetTimeSyncDecodeMetrics()
 {
     m_decodeStartMsBySerial.clear();
     m_decodeModeBySerial.clear();
+    m_decodeUtcTokenBySerial.clear();
     bool const sampleCountChanged = (m_dtLastSampleCount != 0);
     m_dtLastSampleCount = 0;
     m_totalDecodesForDt = 0;
@@ -2545,6 +2905,7 @@ void DecodiumBridge::finalizeTimeSyncDecodeCycle(quint64 serial, const QString& 
 {
     qint64 const startedAtMs = m_decodeStartMsBySerial.take(serial);
     m_decodeModeBySerial.remove(serial);
+    m_decodeUtcTokenBySerial.remove(serial);
 
     if (!isTimeSyncDecodeMode(decodeMode)) {
         return;
@@ -3078,6 +3439,7 @@ void DecodiumBridge::startRx()
     bridgeLog("startRx() called, m_monitoring=" + QString::number(m_monitoring) +
               " m_audioInputDevice=" + m_audioInputDevice);
     if (m_monitoring) { bridgeLog("startRx: already monitoring, skip"); return; }
+    ++m_decodeSessionId;
 
     if (usingLegacyBackendForTx()) {
         bridgeLog("startRx: delegating monitoring to legacy backend");
@@ -3282,6 +3644,7 @@ void DecodiumBridge::startTx()
         return;
     }
     m_lastTransmittedMessage = msg.trimmed();
+    m_lastTxActivityUtc = QDateTime::currentDateTimeUtc();
 
     if (usingLegacyBackendForTx()) {
         bridgeLog("startTx: delegating to legacy backend");
@@ -3520,8 +3883,13 @@ void DecodiumBridge::startTx()
     }
 
     // PTT SU — prima di avviare l'audio (come GitHub pttAssert())
-    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
+    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
         activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        bridgeLog("PTT ON via " + m_catBackend);
+    } else {
+        bridgeLog("WARNING: PTT not available — backend=" + m_catBackend + " not connected. TX audio will play but radio stays in RX.");
+        emit statusMessage("PTT non disponibile: verifica connessione CAT (" + m_catBackend + ")");
+    }
 
     m_transmitting = true;
     emit transmittingChanged();
@@ -3762,6 +4130,7 @@ void DecodiumBridge::startTune()
     clearDeferredManualSyncTx(QStringLiteral("start-tune"));
 
     if (m_tuning || m_transmitting) return;
+    m_lastTxActivityUtc = QDateTime::currentDateTimeUtc();
 
     if (m_currentTx >= 1 && m_currentTx <= 5 &&
         m_dxCall.trimmed().isEmpty() &&
@@ -4007,6 +4376,11 @@ void DecodiumBridge::clearDecodeList()
         m_legacyBackend->clearBandActivity();
         m_legacyBandActivityRevision = -1;
         m_legacyRxFrequencyRevision = -1;
+        QString const path = legacyAllTxtPath().trimmed();
+        QFileInfo const info(path);
+        m_legacyAllTxtConsumedPath = info.exists() ? info.absoluteFilePath() : path;
+        m_legacyAllTxtConsumedSize = info.exists() ? info.size() : -1;
+        m_legacyAllTxtRevisionKey.clear();
     }
     m_decodeList.clear();
     emit decodeListChanged();
@@ -4019,6 +4393,11 @@ void DecodiumBridge::clearRxDecodes()
     if (usingLegacyBackendForTx()) {
         m_legacyBackend->clearRxFrequency();
         m_legacyRxFrequencyRevision = -1;
+        QString const path = legacyAllTxtPath().trimmed();
+        QFileInfo const info(path);
+        m_legacyAllTxtConsumedPath = info.exists() ? info.absoluteFilePath() : path;
+        m_legacyAllTxtConsumedSize = info.exists() ? info.size() : -1;
+        m_legacyAllTxtRevisionKey.clear();
     }
     m_rxDecodeList.clear();
     emit rxDecodeListChanged();
@@ -4053,12 +4432,23 @@ void DecodiumBridge::setCatBackend(const QString& v)
 {
     if (m_catBackend == v) return;
     halt();
-    // Disconnetti il manager attivo prima di cambiare
-    if (m_catBackend == "native"  && m_nativeCat->connected())   m_nativeCat->disconnectRig();
-    else if (m_catBackend == "omnirig" && m_omniRigCat->connected()) m_omniRigCat->disconnectRig();
-    else if (m_catBackend == "hamlib"  && m_hamlibCat->connected())  m_hamlibCat->disconnectRig();
+    // Disconnetti TUTTI i manager per difesa: anche quelli non segnati come
+    // "connected" possono tenere risorse (es. QAxObject di OmniRig o porta
+    // seriale QSerialPort del backend nativo). Evita conflitti "serial port
+    // already open" quando si alterna fra omnirig, hamlib e native.
+    if (m_nativeCat)  m_nativeCat->disconnectRig();
+    if (m_omniRigCat) m_omniRigCat->disconnectRig();
+    if (m_hamlibCat)  m_hamlibCat->disconnectRig();
+    // Lasciamo girare gli eventi in modo che i deleteLater() dei QAxObject
+    // OmniRig e la chiusura della porta seriale del backend nativo si
+    // completino prima di cedere il controllo al nuovo backend.
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
     m_catConnected = false;
     emit catConnectedChanged();
+    if (!m_lastCatError.isEmpty()) {
+        m_lastCatError.clear();
+        emit lastCatErrorChanged();
+    }
     m_catBackend = v;
     emit catBackendChanged();
     emit catManagerChanged();
@@ -4235,8 +4625,12 @@ void DecodiumBridge::initUdpMessageClient()
 
     // Read UDP settings from the legacy INI (canonical source)
     QString serverName = getSetting(QStringLiteral("UDPServer"), QStringLiteral("127.0.0.1")).toString();
-    quint16 serverPort = static_cast<quint16>(getSetting(QStringLiteral("UDPServerPort"), 2237).toUInt());
-    quint16 listenPort = static_cast<quint16>(getSetting(QStringLiteral("UDPListenPort"), 0).toUInt());
+    uint rawServerPort = getSetting(QStringLiteral("UDPServerPort"), 2237).toUInt();
+    quint16 serverPort = (rawServerPort >= 1 && rawServerPort <= 65535)
+                         ? static_cast<quint16>(rawServerPort) : 2237;
+    uint rawListenPort = getSetting(QStringLiteral("UDPListenPort"), 0).toUInt();
+    quint16 listenPort = (rawListenPort <= 65535)
+                         ? static_cast<quint16>(rawListenPort) : 0;
     int ttl = getSetting(QStringLiteral("UDPTTL"), 1).toInt();
     QStringList interfaces;
     QVariant ifaceVal = readSettingFromLegacyIni(QStringLiteral("UDPInterface"));
@@ -4457,6 +4851,8 @@ void DecodiumBridge::saveSettings()
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
     s.setValue("ndepth", m_ndepth);
+    s.setValue("NDepth", legacyCompatibleDecodeDepthBits());
+    s.setValue("decodeDepthMigratedFromLegacy", true);
     s.setValue("tx6", m_tx6);
     s.remove("dxCall");
     s.remove("dxGrid");
@@ -4495,6 +4891,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("contestType",     m_contestType);
     s.setValue("zapEnabled",      m_zapEnabled);
     s.setValue("deepSearchEnabled",m_deepSearchEnabled);
+    s.setValue("avgDecodeEnabled", m_avgDecodeEnabled);
     s.setValue("asyncDecodeEnabled",m_asyncDecodeEnabled);
     s.setValue("pskReporterEnabled",m_pskReporterEnabled);
     s.setValue("catBackend",        m_catBackend);
@@ -4522,6 +4919,10 @@ void DecodiumBridge::saveSettings()
     s.setValue("wsprUploadEnabled", m_wsprUploadEnabled);
     // DX Cluster
     if (m_dxCluster) m_dxCluster->saveSettings();
+    // CAT managers — persist serial port, baud rate, rig name etc.
+    if (m_nativeCat)   m_nativeCat->saveSettings();
+    if (m_hamlibCat)   m_hamlibCat->saveSettings();
+    if (m_omniRigCat)  m_omniRigCat->saveSettings();
     // UI state (posizioni finestre, impostazioni panadapter)
     s.setValue("uiSpectrumHeight",  m_uiSpectrumHeight);
     s.setValue("uiPaletteIndex",    m_uiPaletteIndex);
@@ -4547,6 +4948,11 @@ void DecodiumBridge::shutdown()
     else if (m_catBackend == "hamlib" && m_hamlibCat->connected())
         m_hamlibCat->disconnectRig();
     saveSettings();
+}
+
+void DecodiumBridge::copyToClipboard(const QString &text)
+{
+    QGuiApplication::clipboard()->setText(text);
 }
 
 void DecodiumBridge::openSetupSettings(int tabIndex)
@@ -4671,6 +5077,15 @@ void DecodiumBridge::retryRigConnection()
         m_legacyBackend->retryRigConnection();
         return;
     }
+
+    // Prima di tentare connectRig sul backend attivo, assicuriamo che gli
+    // altri due backend abbiano rilasciato la porta seriale. Questo evita
+    // errori "serial port already open / Access denied" quando l'utente
+    // passa da OmniRig a Hamlib (OmniRig.exe tiene la COM via COM object).
+    if (m_catBackend != "native"  && m_nativeCat)  m_nativeCat->disconnectRig();
+    if (m_catBackend != "omnirig" && m_omniRigCat) m_omniRigCat->disconnectRig();
+    if (m_catBackend != "hamlib"  && m_hamlibCat)  m_hamlibCat->disconnectRig();
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
 
     if (m_catBackend == "native" && m_nativeCat) {
         m_nativeCat->connectRig();
@@ -5874,7 +6289,15 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         }
     } else if (last.length() >= 2 && last[0] == 'R' &&
                (last[1] == '-' || last[1] == '+' || last[1].isDigit())) {
-        bridgeLog("autoSeq: ricevuto R+report → TX4 (RR73)");
+        // Salva il report ricevuto dal partner: la forma "R<report>" è una
+        // conferma + report del partner verso di noi. Se l'utente ha saltato
+        // lo scambio del report nudo, questo è l'unico punto in cui il valore
+        // viene memorizzato — senza, l'ADIF loggerebbe RST_RCVD vuoto/stale.
+        // (Parallelismo con i rami report-nudo e Quick-QSO TU qui sotto.)
+        QString const rptValue = last.mid(1);
+        bridgeLog("autoSeq: ricevuto R+report " + last + " (rpt=" + rptValue + ") → TX4 (RR73)");
+        setReportReceived(rptValue);
+        if (!m_dxCall.isEmpty()) genStdMsgs(m_dxCall, m_dxGrid);
         nextTx = 4;
     } else if (last.length() >= 2 &&
                (last[0] == '-' || last[0] == '+') && last[1].isDigit()) {
@@ -5988,6 +6411,13 @@ void DecodiumBridge::setFontScale(double s)
 void DecodiumBridge::loadSettings()
 {
     QSettings s("Decodium", "Decodium3");
+    QString const configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    QDir const configRoot(configDir.isEmpty() ? QDir::homePath() : configDir);
+    QString const decodium4IniPath = configRoot.absoluteFilePath(QStringLiteral("decodium4.ini"));
+    QString const legacyIniPath = QFileInfo::exists(decodium4IniPath)
+        ? decodium4IniPath
+        : configRoot.absoluteFilePath(QStringLiteral("ft2.ini"));
+    QSettings legacyIni(legacyIniPath, QSettings::IniFormat);
     m_callsign = s.value("callsign", "IU8LMC").toString();
     m_grid     = s.value("grid", "AA00").toString();
     m_frequency = s.value("frequency", 14074000.0).toDouble();
@@ -6004,7 +6434,29 @@ void DecodiumBridge::loadSettings()
     m_txOutputLevel = qBound(0.0, s.value("txOutputLevel", 0.0).toDouble(), 450.0);
     m_nfa      = s.value("nfa", 200).toInt();
     m_nfb      = s.value("nfb", 4000).toInt();
-    m_ndepth   = s.value("ndepth", 1).toInt();
+    {
+        bool const hasBridgeLegacyNDepth = s.contains("NDepth");
+        bool const hasStandaloneLegacyNDepth = legacyIni.contains(QStringLiteral("NDepth"));
+        int const legacyNDepthBits = hasBridgeLegacyNDepth
+            ? s.value("NDepth", 3).toInt()
+            : legacyIni.value(QStringLiteral("NDepth"), 3).toInt();
+        bool const hasLegacyNDepth = s.contains("NDepth");
+        bool const hasModernNDepth = s.contains("ndepth");
+        bool const legacyDepthMigrated = s.value("decodeDepthMigratedFromLegacy", false).toBool();
+        int modernDepth = qBound(1, s.value("ndepth", 3).toInt(), 4);
+        int const legacyDepth = legacyDepthBitsToModernDepth(legacyNDepthBits);
+
+        if ((hasLegacyNDepth || hasStandaloneLegacyNDepth) && (!hasModernNDepth || !legacyDepthMigrated)) {
+            modernDepth = qMax(modernDepth, legacyDepth);
+        }
+
+        m_ndepth = modernDepth;
+        m_avgDecodeEnabled = s.value("avgDecodeEnabled",
+                                     (legacyNDepthBits & 0x10) != 0).toBool();
+        m_deepSearchEnabled = s.value("deepSearchEnabled",
+                                      (legacyNDepthBits & 0x20) != 0).toBool();
+        m_ft8ApEnabled = s.value("FT8AP", false).toBool();
+    }
     m_dxCall   = s.value("dxCall", "").toString();
     m_dxGrid   = s.value("dxGrid", "").toString();
     m_tx1 = s.value("tx1", "").toString();
@@ -6042,10 +6494,13 @@ void DecodiumBridge::loadSettings()
     m_filterMyCallOnly = s.value("filterMyCallOnly",  false).toBool();
     m_contestType      = s.value("contestType",        0).toInt();
     m_zapEnabled       = s.value("zapEnabled",        false).toBool();
-    m_deepSearchEnabled= s.value("deepSearchEnabled", false).toBool();
     m_asyncDecodeEnabled=s.value("asyncDecodeEnabled",false).toBool();
     m_pskReporterEnabled=s.value("pskReporterEnabled",false).toBool();
-    m_catBackend        =s.value("catBackend",        "native").toString();
+    // Default 'hamlib' per nuove installazioni: copre 400+ radio (incluso ICOM
+    // CI-V completo) con molti meno problemi di compatibilita' rispetto al path
+    // nativo che supporta solo comandi ASCII Kenwood/Yaesu. Gli utenti esistenti
+    // mantengono il proprio backend salvato.
+    m_catBackend        =s.value("catBackend",        "hamlib").toString();
     m_lastSuccessfulCatConnected = s.value("lastSuccessfulCatConnected", false).toBool();
     m_lastSuccessfulCatBackend = s.value("lastSuccessfulCatBackend").toString();
     // TX QSO options
@@ -6247,6 +6702,7 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
     emit filterMyCallOnlyChanged();
     emit contestTypeChanged();
     emit zapEnabledChanged();
+    emit avgDecodeEnabledChanged();
     emit deepSearchEnabledChanged();
     emit pskReporterEnabledChanged();
     emit cloudlogEnabledChanged();
@@ -6400,6 +6856,335 @@ QString DecodiumBridge::ensureAdifLogPath()
     return m_adifLogPath;
 }
 
+int DecodiumBridge::effectiveDecodeDepth() const
+{
+    int depth = qBound(1, m_ndepth, 4);
+    if ((m_avgDecodeEnabled || m_deepSearchEnabled) && depth < 4) {
+        depth = 4;
+    }
+    return depth;
+}
+
+int DecodiumBridge::legacyCompatibleDecodeDepthBits() const
+{
+    return modernDepthToLegacyBits(effectiveDecodeDepth(),
+                                   m_avgDecodeEnabled,
+                                   m_deepSearchEnabled);
+}
+
+int DecodiumBridge::legacyDecodeQsoProgress() const
+{
+    return qBound(0, m_qsoProgress, 6);
+}
+
+int DecodiumBridge::legacyDecodeCqHint() const
+{
+    if (m_filterCqOnly) {
+        return 1;
+    }
+
+    if (!m_lastTxActivityUtc.isValid()) {
+        return 1;
+    }
+
+    return m_lastTxActivityUtc.secsTo(QDateTime::currentDateTimeUtc()) > 300 ? 1 : 0;
+}
+
+QVariantList DecodiumBridge::augmentLegacyMirrorWithAllTxt(QVariantList const& mirroredEntries,
+                                                           bool rxPane) const
+{
+    if (!isTimeSyncDecodeMode(m_mode)) {
+        return mirroredEntries;
+    }
+
+    QString const path = legacyAllTxtPath();
+    if (path.trimmed().isEmpty()) {
+        return mirroredEntries;
+    }
+
+    QFileInfo const fileInfo(path);
+    if (!fileInfo.exists()) {
+        m_legacyAllTxtConsumedPath = path;
+        m_legacyAllTxtConsumedSize = -1;
+        return mirroredEntries;
+    }
+
+    QString const absolutePath = fileInfo.absoluteFilePath();
+    qint64 const fileSize = fileInfo.size();
+    if (m_legacyAllTxtConsumedPath != absolutePath
+        || m_legacyAllTxtConsumedSize < 0
+        || fileSize < m_legacyAllTxtConsumedSize) {
+        m_legacyAllTxtConsumedPath = absolutePath;
+        m_legacyAllTxtConsumedSize = fileSize;
+        bridgeLog(QStringLiteral("legacy-alltxt prime %1: size=%2 source=%3")
+                      .arg(rxPane ? QStringLiteral("rx") : QStringLiteral("band"))
+                      .arg(fileSize)
+                      .arg(absolutePath));
+        return mirroredEntries;
+    }
+
+    // Su slot molto affollati FT8/FT4 il legacy ALL.TXT puo crescere di diverse
+    // centinaia di righe in meno di un minuto. Un budget troppo piccolo fa si che
+    // il mirror di D4 veda solo la coda finale del file e perda CQ valide che D3
+    // ha gia mostrato a schermo. Manteniamo una finestra piu ampia e dinamica.
+    int const desiredLineBudget = qMax(4096, mirroredEntries.size() * 8);
+    QStringList const tailLines = readTextLinesFromOffset(path, m_legacyAllTxtConsumedSize, desiredLineBudget);
+    if (tailLines.isEmpty()) {
+        m_legacyAllTxtConsumedSize = fileSize;
+        return mirroredEntries;
+    }
+
+    static const QRegularExpression allTxtPattern {
+        R"(^(\d{6})_(\d{6})\s+([0-9]+(?:\.[0-9]+)?)\s+(Rx|Tx|Ck)\s+([A-Z0-9_+\-]+)\s+(.+)$)",
+        QRegularExpression::CaseInsensitiveOption
+    };
+    static const QRegularExpression payloadPattern {
+        R"(^(-?\d+)\s+(-?\d+(?:\.\d+)?)\s+(\d+)\s+(.*)$)"
+    };
+
+    QVariantList augmented = mirroredEntries;
+    QHash<QString, int> exactIndexByKey;
+    QMultiHash<QString, int> looseIndexByKey;
+    for (int i = 0; i < augmented.size(); ++i) {
+        QVariantMap const entry = augmented.at(i).toMap();
+        exactIndexByKey.insert(decodeMirrorEntryKey(entry), i);
+        looseIndexByKey.insert(decodeMirrorLooseKey(entry), i);
+    }
+
+    QString const normalizedMode = m_mode.trimmed().toUpper();
+    int upgradedTimes = 0;
+    int appended = 0;
+    for (QString const& rawLine : tailLines) {
+        QRegularExpressionMatch const lineMatch = allTxtPattern.match(rawLine.trimmed());
+        if (!lineMatch.hasMatch()) {
+            continue;
+        }
+
+        QString const txRx = lineMatch.captured(4).trimmed().toUpper();
+        if (txRx != QStringLiteral("RX")) {
+            continue;
+        }
+
+        QString const entryMode = lineMatch.captured(5).trimmed().toUpper();
+        if (entryMode != normalizedMode) {
+            continue;
+        }
+
+        QRegularExpressionMatch const payloadMatch = payloadPattern.match(lineMatch.captured(6).trimmed());
+        if (!payloadMatch.hasMatch()) {
+            continue;
+        }
+
+        QVariantMap entry;
+        entry[QStringLiteral("time")] = normalizeUtcDisplayToken(lineMatch.captured(2));
+        entry[QStringLiteral("db")] = payloadMatch.captured(1).trimmed();
+        entry[QStringLiteral("dt")] = payloadMatch.captured(2).trimmed();
+        entry[QStringLiteral("freq")] = payloadMatch.captured(3).trimmed();
+        QString const message = payloadMatch.captured(4).trimmed();
+        if (message.isEmpty()) {
+            continue;
+        }
+
+        bool const isCQ = message.startsWith(QStringLiteral("CQ "), Qt::CaseInsensitive)
+                       || message == QStringLiteral("CQ")
+                       || message.startsWith(QStringLiteral("QRZ "), Qt::CaseInsensitive);
+        QString const myCallUpper = m_callsign.trimmed().toUpper();
+        QString const myBaseUpper = normalizedBaseCall(myCallUpper);
+
+        entry[QStringLiteral("message")] = message;
+        entry[QStringLiteral("aptype")] = QString {};
+        entry[QStringLiteral("quality")] = QString {};
+        entry[QStringLiteral("isTx")] = false;
+        entry[QStringLiteral("isCQ")] = isCQ;
+        entry[QStringLiteral("isMyCall")] = messageContainsCallToken(message, myCallUpper, myBaseUpper);
+        entry[QStringLiteral("fromCall")] = extractDecodedCallsign(message, isCQ);
+        entry[QStringLiteral("forceRxPane")] = rxPane;
+        enrichDecodeEntry(entry);
+
+        QString const exactKey = decodeMirrorEntryKey(entry);
+        if (exactIndexByKey.contains(exactKey)) {
+            continue;
+        }
+
+        QString const looseKey = decodeMirrorLooseKey(entry);
+        auto const indexes = looseIndexByKey.values(looseKey);
+        bool upgradedExisting = false;
+        for (int const index : indexes) {
+            QVariantMap existing = augmented.at(index).toMap();
+            QString const existingTime = normalizeUtcDisplayToken(existing.value(QStringLiteral("time")).toString());
+            if (existing.value(QStringLiteral("isTx")).toBool()) {
+                continue;
+            }
+            if (existingTime.size() >= 6) {
+                continue;
+            }
+            if (!existingTime.isEmpty() && !entry.value(QStringLiteral("time")).toString().startsWith(existingTime)) {
+                continue;
+            }
+            existing[QStringLiteral("time")] = entry.value(QStringLiteral("time")).toString();
+            augmented[index] = existing;
+            exactIndexByKey.insert(decodeMirrorEntryKey(existing), index);
+            ++upgradedTimes;
+            upgradedExisting = true;
+            break;
+        }
+
+        if (upgradedExisting) {
+            continue;
+        }
+
+        if (rxPane) {
+            continue;
+        }
+
+        int const newIndex = augmented.size();
+        augmented.append(entry);
+        exactIndexByKey.insert(exactKey, newIndex);
+        looseIndexByKey.insert(looseKey, newIndex);
+        ++appended;
+    }
+
+    if (upgradedTimes > 0 || appended > 0) {
+        bridgeLog(QStringLiteral("legacy-alltxt augment %1: upgraded=%2 appended=%3 source=%4")
+                      .arg(rxPane ? QStringLiteral("rx") : QStringLiteral("band"))
+                      .arg(upgradedTimes)
+                      .arg(appended)
+                      .arg(path));
+    }
+
+    m_legacyAllTxtConsumedSize = fileSize;
+
+    return augmented;
+}
+
+QString DecodiumBridge::legacyAllTxtPath() const
+{
+    if (m_legacyBackend) {
+        QString const embeddedPath = m_legacyBackend->allTxtPath().trimmed();
+        if (!embeddedPath.isEmpty()) {
+            return embeddedPath;
+        }
+    }
+
+    QString const genericRoot = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    QString const appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString const appLocal = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QStringList candidates;
+    int localCandidateCount = 0;
+
+    if (!appData.isEmpty()) {
+        candidates << QDir(appData).absoluteFilePath(QStringLiteral("ALL.TXT"));
+        candidates << QDir(appData).absoluteFilePath(QStringLiteral("all.txt"));
+        localCandidateCount = candidates.size();
+    }
+    if (!appLocal.isEmpty() && appLocal != appData) {
+        candidates << QDir(appLocal).absoluteFilePath(QStringLiteral("ALL.TXT"));
+        candidates << QDir(appLocal).absoluteFilePath(QStringLiteral("all.txt"));
+        localCandidateCount = candidates.size();
+    }
+    if (!genericRoot.isEmpty()) {
+        candidates << QDir(genericRoot).absoluteFilePath(QStringLiteral("ft2/ALL.TXT"));
+        candidates << QDir(genericRoot).absoluteFilePath(QStringLiteral("IU8LMC/ft2/ALL.TXT"));
+        candidates << QDir(genericRoot).absoluteFilePath(QStringLiteral("Decodium/ALL.TXT"));
+    }
+
+    candidates.removeDuplicates();
+
+    qint64 newestActiveMsecs = std::numeric_limits<qint64>::min();
+    QList<QFileInfo> existingLocalCandidates;
+    QList<QFileInfo> existingFallbackCandidates;
+    for (int i = 0; i < candidates.size(); ++i) {
+        QString const& candidate = candidates.at(i);
+        QFileInfo const info(candidate);
+        if (!info.exists() || !info.isFile()) {
+            continue;
+        }
+        if (i < localCandidateCount) {
+            existingLocalCandidates.append(info);
+        } else {
+            existingFallbackCandidates.append(info);
+        }
+        newestActiveMsecs = qMax(newestActiveMsecs,
+                                 info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+    }
+
+    QList<QFileInfo> const existingCandidates =
+        !existingLocalCandidates.isEmpty() ? existingLocalCandidates : existingFallbackCandidates;
+
+    if (!existingCandidates.isEmpty()) {
+        QFileInfo bestInfo;
+        for (QFileInfo const& info : std::as_const(existingCandidates)) {
+            qint64 const modifiedMsecs = info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch();
+            // Se piu file stanno venendo aggiornati praticamente insieme,
+            // scegli quello piu ricco invece di quello che ha solo qualche
+            // millisecondo di vantaggio ma meno decode.
+            if (modifiedMsecs + 15000 < newestActiveMsecs) {
+                continue;
+            }
+            if (!bestInfo.exists()
+                || info.size() > bestInfo.size()
+                || (info.size() == bestInfo.size()
+                    && modifiedMsecs > bestInfo.lastModified(QTimeZone::UTC).toMSecsSinceEpoch())) {
+                bestInfo = info;
+            }
+        }
+        if (bestInfo.exists()) {
+            return bestInfo.absoluteFilePath();
+        }
+    }
+
+    if (!appData.isEmpty()) {
+        return QDir(appData).absoluteFilePath(QStringLiteral("ALL.TXT"));
+    }
+    if (!appLocal.isEmpty()) {
+        return QDir(appLocal).absoluteFilePath(QStringLiteral("ALL.TXT"));
+    }
+    if (!genericRoot.isEmpty()) {
+        return QDir(genericRoot).absoluteFilePath(QStringLiteral("ft2/ALL.TXT"));
+    }
+    return QStringLiteral("ALL.TXT");
+}
+
+void DecodiumBridge::appendLegacyAllTxtDecodeLine(const QVariantMap& entry) const
+{
+    if (entry.isEmpty() || entry.value(QStringLiteral("isTx")).toBool()) {
+        return;
+    }
+
+    // Quando il backend legacy embedded è attivo, il suo MainWindow scrive già
+    // ALL.TXT in formato D3. Se aggiungiamo anche le righe del decoder moderno,
+    // il file privato di D4 finisce contaminato con decode extra che D3 non ha
+    // e il mirror del pannello non può più coincidere 1:1 col legacy.
+    if (usingLegacyBackendForTx()) {
+        return;
+    }
+
+    QString const path = legacyAllTxtPath();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+        return;
+    }
+
+    QDateTime const utcWhen = approxUtcDateTimeForDisplayToken(entry.value(QStringLiteral("time")).toString());
+    QString const modeString = m_mode.leftJustified(6, QLatin1Char(' '));
+    QString const db = entry.value(QStringLiteral("db")).toString().trimmed();
+    QString const dt = entry.value(QStringLiteral("dt")).toString().trimmed();
+    QString const freq = entry.value(QStringLiteral("freq")).toString().trimmed();
+    QString const message = entry.value(QStringLiteral("message")).toString().trimmed();
+
+    QTextStream out(&file);
+    out << QStringLiteral("%1 %2  Rx  %3%4%5%6  %7")
+              .arg(utcWhen.toString(QStringLiteral("yyMMdd_hhmmss")))
+              .arg(m_frequency / 1e6, 10, 'f', 3)
+              .arg(modeString)
+              .arg(db, 4)
+              .arg(dt, 5)
+              .arg(freq, 5)
+              .arg(message)
+        << '\n';
+}
+
 void DecodiumBridge::logQso()
 {
     // Anti-doppio log: previeni log multipli dello stesso QSO
@@ -6523,49 +7308,21 @@ QString DecodiumBridge::logAllTxtPath() const
 // === Shannon FDR (False Decode Reduction) — 4-level filter ===
 static bool isValidDecode(const QString& msg, int snr, const QString& aptype, float quality)
 {
-    // Shannon FDR Step 1: blocca decode con pattern invalidi
-    if (msg.contains("> <") || msg.contains("< >")) return false;
+    Q_UNUSED(snr);
+    Q_UNUSED(aptype);
+    Q_UNUSED(quality);
 
-    // Blocca messaggi troppo corti
-    if (msg.trimmed().length() < 3) return false;
+    QString const trimmed = msg.trimmed();
 
-    // Shannon FDR Step 2: soglie SNR per tipo messaggio
-    // AP decode con qualità bassa e SNR molto basso → probabilmente falso
-    bool hasAP = !aptype.isEmpty() && aptype != "  ";
-    bool isLowConfidence = msg.endsWith('?');
-
-    if (hasAP && isLowConfidence && snr < -24) return false;
-    if (hasAP && quality < 0.17f && snr < -21) return false;
-
-    // Shannon FDR Step 3: filtro specifico FT2 low confidence
-    if (isLowConfidence && snr < -26) return false;
-
-    // Shannon FDR Step 4: validazione callsign base
-    // Estrai le parti del messaggio e verifica che ci sia almeno un callsign valido
-    QStringList parts = msg.split(' ', Qt::SkipEmptyParts);
-    if (parts.size() < 2) return false;
-
-    // Un callsign valido: almeno 3 caratteri, contiene almeno una lettera e un numero
-    auto isCallsignLike = [](const QString& s) -> bool {
-        if (s.length() < 3 || s.length() > 10) return false;
-        if (s == "CQ" || s == "QRZ" || s == "DE" || s == "DX" ||
-            s == "RR73" || s == "RRR" || s == "73") return true;
-        bool hasLetter = false, hasDigit = false;
-        for (const QChar& c : s) {
-            if (c.isLetter()) hasLetter = true;
-            if (c.isDigit()) hasDigit = true;
-        }
-        return hasLetter && hasDigit;
-    };
-
-    // Almeno una parte deve sembrare un callsign
-    bool foundCall = false;
-    for (const QString& p : parts) {
-        if (isCallsignLike(p)) { foundCall = true; break; }
+    // Manteniamo solo guardrail minimi contro linee palesemente corrotte.
+    // Il filtro aggressivo del bridge moderno non esiste in Decodium3 e
+    // stava nascondendo decode validi e deboli nel confronto diretto.
+    if (trimmed.length() < 2) return false;
+    if (trimmed.contains(QStringLiteral("> <")) || trimmed.contains(QStringLiteral("< >"))) {
+        return false;
     }
-    if (!foundCall) return false;
 
-    return true;  // decode valido
+    return true;
 }
 
 namespace {
@@ -6774,14 +7531,22 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     }
 
     QString const decodeMode = m_decodeModeBySerial.value(serial);
+    QString const forcedUtcToken = m_decodeUtcTokenBySerial.value(serial);
     bool const trackTimeSync = isTimeSyncDecodeMode(decodeMode);
+    bool const legacyUiMirrorActive = usingLegacyBackendForTx();
     QVector<double> dtSamples;
     bool changed = false;
+    int parseFailures = 0;
+    int guardrailFiltered = 0;
+    int uiFiltered = 0;
+    int duplicatesSkipped = 0;
+    int accepted = 0;
     for (const auto& row : rows) {
         // parseFt8Row returns: [time, snr, dt, df, message, aptype, quality, freq]
         QStringList f = parseFt8Row(row);
         if (f.size() < 8) {
             bridgeLog("  parseFt8Row FAILED for: '" + row + "'");
+            ++parseFailures;
             continue;
         }
 
@@ -6791,6 +7556,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             float qualVal = f[6].trimmed().toFloat();
             if (!isValidDecode(f[4], snrVal, f[5], qualVal)) {
                 bridgeLog("FDR: filtered decode: " + f[4]);
+                ++guardrailFiltered;
                 continue;  // salta questo decode
             }
         }
@@ -6814,11 +7580,18 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         QString fromCall = extractDecodedCallsign(msg, isCQ);
 
         // Filtri "Solo CQ" e "Solo My Call"
-        if (m_filterCqOnly && !isCQ && !isMyCall) continue;
-        if (m_filterMyCallOnly && !isMyCall) continue;
+        if (m_filterCqOnly && !isCQ && !isMyCall) {
+            ++uiFiltered;
+            continue;
+        }
+        if (m_filterMyCallOnly && !isMyCall) {
+            ++uiFiltered;
+            continue;
+        }
 
+        QString const entryTime = (trackTimeSync && !forcedUtcToken.isEmpty()) ? forcedUtcToken : f[0];
         QVariantMap entry;
-        entry["time"]    = f[0];
+        entry["time"]    = entryTime;
         entry["db"]      = f[1];
         entry["dt"]      = f[2];
         entry["freq"]    = f[7];   // frequenza assoluta audio Hz
@@ -6829,6 +7602,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         entry["isCQ"]    = isCQ;
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = fromCall;
+        entry["decodeSessionId"] = static_cast<qulonglong>(m_decodeSessionId);
         enrichDecodeEntry(entry);
 
         // B9 — Feed ActiveStationsModel: extract callsign from CQ messages
@@ -6836,21 +7610,22 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             QString dxGridExtracted = entry.value("dxGrid").toString();
             if (!fromCall.isEmpty()) {
                 int freqHz = f[7].toInt();
-                QString utc = f[0];
+                QString utc = entryTime;
                 int snr = f[1].toInt();
                 m_activeStations->addStation(fromCall, freqHz, snr, dxGridExtracted, utc);
             }
         }
 
-        // Shannon write_all(): logga OGNI decode in all.txt
-        {
+        // In modalita' legacy embedded il pannello sinistro deve seguire solo il
+        // mirror del backend legacy, non un mix con il decoder moderno.
+        if (!legacyUiMirrorActive) {
             QString allPath = logAllTxtPath();
             QDir().mkpath(QFileInfo(allPath).absolutePath());
             QFile allFile(allPath);
             if (allFile.open(QIODevice::Append | QIODevice::Text)) {
                 QTextStream ts(&allFile);
                 // Formato Shannon: yyMMdd_hhmmss  freq_MHz  Rx  MODE  SNR  DT  DF  Message
-                QString utcNow = QDateTime::currentDateTimeUtc().toString("yyMMdd_hhmmss");
+                QString utcNow = approxUtcDateTimeForDisplayToken(entryTime).toString("yyMMdd_hhmmss");
                 double freqMhz = m_frequency / 1e6;
                 ts << utcNow
                    << QString("  %1").arg(freqMhz, 10, 'f', 3)
@@ -6864,24 +7639,41 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             }
         }
 
-        // Deduplicazione: non aggiungere se stesso messaggio negli ultimi 10 decode
-        // In FT2 i timestamp variano → dedup solo sul messaggio
-        {
+        if (!legacyUiMirrorActive) {
+            // Deduplicazione: evita solo duplicati veri nello stesso slot e nella
+            // stessa sessione di monitor. Se MON viene spento/riacceso, o se una
+            // stazione ripete il CQ nel periodo successivo, la riga deve tornare.
             bool isDupe = false;
             int listSize = m_decodeList.size();
+            QString const dedupKey = decodeDedupKey(entry.value("time").toString(),
+                                                    entry.value("freq").toString(),
+                                                    msg);
             for (int di = qMax(0, listSize - 10); di < listSize; ++di) {
                 QVariantMap prev = m_decodeList[di].toMap();
-                if (prev.value("message").toString() == msg && !prev.value("isTx").toBool()) {
+                if (prev.value("isTx").toBool()) {
+                    continue;
+                }
+                if (prev.value("decodeSessionId").toULongLong() != m_decodeSessionId) {
+                    continue;
+                }
+                if (decodeDedupKey(prev.value("time").toString(),
+                                   prev.value("freq").toString(),
+                                   prev.value("message").toString()) == dedupKey) {
                     isDupe = true;
                     break;
                 }
             }
-            if (isDupe) continue;
-        }
+            if (isDupe) {
+                ++duplicatesSkipped;
+                continue;
+            }
 
-        m_decodeList.append(QVariant(entry));
-        appendRxDecodeEntry(entry);
-        changed = true;
+            m_decodeList.append(QVariant(entry));
+            appendRxDecodeEntry(entry);
+            appendLegacyAllTxtDecodeLine(entry);
+            changed = true;
+        }
+        ++accepted;
 
         // UDP: invia decode a programmi esterni (JTAlert, GridTracker…)
         udpSendDecode(true, row, serial);
@@ -6917,8 +7709,10 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
     }
     // Cap lista decode per performance QML ListView
-    if (m_decodeList.size() > 1500)
+    if (m_decodeList.size() > 1500) {
         m_decodeList = m_decodeList.mid(m_decodeList.size() - 1500);
+        changed = true;
+    }
 
     // Shannon (linea 9699): auto-seq attiva se m_auto=true e cbAutoSeq checked
     // Processa qualsiasi messaggio che contiene il nostro callsign — identico a Shannon
@@ -6937,7 +7731,17 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
     }
 
+    bridgeLog(QStringLiteral("onFt8DecodeReady summary: raw=%1 accepted=%2 parse_fail=%3 guardrail=%4 ui_filtered=%5 dupes=%6")
+                  .arg(rows.size())
+                  .arg(accepted)
+                  .arg(parseFailures)
+                  .arg(guardrailFiltered)
+                  .arg(uiFiltered)
+                  .arg(duplicatesSkipped));
     if (changed) emit decodeListChanged();
+    if (legacyUiMirrorActive) {
+        syncLegacyBackendDecodeList();
+    }
     finalizeTimeSyncDecodeCycle(serial, decodeMode, dtSamples);
     m_decoding = false;
     emit decodingChanged();
@@ -6968,6 +7772,11 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
 
     bridgeLog("onFt2AsyncDecodeReady: rows=" + QString::number(rows.size()));
     if (!rows.isEmpty()) bridgeLog("  async_raw[0]='" + rows[0] + "'");
+    int const decodePeriodMs = periodMsForMode(QStringLiteral("FT2"));
+    qint64 const currentSlot = decodePeriodMs > 0
+        ? (QDateTime::currentMSecsSinceEpoch() / decodePeriodMs)
+        : -1;
+    QString const forcedUtcToken = utcDisplayTokenForSlotStart(currentSlot, decodePeriodMs);
 
     if (m_dxccLookup && !m_dxccLookup->isLoaded()) {
         QString loadedPath;
@@ -6977,19 +7786,35 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         }
     }
 
-    // Costruisci set di messaggi già presenti per deduplicazione O(1)
+    // Costruisci set dei decode già presenti in questa sessione di monitor.
     QSet<QString> existing;
     for (const auto& v : m_decodeList) {
-        QString msg = v.toMap().value("message").toString();
-        if (!msg.isEmpty()) existing.insert(msg);
+        QVariantMap const prev = v.toMap();
+        if (prev.value("isTx").toBool()) {
+            continue;
+        }
+        if (prev.value("decodeSessionId").toULongLong() != m_decodeSessionId) {
+            continue;
+        }
+        QString const key = decodeDedupKey(prev.value("time").toString(),
+                                           prev.value("freq").toString(),
+                                           prev.value("message").toString());
+        if (!key.isEmpty()) {
+            existing.insert(key);
+        }
     }
 
     bool changed = false;
+    int accepted = 0;
+    int duplicatesSkipped = 0;
+    int uiFiltered = 0;
+    int parseFailures = 0;
     int bestSnr = -99;
     for (const auto& row : rows) {
         QStringList f = parseFt8Row(row);
         if (f.size() < 8) {
             bridgeLog("  async parseFt8Row FAILED: '" + row + "'");
+            ++parseFailures;
             continue;
         }
         QString msg = f[4];
@@ -6998,19 +7823,22 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         int snrVal = f[1].toInt(&snrOk);
         if (snrOk && snrVal > bestSnr) bestSnr = snrVal;
 
-        if (existing.contains(msg)) continue;   // già presente, salta
-        existing.insert(msg);
-
         bool isCQ     = msg.startsWith("CQ ", Qt::CaseInsensitive) || msg == "CQ";
         QString const myCallUpper = m_callsign.trimmed().toUpper();
         QString const myBaseUpper = normalizedBaseCall(myCallUpper);
         bool isMyCall = messageContainsCallToken(msg, myCallUpper, myBaseUpper);
 
-        if (m_filterCqOnly && !isCQ && !isMyCall) continue;
-        if (m_filterMyCallOnly && !isMyCall) continue;
+        if (m_filterCqOnly && !isCQ && !isMyCall) {
+            ++uiFiltered;
+            continue;
+        }
+        if (m_filterMyCallOnly && !isMyCall) {
+            ++uiFiltered;
+            continue;
+        }
 
         QVariantMap entry;
-        entry["time"]    = f[0];
+        entry["time"]    = !forcedUtcToken.isEmpty() ? forcedUtcToken : f[0];
         entry["db"]      = f[1];
         entry["dt"]      = f[2];
         entry["freq"]    = f[7];
@@ -7021,18 +7849,31 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         entry["isCQ"]    = isCQ;
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = extractDecodedCallsign(msg, isCQ);
+        entry["decodeSessionId"] = static_cast<qulonglong>(m_decodeSessionId);
         enrichDecodeEntry(entry);
-        // Deduplicazione
-        { bool isDupe = false; int ls = m_decodeList.size();
-          for (int di = qMax(0,ls-5); di < ls; ++di) {
-            QVariantMap p = m_decodeList[di].toMap();
-            if (p.value("message").toString()==msg && !p.value("isTx").toBool()) { isDupe=true; break; }
-          } if (isDupe) continue; }
+
+        QString const dedupKey = decodeDedupKey(entry.value("time").toString(),
+                                                entry.value("freq").toString(),
+                                                msg);
+        if (existing.contains(dedupKey)) {
+            ++duplicatesSkipped;
+            continue;
+        }
+        existing.insert(dedupKey);
+
         m_decodeList.append(QVariant(entry));
+        appendLegacyAllTxtDecodeLine(entry);
         changed = true;
+        ++accepted;
     }
     if (changed) emit decodeListChanged();
     if (bestSnr > -99) setAsyncSnrDb(bestSnr);
+    bridgeLog(QStringLiteral("onFt2AsyncDecodeReady summary: raw=%1 accepted=%2 parse_fail=%3 ui_filtered=%4 dupes=%5")
+                  .arg(rows.size())
+                  .arg(accepted)
+                  .arg(parseFailures)
+                  .arg(uiFiltered)
+                  .arg(duplicatesSkipped));
 
     // Auto-sequenza FT2 async: identico a onFt8DecodeReady
     // Shannon cbAsyncDecode: quando arriva un decode con il nostro callsign,
@@ -7078,12 +7919,12 @@ void DecodiumBridge::onAsyncDecodeTimer()
     for (int i = 0; i < 45000; ++i)
         req.audio[i] = m_asyncAudio[(start + i) % ASYNC_BUF_SIZE];
 
-    int nfqso = (m_nfa + m_nfb) / 2;
-    req.nqsoprogress = 0;
+    int const nfqso = qBound(m_nfa, m_rxFrequency, m_nfb);
+    req.nqsoprogress = legacyDecodeQsoProgress();
     req.nfqso = nfqso;
     req.nfa   = m_nfa;
     req.nfb   = m_nfb;
-    req.ndepth   = m_ndepth;
+    req.ndepth   = effectiveDecodeDepth();
     req.ncontest = m_ncontest;
     req.mycall   = m_callsign.toLocal8Bit();
     req.hiscall  = m_dxCall.toLocal8Bit();
@@ -7177,12 +8018,20 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
         entry["isCQ"]       = isCQ;
         entry["isMyCall"]   = isMyCall;
         entry["fromCall"]   = fromCall;
+        entry["decodeSessionId"] = static_cast<qulonglong>(m_decodeSessionId);
         enrichDecodeEntry(entry);
-        // Deduplicazione
+        // Deduplicazione limitata a stesso slot/frequenza/sessione.
         { bool isDupe = false; int ls = m_decodeList.size();
+          QString const dedupKey = decodeDedupKey(entry.value("time").toString(),
+                                                  entry.value("freq").toString(),
+                                                  msg);
           for (int di = qMax(0,ls-5); di < ls; ++di) {
             QVariantMap p = m_decodeList[di].toMap();
-            if (p.value("message").toString()==msg && p.value("time").toString()==f[0] && !p.value("isTx").toBool()) { isDupe=true; break; }
+            if (p.value("isTx").toBool()) continue;
+            if (p.value("decodeSessionId").toULongLong() != m_decodeSessionId) continue;
+            if (decodeDedupKey(p.value("time").toString(),
+                               p.value("freq").toString(),
+                               p.value("message").toString()) == dedupKey) { isDupe=true; break; }
           } if (isDupe) continue; }
         m_decodeList.append(QVariant(entry));
         appendRxDecodeEntry(entry);
@@ -7282,11 +8131,17 @@ void DecodiumBridge::onPeriodTimer()
         m_lastPeriodSlot = utcSlot;
     }
     if (utcBoundaryCrossed || tickCounterExpired) {
+        qint64 const completedUtcSlot =
+            (periodMs > 0)
+                ? ((utcBoundaryCrossed && m_lastPeriodSlot >= 0)
+                       ? m_lastPeriodSlot
+                       : qMax<qint64>(0, utcSlot - 1))
+                : -1;
         m_lastPeriodSlot = utcSlot;
         m_periodTicks = 0;
         m_periodProgress = 0;
         emit periodProgressChanged();
-        feedAudioToDecoder();
+        feedAudioToDecoder(completedUtcSlot);
         // Al boundary UTC: un click manuale tardivo in FT8/FT4/FT2 sync
         // viene armato qui invece di partire a meta' slot.
         bool const startedDeferredManualTx = tryStartDeferredManualSyncTx();
@@ -7662,7 +8517,7 @@ void DecodiumBridge::teardownAudioCapture()
     }
 }
 
-void DecodiumBridge::feedAudioToDecoder()
+void DecodiumBridge::feedAudioToDecoder(qint64 completedUtcSlot)
 {
     // Snapshot atomico del buffer audio sotto lock: il callback del sink
     // (DecodiumAudioSink::writeData) può eseguire append() in parallelo da
@@ -7700,23 +8555,36 @@ void DecodiumBridge::feedAudioToDecoder()
     emit decodingChanged();
 
     quint64 serial = ++m_decodeSerial;
-    // FT2 ha periodi di 3.75s: più slot per minuto hanno lo stesso HHMM e
-    // collidono nella mappa m_decodeStartMsBySerial / nella timestamp mostrata.
-    // Per FT2 usiamo HHMMSS (il parser parseFt8Row accetta già 4 o 6 cifre).
-    // FT8/FT4 restano in HHMM per coerenza con il display legacy WSJT-X.
-    QString const utcFmt = (m_mode == QStringLiteral("FT2")) ? QStringLiteral("hhmmss")
-                                                             : QStringLiteral("hhmm");
-    int     nutc   = QDateTime::currentDateTimeUtc().toString(utcFmt).toInt();
-    int     nfqso  = (m_nfa + m_nfb) / 2;
+    int const decodePeriodMs = periodMsForMode(m_mode);
+    qint64 slotIndexForUtc = completedUtcSlot;
+    if (slotIndexForUtc < 0 && decodePeriodMs > 0) {
+        slotIndexForUtc = QDateTime::currentMSecsSinceEpoch() / decodePeriodMs;
+    }
+
+    int nutc = utcTokenForSlotStart(slotIndexForUtc, decodePeriodMs);
+    QString utcToken = utcDisplayTokenForSlotStart(slotIndexForUtc, decodePeriodMs);
+    if (nutc <= 0) {
+        QString const utcFmt = (decodePeriodMs > 0 && decodePeriodMs < 60000)
+                                   ? QStringLiteral("hhmmss")
+                                   : QStringLiteral("hhmm");
+        utcToken = QDateTime::currentDateTimeUtc().toString(utcFmt);
+        nutc = utcToken.toInt();
+    }
+    int const nfqso = qBound(m_nfa, m_rxFrequency, m_nfb);
+    int const nftx = qBound(m_nfa, m_txFrequency, m_nfb);
+    int const decodeQsoProgress = legacyDecodeQsoProgress();
+    int const cqHint = legacyDecodeCqHint();
 
     if (isTimeSyncDecodeMode(m_mode)) {
         qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
         m_decodeStartMsBySerial.insert(serial, nowMs);
         m_decodeModeBySerial.insert(serial, m_mode);
+        m_decodeUtcTokenBySerial.insert(serial, utcToken);
 
         for (auto it = m_decodeStartMsBySerial.begin(); it != m_decodeStartMsBySerial.end(); ) {
             if (nowMs - it.value() > 60000) {
                 m_decodeModeBySerial.remove(it.key());
+                m_decodeUtcTokenBySerial.remove(it.key());
                 it = m_decodeStartMsBySerial.erase(it);
             } else {
                 ++it;
@@ -7726,18 +8594,39 @@ void DecodiumBridge::feedAudioToDecoder()
 
     bridgeLog("feedAudioToDecoder: mode=" + m_mode +
               " samples=" + QString::number(audioSnapshot.size()) +
-              " nutc=" + QString::number(nutc));
+              " nutc=" + QString::number(nutc) +
+              " slot=" + QString::number(slotIndexForUtc) +
+              " nfqso=" + QString::number(nfqso) +
+              " nftx=" + QString::number(nftx) +
+              " depth=" + QString::number(effectiveDecodeDepth()) +
+              " qso=" + QString::number(decodeQsoProgress) +
+              " cqhint=" + QString::number(cqHint) +
+              " ft8ap=" + QString::number(m_ft8ApEnabled ? 1 : 0));
 
     if (m_mode == "FT8") {
         decodium::ft8::DecodeRequest req;
         req.serial = serial; req.audio = audioSnapshot;
-        req.nutc = nutc; req.nqsoprogress = 0;
-        req.nfqso = nfqso; req.nftx = 0;
+        req.nutc = nutc; req.nqsoprogress = decodeQsoProgress;
+        req.nfqso = nfqso; req.nftx = nftx;
         req.nfa = m_nfa; req.nfb = m_nfb;
-        req.ndepth = m_ndepth; req.ncontest = m_ncontest;
+        req.nzhsym = 50;
+        req.ndepth = effectiveDecodeDepth(); req.ncontest = m_ncontest;
+        req.emedelay = 0.0f;
+        req.nagain = 0;
+        req.lft8apon = m_ft8ApEnabled ? 1 : 0;
+        req.lmultift8 = 1;
+        req.lapcqonly = cqHint;
+        if (m_frequency < 30000000.0) {
+            req.napwid = 5;
+        } else if (m_frequency < 100000000.0) {
+            req.napwid = 15;
+        } else {
+            req.napwid = 50;
+        }
+        req.ldiskdat = 0;
         req.mycall = m_callsign.toLocal8Bit();
         req.hiscall = m_dxCall.toLocal8Bit();
-        req.hisgrid = QByteArray();
+        req.hisgrid = m_dxGrid.toLocal8Bit();
         QMetaObject::invokeMethod(m_ft8Worker, [this, req]() {
             m_ft8Worker->decode(req);
         }, Qt::QueuedConnection);
@@ -7745,10 +8634,10 @@ void DecodiumBridge::feedAudioToDecoder()
     } else if (m_mode == "FT2") {
         decodium::ft2::DecodeRequest req;
         req.serial = serial; req.audio = audioSnapshot;
-        req.nutc = nutc; req.nqsoprogress = 0;
+        req.nutc = nutc; req.nqsoprogress = decodeQsoProgress;
         req.nfqso = nfqso;
         req.nfa = m_nfa; req.nfb = m_nfb;
-        req.ndepth = m_ndepth; req.ncontest = m_ncontest;
+        req.ndepth = effectiveDecodeDepth(); req.ncontest = m_ncontest;
         req.mycall = m_callsign.toLocal8Bit();
         req.hiscall = m_dxCall.toLocal8Bit();
         // markLatestDecodeSerial() DEVE essere chiamato prima di decode(),
@@ -7761,10 +8650,11 @@ void DecodiumBridge::feedAudioToDecoder()
     } else if (m_mode == "FT4") {
         decodium::ft4::DecodeRequest req;
         req.serial = serial; req.audio = audioSnapshot;
-        req.nutc = nutc; req.nqsoprogress = 0;
+        req.nutc = nutc; req.nqsoprogress = decodeQsoProgress;
         req.nfqso = nfqso;
         req.nfa = m_nfa; req.nfb = m_nfb;
-        req.ndepth = m_ndepth; req.ncontest = m_ncontest;
+        req.ndepth = effectiveDecodeDepth(); req.ncontest = m_ncontest;
+        req.lapcqonly = cqHint;
         req.mycall = m_callsign.toLocal8Bit();
         req.hiscall = m_dxCall.toLocal8Bit();
         QMetaObject::invokeMethod(m_ft4Worker, [this, req]() {
@@ -7776,7 +8666,7 @@ void DecodiumBridge::feedAudioToDecoder()
         req.serial  = serial; req.audio = audioSnapshot;
         req.nutc    = nutc;   req.nfqso = nfqso;
         req.nfa     = m_nfa;  req.nfb   = m_nfb;
-        req.ndepth  = m_ndepth; req.ncontest = m_ncontest;
+        req.ndepth  = effectiveDecodeDepth(); req.ncontest = m_ncontest;
         req.mycall  = m_callsign.toLocal8Bit();
         req.hiscall = m_dxCall.toLocal8Bit();
         QMetaObject::invokeMethod(m_q65Worker, [this, req]() {
@@ -7814,7 +8704,7 @@ void DecodiumBridge::feedAudioToDecoder()
         req.nfqso   = nfqso;
         req.nfa     = m_nfa;
         req.nfb     = m_nfb;
-        req.ndepth  = m_ndepth;
+        req.ndepth  = effectiveDecodeDepth();
         req.mycall  = m_callsign.toLocal8Bit();
         req.hiscall = m_dxCall.toLocal8Bit();
         req.hisgrid = m_dxGrid.toLocal8Bit();
@@ -7832,7 +8722,8 @@ void DecodiumBridge::feedAudioToDecoder()
         req.nfa     = m_nfa;
         req.nfb     = m_nfb;
         req.nfqso   = nfqso;
-        req.ndepth  = m_ndepth;
+        req.ndepth  = effectiveDecodeDepth();
+        req.lapcqonly = cqHint;
         req.mycall  = m_callsign.toLocal8Bit();
         req.hiscall = m_dxCall.toLocal8Bit();
         req.dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toLocal8Bit();
@@ -7850,10 +8741,28 @@ void DecodiumBridge::feedAudioToDecoder()
         // Fallback a FT8
         decodium::ft8::DecodeRequest req;
         req.serial = serial; req.audio = audioSnapshot;
-        req.nutc = nutc; req.nfqso = nfqso;
+        req.nutc = nutc; req.nqsoprogress = decodeQsoProgress;
+        req.nfqso = nfqso; req.nftx = nftx;
         req.nfa = m_nfa; req.nfb = m_nfb;
-        req.ndepth = m_ndepth;
+        req.nzhsym = 50;
+        req.ndepth = effectiveDecodeDepth();
+        req.emedelay = 0.0f;
+        req.ncontest = m_ncontest;
+        req.nagain = 0;
+        req.lft8apon = m_ft8ApEnabled ? 1 : 0;
+        req.lmultift8 = 1;
+        req.lapcqonly = cqHint;
+        if (m_frequency < 30000000.0) {
+            req.napwid = 5;
+        } else if (m_frequency < 100000000.0) {
+            req.napwid = 15;
+        } else {
+            req.napwid = 50;
+        }
+        req.ldiskdat = 0;
         req.mycall = m_callsign.toLocal8Bit();
+        req.hiscall = m_dxCall.toLocal8Bit();
+        req.hisgrid = m_dxGrid.toLocal8Bit();
         QMetaObject::invokeMethod(m_ft8Worker, [this, req]() {
             m_ft8Worker->decode(req);
         }, Qt::QueuedConnection);

@@ -44,7 +44,7 @@ protected:
 private:
   MODE get_mode ();
   void simple_command (QString const&);
-  QString command_with_reply (QString const&);
+  QString command_with_reply (QString const&, bool tolerate_timeout = false);
   bool write_to_port (QString const&);
   QString frequency_to_string (Frequency) const;
   Frequency string_to_frequency (QString) const;

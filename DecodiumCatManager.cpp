@@ -1,5 +1,7 @@
 #include "DecodiumCatManager.h"
+#include "DecodiumLogging.hpp"
 
+#include <cmath>
 #include <QSerialPortInfo>
 #include <QSettings>
 
@@ -44,9 +46,85 @@ bool isLikelyDataMode(QString const& mode)
         || normalized.contains(QStringLiteral("RTTY"));
 }
 
+// Mappa il nome testuale del modo (USB, DATA-U, CW, ...) al codice a 1
+// carattere usato dal comando Yaesu/Kenwood "MD<code>;". Restituisce 0 se
+// il modo non è riconosciuto.
+//
+// Yaesu FT-991/FT-DX10/FT-DX101 codes:
+//   1=LSB 2=USB 3=CW 4=FM 5=AM 6=RTTY-L 7=CW-R 8=DATA-L 9=RTTY-U
+//   A=DATA-FM B=FM-N C=DATA-U D=AM-N
+char yaesuModeCode(QString const& modeIn)
+{
+    QString const m = modeIn.trimmed().toUpper();
+    if (m == "LSB")            return '1';
+    if (m == "USB")            return '2';
+    if (m == "CW")             return '3';
+    if (m == "FM")             return '4';
+    if (m == "AM")             return '5';
+    if (m == "RTTY-L" || m == "RTTY") return '6';
+    if (m == "CW-R")           return '7';
+    if (m == "DATA-L" || m == "DATA-LSB" || m == "PKT-L") return '8';
+    if (m == "RTTY-U")         return '9';
+    if (m == "DATA-FM")        return 'A';
+    if (m == "FM-N")           return 'B';
+    if (m == "DATA-U" || m == "DATA-USB" || m == "DATA" || m == "PKT" || m == "PKT-U") return 'C';
+    if (m == "AM-N")           return 'D';
+    return 0;
+}
+
 bool isCatPttMethod(QString const& value)
 {
     return value.trimmed().compare(QStringLiteral("CAT"), Qt::CaseInsensitive) == 0;
+}
+
+// Tabella defaults per rig: baud/dataBits/stopBits/handshake/pttMethod + civAddress (ICOM).
+// Valori allineati alle impostazioni di fabbrica piu' comuni per la porta CAT in modo DATA.
+struct RigDefaults
+{
+    const char* match;     // substring case-insensitive sul nome rig
+    int baud;
+    const char* dataBits;
+    const char* stopBits;
+    const char* handshake;
+    const char* pttMethod;
+    int civAddress;        // 0 se non ICOM
+};
+
+// Ordine: match piu' specifici prima (es. "TS-590SG" prima di "TS-590S").
+static const RigDefaults kRigDefaultsTable[] = {
+    // Kenwood
+    {"TS-590SG",   57600,  "8", "1", "none", "CAT", 0x00},
+    {"TS-590S",    57600,  "8", "1", "none", "CAT", 0x00},
+    {"TS-890S",   115200,  "8", "1", "none", "CAT", 0x00},
+    {"TS-480",     57600,  "8", "1", "none", "CAT", 0x00},
+    {"TS-2000",    57600,  "8", "1", "none", "CAT", 0x00},
+    // Yaesu
+    {"FT-DX101",   38400,  "8", "1", "none", "CAT", 0x00},
+    {"FTDX101",    38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT-DX10",    38400,  "8", "1", "none", "CAT", 0x00},
+    {"FTDX10",     38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT-991A",    38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT-991",     38400,  "8", "1", "none", "CAT", 0x00},
+    {"FT991",      38400,  "8", "1", "none", "CAT", 0x00},
+    // Icom (CI-V) - richiede hamlib per protocollo binario
+    {"IC-7300",    19200,  "8", "1", "none", "CAT", 0x94},
+    {"IC-7600",    19200,  "8", "1", "none", "CAT", 0x7A},
+    {"IC-7610",    19200,  "8", "1", "none", "CAT", 0x98},
+    {"IC-9700",    19200,  "8", "1", "none", "CAT", 0xA2},
+    {"IC-705",     19200,  "8", "1", "none", "CAT", 0xA4},
+    // Elecraft
+    {"K3",         38400,  "8", "1", "none", "CAT", 0x00},
+    {"KX3",        38400,  "8", "1", "none", "CAT", 0x00},
+};
+
+const RigDefaults* findRigDefaults(QString const& rigName)
+{
+    QString const upper = rigName.toUpper();
+    for (auto const& e : kRigDefaultsTable) {
+        if (upper.contains(QString::fromLatin1(e.match).toUpper()))
+            return &e;
+    }
+    return nullptr;
 }
 
 QByteArray nativePttOnCommand(QString const& rigName, QString const& mode)
@@ -79,10 +157,46 @@ QStringList DecodiumCatManager::rigList() const
     return {
         "Kenwood TS-590S", "Kenwood TS-590SG", "Kenwood TS-480",
         "Kenwood TS-2000", "Kenwood TS-890S",
-        "Icom IC-7300", "Icom IC-7600", "Icom IC-7610", "Icom IC-9700",
+        "Icom IC-7300", "Icom IC-7600", "Icom IC-7610", "Icom IC-9700", "Icom IC-705",
         "Yaesu FT-991", "Yaesu FT-991A", "Yaesu FT-DX10", "Yaesu FT-DX101D",
         "Elecraft K3", "Elecraft KX3",
     };
+}
+
+// --- setRigName + auto-apply defaults ---
+
+void DecodiumCatManager::setRigName(const QString& v)
+{
+    if (m_rigName == v)
+        return;
+    m_rigName = v;
+    emit rigNameChanged();
+    applyRigDefaults(v);
+}
+
+void DecodiumCatManager::applyRigDefaults(const QString& rigName)
+{
+    const RigDefaults* d = findRigDefaults(rigName);
+    if (!d) {
+        DIAG_CAT(QStringLiteral("applyRigDefaults: nessun default per '%1' (usare hamlib)").arg(rigName));
+        return;
+    }
+
+    DIAG_CAT(QStringLiteral("applyRigDefaults: '%1' -> baud=%2 data=%3 stop=%4 handshake=%5 ptt=%6 civ=0x%7")
+                 .arg(rigName)
+                 .arg(d->baud)
+                 .arg(QLatin1String(d->dataBits))
+                 .arg(QLatin1String(d->stopBits))
+                 .arg(QLatin1String(d->handshake))
+                 .arg(QLatin1String(d->pttMethod))
+                 .arg(d->civAddress, 2, 16, QChar('0')));
+
+    setBaudRate(d->baud);
+    setDataBits(QString::fromLatin1(d->dataBits));
+    setStopBits(QString::fromLatin1(d->stopBits));
+    setHandshake(QString::fromLatin1(d->handshake));
+    setPttMethod(QString::fromLatin1(d->pttMethod));
+    setCivAddress(d->civAddress);
 }
 
 // --- ctor/dtor ---
@@ -184,6 +298,23 @@ void DecodiumCatManager::connectRig()
     if (m_serial)
         disconnectRig();
 
+    // Inizializza auto-baud: baud corrente + candidate comuni.
+    // Si attiva solo al primo tentativo utente (indice -1); dopo un fail
+    // iteriamo tramite tryNextAutoBaud() che chiama di nuovo connectRig().
+    if (m_autoBaudIndex < 0) {
+        m_autoBaudCandidates.clear();
+        m_autoBaudCandidates << m_baudRate;
+        for (int b : {9600, 19200, 38400, 57600, 115200}) {
+            if (!m_autoBaudCandidates.contains(b))
+                m_autoBaudCandidates << b;
+        }
+        m_autoBaudIndex = 0;
+        m_autoBaudActive = true;
+        QStringList seq;
+        for (int b : m_autoBaudCandidates) seq << QString::number(b);
+        DIAG_CAT(QStringLiteral("auto-baud: seq = %1").arg(seq.join(',')));
+    }
+
     auto* serial = new QSerialPort(this);
     serial->setPortName(m_serialPort);
     serial->setBaudRate(m_baudRate);
@@ -237,11 +368,25 @@ void DecodiumCatManager::connectRig()
 
 void DecodiumCatManager::disconnectRig()
 {
+    // Quando disconnectRig e' chiamato dall'auto-baud iterator, m_autoBaudActive
+    // rimane true e il tryNextAutoBaud ha gia' schedulato il reconnect.
+    // Se invece e' disconnect utente, lasciamo che connectRig successivo
+    // reinizializzi la sequenza.
+    if (!m_autoBaudActive) {
+        m_autoBaudIndex = -1;
+        m_autoBaudCandidates.clear();
+    }
     if (m_connectTimer) { m_connectTimer->stop(); m_connectTimer->deleteLater(); m_connectTimer = nullptr; }
     if (m_pollTimer) {
         m_pollTimer->stop();
         m_pollTimer->deleteLater();
         m_pollTimer = nullptr;
+    }
+    if (m_pttSerial) {
+        if (m_pttSerial->isOpen())
+            m_pttSerial->close();
+        delete m_pttSerial;
+        m_pttSerial = nullptr;
     }
     if (m_serial) {
         m_serial->blockSignals(true);
@@ -285,6 +430,13 @@ void DecodiumCatManager::onReadyRead()
 
     m_rxBuf += m_serial->readAll();
 
+    // Guard against unbounded buffer growth from corrupted serial data
+    if (m_rxBuf.size() > 4096) {
+        DIAG_CAT("CAT buffer overflow (" + QString::number(m_rxBuf.size()) + " bytes) — flushing");
+        m_rxBuf.clear();
+        return;
+    }
+
     int idx;
     while ((idx = m_rxBuf.indexOf(';')) >= 0) {
         QByteArray msg = m_rxBuf.left(idx + 1);
@@ -307,6 +459,13 @@ void DecodiumCatManager::processResponse(const QByteArray& resp)
             if (!m_connected) {
                 // Risposta ricevuta: cancella timeout
                 if (m_connectTimer) { m_connectTimer->stop(); m_connectTimer->deleteLater(); m_connectTimer = nullptr; }
+                // Auto-baud: disabilita e persisti il baud vincente.
+                if (m_autoBaudActive) {
+                    DIAG_CAT(QStringLiteral("auto-baud: riuscito a %1 baud").arg(m_baudRate));
+                    m_autoBaudActive = false;
+                    m_autoBaudIndex = -1;
+                    saveSettings();
+                }
                 m_connected = true;
                 emit connectedChanged();
                 emit statusUpdate("CAT: connesso a " + m_rigName +
@@ -350,14 +509,45 @@ QString DecodiumCatManager::parseMode(char code)
     }
 }
 
+// --- auto-baud ---
+
+bool DecodiumCatManager::tryNextAutoBaud()
+{
+    if (!m_autoBaudActive) return false;
+    int next = m_autoBaudIndex + 1;
+    if (next >= m_autoBaudCandidates.size()) {
+        m_autoBaudActive = false;
+        m_autoBaudIndex = -1;
+        return false;
+    }
+    m_autoBaudIndex = next;
+    int const baud = m_autoBaudCandidates[next];
+    DIAG_CAT(QStringLiteral("auto-baud: tentativo %1/%2 a %3 baud")
+             .arg(next + 1).arg(m_autoBaudCandidates.size()).arg(baud));
+    // Aggiorna temporaneamente il baud ma non chiamare saveSettings (lo salva
+    // solo in caso di successo in processResponse).
+    m_baudRate = baud;
+    emit baudRateChanged();
+    // Chiude la porta corrente e riapre con il nuovo baud.
+    // connectRig() non re-inizializza la sequenza perche' m_autoBaudIndex >= 0.
+    QTimer::singleShot(100, this, [this]{ connectRig(); });
+    return true;
+}
+
 // --- onConnectTimeout ---
 
 void DecodiumCatManager::onConnectTimeout()
 {
     if (m_connected) return;  // già connesso, ignora
+    // Prova il prossimo baud della sequenza auto-detect prima di arrendersi.
+    if (tryNextAutoBaud()) {
+        disconnectRig();
+        return;
+    }
     emit errorOccurred("CAT: nessuna risposta da " + m_rigName +
-                       " su " + m_serialPort + " a " + QString::number(m_baudRate) +
-                       " baud. Verifica porta COM e baud rate nel menu radio.");
+                       " su " + m_serialPort + " dopo tentativi a " +
+                       QString::number(m_autoBaudCandidates.isEmpty() ? m_baudRate : m_autoBaudCandidates.last()) +
+                       " baud. Verifica porta COM, cavo USB e che il rig sia acceso.");
     disconnectRig();
 }
 
@@ -376,31 +566,82 @@ void DecodiumCatManager::onSerialError(QSerialPort::SerialPortError error)
 void DecodiumCatManager::setRigFrequency(double hz)
 {
     if (!m_connected) return;
-    QString cmd = QString("FA%1;").arg(static_cast<long long>(hz), 11, 10, QChar('0'));
+    QString cmd = QString("FA%1;").arg(static_cast<long long>(std::round(hz)), 11, 10, QChar('0'));
     sendCommand(cmd.toLatin1());
+}
+
+// --- setRigMode ---
+//
+// Invia il comando CAT per impostare il modo operativo del rig.
+// Mappa il nome testuale al codice Yaesu/Kenwood del comando "MD<code>;".
+// Su Kenwood per DATA-USB serve anche il flag "DA1;" dopo "MD2;".
+// No-op se il rig non è connesso o non è Yaesu/Kenwood.
+
+void DecodiumCatManager::setRigMode(const QString& mode)
+{
+    DIAG_CAT(QStringLiteral("setRigMode(\"%1\")").arg(mode));
+    if (!m_connected) {
+        DIAG_CAT(QStringLiteral("setRigMode: skip (non connesso)"));
+        return;
+    }
+    if (!(isYaesuRig(m_rigName) || isKenwoodRig(m_rigName))) {
+        DIAG_CAT(QStringLiteral("setRigMode: rig '%1' non gestito nativamente, skip").arg(m_rigName));
+        return;
+    }
+    char const code = yaesuModeCode(mode);
+    if (!code) {
+        DIAG_CAT(QStringLiteral("setRigMode: mode '%1' non mappato, skip").arg(mode));
+        return;
+    }
+    QByteArray cmd;
+    cmd.reserve(5);
+    cmd.append("MD");
+    cmd.append(code);
+    cmd.append(';');
+    sendCommand(cmd);
+    // Kenwood: per DATA-USB serve anche DA1; dopo MD2;
+    if (isKenwoodRig(m_rigName) && (code == '2' || code == '1')) {
+        QString const normalized = mode.trimmed().toUpper();
+        bool const wantData = normalized.contains("DATA") || normalized.contains("PKT")
+                              || normalized.contains("DIG");
+        sendCommand(wantData ? QByteArrayLiteral("DA1;") : QByteArrayLiteral("DA0;"));
+    }
 }
 
 // --- setRigPtt ---
 
-static void catLog(const char* msg) {
-    FILE* f = fopen("C:\\Users\\IU8LMC\\cat_log.txt", "a");
-    if (f) { fputs(msg, f); fputc('\n', f); fclose(f); }
-}
 
 void DecodiumCatManager::setRigPtt(bool on)
 {
-    catLog(on ? "setRigPtt(true)" : "setRigPtt(false)");
+    DIAG_CAT(on ? QStringLiteral("setRigPtt(true)") : QStringLiteral("setRigPtt(false)"));
+    // Pre-PTT warning: su Yaesu, se il rig è in voice mode il PTT native
+    // userà TX; (percorso MIC) e l'audio digitale da USB codec non
+    // raggiunge l'RF. Log diagnostico per aiutare a diagnosticare "nessuno
+    // risponde alle TX". Non forziamo il cambio mode automaticamente per
+    // evitare effetti sorpresa: l'utente deve selezionare DATA-USB o
+    // chiamare setRigMode() esplicitamente.
+    if (on && isYaesuRig(m_rigName) && !isLikelyDataMode(m_mode) && !m_mode.isEmpty()) {
+        DIAG_CAT(QStringLiteral(
+            "ATTENZIONE: rig Yaesu in modo '%1' (non DATA). Il PTT userà "
+            "il percorso MIC (TX;) invece di USB codec (TX1;). Per FT8/FT4/FT2 "
+            "imposta il rig in DATA-USB (MD0C;) o chiama setRigMode(\"DATA-U\")."
+            ).arg(m_mode));
+    }
     if (m_pttMethod == "CAT") {
-        catLog(m_connected ? "CAT: m_connected=true, invio TX/RX" : "CAT: m_connected=false, skip");
+        DIAG_CAT(m_connected ? QStringLiteral("CAT: m_connected=true, invio TX/RX")
+                             : QStringLiteral("CAT: m_connected=false, skip"));
         if (!m_connected) return;
         QByteArray const cmd = on ? nativePttOnCommand(m_rigName, m_mode)
                                   : QByteArrayLiteral("RX;");
-        QByteArray logMsg = "CAT cmd=[" + cmd + "] rig=[" + m_rigName.toLatin1() + "] mode=[" + m_mode.toLatin1() + "]";
-        catLog(logMsg.constData());
+        DIAG_CAT(QStringLiteral("CAT cmd=[%1] rig=[%2] mode=[%3]")
+                     .arg(QString::fromLatin1(cmd))
+                     .arg(m_rigName)
+                     .arg(m_mode));
         bool written = (m_serial && m_serial->isOpen()) ? (m_serial->write(cmd) > 0) : false;
         if (m_serial)
             m_serial->flush();
-        catLog(written ? "TX/RX scritto OK" : "ERRORE scrittura seriale");
+        DIAG_CAT(written ? QStringLiteral("TX/RX scritto OK")
+                         : QStringLiteral("ERRORE scrittura seriale"));
         emit statusUpdate("CAT PTT: " + QString::fromLatin1(cmd));
     } else if (m_pttMethod == "DTR" || m_pttMethod == "RTS") {
         // DTR/RTS PTT: usa porta separata se configurata, altrimenti la porta CAT
@@ -422,7 +663,7 @@ void DecodiumCatManager::setRigPtt(bool on)
                     delete m_pttSerial; m_pttSerial = nullptr;
                     return;
                 }
-                catLog(("PTT porta separata aperta: " + m_pttPort).toLatin1().constData());
+                DIAG_CAT("PTT porta separata aperta: " + m_pttPort);
             }
             pttSerial = m_pttSerial;
         }
@@ -432,7 +673,7 @@ void DecodiumCatManager::setRigPtt(bool on)
                 pttSerial->setDataTerminalReady(on);
             else
                 pttSerial->setRequestToSend(on);
-            catLog(on ? "DTR/RTS PTT ON" : "DTR/RTS PTT OFF");
+            DIAG_CAT(on ? QStringLiteral("DTR/RTS PTT ON") : QStringLiteral("DTR/RTS PTT OFF"));
         }
 
         // Chiudi porta PTT separata quando si spegne PTT
@@ -473,6 +714,7 @@ void DecodiumCatManager::saveSettings()
     s.setValue("baudRate",       m_baudRate);
     s.setValue("pttMethod",      catPtt ? QStringLiteral("CAT") : m_pttMethod);
     s.setValue("pttPort",        m_pttPort);
+    s.setValue("civAddress",     m_civAddress);
     s.setValue("pollInterval",   m_pollInterval);
     s.setValue("forceDtr",       catPtt ? false : m_forceDtr);
     s.setValue("dtrHigh",        catPtt ? false : m_dtrHigh);
@@ -494,6 +736,7 @@ void DecodiumCatManager::loadSettings()
     if (m_pttMethod.isEmpty())
         m_pttMethod = QStringLiteral("CAT");
     m_pttPort        = s.value("pttPort",         "CAT").toString();
+    m_civAddress     = s.value("civAddress",      0).toInt();
     m_pollInterval   = s.value("pollInterval",    2).toInt();
     m_forceDtr       = s.value("forceDtr",        false).toBool();
     m_dtrHigh        = s.value("dtrHigh",         false).toBool();

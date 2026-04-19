@@ -20,6 +20,10 @@ env:
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.asset_suffix }} on ${{ matrix.runner }}

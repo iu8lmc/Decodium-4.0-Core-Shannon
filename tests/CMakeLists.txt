@@ -47,6 +47,14 @@ add_executable (ft2_make_test_wav ft2_make_test_wav.cpp)
 target_link_libraries (ft2_make_test_wav wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_dependencies (test_qt_helpers ft2_make_test_wav)
 
+add_executable (test_tx_pipeline test_tx_pipeline.cpp)
+target_link_libraries (test_tx_pipeline wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_test (NAME test_tx_pipeline COMMAND $<TARGET_FILE:test_tx_pipeline>)
+
+add_executable (test_ft2_qso_sim test_ft2_qso_sim.cpp)
+target_link_libraries (test_ft2_qso_sim wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_test (NAME test_ft2_qso_sim COMMAND $<TARGET_FILE:test_ft2_qso_sim>)
+
 add_executable (test_secure_settings test_secure_settings.cpp)
 target_link_libraries (test_secure_settings wsjt_qt wsjt_cxx Qt6::Test)
 add_test (NAME test_secure_settings COMMAND $<TARGET_FILE:test_secure_settings>)

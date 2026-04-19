@@ -912,6 +912,46 @@ static QString udp_client_id_from_application_name ()
   return QStringLiteral ("WSJTX");
 }
 
+static QDateTime decode_line_timestamp_for_log (QDateTime fallbackUtc, QString const& message)
+{
+  if (!fallbackUtc.isValid ()) {
+    fallbackUtc = QDateTime::currentDateTimeUtc ();
+  }
+
+  int start = 0;
+  while (start < message.size () && message.at (start).isSpace ()) {
+    ++start;
+  }
+
+  int digits = 0;
+  while ((start + digits) < message.size ()
+         && message.at (start + digits).isDigit ()
+         && digits < 6) {
+    ++digits;
+  }
+
+  if ((digits != 4 && digits != 6)
+      || ((start + digits) < message.size () && !message.at (start + digits).isSpace ())) {
+    return fallbackUtc;
+  }
+
+  auto const token = message.mid (start, digits);
+  auto const parsed = QTime::fromString (token, digits == 6 ? "hhmmss" : "hhmm");
+  if (!parsed.isValid ()) {
+    return fallbackUtc;
+  }
+
+  QDateTime candidate {fallbackUtc.date (), parsed, Qt::UTC};
+  auto const delta = fallbackUtc.secsTo (candidate);
+  if (delta > 12 * 3600) {
+    candidate = candidate.addDays (-1);
+  } else if (delta < -12 * 3600) {
+    candidate = candidate.addDays (1);
+  }
+
+  return candidate;
+}
+
 void MainWindow::pruneNearDuplicateDecodeCache (qint64 nowMs)
 {
   if (m_decodeDedupeLastPruneMs > 0 && (nowMs - m_decodeDedupeLastPruneMs) < 5000) {
@@ -1155,7 +1195,11 @@ namespace
   QRegularExpression non_r_db_regexp {"\\A[-+]{1}[0-9]{1,2}\\z"};
   auto quint32_max = std::numeric_limits<quint32>::max ();
   constexpr int N_WIDGETS {38};
-  constexpr int default_rx_audio_buffer_frames {-1}; // lets Qt decide
+#if defined(Q_OS_LINUX)
+  constexpr int default_rx_audio_buffer_frames {-1}; // keep ALSA/PipeWire default latency tuning
+#else
+  constexpr int default_rx_audio_buffer_frames {16384}; // ~341ms @ 48kHz, reduces QAudioSource drop bursts on macOS/Windows
+#endif
 #if defined(Q_OS_LINUX)
   constexpr int default_tx_audio_buffer_frames {1024}; // ~21ms @ 48kHz; FT2/FT4 need a much smaller Linux TX queue
 #else
@@ -3499,8 +3543,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
     decodium::ft2::AsyncDecodeRequest request;
     request.audio.resize (45000);
-    int pos = m_asyncAudioPos;
-    int start = (pos - 45000 + 90000) % 90000;
+    uint64_t pos = m_asyncAudioPos;
+    int start = static_cast<int>((pos - 45000 + 90000) % 90000);
     for (int i = 0; i < 45000; i++) {
       request.audio[i] = m_asyncAudio[(start + i) % 90000];
     }
@@ -3516,7 +3560,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     request.nqsoprogress = qBound (0, int(m_QSOProgress), 6);
     request.nfqso = qBound (0, m_wideGraph->rxFreq(), 5000);
     request.nfa = qBound (0, m_wideGraph->nStartFreq(), 5000);
-    request.nfb = qBound (0, m_wideGraph->Fmax(), 5000);
+    request.nfb = effectiveDecodeFmax ();
     if (request.nfb <= request.nfa) {
       request.nfb = request.nfa + 50;
     }
@@ -3591,6 +3635,10 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   auto startup_mode = m_mode;
   m_mode.clear ();
   set_mode (startup_mode);
+  // In embedded mode, a stale saved mode can disagree with the saved dial
+  // frequency on startup. Resolve that once immediately so 14.074 MHz starts
+  // in FT8 instead of waiting for a later CAT refresh.
+  maybe_apply_startup_mode_from_rig_frequency (m_lastMonitoredFrequency);
   if(m_mode=="Echo") monitor(false);  //Don't auto-start Monitor in Echo mode.
 
   // Ensure that the correct frequency is set and displayed
@@ -4075,6 +4123,11 @@ QString MainWindow::legacyAdifLogPath() const
   return m_logBook.path ();
 }
 
+QString MainWindow::legacyAllTxtPath() const
+{
+  return m_config.writeable_data_dir().absoluteFilePath(QStringLiteral("ALL.TXT"));
+}
+
 int MainWindow::legacyTxOutputAttenuation() const
 {
   return (ui && ui->outAttenuation) ? ui->outAttenuation->value() : 0;
@@ -4142,6 +4195,47 @@ void MainWindow::legacySetTxEnabled(bool enabled)
 void MainWindow::legacySetAutoCq(bool enabled)
 {
   onRemoteSetAutoCqRequested(QString {}, enabled);
+}
+
+void MainWindow::legacySetDecodeDepthBits(int bits)
+{
+  m_ndepth = qMax(1, bits);
+  if (m_settings) {
+    m_settings->setValue("NDepth", m_ndepth);
+  }
+  if (!ui) {
+    return;
+  }
+
+  auto syncAction = [] (QAction * action, bool checked) {
+    if (!action) {
+      return;
+    }
+    bool const blocked = action->blockSignals(true);
+    action->setChecked(checked);
+    action->blockSignals(blocked);
+  };
+
+  syncAction(ui->actionQuickDecode, (m_ndepth & 7) == 1);
+  syncAction(ui->actionMediumDecode, (m_ndepth & 7) == 2);
+  syncAction(ui->actionDeepestDecode, (m_ndepth & 7) == 3);
+  syncAction(ui->actionInclude_averaging, (m_ndepth & 16) != 0);
+  syncAction(ui->actionInclude_correlation, (m_ndepth & 32) != 0);
+  syncAction(ui->actionEnable_AP_DXcall, (m_ndepth & 64) != 0);
+  syncAction(ui->actionAuto_Clear_Avg, (m_ndepth & 128) != 0);
+}
+
+void MainWindow::legacySetCqOnly(bool enabled)
+{
+  if (!ui || !ui->cbCQonly) {
+    return;
+  }
+  bool const changed = (ui->cbCQonly->isChecked() != enabled);
+  if (changed) {
+    ui->cbCQonly->setChecked(enabled);
+  } else {
+    on_cbCQonly_toggled(enabled);
+  }
 }
 
 void MainWindow::legacySetRxFrequency(int frequencyHz)
@@ -4220,42 +4314,51 @@ void MainWindow::refreshConfiguredAudioDevicesAfterHotplug (QString const& reaso
   auto const input_devices = QMediaDevices::audioInputs ();
   auto const output_devices = QMediaDevices::audioOutputs ();
 
-  auto has_device_named = [] (QList<QAudioDevice> const& devices, QString const& name) {
+  auto find_device_named = [] (QList<QAudioDevice> const& devices, QString const& name) {
     if (name.isEmpty ())
       {
-        return false;
+        return std::optional<QAudioDevice> {};
       }
     Q_FOREACH (auto const& device, devices)
       {
         if (device.description () == name)
           {
-            return true;
+            return std::optional<QAudioDevice> {device};
           }
       }
-    return false;
+    return std::optional<QAudioDevice> {};
   };
 
   bool rebound_input = false;
-  if (!saved_input_name.isEmpty () && QStringLiteral ("TCI audio") != saved_input_name
-      && has_device_named (input_devices, saved_input_name))
+  if (!saved_input_name.isEmpty () && QStringLiteral ("TCI audio") != saved_input_name)
     {
-      auto const before = m_config.audio_input_device ().description ();
-      m_config.set_audio_input_device (saved_input_name);
-      rebound_input = !m_config.audio_input_device ().isNull ()
-                      && m_config.audio_input_device ().description () == saved_input_name
-                      && (before != m_config.audio_input_device ().description ()
-                          || m_monitoring);
+      auto const before = m_config.audio_input_device ();
+      if (auto const candidate = find_device_named (input_devices, saved_input_name))
+        {
+          if (before.isNull () || before.id () != candidate->id ())
+            {
+              m_config.set_audio_input_device (saved_input_name);
+              rebound_input = !m_config.audio_input_device ().isNull ()
+                              && m_config.audio_input_device ().description () == saved_input_name
+                              && (before.isNull () || before.id () != m_config.audio_input_device ().id ());
+            }
+        }
     }
 
   bool rebound_output = false;
-  if (!saved_output_name.isEmpty () && QStringLiteral ("TCI audio") != saved_output_name
-      && has_device_named (output_devices, saved_output_name))
+  if (!saved_output_name.isEmpty () && QStringLiteral ("TCI audio") != saved_output_name)
     {
-      auto const before = m_config.audio_output_device ().description ();
-      m_config.set_audio_output_device (saved_output_name);
-      rebound_output = !m_config.audio_output_device ().isNull ()
-                       && m_config.audio_output_device ().description () == saved_output_name
-                       && before != m_config.audio_output_device ().description ();
+      auto const before = m_config.audio_output_device ();
+      if (auto const candidate = find_device_named (output_devices, saved_output_name))
+        {
+          if (before.isNull () || before.id () != candidate->id ())
+            {
+              m_config.set_audio_output_device (saved_output_name);
+              rebound_output = !m_config.audio_output_device ().isNull ()
+                               && m_config.audio_output_device ().description () == saved_output_name
+                               && (before.isNull () || before.id () != m_config.audio_output_device ().id ());
+            }
+        }
     }
 
   if (!rebound_input && !rebound_output)
@@ -4610,6 +4713,16 @@ void MainWindow::legacySetEmbeddedMode(bool enabled)
       m_fastGraph->setAttribute (Qt::WA_DontShowOnScreen, enabled);
       if (enabled) m_fastGraph->hide ();
     }
+}
+
+int MainWindow::effectiveDecodeFmax() const
+{
+  if (m_embeddedShellMode || !m_wideGraph)
+    {
+      return 5000;
+    }
+
+  return qBound (0, m_wideGraph->Fmax (), 5000);
 }
 
 void MainWindow::legacyShutdownForEmbedding()
@@ -5687,7 +5800,7 @@ void MainWindow::dataSink(qint64 frames)
 
 // Get power, spectrum, and ihsym
   dec_data.params.nfa=m_wideGraph->nStartFreq();
-  dec_data.params.nfb=m_wideGraph->Fmax();
+  dec_data.params.nfb=effectiveDecodeFmax();
   if(m_mode=="FST4") {
     dec_data.params.nfa=ui->sbF_Low->value();
     dec_data.params.nfb=ui->sbF_High->value();
@@ -5750,8 +5863,15 @@ void MainWindow::dataSink(qint64 frames)
     m_dialFreqRxWSPR=m_freqNominal;
   }
 
-  if(m_mode=="FT8") {
-    if(m_ihsym==40 and m_decoderBusy) {
+  if (m_mode == "FT8") {
+    // Embedded FT8 single-thread can legitimately still be finishing a dense
+    // slot around ihsym 40. Clearing it here truncates real decodes and makes
+    // D4 miss entire :00/:15/:30/:45 CQ slots. Keep the fast per-slot recover
+    // path for the normal UI, but let the longer watchdog handle true hangs in
+    // the embedded shell path.
+    bool const embeddedFt8SingleThread =
+        m_embeddedShellMode && !m_diskData && !m_multithreadFT8;
+    if (!embeddedFt8SingleThread && m_ihsym == 40 && m_decoderBusy) {
       qDebug() << "Clearing hung decoder status";
       cancelPendingInProcessDecode ();
       decodeDone();  //Clear a hung decoder status
@@ -5793,7 +5913,9 @@ void MainWindow::dataSink(qint64 frames)
   if(m_multithreadFT8 && m_ft8DecoderStart==1) m_earlyDecode2 = 46; // ft8md
 
   if(m_ihsym==m_hsymStop) bCallDecoder=true;
-  if(m_mode=="FT8" && !m_diskData && !(m_multithreadFT8 && m_ft8DecoderStart>1)) {  //ft8md Try to call MTD two times when "Very early" has been selected
+
+  if(m_mode=="FT8" && !m_diskData
+     && !(m_multithreadFT8 && m_ft8DecoderStart>1)) {  //ft8md Try to call MTD two times when "Very early" has been selected
     if(m_ihsym==m_earlyDecode) bCallDecoder=true;
     if(m_ihsym==m_earlyDecode2 && !(m_multithreadFT8 && m_ft8DecoderStart!=1)) bCallDecoder=true;
   }
@@ -5911,7 +6033,8 @@ void MainWindow::dataSink(qint64 frames)
       decode(); //Start decoder
     }
 
-    if(m_mode=="FT8" and !(m_diskData or (m_multithreadFT8 && m_ft8DecoderStart<2)) and (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2)) return;
+    if(m_mode=="FT8" and !(m_diskData or (m_multithreadFT8 && m_ft8DecoderStart<2))
+       && (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2)) return;
     if (!m_diskData)
       {
         if (!(m_mode=="FT8" && m_multithreadFT8)) Q_EMIT reset_audio_input_stream (true); // reports dropped samples
@@ -6976,11 +7099,16 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
     {
       debugToFile (QStringLiteral ("audioRest   no output device configured"));
     }
+
+  if (resume_monitor)
+    {
+      scheduleEmbeddedMonitorPhaseResync (QStringLiteral ("audio reopen"));
+    }
 }
 
 void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
 {
-  if (m_embeddedShellMode || m_tci_audio || m_config.audio_input_device ().isNull ())
+  if (m_tci_audio || m_config.audio_input_device ().isNull ())
     {
       return;
     }
@@ -7051,7 +7179,162 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
                              .arg (m_monitoring));
             });
         });
+  }
+}
+
+bool MainWindow::needsEmbeddedMonitorPhaseResync () const
+{
+  if (!m_embeddedShellMode || !m_monitoring || m_tci_audio || m_transmitting || m_diskData)
+    {
+      return false;
     }
+
+  return m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2";
+}
+
+void MainWindow::scheduleEmbeddedMonitorPhaseResync (QString const& reason)
+{
+  if (!m_embeddedShellMode || m_tci_audio || m_transmitting || m_diskData)
+    {
+      return;
+    }
+
+  if (!(m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2"))
+    {
+      m_monitorPhaseResyncAtMs = -1;
+      return;
+    }
+
+  auto const period_ms = qMax<qint64> (1, qRound64 (m_TRperiod * 1000.0));
+  auto const now_ms = preciseCurrentMSecsSinceEpoch ();
+  auto const phase_ms = ((now_ms % period_ms) + period_ms) % period_ms;
+  qint64 constexpr boundary_guard_ms {150};
+
+  if (phase_ms <= boundary_guard_ms || (period_ms - phase_ms) <= boundary_guard_ms)
+    {
+      debugToFile (QString {"phaseSync   skip reason:%1 mode:%2 phase:%3/%4"}
+                     .arg (reason)
+                     .arg (m_mode)
+                     .arg (phase_ms)
+                     .arg (period_ms));
+      m_monitorPhaseResyncAtMs = -1;
+      return;
+    }
+
+  auto next_boundary_ms = now_ms - phase_ms + period_ms;
+  if ((next_boundary_ms - now_ms) < boundary_guard_ms)
+    {
+      next_boundary_ms += period_ms;
+    }
+
+  if (m_monitorPhaseResyncAtMs == next_boundary_ms)
+    {
+      return;
+    }
+
+  m_monitorPhaseResyncAtMs = next_boundary_ms;
+  auto const delay_ms = qMax<qint64> (0, next_boundary_ms - now_ms);
+  debugToFile (QString {"phaseSync   armed reason:%1 mode:%2 phase:%3/%4 at:%5 delay:%6"}
+                 .arg (reason)
+                 .arg (m_mode)
+                 .arg (phase_ms)
+                 .arg (period_ms)
+                 .arg (next_boundary_ms)
+                 .arg (delay_ms));
+  QTimer::singleShot (int (qMin<qint64> (delay_ms, std::numeric_limits<int>::max ())), this,
+                      [this, next_boundary_ms, reason] {
+                        performEmbeddedMonitorPhaseResync (next_boundary_ms, reason);
+                      });
+}
+
+void MainWindow::performEmbeddedMonitorPhaseResync (qint64 expected_at_ms, QString const& reason)
+{
+  if (m_monitorPhaseResyncAtMs != expected_at_ms)
+    {
+      return;
+    }
+
+  auto const now_ms = preciseCurrentMSecsSinceEpoch ();
+  qint64 constexpr early_fire_guard_ms {40};
+  if (now_ms + early_fire_guard_ms < expected_at_ms)
+    {
+      auto const remaining_ms = qMax<qint64> (1, expected_at_ms - now_ms);
+      debugToFile (QString {"phaseSync   early reason:%1 mode:%2 now:%3 expected:%4 rearm:%5"}
+                     .arg (reason)
+                     .arg (m_mode)
+                     .arg (now_ms)
+                     .arg (expected_at_ms)
+                     .arg (remaining_ms));
+      QTimer::singleShot (int (qMin<qint64> (remaining_ms, std::numeric_limits<int>::max ())), this,
+                          [this, expected_at_ms, reason] {
+                            performEmbeddedMonitorPhaseResync (expected_at_ms, reason);
+                          });
+      return;
+    }
+
+  if (!needsEmbeddedMonitorPhaseResync ())
+    {
+      m_monitorPhaseResyncAtMs = -1;
+      return;
+    }
+
+  m_monitorPhaseResyncAtMs = -1;
+  debugToFile (QString {"phaseSync   apply reason:%1 mode:%2 now:%3 expected:%4 late:%5"}
+                 .arg (reason)
+                 .arg (m_mode)
+                 .arg (now_ms)
+                 .arg (expected_at_ms)
+                 .arg (now_ms - expected_at_ms));
+
+  bool const cancelled = cancelPendingInProcessDecode ();
+  if (cancelled || m_decoderBusy)
+    {
+      debugToFile (QString {"phaseSync   reset busy:%1 cancelled:%2"}
+                     .arg (m_decoderBusy)
+                     .arg (cancelled));
+    }
+  if (m_decoderBusy)
+    {
+      decodeBusy (false);
+    }
+
+  m_ihsym = 0;
+  m_kdone = 0;
+  m_k0 = 9999999;
+  m_npts8 = 0;
+  m_nutc0 = 999999;
+  m_dataAvailable = false;
+  m_bDecoded = false;
+  m_bFastDecodeCalled = false;
+  m_bFastDone = false;
+  m_startAnother = false;
+  m_dateTimeSeqStart = QDateTime {};
+  m_last_audio_frame_ms = 0;
+  m_ft8QueuedDecodePending = false;
+  m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
+  dec_data.params.kin = 0;
+  dec_data.params.newdat = 0;
+  dec_data.params.nagain = 0;
+  dec_data.params.nagainfil = 0;
+  dec_data.params.nzhsym = 0;
+
+  if (m_wideGraph)
+    {
+      m_wideGraph->restartTotalPower ();
+    }
+
+  Q_EMIT suspendAudioInputStream ();
+  QTimer::singleShot (0, this, [this, reason] {
+      if (!needsEmbeddedMonitorPhaseResync ())
+        {
+          return;
+        }
+      debugToFile (QString {"phaseSync   resume reason:%1 mode:%2"}
+                     .arg (reason)
+                     .arg (m_mode));
+      Q_EMIT resumeAudioInputStream ();
+      armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
+    });
 }
 
 void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
@@ -7474,6 +7757,36 @@ void MainWindow::on_monitorButton_clicked (bool checked)
 void MainWindow::monitor (bool state)
 {
   bool const activating = state && !m_monitoring;
+  bool const deactivating = !state && m_monitoring;
+  if (!state)
+    {
+      m_monitorPhaseResyncAtMs = -1;
+    }
+  auto const resetPendingDecoderState = [this] (QString const& phase) {
+    bool const cancelled = cancelPendingInProcessDecode ();
+    if (cancelled || m_decoderBusy)
+      {
+        debugToFile (QString {"monitor     %1 reset decoder busy:%2 cancelled:%3"}
+                       .arg (phase)
+                       .arg (m_decoderBusy)
+                       .arg (cancelled));
+      }
+    if (m_decoderBusy)
+      {
+        decodeBusy (false);
+      }
+  };
+
+  if (activating || deactivating)
+    {
+      // MON off/on can happen while an in-process decode worker is still active.
+      // If we keep the old busy/pending state, the next RX period may never arm
+      // a new decode and the UI looks frozen until restart.
+      resetPendingDecoderState (activating
+                                  ? QStringLiteral ("activate")
+                                  : QStringLiteral ("deactivate"));
+    }
+
   ui->monitorButton->setChecked (state);
   debugToFile (QString {"monitor     request:%1 activating:%2 tci:%3 tx:%4"}
                  .arg (state)
@@ -7499,7 +7812,7 @@ void MainWindow::monitor (bool state)
         auto const restart_or_resume = [this, activating] {
           if (activating) {
             debugToFile (QStringLiteral ("monitor     activating via settings-style audio reopen"));
-            restartConfiguredAudioStreams (false);
+            restartConfiguredAudioStreams (true);
           } else {
             debugToFile (QStringLiteral ("monitor     resuming existing audio input stream"));
             Q_EMIT resumeAudioInputStream ();
@@ -10366,28 +10679,46 @@ void MainWindow::msgAvgDecode2()
 
 void MainWindow::decode()                                       //decode()
 {
+  bool queueEmbeddedFt8FullSlot = false;
+
   if (m_decoderBusy) {
-    if (!(m_mode == "FT2"
-          && m_ft2DecodePending
-          && m_ft2DecodeWorker
-          && m_ft2DecodeThread.isRunning ()
-          && !m_diskData
-          && m_dateTimeSeqStart.isValid ())) {
+    bool const ft2MayPreempt =
+        (m_mode == "FT2"
+         && m_ft2DecodePending
+         && m_ft2DecodeWorker
+         && m_ft2DecodeThread.isRunning ()
+         && !m_diskData
+         && m_dateTimeSeqStart.isValid ());
+
+    // Embedded FT8 single-thread can overrun into the next 15 s boundary on
+    // dense slots. Keep one full-slot request queued instead of dropping the
+    // whole slot when the previous decode is still running.
+    queueEmbeddedFt8FullSlot =
+        (m_mode == "FT8"
+         && m_embeddedShellMode
+         && !m_diskData
+         && !m_multithreadFT8
+         && m_ihsym == m_hsymStop
+         && m_dateTimeSeqStart.isValid ());
+
+    if (!ft2MayPreempt && !queueEmbeddedFt8FullSlot) {
       return;                          //Don't start decoder if it's already busy.
     }
 
-    auto const t = m_dateTimeSeqStart.time ();
-    int pendingUtc = t.hour () * 100 + t.minute ();
-    if (m_TRperiod < 60.)
-      {
-        pendingUtc = pendingUtc * 100 + t.second ();
-      }
-    if (pendingUtc == m_ft2DecodePendingUtc)
-      {
-        return;
-      }
+    if (ft2MayPreempt) {
+      auto const t = m_dateTimeSeqStart.time ();
+      int pendingUtc = t.hour () * 100 + t.minute ();
+      if (m_TRperiod < 60.)
+        {
+          pendingUtc = pendingUtc * 100 + t.second ();
+        }
+      if (pendingUtc == m_ft2DecodePendingUtc)
+        {
+          return;
+        }
 
-    cancelPendingInProcessDecode ();
+      cancelPendingInProcessDecode ();
+    }
   }
   m_fetched=0;
   QDateTime now = QDateTime::currentDateTimeUtc ();
@@ -10431,10 +10762,12 @@ void MainWindow::decode()                                       //decode()
   dec_data.params.nfqso=m_wideGraph->rxFreq();
   dec_data.params.nftx = ui->TxFreqSpinBox->value ();
   qint32 depth {m_ndepth};
-  if (!ui->actionInclude_averaging->isVisible ()) depth &= ~16;
-  if (!ui->actionInclude_correlation->isVisible ()) depth &= ~32;
-  if (!ui->actionEnable_AP_DXcall->isVisible ()) depth &= ~64;
-  if (!ui->actionAuto_Clear_Avg->isVisible()) depth &= ~128;
+  if (!m_embeddedShellMode) {
+    if (!ui->actionInclude_averaging->isVisible ()) depth &= ~16;
+    if (!ui->actionInclude_correlation->isVisible ()) depth &= ~32;
+    if (!ui->actionEnable_AP_DXcall->isVisible ()) depth &= ~64;
+    if (!ui->actionAuto_Clear_Avg->isVisible()) depth &= ~128;
+  }
   dec_data.params.ndepth=depth;
   dec_data.params.n2pass=1;
   if(m_config.twoPass()) dec_data.params.n2pass=2;
@@ -10447,7 +10780,7 @@ void MainWindow::decode()                                       //decode()
   dec_data.params.nfSplit=m_wideGraph->Fmin();  // Not used any more?
   if(dec_data.params.nfSplit==8) dec_data.params.nfSplit=1;
 
-  dec_data.params.nfb=m_wideGraph->Fmax();
+  dec_data.params.nfb=effectiveDecodeFmax();
   if((m_mode=="FT8" or m_mode=="FT2") and SpecOp::HOUND==m_specOp and !ui->cbRxAll->isChecked() and
      !m_config.superFox()) dec_data.params.nfb=1000;
   if((m_mode=="FT8" or m_mode=="FT2") and SpecOp::FOX == m_specOp ) dec_data.params.nfqso=200;
@@ -10581,7 +10914,7 @@ void MainWindow::decode()                                       //decode()
     if(m_diskData) dec_data.params.ndiskdat=1;
     dec_data.params.nfa=m_wideGraph->nStartFreq();
     dec_data.params.nfSplit=m_wideGraph->Fmin();
-    dec_data.params.nfb=m_wideGraph->Fmax();
+    dec_data.params.nfb=effectiveDecodeFmax();
     dec_data.params.ntol=50; // this value is not being used
     dec_data.params.ntrperiod=int(m_TRperiod);
     dec_data.params.lwidedxcsearch=m_FT8WideDxCallSearch ? 1 : 0;
@@ -10637,7 +10970,11 @@ void MainWindow::decode()                                       //decode()
           requestInProcessJt9FastDecode ();
         }
       } else {
-        requestSubprocessDecodeStart (m_ihsym);
+        if (queueEmbeddedFt8FullSlot && m_mode == "FT8") {
+          queueInProcessFt8Decode ();
+        } else {
+          requestSubprocessDecodeStart (m_ihsym);
+        }
       }
   if((m_mode=="FT2" or m_mode=="FT4" or (m_mode=="FT8" and m_ihsym==41) or m_diskData) and
      m_ActiveStationsWidget != NULL) {
@@ -11278,6 +11615,7 @@ void MainWindow::callSandP2(int n)
   if(m_mode=="Q65" and m_specOp==SpecOp::Q65_PILEUP and n < 40) {
     // This code is for 6m EME DXpedition operator
     w=m_callers[n].split(' ', SkipEmptyParts);
+    if (w.size() < 4) return;
     m_deCall=w[2];
     if(bCtrl) {
       // Remove this call from q3list.
@@ -11299,6 +11637,7 @@ void MainWindow::callSandP2(int n)
   }
 
   if(m_mode=="Q65") {
+    if (w.size() < 7) return;
     if(!bCtrl) {                          //Do not reset m_freqNominal if CTRL was down
       double kHz=w[1].toDouble();
       int nMHz=m_freqNominal/1000000;
@@ -11309,6 +11648,7 @@ void MainWindow::callSandP2(int n)
     m_txFirst=(w[6]=="0");
 //    ui->TxFreqSpinBox->setValue(1500);
   } else {
+    if (w.size() < 6) return;
     m_deCall=w[0];
     m_deGrid=w[1];
     ui->RxFreqSpinBox->setValue(w[4].toInt());
@@ -11454,6 +11794,11 @@ bool MainWindow::cancelPendingInProcessDecode ()
   if (m_ft8DecodePending) {
     ++m_ft8DecodeSerial;
     m_ft8DecodePending = false;
+    cancelled = true;
+  }
+  if (m_ft8QueuedDecodePending) {
+    m_ft8QueuedDecodePending = false;
+    m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
     cancelled = true;
   }
 
@@ -11633,8 +11978,30 @@ void MainWindow::requestInProcessFt8Decode ()
     return;
   }
 
+  dispatchFt8DecodeRequest (buildFt8DecodeRequest ());
+}
+
+void MainWindow::queueInProcessFt8Decode ()
+{
+  if (m_mode != "FT8") {
+    return;
+  }
+
+  if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
+    qWarning() << "FT8 decode worker unavailable";
+    return;
+  }
+
+  // Preserve the just-finished 15 s slot instead of dropping it when the
+  // previous embedded FT8 decode is still running. The queued request is
+  // launched as soon as the current worker result is consumed.
+  m_ft8QueuedDecodeRequest = buildFt8DecodeRequest ();
+  m_ft8QueuedDecodePending = true;
+}
+
+decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
+{
   decodium::ft8::DecodeRequest request;
-  request.serial = ++m_ft8DecodeSerial;
   request.audio.resize (15 * RX_SAMPLE_RATE);
   std::copy_n (dec_data.d2, request.audio.size (), request.audio.begin ());
   request.nqsoprogress = qBound (0, int (dec_data.params.nQSOProgress), 6);
@@ -11649,13 +12016,24 @@ void MainWindow::requestInProcessFt8Decode ()
   request.ncontest = qBound (0, int (dec_data.params.nexp_decode & 7), 16);
   request.nagain = dec_data.params.nagain ? 1 : 0;
   request.lft8apon = dec_data.params.lft8apon ? 1 : 0;
+  request.lmultift8 = dec_data.params.lmultift8 ? 1 : 0;
   request.lapcqonly = dec_data.params.lapcqonly ? 1 : 0;
   request.napwid = qBound (0, int (dec_data.params.napwid), 200);
   request.ldiskdat = dec_data.params.ndiskdat ? 1 : 0;
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
   request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
   request.hisgrid = QByteArray (dec_data.params.hisgrid, int (sizeof dec_data.params.hisgrid));
+  return request;
+}
 
+void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request)
+{
+  if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
+    qWarning() << "FT8 decode worker unavailable";
+    return;
+  }
+
+  request.serial = ++m_ft8DecodeSerial;
   m_ft8DecodePending = true;
   m_decodedTransportQueue.clear ();
   m_decodeStartMs = QDateTime::currentMSecsSinceEpoch ();
@@ -25468,7 +25846,9 @@ void MainWindow::write_all(QString txRx, QString message)
     t = t.asprintf("%5d",ui->TxFreqSpinBox->value());
     if (txRx=="Tx") msg="   0  0.0" + t + " " + message;
     auto time = QDateTime::currentDateTimeUtc ();
-    if( (txRx=="Rx" || txRx=="Ck") && !m_bFastMode ) time=m_dateTimeSeqStart;
+    if ((txRx=="Rx" || txRx=="Ck") && !m_bFastMode) {
+      time = decode_line_timestamp_for_log (m_dateTimeSeqStart.isValid () ? m_dateTimeSeqStart : time, message);
+    }
 
   if (txRx=="Rx") {
      t = t.asprintf("%10.3f ",m_freqNominalPeriod/1.e6);   // prevent writing of wrong frequencies
@@ -25633,6 +26013,49 @@ void MainWindow::maybe_apply_startup_mode_from_rig_frequency (Frequency dial_fre
 
 void MainWindow::set_mode (QString const& mode)
 {
+  auto const requested_mode = mode.trimmed().toUpper();
+  auto const previous_mode = m_mode.toUpper();
+  bool const embedded_hot_mode_switch =
+      m_embeddedShellMode
+      && m_monitoring
+      && !m_tci_audio
+      && !requested_mode.isEmpty()
+      && requested_mode != previous_mode;
+
+  if (embedded_hot_mode_switch)
+    {
+      bool const cancelled = cancelPendingInProcessDecode ();
+      if (cancelled || m_decoderBusy || previous_mode == QStringLiteral ("WSPR") || previous_mode == QStringLiteral ("FST4W"))
+        {
+          debugToFile (QString {"modeSwitch  pre-reset from:%1 to:%2 busy:%3 cancelled:%4"}
+                         .arg (previous_mode)
+                         .arg (requested_mode)
+                         .arg (m_decoderBusy)
+                         .arg (cancelled));
+        }
+      if (m_decoderBusy)
+        {
+          decodeBusy (false);
+        }
+      m_ntr = 0;
+      m_ihsym = 0;
+      m_kdone = 0;
+      m_npts8 = 0;
+      m_bTxTime = false;
+      m_bFastDone = false;
+      m_bDecoded = false;
+      m_bFastDecodeCalled = false;
+      m_nWSPRdecodes = 0;
+      m_RxLog = 0;
+      m_startAnother = false;
+      m_dataAvailable = false;
+      m_rxDone = false;
+      m_dialFreqRxWSPR = 0;
+      m_last_audio_frame_ms = 0;
+      ui->DecodeButton->setChecked (false);
+      Q_EMIT suspendAudioInputStream ();
+    }
+
   if ("RTTY" == mode) {
     if (!ui->actionRTTY || !ui->actionRTTY->isVisible ()) return;
     if ("RTTY" != m_mode) on_actionRTTY_triggered ();
@@ -25682,6 +26105,25 @@ void MainWindow::set_mode (QString const& mode)
   }
 
   initExternalCtrl();    //avt 12/5/20
+
+  if (embedded_hot_mode_switch)
+    {
+      debugToFile (QString {"modeSwitch  cycle monitor from:%1 to:%2 monitor:%3"}
+                     .arg (previous_mode)
+                     .arg (m_mode)
+                     .arg (m_monitoring));
+      bool const restoreMonitor = m_monitoring;
+      if (restoreMonitor)
+        {
+          monitor (false);
+          monitor (true);
+        }
+      else
+        {
+          restartConfiguredAudioStreams (true);
+          armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
+        }
+    }
 }
 
 void MainWindow::configActiveStations()
@@ -26190,6 +26632,7 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
   m_ft8DecodePending = false;
 
   if (m_mode != "FT8") {
+    m_ft8QueuedDecodePending = false;
     if (m_decoderBusy) {
       decodeBusy (false);
     }
@@ -26203,6 +26646,14 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
   }
 
   readFromStdout ();
+
+  if (m_ft8QueuedDecodePending) {
+    auto request = m_ft8QueuedDecodeRequest;
+    m_ft8QueuedDecodePending = false;
+    m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
+    dispatchFt8DecodeRequest (std::move (request));
+    return;
+  }
 
   decodeDone ();
 }
@@ -29294,9 +29745,15 @@ void MainWindow::onRemoteSetMonitoringRequested(QString const& commandId, bool e
       showStatusMessage(tr("Remote Monitoring ignored: cannot enable while transmitting"));
       return;
     }
-  if (ui->monitorButton->isChecked() != enabled)
+
+  bool const checkboxMismatch = (ui->monitorButton->isChecked() != enabled);
+  bool const stateMismatch = (m_monitoring != enabled);
+  if (checkboxMismatch)
     {
       ui->monitorButton->setChecked(enabled);
+    }
+  if (checkboxMismatch || stateMismatch)
+    {
       on_monitorButton_clicked(enabled);
     }
   showStatusMessage(enabled ? tr("Remote Monitoring enabled") : tr("Remote Monitoring disabled"));

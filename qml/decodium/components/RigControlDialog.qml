@@ -208,6 +208,26 @@ Dialog {
                 font.pixelSize: 10
                 opacity: 0.6
             }
+
+            // Banner: porta seriale occupata da altro software (tipicamente OmniRig)
+            Rectangle {
+                Layout.fillWidth: true
+                visible: bridge.lastCatError.indexOf("occupata") !== -1
+                color: Qt.rgba(1.0, 0.65, 0.0, 0.15)
+                border.color: Qt.rgba(1.0, 0.65, 0.0, 0.6)
+                border.width: 1
+                radius: 6
+                implicitHeight: bannerText.implicitHeight + 16
+                Text {
+                    id: bannerText
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    wrapMode: Text.WordWrap
+                    color: textPrimary
+                    font.pixelSize: 11
+                    text: bridge.lastCatError + "\nSuggerimento: chiudi OmniRig dalla tray icon di Windows, poi premi di nuovo Connetti."
+                }
+            }
         }
 
         // ── Tab bar: Principale / Avanzate ────────────────────────────────

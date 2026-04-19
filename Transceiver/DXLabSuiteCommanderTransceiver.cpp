@@ -293,7 +293,8 @@ void DXLabSuiteCommanderTransceiver::do_mode (MODE m)
 
 void DXLabSuiteCommanderTransceiver::do_poll ()
 {
-  auto reply = command_with_reply ("<command:10>CmdGetFreq<parameters:0>");
+  auto reply = command_with_reply ("<command:10>CmdGetFreq<parameters:0>", true);
+  if (reply.isEmpty ()) return;
   if (0 == reply.indexOf ("<CmdFreq:"))
     {
       auto f = string_to_frequency (reply.mid (reply.indexOf ('>') + 1));
@@ -314,7 +315,8 @@ void DXLabSuiteCommanderTransceiver::do_poll ()
 
   if (state ().split ())
     {
-      reply = command_with_reply ("<command:12>CmdGetTXFreq<parameters:0>");
+      reply = command_with_reply ("<command:12>CmdGetTXFreq<parameters:0>", true);
+      if (reply.isEmpty ()) return;
       if (0 == reply.indexOf ("<CmdTXFreq:"))
         {
           auto f = string_to_frequency (reply.mid (reply.indexOf ('>') + 1));
@@ -334,7 +336,8 @@ void DXLabSuiteCommanderTransceiver::do_poll ()
         }
     }
 
-  reply = command_with_reply ("<command:12>CmdSendSplit<parameters:0>");
+  reply = command_with_reply ("<command:12>CmdSendSplit<parameters:0>", true);
+  if (reply.isEmpty ()) return;
   if (0 == reply.indexOf ("<CmdSplit:"))
     {
       auto split = reply.mid (reply.indexOf ('>') + 1);
@@ -364,7 +367,8 @@ void DXLabSuiteCommanderTransceiver::do_poll ()
 auto DXLabSuiteCommanderTransceiver::get_mode () -> MODE
 {
   MODE m {UNK};
-  auto reply = command_with_reply ("<command:11>CmdSendMode<parameters:0>");
+  auto reply = command_with_reply ("<command:11>CmdSendMode<parameters:0>", true);
+  if (reply.isEmpty ()) return UNK;
   if (0 == reply.indexOf ("<CmdMode:"))
     {
       auto mode = reply.mid (reply.indexOf ('>') + 1);
@@ -436,7 +440,7 @@ void DXLabSuiteCommanderTransceiver::simple_command (QString const& cmd)
     }
 }
 
-QString DXLabSuiteCommanderTransceiver::command_with_reply (QString const& cmd)
+QString DXLabSuiteCommanderTransceiver::command_with_reply (QString const& cmd, bool tolerate_timeout)
 {
   if (!commander_) return QString {};
 
@@ -470,6 +474,12 @@ QString DXLabSuiteCommanderTransceiver::command_with_reply (QString const& cmd)
 
   if (!replied)
     {
+      if (tolerate_timeout)
+        {
+          CAT_WARNING (cmd << "retries exhausted, keeping connection alive");
+          return {};
+        }
+
       CAT_ERROR (cmd << "retries exhausted");
       throw error {
         tr ("DX Lab Suite Commander retries exhausted sending command \"%1\"")

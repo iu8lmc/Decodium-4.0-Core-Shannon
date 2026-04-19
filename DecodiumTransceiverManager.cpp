@@ -12,11 +12,82 @@
 #include <QSettings>
 #include <QMetaObject>
 #include <QDebug>
+#include <QRegularExpression>
 #include <atomic>
 #include <stdexcept>
 
 namespace
 {
+// Estrae il nome di una porta COM (es. "COM5") dal blob di errore hamlib
+// che può contenere path tipo "\\.\COM5" o "/dev/ttyUSB0".
+QString extractPortNameFromReason(QString const& reason)
+{
+    static QRegularExpression const rxWin(QStringLiteral(R"((COM\d+))"),
+                                          QRegularExpression::CaseInsensitiveOption);
+    auto m = rxWin.match(reason);
+    if (m.hasMatch())
+        return m.captured(1).toUpper();
+    static QRegularExpression const rxUnix(QStringLiteral(R"((/dev/[A-Za-z0-9._-]+))"));
+    m = rxUnix.match(reason);
+    if (m.hasMatch())
+        return m.captured(1);
+    return QString();
+}
+
+// Hamlib 4.x pollute rigerror() con l'ultimo messaggio rig_debug() invece
+// dello strerror del codice di errore. Quando un'operazione fallisce, il
+// motivo mostrato all'utente può essere una stringa di debug interna tipo
+// "read_string_generic called, rxmax=129 direct=1, expected_len=1" — che
+// non è un errore vero ma solo trace di I/O seriale. Questa funzione la
+// rileva e la sostituisce con un testo piu' comprensibile.
+QString sanitizeHamlibFailure(QString const& reason)
+{
+    // Prima cerchiamo pattern di porta seriale occupata (il dump hamlib
+    // tipicamente contiene tutto il trace di debug seguito dall'errore
+    // reale "serial port \\.\COMx is already open" / "Access denied").
+    static QStringList const busyMarkers = {
+        QStringLiteral("is already open"),
+        QStringLiteral("Access denied"),
+        QStringLiteral("Permission denied"),
+        QStringLiteral("returning2(-22)"),
+        QStringLiteral("EACCES"),
+        QStringLiteral("EBUSY"),
+    };
+    for (auto const& marker : busyMarkers) {
+        if (reason.contains(marker, Qt::CaseInsensitive)) {
+            QString port = extractPortNameFromReason(reason);
+            if (port.isEmpty()) {
+                return QObject::tr(
+                    "Porta seriale occupata da un altro software "
+                    "(probabilmente OmniRig, WSJT-X, FLDigi o un terminale seriale). "
+                    "Chiudi il programma che sta usando la porta e riprova.");
+            }
+            return QObject::tr(
+                "Porta %1 occupata da un altro software "
+                "(probabilmente OmniRig, WSJT-X, FLDigi o un terminale seriale). "
+                "Chiudi il programma che sta usando la porta e riprova.").arg(port);
+        }
+    }
+
+    static QStringList const debugMarkers = {
+        QStringLiteral("read_string_generic"),
+        QStringLiteral("write_block"),
+        QStringLiteral("tn_"),
+        QStringLiteral("rig_flush"),
+        QStringLiteral("serial_flush"),
+        QStringLiteral("ser_set_"),
+        QStringLiteral("ser_get_"),
+    };
+    for (auto const& marker : debugMarkers) {
+        if (reason.contains(marker, Qt::CaseInsensitive)) {
+            return QObject::tr("Comunicazione CAT interrotta con il rig. "
+                               "Verifica cavo USB, porta COM, baud rate e che "
+                               "il rig sia acceso. (trace hamlib: %1)").arg(reason);
+        }
+    }
+    return reason;
+}
+
 QString normalizeDevicePath(QString value)
 {
     value = value.trimmed();
@@ -401,7 +472,7 @@ void DecodiumTransceiverManager::connectRig()
             this,
             [this](QString const& reason) {
                 d->desired.online(false);
-                emit errorOccurred("CAT failure: " + reason);
+                emit errorOccurred("CAT failure: " + sanitizeHamlibFailure(reason));
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
             },
             Qt::QueuedConnection);

@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QList>
 #include <QSerialPort>
 #include <QTimer>
 
@@ -25,6 +26,7 @@ class DecodiumCatManager : public QObject
     Q_PROPERTY(QString tciPort      READ tciPort         WRITE setTciPort       NOTIFY tciPortChanged)
     Q_PROPERTY(QString pttMethod    READ pttMethod       WRITE setPttMethod     NOTIFY pttMethodChanged)
     Q_PROPERTY(QString pttPort      READ pttPort         WRITE setPttPort       NOTIFY pttPortChanged)
+    Q_PROPERTY(int civAddress       READ civAddress      WRITE setCivAddress    NOTIFY civAddressChanged)
     Q_PROPERTY(QString splitMode    READ splitMode       WRITE setSplitMode     NOTIFY splitModeChanged)
     Q_PROPERTY(int pollInterval     READ pollInterval    WRITE setPollInterval  NOTIFY pollIntervalChanged)
     Q_PROPERTY(QString portType     READ portType        CONSTANT)
@@ -47,7 +49,7 @@ public:
 
     bool        connected()     const { return m_connected; }
     QString     rigName()       const { return m_rigName; }
-    void        setRigName(const QString& v)     { if (m_rigName != v)     { m_rigName = v;     emit rigNameChanged(); } }
+    void        setRigName(const QString& v);
     QString     serialPort()    const { return m_serialPort; }
     void        setSerialPort(const QString& v)  { if (m_serialPort != v)  { m_serialPort = v;  emit serialPortChanged(); } }
     int         baudRate()      const { return m_baudRate; }
@@ -74,6 +76,8 @@ public:
     void        setPttMethod(const QString& v);
     QString     pttPort()       const { return m_pttPort; }
     void        setPttPort(const QString& v)     { if (m_pttPort != v)     { m_pttPort = v;     emit pttPortChanged(); } }
+    int         civAddress()    const { return m_civAddress; }
+    void        setCivAddress(int v)             { if (m_civAddress != v)  { m_civAddress = v;  emit civAddressChanged(); } }
     QString     splitMode()     const { return "none"; }
     void        setSplitMode(const QString&)     {}
     int         pollInterval()  const { return m_pollInterval; }
@@ -102,7 +106,7 @@ public:
 
     Q_INVOKABLE void setRigFrequency(double hz);
     Q_INVOKABLE void setRigTxFrequency(double) {}
-    Q_INVOKABLE void setRigMode(const QString&) {}
+    Q_INVOKABLE void setRigMode(const QString& mode);
     Q_INVOKABLE void setRigPtt(bool on);
 
 public slots:
@@ -128,6 +132,7 @@ signals:
     void tciPortChanged();
     void pttMethodChanged();
     void pttPortChanged();
+    void civAddressChanged();
     void splitModeChanged();
     void pollIntervalChanged();
     void portListChanged();
@@ -147,10 +152,12 @@ private slots:
 
 private:
     void enforceCatSerialDefaults();
+    void applyRigDefaults(const QString& rigName);
     void sendCommand(const QByteArray& cmd);
     void processResponse(const QByteArray& resp);
     QString parseMode(char code);
     void applyPollInterval();
+    bool tryNextAutoBaud();     // ritorna true se ha avviato un nuovo tentativo
 
     QSerialPort* m_serial      {nullptr};
     QTimer*      m_pollTimer   {nullptr};
@@ -172,6 +179,7 @@ private:
     QString m_tciPort     {};
     QString m_pttMethod   {"CAT"};
     QString m_pttPort     {"CAT"};
+    int     m_civAddress  {0};       // ICOM CI-V address (0 = non-ICOM)
     int     m_pollInterval{2};
     double  m_frequency   {0.0};
     QString m_mode;
@@ -180,4 +188,10 @@ private:
     bool    m_catAutoConnect {false};
     bool    m_audioAutoStart {false};
     QSerialPort* m_pttSerial {nullptr};  // porta separata per PTT DTR/RTS
+
+    // Auto-baud detection: si avvia alla connessione, itera su candidate bauds
+    // finche' non arriva una risposta o la lista e' esaurita.
+    QList<int> m_autoBaudCandidates;
+    int        m_autoBaudIndex  {-1};
+    bool       m_autoBaudActive {false};
 };

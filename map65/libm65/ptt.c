@@ -18,7 +18,7 @@ int ptt_(int *nport, int *ntx, int *iptt)
     if (portNameLen < 0 || portNameLen >= (int)sizeof(s)) {
       return 1;
     }
-    hFile=CreateFile(TEXT(s),GENERIC_WRITE,0,NULL,OPEN_EXISTING,
+    hFile=CreateFileA(s,GENERIC_WRITE,0,NULL,OPEN_EXISTING,
 		     FILE_ATTRIBUTE_NORMAL,NULL);
     if(hFile==INVALID_HANDLE_VALUE) {
       //      printf("PTT: Cannot open COM port %d.\n",*nport);

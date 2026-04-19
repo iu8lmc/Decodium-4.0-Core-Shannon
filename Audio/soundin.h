@@ -58,6 +58,7 @@ private:
   QScopedPointer<QAudioSource> m_stream;
   QPointer<AudioDevice> m_sink;
   qint64 cummulative_lost_usec_;
+  qint64 last_dropped_warning_ms_ {-1};
   float m_inputGain {1.0f};
   QString m_deviceDescription;
   int m_sampleRate {0};

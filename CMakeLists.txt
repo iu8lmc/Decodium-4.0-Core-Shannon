@@ -1324,7 +1324,7 @@ target_compile_options (wsjt_qt PRIVATE -Wno-deprecated-declarations)
 target_compile_definitions (wsjt_qt PUBLIC UDP_STATIC_DEFINE)
 target_link_libraries (wsjt_qt Hamlib::Hamlib Boost::log qcp Qt6::Widgets Qt6::Network Qt6::Sql Qt6::WebSockets Qt6::Core5Compat)
 if (WIN32)
-  target_link_libraries (wsjt_qt Qt6::ActiveQt)
+  target_link_libraries (wsjt_qt Qt6::ActiveQt crypt32)
 endif (WIN32)
 
 # wsjt_fort is an INTERFACE library: propagate wsjt_qt and wsjt_cxx transitively
@@ -1488,6 +1488,7 @@ add_executable (decodium_qml
   main_qml.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodiumDiagnostics.cpp
   DecodiumPropagationManager.cpp
   DecodiumPropagationManager.h
   DecodiumLegacyBackend.cpp
@@ -1781,6 +1782,7 @@ install (FILES
 
 install (FILES
   cty.dat
+  CALL3.TXT
   cty.dat_copyright.txt
   grid.dat
   sat.dat

@@ -28,6 +28,7 @@ struct DecodeRequest
   int ncontest {0};
   int nagain {0};
   int lft8apon {0};
+  int lmultift8 {0};
   int lapcqonly {0};
   int napwid {50};
   int ldiskdat {0};

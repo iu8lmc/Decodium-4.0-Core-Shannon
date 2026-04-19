@@ -17,7 +17,10 @@ ApplicationWindow {
     minimumWidth: 1200
     minimumHeight: 700
     visible: true
-    title: "Decodium 4.0 — " + bridge.mode + " — " + bridge.callsign
+    visibility: Window.Windowed
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+         | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
 
@@ -26,18 +29,24 @@ ApplicationWindow {
         if (Qt.application && Qt.application.screens) {
             for (var i = 0; i < Qt.application.screens.length; ++i) {
                 var screen = Qt.application.screens[i]
-                if (!screen)
-                    continue
-                var g = screen.availableGeometry
-                geometries.push({ x: g.x, y: g.y, width: g.width, height: g.height })
+                if (!screen) continue
+                // Qt 6.x: availableGeometry may not exist on all backends;
+                // fall back to virtualGeometry, then to width/height properties.
+                var g = screen.availableGeometry || screen.virtualGeometry
+                if (g && g.width > 0) {
+                    geometries.push({ x: g.x, y: g.y, width: g.width, height: g.height })
+                } else if (screen.width > 0 && screen.height > 0) {
+                    geometries.push({ x: screen.virtualX || 0, y: screen.virtualY || 0,
+                                      width: screen.width, height: screen.height })
+                }
             }
         }
         if (geometries.length === 0) {
             geometries.push({
                 x: 0,
                 y: 0,
-                width: Screen.desktopAvailableWidth,
-                height: Screen.desktopAvailableHeight
+                width: Screen.desktopAvailableWidth || 1920,
+                height: Screen.desktopAvailableHeight || 1080
             })
         }
         return geometries
@@ -67,7 +76,9 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        var state = bridge.loadWindowState("mainWindow")
+        console.log("Main.qml Component.onCompleted — restoring window state")
+        var state = {}
+        try { state = bridge.loadWindowState("mainWindow") || {} } catch(e) { console.log("loadWindowState error: " + e) }
         if (state.width !== undefined && state.width > 0) width = state.width
         if (state.height !== undefined && state.height > 0) height = state.height
         var pos
@@ -83,6 +94,13 @@ ApplicationWindow {
         x = pos.x
         y = pos.y
         windowStateRestoreInProgress = false
+
+        // Force window visible on Windows — some WM/GPU combos need explicit calls
+        visible = true
+        show()
+        raise()
+        requestActivate()
+        console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
     // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight
@@ -1528,6 +1546,34 @@ ApplicationWindow {
 
                             ToolTip.visible: settingsMA.containsMouse
                             ToolTip.text: "Settings"
+                        }
+
+                        // BUG REPORT
+                        Rectangle {
+                            Layout.preferredWidth: 36
+                            Layout.fillHeight: true
+                            radius: 3
+                            color: bugMA.containsMouse ? Qt.rgba(1, 0.47, 0.08, 0.2) :
+                                   (bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? Qt.rgba(1, 0.27, 0.2, 0.25) : "transparent")
+                            border.color: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? "#ff4444" : "transparent"
+                            border.width: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? 1 : 0
+                            Label {
+                                anchors.centerIn: parent
+                                text: bridge.diagnostics && bridge.diagnostics.errorCount > 0
+                                      ? bridge.diagnostics.errorCount : ""
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: "#ff4444"
+                            }
+                            MouseArea {
+                                id: bugMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bugReportDialog.open()
+                            }
+                            ToolTip.visible: bugMA.containsMouse
+                            ToolTip.text: "Bug Report"
                         }
 
                         // REC
@@ -2999,20 +3045,25 @@ ApplicationWindow {
                     Connections {
                         target: bridge
                         function onDecodeListChanged() {
+                            var stickBandTail = evenPeriodList ? evenPeriodList.isNearTail() : true
+                            var stickFloatingTail = period1FloatingList ? period1FloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             var src = bridge.decodeList
-                            var prevCount = decodePanel.lastSyncCount
-                            if (src.length < prevCount) {
-                                // Lista troncata: refresh completo
-                                decodePanel.allDecodes = src
-                            } else if (src.length > prevCount) {
-                                // Solo nuovi: aggiorna riferimento (QML ListView diff)
-                                decodePanel.allDecodes = src
-                            }
+                            decodePanel.allDecodes = src
                             decodePanel.lastSyncCount = src.length
+                            if (stickBandTail && evenPeriodList)
+                                evenPeriodList.forceTailFollow()
+                            if (stickFloatingTail && period1FloatingList)
+                                period1FloatingList.forceTailFollow()
                         }
                         function onRxDecodeListChanged() {
+                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
+                            if (stickRxTail && rxFrequencyList)
+                                rxFrequencyList.forceTailFollow()
+                            if (stickFloatingRxTail && rxFrequencyFloatingList)
+                                rxFrequencyFloatingList.forceTailFollow()
                         }
                     }
 
@@ -3314,7 +3365,7 @@ ApplicationWindow {
                             SplitView.preferredWidth: 400
                             SplitView.minimumWidth: 360
                             readonly property bool compactColumns: width < 540
-                            readonly property int utcColumnWidth: compactColumns ? 48 : 55
+                            readonly property int utcColumnWidth: compactColumns ? 66 : 86
                             readonly property int dbColumnWidth: compactColumns ? 26 : 30
                             readonly property int dtColumnWidth: compactColumns ? 32 : 35
                             readonly property int freqColumnWidth: compactColumns ? 42 : 45
@@ -3575,9 +3626,21 @@ ApplicationWindow {
                                         cacheBuffer: 3000
                                         interactive: true
                                         property bool followTail: true
+                                        function isNearTail() {
+                                            return contentHeight <= height + 2
+                                                || contentY >= Math.max(0, contentHeight - height - 8)
+                                        }
                                         function updateFollowTail() {
-                                            followTail = contentHeight <= height + 2
-                                                      || contentY >= Math.max(0, contentHeight - height - 8)
+                                            followTail = isNearTail()
+                                        }
+                                        function forceTailFollow() {
+                                            followTail = true
+                                            Qt.callLater(function() {
+                                                if (!evenPeriodList)
+                                                    return
+                                                evenPeriodList.positionViewAtEnd()
+                                                evenPeriodList.followTail = true
+                                            })
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
                                             positionViewAtEnd()
@@ -3587,10 +3650,7 @@ ApplicationWindow {
                                         onHeightChanged: updateFollowTail()
                                         onCountChanged: {
                                             if (followTail) {
-                                                Qt.callLater(function() {
-                                                    positionViewAtEnd()
-                                                    updateFollowTail()
-                                                })
+                                                forceTailFollow()
                                             }
                                         }
 
@@ -3707,7 +3767,7 @@ ApplicationWindow {
                             SplitView.minimumWidth: 260
                             readonly property bool compactColumns: width < 430
                             readonly property bool compactHeader: width < 350
-                            readonly property int utcColumnWidth: compactColumns ? 58 : 72
+                            readonly property int utcColumnWidth: compactColumns ? 66 : 86
                             readonly property int dbColumnWidth: compactColumns ? 26 : 30
                             readonly property int dtColumnWidth: compactColumns ? 30 : 35
                             readonly property int gapColumnWidth: compactColumns ? 4 : 6
@@ -3909,7 +3969,35 @@ ApplicationWindow {
                                         anchors.margins: 2
                                         clip: true
                                         spacing: 1
-                                        onCountChanged: positionViewAtEnd()
+                                        interactive: true
+                                        property bool followTail: true
+                                        function isNearTail() {
+                                            return contentHeight <= height + 2
+                                                || contentY >= Math.max(0, contentHeight - height - 8)
+                                        }
+                                        function updateFollowTail() {
+                                            followTail = isNearTail()
+                                        }
+                                        function forceTailFollow() {
+                                            followTail = true
+                                            Qt.callLater(function() {
+                                                if (!rxFrequencyList)
+                                                    return
+                                                rxFrequencyList.positionViewAtEnd()
+                                                rxFrequencyList.followTail = true
+                                            })
+                                        }
+                                        Component.onCompleted: Qt.callLater(function() {
+                                            positionViewAtEnd()
+                                            updateFollowTail()
+                                        })
+                                        onContentYChanged: updateFollowTail()
+                                        onHeightChanged: updateFollowTail()
+                                        onCountChanged: {
+                                            if (followTail) {
+                                                forceTailFollow()
+                                            }
+                                        }
 
                                         // Reattivo: si aggiorna quando la decodeList cambia
                                         property int _ver: decodePanel.decodeListVersion
@@ -4537,6 +4625,11 @@ ApplicationWindow {
     // Settings Dialog (sostituisce il legacy WSJT-X settings)
     SettingsDialog {
         id: settingsDialog
+    }
+
+    // Bug Report Dialog — in-app diagnostics and issue submission
+    BugReportDialog {
+        id: bugReportDialog
     }
 
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato
@@ -6917,9 +7010,21 @@ ApplicationWindow {
                         cacheBuffer: 3000
                         interactive: true
                         property bool followTail: true
+                        function isNearTail() {
+                            return contentHeight <= height + 2
+                                || contentY >= Math.max(0, contentHeight - height - 8)
+                        }
                         function updateFollowTail() {
-                            followTail = contentHeight <= height + 2
-                                      || contentY >= Math.max(0, contentHeight - height - 8)
+                            followTail = isNearTail()
+                        }
+                        function forceTailFollow() {
+                            followTail = true
+                            Qt.callLater(function() {
+                                if (!period1FloatingList)
+                                    return
+                                period1FloatingList.positionViewAtEnd()
+                                period1FloatingList.followTail = true
+                            })
                         }
                         Component.onCompleted: Qt.callLater(function() {
                             positionViewAtEnd()
@@ -6929,10 +7034,7 @@ ApplicationWindow {
                         onHeightChanged: updateFollowTail()
                         onCountChanged: {
                             if (followTail) {
-                                Qt.callLater(function() {
-                                    positionViewAtEnd()
-                                    updateFollowTail()
-                                })
+                                forceTailFollow()
                             }
                         }
                         ScrollBar.vertical: ScrollBar { active: true }
@@ -6947,7 +7049,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 80 }
                                 Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
                                 Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                             }
@@ -7152,10 +7254,40 @@ ApplicationWindow {
                     clip: true
 
                     ListView {
+                        id: rxFrequencyFloatingList
                         anchors.fill: parent
                         anchors.margins: 4
                         clip: true
                         spacing: 1
+                        interactive: true
+                        property bool followTail: true
+                        function isNearTail() {
+                            return contentHeight <= height + 2
+                                || contentY >= Math.max(0, contentHeight - height - 8)
+                        }
+                        function updateFollowTail() {
+                            followTail = isNearTail()
+                        }
+                        function forceTailFollow() {
+                            followTail = true
+                            Qt.callLater(function() {
+                                if (!rxFrequencyFloatingList)
+                                    return
+                                rxFrequencyFloatingList.positionViewAtEnd()
+                                rxFrequencyFloatingList.followTail = true
+                            })
+                        }
+                        Component.onCompleted: Qt.callLater(function() {
+                            positionViewAtEnd()
+                            updateFollowTail()
+                        })
+                        onContentYChanged: updateFollowTail()
+                        onHeightChanged: updateFollowTail()
+                        onCountChanged: {
+                            if (followTail) {
+                                forceTailFollow()
+                            }
+                        }
                         property int _ver: decodePanel.decodeListVersion
                         model: {
                             void(_ver)
@@ -7173,7 +7305,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 80 }
                                 Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
                                 Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
                             }

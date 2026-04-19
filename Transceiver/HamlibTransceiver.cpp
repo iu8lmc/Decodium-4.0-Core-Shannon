@@ -692,6 +692,7 @@ int HamlibTransceiver::do_start ()
   // Verifica esplicita prima di procedere per evitare access violation nel polling.
   if (!m_->rig_.data () || !m_->rig_.data ()->caps)
     {
+      rig_close (m_->rig_.data ());   // release serial port before throwing
       throw error {tr ("Rig not ready — caps null after open (no response from radio?)")};
     }
 
@@ -933,8 +934,9 @@ void HamlibTransceiver::do_stop ()
 {
   if (m_->is_dummy_ && !m_->ptt_only_)
     {
-      rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &impl::dummy_frequency_);
-      impl::dummy_frequency_ = std::round (impl::dummy_frequency_);
+      auto rc = rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &impl::dummy_frequency_);
+      if (RIG_OK == rc)
+        impl::dummy_frequency_ = std::round (impl::dummy_frequency_);
       if (m_->mode_query_works_)
         {
           pbwidth_t width;
@@ -989,8 +991,12 @@ void HamlibTransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
               CAT_TRACE ("rig_set_mode mode=" << rig_strrmode (new_mode));
               m_->error_check (rig_set_mode (m_->rig_.data (), target_vfo, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting current VFO mode"));
             }
-          // set mode on VFOB too if we are in split
-          if (state ().split()) rig_set_mode (m_->rig_.data (), RIG_VFO_B, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting VFOB mode");
+          // set mode on TX VFO too if we are in split
+          if (state ().split())
+            {
+              auto tx_vfo = m_->rig_->state.vfo_list & RIG_VFO_B ? RIG_VFO_B : RIG_VFO_SUB;
+              m_->error_check (rig_set_mode (m_->rig_.data (), tx_vfo, new_mode, RIG_PASSBAND_NOCHANGE), tr ("setting TX VFO mode"));
+            }
           update_mode (m);
         }
     }
@@ -1169,10 +1175,10 @@ void HamlibTransceiver::do_mode (MODE mode)
 
 void HamlibTransceiver::do_poll ()
 {
-  freq_t f;
-  rmode_t m;
-  pbwidth_t w;
-  split_t s;
+  freq_t f {0};
+  rmode_t m {RIG_MODE_USB};
+  pbwidth_t w {RIG_PASSBAND_NORMAL};
+  split_t s {RIG_SPLIT_OFF};
 
   if (m_->get_vfo_works_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_VFO))
     {
@@ -1338,21 +1344,21 @@ void HamlibTransceiver::do_ptt (bool on)
     {
        if (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt)
         {
-          ptt_on_ = true;
           CAT_TRACE ("rig_set_ptt PTT=true");
           auto ptt_type = rig_get_caps_int (m_->model_, RIG_CAPS_PTT_TYPE);
           m_->error_check (rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR
                                         , RIG_PTT_RIG_MICDATA == ptt_type && m_->back_ptt_port_
                                         ? RIG_PTT_ON_DATA : RIG_PTT_ON), tr ("setting PTT on"));
+          ptt_on_ = true;   // set AFTER successful rig_set_ptt
         }
     }
   else
     {
       if (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt)
         {
-          ptt_on_ = false;
           CAT_TRACE ("rig_set_ptt PTT=false");
           m_->error_check (rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR, RIG_PTT_OFF), tr ("setting PTT off"));
+          ptt_on_ = false;  // set AFTER successful rig_set_ptt
         }
     }
 

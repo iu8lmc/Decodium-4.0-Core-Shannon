@@ -9,6 +9,10 @@ env:
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-linux:
     runs-on: ubuntu-22.04

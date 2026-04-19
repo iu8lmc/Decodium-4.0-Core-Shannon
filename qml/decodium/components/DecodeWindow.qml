@@ -45,7 +45,7 @@ Window {
     property color glassBorder: bridge.themeManager.glassBorder
     readonly property real leftPanelWidth: width * 0.5
     readonly property bool compactBandColumns: leftPanelWidth < 460
-    readonly property int bandUtcWidth: compactBandColumns ? 48 : 60
+    readonly property int bandUtcWidth: compactBandColumns ? 66 : 86
     readonly property int bandDbWidth: compactBandColumns ? 28 : 35
     readonly property int bandDtWidth: compactBandColumns ? 34 : 45
     readonly property int bandFreqWidth: compactBandColumns ? 42 : 50
@@ -56,13 +56,34 @@ Window {
     readonly property real rightPanelWidth: width * 0.5
     readonly property bool compactRxColumns: rightPanelWidth < 420
     readonly property bool compactRxHeader: rightPanelWidth < 340
-    readonly property int rxUtcWidth: compactRxColumns ? 58 : 72
+    readonly property int rxUtcWidth: compactRxColumns ? 66 : 86
     readonly property int rxDbWidth: compactRxColumns ? 28 : 35
     readonly property int rxDtWidth: compactRxColumns ? 36 : 45
     readonly property int rxGapWidth: compactRxColumns ? 6 : 10
     readonly property int rxDistanceWidth: compactRxColumns ? 0 : 50
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
     property int decodeListVersion: 0
+    property var bandActivityModel: appEngine.decodeList
+
+    Connections {
+        target: appEngine
+        function onDecodeListChanged() {
+            var stickBandTail = bandActivityList ? bandActivityList.isNearTail() : true
+            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+            decodeWindow.bandActivityModel = appEngine.decodeList
+            decodeWindow.decodeListVersion++
+            if (stickBandTail && bandActivityList)
+                bandActivityList.forceTailFollow()
+            if (stickRxTail && rxFrequencyList)
+                rxFrequencyList.forceTailFollow()
+        }
+        function onRxDecodeListChanged() {
+            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+            decodeWindow.decodeListVersion++
+            if (stickRxTail && rxFrequencyList)
+                rxFrequencyList.forceTailFollow()
+        }
+    }
 
     // Shannon-compatible color scheme
     readonly property color colorB4:          "#606060"   // Grigio — già lavorato (B4)
@@ -93,7 +114,7 @@ Window {
         var lines = []
 
         // Header: Callsign - Country (Continent)
-        var header = modelData.dxCallsign + " - " + modelData.dxCountry
+        var header = (modelData.dxCallsign || "") + " - " + modelData.dxCountry
         if (modelData.dxContinent) header += " (" + modelData.dxContinent + ")"
         lines.push(header)
 
@@ -122,16 +143,6 @@ Window {
 
     // Shannon: RX Frequency window ±200Hz (sbFtol default) + messaggi diretti a noi
     property int rxBandwidth: 200  // Shannon sbFtol default 200Hz
-
-    Connections {
-        target: appEngine
-        function onDecodeListChanged() {
-            decodeWindow.decodeListVersion++
-        }
-        function onRxDecodeListChanged() {
-            decodeWindow.decodeListVersion++
-        }
-    }
 
     // Shannon isAtRxFrequency: dentro finestra ±200Hz OR messaggio per noi
     function isAtRxFrequency(freq, md) {
@@ -391,12 +402,24 @@ Window {
                             anchors.fill: parent
                             anchors.margins: 4
                             clip: true
-                            model: appEngine.decodeList
+                            model: decodeWindow.bandActivityModel
                             spacing: 1
                             property bool followTail: true
+                            function isNearTail() {
+                                return contentHeight <= height + 2
+                                      || contentY >= Math.max(0, contentHeight - height - 8)
+                            }
                             function updateFollowTail() {
-                                followTail = contentHeight <= height + 2
-                                          || contentY >= Math.max(0, contentHeight - height - 8)
+                                followTail = isNearTail()
+                            }
+                            function forceTailFollow() {
+                                followTail = true
+                                Qt.callLater(function() {
+                                    if (!bandActivityList)
+                                        return
+                                    bandActivityList.positionViewAtEnd()
+                                    bandActivityList.followTail = true
+                                })
                             }
                             Component.onCompleted: Qt.callLater(function() {
                                 positionViewAtEnd()
@@ -406,10 +429,7 @@ Window {
                             onHeightChanged: updateFollowTail()
                             onCountChanged: {
                                 if (followTail) {
-                                    Qt.callLater(function() {
-                                        positionViewAtEnd()
-                                        updateFollowTail()
-                                    })
+                                    forceTailFollow()
                                 }
                             }
 
@@ -744,6 +764,35 @@ Window {
                             anchors.margins: 4
                             clip: true
                             spacing: 1
+                            interactive: true
+                            property bool followTail: true
+                            function isNearTail() {
+                                return contentHeight <= height + 2
+                                    || contentY >= Math.max(0, contentHeight - height - 8)
+                            }
+                            function updateFollowTail() {
+                                followTail = isNearTail()
+                            }
+                            function forceTailFollow() {
+                                followTail = true
+                                Qt.callLater(function() {
+                                    if (!rxFrequencyList)
+                                        return
+                                    rxFrequencyList.positionViewAtEnd()
+                                    rxFrequencyList.followTail = true
+                                })
+                            }
+                            Component.onCompleted: Qt.callLater(function() {
+                                positionViewAtEnd()
+                                updateFollowTail()
+                            })
+                            onContentYChanged: updateFollowTail()
+                            onHeightChanged: updateFollowTail()
+                            onCountChanged: {
+                                if (followTail) {
+                                    forceTailFollow()
+                                }
+                            }
                             property int _ver: decodeWindow.decodeListVersion
 
                             // Filter model to only show messages at RX frequency

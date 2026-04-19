@@ -49,6 +49,7 @@ public:
     QString txMessage(int index) const;
     int currentTx() const;
     QString adifLogPath() const;
+    QString allTxtPath() const;
     int txOutputAttenuation() const;
 
     void setMode(const QString& mode);
@@ -57,6 +58,8 @@ public:
     void setAutoSeq(bool enabled);
     void setTxEnabled(bool enabled);
     void setAutoCq(bool enabled);
+    void setDecodeDepthBits(int bits);
+    void setCqOnly(bool enabled);
     void setRxFrequency(int frequencyHz);
     void setTxFrequency(int frequencyHz);
     void setRigPtt(bool enabled);
@@ -106,6 +109,8 @@ private:
 
     QApplication* m_app {nullptr};
     QString m_originalApplicationName;
+    QString m_originalOrganizationName;
+    QString m_originalOrganizationDomain;
     QString m_originalApplicationVersion;
     QString m_originalStyleSheet;
     QPalette m_originalPalette;
@@ -113,6 +118,9 @@ private:
     bool m_available {false};
     QString m_failureReason;
     bool m_monitoringControlClaimed {false};
+    qint64 m_backendStartupMs {0};
+    bool m_startupMonitorRequested {false};
+    bool m_startupMonitorEnablePending {false};
     std::unique_ptr<MultiSettings> m_multiSettings;
     MainWindow* m_mainWindow {nullptr};
 };

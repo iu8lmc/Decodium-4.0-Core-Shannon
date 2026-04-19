@@ -164,7 +164,7 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
   int ncontest = qBound (0, request.ncontest, 16);
   int nagain = request.nagain ? 1 : 0;
   int lft8apon = request.lft8apon ? 1 : 0;
-  int ltry_a8 = nzhsym == 41 ? 1 : 0;
+  int ltry_a8 = (nzhsym == 41 || request.lmultift8 != 0) ? 1 : 0;
   int lapcqonly = request.lapcqonly ? 1 : 0;
   int napwid = qBound (0, request.napwid, 200);
   int ldiskdat = request.ldiskdat ? 1 : 0;

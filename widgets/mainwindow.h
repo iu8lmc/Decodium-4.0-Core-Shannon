@@ -60,6 +60,7 @@
 #include "widgets/qsymonitor.h"
 #include "widgets/TimeSyncPanel.h"
 #include "widgets/FT2QsoFlowPolicy.h"
+#include "Detector/FT8DecodeWorker.hpp"
 #include "MessageBox.hpp"
 #include "Network/NetworkAccessManager.hpp"
 #include "Network/NtpClient.hpp"
@@ -190,6 +191,7 @@ public:
   QString legacyTxMessage(int index) const;
   int legacyCurrentTx() const;
   QString legacyAdifLogPath() const;
+  QString legacyAllTxtPath() const;
   int legacyTxOutputAttenuation() const;
   void legacyClearBandActivity();
   void legacyClearRxFrequency();
@@ -199,6 +201,8 @@ public:
   void legacySetAutoSeq(bool enabled);
   void legacySetTxEnabled(bool enabled);
   void legacySetAutoCq(bool enabled);
+  void legacySetDecodeDepthBits(int bits);
+  void legacySetCqOnly(bool enabled);
   void legacySetRxFrequency(int frequencyHz);
   void legacySetTxFrequency(int frequencyHz);
   void legacySetRigPtt(bool enabled);
@@ -291,6 +295,12 @@ private:
   void requestInProcessFt4Decode ();
   void requestInProcessFst4Decode ();
   void requestInProcessFt8Decode ();
+  void queueInProcessFt8Decode ();
+  decodium::ft8::DecodeRequest buildFt8DecodeRequest () const;
+  void dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request);
+  bool needsEmbeddedMonitorPhaseResync () const;
+  void scheduleEmbeddedMonitorPhaseResync (QString const& reason);
+  void performEmbeddedMonitorPhaseResync (qint64 expected_at_ms, QString const& reason);
   void requestInProcessJt9FastDecode ();
   void requestInProcessQ65Decode ();
   void requestInProcessMsk144Decode ();
@@ -752,6 +762,7 @@ private:
   void setColorHighlighting();
   void chkFT4();
   bool elide_tx1_not_allowed () const;
+  int effectiveDecodeFmax() const;
   void readWidebandDecodes();
   void configActiveStations();
   void sfox_tx();
@@ -964,6 +975,7 @@ private:
   qint32  m_echoSec0=0;
   qint32  m_fetched=0;
   qint32  m_position;
+  qint64  m_monitorPhaseResyncAtMs {-1};
 
   bool    m_btxok;		//True if OK to transmit
   bool    m_diskData;
@@ -1215,6 +1227,8 @@ private:
   decodium::ft8::FT8DecodeWorker * m_ft8DecodeWorker {nullptr};
   quint64 m_ft8DecodeSerial {0};
   bool m_ft8DecodePending {false};
+  bool m_ft8QueuedDecodePending {false};
+  decodium::ft8::DecodeRequest m_ft8QueuedDecodeRequest;
   QThread m_jt9FastDecodeThread;
   decodium::jt9fast::JT9FastDecodeWorker * m_jt9FastDecodeWorker {nullptr};
   quint64 m_jt9FastDecodeSerial {0};
@@ -1241,7 +1255,7 @@ private:
   qint64 m_asyncRxStartMs {0};
   bool m_asyncL2DefaultAppliedForCurrentFt2 {false};
   short int m_asyncAudio[90000];     // ring buffer ~7.5s at 12kHz
-  int m_asyncAudioPos {0};           // write position in ring buffer
+  uint64_t m_asyncAudioPos {0};      // write position in ring buffer (unsigned to avoid signed overflow UB)
   bool m_bAsyncDecoding {false};     // async decode in progress
   QSet<QString> m_asyncDedupeSet;    // deduplication within sliding window
   QDateTime m_asyncDedupeLastCleared;

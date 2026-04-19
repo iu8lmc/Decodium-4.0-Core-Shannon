@@ -242,7 +242,7 @@ int main(int argc, char *argv[])
 
       // disallow multiple instances with same instance key
       QLockFile instance_lock {temp_dir.absoluteFilePath (a.applicationName () + ".lock")};
-      instance_lock.setStaleLockTime (0);
+      instance_lock.setStaleLockTime (30000);  // 30s: auto-recover lock after crash
       while (!instance_lock.tryLock (250))
         {
           if (QLockFile::LockFailedError == instance_lock.error ())
@@ -402,7 +402,7 @@ int main(int argc, char *argv[])
 #if defined (Q_OS_WIN)
                                                                   // default to true for
                                                                   // Windows Vista and older
-                                                                  QSysInfo::WV_VISTA >= QSysInfo::WindowsVersion ? true : false
+                                                                  false // Vista-era resampling workaround no longer needed on Win10+
 #else
                                                                   false
 #endif

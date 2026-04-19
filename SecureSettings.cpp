@@ -9,6 +9,11 @@
 #include <QSettings>
 #include <QStandardPaths>
 
+#if defined (Q_OS_WIN)
+#include <windows.h>
+#include <wincrypt.h>
+#endif
+
 namespace
 {
   [[maybe_unused]] QString trim_single_trailing_newline (QString text)
@@ -76,6 +81,8 @@ namespace
       return QFileInfo::exists (QStringLiteral ("/usr/bin/security"));
 #elif defined (Q_OS_LINUX)
       return !QStandardPaths::findExecutable (QStringLiteral ("secret-tool")).isEmpty ();
+#elif defined (Q_OS_WIN)
+      return true;  // Windows DPAPI always available
 #else
       return false;
 #endif
@@ -155,6 +162,31 @@ namespace
         }
       result.found = false;
       return result;
+#elif defined (Q_OS_WIN)
+      // Windows DPAPI: the encrypted blob is stored in a QSettings key
+      // named "dpapi:<service>/<account>" as a base64 string.
+      QSettings reg (QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
+      auto const key = service + QStringLiteral ("/") + account;
+      auto const blob64 = reg.value (key).toByteArray ();
+      if (blob64.isEmpty ())
+        {
+          result.found = false;
+          return result;
+        }
+      auto const blob = QByteArray::fromBase64 (blob64);
+      DATA_BLOB in_blob;
+      in_blob.cbData = static_cast<DWORD> (blob.size ());
+      in_blob.pbData = reinterpret_cast<BYTE *> (const_cast<char *> (blob.data ()));
+      DATA_BLOB out_blob;
+      if (CryptUnprotectData (&in_blob, nullptr, nullptr, nullptr, nullptr, 0, &out_blob))
+        {
+          result.found = true;
+          result.value = QString::fromUtf8 (reinterpret_cast<char *> (out_blob.pbData), static_cast<int> (out_blob.cbData));
+          LocalFree (out_blob.pbData);
+          return result;
+        }
+      result.error = QObject::tr ("DPAPI CryptUnprotectData failed");
+      return result;
 #else
       Q_UNUSED (service);
       Q_UNUSED (account);
@@ -225,6 +257,23 @@ namespace
           if (error) *error = trim_single_trailing_newline (QString::fromUtf8 (p.readAllStandardError ()));
           return false;
         }
+      return true;
+#elif defined (Q_OS_WIN)
+      auto const utf8 = value.toUtf8 ();
+      DATA_BLOB in_blob;
+      in_blob.cbData = static_cast<DWORD> (utf8.size ());
+      in_blob.pbData = reinterpret_cast<BYTE *> (const_cast<char *> (utf8.data ()));
+      DATA_BLOB out_blob;
+      if (!CryptProtectData (&in_blob, nullptr, nullptr, nullptr, nullptr, 0, &out_blob))
+        {
+          if (error) *error = QObject::tr ("DPAPI CryptProtectData failed");
+          return false;
+        }
+      auto const blob64 = QByteArray (reinterpret_cast<char *> (out_blob.pbData), static_cast<int> (out_blob.cbData)).toBase64 ();
+      LocalFree (out_blob.pbData);
+      QSettings reg (QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
+      auto const key = service + QStringLiteral ("/") + account;
+      reg.setValue (key, blob64);
       return true;
 #else
       Q_UNUSED (service);
@@ -301,6 +350,12 @@ namespace
         }
       if (error) *error = stderr_text.isEmpty () ? QObject::tr ("secret-tool clear failed") : stderr_text;
       return false;
+#elif defined (Q_OS_WIN)
+      Q_UNUSED (error);
+      QSettings reg (QSettings::UserScope, QStringLiteral ("Decodium"), QStringLiteral ("SecureStore"));
+      auto const key = service + QStringLiteral ("/") + account;
+      reg.remove (key);
+      return true;
 #else
       Q_UNUSED (service);
       Q_UNUSED (account);

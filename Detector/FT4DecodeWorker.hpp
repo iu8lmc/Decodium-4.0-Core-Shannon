@@ -22,6 +22,7 @@ struct DecodeRequest
   int nfa {0};
   int nfb {0};
   int ndepth {1};
+  int lapcqonly {0};
   int ncontest {0};
   QByteArray mycall;
   QByteArray hiscall;

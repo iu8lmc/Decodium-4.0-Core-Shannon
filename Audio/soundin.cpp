@@ -77,6 +77,7 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   }
 
   if (m_stream
+      && m_stream->state () == QAudio::ActiveState
       && m_sink == sink
       && m_deviceDescription == device.description()
       && m_sampleRate == format.sampleRate()
@@ -198,6 +199,8 @@ void SoundInput::handleStateChanged (QAudio::State newState)
 
 void SoundInput::reset (bool report_dropped_frames)
 {
+  constexpr qint64 dropped_audio_warning_usec {750000};
+  constexpr qint64 dropped_audio_warning_interval_ms {15000};
   if (m_stream)
     {
       auto elapsed_usecs = m_stream->elapsedUSecs ();
@@ -217,10 +220,19 @@ void SoundInput::reset (bool report_dropped_frames)
             }
           else if (lost_usec > 5 * 48000)
             {
-              auto const lost_frames = qRound64((double(lost_usec) * m_stream->format().sampleRate()) / 1000000.0);
-              LOG_ERROR ("Detected excessive dropped audio source samples: "
-                        << lost_frames
-                         << " (" << std::setprecision (4) << lost_usec / 1.e6 << " S)");
+              qint64 const now_ms = QDateTime::currentMSecsSinceEpoch ();
+              if (lost_usec >= dropped_audio_warning_usec
+                  && (last_dropped_warning_ms_ < 0
+                      || now_ms - last_dropped_warning_ms_ >= dropped_audio_warning_interval_ms))
+                {
+                  auto const lost_frames = qRound64 ((double (lost_usec)
+                                                      * m_stream->format ().sampleRate ())
+                                                     / 1000000.0);
+                  LOG_WARN ("Detected excessive dropped audio source samples: "
+                            << lost_frames
+                            << " (" << std::setprecision (4) << lost_usec / 1.e6 << " S)");
+                  last_dropped_warning_ms_ = now_ms;
+                }
             }
         }
       cummulative_lost_usec_ = elapsed_usecs - m_stream->processedUSecs ();

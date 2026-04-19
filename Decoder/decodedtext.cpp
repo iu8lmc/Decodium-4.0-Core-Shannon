@@ -67,7 +67,7 @@ DecodedText::DecodedText (QString const& the_string)
       int i1 = message_.indexOf ('\r');
       if (i1 > 0)
         {
-          message_ = message_.left (i1 - 1);
+          message_ = message_.left (i1);
         }
       if (message_.contains (QRegularExpression {"^(CQ|QRZ)\\s"}))
         {

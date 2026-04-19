@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLibraryInfo>
+#include <QMessageBox>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
@@ -24,6 +25,7 @@
 #include <clocale>
 
 #include "DecodiumBridge.h"
+#include "DecodiumDiagnostics.h"
 #include "DecodiumDxCluster.h"
 #include "DecodiumLogging.hpp"
 #include "MetaDataRegistry.hpp"
@@ -121,6 +123,16 @@ int main(int argc, char* argv[])
     QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     if (!fixedFontFamily.isEmpty()) {
         QFont::insertSubstitution(QStringLiteral("Consolas"), fixedFontFamily);
+    }
+
+    // Qt6 RHI backend: if the GPU driver is too old or has known issues,
+    // fall back to software rendering to prevent QML hang on startup.
+    // Users can override with QSG_RHI_BACKEND=opengl env var.
+    if (qEnvironmentVariableIsEmpty("QSG_RHI_BACKEND")) {
+        // Check for Intel HD Graphics with low VRAM (known to hang with D3D11 RHI)
+        // Also helps with Remote Desktop, VMs, and headless setups.
+        qputenv("QSG_RHI_BACKEND", "opengl");  // OpenGL is more compatible than D3D11
+        L("RHI backend forced to OpenGL for compatibility");
     }
 
     // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
@@ -223,12 +235,23 @@ int main(int argc, char* argv[])
     // bindings still reevaluate while root objects are being torn down.
     // If the context object dies first, QML sees bridge == null and floods the
     // terminal with TypeError messages on exit.
+    // Disable QML disk cache to prevent stale .qmlc files from overriding
+    // updated .qml sources after an upgrade.  The compiled cache is a
+    // micro-optimisation (<50ms) that is not worth the risk of loading old UI.
+    qputenv("QML_DISABLE_DISK_CACHE", "1");
+
     QQmlApplicationEngine engine;
     L("engine OK");
-    engine.setOutputWarningsToStandardError(false);
+    engine.setOutputWarningsToStandardError(true);  // show QML errors on stderr for debugging
     QObject::connect(&engine, &QQmlEngine::warnings, &app,
-                     [] (const QList<QQmlError>& warnings) {
+                     [&bridge] (const QList<QQmlError>& warnings) {
         logQmlWarnings(warnings);
+        for (auto const& w : warnings) {
+            qWarning("QML WARNING: %s", qPrintable(w.toString()));
+            // Feed warnings to the in-app diagnostics system
+            if (auto *diag = qobject_cast<DecodiumDiagnostics*>(bridge.diagnostics()))
+                diag->addQmlWarning(w.toString());
+        }
     });
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
@@ -236,8 +259,17 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty("bridge", &bridge);
     engine.rootContext()->setContextProperty("appEngine", &bridge);
 
+    // Load BootLoader.qml first — it shows a splash window immediately,
+    // then loads Main.qml asynchronously via Loader { asynchronous: true }.
+    // This guarantees the window appears even if component compilation is slow.
     QString qmlPath = QDir(QCoreApplication::applicationDirPath())
-                          .absoluteFilePath("qml/decodium/Main.qml");
+                          .absoluteFilePath("qml/decodium/BootLoader.qml");
+
+    // Fallback to Main.qml if BootLoader doesn't exist (portable/dev builds)
+    if (!QFile::exists(qmlPath)) {
+        qmlPath = QDir(QCoreApplication::applicationDirPath())
+                      .absoluteFilePath("qml/decodium/Main.qml");
+    }
 
     if (!QFile::exists(qmlPath)) {
         L("QML file NOT FOUND");
@@ -251,11 +283,42 @@ int main(int argc, char* argv[])
     qmlRegisterUncreatableType<DecodiumDxCluster>("Decodium", 1, 0, "DecodiumDxCluster",
         "DecodiumDxCluster is created by DecodiumBridge");
 
+    // Log any QML component creation failures
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app,
+                     [](QObject *obj, const QUrl &url) {
+        if (!obj) {
+            qCritical("QML FAILED to create object from: %s", qPrintable(url.toString()));
+        } else {
+            qDebug("QML object created OK from: %s", qPrintable(url.toString()));
+        }
+    });
+
+    L("loading QML...");
+    // Watchdog: log if QML loading takes too long (helps diagnose hangs)
+    QElapsedTimer loadTimer;
+    loadTimer.start();
+    QTimer watchdog;
+    watchdog.setInterval(5000);
+    QObject::connect(&watchdog, &QTimer::timeout, [&loadTimer]() {
+        qWarning("QML WATCHDOG: engine.load() still running after %lld ms — possible hang in component init",
+                 loadTimer.elapsed());
+    });
+    watchdog.start();
+
     engine.load(QUrl::fromLocalFile(qmlPath));
-    L("engine.load() returned");
+
+    watchdog.stop();
+    L(("engine.load() returned in " + QByteArray::number(loadTimer.elapsed()) + " ms").constData());
+
 
     if (engine.rootObjects().isEmpty()) {
-        L("ERROR: rootObjects empty");
+        L("ERROR: rootObjects empty — QML failed to load. Check console for QML errors.");
+        // Show a native error dialog so user knows what happened
+        QMessageBox::critical(nullptr, QStringLiteral("Decodium — QML Error"),
+            QStringLiteral("The user interface failed to load.\n\n"
+                           "This is usually caused by a missing Qt plugin or a corrupted installation.\n\n"
+                           "Try reinstalling Decodium or deleting the qmlcache folder in the install directory.\n\n"
+                           "QML path: %1").arg(qmlPath));
         return -1;
     }
     L("QML OK - entering event loop");

@@ -32,6 +32,7 @@ class DecodiumCloudlogLite;
 class DecodiumWsprUploader;
 class DxccLookup;
 class DecodiumLegacyBackend;
+#include "DecodiumDiagnostics.h"
 class DecodiumPropagationManager;
 class MessageClient;
 
@@ -152,6 +153,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool catConnected READ catConnected NOTIFY catConnectedChanged)
     Q_PROPERTY(QString catRigName READ catRigName NOTIFY catRigNameChanged)
     Q_PROPERTY(QString catMode READ catMode NOTIFY catModeChanged)
+    Q_PROPERTY(QString lastCatError READ lastCatError NOTIFY lastCatErrorChanged)
 
     // === LED STATUS INDICATORS ===
     Q_PROPERTY(bool   ledCoherentAveraging READ ledCoherentAveraging NOTIFY ledCoherentAveragingChanged)
@@ -191,6 +193,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString logAllTxtPath     READ logAllTxtPath     CONSTANT)
     Q_PROPERTY(QObject* logManager READ logManager CONSTANT)
     Q_PROPERTY(QObject* propagationManager READ propagationManager CONSTANT)
+    Q_PROPERTY(QObject* diagnostics READ diagnostics CONSTANT)
     Q_PROPERTY(int qsoCount READ qsoCount NOTIFY qsoCountChanged)
 
     // === ADIF / LOTW ===
@@ -425,6 +428,7 @@ public:
     bool catConnected() const;
     QString catRigName() const;
     QString catMode() const;
+    QString lastCatError() const { return m_lastCatError; }
 
     // LED status
     bool   ledCoherentAveraging() const { return m_ledCoherentAveraging; }
@@ -592,6 +596,7 @@ public:
     int         callerQueueSize()const { return m_callerQueue.size(); }
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
+    QObject*    diagnostics() const { return m_diagnostics; }
     int         qsoCount() const;
 
     // B9 — Active Stations
@@ -616,6 +621,7 @@ public slots:
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
     Q_INVOKABLE void logQso();
     Q_INVOKABLE void shutdown();
+    Q_INVOKABLE void copyToClipboard(const QString &text);
     Q_INVOKABLE void advanceQsoState(int txNum); // GitHub TxController clone
 
     // Audio
@@ -817,6 +823,7 @@ signals:
     void catConnectedChanged();
     void catRigNameChanged();
     void catModeChanged();
+    void lastCatErrorChanged();
     void dxClusterConnectedChanged();
     void dxClusterSpotsChanged();
     void dxClusterHostChanged();
@@ -968,6 +975,12 @@ private:
     void maybeApplyStartupModeFromRigFrequency(double dialFrequency);
     QString effectiveAdifLogPath() const;
     QString ensureAdifLogPath();
+    int effectiveDecodeDepth() const;
+    int legacyCompatibleDecodeDepthBits() const;
+    int legacyDecodeQsoProgress() const;
+    int legacyDecodeCqHint() const;
+    QString legacyAllTxtPath() const;
+    void appendLegacyAllTxtDecodeLine(const QVariantMap& entry) const;
     bool isRecentAutoCqDuplicate(const QString& call,
                                  double freqHz = -1.0,
                                  const QString& mode = QString()) const;
@@ -1008,10 +1021,16 @@ private:
     QString m_mode {"FT2"};
     bool m_startupModeAutoPending {true};
     qint64 m_startupModeAutoUntilMs {0};
+    QString m_legacyStartupModeGuard;
+    qint64 m_legacyStartupModeGuardUntilMs {0};
     bool m_preserveFrequencyOnModeChange {false};
     bool m_shuttingDown {false};
     bool m_lastSuccessfulCatConnected {false};
     QString m_lastSuccessfulCatBackend;
+    // Limita i retry di startup quando la porta è occupata (es. OmniRig.exe
+    // sta tenendo la COM): dopo il primo fallimento, un secondo tentativo
+    // schedulato con delay maggiore. Nessun retry infinito.
+    int m_startupCatRetryCount {0};
     bool m_monitoring {false};
     bool m_transmitting {false};
     bool m_tuning {false};
@@ -1058,6 +1077,7 @@ private:
     QMap<QString, qint64> m_qsoCooldown;  // callsign → timestamp msec UTC
     bool m_catConnected {false};
     QString m_catRigName;
+    QString m_lastCatError;
     QString m_catMode;
     bool   m_ledCoherentAveraging {false};
     bool   m_ledNeuralSync {false};
@@ -1071,7 +1091,7 @@ private:
     QStringList m_pskSearchBands {"160m","80m","40m","20m","15m","10m"};
     bool        m_pskReporterEnabled {false};
     double m_fontScale {1.0};
-    int m_nfa {200}, m_nfb {4000}, m_ndepth {1}, m_ncontest {0};
+    int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
 
     // Spectrum/Waterfall settings
     int    m_spectrumColorPalette {0};
@@ -1081,13 +1101,14 @@ private:
 
     DecodiumThemeManager* m_themeManager  {nullptr};
     DecodiumPropagationManager* m_propagationManager {nullptr};
+    DecodiumDiagnostics*        m_diagnostics {nullptr};
     WavManager*           m_wavManager    {nullptr};
     MacroManager*         m_macroManager  {nullptr};
     BandManager*          m_bandManager   {nullptr};
     DecodiumCatManager*           m_nativeCat     {nullptr};
     DecodiumOmniRigManager*       m_omniRigCat    {nullptr};
     DecodiumTransceiverManager*   m_hamlibCat     {nullptr};
-    QString                       m_catBackend    {"native"};
+    QString                       m_catBackend    {"hamlib"};
     bool                          m_suppressCatErrors {false};
     RemoteCommandServer*          m_remoteServer {nullptr};
     DecodiumDxCluster*    m_dxCluster     {nullptr};
@@ -1113,6 +1134,7 @@ private:
     // QMutex perché QVector NON è thread-safe per scritture concorrenti.
     mutable QMutex m_audioBufferMutex;
     quint64 m_decodeSerial {0};
+    quint64 m_decodeSessionId {0};
     // Period timer ticks at 250ms; mode determines how many ticks = 1 period
     int m_periodTicks {0};
     int m_periodTicksMax {60};   // FT8=60 (15s), FT4=30 (7.5s), FT2=15 (3.75s)
@@ -1160,6 +1182,9 @@ private:
     MessageClient* m_udpMessageClient {nullptr};
     int  m_legacyBandActivityRevision {-1};
     int  m_legacyRxFrequencyRevision {-1};
+    QString m_legacyAllTxtRevisionKey;
+    mutable QString m_legacyAllTxtConsumedPath;
+    mutable qint64 m_legacyAllTxtConsumedSize {-1};
 
     // === GitHub TxController clone ===
     int  m_nTx73            {0};   // TX5 (73) repeat counter: >=2 → QSO completo, ferma
@@ -1169,6 +1194,7 @@ private:
     QString m_lastAutoSeqKey;      // deduplicazione autoSequenceStep
     qint64  m_lastAutoSeqMs {0};   // timestamp ultima deduplicazione
     QString m_lastTransmittedMessage;
+    QDateTime m_lastTxActivityUtc;
     QDateTime m_qsoStartedOn;
     bool    m_logAfterOwn73 {false};
     bool    m_ft2DeferredLogPending {false};
@@ -1192,6 +1218,7 @@ private:
     int     m_contestType {0};
     bool    m_zapEnabled {false};
     bool    m_deepSearchEnabled {false};
+    bool    m_ft8ApEnabled {false};
     bool    m_asyncDecodeEnabled {false};
     bool    m_alertOnCq {false};
     bool    m_alertOnMyCall {false};
@@ -1271,6 +1298,7 @@ private:
     double m_decodeLatencyMs{0.0};
     QHash<quint64, qint64> m_decodeStartMsBySerial;
     QHash<quint64, QString> m_decodeModeBySerial;
+    QHash<quint64, QString> m_decodeUtcTokenBySerial;
     int    m_dtMinSamples   {3};
     int    m_dtLastSampleCount {0};
     int    m_totalDecodesForDt {0};
@@ -1338,7 +1366,7 @@ private:
     QStringList parseJt65Row(const QString& row) const;
     void startAudioCapture();
     void stopAudioCapture();
-    void feedAudioToDecoder();
+    void feedAudioToDecoder(qint64 completedUtcSlot = -1);
     void enumerateAudioDevices();
     void updatePeriodTicksMax();
     QVector<float> computeSpectrum() const;
@@ -1357,7 +1385,11 @@ private:
     void teardownAudioCapture();
     void reloadBridgeSettingsFromPersistentStore();
     void syncLegacyBackendDecodeList();
-    QVariantList mirrorLegacyDecodeLines(QStringList const& lines, bool rxPane) const;
+    QVariantList mirrorLegacyDecodeLines(QStringList const& lines,
+                                         bool rxPane,
+                                         QVariantList const& previousEntries) const;
+    QVariantList augmentLegacyMirrorWithAllTxt(QVariantList const& mirroredEntries,
+                                               bool rxPane) const;
     bool shouldMirrorToRxPane(const QVariantMap& entry) const;
     void appendRxDecodeEntry(const QVariantMap& entry);
     void rebuildRxDecodeList();

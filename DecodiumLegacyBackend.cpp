@@ -8,6 +8,9 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QFile>
+#include <QFileInfo>
+#include <QDateTime>
 #include <exception>
 
 #include "MultiSettings.hpp"
@@ -15,6 +18,202 @@
 
 namespace
 {
+QString embeddedLegacyConfigPath()
+{
+    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    if (configRoot.isEmpty()) {
+        configRoot = QDir::homePath();
+    }
+
+    QDir configDir(configRoot);
+    configDir.mkpath(QStringLiteral("."));
+    return configDir.absoluteFilePath(QStringLiteral("decodium4.ini"));
+}
+
+QString standaloneLegacyConfigPath()
+{
+    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    if (configRoot.isEmpty()) {
+        configRoot = QDir::homePath();
+    }
+
+    QDir configDir(configRoot);
+    configDir.mkpath(QStringLiteral("."));
+    return configDir.absoluteFilePath(QStringLiteral("ft2.ini"));
+}
+
+void copyFileIfMissing(QString const& targetPath, QString const& sourcePath)
+{
+    if (QFileInfo::exists(targetPath)) {
+        return;
+    }
+
+    QFileInfo const sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile()) {
+        return;
+    }
+
+    QDir targetDir(QFileInfo(targetPath).absolutePath());
+    targetDir.mkpath(QStringLiteral("."));
+    QFile::copy(sourceInfo.absoluteFilePath(), targetPath);
+}
+
+void setSettingIfMissing(QSettings& settings, QString const& key, QVariant const& value)
+{
+    if (!settings.contains(key)) {
+        settings.setValue(key, value);
+    }
+}
+
+void mergeMissingSettings(QSettings& target, QString const& sourcePath)
+{
+    QFileInfo const sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile()) {
+        return;
+    }
+
+    QSettings source(sourceInfo.absoluteFilePath(), QSettings::IniFormat);
+    for (QString const& key : source.allKeys()) {
+        if (!target.contains(key)) {
+            target.setValue(key, source.value(key));
+        }
+    }
+}
+
+void seedEmbeddedLegacyConfigDefaults(QSettings& settings)
+{
+    setSettingIfMissing(settings, QStringLiteral("General/AudioInputChannel"), QStringLiteral("Mono"));
+    setSettingIfMissing(settings, QStringLiteral("General/AudioOutputChannel"), QStringLiteral("Mono"));
+    setSettingIfMissing(settings, QStringLiteral("General/NDepth"), 51);
+    setSettingIfMissing(settings, QStringLiteral("General/UILanguage"), QStringLiteral("en"));
+
+    setSettingIfMissing(settings, QStringLiteral("Common/Mode"), QStringLiteral("FT8"));
+    setSettingIfMissing(settings, QStringLiteral("Common/NDepth"), 51);
+    setSettingIfMissing(settings, QStringLiteral("Common/MultithreadedFT8decoder"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/NFT8Cycles"), 3);
+    setSettingIfMissing(settings, QStringLiteral("Common/NFT8QSORXfreqSensitivity"), 3);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8threads"), 0);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8Sensitivity"), 3);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8DecoderStart"), 3);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8WideDXCallSearch"), true);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8AP"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/CQonly"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/RxAll"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/HideFT8Dupes"), true);
+    setSettingIfMissing(settings, QStringLiteral("Common/DTtol"), 3);
+    setSettingIfMissing(settings, QStringLiteral("Common/MinSync"), 0);
+    setSettingIfMissing(settings, QStringLiteral("Common/actionDontSplitALLTXT"), true);
+    setSettingIfMissing(settings, QStringLiteral("Common/disableWritingOfAllTxt"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/splitAllTxtYearly"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/splitAllTxtMonthly"), false);
+
+    setSettingIfMissing(settings, QStringLiteral("Configuration/Decode52"), false);
+    setSettingIfMissing(settings, QStringLiteral("Configuration/SingleDecode"), false);
+}
+
+void bootstrapEmbeddedLegacyConfig()
+{
+    QString const targetPath = embeddedLegacyConfigPath();
+    QString const legacyPath = standaloneLegacyConfigPath();
+
+    copyFileIfMissing(targetPath, legacyPath);
+
+    QSettings target(targetPath, QSettings::IniFormat);
+    mergeMissingSettings(target, legacyPath);
+    seedEmbeddedLegacyConfigDefaults(target);
+    target.sync();
+}
+
+QString embeddedLegacyPrivateDataDirPath(QString const& appLocalDataPath)
+{
+    if (!appLocalDataPath.isEmpty()) {
+        return QDir(appLocalDataPath).absoluteFilePath(QStringLiteral("embedded-ft2"));
+    }
+
+    QString root = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (root.isEmpty()) {
+        root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    }
+    return QDir(root).absoluteFilePath(QStringLiteral("Decodium/embedded-ft2"));
+}
+
+QStringList embeddedLegacySourceDirs()
+{
+    QStringList dirs;
+    QString const genericRoot = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    QString const appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString const appLocal = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QString const appDir = QCoreApplication::applicationDirPath();
+    QString const currentDir = QDir::currentPath();
+
+    if (!appData.isEmpty()) {
+        dirs << appData;
+    }
+    if (!appLocal.isEmpty() && appLocal != appData) {
+        dirs << appLocal;
+    }
+    if (!genericRoot.isEmpty()) {
+        dirs << QDir(genericRoot).absoluteFilePath(QStringLiteral("ft2"));
+        dirs << QDir(genericRoot).absoluteFilePath(QStringLiteral("IU8LMC/ft2"));
+        dirs << QDir(genericRoot).absoluteFilePath(QStringLiteral("IU8LMC/Decodium"));
+    }
+    if (!appDir.isEmpty()) {
+        dirs << appDir;
+        dirs << QDir(appDir).absoluteFilePath(QStringLiteral("../Resources"));
+        dirs << QDir(appDir).absoluteFilePath(QStringLiteral("../Resources/wsjtx"));
+        dirs << QDir(appDir).absoluteFilePath(QStringLiteral("../Resources/share/wsjtx"));
+        dirs << QDir(appDir).absoluteFilePath(QStringLiteral("../share/Decodium"));
+        dirs << QDir(appDir).absoluteFilePath(QStringLiteral("../share/wsjtx"));
+    }
+    if (!currentDir.isEmpty()) {
+        dirs << currentDir;
+    }
+#ifdef CMAKE_SOURCE_DIR
+    dirs << QDir(QStringLiteral(CMAKE_SOURCE_DIR)).absolutePath();
+#endif
+    dirs.removeDuplicates();
+    return dirs;
+}
+
+void copyIfMissing(QString const& targetDirPath, QString const& fileName)
+{
+    QDir targetDir(targetDirPath);
+    targetDir.mkpath(QStringLiteral("."));
+    QString const targetPath = targetDir.absoluteFilePath(fileName);
+    if (QFileInfo::exists(targetPath)) {
+        return;
+    }
+
+    for (QString const& sourceDirPath : embeddedLegacySourceDirs()) {
+        QFileInfo const sourceInfo(QDir(sourceDirPath).absoluteFilePath(fileName));
+        if (!sourceInfo.exists() || !sourceInfo.isFile()) {
+            continue;
+        }
+        QFile::copy(sourceInfo.absoluteFilePath(), targetPath);
+        if (QFileInfo::exists(targetPath)) {
+            return;
+        }
+    }
+}
+
+void bootstrapEmbeddedLegacyDataDir(QString const& targetDir)
+{
+    QDir(targetDir).mkpath(QStringLiteral("."));
+
+    copyIfMissing(targetDir, QStringLiteral("cty.dat"));
+    copyIfMissing(targetDir, QStringLiteral("CALL3.TXT"));
+    copyIfMissing(targetDir, QStringLiteral("refspec.dat"));
+    copyIfMissing(targetDir, QStringLiteral("hashtable.txt"));
+    copyIfMissing(targetDir, QStringLiteral("azel.dat"));
+    copyIfMissing(targetDir, QStringLiteral("lotw.adi"));
+    copyIfMissing(targetDir, QStringLiteral("jt9_wisdom.dat"));
+    copyIfMissing(targetDir, QStringLiteral("wsjtx_wisdom.dat"));
+    copyIfMissing(targetDir, QStringLiteral("wspr_wisdom.dat"));
+    copyIfMissing(targetDir, QStringLiteral("decodium_wisdom.dat"));
+    copyIfMissing(targetDir, QStringLiteral("wsjtx_log.adi"));
+    copyIfMissing(targetDir, QStringLiteral("wsjtx.log"));
+}
+
 QString embeddedLegacyWidgetStyleSheet()
 {
     return QStringLiteral(R"(
@@ -273,6 +472,7 @@ QPalette embeddedLegacyWidgetPalette(QPalette base)
 DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     : QObject(parent)
 {
+    m_backendStartupMs = QDateTime::currentMSecsSinceEpoch();
     m_app = qobject_cast<QApplication*>(QCoreApplication::instance());
     if (!m_app) {
         m_failureReason = QStringLiteral("QApplication is required for the legacy backend");
@@ -280,17 +480,28 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     }
 
     m_originalApplicationName = m_app->applicationName();
+    m_originalOrganizationName = m_app->organizationName();
+    m_originalOrganizationDomain = m_app->organizationDomain();
     m_originalApplicationVersion = m_app->applicationVersion();
     m_originalQuitOnLastWindowClosed = m_app->quitOnLastWindowClosed();
     m_originalStyleSheet = m_app->styleSheet();
     m_originalPalette = m_app->palette();
+    QString const originalAppLocalDataPath =
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QString const embeddedLegacyDataDir =
+        embeddedLegacyPrivateDataDirPath(originalAppLocalDataPath);
 
     m_app->setQuitOnLastWindowClosed(false);
-    m_app->setApplicationName(QStringLiteral("ft2"));
+    m_app->setOrganizationName(QString {});
+    m_app->setOrganizationDomain(QString {});
+    m_app->setApplicationName(QStringLiteral("decodium4"));
     if (m_app->applicationVersion().isEmpty()) {
         m_app->setApplicationVersion(QStringLiteral("4.0.0"));
     }
     m_app->setProperty("decodiumEmbeddedLegacyShell", true);
+    m_app->setProperty("decodiumEmbeddedLegacyDataDir", embeddedLegacyDataDir);
+    bootstrapEmbeddedLegacyDataDir(embeddedLegacyDataDir);
+    bootstrapEmbeddedLegacyConfig();
 
     try {
         m_multiSettings = std::make_unique<MultiSettings>();
@@ -308,6 +519,9 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
         m_mainWindow->setAttribute(Qt::WA_DontShowOnScreen, true);
         m_mainWindow->legacySetEmbeddedMode(true);
         m_mainWindow->hide();
+        // In embedded mode the legacy window must start with monitor OFF.
+        // The QML bridge will enable RX explicitly after the backend is stable.
+        m_mainWindow->legacySetMonitoring(false);
         connect(m_mainWindow,
                 SIGNAL(legacyWaterfallRowReady(QByteArray const&,int,int,int,int,QString const&)),
                 this,
@@ -337,10 +551,12 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
         applyEmbeddedWidgetTheme();
     } catch (std::exception const& e) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
+        m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
         m_failureReason = QString::fromLocal8Bit(e.what());
         m_available = false;
     } catch (...) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
+        m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
         m_failureReason = QStringLiteral("Unknown exception while creating legacy backend");
         m_available = false;
     }
@@ -359,6 +575,7 @@ DecodiumLegacyBackend::~DecodiumLegacyBackend()
     m_mainWindow = nullptr;
     if (m_app) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
+        m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
     }
 }
 
@@ -497,6 +714,11 @@ QString DecodiumLegacyBackend::adifLogPath() const
     return m_mainWindow ? m_mainWindow->legacyAdifLogPath() : QString {};
 }
 
+QString DecodiumLegacyBackend::allTxtPath() const
+{
+    return m_mainWindow ? m_mainWindow->legacyAllTxtPath() : QString {};
+}
+
 int DecodiumLegacyBackend::txOutputAttenuation() const
 {
     return m_mainWindow ? m_mainWindow->legacyTxOutputAttenuation() : 0;
@@ -520,6 +742,26 @@ void DecodiumLegacyBackend::setMonitoring(bool enabled)
 {
     if (m_mainWindow) {
         m_monitoringControlClaimed = true;
+        m_startupMonitorRequested = enabled;
+
+        constexpr qint64 startupMonitorGateMs {2500};
+        qint64 const elapsedMs = QDateTime::currentMSecsSinceEpoch() - m_backendStartupMs;
+        if (enabled && elapsedMs < startupMonitorGateMs) {
+            if (!m_startupMonitorEnablePending) {
+                m_startupMonitorEnablePending = true;
+                int const remainingMs = int(startupMonitorGateMs - elapsedMs);
+                QTimer::singleShot(remainingMs, this, [this]() {
+                    m_startupMonitorEnablePending = false;
+                    if (!m_mainWindow || !m_startupMonitorRequested) {
+                        return;
+                    }
+                    m_mainWindow->legacySetMonitoring(true);
+                });
+            }
+            return;
+        }
+
+        m_startupMonitorEnablePending = false;
         m_mainWindow->legacySetMonitoring(enabled);
     }
 }
@@ -545,6 +787,20 @@ void DecodiumLegacyBackend::setAutoCq(bool enabled)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetAutoCq(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setDecodeDepthBits(int bits)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetDecodeDepthBits(bits);
+    }
+}
+
+void DecodiumLegacyBackend::setCqOnly(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetCqOnly(enabled);
     }
 }
 
@@ -764,6 +1020,8 @@ void DecodiumLegacyBackend::restoreApplicationIdentity()
     if (!m_app) {
         return;
     }
+    m_app->setOrganizationName(m_originalOrganizationName);
+    m_app->setOrganizationDomain(m_originalOrganizationDomain);
     m_app->setApplicationName(m_originalApplicationName);
     m_app->setApplicationVersion(m_originalApplicationVersion);
     m_app->setQuitOnLastWindowClosed(m_originalQuitOnLastWindowClosed);
