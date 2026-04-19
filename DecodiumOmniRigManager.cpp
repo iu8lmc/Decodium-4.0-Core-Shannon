@@ -192,8 +192,9 @@ void DecodiumOmniRigManager::setRigPtt(bool on)
         emit errorOccurred("OmniRig: impossibile PTT — rig non connesso");
         return;
     }
-    // OmniRig: Ptt property  0=RX  1=TX
-    m_rig->setProperty("Ptt", on ? 1 : 0);
+    // OmniRig COM interface: "Tx" property controls PTT (0=RX, 1=TX)
+    // Note: the property is "Tx", NOT "Ptt" — OmniRig API uses "Tx"
+    m_rig->setProperty("Tx", on ? 1 : 0);
     emit statusUpdate(on ? "OmniRig: PTT ON" : "OmniRig: PTT OFF");
     if (m_pttActive != on) {
         m_pttActive = on;

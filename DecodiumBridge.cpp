@@ -3532,8 +3532,13 @@ void DecodiumBridge::startTx()
     }
 
     // PTT SU — prima di avviare l'audio (come GitHub pttAssert())
-    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
+    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
         activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        bridgeLog("PTT ON via " + m_catBackend);
+    } else {
+        bridgeLog("WARNING: PTT not available — backend=" + m_catBackend + " not connected. TX audio will play but radio stays in RX.");
+        emit statusMessage("PTT non disponibile: verifica connessione CAT (" + m_catBackend + ")");
+    }
 
     m_transmitting = true;
     emit transmittingChanged();
@@ -4538,6 +4543,10 @@ void DecodiumBridge::saveSettings()
     s.setValue("wsprUploadEnabled", m_wsprUploadEnabled);
     // DX Cluster
     if (m_dxCluster) m_dxCluster->saveSettings();
+    // CAT managers — persist serial port, baud rate, rig name etc.
+    if (m_nativeCat)   m_nativeCat->saveSettings();
+    if (m_hamlibCat)   m_hamlibCat->saveSettings();
+    if (m_omniRigCat)  m_omniRigCat->saveSettings();
     // UI state (posizioni finestre, impostazioni panadapter)
     s.setValue("uiSpectrumHeight",  m_uiSpectrumHeight);
     s.setValue("uiPaletteIndex",    m_uiPaletteIndex);
