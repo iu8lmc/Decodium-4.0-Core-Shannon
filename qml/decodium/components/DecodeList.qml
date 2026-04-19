@@ -22,10 +22,10 @@ Item {
         clip: true
         model: decodeListComponent.model
         spacing: 3
-        // IU8LMC: Show newest items at top (list uses append for performance)
-        verticalLayoutDirection: ListView.BottomToTop
+        // Chronological order: oldest at top, newest at bottom (like WSJT-X)
+        verticalLayoutDirection: ListView.TopToBottom
 
-        // Auto-scroll to newest decode (bottom of model = top of view)
+        // Auto-scroll to newest decode at the bottom
         onCountChanged: {
             if (count > 0 && !listView.moving) {
                 Qt.callLater(function() { listView.positionViewAtEnd() })
