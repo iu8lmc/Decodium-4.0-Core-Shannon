@@ -111,17 +111,24 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
   qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
   unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
   if(mstr < mstr0) {              //When mstr has wrapped around to 0, restart the buffer
-    // Il reset di kin (e l'azzeramento del buffer) potrebbe sovrascrivere
-    // dec_data.d2 mentre un decoder Fortran legacy (jt9/JT65/FST4/WSPR)
-    // sta ancora processando il periodo precedente. Acquisiamo brevemente il
-    // runtime mutex Fortran in modo che il reset avvenga solo quando nessun
-    // decoder è dentro la sua sezione critica. Costo: l'audio thread può
-    // bloccarsi al boundary di periodo finché il decoder rilascia il lock,
-    // con possibile drop dei primi campioni del nuovo periodo. Trade-off
-    // accettabile rispetto alla corruzione silenziosa dei dati di decodifica.
-    QMutexLocker lock {&decodium::fortran::runtime_mutex ()};
-    dec_data.params.kin = 0;
-    m_bufferPos = 0;
+    if (m_boundaryResetRequiresRuntimeLock)
+      {
+        // Il reset di kin (e l'azzeramento del buffer) potrebbe sovrascrivere
+        // dec_data.d2 mentre un decoder legacy sta ancora processando il
+        // periodo precedente. Manteniamo il lock solo per i path che leggono
+        // ancora il buffer condiviso in-place.
+        QMutexLocker lock {&decodium::fortran::runtime_mutex ()};
+        dec_data.params.kin = 0;
+        m_bufferPos = 0;
+      }
+    else
+      {
+        // I decoder FTx/Q65 moderni lavorano su una copia dello slot audio.
+        // Bloccare qui l'audio thread al boundary fa perdere il nuovo slot e
+        // porta a decodificare ogni 30 s invece che ogni 15/7.5/3.75 s.
+        dec_data.params.kin = 0;
+        m_bufferPos = 0;
+      }
   }
   mstr0=mstr;
 

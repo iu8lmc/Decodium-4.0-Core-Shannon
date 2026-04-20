@@ -1825,6 +1825,9 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
 
     bool const createdNow = (m_legacyBackend == nullptr);
     if (!m_legacyBackend) {
+        if (auto * app = QCoreApplication::instance()) {
+            app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", !m_useLegacyTxBackend);
+        }
         m_legacyBackend = new DecodiumLegacyBackend(this);
     }
 
@@ -1859,10 +1862,24 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                 this, [this]() {
                     openSetupSettings(0);
                 });
+        connect(m_legacyBackend, &DecodiumLegacyBackend::rigPttRequested,
+                this, [this](bool enabled) {
+                    bridgeLog(QStringLiteral("legacyPttRequested: on=%1 backend=%2 catConnected=%3")
+                                  .arg(enabled ? 1 : 0)
+                                  .arg(m_catBackend)
+                                  .arg(m_catConnected ? 1 : 0));
+                    if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+                        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, enabled, m_omniRigCat, m_legacyBackend);
+                    } else {
+                        bridgeLog(QStringLiteral("legacyPttRequested ignored: no active CAT PTT backend"));
+                    }
+                });
 
         bridgeLog(m_useLegacyTxBackend
                       ? QStringLiteral("Legacy backend enabled for macOS TX/Tune using ft2 profile")
                       : QStringLiteral("Legacy backend enabled for shared Setup/Time Sync UI"));
+
+        m_legacyBackend->setRigControlEnabled(!m_useLegacyTxBackend);
 
         // All'avvio manteniamo il device/channel audio salvato nel bridge, invece di
         // lasciare che il backend legacy riparta dal default di sistema.
@@ -1889,6 +1906,7 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
         }
     }
 
+    m_legacyBackend->setRigControlEnabled(!m_useLegacyTxBackend);
     scheduleLegacyStateRefreshBurst();
 
     return true;
@@ -2082,13 +2100,15 @@ void DecodiumBridge::syncLegacyBackendState()
     updateBool(m_transmitting, m_legacyBackend->transmitting(), [this]() { emit transmittingChanged(); });
     updateBool(m_tuning, m_legacyBackend->tuning(), [this]() { emit tuningChanged(); });
 
-    QString const legacyRigName = m_legacyBackend->rigName().trimmed();
-    bool legacyCatConnected = m_legacyBackend->catConnected();
-    if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && !legacyCatConnected) {
-        legacyCatConnected = !legacyRigName.isEmpty();
+    if (m_legacyBackend->rigControlEnabled()) {
+        QString const legacyRigName = m_legacyBackend->rigName().trimmed();
+        bool legacyCatConnected = m_legacyBackend->catConnected();
+        if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && !legacyCatConnected) {
+            legacyCatConnected = !legacyRigName.isEmpty();
+        }
+        updateBool(m_catConnected, legacyCatConnected, [this]() { emit catConnectedChanged(); });
+        updateString(m_catRigName, m_catConnected ? legacyRigName : QString {}, [this]() { emit catRigNameChanged(); });
     }
-    updateBool(m_catConnected, legacyCatConnected, [this]() { emit catConnectedChanged(); });
-    updateString(m_catRigName, m_catConnected ? legacyRigName : QString {}, [this]() { emit catRigNameChanged(); });
     updateDouble(m_sMeter, m_legacyBackend->signalLevel(), [this]() { emit sMeterChanged(); });
     updateDouble(m_txOutputLevel, txLevelFromLegacyAttenuation(m_legacyBackend->txOutputAttenuation()),
                  [this]() { emit txOutputLevelChanged(); });
@@ -2679,7 +2699,7 @@ void DecodiumBridge::setFrequency(double v) {
         double oldFreq = m_frequency;
         m_frequency = v;
         emit frequencyChanged();
-        if (usingLegacyBackendForTx() || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
+        if (legacyBackendAvailable()) {
             m_legacyBackend->setDialFrequency(v);
         }
         // Pulisci le finestre decode quando cambia banda (differenza > 100kHz)
@@ -3022,8 +3042,10 @@ void DecodiumBridge::setMode(const QString& v) {
         emit rxDecodeListChanged();
 
         emit modeChanged();
-        if (usingLegacyBackendForTx() || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
+        if (legacyBackendAvailable()) {
             m_legacyBackend->setMode(v);
+            m_legacyStartupModeGuard = v.trimmed();
+            m_legacyStartupModeGuardUntilMs = QDateTime::currentMSecsSinceEpoch() + 6000;
         }
     }
 }
@@ -3041,9 +3063,10 @@ void DecodiumBridge::setRxFrequency(int f)
     if (m_rxFrequency != f) {
         m_rxFrequency = f;
         emit rxFrequencyChanged();
-        if (usingLegacyBackendForTx()) {
+        if (legacyBackendAvailable()) {
             m_legacyBackend->setRxFrequency(f);
-        } else {
+        }
+        if (!usingLegacyBackendForTx()) {
             rebuildRxDecodeList();
         }
     }
@@ -3055,7 +3078,7 @@ void DecodiumBridge::setTxFrequency(int f)
     if (m_txFrequency != f) {
         m_txFrequency = f;
         emit txFrequencyChanged();
-        if (usingLegacyBackendForTx()) {
+        if (legacyBackendAvailable()) {
             m_legacyBackend->setTxFrequency(f);
         }
     }

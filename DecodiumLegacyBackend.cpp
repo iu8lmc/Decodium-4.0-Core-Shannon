@@ -490,6 +490,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QString const embeddedLegacyDataDir =
         embeddedLegacyPrivateDataDirPath(originalAppLocalDataPath);
+    auto const embeddedRig = m_app->property("decodiumEmbeddedLegacyRigControlEnabled");
+    if (embeddedRig.isValid()) {
+        m_rigControlEnabled = embeddedRig.toBool();
+    }
 
     m_app->setQuitOnLastWindowClosed(false);
     m_app->setOrganizationName(QString {});
@@ -500,6 +504,7 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     }
     m_app->setProperty("decodiumEmbeddedLegacyShell", true);
     m_app->setProperty("decodiumEmbeddedLegacyDataDir", embeddedLegacyDataDir);
+    m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", m_rigControlEnabled);
     bootstrapEmbeddedLegacyDataDir(embeddedLegacyDataDir);
     bootstrapEmbeddedLegacyConfig();
 
@@ -518,6 +523,7 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                                       QProcessEnvironment::systemEnvironment());
         m_mainWindow->setAttribute(Qt::WA_DontShowOnScreen, true);
         m_mainWindow->legacySetEmbeddedMode(true);
+        m_mainWindow->legacySetRigControlEnabled(m_rigControlEnabled);
         m_mainWindow->hide();
         // In embedded mode the legacy window must start with monitor OFF.
         // The QML bridge will enable RX explicitly after the backend is stable.
@@ -538,6 +544,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                 SIGNAL(legacyPreferencesRequested()),
                 this,
                 SIGNAL(preferencesRequested()));
+        connect(m_mainWindow,
+                SIGNAL(legacyPttRequested(bool)),
+                this,
+                SIGNAL(rigPttRequested(bool)));
         m_available = true;
 
         // Prevent legacy startup options from auto-starting monitor behind the
@@ -552,11 +562,13 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     } catch (std::exception const& e) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
         m_failureReason = QString::fromLocal8Bit(e.what());
         m_available = false;
     } catch (...) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
         m_failureReason = QStringLiteral("Unknown exception while creating legacy backend");
         m_available = false;
     }
@@ -576,6 +588,7 @@ DecodiumLegacyBackend::~DecodiumLegacyBackend()
     if (m_app) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
     }
 }
 
@@ -815,6 +828,17 @@ void DecodiumLegacyBackend::setTxFrequency(int frequencyHz)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetTxFrequency(frequencyHz);
+    }
+}
+
+void DecodiumLegacyBackend::setRigControlEnabled(bool enabled)
+{
+    m_rigControlEnabled = enabled;
+    if (m_app) {
+        m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", enabled);
+    }
+    if (m_mainWindow) {
+        m_mainWindow->legacySetRigControlEnabled(enabled);
     }
 }
 

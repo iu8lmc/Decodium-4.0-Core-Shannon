@@ -26,6 +26,7 @@ public:
             QObject * parent = 0);
 
   void setTRPeriod(double p) {m_period=p;}
+  void setBoundaryResetRequiresRuntimeLock (bool required) { m_boundaryResetRequiresRuntimeLock = required; }
   bool reset () override;
 
   Q_SIGNAL void framesWritten (qint64) const;
@@ -53,6 +54,7 @@ private:
   // data (a signals worth) at
   // the input sample rate
   unsigned m_bufferPos;
+  bool m_boundaryResetRequiresRuntimeLock {true};
 
 };
 

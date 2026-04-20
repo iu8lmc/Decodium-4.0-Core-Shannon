@@ -41,6 +41,7 @@ public:
     bool transmitting() const;
     bool tuning() const;
     bool catConnected() const;
+    bool rigControlEnabled() const { return m_rigControlEnabled; }
     double signalLevel() const;
     int bandActivityRevision() const;
     QStringList bandActivityLines() const;
@@ -62,6 +63,7 @@ public:
     void setCqOnly(bool enabled);
     void setRxFrequency(int frequencyHz);
     void setTxFrequency(int frequencyHz);
+    void setRigControlEnabled(bool enabled);
     void setRigPtt(bool enabled);
     void setAudioInputDeviceName(const QString& name);
     void setAudioOutputDeviceName(const QString& name);
@@ -101,6 +103,7 @@ Q_SIGNALS:
     void rigErrorRaised(QString const& title,
                         QString const& summary,
                         QString const& details) const;
+    void rigPttRequested(bool enabled) const;
 
 private:
     void applyEmbeddedWidgetTheme();
@@ -117,6 +120,7 @@ private:
     bool m_originalQuitOnLastWindowClosed {true};
     bool m_available {false};
     QString m_failureReason;
+    bool m_rigControlEnabled {true};
     bool m_monitoringControlClaimed {false};
     qint64 m_backendStartupMs {0};
     bool m_startupMonitorRequested {false};

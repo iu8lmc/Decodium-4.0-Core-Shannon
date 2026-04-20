@@ -1430,10 +1430,6 @@ namespace
 
   bool ghost_filter_valid_callsign_token (QString const& token, AD1CCty const * countries)
   {
-    if (!countries) {
-      return true;
-    }
-
     auto normalized = normalize_call_token (token).toUpper ();
     if (normalized.isEmpty ()) {
       return false;
@@ -1457,8 +1453,23 @@ namespace
       return false;
     }
 
+    if (!countries) {
+      return true;
+    }
+
     auto const record = countries->lookup (normalized);
-    return !record.entity_name.isEmpty ();
+    if (!record.entity_name.isEmpty ()) {
+      return true;
+    }
+
+    auto const baseRecord = countries->lookup (base);
+    if (!baseRecord.entity_name.isEmpty ()) {
+      return true;
+    }
+
+    // FT2 ghost filtering must not reject syntactically valid callsigns just
+    // because AD1CC lookup did not resolve an entity for this exact token.
+    return true;
   }
 
   QString infer_partner_from_directed_message (QString const& message,
@@ -10722,6 +10733,16 @@ void MainWindow::decode()                                       //decode()
   }
   m_fetched=0;
   QDateTime now = QDateTime::currentDateTimeUtc ();
+  bool const cqOnlyDecodeRequested =
+      ui && ui->cbCQonly && ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked();
+  bool const preferUniformCqDecode =
+      cqOnlyDecodeRequested
+      && !m_diskData
+      && SpecOp::NONE == m_specOp
+      && !m_transmitting
+      && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2")
+      && (m_QSOProgress <= 1 || m_hisCall.trimmed().isEmpty());
+
   if( m_dateTimeLastTX.isValid () ) {
     qint64 isecs_since_tx = m_dateTimeLastTX.secsTo(now);
     dec_data.params.lapcqonly= (isecs_since_tx > 300); 
@@ -10733,6 +10754,9 @@ void MainWindow::decode()                                       //decode()
     dec_data.params.lapcqonly=false;
   } else {
     dec_data.params.yymmdd=-1;
+  }
+  if (preferUniformCqDecode) {
+    dec_data.params.lapcqonly = true;
   }
   if(!m_dataAvailable or m_TRperiod==0.0) return;
   ui->DecodeButton->setChecked (true);
@@ -10784,6 +10808,11 @@ void MainWindow::decode()                                       //decode()
   if((m_mode=="FT8" or m_mode=="FT2") and SpecOp::HOUND==m_specOp and !ui->cbRxAll->isChecked() and
      !m_config.superFox()) dec_data.params.nfb=1000;
   if((m_mode=="FT8" or m_mode=="FT2") and SpecOp::FOX == m_specOp ) dec_data.params.nfqso=200;
+  if (preferUniformCqDecode) {
+    int const searchLow = qBound (0, int (dec_data.params.nfa), 5000);
+    int const searchHigh = qBound (searchLow + 1, int (dec_data.params.nfb), 5000);
+    dec_data.params.nfqso = qBound (searchLow, (searchLow + searchHigh) / 2, searchHigh);
+  }
   dec_data.params.b_even_seq=(dec_data.params.nutc%10)==0;
   dec_data.params.b_superfox=(m_config.superFox() and (SpecOp::FOX == m_specOp or SpecOp::HOUND == m_specOp));
   if(m_mode=="FT8" and dec_data.params.b_superfox and dec_data.params.b_even_seq and m_ihsym<50) return;
@@ -10817,6 +10846,9 @@ void MainWindow::decode()                                       //decode()
   if(m_mode=="FT8") dec_data.params.lft8apon = ui->actionEnable_AP_FT8->isVisible () &&
       ui->actionEnable_AP_FT8->isChecked ();
   if(m_mode=="FT8") dec_data.params.napwid=50;
+  if(m_mode=="FT8" && preferUniformCqDecode) {
+    dec_data.params.napwid = qBound (50, int (dec_data.params.nfb) - int (dec_data.params.nfa), 5000);
+  }
   if(m_mode=="FT2") {
     dec_data.params.nmode=2;
     m_BestCQpriority="";
@@ -14701,12 +14733,18 @@ void MainWindow::guiUpdate()
       requestRigPtt (true); // Assert the PTT
       m_tx_when_ready = true;
 
-#if defined(Q_OS_LINUX)
-      if (!m_tci_audio && (m_mode == "FT2" || m_mode == "FT4"))
+      bool const embeddedDigitalTxNeedsFallback =
+          m_embeddedShellMode
+          && !m_tci_audio
+          && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+
+      if (embeddedDigitalTxNeedsFallback)
         {
           int const fallback_ms = qMax (static_cast<int> (1000.0 * m_config.txDelay ()), 120);
           QTimer::singleShot (fallback_ms, this, [this, fallback_ms] () {
-            if (m_tx_when_ready && g_iptt == 1 && !m_tci_audio && (m_mode == "FT2" || m_mode == "FT4"))
+            if (m_tx_when_ready && g_iptt == 1 && !m_tci_audio
+                && m_embeddedShellMode
+                && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2"))
               {
                 debugToFile (QString {"txFallback  startTx2 without CAT PTT confirm mode:%1 after:%2ms"}
                                  .arg (m_mode)
@@ -14716,7 +14754,6 @@ void MainWindow::guiUpdate()
               }
           });
         }
-#endif
 
       if (m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio)
         {
@@ -21527,6 +21564,13 @@ void MainWindow::on_actionFreqCal_triggered()
 
 void MainWindow::switch_mode (Mode mode)
 {
+  if (m_detector)
+    {
+      bool const boundaryResetNeedsRuntimeLock =
+          !(m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+      m_detector->setBoundaryResetRequiresRuntimeLock (boundaryResetNeedsRuntimeLock);
+    }
+
   no_a7_decodes = true;  // Don't allow a7 decodes during the first period because they can be leftovers from the previous mode
   msk144qsy = false;     // MSK144 QSY
   QTimer::singleShot ((int(1500.0*m_TRperiod)), [=] {no_a7_decodes = false;});
