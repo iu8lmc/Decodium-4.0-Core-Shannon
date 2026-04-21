@@ -94,6 +94,117 @@ Item {
         anchors.fill: parent
         spacing: 0
 
+        // ── Toolbar Callsign Labels (font/spaziatura/bold/colore) ─────────
+        // Posizionata in cima, lontana dallo spettro
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 22
+            color: Qt.rgba(0,0,0,0.35); visible: showControls
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
+
+                Text { text: "Calls:"; color: "#00E5FF"; font.pixelSize: 10; font.bold: true }
+
+                // Font size
+                Text { text: "Font"; color: textSec; font.pixelSize: 10 }
+                Slider {
+                    id: labelFontSlider
+                    Layout.preferredWidth: 70
+                    from: 6; to: 20; value: 8; stepSize: 1
+                    onValueChanged: {
+                        waterfallDisplay.labelFontSize = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelFontSize", value)
+                        }
+                    }
+                    background: Rectangle { x:labelFontSlider.leftPadding;y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-2;width:labelFontSlider.availableWidth;height:4;radius:2;color:"#1a2a3a"
+                        Rectangle { width: labelFontSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#00E5FF" }
+                    }
+                    handle: Rectangle { x:labelFontSlider.leftPadding+labelFontSlider.visualPosition*(labelFontSlider.availableWidth-width);y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color: labelFontSlider.pressed ? accentGreen : "#00E5FF" }
+                }
+                Text { text: labelFontSlider.value.toFixed(0)+"px"; color: "#00E5FF"; font.pixelSize: 10; width: 26 }
+
+                Rectangle { width:1;height:14;color:"#333" }
+
+                // Spacing orizzontale
+                Text { text: "Gap"; color: textSec; font.pixelSize: 10 }
+                Slider {
+                    id: labelSpacingSlider
+                    Layout.preferredWidth: 60
+                    from: 0; to: 20; value: 2; stepSize: 1
+                    onValueChanged: {
+                        waterfallDisplay.labelSpacing = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelSpacing", value)
+                        }
+                    }
+                    background: Rectangle { x:labelSpacingSlider.leftPadding;y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-2;width:labelSpacingSlider.availableWidth;height:4;radius:2;color:"#1a2a3a"
+                        Rectangle { width: labelSpacingSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#88DD88" }
+                    }
+                    handle: Rectangle { x:labelSpacingSlider.leftPadding+labelSpacingSlider.visualPosition*(labelSpacingSlider.availableWidth-width);y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color: labelSpacingSlider.pressed ? accentGreen : "#88DD88" }
+                }
+                Text { text: labelSpacingSlider.value.toFixed(0); color: "#88DD88"; font.pixelSize: 10; width: 20 }
+
+                Rectangle { width:1;height:14;color:"#333" }
+
+                // Bold
+                CheckBox {
+                    id: labelBoldCheck
+                    checked: true
+                    onCheckedChanged: {
+                        waterfallDisplay.labelBold = checked
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelBold", checked)
+                        }
+                    }
+                    indicator: Rectangle {
+                        implicitWidth: 14; implicitHeight: 14; radius: 2
+                        color: labelBoldCheck.checked ? "#FFFFFF" : Qt.rgba(30/255,45/255,70/255,0.9)
+                        border.color: "#FFFFFF"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "B"; color: "black"; font.pixelSize: 9; font.bold: true; visible: labelBoldCheck.checked }
+                    }
+                }
+                Text { text: "Bold"; color: labelBoldCheck.checked ? "#FFFFFF" : textSec; font.pixelSize: 10 }
+
+                Rectangle { width:1;height:14;color:"#333" }
+
+                // Color preset
+                Text { text: "Colore"; color: textSec; font.pixelSize: 10 }
+                ComboBox {
+                    id: labelColorCombo
+                    Layout.preferredWidth: 86
+                    font.pixelSize: 10
+                    model: waterfallPanel.labelColorPresets.map(function(p){ return p.name })
+                    currentIndex: 0
+                    onActivated: {
+                        var preset = waterfallPanel.labelColorPresets[currentIndex]
+                        waterfallDisplay.labelUseCustomColor = preset.custom
+                        waterfallDisplay.labelColor = preset.color
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelColorPreset", currentIndex)
+                        }
+                    }
+                    background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
+                    contentItem: Row {
+                        spacing: 4
+                        leftPadding: 4
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 10; height: 10; radius: 2
+                            color: waterfallPanel.labelColorPresets[labelColorCombo.currentIndex].color
+                            border.color: "#555"; border.width: 1
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: labelColorCombo.displayText
+                            font.pixelSize: 10; color: textPrimary
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
         // ── Toolbar controls ──────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
@@ -293,116 +404,6 @@ Item {
                     handle: Rectangle { x:speedSlider.leftPadding+speedSlider.visualPosition*(speedSlider.availableWidth-width);y:speedSlider.topPadding+speedSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#DD8866" }
                 }
                 Text { text: speedSlider.value.toFixed(0)+"ms"; color: "#DD8866"; font.pixelSize: 10; width: 32 }
-
-                Item { Layout.fillWidth: true }
-            }
-        }
-
-        // ── Toolbar Callsign Labels (font/spaziatura/bold/colore) ─────────
-        Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 22
-            color: Qt.rgba(0,0,0,0.35); visible: showControls
-            RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
-
-                Text { text: "Calls:"; color: "#00E5FF"; font.pixelSize: 10; font.bold: true }
-
-                // Font size
-                Text { text: "Font"; color: textSec; font.pixelSize: 10 }
-                Slider {
-                    id: labelFontSlider
-                    Layout.preferredWidth: 70
-                    from: 6; to: 20; value: 8; stepSize: 1
-                    onValueChanged: {
-                        waterfallDisplay.labelFontSize = value
-                        if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelFontSize", value)
-                        }
-                    }
-                    background: Rectangle { x:labelFontSlider.leftPadding;y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-2;width:labelFontSlider.availableWidth;height:4;radius:2;color:"#1a2a3a"
-                        Rectangle { width: labelFontSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#00E5FF" }
-                    }
-                    handle: Rectangle { x:labelFontSlider.leftPadding+labelFontSlider.visualPosition*(labelFontSlider.availableWidth-width);y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color: labelFontSlider.pressed ? accentGreen : "#00E5FF" }
-                }
-                Text { text: labelFontSlider.value.toFixed(0)+"px"; color: "#00E5FF"; font.pixelSize: 10; width: 26 }
-
-                Rectangle { width:1;height:14;color:"#333" }
-
-                // Spacing orizzontale
-                Text { text: "Gap"; color: textSec; font.pixelSize: 10 }
-                Slider {
-                    id: labelSpacingSlider
-                    Layout.preferredWidth: 60
-                    from: 0; to: 20; value: 2; stepSize: 1
-                    onValueChanged: {
-                        waterfallDisplay.labelSpacing = value
-                        if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelSpacing", value)
-                        }
-                    }
-                    background: Rectangle { x:labelSpacingSlider.leftPadding;y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-2;width:labelSpacingSlider.availableWidth;height:4;radius:2;color:"#1a2a3a"
-                        Rectangle { width: labelSpacingSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#88DD88" }
-                    }
-                    handle: Rectangle { x:labelSpacingSlider.leftPadding+labelSpacingSlider.visualPosition*(labelSpacingSlider.availableWidth-width);y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color: labelSpacingSlider.pressed ? accentGreen : "#88DD88" }
-                }
-                Text { text: labelSpacingSlider.value.toFixed(0); color: "#88DD88"; font.pixelSize: 10; width: 20 }
-
-                Rectangle { width:1;height:14;color:"#333" }
-
-                // Bold
-                CheckBox {
-                    id: labelBoldCheck
-                    checked: true
-                    onCheckedChanged: {
-                        waterfallDisplay.labelBold = checked
-                        if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelBold", checked)
-                        }
-                    }
-                    indicator: Rectangle {
-                        implicitWidth: 14; implicitHeight: 14; radius: 2
-                        color: labelBoldCheck.checked ? "#FFFFFF" : Qt.rgba(30/255,45/255,70/255,0.9)
-                        border.color: "#FFFFFF"; border.width: 1
-                        Text { anchors.centerIn: parent; text: "B"; color: "black"; font.pixelSize: 9; font.bold: true; visible: labelBoldCheck.checked }
-                    }
-                }
-                Text { text: "Bold"; color: labelBoldCheck.checked ? "#FFFFFF" : textSec; font.pixelSize: 10 }
-
-                Rectangle { width:1;height:14;color:"#333" }
-
-                // Color preset
-                Text { text: "Colore"; color: textSec; font.pixelSize: 10 }
-                ComboBox {
-                    id: labelColorCombo
-                    Layout.preferredWidth: 86
-                    font.pixelSize: 10
-                    model: waterfallPanel.labelColorPresets.map(function(p){ return p.name })
-                    currentIndex: 0
-                    onActivated: {
-                        var preset = waterfallPanel.labelColorPresets[currentIndex]
-                        waterfallDisplay.labelUseCustomColor = preset.custom
-                        waterfallDisplay.labelColor = preset.color
-                        if (!waterfallPanel.restoringSettings) {
-                            bridge.setSetting("uiLabelColorPreset", currentIndex)
-                        }
-                    }
-                    background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
-                    contentItem: Row {
-                        spacing: 4
-                        leftPadding: 4
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 10; height: 10; radius: 2
-                            color: waterfallPanel.labelColorPresets[labelColorCombo.currentIndex].color
-                            border.color: "#555"; border.width: 1
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: labelColorCombo.displayText
-                            font.pixelSize: 10; color: textPrimary
-                        }
-                    }
-                }
 
                 Item { Layout.fillWidth: true }
             }
