@@ -2427,7 +2427,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "RX Freq"
+                            text: "Signal RX"
                             font.pixelSize: 10
                             font.bold: true
                             color: secondaryCyan
@@ -2446,7 +2446,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: rxRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina RX Frequency"
+                    ToolTip.text: "Ripristina Signal RX"
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3085,32 +3085,14 @@ ApplicationWindow {
                         return inWindow || relevant
                     }
                     function currentRxDecodes() {
+                        // IU8LMC: ordine identico a Band Activity — rispetta l'ordine di arrivo dal bridge (nessun sort custom)
                         var merged = []
-                        function utcSortValue(timeStr) {
-                            var digits = String(timeStr || "").replace(/[^0-9]/g, "")
-                            if (digits.length >= 6)
-                                return parseInt(digits.substring(0, 6))
-                            if (digits.length === 4)
-                                return parseInt(digits + "00")
-                            return -1
-                        }
                         if (bridge.rxDecodeList) {
                             for (var j = 0; j < bridge.rxDecodeList.length; j++) {
                                 if (bridge.rxDecodeList[j])
                                     merged.push(bridge.rxDecodeList[j])
                             }
                         }
-                        merged.sort(function(a, b) {
-                            var ta = utcSortValue(a.time)
-                            var tb = utcSortValue(b.time)
-                            if (ta !== tb)
-                                return ta - tb
-                            var fa = parseInt(a.freq || "0")
-                            var fb = parseInt(b.freq || "0")
-                            if (fa !== fb)
-                                return fa - fb
-                            return String(a.message || "").localeCompare(String(b.message || ""))
-                        })
                         return merged
                     }
 
@@ -3445,7 +3427,7 @@ ApplicationWindow {
                                         }
 
                                         Text {
-                                            text: "Band Activity"
+                                            text: "Full Spectrum"
                                             font.pixelSize: 14
                                             font.bold: true
                                             color: "#4CAF50"
@@ -3763,7 +3745,7 @@ ApplicationWindow {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: rxFreqDockHighlighted ? "🧲 Rilascia qui!" : "📡 RX Freq Detached"
+                                        text: rxFreqDockHighlighted ? "🧲 Rilascia qui!" : "📡 Signal RX Detached"
                                         color: rxFreqDockHighlighted ? primaryBlue : textSecondary
                                         font.pixelSize: rxFreqDockHighlighted ? 16 : 12
                                         font.bold: rxFreqDockHighlighted
@@ -3822,7 +3804,7 @@ ApplicationWindow {
                                         }
 
                                         Text {
-                                            text: rxFreqPanel.compactHeader ? "RX Freq" : "RX Frequency"
+                                            text: "Signal RX"
                                             font.pixelSize: rxFreqPanel.compactHeader ? 12 : 14
                                             font.bold: true
                                             color: primaryBlue
@@ -3868,7 +3850,7 @@ ApplicationWindow {
                                                 onClicked: bridge.clearRxDecodes()
                                             }
                                             ToolTip.visible: rxClearMA.containsMouse
-                                            ToolTip.text: "Pulisci RX Frequency"
+                                            ToolTip.text: "Pulisci Signal RX"
                                         }
 
                                         // Detach button
@@ -3898,7 +3880,7 @@ ApplicationWindow {
                                             }
 
                                             ToolTip.visible: rxDetachMA.containsMouse
-                                            ToolTip.text: "Sgancia RX Frequency"
+                                            ToolTip.text: "Sgancia Signal RX"
                                             ToolTip.delay: 500
                                         }
                                     }
@@ -7099,7 +7081,7 @@ ApplicationWindow {
         minimumHeight: 200
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "RX Frequency - Decodium"
+        title: "Signal RX - Decodium"
         color: "transparent"
 
         x: mainWindow.x + 300
@@ -7194,7 +7176,7 @@ ApplicationWindow {
 
                         Text { text: "⋮⋮"; font.pixelSize: 12; color: primaryBlue }
                         Rectangle { width: 10; height: 10; radius: 5; color: primaryBlue }
-                        Text { text: "RX Frequency"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
+                        Text { text: "Signal RX"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
 
                         Rectangle {
                             width: 70

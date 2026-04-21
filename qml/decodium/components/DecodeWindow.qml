@@ -152,16 +152,12 @@ Window {
         return inWindow || relevant
     }
     function currentRxDecodes() {
+        // IU8LMC: ordine identico a Band Activity — rispetta l'ordine di arrivo dal bridge (nessun sort custom)
         var merged = []
         if (appEngine.rxDecodeList) {
             for (var j = 0; j < appEngine.rxDecodeList.length; j++) {
-                if (appEngine.rxDecodeList[j]) {
-                    var item = {}
-                    var src = appEngine.rxDecodeList[j]
-                    for (var key in src)
-                        item[key] = src[key]
-                    merged.push(item)
-                }
+                if (appEngine.rxDecodeList[j])
+                    merged.push(appEngine.rxDecodeList[j])
             }
         }
         return merged
@@ -250,7 +246,7 @@ Window {
                             spacing: 12
 
                             Text {
-                                text: "Band Activity"
+                                text: "Full Spectrum"
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: secondaryCyan
@@ -624,7 +620,7 @@ Window {
                             spacing: 8
 
                             Text {
-                                text: decodeWindow.compactRxHeader ? "RX Freq" : "RX Frequency"
+                                text: "Signal RX"
                                 font.pixelSize: decodeWindow.compactRxHeader ? 12 : 13
                                 font.bold: true
                                 color: primaryBlue
@@ -752,30 +748,20 @@ Window {
                             spacing: 1
                             interactive: true
                             property bool followTail: true
-                            property bool tailFollowPending: false
                             function isNearTail() {
                                 return contentHeight <= height + 2
                                     || contentY >= Math.max(0, contentHeight - height - 8)
                             }
                             function updateFollowTail() {
-                                if (tailFollowPending)
-                                    return
                                 followTail = isNearTail()
                             }
                             function forceTailFollow() {
                                 followTail = true
-                                tailFollowPending = true
                                 Qt.callLater(function() {
                                     if (!rxFrequencyList)
                                         return
                                     rxFrequencyList.positionViewAtEnd()
                                     rxFrequencyList.followTail = true
-                                    Qt.callLater(function() {
-                                        if (!rxFrequencyList)
-                                            return
-                                        rxFrequencyList.tailFollowPending = false
-                                        rxFrequencyList.followTail = rxFrequencyList.isNearTail()
-                                    })
                                 })
                             }
                             Component.onCompleted: Qt.callLater(function() {
@@ -790,11 +776,6 @@ Window {
                                 }
                             }
                             property int _ver: decodeWindow.decodeListVersion
-                            on_VerChanged: {
-                                if (followTail || isNearTail()) {
-                                    forceTailFollow()
-                                }
-                            }
 
                             // Filter model to only show messages at RX frequency
                             model: {
@@ -933,7 +914,7 @@ Window {
                         // Empty state for RX Frequency
                         Text {
                             anchors.centerIn: parent
-                            text: "No messages at " + appEngine.rxFrequency + " Hz\nClick on Band Activity to select frequency"
+                            text: "No messages at " + appEngine.rxFrequency + " Hz\nClick on Full Spectrum to select frequency"
                             font.pixelSize: 12
                             color: textSecondary
                             horizontalAlignment: Text.AlignHCenter

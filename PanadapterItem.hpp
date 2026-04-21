@@ -10,6 +10,7 @@
 #include <QMutex>
 #include <QTimer>
 #include <QStringList>
+#include <QColor>
 
 class QSGSimpleTextureNode;
 
@@ -46,6 +47,13 @@ class PanadapterItem : public QQuickItem
     Q_PROPERTY(int   colorGain   READ colorGain   WRITE setColorGain   NOTIFY colorGainChanged)
     Q_PROPERTY(int   blackLevel  READ blackLevel  WRITE setBlackLevel  NOTIFY blackLevelChanged)
 
+    // ── Decode labels (callsign overlay) ────────────────────────────────────
+    Q_PROPERTY(int   labelFontSize      READ labelFontSize      WRITE setLabelFontSize      NOTIFY labelFontSizeChanged)
+    Q_PROPERTY(int   labelSpacing       READ labelSpacing       WRITE setLabelSpacing       NOTIFY labelSpacingChanged)
+    Q_PROPERTY(bool  labelBold          READ labelBold          WRITE setLabelBold          NOTIFY labelBoldChanged)
+    Q_PROPERTY(QColor labelColor        READ labelColor         WRITE setLabelColor         NOTIFY labelColorChanged)
+    Q_PROPERTY(bool  labelUseCustomColor READ labelUseCustomColor WRITE setLabelUseCustomColor NOTIFY labelUseCustomColorChanged)
+
     // ── Read-only status ────────────────────────────────────────────────────
     Q_PROPERTY(float measuredFloor READ measuredFloor NOTIFY measuredFloorChanged)
     Q_PROPERTY(float measuredPeak  READ measuredPeak  NOTIFY measuredPeakChanged)
@@ -81,6 +89,11 @@ public:
     }
     int   colorGain()      const { return m_colorGain; }
     int   blackLevel()     const { return m_blackLevel; }
+    int   labelFontSize()  const { return m_labelFontSize; }
+    int   labelSpacing()   const { return m_labelSpacing; }
+    bool  labelBold()      const { return m_labelBold; }
+    QColor labelColor()    const { return m_labelColor; }
+    bool  labelUseCustomColor() const { return m_labelUseCustomColor; }
 
     // ── Setters ─────────────────────────────────────────────────────────────
     void setMinDb(float v)         { if (m_minDb!=v){m_minDb=v;emit minDbChanged();markDirty();} }
@@ -101,6 +114,11 @@ public:
     void setShowTxBrackets(bool v) { if (m_showTxBrackets!=v){m_showTxBrackets=v;emit showTxBracketsChanged();markDirty();} }
     void setColorGain(int v)       { v=qBound(0,v,100); if(m_colorGain!=v){m_colorGain=v;emit colorGainChanged();markDirty();} }
     void setBlackLevel(int v)      { v=qBound(0,v,100); if(m_blackLevel!=v){m_blackLevel=v;emit blackLevelChanged();markDirty();} }
+    void setLabelFontSize(int v)   { v=qBound(6,v,24); if(m_labelFontSize!=v){m_labelFontSize=v;emit labelFontSizeChanged();markDirty();} }
+    void setLabelSpacing(int v)    { v=qBound(0,v,20); if(m_labelSpacing!=v){m_labelSpacing=v;emit labelSpacingChanged();markDirty();} }
+    void setLabelBold(bool v)      { if(m_labelBold!=v){m_labelBold=v;emit labelBoldChanged();markDirty();} }
+    void setLabelColor(QColor v)   { if(m_labelColor!=v){m_labelColor=v;emit labelColorChanged();markDirty();} }
+    void setLabelUseCustomColor(bool v) { if(m_labelUseCustomColor!=v){m_labelUseCustomColor=v;emit labelUseCustomColorChanged();markDirty();} }
 
     // ── Invokable methods ───────────────────────────────────────────────────
     // Chiamato dal bridge: dB raw + range dB + range frequenze exact
@@ -138,6 +156,11 @@ signals:
     void txFrequencySelected(int freq);
     void colorGainChanged();
     void blackLevelChanged();
+    void labelFontSizeChanged();
+    void labelSpacingChanged();
+    void labelBoldChanged();
+    void labelColorChanged();
+    void labelUseCustomColorChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
@@ -199,6 +222,13 @@ private:
     int   m_colorGain    = 50;
     int   m_blackLevel   = 15;
     QVariantList m_decodeLabels;  // [{call:"IU8LMC",freq:1500,snr:-5,isCQ:true}, ...]
+
+    // ── Stile label callsign (overlay spettro) ──────────────────────────────
+    int    m_labelFontSize       = 8;
+    int    m_labelSpacing        = 2;    // gap orizzontale minimo tra label
+    bool   m_labelBold           = true;
+    QColor m_labelColor          = QColor(0, 230, 255);
+    bool   m_labelUseCustomColor = false; // se false, usa i colori categorici (CQ/MyCall/altri)
 
     // ── Stato rendering ─────────────────────────────────────────────────────
     bool  m_spectrumDirty = true;

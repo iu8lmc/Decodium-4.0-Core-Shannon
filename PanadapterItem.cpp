@@ -464,8 +464,29 @@ void PanadapterItem::renderSpectrum()
     }
 
     // ── Decode labels: mostra callsign delle stazioni decodificate ─────
+    // Algoritmo anti-overlap: assegnazione automatica su più righe.
     if (!m_decodeLabels.isEmpty()) {
-        p.setFont(QFont("Consolas", 8, QFont::Bold));
+        QFont labelFont("Consolas", m_labelFontSize, m_labelBold ? QFont::Bold : QFont::Normal);
+        p.setFont(labelFont);
+        QFontMetrics fm(labelFont);
+        const int rowH = fm.height();                 // altezza riga label
+        const int topPad = 2;                         // margine dall'alto
+        const int bottomKeepOut = 20;                 // non sovrapporre ai tick frequenza
+        const int gap = m_labelSpacing;               // spaziatura orizzontale minima
+
+        // Numero massimo righe che stanno prima dei tick frequenza
+        int maxRows = qMax(1, (h - bottomKeepOut - topPad) / rowH);
+
+        // Prepara elementi ordinati per freq crescente (equivale a x crescente)
+        struct LabelItem {
+            int x;            // pixel screen
+            int textW;        // larghezza testo
+            QString text;
+            QColor color;
+        };
+        QVector<LabelItem> items;
+        items.reserve(m_decodeLabels.size());
+
         for (const auto& v : m_decodeLabels) {
             QVariantMap d = v.toMap();
             QString call = d.value("call").toString();
@@ -478,20 +499,47 @@ void PanadapterItem::renderSpectrum()
             int lx = fToX(freq);
             if (lx < 0 || lx >= w) continue;
 
-            // Colore: verde per CQ, rosso per MyCall, ciano per altri
-            QColor col = isCQ ? QColor(0, 230, 100) : (isMyCall ? QColor(255, 80, 80) : QColor(0, 200, 255));
+            QString text = call + " " + QString::number(snr);
+            int textW = fm.horizontalAdvance(text);
+
+            QColor col;
+            if (m_labelUseCustomColor) {
+                col = m_labelColor;
+            } else {
+                // Colore: verde per CQ, rosso per MyCall, ciano per altri
+                col = isCQ ? QColor(0, 230, 100)
+                           : (isMyCall ? QColor(255, 80, 80) : QColor(0, 200, 255));
+            }
+
+            items.push_back({lx, textW, text, col});
+        }
+
+        std::sort(items.begin(), items.end(),
+                  [](const LabelItem& a, const LabelItem& b){ return a.x < b.x; });
+
+        // Ogni riga mantiene il rightmost X (fine testo precedente + gap)
+        QVector<int> rowRightX(maxRows, -1000000);
+
+        for (const auto& it : items) {
+            int textX = it.x + 2;
+            // Scegli la prima riga dove textX > rowRightX[r]
+            int chosenRow = -1;
+            for (int r = 0; r < maxRows; ++r) {
+                if (textX > rowRightX[r] + gap) { chosenRow = r; break; }
+            }
+            if (chosenRow < 0) continue; // tutte le righe occupate: scarta questa label
+
+            int textY = topPad + rowH * (chosenRow + 1) - fm.descent();
 
             // Linea verticale sottile alla frequenza
-            p.setPen(QPen(col, 1, Qt::DotLine));
-            p.drawLine(lx, 0, lx, h - 20);
+            p.setPen(QPen(it.color, 1, Qt::DotLine));
+            p.drawLine(it.x, 0, it.x, h - bottomKeepOut);
 
-            // Label callsign + SNR
-            QString label = call + " " + QString::number(snr);
-            p.setPen(col);
-            int textX = lx + 2;
-            // Alterna posizione verticale per evitare sovrapposizioni
-            int textY = 10 + (freq % 3) * 10;
-            p.drawText(textX, textY, label);
+            // Testo
+            p.setPen(it.color);
+            p.drawText(textX, textY, it.text);
+
+            rowRightX[chosenRow] = textX + it.textW;
         }
     }
 
