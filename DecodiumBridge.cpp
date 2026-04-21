@@ -1347,6 +1347,7 @@ static int syncTxStartBudgetMs(const QString& mode)
 #endif
 }
 
+#if defined(Q_OS_MAC)
 static AudioDevice::Channel txOutputChannelForFormat(const QAudioFormat& format, int configuredChannel)
 {
     AudioDevice::Channel const requestedChannel =
@@ -1356,6 +1357,7 @@ static AudioDevice::Channel txOutputChannelForFormat(const QAudioFormat& format,
     }
     return requestedChannel;
 }
+#endif
 
 // ── helpers PTT / freq che delegano al backend attivo ────────────────────────
 static inline bool useLegacyRigControlFallback(DecodiumLegacyBackend* legacy, const QString& backend)

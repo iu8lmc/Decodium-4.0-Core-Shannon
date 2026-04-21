@@ -280,6 +280,7 @@ Allineamenti eseguiti per la release `1.0.33`:
 - `installer/decodium_setup.iss` aggiornato a `1.0.33`
 - workflow Windows aggiornato per accettare anche tag semver nudi come `1.0.33`
 - documentazione SignPath corretta per il caso di release firmata con tag `v<version>`
+- fix CI Windows post-tag: `txOutputChannelForFormat()` reso helper solo `Q_OS_MAC`, evitando l'errore `-Werror=unused-function` sul runner MinGW
 
 Uso previsto:
 - tag `1.0.33`: build/release Windows unsigned via workflow `Build Windows x64`
