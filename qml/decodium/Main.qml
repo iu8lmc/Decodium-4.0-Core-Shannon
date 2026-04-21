@@ -1548,34 +1548,6 @@ ApplicationWindow {
                             ToolTip.text: "Settings"
                         }
 
-                        // BUG REPORT
-                        Rectangle {
-                            Layout.preferredWidth: 36
-                            Layout.fillHeight: true
-                            radius: 3
-                            color: bugMA.containsMouse ? Qt.rgba(1, 0.47, 0.08, 0.2) :
-                                   (bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? Qt.rgba(1, 0.27, 0.2, 0.25) : "transparent")
-                            border.color: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? "#ff4444" : "transparent"
-                            border.width: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? 1 : 0
-                            Label {
-                                anchors.centerIn: parent
-                                text: bridge.diagnostics && bridge.diagnostics.errorCount > 0
-                                      ? bridge.diagnostics.errorCount : ""
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: "#ff4444"
-                            }
-                            MouseArea {
-                                id: bugMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: bugReportDialog.open()
-                            }
-                            ToolTip.visible: bugMA.containsMouse
-                            ToolTip.text: "Bug Report"
-                        }
-
                         // REC
                         Rectangle {
                             Layout.preferredWidth: 50
@@ -3114,17 +3086,31 @@ ApplicationWindow {
                     }
                     function currentRxDecodes() {
                         var merged = []
+                        function utcSortValue(timeStr) {
+                            var digits = String(timeStr || "").replace(/[^0-9]/g, "")
+                            if (digits.length >= 6)
+                                return parseInt(digits.substring(0, 6))
+                            if (digits.length === 4)
+                                return parseInt(digits + "00")
+                            return -1
+                        }
                         if (bridge.rxDecodeList) {
                             for (var j = 0; j < bridge.rxDecodeList.length; j++) {
-                                if (bridge.rxDecodeList[j]) {
-                                    var item = {}
-                                    var src = bridge.rxDecodeList[j]
-                                    for (var key in src)
-                                        item[key] = src[key]
-                                    merged.push(item)
-                                }
+                                if (bridge.rxDecodeList[j])
+                                    merged.push(bridge.rxDecodeList[j])
                             }
                         }
+                        merged.sort(function(a, b) {
+                            var ta = utcSortValue(a.time)
+                            var tb = utcSortValue(b.time)
+                            if (ta !== tb)
+                                return ta - tb
+                            var fa = parseInt(a.freq || "0")
+                            var fb = parseInt(b.freq || "0")
+                            if (fa !== fb)
+                                return fa - fb
+                            return String(a.message || "").localeCompare(String(b.message || ""))
+                        })
                         return merged
                     }
 
@@ -3231,9 +3217,8 @@ ApplicationWindow {
                                 var periodIndex = Math.floor(totalMs / periodMs)
                                 timingBar.isEvenPeriod = (periodIndex % 2) === 0
                                 // isTxPhase: true quando siamo nel NOSTRO periodo TX
-                                // bridge.txPeriod === 1 -> first/even (:00/:30)
-                                // bridge.txPeriod === 0 -> second/odd (:15/:45)
-                                var isOurTxPeriod = bridge ? ((bridge.txPeriod === 1) === timingBar.isEvenPeriod) : false
+                                // txPeriod=0 → TX nei periodi pari, txPeriod=1 → TX nei dispari
+                                var isOurTxPeriod = bridge ? ((bridge.txPeriod === 0) === timingBar.isEvenPeriod) : false
                                 timingBar.isTxPhase = isOurTxPeriod && timingBar.secInPeriod < timingBar.txDuration
                                 timingBar.periodLabel = isOurTxPeriod ? "TX" : "RX"
                             }
@@ -3958,30 +3943,20 @@ ApplicationWindow {
                                         spacing: 1
                                         interactive: true
                                         property bool followTail: true
-                                        property bool tailFollowPending: false
                                         function isNearTail() {
                                             return contentHeight <= height + 2
                                                 || contentY >= Math.max(0, contentHeight - height - 8)
                                         }
                                         function updateFollowTail() {
-                                            if (tailFollowPending)
-                                                return
                                             followTail = isNearTail()
                                         }
                                         function forceTailFollow() {
                                             followTail = true
-                                            tailFollowPending = true
                                             Qt.callLater(function() {
                                                 if (!rxFrequencyList)
                                                     return
                                                 rxFrequencyList.positionViewAtEnd()
                                                 rxFrequencyList.followTail = true
-                                                Qt.callLater(function() {
-                                                    if (!rxFrequencyList)
-                                                        return
-                                                    rxFrequencyList.tailFollowPending = false
-                                                    rxFrequencyList.followTail = rxFrequencyList.isNearTail()
-                                                })
                                             })
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
@@ -3998,11 +3973,6 @@ ApplicationWindow {
 
                                         // Reattivo: si aggiorna quando la decodeList cambia
                                         property int _ver: decodePanel.decodeListVersion
-                                        on_VerChanged: {
-                                            if (followTail || isNearTail()) {
-                                                forceTailFollow()
-                                            }
-                                        }
                                         model: {
                                             void(_ver)  // forza ricalcolo quando _ver cambia
                                             return decodePanel.currentRxDecodes()
@@ -4932,6 +4902,24 @@ ApplicationWindow {
                 text: parent.text
                 font.pixelSize: 12
                 color: textPrimary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            text: bridge.diagnostics && bridge.diagnostics.errorCount > 0
+                  ? "Segnala Bug (" + bridge.diagnostics.errorCount + ")"
+                  : "Segnala Bug"
+            onTriggered: bugReportDialog.open()
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? "#ff4444" : textPrimary
                 leftPadding: 10
             }
         }
@@ -7263,30 +7251,20 @@ ApplicationWindow {
                         spacing: 1
                         interactive: true
                         property bool followTail: true
-                        property bool tailFollowPending: false
                         function isNearTail() {
                             return contentHeight <= height + 2
                                 || contentY >= Math.max(0, contentHeight - height - 8)
                         }
                         function updateFollowTail() {
-                            if (tailFollowPending)
-                                return
                             followTail = isNearTail()
                         }
                         function forceTailFollow() {
                             followTail = true
-                            tailFollowPending = true
                             Qt.callLater(function() {
                                 if (!rxFrequencyFloatingList)
                                     return
                                 rxFrequencyFloatingList.positionViewAtEnd()
                                 rxFrequencyFloatingList.followTail = true
-                                Qt.callLater(function() {
-                                    if (!rxFrequencyFloatingList)
-                                        return
-                                    rxFrequencyFloatingList.tailFollowPending = false
-                                    rxFrequencyFloatingList.followTail = rxFrequencyFloatingList.isNearTail()
-                                })
                             })
                         }
                         Component.onCompleted: Qt.callLater(function() {
@@ -7301,11 +7279,6 @@ ApplicationWindow {
                             }
                         }
                         property int _ver: decodePanel.decodeListVersion
-                        on_VerChanged: {
-                            if (followTail || isNearTail()) {
-                                forceTailFollow()
-                            }
-                        }
                         model: {
                             void(_ver)
                             return decodePanel.currentRxDecodes()
