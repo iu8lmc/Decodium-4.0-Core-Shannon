@@ -15,8 +15,8 @@ Item {
     signal txFrequencySelected(int freq)     // Sinistro = TX
 
     property bool showControls: true
-    property int  minFreq: 200
-    property int  maxFreq: 3000
+    property int  minFreq: 0
+    property int  maxFreq: 3200
     property int  spectrumHeight: 150
     property bool restoringSettings: false
 
@@ -32,6 +32,16 @@ Item {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSec:     Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.6)
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
+
+    readonly property var labelColorPresets: [
+        { name: "Auto",    color: "#00E6FF", custom: false },
+        { name: "Ciano",   color: "#00E6FF", custom: true  },
+        { name: "Bianco",  color: "#FFFFFF", custom: true  },
+        { name: "Giallo",  color: "#FFE600", custom: true  },
+        { name: "Verde",   color: "#00E664", custom: true  },
+        { name: "Magenta", color: "#FF64FF", custom: true  },
+        { name: "Arancio", color: "#FF9600", custom: true  }
+    ]
 
     function applyManualContrast() {
         if (waterfallDisplay && !autoRangeCheck.checked) {
@@ -51,6 +61,11 @@ Item {
         contrastSlider.value = bridge.getSetting("uiWaterfallContrast", 80)
         speedSlider.value = bridge.getSetting("spectrumInterval", 20)
         zoomSlider.value = bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
+        labelFontSlider.value = bridge.getSetting("uiLabelFontSize", 8)
+        labelSpacingSlider.value = bridge.getSetting("uiLabelSpacing", 2)
+        labelBoldCheck.checked = bridge.getSetting("uiLabelBold", true)
+        labelColorCombo.currentIndex = Math.max(0, Math.min(labelColorPresets.length - 1,
+                                           bridge.getSetting("uiLabelColorPreset", 0)))
 
         waterfallDisplay.paletteIndex = paletteCombo.currentIndex
         waterfallDisplay.autoRange = autoRangeCheck.checked
@@ -59,6 +74,12 @@ Item {
         waterfallDisplay.blackLevel = blackSlider.value
         waterfallDisplay.colorGain = gainSlider.value
         waterfallDisplay.zoomFactor = zoomSlider.value
+        waterfallDisplay.labelFontSize = labelFontSlider.value
+        waterfallDisplay.labelSpacing = labelSpacingSlider.value
+        waterfallDisplay.labelBold = labelBoldCheck.checked
+        var preset = labelColorPresets[labelColorCombo.currentIndex]
+        waterfallDisplay.labelUseCustomColor = preset.custom
+        waterfallDisplay.labelColor = preset.color
         applyManualContrast()
         restoringSettings = false
     }
@@ -69,6 +90,118 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 34
+            Layout.bottomMargin: 4
+            color: Qt.rgba(0,0,0,0.35); visible: showControls
+            clip: true
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
+                anchors.topMargin: 3; anchors.bottomMargin: 5
+                spacing: 6
+
+                Text { text: "Calls:"; color: "#00E5FF"; font.pixelSize: 10; font.bold: true }
+
+                Text { text: "Font"; color: textSec; font.pixelSize: 10 }
+                Slider {
+                    id: labelFontSlider
+                    Layout.preferredWidth: 70
+                    Layout.alignment: Qt.AlignVCenter
+                    from: 6; to: 20; value: 8; stepSize: 1
+                    onValueChanged: {
+                        waterfallDisplay.labelFontSize = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelFontSize", value)
+                        }
+                    }
+                    background: Rectangle { x:labelFontSlider.leftPadding; y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-2; width:labelFontSlider.availableWidth; height:4; radius:2; color:"#1a2a3a"
+                        Rectangle { width: labelFontSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#00E5FF" }
+                    }
+                    handle: Rectangle { x:labelFontSlider.leftPadding+labelFontSlider.visualPosition*(labelFontSlider.availableWidth-width); y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-height/2; width:10; height:10; radius:5; color: labelFontSlider.pressed ? accentGreen : "#00E5FF" }
+                }
+                Text { text: labelFontSlider.value.toFixed(0)+"px"; color: "#00E5FF"; font.pixelSize: 10; width: 26 }
+
+                Rectangle { width:1; height:14; color:"#333" }
+
+                Text { text: "Gap"; color: textSec; font.pixelSize: 10 }
+                Slider {
+                    id: labelSpacingSlider
+                    Layout.preferredWidth: 60
+                    Layout.alignment: Qt.AlignVCenter
+                    from: 0; to: 20; value: 2; stepSize: 1
+                    onValueChanged: {
+                        waterfallDisplay.labelSpacing = value
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelSpacing", value)
+                        }
+                    }
+                    background: Rectangle { x:labelSpacingSlider.leftPadding; y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-2; width:labelSpacingSlider.availableWidth; height:4; radius:2; color:"#1a2a3a"
+                        Rectangle { width: labelSpacingSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#88DD88" }
+                    }
+                    handle: Rectangle { x:labelSpacingSlider.leftPadding+labelSpacingSlider.visualPosition*(labelSpacingSlider.availableWidth-width); y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-height/2; width:10; height:10; radius:5; color: labelSpacingSlider.pressed ? accentGreen : "#88DD88" }
+                }
+                Text { text: labelSpacingSlider.value.toFixed(0); color: "#88DD88"; font.pixelSize: 10; width: 20 }
+
+                Rectangle { width:1; height:14; color:"#333" }
+
+                CheckBox {
+                    id: labelBoldCheck
+                    checked: true
+                    onCheckedChanged: {
+                        waterfallDisplay.labelBold = checked
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelBold", checked)
+                        }
+                    }
+                    indicator: Rectangle {
+                        implicitWidth: 14; implicitHeight: 14; radius: 2
+                        color: labelBoldCheck.checked ? "#FFFFFF" : Qt.rgba(30/255,45/255,70/255,0.9)
+                        border.color: "#FFFFFF"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "B"; color: "black"; font.pixelSize: 9; font.bold: true; visible: labelBoldCheck.checked }
+                    }
+                }
+                Text { text: "Bold"; color: labelBoldCheck.checked ? "#FFFFFF" : textSec; font.pixelSize: 10 }
+
+                Rectangle { width:1; height:14; color:"#333" }
+
+                Text { text: "Colore"; color: textSec; font.pixelSize: 10 }
+                ComboBox {
+                    id: labelColorCombo
+                    Layout.preferredWidth: 86
+                    Layout.alignment: Qt.AlignVCenter
+                    font.pixelSize: 10
+                    model: waterfallPanel.labelColorPresets.map(function(p){ return p.name })
+                    currentIndex: 0
+                    onActivated: {
+                        var preset = waterfallPanel.labelColorPresets[currentIndex]
+                        waterfallDisplay.labelUseCustomColor = preset.custom
+                        waterfallDisplay.labelColor = preset.color
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiLabelColorPreset", currentIndex)
+                        }
+                    }
+                    background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
+                    contentItem: Row {
+                        spacing: 4
+                        leftPadding: 4
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 10; height: 10; radius: 2
+                            color: waterfallPanel.labelColorPresets[labelColorCombo.currentIndex].color
+                            border.color: "#555"; border.width: 1
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: labelColorCombo.displayText
+                            font.pixelSize: 10; color: textPrimary
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
 
         // ── Toolbar controls ──────────────────────────────────────────────
         Rectangle {
@@ -324,8 +457,8 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            startFreq:      bridge.nfa
-            bandwidth:      bridge.nfb - bridge.nfa
+            startFreq:      waterfallPanel.minFreq
+            bandwidth:      waterfallPanel.maxFreq - waterfallPanel.minFreq
             rxFreq:         bridge.rxFrequency
             txFreq:         bridge.txFrequency
             running:        bridge.monitoring

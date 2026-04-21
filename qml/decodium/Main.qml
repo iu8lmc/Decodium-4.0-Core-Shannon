@@ -327,6 +327,18 @@ ApplicationWindow {
     property color successGreen: bridge.themeManager.successColor
     property color glassOverlay: bridge.themeManager.glassOverlay
     property color glassBorder: bridge.themeManager.glassBorder
+    property bool showDxccInfo: bridge.getSetting("ShowDXCC", true)
+    property bool showTxMessagesInRx: bridge.getSetting("TXMessagesToRX", true)
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "ShowDXCC" || key === "DXCCEntity")
+                mainWindow.showDxccInfo = !!value
+            else if (key === "TXMessagesToRX" || key === "Tx2QSO")
+                mainWindow.showTxMessagesInRx = !!value
+        }
+    }
 
     // IU8LMC: DXCC color scheme (JTDX-style)
     readonly property color colorWorked: "#808080"       // Gray - already worked
@@ -1548,34 +1560,6 @@ ApplicationWindow {
                             ToolTip.text: "Settings"
                         }
 
-                        // BUG REPORT
-                        Rectangle {
-                            Layout.preferredWidth: 36
-                            Layout.fillHeight: true
-                            radius: 3
-                            color: bugMA.containsMouse ? Qt.rgba(1, 0.47, 0.08, 0.2) :
-                                   (bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? Qt.rgba(1, 0.27, 0.2, 0.25) : "transparent")
-                            border.color: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? "#ff4444" : "transparent"
-                            border.width: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? 1 : 0
-                            Label {
-                                anchors.centerIn: parent
-                                text: bridge.diagnostics && bridge.diagnostics.errorCount > 0
-                                      ? bridge.diagnostics.errorCount : ""
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: "#ff4444"
-                            }
-                            MouseArea {
-                                id: bugMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: bugReportDialog.open()
-                            }
-                            ToolTip.visible: bugMA.containsMouse
-                            ToolTip.text: "Bug Report"
-                        }
-
                         // REC
                         Rectangle {
                             Layout.preferredWidth: 50
@@ -2455,7 +2439,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "RX Freq"
+                            text: "Signal RX"
                             font.pixelSize: 10
                             font.bold: true
                             color: secondaryCyan
@@ -2474,7 +2458,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: rxRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina RX Frequency"
+                    ToolTip.text: "Ripristina Signal RX"
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3010,8 +2994,8 @@ ApplicationWindow {
                             anchors.margins: 4
                             visible: !waterfallDetached
                             showControls: true
-                            minFreq: 200
-                            maxFreq: 3000
+                            minFreq: 0
+                            maxFreq: 3200
                             spectrumHeight: 150
 
                             onFrequencySelected: function(freq) {
@@ -3121,6 +3105,8 @@ ApplicationWindow {
                                     var src = bridge.rxDecodeList[j]
                                     for (var key in src)
                                         item[key] = src[key]
+                                    if (!mainWindow.showTxMessagesInRx && item.isTx)
+                                        continue
                                     merged.push(item)
                                 }
                             }
@@ -3357,8 +3343,8 @@ ApplicationWindow {
                             readonly property int dtColumnWidth: compactColumns ? 32 : 35
                             readonly property int freqColumnWidth: compactColumns ? 42 : 45
                             readonly property int gapColumnWidth: compactColumns ? 4 : 6
-                            readonly property int dxccColumnWidth: compactColumns ? 96 : 132
-                            readonly property int azColumnWidth: compactColumns ? 42 : 52
+                            readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 96 : 132) : 0
+                            readonly property int azColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 42 : 52) : 0
                             readonly property int messageMinWidth: compactColumns ? 72 : 140
                             Component.onCompleted: {
                                 // Dopo il layout, porta il separatore al 50%
@@ -3460,7 +3446,7 @@ ApplicationWindow {
                                         }
 
                                         Text {
-                                            text: "Band Activity"
+                                            text: "Full Spectrum"
                                             font.pixelSize: 14
                                             font.bold: true
                                             color: "#4CAF50"
@@ -3563,6 +3549,7 @@ ApplicationWindow {
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                         Text { text: "Message"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
                                         Item {
+                                            visible: mainWindow.showDxccInfo
                                             Layout.preferredWidth: period1Panel.dxccColumnWidth
                                             Layout.fillHeight: true
                                             Text {
@@ -3577,6 +3564,7 @@ ApplicationWindow {
                                             }
                                         }
                                         Item {
+                                            visible: mainWindow.showDxccInfo
                                             Layout.preferredWidth: period1Panel.azColumnWidth
                                             Layout.fillHeight: true
                                             Text {
@@ -3705,6 +3693,7 @@ ApplicationWindow {
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                                 Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: Text.ElideRight }
                                                 Item {
+                                                    visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
@@ -3719,6 +3708,7 @@ ApplicationWindow {
                                                     }
                                                 }
                                                 Item {
+                                                    visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.azColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
@@ -3752,12 +3742,12 @@ ApplicationWindow {
                             id: rxFreqPanel
                             SplitView.fillWidth: true
                             SplitView.minimumWidth: 260
-                            readonly property bool compactColumns: width < 430
+                            readonly property bool compactColumns: width < 450
                             readonly property bool compactHeader: width < 350
-                            readonly property int utcColumnWidth: compactColumns ? 66 : 86
-                            readonly property int dbColumnWidth: compactColumns ? 26 : 30
-                            readonly property int dtColumnWidth: compactColumns ? 30 : 35
-                            readonly property int gapColumnWidth: compactColumns ? 4 : 6
+                            readonly property int utcColumnWidth: compactColumns ? 62 : 78
+                            readonly property int dbColumnWidth: compactColumns ? 24 : 28
+                            readonly property int dtColumnWidth: compactColumns ? 28 : 32
+                            readonly property int gapColumnWidth: compactColumns ? 3 : 4
                             readonly property int headerBadgeWidth: compactHeader ? 62 : 70
                             color: "transparent"
 
@@ -3778,7 +3768,7 @@ ApplicationWindow {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: rxFreqDockHighlighted ? "🧲 Rilascia qui!" : "📡 RX Freq Detached"
+                                        text: rxFreqDockHighlighted ? "🧲 Rilascia qui!" : "📡 Signal RX Detached"
                                         color: rxFreqDockHighlighted ? primaryBlue : textSecondary
                                         font.pixelSize: rxFreqDockHighlighted ? 16 : 12
                                         font.bold: rxFreqDockHighlighted
@@ -3837,7 +3827,7 @@ ApplicationWindow {
                                         }
 
                                         Text {
-                                            text: rxFreqPanel.compactHeader ? "RX Freq" : "RX Frequency"
+                                            text: "Signal RX"
                                             font.pixelSize: rxFreqPanel.compactHeader ? 12 : 14
                                             font.bold: true
                                             color: primaryBlue
@@ -3883,7 +3873,7 @@ ApplicationWindow {
                                                 onClicked: bridge.clearRxDecodes()
                                             }
                                             ToolTip.visible: rxClearMA.containsMouse
-                                            ToolTip.text: "Pulisci RX Frequency"
+                                            ToolTip.text: "Pulisci Signal RX"
                                         }
 
                                         // Detach button
@@ -3913,7 +3903,7 @@ ApplicationWindow {
                                             }
 
                                             ToolTip.visible: rxDetachMA.containsMouse
-                                            ToolTip.text: "Sgancia RX Frequency"
+                                            ToolTip.text: "Sgancia Signal RX"
                                             ToolTip.delay: 500
                                         }
                                     }
@@ -3928,8 +3918,8 @@ ApplicationWindow {
 
                                     RowLayout {
                                         anchors.fill: parent
-                                        anchors.leftMargin: 6
-                                        anchors.rightMargin: 6
+                                        anchors.leftMargin: 4
+                                        anchors.rightMargin: 4
                                         spacing: 0
 
                                         Text { text: "UTC"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
@@ -4060,8 +4050,8 @@ ApplicationWindow {
 
                                             RowLayout {
                                                 anchors.fill: parent
-                                                anchors.leftMargin: 6
-                                                anchors.rightMargin: 6
+                                                anchors.leftMargin: 4
+                                                anchors.rightMargin: 4
                                                 spacing: 0
 
                                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
@@ -4921,145 +4911,6 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "Storia del Programma"
-            onTriggered: { infoDialog.currentTab = 1; infoDialog.open() }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textPrimary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: "Guida Rapida"
-            onTriggered: { infoDialog.currentTab = 3; infoDialog.open() }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textPrimary
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: bridge.themeManager.isLightTheme ? "☀ Stellar Light" : "☽ Ocean Blue"
-            onTriggered: {
-                if (bridge.themeManager.isLightTheme)
-                    bridge.themeManager.applyThemeByName("Ocean Blue")
-                else
-                    bridge.themeManager.applyThemeByName("Stellar Light")
-            }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                font.bold: true
-                color: secondaryCyan
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: "Contatta Sviluppatore"
-            onTriggered: Qt.openUrlExternally("mailto:iu8lmc@gmail.com")
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: secondaryCyan
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: "Invia Feedback"
-            onTriggered: { infoDialog.currentTab = 2; infoDialog.open() }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: accentOrange
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: "PSK Reporter"
-            onTriggered: Qt.openUrlExternally("https://pskreporter.info")
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: "QRZ.com"
-            onTriggered: Qt.openUrlExternally("https://www.qrz.com")
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
             text: "Link Utili..."
             onTriggered: { infoDialog.currentTab = 4; infoDialog.open() }
 
@@ -5149,7 +5000,7 @@ ApplicationWindow {
 
         MenuItem {
             text: "📂 Apri Cartella ALL.TXT"
-            onTriggered: Qt.openUrlExternally("file:///" + bridge.logAllTxtPath)
+            onTriggered: bridge.openAllTxtFolder()
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6382,8 +6233,8 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     visible: waterfallDetached
                     showControls: true
-                    minFreq: 200
-                    maxFreq: 3000
+                    minFreq: 0
+                    maxFreq: 3200
                     spectrumHeight: 150
 
                     onFrequencySelected: function(freq) {
@@ -7111,7 +6962,7 @@ ApplicationWindow {
         minimumHeight: 200
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "RX Frequency - Decodium"
+        title: "Signal RX - Decodium"
         color: "transparent"
 
         x: mainWindow.x + 300
@@ -7206,7 +7057,7 @@ ApplicationWindow {
 
                         Text { text: "⋮⋮"; font.pixelSize: 12; color: primaryBlue }
                         Rectangle { width: 10; height: 10; radius: 5; color: primaryBlue }
-                        Text { text: "RX Frequency"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
+                        Text { text: "Signal RX"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
 
                         Rectangle {
                             width: 70

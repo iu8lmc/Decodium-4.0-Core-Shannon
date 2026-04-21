@@ -618,6 +618,7 @@ public slots:
     Q_INVOKABLE void clearTxMessages();
     Q_INVOKABLE void startTune();      // tono continuo fino a stopTune()
     Q_INVOKABLE void stopTune();
+    Q_INVOKABLE bool openAllTxtFolder() const;
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
     Q_INVOKABLE void logQso();
     Q_INVOKABLE void shutdown();
@@ -819,6 +820,7 @@ signals:
     void asyncTxEnabledChanged();
     void dualCarrierEnabledChanged();
     void quickQsoEnabledChanged();
+    void settingValueChanged(QString key, QVariant value);
     void asyncSnrDbChanged();
     void catConnectedChanged();
     void catRigNameChanged();
@@ -1012,6 +1014,7 @@ private:
 
     // Standalone UDP MessageClient for WSJT-X protocol
     void initUdpMessageClient();
+    void shutdownUdpMessageClient();
     void udpSendStatus();
     void udpSendDecode(bool isNew, const QString& rawLine, quint64 serial);
 
@@ -1185,6 +1188,7 @@ private:
     QString m_legacyAllTxtRevisionKey;
     mutable QString m_legacyAllTxtConsumedPath;
     mutable qint64 m_legacyAllTxtConsumedSize {-1};
+    QSet<QString> m_legacyClearedRxMirrorKeys;
 
     // === GitHub TxController clone ===
     int  m_nTx73            {0};   // TX5 (73) repeat counter: >=2 → QSO completo, ferma
