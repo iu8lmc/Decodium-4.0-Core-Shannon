@@ -1066,7 +1066,7 @@ private:
     bool m_deferredManualSyncTx {false};
     bool m_autoCqRepeat     {false};
     bool m_avgDecodeEnabled {false};
-    int  m_txPeriod         {0};   // 0=even periods, 1=odd periods
+    int  m_txPeriod         {0};   // 1=first/even (:00/:30), 0=second/odd (:15/:45)
     bool m_alt12Enabled     {false};
     bool    m_asyncTxEnabled   {false};  // FT2 async TX (no periodo sync, come GitHub cbAsyncDecode)
     qint64  m_asyncLastTxEndMs {0};      // timestamp fine ultima TX FT2 async (per guard timer)

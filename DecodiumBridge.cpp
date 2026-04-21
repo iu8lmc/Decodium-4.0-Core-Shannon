@@ -162,6 +162,27 @@ static QString normalizeUtcDisplayToken(QString raw)
     return raw;
 }
 
+static int secondsFromUtcDisplayToken(QString raw)
+{
+    raw = normalizeUtcDisplayToken(raw);
+    if (raw.size() >= 6) {
+        bool ok = false;
+        int const sec = raw.mid(4, 2).toInt(&ok);
+        if (ok) {
+            return qBound(0, sec, 59);
+        }
+    }
+    return -1;
+}
+
+static bool bridgeTxPeriodIsEven(int txPeriod)
+{
+    // Bridge runtime convention:
+    //   txPeriod == 1  -> legacy txFirst == true  -> first/even slot (:00/:30)
+    //   txPeriod == 0  -> legacy txFirst == false -> second/odd slot (:15/:45)
+    return txPeriod != 0;
+}
+
 static QString decodeDedupKey(QString const& time,
                               QString const& freq,
                               QString const& message)
@@ -526,6 +547,13 @@ static QString normalizeCallToken(QString token)
     return token.trimmed();
 }
 
+static bool isPlaceholderCallToken(QString const& token)
+{
+    QString const upper = normalizeCallToken(token).trimmed().toUpper();
+    return upper == QStringLiteral("...")
+        || upper == QStringLiteral("<...>");
+}
+
 static QString normalizedBaseCall(QString token)
 {
     token = normalizeCallToken(token).toUpper();
@@ -793,6 +821,9 @@ static QString inferPartnerFromDirectedMessage(QString const& message,
     };
     auto const looksLikePartnerCall = [](QString const& token) {
         QString const upper = token.trimmed().toUpper();
+        if (isPlaceholderCallToken(upper)) {
+            return false;
+        }
         if (upper == QStringLiteral("CQ")
             || upper == QStringLiteral("QRZ")
             || upper == QStringLiteral("DE")
@@ -1488,6 +1519,35 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                 s.setValue("lastSuccessfulCatConnected", false);
                 s.setValue("lastSuccessfulCatBackend", backend);
             }
+
+            if (c) {
+                auto applyCatStartupFrequency = [this, backend, catProp]() {
+                    if (m_catBackend != backend) {
+                        return;
+                    }
+                    if (!catProp("connected").toBool()) {
+                        return;
+                    }
+                    double const rigFrequency = catProp("frequency").toDouble();
+                    if (rigFrequency <= 0.0) {
+                        return;
+                    }
+                    bool const differsFromBridge =
+                        !qFuzzyCompare(m_frequency + 1.0, rigFrequency + 1.0);
+                    if (differsFromBridge || m_startupModeAutoPending) {
+                        bridgeLog(QStringLiteral("startup CAT sync: using rig frequency %1 Hz from %2")
+                                      .arg(QString::number(rigFrequency, 'f', 0), backend));
+                        setFrequency(rigFrequency);
+                        maybeApplyStartupModeFromRigFrequency(rigFrequency);
+                    }
+                };
+
+                applyCatStartupFrequency();
+                static constexpr int kStartupCatSyncRetryMs[] = {75, 200, 500};
+                for (int const delayMs : kStartupCatSyncRetryMs) {
+                    QTimer::singleShot(delayMs, this, applyCatStartupFrequency);
+                }
+            }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::errorOccurred, this, [this, backend](const QString& msg) {
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
@@ -2161,14 +2221,26 @@ void DecodiumBridge::syncLegacyBackendState()
 
     double const legacyDialFrequency = m_legacyBackend->dialFrequency();
     if (legacyDialFrequency > 0.0) {
-        if (!qFuzzyCompare(m_frequency + 1.0, legacyDialFrequency + 1.0)) {
-            m_frequency = legacyDialFrequency;
-            emit frequencyChanged();
+        bool const catOwnsDialFrequency =
+            m_catConnected && !useLegacyRigControlFallback(m_legacyBackend, m_catBackend);
+        if (catOwnsDialFrequency) {
+            if (m_frequency > 0.0
+                && !qFuzzyCompare(m_frequency + 1.0, legacyDialFrequency + 1.0)) {
+                bridgeLog(QStringLiteral("legacy dial ignored while CAT authoritative: legacy=%1 bridge=%2")
+                              .arg(QString::number(legacyDialFrequency, 'f', 0),
+                                   QString::number(m_frequency, 'f', 0)));
+                m_legacyBackend->setDialFrequency(m_frequency);
+            }
+        } else {
+            if (!qFuzzyCompare(m_frequency + 1.0, legacyDialFrequency + 1.0)) {
+                m_frequency = legacyDialFrequency;
+                emit frequencyChanged();
+            }
+            if (m_bandManager) {
+                m_bandManager->updateFromFrequency(legacyDialFrequency);
+            }
+            maybeApplyStartupModeFromRigFrequency(legacyDialFrequency);
         }
-        if (m_bandManager) {
-            m_bandManager->updateFromFrequency(legacyDialFrequency);
-        }
-        maybeApplyStartupModeFromRigFrequency(legacyDialFrequency);
     }
 
     updateInt(m_rxFrequency, m_legacyBackend->rxFrequency(), [this]() { emit rxFrequencyChanged(); });
@@ -5252,29 +5324,30 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
 
     if (audioFreq > 0) setRxFrequency(audioFreq);
 
-    // Shannon (riga 11397-11406): usa il TIMESTAMP del messaggio decodificato
-    // per determinare il periodo TX (NON il tempo corrente al momento del click)
-    // nmod = fmod(message.timeInSeconds(), 2*TRperiod); m_txFirst = (nmod != 0)
+    // Usa il timestamp del decode cliccato per determinare il periodo TX.
+    // Nel bridge 1 = first/even (:00/:30), 0 = second/odd (:15/:45),
+    // coerente con il backend legacy txFirst.
     int pMs = periodMsForMode(m_mode);
     {
-        // Prova a estrarre i secondi dal timeStr (formato "HHMMSS" o "HHMM")
         int msgSecond = -1;
-        if (timeStr.length() >= 6) {
-            msgSecond = timeStr.mid(4, 2).toInt();  // SS da HHMMSS
-        } else if (timeStr.length() == 4) {
-            // Solo HHMM: usa il secondo UTC corrente come approssimazione
+        if (!timeStr.isEmpty()) {
+            msgSecond = secondsFromUtcDisplayToken(timeStr);
+        }
+        if (msgSecond < 0 && normalizeUtcDisplayToken(timeStr).size() == 4) {
+            // Solo HHMM: fallback all'orologio corrente.
             msgSecond = QDateTime::currentDateTimeUtc().time().second();
         }
 
         if (msgSecond >= 0) {
-            // Shannon: m_txFirst = (nmod != 0) dove nmod=fmod(msgSecond, 2*TRperiod_s)
-            // Tradotto in Decodium3: TX nel periodo opposto a quello del DX
             int dxPidx = (msgSecond * 1000) / pMs;
-            m_txPeriod = (dxPidx + 1) % 2;  // periodo successivo al DX
+            // Decodium3/legacy: per un DX nel 2nd/odd slot (:15/:45) dobbiamo
+            // mettere txFirst=true -> first/even slot. Quindi il bridge salva
+            // direttamente la parita' del DX con la convenzione txFirst.
+            m_txPeriod = dxPidx % 2;
         } else {
-            // Fallback: periodo corrente (comportamento originale)
             qint64 msNow = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
-            m_txPeriod = (int)(msNow / (qint64)pMs) % 2;
+            bool const isEvenPeriod = ((msNow / static_cast<qint64>(pMs)) % 2) == 0;
+            m_txPeriod = isEvenPeriod ? 1 : 0;
         }
     }
     emit txPeriodChanged();
@@ -5591,8 +5664,9 @@ bool DecodiumBridge::shouldDeferManualSyncTxStart() const
 
     qint64 const msNow = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
     qint64 const slotIndex = msNow / static_cast<qint64>(periodMs);
-    bool const isOurPeriod = (m_txPeriod == 0) ? ((slotIndex % 2) == 0)
-                                               : ((slotIndex % 2) != 0);
+    bool const isEvenPeriod = ((slotIndex % 2) == 0);
+    bool const isOurPeriod = bridgeTxPeriodIsEven(m_txPeriod) ? isEvenPeriod
+                                                              : !isEvenPeriod;
     if (!isOurPeriod) {
         return true;
     }
@@ -5625,8 +5699,9 @@ bool DecodiumBridge::tryStartDeferredManualSyncTx()
 
     qint64 const msNow = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
     qint64 const slotIndex = msNow / static_cast<qint64>(periodMs);
-    bool const isOurPeriod = (m_txPeriod == 0) ? ((slotIndex % 2) == 0)
-                                               : ((slotIndex % 2) != 0);
+    bool const isEvenPeriod = ((slotIndex % 2) == 0);
+    bool const isOurPeriod = bridgeTxPeriodIsEven(m_txPeriod) ? isEvenPeriod
+                                                              : !isEvenPeriod;
     if (!isOurPeriod) {
         return false;
     }
@@ -5844,8 +5919,8 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         qint64 msNow = QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay();
         int pMs  = periodMsForMode(m_mode);
         int pidx = (int)(msNow / (qint64)pMs);
-        bool isEven = (pidx % 2 == 0);
-        bool isOurPeriod = (m_txPeriod == 0) ? isEven : !isEven;
+        bool const isEven = (pidx % 2 == 0);
+        bool const isOurPeriod = bridgeTxPeriodIsEven(m_txPeriod) ? isEven : !isEven;
         if (!isOurPeriod) return;
 
         // Guardia anti-CQ-consecutivi: dopo un CQ aspetta almeno N periodi di pausa RX
@@ -6061,7 +6136,17 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         from = parts[0];
     }
     QString const directedPartner = inferPartnerFromDirectedMessage(msg, myCallUpper, myBaseUpper);
-    QString const messagePartner = directedPartner.isEmpty() ? from : directedPartner;
+    QString fallbackDirectedPartner = directedPartner;
+    if (fallbackDirectedPartner.isEmpty()
+        && directedToMe
+        && parts.size() >= 2
+        && isPlaceholderCallToken(parts[1])
+        && !m_dxCall.trimmed().isEmpty()) {
+        fallbackDirectedPartner = m_dxCall.trimmed();
+        bridgeLog(QStringLiteral("autoSeq: placeholder partner resolved to active DX %1 for msg=%2")
+                      .arg(fallbackDirectedPartner, msg));
+    }
+    QString const messagePartner = fallbackDirectedPartner.isEmpty() ? from : fallbackDirectedPartner;
     QString const messagePartnerBase = Radio::base_callsign(messagePartner).trimmed().toUpper();
 
     // QSO cooldown: ignora 73/RR73 ripetuti da stazione con cui il QSO è chiuso
@@ -7226,6 +7311,8 @@ void DecodiumBridge::logQso()
             emit qsoCountChanged();
             emit workedCountChanged();
         });
+        clearPendingAutoLogSnapshot();
+        m_qsoLogged = true;
         emit statusMessage("Log QSO via backend legacy");
         return;
     }

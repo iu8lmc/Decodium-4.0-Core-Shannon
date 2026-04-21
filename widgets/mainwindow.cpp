@@ -1361,6 +1361,167 @@ namespace
     return token.trimmed ();
   }
 
+  bool placeholder_exchange_token (QString const& token)
+  {
+    auto const upper = normalize_call_token (token).trimmed ().toUpper ();
+    if (upper.isEmpty ()) {
+      return false;
+    }
+
+    if (upper == "73" || upper == "RR73" || upper == "RRR" || upper == "R") {
+      return true;
+    }
+
+    static QRegularExpression const reportRx {R"(^(?:R)?[+-]\d{1,2}$)"};
+    return reportRx.match (upper).hasMatch ();
+  }
+
+  bool directed_partner_exchange_payload (QStringList const& msg_parts,
+                                          QString const& my_call,
+                                          QString const& my_base,
+                                          QString const& active_partner_call)
+  {
+    if (msg_parts.size () < 3) {
+      return false;
+    }
+
+    bool hasDePrefix {false};
+    int partnerIndex {1};
+    int exchangeIndex {2};
+    if (normalize_call_token (msg_parts.at (0)).trimmed ().toUpper () == "DE") {
+      if (msg_parts.size () < 4) {
+        return false;
+      }
+      hasDePrefix = true;
+      partnerIndex = 2;
+      exchangeIndex = 3;
+    }
+
+    Q_UNUSED (hasDePrefix);
+    if (!ft2_payload_targets_my_call (msg_parts, my_call, my_base)) {
+      return false;
+    }
+
+    auto const partnerToken = normalize_call_token (msg_parts.value (partnerIndex)).trimmed ().toUpper ();
+    auto const partnerBase = Radio::base_callsign (partnerToken).trimmed ().toUpper ();
+    auto const activePartner = active_partner_call.trimmed ().toUpper ();
+    auto const activePartnerBase = Radio::base_callsign (activePartner).trimmed ().toUpper ();
+    bool const partnerLooksPlausible =
+        partnerToken == "..."
+        || partnerToken == "<...>"
+        || (!activePartnerBase.isEmpty ()
+            && (partnerToken.contains (activePartnerBase)
+                || partnerBase == activePartnerBase))
+        || (!partnerBase.isEmpty () && Radio::is_callsign (partnerBase));
+    if (!partnerLooksPlausible) {
+      return false;
+    }
+
+    return placeholder_exchange_token (msg_parts.value (exchangeIndex));
+  }
+
+  QString resolve_active_qso_placeholder_payload (QString const& payload,
+                                                  QString const& my_call,
+                                                  QString const& my_base,
+                                                  QString const& active_partner_call)
+  {
+    auto const activePartner = active_partner_call.trimmed ().toUpper ();
+    if (payload.isEmpty () || activePartner.isEmpty ()) {
+      return payload;
+    }
+
+    auto const rawParts = payload.simplified ().split (' ', SkipEmptyParts);
+    if (rawParts.size () < 3) {
+      return payload;
+    }
+
+    QStringList upperParts;
+    upperParts.reserve (rawParts.size ());
+    for (auto const& part : rawParts) {
+      upperParts << normalize_call_token (part).trimmed ().toUpper ();
+    }
+
+    bool hasDePrefix {false};
+    int toIndex {0};
+    int partnerIndex {1};
+    int exchangeIndex {2};
+    if (upperParts.at (0) == "DE") {
+      if (upperParts.size () < 4) {
+        return payload;
+      }
+      hasDePrefix = true;
+      toIndex = 1;
+      partnerIndex = 2;
+      exchangeIndex = 3;
+    }
+
+    if (!ft2_word_matches_my_call (upperParts.at (toIndex), my_call, my_base)) {
+      return payload;
+    }
+
+    if (upperParts.at (partnerIndex) != "...") {
+      return payload;
+    }
+
+    if (!placeholder_exchange_token (upperParts.value (exchangeIndex))) {
+      return payload;
+    }
+
+    auto const escapedToToken = QRegularExpression::escape (rawParts.at (toIndex));
+    QRegularExpression payloadRx {
+      hasDePrefix
+          ? QStringLiteral (R"(^(\s*DE\s+%1\s+)(?:<\.\.\.>|\.\.\.)(\s+.*)$)")
+                .arg (escapedToToken)
+          : QStringLiteral (R"(^(\s*%1\s+)(?:<\.\.\.>|\.\.\.)(\s+.*)$)")
+                .arg (escapedToToken),
+      QRegularExpression::CaseInsensitiveOption
+    };
+    auto const match = payloadRx.match (payload);
+    if (match.hasMatch ()) {
+      QString resolved = payload;
+      resolved.replace (payloadRx, match.captured (1) + activePartner + match.captured (2));
+      return resolved;
+    }
+
+    QStringList rebuilt = rawParts;
+    rebuilt[partnerIndex] = activePartner;
+    return rebuilt.join (' ');
+  }
+
+  QString resolve_active_qso_placeholder_decode_line (QString const& decodeLine,
+                                                      QString const& my_call,
+                                                      QString const& my_base,
+                                                      QString const& active_partner_call)
+  {
+    if (decodeLine.isEmpty ()) {
+      return decodeLine;
+    }
+
+    int payloadStart = decoded_line_mode_column (decodeLine);
+    if (payloadStart < 0 || payloadStart >= decodeLine.size ()) {
+      return decodeLine;
+    }
+
+    if (is_decode_mode_marker (decodeLine.at (payloadStart))) {
+      ++payloadStart;
+    }
+    while (payloadStart < decodeLine.size () && decodeLine.at (payloadStart).isSpace ()) {
+      ++payloadStart;
+    }
+    if (payloadStart >= decodeLine.size ()) {
+      return decodeLine;
+    }
+
+    auto const payload = decodeLine.mid (payloadStart);
+    auto const resolvedPayload =
+        resolve_active_qso_placeholder_payload (payload, my_call, my_base, active_partner_call);
+    if (resolvedPayload == payload) {
+      return decodeLine;
+    }
+
+    return decodeLine.left (payloadStart) + resolvedPayload;
+  }
+
   bool ignored_double_click_token (QString const& token)
   {
     auto normalized = token.trimmed ().toUpper ();
@@ -11095,8 +11256,14 @@ void MainWindow::processFastDecodedRows (QStringList const& rows)
   float t,tmax=-99.0;
   dec_data.params.nagain=false;
   dec_data.params.ndiskdat=false;
+  auto const activePartnerCall = (!m_hisCall.trimmed ().isEmpty ()
+                                  ? m_hisCall
+                                  : ui->dxCallEntry->text ()).trimmed ().toUpper ();
+  auto const myCallUpper = m_config.my_callsign ().trimmed ().toUpper ();
+  auto const myBaseUpper = m_baseCall.trimmed ().toUpper ();
   for (auto const& row : rows) {
-    QString message = row;
+    QString message = resolve_active_qso_placeholder_decode_line (
+        row, myCallUpper, myBaseUpper, activePartnerCall);
     if(message.length()>80) message=message.left (80);
     if(narg[13]/8==narg[12]) message=message.trimmed().replace("<...>",m_calls);
 
@@ -12419,6 +12586,21 @@ bool MainWindow::prepareDecodedRow (QByteArray line_read, bool bDisplayPoints, D
   }
 
   prepared.rawLine = QString::fromUtf8 (prepared.line_read.constData ());
+  {
+    auto const activePartnerCall = (!m_hisCall.trimmed ().isEmpty ()
+                                    ? m_hisCall
+                                    : ui->dxCallEntry->text ()).trimmed ().toUpper ();
+    auto const myCallUpper = m_config.my_callsign ().trimmed ().toUpper ();
+    auto const myBaseUpper = m_baseCall.trimmed ().toUpper ();
+    auto const resolvedRawLine = resolve_active_qso_placeholder_decode_line (
+        prepared.rawLine, myCallUpper, myBaseUpper, activePartnerCall);
+    if (resolvedRawLine != prepared.rawLine) {
+      debugToFile (QString {"placeholder  resolved active DX:%1 msg:%2"}
+                       .arg (activePartnerCall, resolvedRawLine));
+      prepared.rawLine = resolvedRawLine;
+      prepared.line_read = prepared.rawLine.toUtf8 ();
+    }
+  }
   if (m_mode == "FT2" && m_asyncRxStartMs > 0 && prepared.rawLine.length () >= 20) {
     apply_async_ft2_tdelta (prepared.rawLine, m_asyncRxStartMs);
   }
@@ -13992,9 +14174,18 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
   }
   bool const is_73 = payload_is_73 (wUpper);
   bool const ft2QuickTu = is_ft2_quick_tu_message (wUpper, m_mode);
+  auto const activePartnerCallForGate = (!m_hisCall.trimmed ().isEmpty ()
+                                         ? m_hisCall
+                                         : ui->dxCallEntry->text ()).trimmed ().toUpper ();
+  bool const compoundDirectedExchange =
+      directed_partner_exchange_payload (w,
+                                         m_config.my_callsign ().trimmed ().toUpper (),
+                                         myBaseEffective,
+                                         activePartnerCallForGate);
   bool is_OK=false;
   if(m_mode=="MSK144" && msg_no_hash.indexOf(ui->dxCallEntry->text()+" R ")>0) is_OK=true;
-  if (message_words.size () > 3 && (message.isStandardMessage() || is_73 || ft2QuickTu || is_OK)) {
+  if (message_words.size () > 3
+      && (message.isStandardMessage() || is_73 || ft2QuickTu || is_OK || compoundDirectedExchange)) {
     if (m_mode == "FT2"
         && m_autoCQ
         && ui->cbAsyncDecode->isChecked()
@@ -14075,7 +14266,10 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
       || message.string ().toUpper ().remove ("<").remove (">").contains (" " + m_config.my_callsign ().trimmed ().toUpper () + " ")
       || (!myBaseEffective.isEmpty ()
           && message.string ().toUpper ().remove ("<").remove (">").contains (" " + myBaseEffective + " "));
-    auto activePartnerBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
+    auto const activePartnerCall = (!m_hisCall.trimmed ().isEmpty ()
+                                    ? m_hisCall
+                                    : ui->dxCallEntry->text ()).trimmed ().toUpper ();
+    auto activePartnerBase = Radio::base_callsign (activePartnerCall).trimmed ().toUpper ();
     auto const lockedPartnerBase = Radio::base_callsign (m_autoCqLockedCall).trimmed ().toUpper ();
     if (m_autoCQ && m_QSOProgress > CALLING && activePartnerBase.isEmpty () && !lockedPartnerBase.isEmpty ()) {
       activePartnerBase = lockedPartnerBase;
@@ -14094,6 +14288,13 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     if (fromToken.isEmpty () && !wUpper.isEmpty ()) {
       fromToken = wUpper.at (0);
     }
+    bool const placeholderPartnerReply =
+        addressed_to_me
+        && !activePartnerBase.isEmpty ()
+        && normalize_call_token (fromToken).trimmed ().toUpper () == "...";
+    if (placeholderPartnerReply) {
+      fromToken = !activePartnerCall.isEmpty () ? activePartnerCall : activePartnerBase;
+    }
     auto isPartnerToken = [&activePartnerBase] (QString const& token) {
       auto t = token.trimmed ().toUpper ();
       if (t.isEmpty () || activePartnerBase.isEmpty ()) return false;
@@ -14111,10 +14312,10 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
         break;
       }
     }
-    bool const from_active_partner_effective = from_active_partner || partner_seen_in_payload;
+    bool const from_active_partner_effective = from_active_partner || partner_seen_in_payload || placeholderPartnerReply;
     bool payload_partner_exchange = false;
     if (!activePartnerBase.isEmpty () && wUpper.size () >= 2 && isMyAddressedToken (wUpper.at (0))) {
-      bool const payload_from_partner = isPartnerToken (wUpper.at (1));
+      bool const payload_from_partner = isPartnerToken (wUpper.at (1)) || placeholderPartnerReply;
       if (payload_from_partner) {
         for (int i = 2; i < wUpper.size (); ++i) {
           auto const token = wUpper.at (i);
@@ -14221,7 +14422,8 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
         !m_bCallingCQ
         && (!m_sentFirst73 || signoffRetryWindowOpen || waitingFinalAckAfterOwnSignoff)
         && (((!myBaseEffective.isEmpty () && message_words.at (2).contains (myBaseEffective))
-             && (message_words.at (3).contains (Radio::base_callsign (ui->dxCallEntry->text ()))
+             && ((message_words.at (3).contains (Radio::base_callsign (ui->dxCallEntry->text ()))
+                  || placeholderPartnerReply)
                  || bEU_VHF))
             || (!myBaseEffective.isEmpty () && message_words.at (1) == myBaseEffective) // <de-call> RR73; ...
             || (within_tolerance
@@ -15268,10 +15470,16 @@ void MainWindow::guiUpdate()
             auto_tx_mode (false);  //avt 11/20/20 leave Tx enabled fo external controller next action 12/12/21 MSK144 not under external ctrl
             statusUpdate();      //avt 11/17/20 so that external controller is notified
           }
-          if(b and !is_externalCtrlMode()) {
-            m_ntx=6;
-            ui->txrb6->setChecked(true);
-            m_QSOProgress = CALLING;
+          if (b && !is_externalCtrlMode()) {
+            if (m_autoCQ) {
+              m_ntx=6;
+              ui->txrb6->setChecked(true);
+              m_QSOProgress = CALLING;
+            } else {
+              // Plain auto-sequencing must stop after the closing 73/log.
+              // Re-arming TX6 here makes the next period look like an AutoCQ restart.
+              m_QSOProgress = SIGNOFF;
+            }
           }
         }
       }
@@ -16344,6 +16552,31 @@ void MainWindow::handleDoubleClickOnCall(Qt::KeyboardModifiers modifiers, bool f
       m_bDoubleClicked = true;
       m_hisCall0 = m_hisCall;
       processMessage (message, modifiers);
+      if (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2") {
+        int clickedNmod;
+        if (m_TRperiod < 5.0) {
+          int period = (int)round (double (message.timeInSeconds ()) / m_TRperiod);
+          clickedNmod = period % 2;
+        } else {
+          clickedNmod = fmod (double (message.timeInSeconds ()), 2.0 * m_TRperiod);
+        }
+        bool clickedTxFirst = (clickedNmod != 0);
+        if (SpecOp::HOUND == m_specOp) clickedTxFirst = false;
+        if (SpecOp::FOX == m_specOp) clickedTxFirst = true;
+        if (m_txFirst != clickedTxFirst) {
+          debugToFile (QString {"doubleClick  slot override old:%1 new:%2 msg:%3"}
+                         .arg (m_txFirst ? 1 : 0)
+                         .arg (clickedTxFirst ? 1 : 0)
+                         .arg (message.string ().trimmed ()));
+        }
+        m_txFirst = clickedTxFirst;
+        ui->txFirstCheckBox->setChecked (m_txFirst);
+      }
+      if (m_monitorPhaseResyncAtMs > 0) {
+        debugToFile (QString {"doubleClick  cancel phaseSync at:%1"}
+                       .arg (m_monitorPhaseResyncAtMs));
+        m_monitorPhaseResyncAtMs = -1;
+      }
       // pressing ALT while double-clicking on a call only adds the callsign to DX Call Box
       if(SpecOp::FOX!=m_specOp && modifiers==Qt::AltModifier) {   //avt 10/1/25
         m_bDoubleClicked = false;
@@ -16546,6 +16779,12 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
 
   auto const clean_no_brackets = message.clean_string ().remove ("<").remove (">");
   auto const payload_no_brackets = udp_decode_message_text (message.clean_string ()).remove ("<").remove (">");
+  bool const compoundDirectedExchange =
+      directed_partner_exchange_payload (
+          payload_no_brackets.split (" ", SkipEmptyParts),
+          m_config.my_callsign ().trimmed ().toUpper (),
+          m_baseCall.trimmed ().toUpper (),
+          (!m_hisCall.trimmed ().isEmpty () ? m_hisCall : ui->dxCallEntry->text ()));
 
   // don't call CQ when double-clicking on the final "73" message of your QSO
   if (m_bDoubleClicked && clean_no_brackets.contains((" " + m_baseCall + " "))
@@ -16576,10 +16815,20 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   bool const is_73 = payload_is_73 (w);
   bool const ft2QuickTu = is_ft2_quick_tu_message (w, m_mode);
   bool const ft2QuickBeaconTu = is_ft2_quick_beacon_tu (w, m_mode);
-  if (!is_externalCtrlMode() and !is_73 and !ft2QuickTu and !message.isStandardMessage() and !message.clean_string ().contains("<")) {   //avt 1/21/24
+  if (!is_externalCtrlMode() and !is_73 and !ft2QuickTu
+      and !message.isStandardMessage()
+      and !message.clean_string ().contains("<")
+      and !compoundDirectedExchange) {   //avt 1/21/24
     qDebug () << "Not processing message - hiscall:" << hiscall << "hisgrid:" << hisgrid
-              << message.clean_string () << message.isStandardMessage();
+              << message.clean_string () << message.isStandardMessage()
+              << "compoundDirectedExchange:" << compoundDirectedExchange
+              << "activePartner:" << ((!m_hisCall.trimmed ().isEmpty () ? m_hisCall : ui->dxCallEntry->text ()));
     return;
+  }
+  if (compoundDirectedExchange) {
+    debugToFile (QString {"processMess  compound-directed-reply msg:%1 active:%2"}
+                     .arg (message.clean_string ().trimmed (),
+                           (!m_hisCall.trimmed ().isEmpty () ? m_hisCall : ui->dxCallEntry->text ()).trimmed ()));
   }
 
   if ((message.isJT9 () and m_mode != "JT9" and m_mode != "JT4") or
@@ -16625,12 +16874,6 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   if (m_autoCQ && m_QSOProgress > CALLING && qso_partner_base_call.isEmpty () && !locked_partner_base_call.isEmpty ()) {
     qso_partner_base_call = locked_partner_base_call;
   }
-  auto base_call = Radio::base_callsign (hiscall).trimmed ().toUpper ();
-  bool const qso_partner_matched = message_words.size () > 3
-                                   && !qso_partner_base_call.isEmpty ()
-                                   && (message_words.at (3).contains (qso_partner_base_call)
-                                       || (!qso_partner_call.isEmpty ()
-                                           && message_words.at (3).contains (qso_partner_call)));
   bool const manual_partner_override = ctrl || shift;
   bool const wait_lock_enabled = m_config.Wait_features_enabled ()
                                  && ui->cbAutoSeq
@@ -16641,13 +16884,81 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
                                && m_QSOProgress <= SIGNOFF
                                && !manual_partner_override
                                && !qso_partner_base_call.isEmpty ();
-  bool const directed_to_me = message_words.size () > 3
+  auto const my_call_upper = m_config.my_callsign ().trimmed ().toUpper ();
+  auto const my_base_upper = m_baseCall.trimmed ().toUpper ();
+  auto const payload_word_0 = nw > 0 ? normalize_call_token (w.at (0)).trimmed ().toUpper () : QString {};
+  auto const payload_word_1 = nw > 1 ? normalize_call_token (w.at (1)).trimmed ().toUpper () : QString {};
+  auto const payload_word_2 = nw > 2 ? normalize_call_token (w.at (2)).trimmed ().toUpper () : QString {};
+  bool const payload_directed_to_me =
+      ft2_word_matches_my_call (payload_word_0, my_call_upper, my_base_upper)
+      || (payload_word_0 == "DE"
+          && ft2_word_matches_my_call (payload_word_1, my_call_upper, my_base_upper));
+  auto const payload_partner_token =
+      payload_word_0 == "DE" ? payload_word_2 : payload_word_1;
+  auto const payload_report_token =
+      payload_word_0 == "DE"
+          ? (nw > 3 ? normalize_call_token (w.at (3)).trimmed ().toUpper () : QString {})
+          : payload_word_2;
+  bool const directed_to_me = payload_directed_to_me || (message_words.size () > 3
                               && (message_words.at (2).contains (m_baseCall)
                                   || message_words.at (2).contains (m_config.my_callsign ())
                                   || ("DE" == message_words.at (2)
                                       && message_words.size () > 4
                                       && (message_words.at (4).contains (m_baseCall)
-                                          || message_words.at (4).contains (m_config.my_callsign ()))));
+                                          || message_words.at (4).contains (m_config.my_callsign ())))));
+  auto const directed_partner_token = message_words.size () > 3
+                                      ? normalize_call_token (message_words.at (3)).trimmed ().toUpper ()
+                                      : QString {};
+  bool const placeholder_partner_reply =
+      directed_to_me
+      && !qso_partner_call.isEmpty ()
+      && (directed_partner_token == "..." || payload_partner_token == "...");
+  if (placeholder_partner_reply)
+    {
+      hiscall = qso_partner_call;
+      if (hisgrid.trimmed ().isEmpty ())
+        {
+          hisgrid = ui->dxGridEntry->text ().trimmed ().toUpper ();
+        }
+    }
+  auto base_call = Radio::base_callsign (hiscall).trimmed ().toUpper ();
+  bool const qso_partner_matched = message_words.size () > 3
+                                   && !qso_partner_base_call.isEmpty ()
+                                   && ((message_words.at (3).contains (qso_partner_base_call)
+                                        || (!qso_partner_call.isEmpty ()
+                                            && message_words.at (3).contains (qso_partner_call)))
+                                       || placeholder_partner_reply);
+  auto const placeholder_reply_word = message_words.size () > 4
+                                      ? (payload_report_token.isEmpty ()
+                                             ? message_words.at (4).trimmed ().toUpper ()
+                                             : payload_report_token)
+                                      : QString {};
+  bool placeholder_reply_is_plain_report {false};
+  int placeholder_reply_report_value {0};
+  if (placeholder_partner_reply)
+    {
+      placeholder_reply_report_value = placeholder_reply_word.toInt (&placeholder_reply_is_plain_report);
+      placeholder_reply_is_plain_report =
+          placeholder_reply_is_plain_report
+          && placeholder_reply_report_value >= -50
+          && placeholder_reply_report_value <= 49;
+    }
+  if (placeholder_reply_is_plain_report
+      && (m_QSOProgress == CALLING || m_QSOProgress == REPLYING))
+    {
+      m_rptRcvd = placeholder_reply_word;
+      m_txRetryCount = 0;
+      m_lastNtx = -1;
+      m_cqRetryCount = 0;
+      setTxMsg (2);
+      m_ntx = 2;
+      m_QSOProgress = REPORT;
+      ui->txrb2->setChecked (true);
+    }
+  bool const placeholder_reply_forced_tx2 =
+      placeholder_reply_is_plain_report
+      && m_ntx == 2
+      && m_QSOProgress == REPORT;
   bool const starting_auto_cq_partner =
       m_autoCQ
       && !m_bDXpedMode
@@ -16926,8 +17237,10 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
                 else {
                   cease_auto_Tx_after_QSO ();
                 }
-                m_ntx=6;
-                ui->txrb6->setChecked(true);
+                if (m_autoCQ) {
+                  m_ntx=6;
+                  ui->txrb6->setChecked(true);
+                }
               }
             else if (!partnerFinalAck
                      && word_3.contains (QRegularExpression {"^R(?!R73|RR)"})
@@ -17003,7 +17316,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
             if(nRpt>=529 and nRpt<=599) m_xRcvd=t[n-2] + " " + t[n-1];
           }
           ui->txrb4->setChecked(true);
-        } else if (m_QSOProgress >= CALLING)
+        } else if (!placeholder_reply_forced_tx2 && m_QSOProgress >= CALLING)
           {
             if ((word_3_as_number >= -50 && word_3_as_number <= 49)
                 || (word_3_as_number >= 529 && word_3_as_number <= 599))
@@ -17071,8 +17384,10 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
       } else {
         cease_auto_Tx_after_QSO ();
       }
-      m_ntx=6;
-      ui->txrb6->setChecked(true);
+      if (m_autoCQ) {
+        m_ntx=6;
+        ui->txrb6->setChecked(true);
+      }
       m_QSOProgress = SIGNOFF;
     }
     else if (!(m_bAutoReply && (m_QSOProgress > CALLING))) {
@@ -19319,6 +19634,10 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   auto const currentTxIs73 =
       message_is_73 (m_currentMessageType,
                      m_currentMessage.split (' ', SkipEmptyParts));
+  bool const shouldStopAfterLoggedSignoff =
+      !m_autoCQ
+      && !m_bDXpedMode
+      && (currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF);
   if (m_autoCQ && !m_pendingAutoLogValid && currentTxIs73) {
     // Recovery path: after deferred RR73 retries, call context can be missing in m_hisCall.
     capturePendingAutoLogSnapshot ();
@@ -19460,6 +19779,28 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   });
   stopWRTimer.stop();           // Stop any Wait & Reply timeout
   stopWCTimer.stop();           // Stop any Wait & Call timeout
+
+  if (shouldStopAfterLoggedSignoff) {
+    QTimer::singleShot (0, this, [this, loggedBase] {
+      auto const currentBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
+      if (!loggedBase.isEmpty () && !currentBase.isEmpty () && currentBase != loggedBase) {
+        return;
+      }
+      debugToFile (QString {"logQSO-stop after signoff logged:%1 current:%2 ntx:%3 qso:%4"}
+                       .arg (loggedBase, currentBase)
+                       .arg (m_ntx)
+                       .arg (m_QSOProgress));
+      m_tx_when_ready = false;
+      m_restart = false;
+      m_btxok = false;
+      m_bCallingCQ = false;
+      m_bAutoReply = false;
+      clearDX ();
+      if (m_auto) {
+        auto_tx_mode (false);
+      }
+    });
+  }
 
   // Auto CQ: restart CQ calling after logging the QSO
   // DXped mode: skip reset, la macchina a stati DXped gestisce la continuazione
@@ -22966,6 +23307,12 @@ void MainWindow::transmit (double snr)
                        .arg (m_ntx)
                        .arg (m_QSOProgress));
       logQSOTimer.start (0);
+    }
+    if (!m_autoCQ) {
+      m_QSOProgress = SIGNOFF;
+      QTimer::singleShot (0, this, [this] {
+        auto_tx_mode (false);
+      });
     }
   }
 

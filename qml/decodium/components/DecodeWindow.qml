@@ -153,31 +153,17 @@ Window {
     }
     function currentRxDecodes() {
         var merged = []
-        function utcSortValue(timeStr) {
-            var digits = String(timeStr || "").replace(/[^0-9]/g, "")
-            if (digits.length >= 6)
-                return parseInt(digits.substring(0, 6))
-            if (digits.length === 4)
-                return parseInt(digits + "00")
-            return -1
-        }
         if (appEngine.rxDecodeList) {
             for (var j = 0; j < appEngine.rxDecodeList.length; j++) {
-                if (appEngine.rxDecodeList[j])
-                    merged.push(appEngine.rxDecodeList[j])
+                if (appEngine.rxDecodeList[j]) {
+                    var item = {}
+                    var src = appEngine.rxDecodeList[j]
+                    for (var key in src)
+                        item[key] = src[key]
+                    merged.push(item)
+                }
             }
         }
-        merged.sort(function(a, b) {
-            var ta = utcSortValue(a.time)
-            var tb = utcSortValue(b.time)
-            if (ta !== tb)
-                return ta - tb
-            var fa = parseInt(a.freq || "0")
-            var fb = parseInt(b.freq || "0")
-            if (fa !== fb)
-                return fa - fb
-            return String(a.message || "").localeCompare(String(b.message || ""))
-        })
         return merged
     }
 
@@ -766,20 +752,30 @@ Window {
                             spacing: 1
                             interactive: true
                             property bool followTail: true
+                            property bool tailFollowPending: false
                             function isNearTail() {
                                 return contentHeight <= height + 2
                                     || contentY >= Math.max(0, contentHeight - height - 8)
                             }
                             function updateFollowTail() {
+                                if (tailFollowPending)
+                                    return
                                 followTail = isNearTail()
                             }
                             function forceTailFollow() {
                                 followTail = true
+                                tailFollowPending = true
                                 Qt.callLater(function() {
                                     if (!rxFrequencyList)
                                         return
                                     rxFrequencyList.positionViewAtEnd()
                                     rxFrequencyList.followTail = true
+                                    Qt.callLater(function() {
+                                        if (!rxFrequencyList)
+                                            return
+                                        rxFrequencyList.tailFollowPending = false
+                                        rxFrequencyList.followTail = rxFrequencyList.isNearTail()
+                                    })
                                 })
                             }
                             Component.onCompleted: Qt.callLater(function() {
@@ -794,6 +790,11 @@ Window {
                                 }
                             }
                             property int _ver: decodeWindow.decodeListVersion
+                            on_VerChanged: {
+                                if (followTail || isNearTail()) {
+                                    forceTailFollow()
+                                }
+                            }
 
                             // Filter model to only show messages at RX frequency
                             model: {

@@ -41,6 +41,23 @@ QMutex& adif_append_mutex ()
   static QMutex mutex;
   return mutex;
 }
+
+QString resolvedLogBookPath (Configuration const * configuration)
+{
+  QDir dataDir;
+  if (configuration)
+    {
+      dataDir = configuration->writeable_data_dir ();
+    }
+
+  if (dataDir.path ().isEmpty ())
+    {
+      dataDir = QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
+    }
+
+  dataDir.mkpath (QStringLiteral ("."));
+  return dataDir.absoluteFilePath (QStringLiteral ("wsjtx_log.adi"));
+}
 }
 
 // hash function for QString members in hashed indexes
@@ -236,8 +253,6 @@ typedef multi_index_container<
 
 namespace
 {
-  auto const logFileName = "wsjtx_log.adi";
-
   // Exception class suitable for using with QtConcurrent across
   // thread boundaries
   class LoaderException final
@@ -384,7 +399,7 @@ class WorkedBefore::impl final
 public:
   impl (Configuration const * configuration)
     : configuration_ {configuration}
-    , path_ {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath (logFileName)}
+    , path_ {resolvedLogBookPath (configuration)}
     , prefixes_ {configuration}
   {
   }
@@ -466,6 +481,7 @@ bool WorkedBefore::add (QString const& call
     {
       QMutexLocker lock {&adif_append_mutex ()};
       auto const& entity = m_->prefixes_.lookup (call);
+      QDir {}.mkpath (QFileInfo {m_->path_}.absolutePath ());
       QFile file {m_->path_};
       if (!file.open(QIODevice::Text | QIODevice::Append))
         {
