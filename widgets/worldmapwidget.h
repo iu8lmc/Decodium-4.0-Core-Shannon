@@ -31,6 +31,7 @@ public:
   void setGreylineEnabled(bool enabled);
   void setDistanceInMiles(bool enabled);
   void setTransmitState(bool transmitting, QString const& targetCall, QString const& targetGrid, QString const& mode);
+  void clearContacts();
   void downgradeContactToBand(QString const& call);
   void addContact(QString const& call, QString const& sourceGrid, QString const& destinationGrid,
                   PathRole role = PathRole::Generic);

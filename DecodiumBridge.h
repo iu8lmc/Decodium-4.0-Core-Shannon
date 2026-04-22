@@ -385,7 +385,7 @@ public:
     int  autoCqPauseSec()    const { return m_autoCqPauseSec; }
     void setAutoCqPauseSec(int v) { if (m_autoCqPauseSec != v) { m_autoCqPauseSec = qBound(0, v, 300); emit autoCqPauseSecChanged(); } }
     bool avgDecodeEnabled()  const { return m_avgDecodeEnabled; }
-    void setAvgDecodeEnabled(bool v){ if (m_avgDecodeEnabled != v) { m_avgDecodeEnabled = v; emit avgDecodeEnabledChanged(); } }
+    void setAvgDecodeEnabled(bool v);
     int  txPeriod()          const { return m_txPeriod; }
     void setTxPeriod(int v);
     bool alt12Enabled()      const { return m_alt12Enabled; }
@@ -425,7 +425,7 @@ public:
     bool zapEnabled() const { return m_zapEnabled; }
     void setZapEnabled(bool v) { if (m_zapEnabled!=v){m_zapEnabled=v;emit zapEnabledChanged();} }
     bool deepSearchEnabled() const { return m_deepSearchEnabled; }
-    void setDeepSearchEnabled(bool v) { if (m_deepSearchEnabled!=v){m_deepSearchEnabled=v;emit deepSearchEnabledChanged();} }
+    void setDeepSearchEnabled(bool v);
 
     // CAT
     bool catConnected() const;
@@ -703,6 +703,8 @@ public slots:
     Q_INVOKABLE void enqueueStation(const QString& call);
     Q_INVOKABLE void dequeueStation(const QString& call);
     Q_INVOKABLE void clearCallerQueue();
+    Q_INVOKABLE void replayWorldMapFeed();
+    Q_INVOKABLE void processMapContactClick(const QString& call, const QString& grid);
 
     // C13 — Grid distance/bearing
     Q_INVOKABLE double calcDistance(const QString& myGrid, const QString& dxGrid) const;
@@ -854,6 +856,7 @@ signals:
     void warningRaised(const QString& title, const QString& summary, const QString& details);
     void setupSettingsRequested(int tabIndex);
     void timeSyncSettingsRequested();
+    void quitRequested();
     void catSettingsRequested();
     void rigErrorRaised(const QString& title, const QString& summary, const QString& details);
     // B6 — cty.dat
@@ -885,6 +888,14 @@ signals:
     void foxModeChanged();
     void houndModeChanged();
     void callerQueueChanged();
+    void worldMapResetRequested();
+    void worldMapContactAdded(QString call, QString sourceGrid, QString destinationGrid, int role);
+    void worldMapContactAddedByLonLat(QString call,
+                                      double sourceLon,
+                                      double sourceLat,
+                                      QString destinationGrid,
+                                      int role);
+    void worldMapContactDowngraded(QString call);
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();
@@ -983,6 +994,7 @@ private:
     QString ensureAdifLogPath();
     int effectiveDecodeDepth() const;
     int legacyCompatibleDecodeDepthBits() const;
+    void persistDecodeDepthState();
     int legacyDecodeQsoProgress() const;
     int legacyDecodeCqHint() const;
     QString legacyAllTxtPath() const;
@@ -1317,6 +1329,10 @@ private:
     bool        m_foxMode   {false};
     bool        m_houndMode {false};
     QStringList m_callerQueue;
+    QHash<QString, QString> m_worldMapGridByCall;
+    bool        m_worldMapCall3Loaded {false};
+    QString     m_mapLastClickCall;
+    qint64      m_mapLastClickMs {0};
     static constexpr int FOX_QUEUE_MAX = 20;
 
     // B9 — Active Stations model
@@ -1367,6 +1383,11 @@ private:
 
     QStringList ctyDatSearchPaths() const;
     bool reloadDxccLookup(QString* loadedPath = nullptr);
+    void clearWorldMapRuntimeCache();
+    void rememberWorldMapGrid(const QString& call, const QString& grid);
+    QString lookupWorldMapGrid(const QString& call);
+    void loadWorldMapCall3Cache();
+    void replayWorldMapEntry(const QVariantMap& entry);
     QString extractDecodedCallsign(const QString& msg, bool isCQ) const;
     QString extractDecodedGrid(const QString& msg) const;
     void enrichDecodeEntry(QVariantMap& entry) const;

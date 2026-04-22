@@ -131,6 +131,7 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   m_sampleRate = format.sampleRate();
   m_channelCount = format.channelCount();
   m_channelSelector = static_cast<int>(channel);
+  m_expectedSuspend_ = false;
   m_haveReportedState_ = false;
   m_lastStatusMessage.clear ();
 
@@ -157,26 +158,36 @@ void SoundInput::suspend ()
 {
   if (m_stream)
     {
-      m_stream->stop();
-      checkStream ();
+      m_expectedSuspend_ = true;
+      if (m_stream->state () != QAudio::SuspendedState
+          && m_stream->state () != QAudio::StoppedState)
+        {
+          m_stream->suspend ();
+          checkStream ();
+        }
+      cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
     }
 }
 
 void SoundInput::resume ()
 {
-  if (m_sink)
-    {
-      m_sink->reset ();
-    }
-
+  m_expectedSuspend_ = false;
   if (m_stream)
     {
-      if (m_stream->state () == QAudio::ActiveState)
+      auto const state = m_stream->state ();
+      if (state == QAudio::ActiveState || state == QAudio::IdleState)
         {
           cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
           return;
         }
-      m_stream->start (m_sink);
+      if (state == QAudio::SuspendedState)
+        {
+          m_stream->resume ();
+        }
+      else if (state == QAudio::StoppedState && m_sink)
+        {
+          m_stream->start (m_sink);
+        }
       checkStream ();
       cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
     }
@@ -204,14 +215,27 @@ void SoundInput::handleStateChanged (QAudio::State newState)
 
     case QAudio::ActiveState:
       reset (false);
-      emitStatusIfChanged (tr ("Receiving"), newState);
+      if (!m_expectedSuspend_)
+        {
+          emitStatusIfChanged (tr ("Receiving"), newState);
+        }
       break;
 
     case QAudio::SuspendedState:
+      if (m_expectedSuspend_)
+        {
+          qDebug () << "SoundInput: expected suspend acknowledged";
+          return;
+        }
       emitStatusIfChanged (tr ("Suspended"), newState);
       break;
 
     case QAudio::StoppedState:
+      if (m_expectedSuspend_ && streamError == QAudio::NoError)
+        {
+          qDebug () << "SoundInput: expected stop while suspended";
+          return;
+        }
       if (!checkStream ())
         {
           emitStatusIfChanged (tr ("Error"), newState);
@@ -268,6 +292,7 @@ void SoundInput::reset (bool report_dropped_frames)
 
 void SoundInput::stop()
 {
+  m_expectedSuspend_ = false;
   if (m_stream)
     {
       m_stream->stop ();

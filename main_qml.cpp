@@ -39,6 +39,7 @@
 #include "Transceiver/TransceiverFactory.hpp"
 #include "WaterfallItem.hpp"
 #include "PanadapterItem.hpp"
+#include "WorldMapItem.hpp"
 #include "lib/init_random_seed.h"
 
 static void L(const char* msg) {
@@ -279,6 +280,7 @@ int main(int argc, char* argv[])
 
     qmlRegisterType<WaterfallItem>("Decodium", 1, 0, "WaterfallItem");
     qmlRegisterType<PanadapterItem>("Decodium", 1, 0, "PanadapterItem");
+    qmlRegisterType<WorldMapItem>("Decodium", 1, 0, "WorldMapItem");
     // Registra DecodiumDxCluster come tipo QML non-creabile (accessibile solo come proprietà di bridge)
     qmlRegisterUncreatableType<DecodiumDxCluster>("Decodium", 1, 0, "DecodiumDxCluster",
         "DecodiumDxCluster is created by DecodiumBridge");

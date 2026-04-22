@@ -545,6 +545,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                 this,
                 SIGNAL(preferencesRequested()));
         connect(m_mainWindow,
+                SIGNAL(legacyQuitRequested()),
+                this,
+                SIGNAL(quitRequested()));
+        connect(m_mainWindow,
                 SIGNAL(legacyPttRequested(bool)),
                 this,
                 SIGNAL(rigPttRequested(bool)));
@@ -667,6 +671,11 @@ bool DecodiumLegacyBackend::txFirst() const
     return m_mainWindow && m_mainWindow->legacyTxFirst();
 }
 
+bool DecodiumLegacyBackend::txEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyTxEnabled();
+}
+
 bool DecodiumLegacyBackend::monitoring() const
 {
     return m_mainWindow && m_mainWindow->legacyMonitoring();
@@ -685,6 +694,41 @@ bool DecodiumLegacyBackend::tuning() const
 bool DecodiumLegacyBackend::catConnected() const
 {
     return m_mainWindow && m_mainWindow->legacyCatConnected();
+}
+
+bool DecodiumLegacyBackend::autoSpotEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyAutoSpotEnabled();
+}
+
+bool DecodiumLegacyBackend::asyncL2Enabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyAsyncL2Enabled();
+}
+
+bool DecodiumLegacyBackend::dualCarrierEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyDualCarrierEnabled();
+}
+
+bool DecodiumLegacyBackend::manualTxEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyManualTxEnabled();
+}
+
+bool DecodiumLegacyBackend::speedyContestEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacySpeedyContestEnabled();
+}
+
+bool DecodiumLegacyBackend::digitalMorseEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyDigitalMorseEnabled();
+}
+
+bool DecodiumLegacyBackend::quickQsoEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyQuickQsoEnabled();
 }
 
 double DecodiumLegacyBackend::signalLevel() const
@@ -722,6 +766,11 @@ int DecodiumLegacyBackend::currentTx() const
     return m_mainWindow ? m_mainWindow->legacyCurrentTx() : 1;
 }
 
+QStringList DecodiumLegacyBackend::callerQueue() const
+{
+    return m_mainWindow ? m_mainWindow->legacyCallerQueue() : QStringList {};
+}
+
 QString DecodiumLegacyBackend::adifLogPath() const
 {
     return m_mainWindow ? m_mainWindow->legacyAdifLogPath() : QString {};
@@ -737,10 +786,36 @@ int DecodiumLegacyBackend::txOutputAttenuation() const
     return m_mainWindow ? m_mainWindow->legacyTxOutputAttenuation() : 0;
 }
 
+int DecodiumLegacyBackend::ft2QsoMessageCount() const
+{
+    return m_mainWindow ? m_mainWindow->legacyFt2QsoMessageCount() : 5;
+}
+
+int DecodiumLegacyBackend::asyncSnrDb() const
+{
+    return m_mainWindow ? m_mainWindow->legacyAsyncSnrDb() : -99;
+}
+
+QString DecodiumLegacyBackend::uiLanguage() const
+{
+    return m_mainWindow ? m_mainWindow->legacyUiLanguage() : QStringLiteral("en");
+}
+
 void DecodiumLegacyBackend::setMode(const QString& mode)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetMode(mode);
+    }
+}
+
+void DecodiumLegacyBackend::setBand(const QString& band)
+{
+    if (m_mainWindow) {
+        QMetaObject::invokeMethod(m_mainWindow,
+                                  "onRemoteSetBandRequested",
+                                  Qt::DirectConnection,
+                                  Q_ARG(QString, QString {}),
+                                  Q_ARG(QString, band));
     }
 }
 
@@ -1028,6 +1103,62 @@ void DecodiumLegacyBackend::setTxFirst(bool enabled)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetTxFirst(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setAutoSpotEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetAutoSpotEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setAsyncL2Enabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetAsyncL2Enabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setDualCarrierEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetDualCarrierEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setManualTxEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetManualTxEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setSpeedyContestEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetSpeedyContestEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setDigitalMorseEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetDigitalMorseEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setQuickQsoEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetQuickQsoEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setFt2QsoMessageCount(int count)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacyRemoteSetFt2QsoMessageCount(count);
     }
 }
 

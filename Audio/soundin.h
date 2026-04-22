@@ -68,6 +68,7 @@ private:
   QString m_lastStatusMessage;
   QAudio::State m_lastReportedState {QAudio::StoppedState};
   bool m_haveReportedState_ {false};
+  bool m_expectedSuspend_ {false};
 };
 
 #endif
