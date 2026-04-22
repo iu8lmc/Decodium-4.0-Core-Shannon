@@ -4198,6 +4198,11 @@ QString MainWindow::legacyWaterfallPalette() const
                     : QStringLiteral ("Default");
 }
 
+bool MainWindow::legacyTxEnabled() const
+{
+  return m_auto;
+}
+
 bool MainWindow::legacyMonitoring() const
 {
   return m_monitoring;
@@ -4216,6 +4221,41 @@ bool MainWindow::legacyTuning() const
 bool MainWindow::legacyCatConnected() const
 {
   return m_config.is_transceiver_online();
+}
+
+bool MainWindow::legacyAutoSpotEnabled() const
+{
+  return m_autoSpotEnabled;
+}
+
+bool MainWindow::legacyAsyncL2Enabled() const
+{
+  return ui && ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked();
+}
+
+bool MainWindow::legacyDualCarrierEnabled() const
+{
+  return ui && ui->cbDualCarrier && ui->cbDualCarrier->isChecked();
+}
+
+bool MainWindow::legacyManualTxEnabled() const
+{
+  return ui && ui->cbManualTx && ui->cbManualTx->isChecked();
+}
+
+bool MainWindow::legacySpeedyContestEnabled() const
+{
+  return ui && ui->cbSpeedyContest && ui->cbSpeedyContest->isChecked();
+}
+
+bool MainWindow::legacyDigitalMorseEnabled() const
+{
+  return ui && ui->cbDigitalMorse && ui->cbDigitalMorse->isChecked();
+}
+
+bool MainWindow::legacyQuickQsoEnabled() const
+{
+  return ui && ui->btnQuickQSO && ui->btnQuickQSO->isChecked();
 }
 
 double MainWindow::legacySignalLevel() const
@@ -4290,6 +4330,16 @@ int MainWindow::legacyCurrentTx() const
   return qBound (1, static_cast<int> (m_ntx), 6);
 }
 
+QStringList MainWindow::legacyCallerQueue() const
+{
+  QStringList queue;
+  queue.reserve(m_callerQueue.size());
+  for (QString const& entry : m_callerQueue) {
+    queue << entry;
+  }
+  return queue;
+}
+
 QString MainWindow::legacyAdifLogPath() const
 {
   return m_logBook.path ();
@@ -4303,6 +4353,32 @@ QString MainWindow::legacyAllTxtPath() const
 int MainWindow::legacyTxOutputAttenuation() const
 {
   return (ui && ui->outAttenuation) ? ui->outAttenuation->value() : 0;
+}
+
+int MainWindow::legacyFt2QsoMessageCount() const
+{
+  return ft2QsoMessageCount(m_ft2QsoMessageProfile);
+}
+
+int MainWindow::legacyAsyncSnrDb() const
+{
+  return (m_mode == "FT2" && m_asyncVis) ? m_asyncVis->snr() : -99;
+}
+
+QString MainWindow::legacyUiLanguage() const
+{
+  QString language = m_settings
+      ? m_settings->value(QStringLiteral("UILanguage")).toString().trimmed()
+      : QString {};
+  if (language.isEmpty())
+    {
+      language = QLocale::system().name().trimmed();
+    }
+  if (language.isEmpty())
+    {
+      language = QStringLiteral("en");
+    }
+  return language;
 }
 
 void MainWindow::legacyClearBandActivity()
@@ -4362,6 +4438,26 @@ void MainWindow::legacySetAutoSeq(bool enabled)
 void MainWindow::legacySetTxEnabled(bool enabled)
 {
   onRemoteSetTxEnabledRequested(QString {}, enabled);
+}
+
+void MainWindow::legacySetHoldTxFreq(bool enabled)
+{
+  if (!ui || !ui->cbHoldTxFreq) {
+    return;
+  }
+  bool const changed = (ui->cbHoldTxFreq->isChecked() != enabled);
+  if (changed) {
+    ui->cbHoldTxFreq->setChecked(enabled);
+  }
+  on_cbHoldTxFreq_clicked(enabled);
+}
+
+bool MainWindow::legacyHoldTxFreq() const
+{
+  if (!ui || !ui->cbHoldTxFreq) {
+    return false;
+  }
+  return ui->cbHoldTxFreq->isChecked();
 }
 
 void MainWindow::legacySetAutoCq(bool enabled)
@@ -4857,6 +4953,46 @@ void MainWindow::legacySetRigControlEnabled(bool enabled)
       m_first_error = true;
       m_config.transceiver_offline ();
     }
+}
+
+void MainWindow::legacyRemoteSetAutoSpotEnabled(bool enabled)
+{
+  onRemoteSetAutoSpotRequested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetAsyncL2Enabled(bool enabled)
+{
+  onRemoteSetAsyncL2Requested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetDualCarrierEnabled(bool enabled)
+{
+  onRemoteSetDualCarrierRequested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetManualTxEnabled(bool enabled)
+{
+  onRemoteSetManualTxRequested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetSpeedyContestEnabled(bool enabled)
+{
+  onRemoteSetSpeedyContestRequested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetDigitalMorseEnabled(bool enabled)
+{
+  onRemoteSetDigitalMorseRequested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetQuickQsoEnabled(bool enabled)
+{
+  onRemoteSetQuickQsoRequested(QString {}, enabled);
+}
+
+void MainWindow::legacyRemoteSetFt2QsoMessageCount(int count)
+{
+  onRemoteSetFt2QsoMessageCountRequested(QString {}, count);
 }
 
 void MainWindow::legacyRaiseWarning(QString const& title,
@@ -17187,15 +17323,23 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
         auto const& word_3 = message_words.at (4);
         auto word_3_as_number = word_3.toInt ();
         bool const localSignoffAlreadySent =
-            (m_nTx73 > 0)
+            m_logAfterOwn73
+            || (m_ntx == 5)
+            || (m_nTx73 > 0)
+            || message_is_73 (m_currentMessageType,
+                              m_currentMessage.split (' ', SkipEmptyParts))
             || message_is_73 (m_lastMessageType,
                               m_lastMessageSent.split (' ', SkipEmptyParts));
+        // AutoCQ queued callers can legitimately answer our TX2/report with
+        // RR73 right away. Once we've already reached REPORT, treat 73/RR73
+        // as a real final ack so the state machine stays on TX5/log instead
+        // of slipping back to TX4/RR73 via stale replayed state.
         bool const partnerSignoff73 =
             (word_3_as_number == 73
-             && (m_QSOProgress >= ROGER_REPORT));
+             && (m_QSOProgress >= REPORT));
         bool const partnerSignoffRR73 =
             (word_3 == "RR73"
-             && (m_QSOProgress >= ROGER_REPORT));
+             && (m_QSOProgress >= REPORT));
         bool const partnerAnySignoff = partnerSignoff73 || partnerSignoffRR73;
         bool const profileNeedsOwn73BeforeLog =
             ((m_mode == "FT2"
@@ -18281,6 +18425,18 @@ void MainWindow::enqueueCaller (QString const& call, int freq, int snr, float dt
     debugAutoCq ("queue-skip-empty", QString {"raw:%1"}.arg (call.trimmed ()));
     return;
   }
+  auto activeQueuedBase = Radio::base_callsign (m_hisCall).trimmed ().toUpper ();
+  if (activeQueuedBase.isEmpty ()) {
+    activeQueuedBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
+  }
+  if (activeQueuedBase.isEmpty ()) {
+    activeQueuedBase = Radio::base_callsign (m_autoCqLockedCall).trimmed ().toUpper ();
+  }
+  if (!activeQueuedBase.isEmpty ()
+      && queuedCall.trimmed ().toUpper () == activeQueuedBase) {
+    debugAutoCq ("queue-skip-active", QString {"call:%1 freq:%2 snr:%3"}.arg (queuedCall).arg (freq).arg (snr));
+    return;
+  }
   if (isRecentAutoCqDuplicate (queuedCall)) {
     debugAutoCq ("queue-skip-recent", QString {"call:%1 freq:%2 snr:%3"}.arg (queuedCall).arg (freq).arg (snr));
     return;
@@ -18345,6 +18501,7 @@ void MainWindow::processNextInQueue ()
     m_hisCall0 = parts.at (0);
     m_hisGrid.clear ();
     ui->dxCallEntry->setText (parts.at (0));
+    removeCallerFromQueue (parts.at (0));
     ui->RxFreqSpinBox->setValue (freq);
     ui->rptSpinBox->setValue (snr);
     genStdMsgs (QString::number (snr));
@@ -19502,6 +19659,9 @@ void MainWindow::on_dxCallEntry_textChanged (QString const& call)
   m_hisCall = call;
   auto const newBase = Radio::base_callsign (m_hisCall).trimmed ().toUpper ();
   if (!newBase.isEmpty () && newBase != previousBase) {
+    if ((m_autoCQ || !m_callerQueue.isEmpty ()) && (m_auto || m_bAutoReply || m_QSOProgress > CALLING)) {
+      removeCallerFromQueue (newBase);
+    }
     // AutoCQ retry counters are per-partner; reset when the active DX call changes.
     m_logAfterOwn73 = false;
     m_ft2QuickPeerSignaled = false;
@@ -19634,10 +19794,6 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   auto const currentTxIs73 =
       message_is_73 (m_currentMessageType,
                      m_currentMessage.split (' ', SkipEmptyParts));
-  bool const shouldStopAfterLoggedSignoff =
-      !m_autoCQ
-      && !m_bDXpedMode
-      && (currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF);
   if (m_autoCQ && !m_pendingAutoLogValid && currentTxIs73) {
     // Recovery path: after deferred RR73 retries, call context can be missing in m_hisCall.
     capturePendingAutoLogSnapshot ();
@@ -19779,28 +19935,6 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   });
   stopWRTimer.stop();           // Stop any Wait & Reply timeout
   stopWCTimer.stop();           // Stop any Wait & Call timeout
-
-  if (shouldStopAfterLoggedSignoff) {
-    QTimer::singleShot (0, this, [this, loggedBase] {
-      auto const currentBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
-      if (!loggedBase.isEmpty () && !currentBase.isEmpty () && currentBase != loggedBase) {
-        return;
-      }
-      debugToFile (QString {"logQSO-stop after signoff logged:%1 current:%2 ntx:%3 qso:%4"}
-                       .arg (loggedBase, currentBase)
-                       .arg (m_ntx)
-                       .arg (m_QSOProgress));
-      m_tx_when_ready = false;
-      m_restart = false;
-      m_btxok = false;
-      m_bCallingCQ = false;
-      m_bAutoReply = false;
-      clearDX ();
-      if (m_auto) {
-        auto_tx_mode (false);
-      }
-    });
-  }
 
   // Auto CQ: restart CQ calling after logging the QSO
   // DXped mode: skip reset, la macchina a stati DXped gestisce la continuazione
@@ -23307,12 +23441,6 @@ void MainWindow::transmit (double snr)
                        .arg (m_ntx)
                        .arg (m_QSOProgress));
       logQSOTimer.start (0);
-    }
-    if (!m_autoCQ) {
-      m_QSOProgress = SIGNOFF;
-      QTimer::singleShot (0, this, [this] {
-        auto_tx_mode (false);
-      });
     }
   }
 

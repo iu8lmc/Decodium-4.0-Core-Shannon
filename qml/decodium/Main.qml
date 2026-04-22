@@ -23,6 +23,10 @@ ApplicationWindow {
     title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
+    property bool decodePanelLayoutSaved: !!bridge.getSetting("uiDecodePanelsLayoutSaved", false)
+    property int savedPeriod1PanelWidth: safeStoredPanelWidth(bridge.getSetting("uiFullSpectrumPanelWidth", 400), 400, 360)
+    property int savedRxFreqPanelWidth: safeStoredPanelWidth(bridge.getSetting("uiSignalRxPanelWidth", 400), 400, 260)
+    property int savedLiveMapPanelWidth: safeStoredPanelWidth(bridge.getSetting("uiLiveMapPanelWidth", 360), 360, 280)
 
     function availableScreenGeometries() {
         var geometries = []
@@ -75,6 +79,91 @@ ApplicationWindow {
         }
     }
 
+    function safeStoredPanelWidth(value, fallback, minimum) {
+        var numeric = Number(value)
+        if (!isFinite(numeric) || numeric <= 0)
+            numeric = fallback
+        return Math.max(minimum, Math.round(numeric))
+    }
+
+    function restoreDecodePanelWidths() {
+        if (typeof decodePanelsSplit === "undefined" || !decodePanelsSplit ||
+            typeof period1Panel === "undefined" || !period1Panel ||
+            typeof rxFreqPanel === "undefined" || !rxFreqPanel ||
+            typeof liveMapPanelHost === "undefined" || !liveMapPanelHost) {
+            Qt.callLater(restoreDecodePanelWidths)
+            return
+        }
+
+        var totalWidth = decodePanelsSplit.width
+        if (!(totalWidth > 0)) {
+            Qt.callLater(restoreDecodePanelWidths)
+            return
+        }
+
+        liveMapPanelHost.targetPanelWidth = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, 280)
+
+        if (!decodePanelLayoutSaved) {
+            period1Panel.userDraggedSplit = false
+            period1Panel.applyCenterSplit()
+            return
+        }
+
+        var period1Min = 360
+        var rxMin = 260
+        var mapMin = 280
+        var savedPeriod1 = safeStoredPanelWidth(savedPeriod1PanelWidth, 400, period1Min)
+        var savedRx = safeStoredPanelWidth(savedRxFreqPanelWidth, 400, rxMin)
+        var savedMap = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, mapMin)
+        var mapWidth = 0
+
+        if (mainWindow.liveMapPanelVisible) {
+            var maxMapWidth = Math.max(mapMin, totalWidth - period1Min - rxMin)
+            mapWidth = Math.min(savedMap, maxMapWidth)
+        }
+
+        var remainingWidth = Math.max(period1Min + rxMin, totalWidth - mapWidth)
+        var savedCombined = Math.max(1, savedPeriod1 + savedRx)
+        var period1Width = Math.round(remainingWidth * (savedPeriod1 / savedCombined))
+        period1Width = Math.max(period1Min, Math.min(period1Width, remainingWidth - rxMin))
+        var rxWidth = Math.max(rxMin, remainingWidth - period1Width)
+
+        period1Panel.userDraggedSplit = true
+        period1Panel.targetPanelWidth = period1Width
+        rxFreqPanel.targetPanelWidth = rxWidth
+        if (mainWindow.liveMapPanelVisible)
+            liveMapPanelHost.targetPanelWidth = mapWidth
+    }
+
+    function persistDecodePanelWidths() {
+        if (!bridge)
+            return
+
+        if (typeof period1Panel !== "undefined" && period1Panel &&
+            !period1Detached && period1Panel.width >= 360) {
+            savedPeriod1PanelWidth = Math.round(period1Panel.width)
+            bridge.setSetting("uiFullSpectrumPanelWidth", savedPeriod1PanelWidth)
+        }
+
+        if (typeof rxFreqPanel !== "undefined" && rxFreqPanel &&
+            !rxFreqDetached && rxFreqPanel.width >= 260) {
+            savedRxFreqPanelWidth = Math.round(rxFreqPanel.width)
+            bridge.setSetting("uiSignalRxPanelWidth", savedRxFreqPanelWidth)
+        }
+
+        if (typeof liveMapPanelHost !== "undefined" && liveMapPanelHost) {
+            var liveMapWidth = liveMapPanelHost.visible ? liveMapPanelHost.width : liveMapPanelHost.targetPanelWidth
+            if (liveMapWidth >= 280) {
+                savedLiveMapPanelWidth = Math.round(liveMapWidth)
+                liveMapPanelHost.targetPanelWidth = savedLiveMapPanelWidth
+                bridge.setSetting("uiLiveMapPanelWidth", savedLiveMapPanelWidth)
+            }
+        }
+
+        decodePanelLayoutSaved = true
+        bridge.setSetting("uiDecodePanelsLayoutSaved", true)
+    }
+
     Component.onCompleted: {
         console.log("Main.qml Component.onCompleted — restoring window state")
         var state = {}
@@ -100,11 +189,13 @@ ApplicationWindow {
         show()
         raise()
         requestActivate()
+        Qt.callLater(restoreDecodePanelWidths)
         console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
-    // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight
-    property int  waterfallPanelHeight: bridge.uiWaterfallHeight > 0 ? bridge.uiWaterfallHeight : 350
+    // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight.
+    // Default 420px così all'avvio la cascata è già ben aperta (feedback IK8OLM).
+    property int  waterfallPanelHeight: bridge.uiWaterfallHeight > 0 ? bridge.uiWaterfallHeight : 420
 
     // Timer che salva le impostazioni 2s dopo ogni modifica (debounce)
     Timer {
@@ -151,6 +242,7 @@ ApplicationWindow {
     }
 
     function persistWindowLayouts() {
+        persistDecodePanelWidths()
         bridge.saveWindowState("mainWindow", Math.round(x), Math.round(y), Math.round(width), Math.round(height), false, visibility === Window.Minimized)
         bridge.saveWindowState("waterfallWindow", Math.round(waterfallWindow.x), Math.round(waterfallWindow.y), Math.round(waterfallWindow.width), Math.round(waterfallWindow.height), waterfallDetached, waterfallMinimized)
         bridge.saveWindowState("logFloatingWindow", Math.round(logFloatingWindow.x), Math.round(logFloatingWindow.y), Math.round(logFloatingWindow.width), Math.round(logFloatingWindow.height), logWindowDetached, logWindowMinimized)
@@ -256,6 +348,13 @@ ApplicationWindow {
     property bool callerQueuePanelVisible:    false
     property bool astroPanelVisible:          false
     property bool dxClusterPanelVisible:      false
+    property bool liveMapPanelVisible:        bridge.getSetting("WorldMapDisplayed", true)
+    onLiveMapPanelVisibleChanged: Qt.callLater(function() {
+        if (mainWindow.decodePanelLayoutSaved)
+            mainWindow.restoreDecodePanelWidths()
+        else if (typeof period1Panel !== "undefined" && period1Panel)
+            period1Panel.applyCenterSplit()
+    })
 
     // === Dialoghi lazy-loaded ===
     Loader { id: colorDialogLoader; source: "../dialogs/ColorHighlightingDialog.qml"; active: false }
@@ -337,6 +436,10 @@ ApplicationWindow {
                 mainWindow.showDxccInfo = !!value
             else if (key === "TXMessagesToRX" || key === "Tx2QSO")
                 mainWindow.showTxMessagesInRx = !!value
+            else if (key === "WorldMapDisplayed")
+                mainWindow.liveMapPanelVisible = !!value
+            else if (key === "uiDecodePanelsLayoutSaved")
+                mainWindow.decodePanelLayoutSaved = !!value
         }
     }
 
@@ -419,6 +522,17 @@ ApplicationWindow {
         statusToastColor = color ? color : secondaryCyan
         statusToastVisible = true
         statusToastHideTimer.restart()
+    }
+
+    function messageElideMode(message) {
+        var myCall = String((bridge && bridge.callsign) || "").trim().toUpperCase()
+        if (!myCall.length)
+            return Text.ElideRight
+
+        var normalized = " " + String(message || "").toUpperCase().replace(/[<>;,]/g, " ") + " "
+        return normalized.indexOf(" " + myCall + " ") >= 0
+            ? Text.ElideMiddle
+            : Text.ElideRight
     }
 
     // Dock zones positions
@@ -729,10 +843,17 @@ ApplicationWindow {
     }
 
     // Listen for PSK search results
+    // In 1.0.40 searchPskReporter() è passato da stub a query HTTP reale verso
+    // pskreporter.info, quindi il popup è ora l'unico modo per vedere l'esito
+    // della ricerca (ONLINE/OFFLINE + bande cliccabili). Apriamo il popup all'INIZIO
+    // della ricerca così l'utente vede "Searching…" e poi il risultato; il timer
+    // pskPopupTimer (8s) lo chiude da solo se resta aperto troppo a lungo.
+    // Il vecchio gate uiPskSearchPopupEnabled è rimosso: bloccava anche le ricerche
+    // esplicite dall'utente (l'unico caller di searchPskReporter è la barra manuale).
     Connections {
         target: bridge
         function onPskSearchingChanged() {
-            if (!bridge.pskSearching && bridge.pskSearchCallsign !== "") {
+            if (bridge.pskSearching) {
                 pskSearchPopup.open()
             }
         }
@@ -2738,7 +2859,7 @@ ApplicationWindow {
                 handle: Rectangle {
                     id: splitHandle
                     implicitWidth: 10
-                    implicitHeight: 20
+                    implicitHeight: 10
                     color: SplitHandle.hovered || SplitHandle.pressed ? "#00e6e6" : "#505070"
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -2813,7 +2934,7 @@ ApplicationWindow {
                 Rectangle {
                     id: waterfallPanel
                     SplitView.preferredHeight: waterfallDetached ? 40 : mainWindow.waterfallPanelHeight
-                    SplitView.minimumHeight: waterfallDetached ? 40 : 200
+                    SplitView.minimumHeight: waterfallDetached ? 40 : 260
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                     radius: 8
                     border.color: isDockHighlighted ? secondaryCyan : glassBorder
@@ -3021,7 +3142,9 @@ ApplicationWindow {
                     property real periodLength: bridge.mode === "FT2" ? 3.75 : (bridge.mode === "FT4" ? 7.5 : 15)  // FT2=3.75s, FT4=7.5s, FT8=15s
 
                     // IU8LMC: Reactive property for all decodes (Band Activity)
+                    property bool showTxMessagesInRx: mainWindow.showTxMessagesInRx
                     property var allDecodes: bridge.decodeList
+                    property var rxDecodes: currentRxDecodes()
                     property int decodeListVersion: 0
                     property int lastSyncCount: 0
 
@@ -3031,24 +3154,37 @@ ApplicationWindow {
                         function onDecodeListChanged() {
                             var stickBandTail = evenPeriodList ? evenPeriodList.isNearTail() : true
                             var stickFloatingTail = period1FloatingList ? period1FloatingList.isNearTail() : true
+                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             var src = bridge.decodeList
                             decodePanel.allDecodes = src
+                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
                             decodePanel.lastSyncCount = src.length
                             if (stickBandTail && evenPeriodList)
                                 evenPeriodList.forceTailFollow()
                             if (stickFloatingTail && period1FloatingList)
                                 period1FloatingList.forceTailFollow()
-                        }
-                        function onRxDecodeListChanged() {
-                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
-                            decodePanel.decodeListVersion++
                             if (stickRxTail && rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
                             if (stickFloatingRxTail && rxFrequencyFloatingList)
                                 rxFrequencyFloatingList.forceTailFollow()
                         }
+                        function onRxDecodeListChanged() {
+                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
+                            decodePanel.decodeListVersion++
+                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
+                            if (stickRxTail && rxFrequencyList)
+                                rxFrequencyList.forceTailFollow()
+                            if (stickFloatingRxTail && rxFrequencyFloatingList)
+                                rxFrequencyFloatingList.forceTailFollow()
+                        }
+                    }
+
+                    onShowTxMessagesInRxChanged: {
+                        decodePanel.rxDecodes = currentRxDecodes()
+                        decodePanel.decodeListVersion++
                     }
 
                     Timer {
@@ -3311,6 +3447,7 @@ ApplicationWindow {
                     }
 
                     SplitView {
+                        id: decodePanelsSplit
                         anchors.fill: parent
                         anchors.margins: 4
                         anchors.topMargin: 36
@@ -3330,12 +3467,24 @@ ApplicationWindow {
                                 radius: 2
                                 color: SplitHandle.hovered || SplitHandle.pressed ? "#00bcd4" : "#909090"
                             }
+
+                            // Marca il divisore come "spostato a mano" non appena l'utente
+                            // inizia a trascinare — disattiva il ri-centramento automatico
+                            // al resize della finestra.
+                            Connections {
+                                target: SplitHandle
+                                function onPressedChanged() {
+                                    if (SplitHandle.pressed && typeof period1Panel !== "undefined")
+                                        period1Panel.userDraggedSplit = true
+                                }
+                            }
                         }
 
                         // ========== LEFT: Band Activity ==========
                         Rectangle {
                             id: period1Panel
-                            SplitView.preferredWidth: 400
+                            property int targetPanelWidth: mainWindow.savedPeriod1PanelWidth
+                            SplitView.preferredWidth: targetPanelWidth
                             SplitView.minimumWidth: 360
                             readonly property bool compactColumns: width < 540
                             readonly property int utcColumnWidth: compactColumns ? 66 : 86
@@ -3346,12 +3495,43 @@ ApplicationWindow {
                             readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 96 : 132) : 0
                             readonly property int azColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 42 : 52) : 0
                             readonly property int messageMinWidth: compactColumns ? 72 : 140
-                            Component.onCompleted: {
-                                // Dopo il layout, porta il separatore al 50%
-                                Qt.callLater(function() {
-                                    if (parent && parent.width > 0)
-                                        period1Panel.SplitView.preferredWidth = parent.width * 0.5
-                                })
+                            // Divisore Full Spectrum / Signal RX: 50/50 affidabile.
+                            // Se `parent.width==0` al momento del callback (timing race),
+                            // applyCenterSplit() si ri-schedula finché il parent non ha width.
+                            // Il flag userDraggedSplit (settato su onPressedChanged del handle)
+                            // disattiva il ri-centramento se l'utente ha trascinato il separatore.
+                            property bool userDraggedSplit: false
+                            function applyCenterSplit() {
+                                if (userDraggedSplit) return
+                                if (parent && parent.width > 0) {
+                                    var liveMapWidth = (typeof liveMapPanelHost !== "undefined" && liveMapPanelHost.visible)
+                                                     ? liveMapPanelHost.targetPanelWidth
+                                                     : 0
+                                    period1Panel.targetPanelWidth = Math.max(360, Math.round((parent.width - liveMapWidth) * 0.5))
+                                } else {
+                                    Qt.callLater(applyCenterSplit)
+                                }
+                            }
+                            Component.onCompleted: Qt.callLater(function() {
+                                if (mainWindow.decodePanelLayoutSaved)
+                                    mainWindow.restoreDecodePanelWidths()
+                                else
+                                    applyCenterSplit()
+                            })
+                            onWidthChanged: {
+                                if (width >= 360 && Math.abs(targetPanelWidth - width) >= 1) {
+                                    targetPanelWidth = Math.round(width)
+                                    if (!mainWindow.windowStateRestoreInProgress)
+                                        mainWindow.scheduleWindowStateSave()
+                                }
+                            }
+                            Connections {
+                                target: period1Panel.parent
+                                ignoreUnknownSignals: true
+                                function onWidthChanged() {
+                                    if (!period1Panel.userDraggedSplit)
+                                        period1Panel.applyCenterSplit()
+                                }
                             }
                             color: "transparent"
 
@@ -3691,7 +3871,7 @@ ApplicationWindow {
                                                 Text { text: modelData.dt || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Text { text: modelData.freq || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: Text.ElideRight }
+                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
                                                 Item {
                                                     visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
@@ -3740,7 +3920,9 @@ ApplicationWindow {
                         // ========== RIGHT: RX Frequency ==========
                         Rectangle {
                             id: rxFreqPanel
+                            property int targetPanelWidth: mainWindow.savedRxFreqPanelWidth
                             SplitView.fillWidth: true
+                            SplitView.preferredWidth: targetPanelWidth
                             SplitView.minimumWidth: 260
                             readonly property bool compactColumns: width < 450
                             readonly property bool compactHeader: width < 350
@@ -3750,6 +3932,13 @@ ApplicationWindow {
                             readonly property int gapColumnWidth: compactColumns ? 3 : 4
                             readonly property int headerBadgeWidth: compactHeader ? 62 : 70
                             color: "transparent"
+                            onWidthChanged: {
+                                if (width >= 260 && Math.abs(targetPanelWidth - width) >= 1) {
+                                    targetPanelWidth = Math.round(width)
+                                    if (!mainWindow.windowStateRestoreInProgress)
+                                        mainWindow.scheduleWindowStateSave()
+                                }
+                            }
 
                             // Placeholder when detached - magnetic dock zone
                             Rectangle {
@@ -3993,10 +4182,7 @@ ApplicationWindow {
                                                 forceTailFollow()
                                             }
                                         }
-                                        model: {
-                                            void(_ver)  // forza ricalcolo quando _ver cambia
-                                            return decodePanel.currentRxDecodes()
-                                        }
+                                        model: decodePanel.rxDecodes
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
 
@@ -4058,7 +4244,7 @@ ApplicationWindow {
                                                 Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
                                                 Text { text: modelData.dt || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
+                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                                             }
                                         }
 
@@ -4072,6 +4258,28 @@ ApplicationWindow {
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        Rectangle {
+                            id: liveMapPanelHost
+                            visible: mainWindow.liveMapPanelVisible
+                            color: "transparent"
+                            property int targetPanelWidth: mainWindow.savedLiveMapPanelWidth
+                            SplitView.preferredWidth: visible ? targetPanelWidth : 0
+                            SplitView.minimumWidth: visible ? 280 : 0
+                            onWidthChanged: {
+                                if (visible && width >= 280 && Math.abs(targetPanelWidth - width) >= 1) {
+                                    targetPanelWidth = Math.round(width)
+                                    if (!mainWindow.windowStateRestoreInProgress)
+                                        mainWindow.scheduleWindowStateSave()
+                                }
+                            }
+
+                            LiveMapPanel {
+                                anchors.fill: parent
+                                engine: bridge
+                                visible: parent.visible
                             }
                         }
                     }
@@ -4665,8 +4873,14 @@ ApplicationWindow {
             timeSyncPanelVisible = true
             settingsDialog.openTab(8)
         }
+        function onSetupSettingsRequested(tabIndex) {
+            settingsDialog.openTab(tabIndex !== undefined && tabIndex >= 0 ? tabIndex : 0)
+        }
         function onCatSettingsRequested() {
             settingsDialog.openTab(1)
+        }
+        function onQuitRequested() {
+            mainWindow.close()
         }
         function onRigErrorRaised(title, summary, details) {
             if (bridge.catBackend === "native") return
@@ -4817,6 +5031,7 @@ ApplicationWindow {
     // MAM Window - Multi-Answer Mode
     MamWindow {
         id: mamWindow
+        engine: bridge
     }
 
     // Auto-open MAM window when MAM mode is enabled
@@ -5401,6 +5616,24 @@ ApplicationWindow {
             contentItem: Text {
                 text: parent.text; font.pixelSize: 12
                 color: activeStationsPanelVisible ? successGreen : textSecondary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
+            text: liveMapPanelVisible ? "✓ Live Map" : "☐ Live Map"
+            onTriggered: {
+                liveMapPanelVisible = !liveMapPanelVisible
+                bridge.setSetting("WorldMapDisplayed", liveMapPanelVisible)
+            }
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: liveMapPanelVisible ? successGreen : textSecondary
                 leftPadding: 10
             }
         }
@@ -6904,7 +7137,7 @@ ApplicationWindow {
                                 spacing: 6
                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 80 }
                                 Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
+                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                             }
 
                             MouseArea {
@@ -7157,10 +7390,7 @@ ApplicationWindow {
                                 forceTailFollow()
                             }
                         }
-                        model: {
-                            void(_ver)
-                            return decodePanel.currentRxDecodes()
-                        }
+                        model: decodePanel.rxDecodes
                         ScrollBar.vertical: ScrollBar { active: true }
 
                         delegate: Rectangle {
@@ -7175,7 +7405,7 @@ ApplicationWindow {
                                 spacing: 6
                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 80 }
                                 Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: Text.ElideRight }
+                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                             }
 
                             MouseArea {

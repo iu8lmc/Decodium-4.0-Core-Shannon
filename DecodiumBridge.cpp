@@ -45,6 +45,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QUrlQuery>
 #include <QStandardPaths>
 #include <QDir>
 #include <QMutex>
@@ -65,6 +66,7 @@
 #include <QDebug>
 #include <QDesktopServices>
 #include <QDataStream>
+#include <QLocale>
 #include <QUrl>
 #include <QRegularExpression>
 #include <cstdio>
@@ -122,6 +124,8 @@ static QString aliasedBridgeSettingKey(const QString& key)
     if (key == QStringLiteral("ShowCountryNames")) return QStringLiteral("AlwaysShowCountryNames");
     if (key == QStringLiteral("InsertBlankLine")) return QStringLiteral("InsertBlank");
     if (key == QStringLiteral("TXMessagesToRX")) return QStringLiteral("Tx2QSO");
+    if (key == QStringLiteral("ShowGreyline")) return QStringLiteral("MapShowGreyline");
+    if (key == QStringLiteral("MapSingleClickTX")) return QStringLiteral("MapSingleClickStartsTx");
     return key;
 }
 
@@ -202,16 +206,31 @@ static QString decodeDedupKey(QString const& time,
         + message.trimmed();
 }
 
+// FT2 async turbo (100ms windows): lo stage7 DSP può riportare lo stesso messaggio
+// in scansioni consecutive con freq leggermente diversa (±1-10 Hz di jitter). Quantizza
+// la frequenza in bucket da 20 Hz così gli stessi decode non producono righe duplicate
+// nella decodeList, mantenendo comunque la distinzione tra QSO vicini su bande diverse.
+static QString decodeDedupKeyFt2Async(QString const& time,
+                                      QString const& freq,
+                                      QString const& message)
+{
+    bool ok = false;
+    int const f = freq.trimmed().toInt(&ok);
+    QString const fBucket = ok ? QString::number((f / 20) * 20) : freq.trimmed();
+    return normalizeUtcDisplayToken(time).trimmed()
+        + QLatin1Char('|')
+        + fBucket
+        + QLatin1Char('|')
+        + message.trimmed();
+}
+
 static int legacyDepthBitsToModernDepth(int legacyBits)
 {
     int depth = legacyBits & 0x7;
     if (depth <= 0) {
         depth = 3;
     }
-    if (legacyBits & 0xF0) {
-        depth = 4;
-    }
-    return qBound(1, depth, 4);
+    return qBound(1, depth, 3);
 }
 
 static int modernDepthToLegacyBits(int depth, bool avgDecodeEnabled, bool deepSearchEnabled)
@@ -1566,26 +1585,70 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                     bridgeLog("Remote Web disabled: token must be at least 12 characters on LAN/WAN bind.");
                 } else {
                     m_remoteServer = new RemoteCommandServer(this);
+                    auto ensureRemoteLegacyBackend = [this]() -> bool {
+                        return legacyBackendAvailable() || ensureLegacyBackendAvailable();
+                    };
+                    bool const remoteLegacyReady = ensureRemoteLegacyBackend();
+                    if (!remoteLegacyReady) {
+                        bridgeLog(QStringLiteral("Remote Web: legacy backend unavailable, advanced FT2 controls limited"));
+                    }
                     m_remoteServer->setRuntimeStateProvider([this]() -> RemoteCommandServer::RuntimeState {
+                        auto sanitizeFt2QsoMessageCount = [] (int count, bool quickQsoEnabled) {
+                            if (count == 2 || count == 3 || count == 5) {
+                                return count;
+                            }
+                            return quickQsoEnabled ? 2 : 5;
+                        };
+
+                        QSettings remoteStateSettings(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
                         RemoteCommandServer::RuntimeState s;
-                        s.mode = m_mode;
-                        s.band = QString();
-                        s.dialFrequencyHz = static_cast<qint64>(m_frequency);
+                        s.mode = m_mode.trimmed().toUpper();
+                        s.band = autoCqBandKeyForFrequency(m_frequency);
+                        s.dialFrequencyHz = qRound64(m_frequency);
                         s.rxFrequencyHz = m_rxFrequency;
                         s.txFrequencyHz = m_txFrequency;
-                        s.periodMs = qMax<qint64>(1, qRound64(m_txPeriod * 1000.0));
+                        s.periodMs = qMax<qint64>(1, periodMsForMode(m_mode));
                         s.txEnabled = m_txEnabled;
                         s.autoCqEnabled = m_autoCqRepeat > 0;
-                        s.autoSpotEnabled = m_pskReporterEnabled;
+                        s.autoSpotEnabled = remoteStateSettings.value(QStringLiteral("AutoSpotEnabled"), false).toBool();
                         s.asyncL2Enabled = m_asyncDecodeEnabled;
                         s.dualCarrierEnabled = m_dualCarrierEnabled;
                         s.alt12Enabled = m_alt12Enabled;
+                        s.manualTxEnabled = remoteStateSettings.value(QStringLiteral("ManualTxTiming"), false).toBool();
+                        s.speedyContestEnabled = remoteStateSettings.value(QStringLiteral("SpeedyContest"), false).toBool();
+                        s.digitalMorseEnabled = remoteStateSettings.value(QStringLiteral("DigitalMorse"), false).toBool();
                         s.quickQsoEnabled = m_quickQsoEnabled;
+                        s.ft2QsoMessageCount = sanitizeFt2QsoMessageCount(
+                            remoteStateSettings.value(QStringLiteral("FT2QsoMsgCount"), m_quickQsoEnabled ? 2 : 5).toInt(),
+                            m_quickQsoEnabled);
+                        s.asyncSnrDb = (m_mode == QStringLiteral("FT2")) ? m_asyncSnrDb : -99;
+                        s.uiLanguage = remoteStateSettings.value(QStringLiteral("UILanguage")).toString().trimmed();
+                        if (legacyBackendAvailable()) {
+                            s.autoSpotEnabled = m_legacyBackend->autoSpotEnabled();
+                            s.asyncL2Enabled = m_legacyBackend->asyncL2Enabled();
+                            s.dualCarrierEnabled = m_legacyBackend->dualCarrierEnabled();
+                            s.alt12Enabled = m_legacyBackend->alt12Enabled();
+                            s.manualTxEnabled = m_legacyBackend->manualTxEnabled();
+                            s.speedyContestEnabled = m_legacyBackend->speedyContestEnabled();
+                            s.digitalMorseEnabled = m_legacyBackend->digitalMorseEnabled();
+                            s.quickQsoEnabled = m_legacyBackend->quickQsoEnabled();
+                            s.ft2QsoMessageCount = sanitizeFt2QsoMessageCount(
+                                m_legacyBackend->ft2QsoMessageCount(),
+                                s.quickQsoEnabled);
+                            s.asyncSnrDb = m_legacyBackend->asyncSnrDb();
+                            s.uiLanguage = m_legacyBackend->uiLanguage().trimmed();
+                        }
+                        if (s.uiLanguage.isEmpty()) {
+                            s.uiLanguage = QLocale::system().name().trimmed();
+                        }
+                        if (s.uiLanguage.isEmpty()) {
+                            s.uiLanguage = QStringLiteral("en");
+                        }
                         s.monitoring = m_monitoring;
                         s.transmitting = m_transmitting;
                         s.myCall = m_callsign;
                         s.dxCall = m_dxCall;
-                        s.nowUtcMs = QDateTime::currentMSecsSinceEpoch();
+                        s.nowUtcMs = ntpCorrectedCurrentMSecsSinceEpoch();
                         return s;
                     });
                     m_remoteServer->setAuthUser(authUser);
@@ -1612,11 +1675,199 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                     }
 
                     // Collega comandi remoti al bridge
-                    connect(m_remoteServer, &RemoteCommandServer::setModeRequested, this, [this](const QString&, const QString& mode) { setMode(mode); });
+                    connect(m_remoteServer, &RemoteCommandServer::selectCallerDue, this,
+                            [this](const QString&, const QString& call, const QString& grid) {
+                        if (m_mode.compare(QStringLiteral("FT2"), Qt::CaseInsensitive) != 0) {
+                            return;
+                        }
+
+                        QString remoteCall = call.trimmed().toUpper();
+                        remoteCall.remove(QLatin1Char('<'));
+                        remoteCall.remove(QLatin1Char('>'));
+                        if (remoteCall.isEmpty()) {
+                            return;
+                        }
+
+                        QString remoteGrid = grid.trimmed().toUpper();
+                        if (m_autoCqRepeat) {
+                            setAutoCqRepeat(false);
+                        }
+                        clearCallerQueue();
+                        clearAutoCqPartnerLock();
+                        clearManualTxHold(QStringLiteral("remote-select-caller"));
+
+                        bool const newQso = (remoteCall.compare(m_dxCall, Qt::CaseInsensitive) != 0);
+                        setDxCall(remoteCall);
+                        if (!remoteGrid.isEmpty()) {
+                            setDxGrid(remoteGrid.left(6));
+                        }
+
+                        m_nTx73 = 0;
+                        m_txRetryCount = 0;
+                        m_lastNtx = -1;
+                        m_lastCqPidx = -1;
+                        m_txWatchdogTicks = 0;
+                        m_autoCQPeriodsMissed = 0;
+                        m_logAfterOwn73 = false;
+                        m_ft2DeferredLogPending = false;
+                        m_quickPeerSignaled = false;
+                        m_qsoLogged = false;
+                        m_lastTransmittedMessage.clear();
+                        m_qsoStartedOn = QDateTime::currentDateTimeUtc();
+                        clearPendingAutoLogSnapshot();
+                        if (newQso) {
+                            clearAutoCqPartnerLock();
+                        }
+
+                        genStdMsgs(remoteCall, remoteGrid);
+                        advanceQsoState(1);
+                        updateAutoCqPartnerLock();
+                        setTxEnabled(true);
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setModeRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, const QString& mode) {
+                        QString const requested = mode.trimmed().toUpper();
+                        if (requested.isEmpty()) {
+                            return;
+                        }
+                        bool const legacyReady = ensureRemoteLegacyBackend();
+                        setMode(requested);
+                        if (legacyReady) {
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setBandRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, const QString& band) {
+                        QString const requested = band.trimmed();
+                        if (requested.isEmpty()) {
+                            return;
+                        }
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setBand(requested);
+                            scheduleLegacyStateRefreshBurst();
+                        } else if (m_bandManager) {
+                            m_bandManager->changeBandByLambda(requested);
+                        }
+                    });
                     connect(m_remoteServer, &RemoteCommandServer::setRxFrequencyRequested, this, [this](const QString&, int f) { setRxFrequency(f); });
                     connect(m_remoteServer, &RemoteCommandServer::setTxFrequencyRequested, this, [this](const QString&, int f) { setTxFrequency(f); });
-                    connect(m_remoteServer, &RemoteCommandServer::setTxEnabledRequested, this, [this](const QString&, bool e) { setTxEnabled(e); });
-                    connect(m_remoteServer, &RemoteCommandServer::setMonitoringRequested, this, [this](const QString&, bool e) { setMonitoring(e); });
+                    connect(m_remoteServer, &RemoteCommandServer::setTxEnabledRequested, this,
+                            [this](const QString&, bool enabled) {
+                        if (!enabled) {
+                            if (m_autoCqRepeat) {
+                                setAutoCqRepeat(false);
+                            }
+                            if (m_transmitting || m_tuning) {
+                                halt();
+                                return;
+                            }
+                        }
+                        setTxEnabled(enabled);
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setAutoCqRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        bool const legacyReady = ensureRemoteLegacyBackend();
+                        setAutoCqRepeat(enabled);
+                        if (legacyReady && !usingLegacyBackendForTx()) {
+                            m_legacyBackend->setAutoCq(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setAutoSpotRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                        s.setValue(QStringLiteral("AutoSpotEnabled"), enabled);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setAutoSpotEnabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setMonitoringRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setMonitoring(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        } else {
+                            setMonitoring(enabled);
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setAsyncL2Requested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        bool const effective = (m_mode.compare(QStringLiteral("FT2"), Qt::CaseInsensitive) == 0)
+                            ? true
+                            : enabled;
+                        setAsyncDecodeEnabled(effective);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setAsyncL2Enabled(effective);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setDualCarrierRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        setDualCarrierEnabled(enabled);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setDualCarrierEnabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setAlt12Requested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        setAlt12Enabled(enabled);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setAlt12Enabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setManualTxRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                        s.setValue(QStringLiteral("ManualTxTiming"), enabled);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setManualTxEnabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setSpeedyContestRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                        s.setValue(QStringLiteral("SpeedyContest"), enabled);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setSpeedyContestEnabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setDigitalMorseRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                        s.setValue(QStringLiteral("DigitalMorse"), enabled);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setDigitalMorseEnabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setQuickQsoRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, bool enabled) {
+                        setQuickQsoEnabled(enabled);
+                        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                        s.setValue(QStringLiteral("FT2QsoMsgCount"), enabled ? 2 : 5);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setQuickQsoEnabled(enabled);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
+                    connect(m_remoteServer, &RemoteCommandServer::setFt2QsoMessageCountRequested, this,
+                            [this, ensureRemoteLegacyBackend](const QString&, int count) {
+                        int const effectiveCount = (count == 2 || count == 3 || count == 5)
+                            ? count
+                            : (m_quickQsoEnabled ? 2 : 5);
+                        setQuickQsoEnabled(effectiveCount == 2);
+                        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+                        s.setValue(QStringLiteral("FT2QsoMsgCount"), effectiveCount);
+                        if (ensureRemoteLegacyBackend()) {
+                            m_legacyBackend->setFt2QsoMessageCount(effectiveCount);
+                            scheduleLegacyStateRefreshBurst();
+                        }
+                    });
                     connect(m_remoteServer, &RemoteCommandServer::logMessage, this, [](const QString& msg) { bridgeLog("Remote: " + msg); });
 
                     if (!m_remoteServer->start(static_cast<quint16>(wsPort), bindAddress, httpPort)) {
@@ -2134,7 +2385,15 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
         });
         connect(m_legacyBackend, &DecodiumLegacyBackend::preferencesRequested,
                 this, [this]() {
-                    openSetupSettings(0);
+                    QTimer::singleShot(0, this, [this]() {
+                        emit setupSettingsRequested(0);
+                    });
+                });
+        connect(m_legacyBackend, &DecodiumLegacyBackend::quitRequested,
+                this, [this]() {
+                    QTimer::singleShot(0, this, [this]() {
+                        emit quitRequested();
+                    });
                 });
         connect(m_legacyBackend, &DecodiumLegacyBackend::rigPttRequested,
                 this, [this](bool enabled) {
@@ -2350,6 +2609,12 @@ void DecodiumBridge::syncLegacyBackendState()
             signal();
         }
     };
+    auto updateStringList = [] (QStringList& target, QStringList const& value, auto signal) {
+        if (target != value) {
+            target = value;
+            signal();
+        }
+    };
     auto updateDouble = [] (double& target, double value, auto signal) {
         if (!qFuzzyCompare(target + 1.0, value + 1.0)) {
             target = value;
@@ -2376,8 +2641,19 @@ void DecodiumBridge::syncLegacyBackendState()
 
     updateBool(m_monitoring, m_legacyBackend->monitoring(), [this]() { emit monitoringChanged(); });
     updateBool(m_decoding, m_monitoring, [this]() { emit decodingChanged(); });
+    bool const legacyAutoCqOwnsTx =
+        m_autoCqRepeat
+        && !m_tx6.trimmed().isEmpty();
+    // AutoCQ owns the next transmit cycle across FT8/FT4/FT2. During the
+    // signoff/log handoff the embedded legacy backend can briefly drop its
+    // plain tx-enabled flag even though AutoCQ is still active and should
+    // immediately resume with either the next queued caller or a fresh CQ.
+    updateBool(m_txEnabled, m_legacyBackend->txEnabled() || legacyAutoCqOwnsTx,
+               [this]() { emit txEnabledChanged(); });
     updateBool(m_transmitting, m_legacyBackend->transmitting(), [this]() { emit transmittingChanged(); });
     updateBool(m_tuning, m_legacyBackend->tuning(), [this]() { emit tuningChanged(); });
+    updateBool(m_holdTxFreq, m_legacyBackend->holdTxFreq(), [this]() { emit holdTxFreqChanged(); });
+    updateStringList(m_callerQueue, m_legacyBackend->callerQueue(), [this]() { emit callerQueueChanged(); });
 
     if (m_legacyBackend->rigControlEnabled()) {
         QString const legacyRigName = m_legacyBackend->rigName().trimmed();
@@ -3628,6 +3904,9 @@ QString DecodiumBridge::dxCall() const { return m_dxCall; }
 void DecodiumBridge::setDxCall(const QString& v) {
     if (m_dxCall != v) {
         m_dxCall = v;
+        if (!m_dxCall.trimmed().isEmpty()) {
+            removeCallerFromQueue(m_dxCall);
+        }
         // Cambio partner: resetta l'ultimo messaggio trasmesso, altrimenti il
         // controllo `messageCarries73Payload(m_lastTransmittedMessage)` in
         // autoSequenceStep ricorderebbe il "73" del QSO precedente e marcherebbe
@@ -3694,6 +3973,17 @@ void DecodiumBridge::setAutoSeq(bool v)
     }
 }
 
+void DecodiumBridge::setHoldTxFreq(bool v)
+{
+    if (m_holdTxFreq != v) {
+        m_holdTxFreq = v;
+        emit holdTxFreqChanged();
+        if (m_legacyBackend) {
+            m_legacyBackend->setHoldTxFreq(v);
+        }
+    }
+}
+
 void DecodiumBridge::setTxEnabled(bool v)
 {
     if (v) {
@@ -3735,6 +4025,7 @@ void DecodiumBridge::setAutoCqRepeat(bool v)
         if (usingLegacyBackendForTx()) {
             syncLegacyBackendTxState();
             m_legacyBackend->setAutoCq(v);
+            scheduleLegacyStateRefreshBurst();
         }
     }
 }
@@ -3773,9 +4064,35 @@ void DecodiumBridge::setNfa(int v) { if (m_nfa!=v) { m_nfa=v; emit nfaChanged();
 int DecodiumBridge::nfb() const { return m_nfb; }
 void DecodiumBridge::setNfb(int v) { if (m_nfb!=v) { m_nfb=v; emit nfbChanged(); } }
 int DecodiumBridge::ndepth() const { return m_ndepth; }
-void DecodiumBridge::setNdepth(int v) { if (m_ndepth!=v) { m_ndepth=v; emit ndepthChanged(); } }
+void DecodiumBridge::setNdepth(int v)
+{
+    int const bounded = qBound(1, v, 3);
+    if (m_ndepth != bounded) {
+        m_ndepth = bounded;
+        emit ndepthChanged();
+        persistDecodeDepthState();
+    }
+}
 int DecodiumBridge::ncontest() const { return m_ncontest; }
 void DecodiumBridge::setNcontest(int v) { if (m_ncontest!=v) { m_ncontest=v; emit ncontestChanged(); } }
+
+void DecodiumBridge::setAvgDecodeEnabled(bool v)
+{
+    if (m_avgDecodeEnabled != v) {
+        m_avgDecodeEnabled = v;
+        emit avgDecodeEnabledChanged();
+        persistDecodeDepthState();
+    }
+}
+
+void DecodiumBridge::setDeepSearchEnabled(bool v)
+{
+    if (m_deepSearchEnabled != v) {
+        m_deepSearchEnabled = v;
+        emit deepSearchEnabledChanged();
+        persistDecodeDepthState();
+    }
+}
 
 // === QML INVOKABLE ACTIONS ===
 
@@ -3828,8 +4145,11 @@ void DecodiumBridge::startRx()
         m_periodTimer->stop();
         m_asyncDecodeTimer->stop();
         m_asyncDecodePending = false;
-        syncLegacyBackendState();
+        // Push bridge mode/settings first: if the embedded legacy backend is still
+        // on the previous mode (for example FT2 on Windows), pulling its state here
+        // would overwrite the UI-selected FT8/FT4 mode before monitor start.
         syncLegacyBackendTxState();
+        syncLegacyBackendState();
         m_legacyBackend->setMonitoring(true);
         syncLegacyBackendState();
         if (useModernSpectrumFeedWithLegacy()) {
@@ -4044,8 +4364,8 @@ void DecodiumBridge::startTx()
                 bridgeLog("TX recording skipped (legacy): " + recordingError + " msg=[" + msg + "]");
             }
         }
-        syncLegacyBackendState();
         syncLegacyBackendTxState();
+        syncLegacyBackendState();
         m_legacyBackend->armCurrentTx();
         scheduleLegacyStateRefreshBurst();
         emit statusMessage("TX armato via backend legacy: " + msg.trimmed());
@@ -4578,8 +4898,8 @@ void DecodiumBridge::startTune()
                 emit errorMessage("Impossibile salvare la registrazione TUNE");
             }
         }
-        syncLegacyBackendState();
         syncLegacyBackendTxState();
+        syncLegacyBackendState();
         m_legacyBackend->startTune(true);
         scheduleLegacyStateRefreshBurst();
         emit statusMessage("TUNE via backend legacy");
@@ -4791,6 +5111,10 @@ void DecodiumBridge::halt()
 {
     engageManualTxHold(QStringLiteral("halt"), true);
     clearDeferredManualSyncTx(QStringLiteral("halt"));
+    if (m_autoCqRepeat) {
+        bridgeLog(QStringLiteral("halt: disabling AutoCQ"));
+        setAutoCqRepeat(false);
+    }
 
     if (usingLegacyBackendForTx()) {
         bridgeLog("halt: delegating stop to legacy backend");
@@ -5341,7 +5665,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("txOutputLevel", m_txOutputLevel);
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
-    s.setValue("ndepth", m_ndepth);
+    s.setValue("ndepth", qBound(1, m_ndepth, 3));
     s.setValue("NDepth", legacyCompatibleDecodeDepthBits());
     s.setValue("decodeDepthMigratedFromLegacy", true);
     s.setValue("tx6", m_tx6);
@@ -5598,15 +5922,119 @@ void DecodiumBridge::sendPskReporterNow()
 void DecodiumBridge::searchPskReporter(const QString& callsign)
 {
     if (m_pskSearching) return;
-    m_pskSearchCallsign = callsign;
+    QString const call = callsign.trimmed().toUpper();
+    if (call.isEmpty()) return;
+
+    m_pskSearchCallsign = call;
     m_pskSearchFound = false;
+    m_pskSearchBands.clear();
     m_pskSearching = true;
     emit pskSearchingChanged();
     emit pskSearchCallsignChanged();
     emit pskSearchFoundChanged();
-    // Stub: simulate search end after 1s
-    QTimer::singleShot(1000, this, [this]() {
+    emit pskSearchBandsChanged();
+
+    // Query reale a PSK Reporter:
+    //   GET https://retrieve.pskreporter.info/query
+    //     ?senderCallsign=XXX       (callsign cercato come trasmittente)
+    //     &flowStartSeconds=-3600   (ultima ora)
+    //     &rptlimit=50              (max 50 spot)
+    //     &rronly=1                 (solo reception reports, XML compatto)
+    // Risposta: XML con elementi <receptionReport frequency="7074000" ... />.
+    // Se almeno uno è presente la stazione è "online" e aggrega le bande.
+    QNetworkAccessManager* nam = new QNetworkAccessManager(this);
+    QUrl url(QStringLiteral("https://retrieve.pskreporter.info/query"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("senderCallsign"), call);
+    q.addQueryItem(QStringLiteral("flowStartSeconds"), QStringLiteral("-3600"));
+    q.addQueryItem(QStringLiteral("rptlimit"), QStringLiteral("50"));
+    q.addQueryItem(QStringLiteral("rronly"), QStringLiteral("1"));
+    url.setQuery(q);
+    QNetworkRequest req(url);
+    req.setRawHeader("User-Agent", "Decodium/4.0 (+pskreporter search)");
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply* reply = nam->get(req);
+
+    // Timeout hard: 10s. Qt 5.15+ ha transferTimeout ma teniamolo esplicito.
+    QTimer* timeout = new QTimer(this);
+    timeout->setSingleShot(true);
+    timeout->setInterval(10000);
+    connect(timeout, &QTimer::timeout, reply, [reply]() {
+        if (reply && reply->isRunning()) reply->abort();
+    });
+    connect(reply, &QNetworkReply::finished, timeout, &QTimer::deleteLater);
+    timeout->start();
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
+        QByteArray const data = reply->readAll();
+        QNetworkReply::NetworkError const err = reply->error();
+        QString const errStr = reply->errorString();
+        reply->deleteLater();
+        nam->deleteLater();
+
+        bool found = false;
+        QSet<QString> bandSet;
+
+        if (err == QNetworkReply::NoError) {
+            QString const xml = QString::fromUtf8(data);
+            // Parsing via regex: XML di PSK Reporter è deterministico,
+            // ogni spot è <receptionReport ... frequency="12345678" ... />
+            QRegularExpression re(QStringLiteral("<receptionReport\\b[^>]*\\bfrequency=\"([0-9]+)\""));
+            auto it = re.globalMatch(xml);
+            while (it.hasNext()) {
+                auto m = it.next();
+                bool ok = false;
+                qint64 const freqHz = m.captured(1).toLongLong(&ok);
+                if (!ok) continue;
+                found = true;
+                double const mhz = freqHz / 1000000.0;
+                QString band;
+                if (mhz < 2.0)        band = QStringLiteral("160m");
+                else if (mhz < 4.5)   band = QStringLiteral("80m");
+                else if (mhz < 5.8)   band = QStringLiteral("60m");
+                else if (mhz < 8.0)   band = QStringLiteral("40m");
+                else if (mhz < 11.0)  band = QStringLiteral("30m");
+                else if (mhz < 15.0)  band = QStringLiteral("20m");
+                else if (mhz < 19.0)  band = QStringLiteral("17m");
+                else if (mhz < 22.0)  band = QStringLiteral("15m");
+                else if (mhz < 26.0)  band = QStringLiteral("12m");
+                else if (mhz < 30.0)  band = QStringLiteral("10m");
+                else if (mhz < 55.0)  band = QStringLiteral("6m");
+                else if (mhz < 150.0) band = QStringLiteral("2m");
+                else                  band = QString::number(mhz, 'f', 1) + QStringLiteral("MHz");
+                bandSet.insert(band);
+            }
+            bridgeLog(QStringLiteral("PSK Reporter search '%1': found=%2 bands=%3")
+                          .arg(m_pskSearchCallsign)
+                          .arg(found ? "YES" : "NO")
+                          .arg(bandSet.size()));
+        } else {
+            bridgeLog(QStringLiteral("PSK Reporter search '%1': network error: %2")
+                          .arg(m_pskSearchCallsign, errStr));
+        }
+
+        // Ordina bande per frequenza crescente (160m → 2m)
+        static const QStringList bandOrder {
+            QStringLiteral("160m"), QStringLiteral("80m"), QStringLiteral("60m"),
+            QStringLiteral("40m"),  QStringLiteral("30m"), QStringLiteral("20m"),
+            QStringLiteral("17m"),  QStringLiteral("15m"), QStringLiteral("12m"),
+            QStringLiteral("10m"),  QStringLiteral("6m"),  QStringLiteral("2m")
+        };
+        QStringList bands;
+        for (const QString& b : bandOrder) {
+            if (bandSet.contains(b)) bands.append(b);
+        }
+        // Eventuali bande VHF/UHF non nella lista conosciuta
+        for (const QString& b : std::as_const(bandSet)) {
+            if (!bands.contains(b)) bands.append(b);
+        }
+
+        m_pskSearchFound = found;
+        m_pskSearchBands = bands;
         m_pskSearching = false;
+        emit pskSearchFoundChanged();
+        emit pskSearchBandsChanged();
         emit pskSearchingChanged();
     });
 }
@@ -5750,9 +6178,29 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
     }
     emit txPeriodChanged();
 
+    if (usingLegacyBackendForTx()) {
+        // Leaving AutoCQ and immediately double-clicking a caller can hit a
+        // brief stale-state window where the embedded legacy backend has
+        // already dropped MON/TX while the bridge still thinks they are on.
+        // Refresh from the source of truth first, then explicitly restore
+        // monitoring for the manual operator-selected QSO path.
+        syncLegacyBackendState();
+        if (!m_monitoring) {
+            bridgeLog(QStringLiteral("processDecodeDoubleClick: restoring monitoring before manual TX arm"));
+            setMonitoring(true);
+            syncLegacyBackendState();
+        }
+    } else if (!m_monitoring) {
+        bridgeLog(QStringLiteral("processDecodeDoubleClick: restoring monitoring before manual TX arm"));
+        setMonitoring(true);
+    }
+
     // Abilita TX: doppio click su decode abilita TX automaticamente (quick call behavior)
     // Come Shannon: il doppio click equivale sempre a "Enable TX" + avvio sequenza
     setTxEnabled(true);
+    if (usingLegacyBackendForTx()) {
+        scheduleLegacyStateRefreshBurst();
+    }
 
     bridgeLog("processDecodeDoubleClick: hisCall=" + hisCall +
               " TX=" + QString::number(newCurrentTx) +
@@ -6190,6 +6638,14 @@ void DecodiumBridge::enqueueCallerInternal(const QString& call, int freq, int sn
 {
     QString const queuedCall = Radio::base_callsign(call).trimmed().toUpper();
     if (queuedCall.isEmpty()) {
+        return;
+    }
+    QString activeCall = Radio::base_callsign(m_dxCall).trimmed().toUpper();
+    if (activeCall.isEmpty()) {
+        activeCall = Radio::base_callsign(m_autoCqLockedCall).trimmed().toUpper();
+    }
+    if (!activeCall.isEmpty() && queuedCall == activeCall) {
+        bridgeLog(QStringLiteral("AutoCQ queue-skip-active: %1").arg(queuedCall));
         return;
     }
     if (isRecentAutoCqDuplicate(queuedCall, m_frequency, m_mode)) {
@@ -6676,13 +7132,21 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     };
 
     bool const localSignoffAlreadySent =
-        (m_nTx73 > 0) || messageCarries73Payload(m_lastTransmittedMessage);
+        m_logAfterOwn73
+        || (m_currentTx == 5)
+        || (m_nTx73 > 0)
+        || messageCarries73Payload(m_lastTransmittedMessage);
+    // After we've already sent at least our report (TX2/REPORT), an incoming
+    // 73/RR73 from the active partner must be treated as a real final ack.
+    // Keeping the threshold at ROGER_REPORT caused AutoCQ queued QSOs to fall
+    // into a "TX5 selected but not sticky" limbo, so stale state could drag
+    // the sequence back to TX4/RR73 instead of logging and moving on.
     bool const partnerSignoff73 =
         (last.compare(QStringLiteral("73"), Qt::CaseInsensitive) == 0
-         && m_qsoProgress >= 4);
+         && m_qsoProgress >= 3);
     bool const partnerSignoffRR73 =
         (last.compare(QStringLiteral("RR73"), Qt::CaseInsensitive) == 0
-         && m_qsoProgress >= 4);
+         && m_qsoProgress >= 3);
     bool const partnerAnySignoff = partnerSignoff73 || partnerSignoffRR73;
     bool const profileNeedsOwn73BeforeLog =
         ((m_mode == QStringLiteral("FT2") && !m_quickQsoEnabled)
@@ -6955,7 +7419,7 @@ void DecodiumBridge::loadSettings()
         bool const hasLegacyNDepth = s.contains("NDepth");
         bool const hasModernNDepth = s.contains("ndepth");
         bool const legacyDepthMigrated = s.value("decodeDepthMigratedFromLegacy", false).toBool();
-        int modernDepth = qBound(1, s.value("ndepth", 3).toInt(), 4);
+        int modernDepth = qBound(1, s.value("ndepth", 3).toInt(), 3);
         int const legacyDepth = legacyDepthBitsToModernDepth(legacyNDepthBits);
 
         if ((hasLegacyNDepth || hasStandaloneLegacyNDepth) && (!hasModernNDepth || !legacyDepthMigrated)) {
@@ -7371,9 +7835,9 @@ QString DecodiumBridge::ensureAdifLogPath()
 
 int DecodiumBridge::effectiveDecodeDepth() const
 {
-    int depth = qBound(1, m_ndepth, 4);
-    if ((m_avgDecodeEnabled || m_deepSearchEnabled) && depth < 4) {
-        depth = 4;
+    int depth = qBound(1, m_ndepth, 3);
+    if ((m_avgDecodeEnabled || m_deepSearchEnabled) && depth < 3) {
+        depth = 3;
     }
     return depth;
 }
@@ -7383,6 +7847,21 @@ int DecodiumBridge::legacyCompatibleDecodeDepthBits() const
     return modernDepthToLegacyBits(effectiveDecodeDepth(),
                                    m_avgDecodeEnabled,
                                    m_deepSearchEnabled);
+}
+
+void DecodiumBridge::persistDecodeDepthState()
+{
+    QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    s.setValue(QStringLiteral("ndepth"), qBound(1, m_ndepth, 3));
+    s.setValue(QStringLiteral("NDepth"), legacyCompatibleDecodeDepthBits());
+    s.setValue(QStringLiteral("decodeDepthMigratedFromLegacy"), true);
+    s.setValue(QStringLiteral("avgDecodeEnabled"), m_avgDecodeEnabled);
+    s.setValue(QStringLiteral("deepSearchEnabled"), m_deepSearchEnabled);
+    s.sync();
+
+    if (legacyBackendAvailable()) {
+        m_legacyBackend->setDecodeDepthBits(legacyCompatibleDecodeDepthBits());
+    }
 }
 
 int DecodiumBridge::legacyDecodeQsoProgress() const
@@ -7708,8 +8187,8 @@ void DecodiumBridge::logQso()
 
     if (usingLegacyBackendForTx()) {
         bridgeLog("logQso: delegating to legacy backend");
-        syncLegacyBackendState();
         syncLegacyBackendTxState();
+        syncLegacyBackendState();
         m_legacyBackend->logQso();
         syncLegacyBackendState();
         QTimer::singleShot(250, this, [this]() {
@@ -8326,6 +8805,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
     }
 
     // Costruisci set dei decode già presenti in questa sessione di monitor.
+    // Usa la chiave quantizzata per FT2 async: lo stage7 DSP ri-emette lo stesso
+    // messaggio ogni 100ms con piccolo jitter di freq; con quantizzazione a 20Hz
+    // il primo decode vince e gli successivi vengono scartati come duplicati.
     QSet<QString> existing;
     for (const auto& v : m_decodeList) {
         QVariantMap const prev = v.toMap();
@@ -8335,9 +8817,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         if (prev.value("decodeSessionId").toULongLong() != m_decodeSessionId) {
             continue;
         }
-        QString const key = decodeDedupKey(prev.value("time").toString(),
-                                           prev.value("freq").toString(),
-                                           prev.value("message").toString());
+        QString const key = decodeDedupKeyFt2Async(prev.value("time").toString(),
+                                                   prev.value("freq").toString(),
+                                                   prev.value("message").toString());
         if (!key.isEmpty()) {
             existing.insert(key);
         }
@@ -8392,9 +8874,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
             continue;
         }
 
-        QString const dedupKey = decodeDedupKey(entry.value("time").toString(),
-                                                entry.value("freq").toString(),
-                                                msg);
+        QString const dedupKey = decodeDedupKeyFt2Async(entry.value("time").toString(),
+                                                        entry.value("freq").toString(),
+                                                        msg);
         if (existing.contains(dedupKey)) {
             ++duplicatesSkipped;
             continue;
@@ -9098,11 +9580,27 @@ void DecodiumBridge::feedAudioToDecoder(qint64 completedUtcSlot)
         m_audioBuffer.reserve(m_periodTicksMax * TIMER_MS * SAMPLE_RATE / 1000);
     }
 
+    int const decodePeriodMs = periodMsForMode(m_mode);
+    if (m_mode == QStringLiteral("FT2") && decodePeriodMs > 0) {
+        // FT2 a 12 kHz richiede finestre da ~45k campioni. Su Windows alcuni
+        // driver USB/WASAPI rilasciano sporadicamente chunk spuri da pochi
+        // millisecondi: ignorali invece di inoltrarli al decoder.
+        int const expectedSamples = qMax(1, (decodePeriodMs * SAMPLE_RATE) / 1000);
+        int const minSamples = qMax(1, (expectedSamples * 7) / 10);
+        if (audioSnapshot.size() < minSamples) {
+            bridgeLog(QStringLiteral("feedAudioToDecoder: guarded short FT2 chunk samples=%1 expected=%2 min=%3 slot=%4")
+                          .arg(audioSnapshot.size())
+                          .arg(expectedSamples)
+                          .arg(minSamples)
+                          .arg(completedUtcSlot));
+            return;
+        }
+    }
+
     m_decoding = true;
     emit decodingChanged();
 
     quint64 serial = ++m_decodeSerial;
-    int const decodePeriodMs = periodMsForMode(m_mode);
     qint64 slotIndexForUtc = completedUtcSlot;
     if (slotIndexForUtc < 0 && decodePeriodMs > 0) {
         slotIndexForUtc = QDateTime::currentMSecsSinceEpoch() / decodePeriodMs;
@@ -9641,6 +10139,372 @@ void DecodiumBridge::clearCallerQueue()
     if (m_callerQueue.isEmpty()) return;
     m_callerQueue.clear();
     emit callerQueueChanged();
+}
+
+void DecodiumBridge::replayWorldMapFeed()
+{
+    emit worldMapResetRequested();
+
+    QString const myGrid = m_grid.trimmed().toUpper();
+    if (!isGridToken(myGrid)) {
+        return;
+    }
+
+    QSet<QString> seen;
+    QVariantList mergedEntries = m_decodeList;
+    for (QVariant const& value : std::as_const(m_decodeList)) {
+        QVariantMap const entry = value.toMap();
+        QString const key = decodeDedupKey(entry.value(QStringLiteral("time")).toString(),
+                                           entry.value(QStringLiteral("freq")).toString(),
+                                           entry.value(QStringLiteral("message")).toString());
+        seen.insert(key);
+    }
+    for (QVariant const& value : std::as_const(m_rxDecodeList)) {
+        QVariantMap const entry = value.toMap();
+        QString const key = decodeDedupKey(entry.value(QStringLiteral("time")).toString(),
+                                           entry.value(QStringLiteral("freq")).toString(),
+                                           entry.value(QStringLiteral("message")).toString());
+        if (seen.contains(key)) {
+            continue;
+        }
+        seen.insert(key);
+        mergedEntries.append(entry);
+    }
+
+    for (QVariant const& value : std::as_const(mergedEntries)) {
+        replayWorldMapEntry(value.toMap());
+    }
+
+    if ((m_transmitting || m_tuning)
+        && isGridToken(m_dxGrid)
+        && !normalizeCallToken(m_dxCall).trimmed().isEmpty()) {
+        emit worldMapContactAdded(normalizeCallToken(m_dxCall).trimmed().toUpper(),
+                                  myGrid.left(6),
+                                  m_dxGrid.trimmed().toUpper().left(6),
+                                  2);
+    }
+}
+
+void DecodiumBridge::processMapContactClick(const QString& call, const QString& grid)
+{
+    QString mapCall = normalizeCallToken(call).trimmed().toUpper();
+    QString mapGrid = grid.trimmed().toUpper();
+    if (mapGrid.size() > 6) {
+        mapGrid = mapGrid.left(6);
+    }
+
+    if (mapCall.isEmpty()) {
+        return;
+    }
+
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    int const dblIntervalMs = qMax(180, QApplication::doubleClickInterval());
+    bool const isDoubleClick =
+        !m_mapLastClickCall.isEmpty()
+        && m_mapLastClickCall == mapCall
+        && m_mapLastClickMs > 0
+        && (nowMs - m_mapLastClickMs) >= 0
+        && (nowMs - m_mapLastClickMs) <= (dblIntervalMs + 120);
+
+    m_mapLastClickCall = mapCall;
+    m_mapLastClickMs = nowMs;
+
+    if (isGridToken(mapGrid)) {
+        rememberWorldMapGrid(mapCall, mapGrid);
+    } else {
+        QString const cachedGrid = lookupWorldMapGrid(mapCall);
+        if (isGridToken(cachedGrid)) {
+            mapGrid = cachedGrid.left(6);
+        }
+    }
+
+    setDxCall(mapCall);
+    if (isGridToken(mapGrid)) {
+        setDxGrid(mapGrid.left(6));
+    }
+    genStdMsgs(mapCall, mapGrid);
+
+    bool const singleClickStartsTx =
+        getSetting(QStringLiteral("MapSingleClickTX"), false).toBool();
+    bool const startTxNow = singleClickStartsTx ? !isDoubleClick : isDoubleClick;
+    if (!startTxNow) {
+        emit statusMessage(QStringLiteral("Map selection: %1").arg(mapCall));
+        return;
+    }
+
+    if (m_mode == QStringLiteral("WSPR") || m_mode == QStringLiteral("FST4W")) {
+        return;
+    }
+
+    QString syntheticMessage = QStringLiteral("CQ %1").arg(mapCall);
+    if (isGridToken(mapGrid)) {
+        syntheticMessage += QStringLiteral(" ") + mapGrid.left(6);
+    }
+    processDecodeDoubleClick(syntheticMessage, QString(), QString(), 0);
+
+    m_mapLastClickMs = 0;
+    m_mapLastClickCall.clear();
+}
+
+void DecodiumBridge::clearWorldMapRuntimeCache()
+{
+    m_worldMapGridByCall.clear();
+    m_worldMapCall3Loaded = false;
+}
+
+void DecodiumBridge::rememberWorldMapGrid(const QString& call, const QString& grid)
+{
+    QString const normalizedCall = normalizeCallToken(call).trimmed().toUpper();
+    QString const normalizedGrid = grid.trimmed().toUpper();
+    if (normalizedCall.isEmpty() || !isGridToken(normalizedGrid)) {
+        return;
+    }
+
+    QString key = normalizedBaseCall(normalizedCall);
+    if (key.isEmpty()) {
+        key = normalizedCall;
+    }
+    if (!key.isEmpty()) {
+        m_worldMapGridByCall.insert(key, normalizedGrid.left(6));
+    }
+}
+
+QString DecodiumBridge::lookupWorldMapGrid(const QString& call)
+{
+    QString const normalizedCall = normalizeCallToken(call).trimmed().toUpper();
+    if (normalizedCall.isEmpty()) {
+        return {};
+    }
+
+    QString key = normalizedBaseCall(normalizedCall);
+    if (key.isEmpty()) {
+        key = normalizedCall;
+    }
+    if (key.isEmpty()) {
+        return {};
+    }
+
+    QString locator = m_worldMapGridByCall.value(key);
+    if (locator.isEmpty()) {
+        loadWorldMapCall3Cache();
+        locator = m_worldMapGridByCall.value(key);
+    }
+    return locator;
+}
+
+void DecodiumBridge::loadWorldMapCall3Cache()
+{
+    if (m_worldMapCall3Loaded) {
+        return;
+    }
+    m_worldMapCall3Loaded = true;
+
+    QStringList candidates;
+    QString const appDir = QCoreApplication::applicationDirPath();
+    QString const appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    candidates << QDir(appData).absoluteFilePath(QStringLiteral("CALL3.TXT"))
+               << QDir(appDir).absoluteFilePath(QStringLiteral("CALL3.TXT"))
+               << QDir(QDir::currentPath()).absoluteFilePath(QStringLiteral("CALL3.TXT"));
+
+    for (QString const& candidate : std::as_const(candidates)) {
+        QFile file(candidate);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            continue;
+        }
+
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';'))) {
+                continue;
+            }
+
+            int const comma1 = line.indexOf(QLatin1Char(','));
+            if (comma1 <= 0) {
+                continue;
+            }
+            int comma2 = line.indexOf(QLatin1Char(','), comma1 + 1);
+            if (comma2 < 0) {
+                comma2 = line.size();
+            }
+
+            QString const fileCall = normalizeCallToken(line.left(comma1)).trimmed().toUpper();
+            QString const locator = line.mid(comma1 + 1, comma2 - comma1 - 1).trimmed().toUpper();
+            if (fileCall.isEmpty() || !isGridToken(locator)) {
+                continue;
+            }
+
+            QString key = normalizedBaseCall(fileCall);
+            if (key.isEmpty()) {
+                key = fileCall;
+            }
+            if (!key.isEmpty() && !m_worldMapGridByCall.contains(key)) {
+                m_worldMapGridByCall.insert(key, locator.left(6));
+            }
+        }
+
+        file.close();
+        return;
+    }
+}
+
+void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
+{
+    QString const myGrid = m_grid.trimmed().toUpper();
+    if (!isGridToken(myGrid)) {
+        return;
+    }
+
+    if (entry.value(QStringLiteral("isTx")).toBool()) {
+        return;
+    }
+
+    auto normalizeMapCall = [] (QString token) {
+        return normalizeCallToken(token).trimmed().toUpper();
+    };
+    auto callKey = [&normalizeMapCall] (QString const& token) {
+        QString key = normalizedBaseCall(normalizeMapCall(token));
+        if (key.isEmpty()) {
+            key = normalizeMapCall(token);
+        }
+        return key;
+    };
+
+    QString const myCall = normalizeMapCall(m_callsign);
+    QString const myBaseCall = normalizedBaseCall(m_callsign);
+    QString const myCallKey = callKey(myCall);
+    QString const myBaseKey = callKey(myBaseCall);
+    auto isMine = [&](QString const& token) {
+        QString const key = callKey(token);
+        return !key.isEmpty() && (key == myCallKey || key == myBaseKey);
+    };
+
+    QString const message = entry.value(QStringLiteral("message")).toString().trimmed();
+    if (message.isEmpty()) {
+        return;
+    }
+
+    QStringList const rawWords = message.split(QRegularExpression(QStringLiteral("\\s+")),
+                                               Qt::SkipEmptyParts);
+    if (rawWords.isEmpty()) {
+        return;
+    }
+
+    QString const word1 = normalizeMapCall(rawWords.value(0));
+    QString const word2 = normalizeMapCall(rawWords.value(1));
+    QString const word3 = rawWords.value(2).trimmed().toUpper();
+    bool const hasGrid = isGridToken(word3);
+    bool const isCqLike =
+        word1 == QStringLiteral("CQ")
+        || word1 == QStringLiteral("QRZ")
+        || word1 == QStringLiteral("DE");
+
+    if (hasGrid && !word2.isEmpty()) {
+        rememberWorldMapGrid(word2, word3);
+    }
+
+    QString const deCall = normalizeMapCall(entry.value(QStringLiteral("fromCall")).toString());
+    QString const deGrid = entry.value(QStringLiteral("dxGrid")).toString().trimmed().toUpper();
+    if (!deCall.isEmpty() && isGridToken(deGrid) && !isMine(deCall)) {
+        rememberWorldMapGrid(deCall, deGrid);
+    }
+
+    bool const outgoingFromMe =
+        !isCqLike
+        && !word1.isEmpty()
+        && !word2.isEmpty()
+        && isMine(word2)
+        && !isMine(word1);
+    bool const incomingToMe =
+        !isCqLike
+        && !word1.isEmpty()
+        && !word2.isEmpty()
+        && isMine(word1)
+        && !isMine(word2);
+    bool const isEndOfQso =
+        rawWords.contains(QStringLiteral("73"), Qt::CaseInsensitive)
+        || rawWords.contains(QStringLiteral("RR73"), Qt::CaseInsensitive);
+
+    QString remoteCall;
+    QString remoteGrid;
+    int role = 0;
+
+    if (outgoingFromMe) {
+        remoteCall = word1;
+        if (remoteCall.isEmpty() && !word2.isEmpty() && !isMine(word2)) {
+            remoteCall = word2;
+        }
+        if (remoteCall.isEmpty()) {
+            remoteCall = normalizeMapCall(m_dxCall);
+        }
+
+        remoteGrid = lookupWorldMapGrid(remoteCall);
+        QString const dxCall = normalizeMapCall(m_dxCall);
+        QString const dxGrid = m_dxGrid.trimmed().toUpper();
+        if (remoteGrid.isEmpty()
+            && !dxCall.isEmpty()
+            && callKey(remoteCall) == callKey(dxCall)
+            && isGridToken(dxGrid)) {
+            remoteGrid = dxGrid.left(6);
+            rememberWorldMapGrid(remoteCall, remoteGrid);
+        }
+
+        role = 2;
+        if (isGridToken(remoteGrid)) {
+            emit worldMapContactAdded(remoteCall, myGrid.left(6), remoteGrid.left(6), role);
+            return;
+        }
+    } else if (incomingToMe) {
+        remoteCall = word2;
+        remoteGrid = hasGrid ? word3.left(6) : lookupWorldMapGrid(remoteCall);
+        role = 1;
+        if (isGridToken(remoteGrid)) {
+            emit worldMapContactAdded(remoteCall, remoteGrid.left(6), myGrid.left(6), role);
+            return;
+        }
+
+        if (m_dxccLookup && m_dxccLookup->isLoaded() && !remoteCall.isEmpty()) {
+            DxccEntity const ent = m_dxccLookup->lookup(remoteCall);
+            if (ent.isValid() && std::isfinite(ent.lat) && std::isfinite(ent.lon)) {
+                emit worldMapContactAddedByLonLat(remoteCall,
+                                                  -ent.lon,
+                                                  ent.lat,
+                                                  myGrid.left(6),
+                                                  role);
+                return;
+            }
+        }
+    } else {
+        if (!deCall.isEmpty() && isGridToken(deGrid) && !isMine(deCall)) {
+            remoteCall = deCall;
+            remoteGrid = deGrid.left(6);
+        } else if (isCqLike && !word2.isEmpty() && hasGrid) {
+            remoteCall = word2;
+            remoteGrid = word3.left(6);
+        }
+        role = 3;
+    }
+
+    if (isEndOfQso && !remoteCall.isEmpty()) {
+        emit worldMapContactDowngraded(remoteCall);
+        role = 3;
+    }
+
+    if (!isGridToken(remoteGrid)) {
+        return;
+    }
+    if (remoteCall.isEmpty()) {
+        remoteCall = deCall;
+    }
+    if (remoteCall.isEmpty()) {
+        return;
+    }
+
+    if (role == 3) {
+        emit worldMapContactAdded(remoteCall, remoteGrid.left(6), remoteGrid.left(6), role);
+    } else {
+        emit worldMapContactAdded(remoteCall, remoteGrid.left(6), myGrid.left(6), role);
+    }
 }
 
 // ============================================================

@@ -451,13 +451,20 @@ void PanadapterItem::renderSpectrum()
         p.drawPath(pkPath);
     }
 
-    // ── Marker VFO RX: linea verticale ciano #00E5FF ──────────────────────
+    // ── Marker VFO RX: linea verticale ciano #00E5FF (spessa + glow) ──────
     if (rxX >= 0 && rxX < w) {
-        p.setPen(QPen(QColor(0, 229, 255, 220), 1.5));
+        // Glow esterno (alone ampio)
+        p.setPen(QPen(QColor(0, 229, 255, 70), 7.0));
         p.drawLine(rxX, 0, rxX, h);
-        p.setFont(QFont("Segoe UI", 8, QFont::Bold));
+        // Linea principale spessa
+        p.setPen(QPen(QColor(0, 229, 255, 240), 3.0));
+        p.drawLine(rxX, 0, rxX, h);
+        // Core brillante
+        p.setPen(QPen(QColor(180, 255, 255, 255), 1.0));
+        p.drawLine(rxX, 0, rxX, h);
+        p.setFont(QFont("Segoe UI", 9, QFont::Bold));
         p.setPen(QColor(0, 229, 255));
-        p.drawText(rxX + 3, 12, QString("%1").arg(m_rxFreq));
+        p.drawText(rxX + 5, 12, QString("RX %1").arg(m_rxFreq));
     }
 
     // ── Frequency ticks ogni 500Hz ────────────────────────────────────────
@@ -471,13 +478,21 @@ void PanadapterItem::renderSpectrum()
         p.drawText(cx - 20, h-20, QString::number(calFreq));
     }
 
-    // ── Marker TX: magenta (Slice B SmartSDR) ────────────────────────────
+    // ── Marker TX: magenta (Slice B SmartSDR) — spessa + glow ───────────
     int txX = fToX(m_txFreq);
     if (txX >= 0 && txX < w && m_txFreq != m_rxFreq) {
-        p.setPen(QPen(QColor(255, 0, 255, 200), 1.5));
+        // Glow esterno
+        p.setPen(QPen(QColor(255, 0, 255, 70), 7.0));
         p.drawLine(txX, 0, txX, h);
+        // Linea principale spessa
+        p.setPen(QPen(QColor(255, 0, 255, 240), 3.0));
+        p.drawLine(txX, 0, txX, h);
+        // Core brillante
+        p.setPen(QPen(QColor(255, 200, 255, 255), 1.0));
+        p.drawLine(txX, 0, txX, h);
+        p.setFont(QFont("Segoe UI", 9, QFont::Bold));
         p.setPen(QColor(255, 0, 255));
-        p.drawText(txX + 3, 24, QString("TX %1").arg(m_txFreq));
+        p.drawText(txX + 5, 24, QString("TX %1").arg(m_txFreq));
     }
 
     // ── Decode labels: mostra callsign delle stazioni decodificate ─────

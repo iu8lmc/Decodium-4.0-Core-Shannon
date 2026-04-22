@@ -92,9 +92,10 @@ Item {
         spacing: 0
 
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34
-            Layout.bottomMargin: 4
-            color: Qt.rgba(0,0,0,0.35); visible: showControls
+            Layout.fillWidth: true; Layout.preferredHeight: 46
+            Layout.bottomMargin: 6
+            color: Qt.rgba(0,0,0,0.75); visible: showControls
+            border.color: "#3a5470"; border.width: 1
             clip: true
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
@@ -103,7 +104,7 @@ Item {
 
                 Text { text: "Calls:"; color: "#00E5FF"; font.pixelSize: 10; font.bold: true }
 
-                Text { text: "Font"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Font"; color: "#FFFFFF"; font.pixelSize: 10 }
                 Slider {
                     id: labelFontSlider
                     Layout.preferredWidth: 70
@@ -124,7 +125,7 @@ Item {
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Gap"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Gap"; color: "#FFFFFF"; font.pixelSize: 10 }
                 Slider {
                     id: labelSpacingSlider
                     Layout.preferredWidth: 60
@@ -165,7 +166,7 @@ Item {
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Colore"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Colore"; color: "#FFFFFF"; font.pixelSize: 10 }
                 ComboBox {
                     id: labelColorCombo
                     Layout.preferredWidth: 86
@@ -199,25 +200,11 @@ Item {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
-            }
-        }
+                Rectangle { width:1; height:14; color:"#333" }
 
-        // ── Toolbar controls ──────────────────────────────────────────────
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: showControls ? 28 : 0
-            visible: showControls
-            color: bgPanel
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 6
-                anchors.rightMargin: 6
-                spacing: 6
-
-                // Palette
-                Text { text: "Palette:"; color: textSec; font.pixelSize: 10 }
+                // ── Palette / Auto / [] / Peak / Zoom / dBm ──
+                // Unita alla barra Calls per avere un'unica riga superiore (feedback IK8OLM)
+                Text { text: "Palette:"; color: "#FFFFFF"; font.pixelSize: 10 }
                 ComboBox {
                     id: paletteCombo
                     Layout.preferredWidth: 106
@@ -305,7 +292,7 @@ Item {
                 Text { text: "Peak"; color: peakHoldCheck.checked ? "#ffcc00" : textSec; font.pixelSize: 10 }
 
                 // Zoom
-                Text { text: "Zoom"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Zoom"; color: "#FFFFFF"; font.pixelSize: 10 }
                 Slider {
                     id: zoomSlider
                     Layout.preferredWidth: 70

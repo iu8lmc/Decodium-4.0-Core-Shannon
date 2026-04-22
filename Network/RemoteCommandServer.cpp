@@ -92,7 +92,7 @@ R"FT2HTML(<!doctype html>
     <header class="top">
       <div>
         <h1 id="app_title">Decodium Remote Console</h1>
-        <div class="sub">Fork by 9H1SR Salvatore Raccampo</div>
+        <div class="sub">By 9H1SR Salvatore Raccampo</div>
       </div>
       <div class="top-actions">
         <button id="btn_install" class="install-btn hidden" type="button">Install App</button>
@@ -2713,9 +2713,15 @@ R"FT2JS((() => {
     if (type === 'set_mode' && typeof j.mode === 'string') {
       currentMode = j.mode.toUpperCase();
       activeMode = currentMode;
+      set('st_mode', currentMode);
       updateModePresetSelect();
       applyEmissionControlVisibility();
       drawWaterfallOverlay();
+      refreshButtonHighlights();
+    }
+    if (type === 'set_band' && typeof j.band === 'string') {
+      activeBand = j.band.trim();
+      set('st_band', activeBand || '-');
       refreshButtonHighlights();
     }
     setTimeout(() => { getState(false).catch(() => {}); }, 120);
@@ -2871,7 +2877,13 @@ R"FT2JS((() => {
         if (type === 'set_mode' && typeof m.mode === 'string') {
           currentMode = m.mode.toUpperCase();
           activeMode = currentMode;
+          set('st_mode', currentMode);
           updateModePresetSelect();
+          refreshButtonHighlights();
+        }
+        if (type === 'set_band' && typeof m.band === 'string') {
+          activeBand = m.band.trim();
+          set('st_band', activeBand || '-');
           refreshButtonHighlights();
         }
       }
@@ -3128,7 +3140,7 @@ QByteArray dashboard_manifest()
 R"FT2MAN({
   "name": "Decodium Remote Console",
   "short_name": "Decodium",
-  "description": "Fork by 9H1SR Salvatore Raccampo",
+  "description": "By 9H1SR Salvatore Raccampo",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
