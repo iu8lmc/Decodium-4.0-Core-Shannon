@@ -51,6 +51,21 @@ bool SoundInput::checkStream ()
   return result;
 }
 
+void SoundInput::emitStatusIfChanged (QString const& message, QAudio::State state)
+{
+  if (m_haveReportedState_
+      && m_lastReportedState == state
+      && m_lastStatusMessage == message)
+    {
+      return;
+    }
+
+  m_lastReportedState = state;
+  m_lastStatusMessage = message;
+  m_haveReportedState_ = true;
+  Q_EMIT status (message);
+}
+
 void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDevice * sink
                        , unsigned downSampleFactor, AudioDevice::Channel channel)
 {
@@ -116,6 +131,8 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   m_sampleRate = format.sampleRate();
   m_channelCount = format.channelCount();
   m_channelSelector = static_cast<int>(channel);
+  m_haveReportedState_ = false;
+  m_lastStatusMessage.clear ();
 
   connect (m_stream.data(), &QAudioSource::stateChanged, this, &SoundInput::handleStateChanged);
   // Note: QAudioSource::notify() was removed in Qt6; no periodic notification needed.
@@ -167,31 +184,41 @@ void SoundInput::resume ()
 
 void SoundInput::handleStateChanged (QAudio::State newState)
 {
+  QAudio::Error const streamError = m_stream ? m_stream->error () : QAudio::NoError;
   qDebug() << "SoundInput: handleStateChanged state=" << (int)newState
-           << (m_stream ? " err=" + QString::number((int)m_stream->error()) : " no_stream");
+           << (m_stream ? " err=" + QString::number((int)streamError) : " no_stream");
   switch (newState)
     {
     case QAudio::IdleState:
-      Q_EMIT status (tr ("Idle"));
+      if (streamError == QAudio::NoError)
+        {
+          // QAudioSource on some devices spuriously bounces through IdleState
+          // even while capture is healthy. Treat that as a benign transient
+          // and keep the stream logically "Receiving" to avoid false alarms.
+          reset (false);
+          qDebug () << "SoundInput: benign idle transition ignored";
+          return;
+        }
+      emitStatusIfChanged (tr ("Idle"), newState);
       break;
 
     case QAudio::ActiveState:
       reset (false);
-      Q_EMIT status (tr ("Receiving"));
+      emitStatusIfChanged (tr ("Receiving"), newState);
       break;
 
     case QAudio::SuspendedState:
-      Q_EMIT status (tr ("Suspended"));
+      emitStatusIfChanged (tr ("Suspended"), newState);
       break;
 
     case QAudio::StoppedState:
       if (!checkStream ())
         {
-          Q_EMIT status (tr ("Error"));
+          emitStatusIfChanged (tr ("Error"), newState);
         }
       else
         {
-          Q_EMIT status (tr ("Stopped"));
+          emitStatusIfChanged (tr ("Stopped"), newState);
         }
       break;
     }
@@ -250,6 +277,9 @@ void SoundInput::stop()
   m_sampleRate = 0;
   m_channelCount = 0;
   m_channelSelector = static_cast<int>(AudioDevice::Mono);
+  m_lastStatusMessage.clear ();
+  m_lastReportedState = QAudio::StoppedState;
+  m_haveReportedState_ = false;
 }
 
 SoundInput::~SoundInput ()

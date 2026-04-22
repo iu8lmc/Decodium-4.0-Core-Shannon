@@ -58,6 +58,8 @@ public:
     void setMonitoring(bool enabled);
     void setAutoSeq(bool enabled);
     void setTxEnabled(bool enabled);
+    void setHoldTxFreq(bool enabled);
+    bool holdTxFreq() const;
     void setAutoCq(bool enabled);
     void setDecodeDepthBits(int bits);
     void setCqOnly(bool enabled);

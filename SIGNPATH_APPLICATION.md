@@ -118,4 +118,4 @@ IU8LMC
    - Variable: `SIGNPATH_ORGANIZATION_ID`
 4. **Abilita MFA** sul tuo account GitHub
 5. **Testa**: vai su Actions → "Build Windows + SignPath" → Run workflow
-6. **Release**: crea tag `1.0.29` per triggerare build + signing + installer automatico
+6. **Release**: crea tag `v<version>` (es. `v1.0.33`) per triggerare build + signing + installer automatico

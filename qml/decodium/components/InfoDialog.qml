@@ -9,8 +9,8 @@ import QtQuick.Layouts
 
 Dialog {
     id: infoDialog
-    width: 680
-    height: 580
+    width: 760
+    height: 620
     modal: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     property bool positionInitialized: false
@@ -267,6 +267,13 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
+                                text: "Developed by Salvatore Raccampo 9H1SR"
+                                font.pixelSize: 12
+                                color: textPrimary
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
                                 text: "WSJT-X Algorithms by K1JT (Joe Taylor)"
                                 font.pixelSize: 12
                                 color: textPrimary
@@ -405,8 +412,8 @@ Dialog {
                     // Contact Info
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: 400
-                        implicitHeight: contactCol.height + 30
+                        Layout.preferredWidth: Math.min(infoDialog.width - 56, 520)
+                        implicitHeight: contactCol.implicitHeight + 30
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.7)
                         border.color: glassBorder
                         radius: 12
@@ -487,8 +494,8 @@ Dialog {
                     // Feedback Form
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: 500
-                        implicitHeight: feedbackCol.height + 30
+                        Layout.preferredWidth: Math.min(infoDialog.width - 56, 600)
+                        implicitHeight: feedbackCol.implicitHeight + 30
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.7)
                         border.color: glassBorder
                         radius: 12
@@ -532,6 +539,10 @@ Dialog {
                                 color: textPrimary
                                 placeholderTextColor: textSecondary
                                 wrapMode: TextArea.Wrap
+                                leftPadding: 10
+                                rightPadding: 10
+                                topPadding: 10
+                                bottomPadding: 10
                                 background: Rectangle {
                                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                                     border.color: feedbackMessage.activeFocus ? secondaryCyan : glassBorder

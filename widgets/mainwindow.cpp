@@ -4364,6 +4364,26 @@ void MainWindow::legacySetTxEnabled(bool enabled)
   onRemoteSetTxEnabledRequested(QString {}, enabled);
 }
 
+void MainWindow::legacySetHoldTxFreq(bool enabled)
+{
+  if (!ui || !ui->cbHoldTxFreq) {
+    return;
+  }
+  bool const changed = (ui->cbHoldTxFreq->isChecked() != enabled);
+  if (changed) {
+    ui->cbHoldTxFreq->setChecked(enabled);
+  }
+  on_cbHoldTxFreq_clicked(enabled);
+}
+
+bool MainWindow::legacyHoldTxFreq() const
+{
+  if (!ui || !ui->cbHoldTxFreq) {
+    return false;
+  }
+  return ui->cbHoldTxFreq->isChecked();
+}
+
 void MainWindow::legacySetAutoCq(bool enabled)
 {
   onRemoteSetAutoCqRequested(QString {}, enabled);

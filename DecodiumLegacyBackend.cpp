@@ -796,6 +796,21 @@ void DecodiumLegacyBackend::setTxEnabled(bool enabled)
     }
 }
 
+void DecodiumLegacyBackend::setHoldTxFreq(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetHoldTxFreq(enabled);
+    }
+}
+
+bool DecodiumLegacyBackend::holdTxFreq() const
+{
+    if (m_mainWindow) {
+        return m_mainWindow->legacyHoldTxFreq();
+    }
+    return false;
+}
+
 void DecodiumLegacyBackend::setAutoCq(bool enabled)
 {
     if (m_mainWindow) {

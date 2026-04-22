@@ -790,9 +790,12 @@ Dialog {
                             model: bridge.catManager && bridge.catManager.pttMethodList ? bridge.catManager.pttMethodList : ["CAT","DTR","RTS","VOX"]
                             Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
-                                if (!bridge.catManager)
-                                    return -1
-                                return find(bridge.catManager.pttMethod)
+                                var methods = (bridge.catManager && bridge.catManager.pttMethodList)
+                                              ? bridge.catManager.pttMethodList
+                                              : ["CAT","DTR","RTS","VOX"]
+                                var savedMethod = bridge.catManager ? bridge.catManager.pttMethod : "CAT"
+                                var idx = settingsDialog.stringListIndexOf(methods, savedMethod)
+                                return idx >= 0 ? idx : 0
                             }
                             onActivated: {
                                 if (bridge.catManager) {
@@ -803,7 +806,21 @@ Dialog {
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: pttCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            contentItem: Text {
+                                text: {
+                                    if (pttCombo.currentIndex >= 0 && pttCombo.displayText !== "")
+                                        return pttCombo.displayText
+                                    if (bridge.catManager && bridge.catManager.pttMethod !== undefined && bridge.catManager.pttMethod !== null) {
+                                        var fallback = String(bridge.catManager.pttMethod).trim().toUpperCase()
+                                        return fallback !== "" ? fallback : "CAT"
+                                    }
+                                    return "CAT"
+                                }
+                                color: textPrimary
+                                font.pixelSize: controlFontSize
+                                leftPadding: 8
+                                verticalAlignment: Text.AlignVCenter
+                            }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
@@ -1158,7 +1175,7 @@ Dialog {
                         Text { text: "Output Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: audioOutChCombo
-                            model: ["Mono","Left","Right"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Mono","Left","Right","Both"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             Layout.minimumWidth: fieldMinWidth
                             currentIndex: bridge.audioOutputChannel
                             onActivated: bridge.audioOutputChannel = currentIndex
@@ -1446,7 +1463,7 @@ Dialog {
 
                         Text { text: "Show DXCC:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ShowDXCC", false)
+                            checked: bridge.getSetting("ShowDXCC", true)
                             onCheckedChanged: bridge.setSetting("ShowDXCC", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -1483,7 +1500,7 @@ Dialog {
                         }
                         Text { text: "Blank Line:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("InsertBlankLine", false)
+                            checked: bridge.getSetting("InsertBlankLine", true)
                             onCheckedChanged: bridge.setSetting("InsertBlankLine", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -1491,7 +1508,7 @@ Dialog {
 
                         Text { text: "Detailed Blank:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("DetailedBlank", false)
+                            checked: bridge.getSetting("DetailedBlank", true)
                             onCheckedChanged: bridge.setSetting("DetailedBlank", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -1506,7 +1523,7 @@ Dialog {
 
                         Text { text: "TX Msg to RX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("TXMessagesToRX", false)
+                            checked: bridge.getSetting("TXMessagesToRX", true)
                             onCheckedChanged: bridge.setSetting("TXMessagesToRX", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -2860,8 +2877,8 @@ Dialog {
                         // Alert grid
                         Text { text: "CQ in Msg:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertCQInMsg", false)
-                            onCheckedChanged: bridge.setSetting("AlertCQInMsg", checked)
+                            checked: bridge.alertOnCq
+                            onCheckedChanged: bridge.alertOnCq = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }

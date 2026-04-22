@@ -135,6 +135,7 @@ class DecodiumBridge : public QObject
     // === TX CONTROL ===
     Q_PROPERTY(bool autoSeq          READ autoSeq          WRITE setAutoSeq          NOTIFY autoSeqChanged)
     Q_PROPERTY(bool txEnabled        READ txEnabled        WRITE setTxEnabled        NOTIFY txEnabledChanged)
+    Q_PROPERTY(bool holdTxFreq       READ holdTxFreq       WRITE setHoldTxFreq       NOTIFY holdTxFreqChanged)
     Q_PROPERTY(bool autoCqRepeat     READ autoCqRepeat     WRITE setAutoCqRepeat     NOTIFY autoCqRepeatChanged)
     Q_PROPERTY(int  maxCallerRetries READ maxCallerRetries WRITE setMaxCallerRetries NOTIFY maxCallerRetriesChanged)
     Q_PROPERTY(int  autoCqMaxCycles  READ autoCqMaxCycles  WRITE setAutoCqMaxCycles  NOTIFY autoCqMaxCyclesChanged)
@@ -373,6 +374,8 @@ public:
     void setAutoSeq(bool v);
     bool txEnabled()         const { return m_txEnabled; }
     void setTxEnabled(bool v);
+    bool holdTxFreq()        const { return m_holdTxFreq; }
+    void setHoldTxFreq(bool v);
     bool autoCqRepeat()      const { return m_autoCqRepeat; }
     void setAutoCqRepeat(bool v);
     int  maxCallerRetries()  const { return m_maxCallerRetries; }
@@ -618,6 +621,7 @@ public slots:
     Q_INVOKABLE void clearTxMessages();
     Q_INVOKABLE void startTune();      // tono continuo fino a stopTune()
     Q_INVOKABLE void stopTune();
+    Q_INVOKABLE bool openAllTxtFolder() const;
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
     Q_INVOKABLE void logQso();
     Q_INVOKABLE void shutdown();
@@ -808,6 +812,7 @@ signals:
     void sendRR73Changed();
     void multiAnswerModeChanged();
     void autoSeqChanged();
+    void holdTxFreqChanged();
     void txEnabledChanged();
     void autoCqRepeatChanged();
     void maxCallerRetriesChanged();
@@ -819,6 +824,7 @@ signals:
     void asyncTxEnabledChanged();
     void dualCarrierEnabledChanged();
     void quickQsoEnabledChanged();
+    void settingValueChanged(QString key, QVariant value);
     void asyncSnrDbChanged();
     void catConnectedChanged();
     void catRigNameChanged();
@@ -1012,6 +1018,7 @@ private:
 
     // Standalone UDP MessageClient for WSJT-X protocol
     void initUdpMessageClient();
+    void shutdownUdpMessageClient();
     void udpSendStatus();
     void udpSendDecode(bool isNew, const QString& rawLine, quint64 serial);
 
@@ -1061,6 +1068,7 @@ private:
     int     m_autoCQPeriodsMissed {0}; // periodi CQ senza risposta (watchdog count-based)
     bool m_multiAnswerMode {false};
     bool m_autoSeq          {true};
+    bool m_holdTxFreq       {false};
     bool m_txEnabled        {false};
     bool m_manualTxHold     {false};
     bool m_deferredManualSyncTx {false};
@@ -1185,6 +1193,7 @@ private:
     QString m_legacyAllTxtRevisionKey;
     mutable QString m_legacyAllTxtConsumedPath;
     mutable qint64 m_legacyAllTxtConsumedSize {-1};
+    QSet<QString> m_legacyClearedRxMirrorKeys;
 
     // === GitHub TxController clone ===
     int  m_nTx73            {0};   // TX5 (73) repeat counter: >=2 → QSO completo, ferma

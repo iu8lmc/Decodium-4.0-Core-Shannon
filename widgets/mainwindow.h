@@ -200,6 +200,8 @@ public:
   void legacySetMonitoring(bool enabled);
   void legacySetAutoSeq(bool enabled);
   void legacySetTxEnabled(bool enabled);
+  void legacySetHoldTxFreq(bool enabled);
+  bool legacyHoldTxFreq() const;
   void legacySetAutoCq(bool enabled);
   void legacySetDecodeDepthBits(int bits);
   void legacySetCqOnly(bool enabled);

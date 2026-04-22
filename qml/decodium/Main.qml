@@ -327,6 +327,18 @@ ApplicationWindow {
     property color successGreen: bridge.themeManager.successColor
     property color glassOverlay: bridge.themeManager.glassOverlay
     property color glassBorder: bridge.themeManager.glassBorder
+    property bool showDxccInfo: bridge.getSetting("ShowDXCC", true)
+    property bool showTxMessagesInRx: bridge.getSetting("TXMessagesToRX", true)
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "ShowDXCC" || key === "DXCCEntity")
+                mainWindow.showDxccInfo = !!value
+            else if (key === "TXMessagesToRX" || key === "Tx2QSO")
+                mainWindow.showTxMessagesInRx = !!value
+        }
+    }
 
     // IU8LMC: DXCC color scheme (JTDX-style)
     readonly property color colorWorked: "#808080"       // Gray - already worked
@@ -717,10 +729,14 @@ ApplicationWindow {
     }
 
     // Listen for PSK search results
+    // NOTE: popup auto-open disabilitato su richiesta IK8OLM — feedback:
+    //   "quella finestrina mezza trasparente quando chiami qualcuno si potrebbe evitare"
+    // Riabilitabile impostando uiPskSearchPopupEnabled=true nelle QSettings.
     Connections {
         target: bridge
         function onPskSearchingChanged() {
-            if (!bridge.pskSearching && bridge.pskSearchCallsign !== "") {
+            if (!bridge.pskSearching && bridge.pskSearchCallsign !== ""
+                && bridge.getSetting("uiPskSearchPopupEnabled", false)) {
                 pskSearchPopup.open()
             }
         }
@@ -2982,8 +2998,8 @@ ApplicationWindow {
                             anchors.margins: 4
                             visible: !waterfallDetached
                             showControls: true
-                            minFreq: 200
-                            maxFreq: 3000
+                            minFreq: 0
+                            maxFreq: 3200
                             spectrumHeight: 150
 
                             onFrequencySelected: function(freq) {
@@ -3085,12 +3101,18 @@ ApplicationWindow {
                         return inWindow || relevant
                     }
                     function currentRxDecodes() {
-                        // IU8LMC: ordine identico a Band Activity — rispetta l'ordine di arrivo dal bridge (nessun sort custom)
                         var merged = []
                         if (bridge.rxDecodeList) {
                             for (var j = 0; j < bridge.rxDecodeList.length; j++) {
-                                if (bridge.rxDecodeList[j])
-                                    merged.push(bridge.rxDecodeList[j])
+                                if (bridge.rxDecodeList[j]) {
+                                    var item = {}
+                                    var src = bridge.rxDecodeList[j]
+                                    for (var key in src)
+                                        item[key] = src[key]
+                                    if (!mainWindow.showTxMessagesInRx && item.isTx)
+                                        continue
+                                    merged.push(item)
+                                }
                             }
                         }
                         return merged
@@ -3199,8 +3221,9 @@ ApplicationWindow {
                                 var periodIndex = Math.floor(totalMs / periodMs)
                                 timingBar.isEvenPeriod = (periodIndex % 2) === 0
                                 // isTxPhase: true quando siamo nel NOSTRO periodo TX
-                                // txPeriod=0 → TX nei periodi pari, txPeriod=1 → TX nei dispari
-                                var isOurTxPeriod = bridge ? ((bridge.txPeriod === 0) === timingBar.isEvenPeriod) : false
+                                // bridge.txPeriod === 1 -> first/even (:00/:30)
+                                // bridge.txPeriod === 0 -> second/odd (:15/:45)
+                                var isOurTxPeriod = bridge ? ((bridge.txPeriod === 1) === timingBar.isEvenPeriod) : false
                                 timingBar.isTxPhase = isOurTxPeriod && timingBar.secInPeriod < timingBar.txDuration
                                 timingBar.periodLabel = isOurTxPeriod ? "TX" : "RX"
                             }
@@ -3324,8 +3347,8 @@ ApplicationWindow {
                             readonly property int dtColumnWidth: compactColumns ? 32 : 35
                             readonly property int freqColumnWidth: compactColumns ? 42 : 45
                             readonly property int gapColumnWidth: compactColumns ? 4 : 6
-                            readonly property int dxccColumnWidth: compactColumns ? 96 : 132
-                            readonly property int azColumnWidth: compactColumns ? 42 : 52
+                            readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 96 : 132) : 0
+                            readonly property int azColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 42 : 52) : 0
                             readonly property int messageMinWidth: compactColumns ? 72 : 140
                             Component.onCompleted: {
                                 // Dopo il layout, porta il separatore al 50%
@@ -3530,6 +3553,7 @@ ApplicationWindow {
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                         Text { text: "Message"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
                                         Item {
+                                            visible: mainWindow.showDxccInfo
                                             Layout.preferredWidth: period1Panel.dxccColumnWidth
                                             Layout.fillHeight: true
                                             Text {
@@ -3544,6 +3568,7 @@ ApplicationWindow {
                                             }
                                         }
                                         Item {
+                                            visible: mainWindow.showDxccInfo
                                             Layout.preferredWidth: period1Panel.azColumnWidth
                                             Layout.fillHeight: true
                                             Text {
@@ -3672,6 +3697,7 @@ ApplicationWindow {
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                                 Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: Text.ElideRight }
                                                 Item {
+                                                    visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
@@ -3686,6 +3712,7 @@ ApplicationWindow {
                                                     }
                                                 }
                                                 Item {
+                                                    visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.azColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
@@ -3719,12 +3746,12 @@ ApplicationWindow {
                             id: rxFreqPanel
                             SplitView.fillWidth: true
                             SplitView.minimumWidth: 260
-                            readonly property bool compactColumns: width < 430
+                            readonly property bool compactColumns: width < 450
                             readonly property bool compactHeader: width < 350
-                            readonly property int utcColumnWidth: compactColumns ? 66 : 86
-                            readonly property int dbColumnWidth: compactColumns ? 26 : 30
-                            readonly property int dtColumnWidth: compactColumns ? 30 : 35
-                            readonly property int gapColumnWidth: compactColumns ? 4 : 6
+                            readonly property int utcColumnWidth: compactColumns ? 62 : 78
+                            readonly property int dbColumnWidth: compactColumns ? 24 : 28
+                            readonly property int dtColumnWidth: compactColumns ? 28 : 32
+                            readonly property int gapColumnWidth: compactColumns ? 3 : 4
                             readonly property int headerBadgeWidth: compactHeader ? 62 : 70
                             color: "transparent"
 
@@ -3895,8 +3922,8 @@ ApplicationWindow {
 
                                     RowLayout {
                                         anchors.fill: parent
-                                        anchors.leftMargin: 6
-                                        anchors.rightMargin: 6
+                                        anchors.leftMargin: 4
+                                        anchors.rightMargin: 4
                                         spacing: 0
 
                                         Text { text: "UTC"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
@@ -3925,20 +3952,30 @@ ApplicationWindow {
                                         spacing: 1
                                         interactive: true
                                         property bool followTail: true
+                                        property bool tailFollowPending: false
                                         function isNearTail() {
                                             return contentHeight <= height + 2
                                                 || contentY >= Math.max(0, contentHeight - height - 8)
                                         }
                                         function updateFollowTail() {
+                                            if (tailFollowPending)
+                                                return
                                             followTail = isNearTail()
                                         }
                                         function forceTailFollow() {
                                             followTail = true
+                                            tailFollowPending = true
                                             Qt.callLater(function() {
                                                 if (!rxFrequencyList)
                                                     return
                                                 rxFrequencyList.positionViewAtEnd()
                                                 rxFrequencyList.followTail = true
+                                                Qt.callLater(function() {
+                                                    if (!rxFrequencyList)
+                                                        return
+                                                    rxFrequencyList.tailFollowPending = false
+                                                    rxFrequencyList.followTail = rxFrequencyList.isNearTail()
+                                                })
                                             })
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
@@ -3955,6 +3992,11 @@ ApplicationWindow {
 
                                         // Reattivo: si aggiorna quando la decodeList cambia
                                         property int _ver: decodePanel.decodeListVersion
+                                        on_VerChanged: {
+                                            if (followTail || isNearTail()) {
+                                                forceTailFollow()
+                                            }
+                                        }
                                         model: {
                                             void(_ver)  // forza ricalcolo quando _ver cambia
                                             return decodePanel.currentRxDecodes()
@@ -4012,8 +4054,8 @@ ApplicationWindow {
 
                                             RowLayout {
                                                 anchors.fill: parent
-                                                anchors.leftMargin: 6
-                                                anchors.rightMargin: 6
+                                                anchors.leftMargin: 4
+                                                anchors.rightMargin: 4
                                                 spacing: 0
 
                                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
@@ -4873,163 +4915,6 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "Storia del Programma"
-            onTriggered: { infoDialog.currentTab = 1; infoDialog.open() }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textPrimary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: bridge.diagnostics && bridge.diagnostics.errorCount > 0
-                  ? "Segnala Bug (" + bridge.diagnostics.errorCount + ")"
-                  : "Segnala Bug"
-            onTriggered: bugReportDialog.open()
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: bridge.diagnostics && bridge.diagnostics.errorCount > 0 ? "#ff4444" : textPrimary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: "Guida Rapida"
-            onTriggered: { infoDialog.currentTab = 3; infoDialog.open() }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textPrimary
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: bridge.themeManager.isLightTheme ? "☀ Stellar Light" : "☽ Ocean Blue"
-            onTriggered: {
-                if (bridge.themeManager.isLightTheme)
-                    bridge.themeManager.applyThemeByName("Ocean Blue")
-                else
-                    bridge.themeManager.applyThemeByName("Stellar Light")
-            }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                font.bold: true
-                color: secondaryCyan
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: "Contatta Sviluppatore"
-            onTriggered: Qt.openUrlExternally("mailto:iu8lmc@gmail.com")
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: secondaryCyan
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: "Invia Feedback"
-            onTriggered: { infoDialog.currentTab = 2; infoDialog.open() }
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: accentOrange
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: "PSK Reporter"
-            onTriggered: Qt.openUrlExternally("https://pskreporter.info")
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: "QRZ.com"
-            onTriggered: Qt.openUrlExternally("https://www.qrz.com")
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
             text: "Link Utili..."
             onTriggered: { infoDialog.currentTab = 4; infoDialog.open() }
 
@@ -5119,7 +5004,7 @@ ApplicationWindow {
 
         MenuItem {
             text: "📂 Apri Cartella ALL.TXT"
-            onTriggered: Qt.openUrlExternally("file:///" + bridge.logAllTxtPath)
+            onTriggered: bridge.openAllTxtFolder()
 
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6352,8 +6237,8 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     visible: waterfallDetached
                     showControls: true
-                    minFreq: 200
-                    maxFreq: 3000
+                    minFreq: 0
+                    maxFreq: 3200
                     spectrumHeight: 150
 
                     onFrequencySelected: function(freq) {
@@ -7233,20 +7118,30 @@ ApplicationWindow {
                         spacing: 1
                         interactive: true
                         property bool followTail: true
+                        property bool tailFollowPending: false
                         function isNearTail() {
                             return contentHeight <= height + 2
                                 || contentY >= Math.max(0, contentHeight - height - 8)
                         }
                         function updateFollowTail() {
+                            if (tailFollowPending)
+                                return
                             followTail = isNearTail()
                         }
                         function forceTailFollow() {
                             followTail = true
+                            tailFollowPending = true
                             Qt.callLater(function() {
                                 if (!rxFrequencyFloatingList)
                                     return
                                 rxFrequencyFloatingList.positionViewAtEnd()
                                 rxFrequencyFloatingList.followTail = true
+                                Qt.callLater(function() {
+                                    if (!rxFrequencyFloatingList)
+                                        return
+                                    rxFrequencyFloatingList.tailFollowPending = false
+                                    rxFrequencyFloatingList.followTail = rxFrequencyFloatingList.isNearTail()
+                                })
                             })
                         }
                         Component.onCompleted: Qt.callLater(function() {
@@ -7261,6 +7156,11 @@ ApplicationWindow {
                             }
                         }
                         property int _ver: decodePanel.decodeListVersion
+                        on_VerChanged: {
+                            if (followTail || isNearTail()) {
+                                forceTailFollow()
+                            }
+                        }
                         model: {
                             void(_ver)
                             return decodePanel.currentRxDecodes()

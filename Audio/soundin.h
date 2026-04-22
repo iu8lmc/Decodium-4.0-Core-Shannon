@@ -54,6 +54,7 @@ private:
   Q_SLOT void handleStateChanged (QAudio::State);
 
   bool checkStream ();
+  void emitStatusIfChanged (QString const& message, QAudio::State state);
 
   QScopedPointer<QAudioSource> m_stream;
   QPointer<AudioDevice> m_sink;
@@ -64,6 +65,9 @@ private:
   int m_sampleRate {0};
   int m_channelCount {0};
   int m_channelSelector {static_cast<int>(AudioDevice::Mono)};
+  QString m_lastStatusMessage;
+  QAudio::State m_lastReportedState {QAudio::StoppedState};
+  bool m_haveReportedState_ {false};
 };
 
 #endif

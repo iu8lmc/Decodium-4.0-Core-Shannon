@@ -169,17 +169,21 @@ void PanadapterItem::setPaletteIndex(int v)
 // Questo garantisce perfetta congruenza tra segnale visualizzato e label frequenza
 int PanadapterItem::freqToX(int freq) const
 {
-    float range = (m_dataFreqMax - m_dataFreqMin) / m_zoomFactor;
+    float const baseStart = (m_bandwidth > 0) ? static_cast<float>(m_startFreq) : m_dataFreqMin;
+    float const baseEnd = (m_bandwidth > 0) ? static_cast<float>(m_startFreq + m_bandwidth) : m_dataFreqMax;
+    float range = (baseEnd - baseStart) / m_zoomFactor;
     if (range <= 0.f) return 0;
-    float center = m_dataFreqMin + (m_dataFreqMax - m_dataFreqMin) * 0.5f + m_panHz;
+    float center = baseStart + (baseEnd - baseStart) * 0.5f + m_panHz;
     float start  = center - range * 0.5f;
     return (int)((freq - start) * width() / range);
 }
 
 int PanadapterItem::xToFreq(int x) const
 {
-    float range = (m_dataFreqMax - m_dataFreqMin) / m_zoomFactor;
-    float center = m_dataFreqMin + (m_dataFreqMax - m_dataFreqMin) * 0.5f + m_panHz;
+    float const baseStart = (m_bandwidth > 0) ? static_cast<float>(m_startFreq) : m_dataFreqMin;
+    float const baseEnd = (m_bandwidth > 0) ? static_cast<float>(m_startFreq + m_bandwidth) : m_dataFreqMax;
+    float range = (baseEnd - baseStart) / m_zoomFactor;
+    float center = baseStart + (baseEnd - baseStart) * 0.5f + m_panHz;
     float start  = center - range * 0.5f;
     return (int)(start + x * range / width());
 }
@@ -330,15 +334,20 @@ void PanadapterItem::renderSpectrum()
     };
 
     // Sistema di coordinate: usa m_dataFreqMin/Max — stessa base usata dai bin FFT
-    float totalRange = m_dataFreqMax - m_dataFreqMin;
-    float viewRange  = totalRange / m_zoomFactor;
-    float viewCenter = m_dataFreqMin + totalRange * 0.5f + m_panHz;
+    float const baseStart = (m_bandwidth > 0) ? static_cast<float>(m_startFreq) : m_dataFreqMin;
+    float const baseEnd = (m_bandwidth > 0) ? static_cast<float>(m_startFreq + m_bandwidth) : m_dataFreqMax;
+    float viewportRange = baseEnd - baseStart;
+    if (viewportRange <= 0.f) viewportRange = 1.f;
+    float dataRange = m_dataFreqMax - m_dataFreqMin;
+    if (dataRange <= 0.f) dataRange = 1.f;
+    float viewRange  = viewportRange / m_zoomFactor;
+    float viewCenter = baseStart + viewportRange * 0.5f + m_panHz;
     float viewStart  = viewCenter - viewRange * 0.5f;
     // fToX: mappa freq → pixel usando le coordinate dei bin reali
     auto fToX = [&](float f) -> int { return (int)((f - viewStart) * w / viewRange); };
-    // Anche i BIN devono usare questa stessa mappatura
-    // bin[i] corrisponde a freq = m_dataFreqMin + (i / nBins) * totalRange
-    // pixel x → bin i = (x/w * viewRange + viewStart - m_dataFreqMin) / totalRange * nBins
+    // Anche i BIN devono usare questa stessa mappatura.
+    // bin[i] corrisponde al range dati reale m_dataFreqMin..m_dataFreqMax,
+    // mentre la view può essere un sotto-range custom 0..3200.
 
     // ── Griglia dB orizzontale (SmartSDR: 5 livelli, labels dBm) ──────────
     const int DB_STEPS = 5;
@@ -386,7 +395,14 @@ void PanadapterItem::renderSpectrum()
     for (int x = 0; x < w; ++x) {
         // Mappa pixel x → frequenza → bin usando il range effettivo dei dati FFT
         float pixFreq = viewStart + (float)x * viewRange / w;
-        int bin = (int)((pixFreq - m_dataFreqMin) / totalRange * nBins);
+        if (pixFreq < m_dataFreqMin || pixFreq > m_dataFreqMax) {
+            int const y = h - 1;
+            fillPath.lineTo(x, y);
+            if (first) { linePath.moveTo(x, y); first = false; }
+            else        { linePath.lineTo(x, y); }
+            continue;
+        }
+        int bin = (int)((pixFreq - m_dataFreqMin) / dataRange * nBins);
         bin = qBound(0, bin, nBins - 1);
         int y = binToY(m_bins[bin]);
         fillPath.lineTo(x, y);
@@ -424,7 +440,8 @@ void PanadapterItem::renderSpectrum()
         first = true;
         for (int x = 0; x < w; ++x) {
             float pixFreq = viewStart + (float)x * viewRange / w;
-            int bin = (int)((pixFreq - m_dataFreqMin) / totalRange * nBins);
+            if (pixFreq < m_dataFreqMin || pixFreq > m_dataFreqMax) continue;
+            int bin = (int)((pixFreq - m_dataFreqMin) / dataRange * nBins);
             bin = qBound(0, bin, nBins - 1);
             int y = binToY(m_peakBins[bin]);
             if (first) { pkPath.moveTo(x, y); first = false; }
@@ -434,13 +451,20 @@ void PanadapterItem::renderSpectrum()
         p.drawPath(pkPath);
     }
 
-    // ── Marker VFO RX: linea verticale ciano #00E5FF ──────────────────────
+    // ── Marker VFO RX: linea verticale ciano #00E5FF (spessa + glow) ──────
     if (rxX >= 0 && rxX < w) {
-        p.setPen(QPen(QColor(0, 229, 255, 220), 1.5));
+        // Glow esterno (alone ampio)
+        p.setPen(QPen(QColor(0, 229, 255, 70), 7.0));
         p.drawLine(rxX, 0, rxX, h);
-        p.setFont(QFont("Segoe UI", 8, QFont::Bold));
+        // Linea principale spessa
+        p.setPen(QPen(QColor(0, 229, 255, 240), 3.0));
+        p.drawLine(rxX, 0, rxX, h);
+        // Core brillante
+        p.setPen(QPen(QColor(180, 255, 255, 255), 1.0));
+        p.drawLine(rxX, 0, rxX, h);
+        p.setFont(QFont("Segoe UI", 9, QFont::Bold));
         p.setPen(QColor(0, 229, 255));
-        p.drawText(rxX + 3, 12, QString("%1").arg(m_rxFreq));
+        p.drawText(rxX + 5, 12, QString("RX %1").arg(m_rxFreq));
     }
 
     // ── Frequency ticks ogni 500Hz ────────────────────────────────────────
@@ -454,13 +478,21 @@ void PanadapterItem::renderSpectrum()
         p.drawText(cx - 20, h-20, QString::number(calFreq));
     }
 
-    // ── Marker TX: magenta (Slice B SmartSDR) ────────────────────────────
+    // ── Marker TX: magenta (Slice B SmartSDR) — spessa + glow ───────────
     int txX = fToX(m_txFreq);
     if (txX >= 0 && txX < w && m_txFreq != m_rxFreq) {
-        p.setPen(QPen(QColor(255, 0, 255, 200), 1.5));
+        // Glow esterno
+        p.setPen(QPen(QColor(255, 0, 255, 70), 7.0));
         p.drawLine(txX, 0, txX, h);
+        // Linea principale spessa
+        p.setPen(QPen(QColor(255, 0, 255, 240), 3.0));
+        p.drawLine(txX, 0, txX, h);
+        // Core brillante
+        p.setPen(QPen(QColor(255, 200, 255, 255), 1.0));
+        p.drawLine(txX, 0, txX, h);
+        p.setFont(QFont("Segoe UI", 9, QFont::Bold));
         p.setPen(QColor(255, 0, 255));
-        p.drawText(txX + 3, 24, QString("TX %1").arg(m_txFreq));
+        p.drawText(txX + 5, 24, QString("TX %1").arg(m_txFreq));
     }
 
     // ── Decode labels: mostra callsign delle stazioni decodificate ─────
@@ -469,18 +501,16 @@ void PanadapterItem::renderSpectrum()
         QFont labelFont("Consolas", m_labelFontSize, m_labelBold ? QFont::Bold : QFont::Normal);
         p.setFont(labelFont);
         QFontMetrics fm(labelFont);
-        const int rowH = fm.height();                 // altezza riga label
-        const int topPad = 2;                         // margine dall'alto
-        const int bottomKeepOut = 20;                 // non sovrapporre ai tick frequenza
-        const int gap = m_labelSpacing;               // spaziatura orizzontale minima
+        const int rowH = fm.height();
+        const int topPad = 2;
+        const int bottomKeepOut = 20;
+        const int gap = m_labelSpacing;
 
-        // Numero massimo righe che stanno prima dei tick frequenza
         int maxRows = qMax(1, (h - bottomKeepOut - topPad) / rowH);
 
-        // Prepara elementi ordinati per freq crescente (equivale a x crescente)
         struct LabelItem {
-            int x;            // pixel screen
-            int textW;        // larghezza testo
+            int x;
+            int textW;
             QString text;
             QColor color;
         };
@@ -506,7 +536,6 @@ void PanadapterItem::renderSpectrum()
             if (m_labelUseCustomColor) {
                 col = m_labelColor;
             } else {
-                // Colore: verde per CQ, rosso per MyCall, ciano per altri
                 col = isCQ ? QColor(0, 230, 100)
                            : (isMyCall ? QColor(255, 80, 80) : QColor(0, 200, 255));
             }
@@ -517,25 +546,24 @@ void PanadapterItem::renderSpectrum()
         std::sort(items.begin(), items.end(),
                   [](const LabelItem& a, const LabelItem& b){ return a.x < b.x; });
 
-        // Ogni riga mantiene il rightmost X (fine testo precedente + gap)
         QVector<int> rowRightX(maxRows, -1000000);
 
         for (const auto& it : items) {
             int textX = it.x + 2;
-            // Scegli la prima riga dove textX > rowRightX[r]
             int chosenRow = -1;
             for (int r = 0; r < maxRows; ++r) {
-                if (textX > rowRightX[r] + gap) { chosenRow = r; break; }
+                if (textX > rowRightX[r] + gap) {
+                    chosenRow = r;
+                    break;
+                }
             }
-            if (chosenRow < 0) continue; // tutte le righe occupate: scarta questa label
+            if (chosenRow < 0) continue;
 
             int textY = topPad + rowH * (chosenRow + 1) - fm.descent();
 
-            // Linea verticale sottile alla frequenza
             p.setPen(QPen(it.color, 1, Qt::DotLine));
             p.drawLine(it.x, 0, it.x, h - bottomKeepOut);
 
-            // Testo
             p.setPen(it.color);
             p.drawText(textX, textY, it.text);
 
@@ -572,9 +600,14 @@ void PanadapterItem::addWaterfallRow()
 
     // Ring buffer: scrivi nella riga corrente
     // Usa lo stesso sistema di coordinate del renderSpectrum per allineamento perfetto
-    float totalRange = m_dataFreqMax - m_dataFreqMin;
-    float viewRange  = totalRange / m_zoomFactor;
-    float viewCenter = m_dataFreqMin + totalRange * 0.5f + m_panHz;
+    float const baseStart = (m_bandwidth > 0) ? static_cast<float>(m_startFreq) : m_dataFreqMin;
+    float const baseEnd = (m_bandwidth > 0) ? static_cast<float>(m_startFreq + m_bandwidth) : m_dataFreqMax;
+    float viewportRange = baseEnd - baseStart;
+    if (viewportRange <= 0.f) viewportRange = 1.f;
+    float dataRange = m_dataFreqMax - m_dataFreqMin;
+    if (dataRange <= 0.f) dataRange = 1.f;
+    float viewRange  = viewportRange / m_zoomFactor;
+    float viewCenter = baseStart + viewportRange * 0.5f + m_panHz;
     float viewStart  = viewCenter - viewRange * 0.5f;
 
     // BlackLevel: soglia sotto cui tutto è nero (0=nulla, 100=aggressivo)
@@ -588,7 +621,11 @@ void PanadapterItem::addWaterfallRow()
     QRgb* line = reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
     for (int x = 0; x < w; ++x) {
         float pixFreq = viewStart + (float)x * viewRange / w;
-        int bin = (int)((pixFreq - m_dataFreqMin) / totalRange * nBins);
+        if (pixFreq < m_dataFreqMin || pixFreq > m_dataFreqMax) {
+            line[x] = qRgb(0,0,0);
+            continue;
+        }
+        int bin = (int)((pixFreq - m_dataFreqMin) / dataRange * nBins);
         bin = qBound(0, bin, nBins - 1);
         float raw = (m_bins[bin] - m_minDb) / range;
         // Sottrai la soglia nero e riscala

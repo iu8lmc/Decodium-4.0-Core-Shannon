@@ -461,6 +461,40 @@ Item {
                         }
 
                         Rectangle {
+                            width: 78
+                            height: 36
+                            radius: 6
+                            color: holdTxFreqBtn.checked ? Qt.rgba(255/255, 193/255, 7/255, 0.25) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: holdTxFreqBtn.checked ? "#FFC107" : glassBorder
+                            border.width: holdTxFreqBtn.checked ? 2 : 1
+
+                            Button {
+                                id: holdTxFreqBtn
+                                anchors.fill: parent
+                                checkable: true
+                                checked: bridge ? bridge.holdTxFreq : false
+                                padding: 0
+                                onClicked: {
+                                    if (bridge) {
+                                        bridge.holdTxFreq = checked
+                                    }
+                                }
+                                background: Rectangle { color: "transparent" }
+                                contentItem: ToolbarButtonContent {
+                                    label: "HOLD"
+                                    glyph: holdTxFreqBtn.checked ? "\uD83D\uDD12" : "\uD83D\uDD13"
+                                    foreground: holdTxFreqBtn.checked ? "#FFC107" : textSecondary
+                                    glyphSize: 14
+                                    labelSize: 10
+                                    boldLabel: holdTxFreqBtn.checked
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Blocca Frequenza TX\n(Hold Tx Freq)"
+                                ToolTip.delay: 500
+                            }
+                        }
+
+                        Rectangle {
                             width: 82
                             height: 36
                             radius: 6

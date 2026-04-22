@@ -225,10 +225,10 @@ private:
 
     // ── Stile label callsign (overlay spettro) ──────────────────────────────
     int    m_labelFontSize       = 8;
-    int    m_labelSpacing        = 2;    // gap orizzontale minimo tra label
+    int    m_labelSpacing        = 2;
     bool   m_labelBold           = true;
     QColor m_labelColor          = QColor(0, 230, 255);
-    bool   m_labelUseCustomColor = false; // se false, usa i colori categorici (CQ/MyCall/altri)
+    bool   m_labelUseCustomColor = false;
 
     // ── Stato rendering ─────────────────────────────────────────────────────
     bool  m_spectrumDirty = true;

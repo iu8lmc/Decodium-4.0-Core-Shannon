@@ -43,6 +43,8 @@ Window {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color glassBorder: bridge.themeManager.glassBorder
+    property bool showDxccInfo: bridge.getSetting("ShowDXCC", true)
+    property bool showTxMessagesInRx: bridge.getSetting("TXMessagesToRX", true)
     readonly property real leftPanelWidth: width * 0.5
     readonly property bool compactBandColumns: leftPanelWidth < 460
     readonly property int bandUtcWidth: compactBandColumns ? 66 : 86
@@ -50,16 +52,16 @@ Window {
     readonly property int bandDtWidth: compactBandColumns ? 34 : 45
     readonly property int bandFreqWidth: compactBandColumns ? 42 : 50
     readonly property int bandGapWidth: compactBandColumns ? 6 : 10
-    readonly property int bandDxccWidth: compactBandColumns ? 92 : 132
-    readonly property int bandAzWidth: compactBandColumns ? 42 : 52
+    readonly property int bandDxccWidth: showDxccInfo ? (compactBandColumns ? 92 : 132) : 0
+    readonly property int bandAzWidth: showDxccInfo ? (compactBandColumns ? 42 : 52) : 0
     readonly property int bandMessageMinWidth: compactBandColumns ? 72 : 140
     readonly property real rightPanelWidth: width * 0.5
-    readonly property bool compactRxColumns: rightPanelWidth < 420
+    readonly property bool compactRxColumns: rightPanelWidth < 450
     readonly property bool compactRxHeader: rightPanelWidth < 340
-    readonly property int rxUtcWidth: compactRxColumns ? 66 : 86
-    readonly property int rxDbWidth: compactRxColumns ? 28 : 35
-    readonly property int rxDtWidth: compactRxColumns ? 36 : 45
-    readonly property int rxGapWidth: compactRxColumns ? 6 : 10
+    readonly property int rxUtcWidth: compactRxColumns ? 62 : 78
+    readonly property int rxDbWidth: compactRxColumns ? 24 : 28
+    readonly property int rxDtWidth: compactRxColumns ? 30 : 36
+    readonly property int rxGapWidth: compactRxColumns ? 4 : 6
     readonly property int rxDistanceWidth: compactRxColumns ? 0 : 50
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
     property int decodeListVersion: 0
@@ -82,6 +84,16 @@ Window {
             decodeWindow.decodeListVersion++
             if (stickRxTail && rxFrequencyList)
                 rxFrequencyList.forceTailFollow()
+        }
+    }
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "ShowDXCC" || key === "DXCCEntity")
+                decodeWindow.showDxccInfo = !!value
+            else if (key === "TXMessagesToRX" || key === "Tx2QSO")
+                decodeWindow.showTxMessagesInRx = !!value
         }
     }
 
@@ -152,12 +164,18 @@ Window {
         return inWindow || relevant
     }
     function currentRxDecodes() {
-        // IU8LMC: ordine identico a Band Activity — rispetta l'ordine di arrivo dal bridge (nessun sort custom)
         var merged = []
         if (appEngine.rxDecodeList) {
             for (var j = 0; j < appEngine.rxDecodeList.length; j++) {
-                if (appEngine.rxDecodeList[j])
-                    merged.push(appEngine.rxDecodeList[j])
+                if (appEngine.rxDecodeList[j]) {
+                    var item = {}
+                    var src = appEngine.rxDecodeList[j]
+                    for (var key in src)
+                        item[key] = src[key]
+                    if (!decodeWindow.showTxMessagesInRx && item.isTx)
+                        continue
+                    merged.push(item)
+                }
             }
         }
         return merged
@@ -341,6 +359,7 @@ Window {
                                 Layout.fillWidth: true
                             }
                             Item {
+                                visible: decodeWindow.showDxccInfo
                                 Layout.preferredWidth: decodeWindow.bandDxccWidth
                                 Layout.fillHeight: true
                                 Text {
@@ -355,6 +374,7 @@ Window {
                                 }
                             }
                             Item {
+                                visible: decodeWindow.showDxccInfo
                                 Layout.preferredWidth: decodeWindow.bandAzWidth
                                 Layout.fillHeight: true
                                 Text {
@@ -490,8 +510,8 @@ Window {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
+                                    anchors.leftMargin: 4
+                                    anchors.rightMargin: 4
                                     spacing: 0
 
                                     Text {
@@ -551,6 +571,7 @@ Window {
                                     }
 
                                     Item {
+                                        visible: decodeWindow.showDxccInfo
                                         Layout.preferredWidth: decodeWindow.bandDxccWidth
                                         Layout.fillHeight: true
                                         Text {
@@ -567,6 +588,7 @@ Window {
                                     }
 
                                     Item {
+                                        visible: decodeWindow.showDxccInfo
                                         Layout.preferredWidth: decodeWindow.bandAzWidth
                                         Layout.fillHeight: true
                                         Text {
@@ -748,20 +770,30 @@ Window {
                             spacing: 1
                             interactive: true
                             property bool followTail: true
+                            property bool tailFollowPending: false
                             function isNearTail() {
                                 return contentHeight <= height + 2
                                     || contentY >= Math.max(0, contentHeight - height - 8)
                             }
                             function updateFollowTail() {
+                                if (tailFollowPending)
+                                    return
                                 followTail = isNearTail()
                             }
                             function forceTailFollow() {
                                 followTail = true
+                                tailFollowPending = true
                                 Qt.callLater(function() {
                                     if (!rxFrequencyList)
                                         return
                                     rxFrequencyList.positionViewAtEnd()
                                     rxFrequencyList.followTail = true
+                                    Qt.callLater(function() {
+                                        if (!rxFrequencyList)
+                                            return
+                                        rxFrequencyList.tailFollowPending = false
+                                        rxFrequencyList.followTail = rxFrequencyList.isNearTail()
+                                    })
                                 })
                             }
                             Component.onCompleted: Qt.callLater(function() {
@@ -776,6 +808,11 @@ Window {
                                 }
                             }
                             property int _ver: decodeWindow.decodeListVersion
+                            on_VerChanged: {
+                                if (followTail || isNearTail()) {
+                                    forceTailFollow()
+                                }
+                            }
 
                             // Filter model to only show messages at RX frequency
                             model: {
@@ -849,8 +886,8 @@ Window {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
+                                    anchors.leftMargin: 4
+                                    anchors.rightMargin: 4
                                     spacing: 0
 
                                     Text {
