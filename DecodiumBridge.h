@@ -1129,7 +1129,7 @@ private:
     int    m_uiSpectrumHeight  {150};
     int    m_uiPaletteIndex    {3};
     double m_uiZoomFactor      {1.0};
-    int    m_uiWaterfallHeight {350};
+    int    m_uiWaterfallHeight {420};
     int    m_uiDecodeWinX      {0};
     int    m_uiDecodeWinY      {0};
     int    m_uiDecodeWinWidth  {1100};

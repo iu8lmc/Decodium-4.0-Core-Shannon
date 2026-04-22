@@ -200,25 +200,11 @@ Item {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
-            }
-        }
+                Rectangle { width:1; height:14; color:"#333" }
 
-        // ── Toolbar controls ──────────────────────────────────────────────
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: showControls ? 28 : 0
-            visible: showControls
-            color: bgPanel
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 6
-                anchors.rightMargin: 6
-                spacing: 6
-
-                // Palette
-                Text { text: "Palette:"; color: textSec; font.pixelSize: 10 }
+                // ── Palette / Auto / [] / Peak / Zoom / dBm ──
+                // Unita alla barra Calls per avere un'unica riga superiore (feedback IK8OLM)
+                Text { text: "Palette:"; color: "#FFFFFF"; font.pixelSize: 10 }
                 ComboBox {
                     id: paletteCombo
                     Layout.preferredWidth: 106
@@ -306,7 +292,7 @@ Item {
                 Text { text: "Peak"; color: peakHoldCheck.checked ? "#ffcc00" : textSec; font.pixelSize: 10 }
 
                 // Zoom
-                Text { text: "Zoom"; color: textSec; font.pixelSize: 10 }
+                Text { text: "Zoom"; color: "#FFFFFF"; font.pixelSize: 10 }
                 Slider {
                     id: zoomSlider
                     Layout.preferredWidth: 70

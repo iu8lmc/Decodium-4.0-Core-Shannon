@@ -2221,7 +2221,10 @@ Dialog {
 
                         Text { text: "Accept UDP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AcceptUDPRequests", false)
+                            // Default allineato con Configuration.cpp (true) per evitare
+                            // che il primo onCheckedChanged scriva `false` nel legacy INI
+                            // prima che Configuration abbia fatto write_settings.
+                            checked: bridge.getSetting("AcceptUDPRequests", true)
                             onCheckedChanged: bridge.setSetting("AcceptUDPRequests", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }

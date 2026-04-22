@@ -103,8 +103,9 @@ ApplicationWindow {
         console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
-    // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight
-    property int  waterfallPanelHeight: bridge.uiWaterfallHeight > 0 ? bridge.uiWaterfallHeight : 350
+    // Altezza pannello waterfall — caricata da bridge.uiWaterfallHeight.
+    // Default 420px così all'avvio la cascata è già ben aperta (feedback IK8OLM).
+    property int  waterfallPanelHeight: bridge.uiWaterfallHeight > 0 ? bridge.uiWaterfallHeight : 420
 
     // Timer che salva le impostazioni 2s dopo ogni modifica (debounce)
     Timer {
@@ -729,14 +730,17 @@ ApplicationWindow {
     }
 
     // Listen for PSK search results
-    // NOTE: popup auto-open disabilitato su richiesta IK8OLM — feedback:
-    //   "quella finestrina mezza trasparente quando chiami qualcuno si potrebbe evitare"
-    // Riabilitabile impostando uiPskSearchPopupEnabled=true nelle QSettings.
+    // In 1.0.40 searchPskReporter() è passato da stub a query HTTP reale verso
+    // pskreporter.info, quindi il popup è ora l'unico modo per vedere l'esito
+    // della ricerca (ONLINE/OFFLINE + bande cliccabili). Apriamo il popup all'INIZIO
+    // della ricerca così l'utente vede "Searching…" e poi il risultato; il timer
+    // pskPopupTimer (8s) lo chiude da solo se resta aperto troppo a lungo.
+    // Il vecchio gate uiPskSearchPopupEnabled è rimosso: bloccava anche le ricerche
+    // esplicite dall'utente (l'unico caller di searchPskReporter è la barra manuale).
     Connections {
         target: bridge
         function onPskSearchingChanged() {
-            if (!bridge.pskSearching && bridge.pskSearchCallsign !== ""
-                && bridge.getSetting("uiPskSearchPopupEnabled", false)) {
+            if (bridge.pskSearching) {
                 pskSearchPopup.open()
             }
         }
@@ -2742,7 +2746,7 @@ ApplicationWindow {
                 handle: Rectangle {
                     id: splitHandle
                     implicitWidth: 10
-                    implicitHeight: 20
+                    implicitHeight: 10
                     color: SplitHandle.hovered || SplitHandle.pressed ? "#00e6e6" : "#505070"
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -2817,7 +2821,7 @@ ApplicationWindow {
                 Rectangle {
                     id: waterfallPanel
                     SplitView.preferredHeight: waterfallDetached ? 40 : mainWindow.waterfallPanelHeight
-                    SplitView.minimumHeight: waterfallDetached ? 40 : 200
+                    SplitView.minimumHeight: waterfallDetached ? 40 : 260
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                     radius: 8
                     border.color: isDockHighlighted ? secondaryCyan : glassBorder
@@ -3334,6 +3338,17 @@ ApplicationWindow {
                                 radius: 2
                                 color: SplitHandle.hovered || SplitHandle.pressed ? "#00bcd4" : "#909090"
                             }
+
+                            // Marca il divisore come "spostato a mano" non appena l'utente
+                            // inizia a trascinare — disattiva il ri-centramento automatico
+                            // al resize della finestra.
+                            Connections {
+                                target: SplitHandle
+                                function onPressedChanged() {
+                                    if (SplitHandle.pressed && typeof period1Panel !== "undefined")
+                                        period1Panel.userDraggedSplit = true
+                                }
+                            }
                         }
 
                         // ========== LEFT: Band Activity ==========
@@ -3350,12 +3365,28 @@ ApplicationWindow {
                             readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 96 : 132) : 0
                             readonly property int azColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 42 : 52) : 0
                             readonly property int messageMinWidth: compactColumns ? 72 : 140
-                            Component.onCompleted: {
-                                // Dopo il layout, porta il separatore al 50%
-                                Qt.callLater(function() {
-                                    if (parent && parent.width > 0)
-                                        period1Panel.SplitView.preferredWidth = parent.width * 0.5
-                                })
+                            // Divisore Full Spectrum / Signal RX: 50/50 affidabile.
+                            // Se `parent.width==0` al momento del callback (timing race),
+                            // applyCenterSplit() si ri-schedula finché il parent non ha width.
+                            // Il flag userDraggedSplit (settato su onPressedChanged del handle)
+                            // disattiva il ri-centramento se l'utente ha trascinato il separatore.
+                            property bool userDraggedSplit: false
+                            function applyCenterSplit() {
+                                if (userDraggedSplit) return
+                                if (parent && parent.width > 0) {
+                                    period1Panel.SplitView.preferredWidth = parent.width * 0.5
+                                } else {
+                                    Qt.callLater(applyCenterSplit)
+                                }
+                            }
+                            Component.onCompleted: Qt.callLater(applyCenterSplit)
+                            Connections {
+                                target: period1Panel.parent
+                                ignoreUnknownSignals: true
+                                function onWidthChanged() {
+                                    if (!period1Panel.userDraggedSplit)
+                                        period1Panel.applyCenterSplit()
+                                }
                             }
                             color: "transparent"
 

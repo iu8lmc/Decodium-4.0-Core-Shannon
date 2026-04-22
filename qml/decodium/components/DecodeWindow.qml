@@ -66,6 +66,10 @@ Window {
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
     property int decodeListVersion: 0
     property var bandActivityModel: appEngine.decodeList
+    // Signal RX model: property-backed come bandActivityModel — evita il
+    // reset del layout ListView che si verifica con function-call model
+    // (new array reference ad ogni invocazione → contentY azzerato).
+    property var rxDecodeModel: []
 
     Connections {
         target: appEngine
@@ -73,6 +77,7 @@ Window {
             var stickBandTail = bandActivityList ? bandActivityList.isNearTail() : true
             var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
             decodeWindow.bandActivityModel = appEngine.decodeList
+            decodeWindow.rxDecodeModel = currentRxDecodes()
             decodeWindow.decodeListVersion++
             if (stickBandTail && bandActivityList)
                 bandActivityList.forceTailFollow()
@@ -81,10 +86,19 @@ Window {
         }
         function onRxDecodeListChanged() {
             var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+            decodeWindow.rxDecodeModel = currentRxDecodes()
             decodeWindow.decodeListVersion++
             if (stickRxTail && rxFrequencyList)
                 rxFrequencyList.forceTailFollow()
         }
+    }
+
+    // Refresh rxDecodeModel anche quando cambia il filtro Tx2QSO/TXMessagesToRX
+    onShowTxMessagesInRxChanged: {
+        rxDecodeModel = currentRxDecodes()
+    }
+    Component.onCompleted: {
+        rxDecodeModel = currentRxDecodes()
     }
 
     Connections {
@@ -769,31 +783,26 @@ Window {
                             clip: true
                             spacing: 1
                             interactive: true
+                            // Pattern identico a bandActivityList: model property-backed
+                            // (decodeWindow.rxDecodeModel) + followTail/isNearTail/updateFollowTail
+                            // basato su contentY/contentHeight. Così Signal RX si comporta
+                            // esattamente come Full Spectrum.
+                            model: decodeWindow.rxDecodeModel
                             property bool followTail: true
-                            property bool tailFollowPending: false
                             function isNearTail() {
                                 return contentHeight <= height + 2
-                                    || contentY >= Math.max(0, contentHeight - height - 8)
+                                      || contentY >= Math.max(0, contentHeight - height - 8)
                             }
                             function updateFollowTail() {
-                                if (tailFollowPending)
-                                    return
                                 followTail = isNearTail()
                             }
                             function forceTailFollow() {
                                 followTail = true
-                                tailFollowPending = true
                                 Qt.callLater(function() {
                                     if (!rxFrequencyList)
                                         return
                                     rxFrequencyList.positionViewAtEnd()
                                     rxFrequencyList.followTail = true
-                                    Qt.callLater(function() {
-                                        if (!rxFrequencyList)
-                                            return
-                                        rxFrequencyList.tailFollowPending = false
-                                        rxFrequencyList.followTail = rxFrequencyList.isNearTail()
-                                    })
                                 })
                             }
                             Component.onCompleted: Qt.callLater(function() {
@@ -806,18 +815,6 @@ Window {
                                 if (followTail) {
                                     forceTailFollow()
                                 }
-                            }
-                            property int _ver: decodeWindow.decodeListVersion
-                            on_VerChanged: {
-                                if (followTail || isNearTail()) {
-                                    forceTailFollow()
-                                }
-                            }
-
-                            // Filter model to only show messages at RX frequency
-                            model: {
-                                void(_ver)
-                                return currentRxDecodes()
                             }
 
                             ScrollBar.vertical: ScrollBar {

@@ -45,6 +45,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QUrlQuery>
 #include <QStandardPaths>
 #include <QDir>
 #include <QMutex>
@@ -198,6 +199,24 @@ static QString decodeDedupKey(QString const& time,
     return normalizeUtcDisplayToken(time).trimmed()
         + QLatin1Char('|')
         + freq.trimmed()
+        + QLatin1Char('|')
+        + message.trimmed();
+}
+
+// FT2 async turbo (100ms windows): lo stage7 DSP può riportare lo stesso messaggio
+// in scansioni consecutive con freq leggermente diversa (±1-10 Hz di jitter). Quantizza
+// la frequenza in bucket da 20 Hz così gli stessi decode non producono righe duplicate
+// nella decodeList, mantenendo comunque la distinzione tra QSO vicini su bande diverse.
+static QString decodeDedupKeyFt2Async(QString const& time,
+                                      QString const& freq,
+                                      QString const& message)
+{
+    bool ok = false;
+    int const f = freq.trimmed().toInt(&ok);
+    QString const fBucket = ok ? QString::number((f / 20) * 20) : freq.trimmed();
+    return normalizeUtcDisplayToken(time).trimmed()
+        + QLatin1Char('|')
+        + fBucket
         + QLatin1Char('|')
         + message.trimmed();
 }
@@ -5610,15 +5629,119 @@ void DecodiumBridge::sendPskReporterNow()
 void DecodiumBridge::searchPskReporter(const QString& callsign)
 {
     if (m_pskSearching) return;
-    m_pskSearchCallsign = callsign;
+    QString const call = callsign.trimmed().toUpper();
+    if (call.isEmpty()) return;
+
+    m_pskSearchCallsign = call;
     m_pskSearchFound = false;
+    m_pskSearchBands.clear();
     m_pskSearching = true;
     emit pskSearchingChanged();
     emit pskSearchCallsignChanged();
     emit pskSearchFoundChanged();
-    // Stub: simulate search end after 1s
-    QTimer::singleShot(1000, this, [this]() {
+    emit pskSearchBandsChanged();
+
+    // Query reale a PSK Reporter:
+    //   GET https://retrieve.pskreporter.info/query
+    //     ?senderCallsign=XXX       (callsign cercato come trasmittente)
+    //     &flowStartSeconds=-3600   (ultima ora)
+    //     &rptlimit=50              (max 50 spot)
+    //     &rronly=1                 (solo reception reports, XML compatto)
+    // Risposta: XML con elementi <receptionReport frequency="7074000" ... />.
+    // Se almeno uno è presente la stazione è "online" e aggrega le bande.
+    QNetworkAccessManager* nam = new QNetworkAccessManager(this);
+    QUrl url(QStringLiteral("https://retrieve.pskreporter.info/query"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("senderCallsign"), call);
+    q.addQueryItem(QStringLiteral("flowStartSeconds"), QStringLiteral("-3600"));
+    q.addQueryItem(QStringLiteral("rptlimit"), QStringLiteral("50"));
+    q.addQueryItem(QStringLiteral("rronly"), QStringLiteral("1"));
+    url.setQuery(q);
+    QNetworkRequest req(url);
+    req.setRawHeader("User-Agent", "Decodium/4.0 (+pskreporter search)");
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply* reply = nam->get(req);
+
+    // Timeout hard: 10s. Qt 5.15+ ha transferTimeout ma teniamolo esplicito.
+    QTimer* timeout = new QTimer(this);
+    timeout->setSingleShot(true);
+    timeout->setInterval(10000);
+    connect(timeout, &QTimer::timeout, reply, [reply]() {
+        if (reply && reply->isRunning()) reply->abort();
+    });
+    connect(reply, &QNetworkReply::finished, timeout, &QTimer::deleteLater);
+    timeout->start();
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
+        QByteArray const data = reply->readAll();
+        QNetworkReply::NetworkError const err = reply->error();
+        QString const errStr = reply->errorString();
+        reply->deleteLater();
+        nam->deleteLater();
+
+        bool found = false;
+        QSet<QString> bandSet;
+
+        if (err == QNetworkReply::NoError) {
+            QString const xml = QString::fromUtf8(data);
+            // Parsing via regex: XML di PSK Reporter è deterministico,
+            // ogni spot è <receptionReport ... frequency="12345678" ... />
+            QRegularExpression re(QStringLiteral("<receptionReport\\b[^>]*\\bfrequency=\"([0-9]+)\""));
+            auto it = re.globalMatch(xml);
+            while (it.hasNext()) {
+                auto m = it.next();
+                bool ok = false;
+                qint64 const freqHz = m.captured(1).toLongLong(&ok);
+                if (!ok) continue;
+                found = true;
+                double const mhz = freqHz / 1000000.0;
+                QString band;
+                if (mhz < 2.0)        band = QStringLiteral("160m");
+                else if (mhz < 4.5)   band = QStringLiteral("80m");
+                else if (mhz < 5.8)   band = QStringLiteral("60m");
+                else if (mhz < 8.0)   band = QStringLiteral("40m");
+                else if (mhz < 11.0)  band = QStringLiteral("30m");
+                else if (mhz < 15.0)  band = QStringLiteral("20m");
+                else if (mhz < 19.0)  band = QStringLiteral("17m");
+                else if (mhz < 22.0)  band = QStringLiteral("15m");
+                else if (mhz < 26.0)  band = QStringLiteral("12m");
+                else if (mhz < 30.0)  band = QStringLiteral("10m");
+                else if (mhz < 55.0)  band = QStringLiteral("6m");
+                else if (mhz < 150.0) band = QStringLiteral("2m");
+                else                  band = QString::number(mhz, 'f', 1) + QStringLiteral("MHz");
+                bandSet.insert(band);
+            }
+            bridgeLog(QStringLiteral("PSK Reporter search '%1': found=%2 bands=%3")
+                          .arg(m_pskSearchCallsign)
+                          .arg(found ? "YES" : "NO")
+                          .arg(bandSet.size()));
+        } else {
+            bridgeLog(QStringLiteral("PSK Reporter search '%1': network error: %2")
+                          .arg(m_pskSearchCallsign, errStr));
+        }
+
+        // Ordina bande per frequenza crescente (160m → 2m)
+        static const QStringList bandOrder {
+            QStringLiteral("160m"), QStringLiteral("80m"), QStringLiteral("60m"),
+            QStringLiteral("40m"),  QStringLiteral("30m"), QStringLiteral("20m"),
+            QStringLiteral("17m"),  QStringLiteral("15m"), QStringLiteral("12m"),
+            QStringLiteral("10m"),  QStringLiteral("6m"),  QStringLiteral("2m")
+        };
+        QStringList bands;
+        for (const QString& b : bandOrder) {
+            if (bandSet.contains(b)) bands.append(b);
+        }
+        // Eventuali bande VHF/UHF non nella lista conosciuta
+        for (const QString& b : std::as_const(bandSet)) {
+            if (!bands.contains(b)) bands.append(b);
+        }
+
+        m_pskSearchFound = found;
+        m_pskSearchBands = bands;
         m_pskSearching = false;
+        emit pskSearchFoundChanged();
+        emit pskSearchBandsChanged();
         emit pskSearchingChanged();
     });
 }
@@ -8338,6 +8461,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
     }
 
     // Costruisci set dei decode già presenti in questa sessione di monitor.
+    // Usa la chiave quantizzata per FT2 async: lo stage7 DSP ri-emette lo stesso
+    // messaggio ogni 100ms con piccolo jitter di freq; con quantizzazione a 20Hz
+    // il primo decode vince e gli successivi vengono scartati come duplicati.
     QSet<QString> existing;
     for (const auto& v : m_decodeList) {
         QVariantMap const prev = v.toMap();
@@ -8347,9 +8473,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         if (prev.value("decodeSessionId").toULongLong() != m_decodeSessionId) {
             continue;
         }
-        QString const key = decodeDedupKey(prev.value("time").toString(),
-                                           prev.value("freq").toString(),
-                                           prev.value("message").toString());
+        QString const key = decodeDedupKeyFt2Async(prev.value("time").toString(),
+                                                   prev.value("freq").toString(),
+                                                   prev.value("message").toString());
         if (!key.isEmpty()) {
             existing.insert(key);
         }
@@ -8404,9 +8530,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
             continue;
         }
 
-        QString const dedupKey = decodeDedupKey(entry.value("time").toString(),
-                                                entry.value("freq").toString(),
-                                                msg);
+        QString const dedupKey = decodeDedupKeyFt2Async(entry.value("time").toString(),
+                                                        entry.value("freq").toString(),
+                                                        msg);
         if (existing.contains(dedupKey)) {
             ++duplicatesSkipped;
             continue;
