@@ -7510,14 +7510,22 @@ int DecodiumBridge::effectiveDecodeDepth() const
     if ((m_avgDecodeEnabled || m_deepSearchEnabled) && depth < 4) {
         depth = 4;
     }
+    qDebug() << "[DEPTHDBG] effectiveDecodeDepth: m_ndepth=" << m_ndepth
+             << " avg=" << m_avgDecodeEnabled
+             << " deep=" << m_deepSearchEnabled
+             << " -> depth=" << depth;
     return depth;
 }
 
 int DecodiumBridge::legacyCompatibleDecodeDepthBits() const
 {
-    return modernDepthToLegacyBits(effectiveDecodeDepth(),
-                                   m_avgDecodeEnabled,
-                                   m_deepSearchEnabled);
+    int const eff = effectiveDecodeDepth();
+    int const bits = modernDepthToLegacyBits(eff, m_avgDecodeEnabled, m_deepSearchEnabled);
+    qDebug() << "[DEPTHDBG] legacyCompatibleDecodeDepthBits: eff=" << eff
+             << " avg=" << m_avgDecodeEnabled
+             << " deep=" << m_deepSearchEnabled
+             << " -> bits=" << bits << "(0x" << QString::number(bits, 16) << ")";
+    return bits;
 }
 
 int DecodiumBridge::legacyDecodeQsoProgress() const

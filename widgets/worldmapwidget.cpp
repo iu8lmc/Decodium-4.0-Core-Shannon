@@ -336,6 +336,21 @@ void WorldMapWidget::setTransmitState(bool transmitting, QString const& targetCa
   update();
 }
 
+void WorldMapWidget::clearContacts()
+{
+  if (m_contacts.isEmpty())
+    {
+      return;
+    }
+
+  m_contacts.clear();
+  m_postTxQueueUntilMs = 0;
+  m_lastClickedCall.clear();
+  m_lastClickedUntilMs = 0;
+  updateViewportTargets();
+  update();
+}
+
 void WorldMapWidget::downgradeContactToBand(QString const& call)
 {
   auto normalizedCall = call.trimmed().toUpper();

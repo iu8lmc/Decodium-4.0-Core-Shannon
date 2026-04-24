@@ -16,6 +16,17 @@ Item {
     signal decodeSelected(int index)
     signal decodeDoubleClicked(int index)
 
+    function messageElideMode(message) {
+        var myCall = String((bridge && bridge.callsign) || "").trim().toUpperCase()
+        if (!myCall.length)
+            return Text.ElideRight
+
+        var normalized = " " + String(message || "").toUpperCase().replace(/[<>;,]/g, " ") + " "
+        return normalized.indexOf(" " + myCall + " ") >= 0
+            ? Text.ElideMiddle
+            : Text.ElideRight
+    }
+
     ListView {
         id: listView
         anchors.fill: parent
@@ -127,7 +138,7 @@ Item {
                     font.strikeout: modelData.isB4 !== undefined && modelData.isB4 && bridge.showB4Strikethrough
                     opacity: modelData.isB4 !== undefined && modelData.isB4 ? 0.55 : 1.0
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
+                    elide: decodeListComponent.messageElideMode(modelData.message)
                 }
             }
         }

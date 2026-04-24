@@ -545,7 +545,7 @@ Window {
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
                                         Layout.minimumWidth: decodeWindow.bandMessageMinWidth
-                                        elide: Text.ElideRight
+                                        elide: decodeWindow.messageElideMode(modelData.message)
                                     }
 
                                     Item {
@@ -863,7 +863,7 @@ Window {
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
-                                        elide: Text.ElideRight
+                                        elide: decodeWindow.messageElideMode(modelData.message)
                                     }
 
                                     // Distanza
@@ -984,5 +984,16 @@ Window {
         var gridRegex = /\b([A-R]{2}[0-9]{2})\b/i
         var match = message.match(gridRegex)
         return match ? match[1].toUpperCase() : ""
+    }
+
+    function messageElideMode(message) {
+        var myCall = String((appEngine && appEngine.callsign) || (bridge && bridge.callsign) || "").trim().toUpperCase()
+        if (!myCall.length)
+            return Text.ElideRight
+
+        var normalized = " " + String(message || "").toUpperCase().replace(/[<>;,]/g, " ") + " "
+        return normalized.indexOf(" " + myCall + " ") >= 0
+            ? Text.ElideMiddle
+            : Text.ElideRight
     }
 }

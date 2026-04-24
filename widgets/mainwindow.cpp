@@ -11109,6 +11109,10 @@ void MainWindow::decode()                                       //decode()
     dec_data.params.ndelay=m_delay;
     dec_data.params.nfqso=m_wideGraph->rxFreq();
     dec_data.params.ndepth=m_ndepth;
+    qDebug() << "[DEPTHDBG] FT8-MT set: m_ndepth=" << m_ndepth
+             << " ndepth=" << dec_data.params.ndepth
+             << " ihsym=" << m_ihsym
+             << " early=" << m_earlyDecode << " early2=" << m_earlyDecode2;
     dec_data.params.nranera=m_config.ntrials();
     dec_data.params.lmultift8=m_multithreadFT8; //ft8md
     dec_data.params.ntrials10=0; //ft8md was =m_config.ntrials10();
@@ -11122,6 +11126,7 @@ void MainWindow::decode()                                       //decode()
     if (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2 or (m_specOp==SpecOp::HOUND && m_config.superFox())) {
       dec_data.params.lmultift8 = false; // use the standard FT8 decoder for early decoding step
       if (m_ihsym==m_earlyDecode2) dec_data.params.ndepth=2;
+      qDebug() << "[DEPTHDBG] FT8-MT EARLY override: lmultift8=false ndepth=" << dec_data.params.ndepth;
     }
     dec_data.params.ndiskdat=0;
     if(m_diskData) dec_data.params.ndiskdat=1;
