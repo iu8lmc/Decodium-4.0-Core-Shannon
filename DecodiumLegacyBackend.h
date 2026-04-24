@@ -98,7 +98,9 @@ Q_SIGNALS:
                            int rxFrequencyHz,
                            int txFrequencyHz,
                            QString const& mode) const;
+    void audioSamplesReady(QByteArray const& pcmSamples) const;
     void preferencesRequested() const;
+    void quitRequested() const;
     void warningRaised(QString const& title,
                        QString const& summary,
                        QString const& details) const;

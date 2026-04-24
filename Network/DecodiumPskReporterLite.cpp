@@ -44,7 +44,7 @@ void DecodiumPskReporterLite::setLocalStation(const QString& callsign,
     m_myCall      = callsign.trimmed().toUpper();
     m_myGrid      = grid.trimmed().toUpper();
     m_programInfo = programInfo.isEmpty()
-                        ? QStringLiteral("Decodium/3.0")
+                        ? QStringLiteral("Decodium4")
                         : programInfo;
 }
 
@@ -92,6 +92,7 @@ void DecodiumPskReporterLite::sendReport(bool last)
     QNetworkRequest request{QUrl{QString::fromLatin1(PSK_REPORTER_URL)}};
     request.setHeader(QNetworkRequest::ContentTypeHeader,
                       QByteArrayLiteral("application/xml"));
+    request.setRawHeader("User-Agent", m_programInfo.toUtf8());
 
     m_nam->post(request, payload);
     // Reply is handled asynchronously in onReplyFinished().

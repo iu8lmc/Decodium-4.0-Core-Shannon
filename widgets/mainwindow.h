@@ -686,6 +686,7 @@ private slots:
   void onRemoteSelectCallerDue(QString const& commandId, QString const& call, QString const& grid);
   void onRemoteSetModeRequested(QString const& commandId, QString const& mode);
   void onRemoteSetBandRequested(QString const& commandId, QString const& band);
+  void onRemoteSetDialFrequencyRequested(QString const& commandId, qint64 dialFrequencyHz);
   void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
   void onRemoteSetTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
   void onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled);
@@ -741,6 +742,7 @@ private:
                                          int rxFrequencyHz,
                                          int txFrequencyHz,
                                          QString const& mode) const;
+  Q_SIGNAL void legacyAudioSamplesReady (QByteArray const& pcmSamples) const;
   Q_SIGNAL void legacyWarningRaised (QString const& title,
                                      QString const& summary,
                                      QString const& details) const;
@@ -833,6 +835,9 @@ private:
   double m_rttyTciFramesPerSymbol {0.0};
   bool m_rttyManualTxActive {false};
   Transceiver::TransceiverState m_rigState;
+  Frequency m_remoteDialFrequencyTarget {0};
+  qint64 m_remoteDialFrequencyGuardUntilMs {0};
+  qint64 m_lastRemoteDialFrequencyRetryMs {0};
   Frequency  m_lastDialFreq;
   QString m_lastBand;
   QString m_lastCallsign;

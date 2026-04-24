@@ -22,10 +22,10 @@ public:
     ~DecodiumPskReporterLite() override;
 
     // Configure the local (receiving) station identity.
-    // programInfo defaults to "Decodium/3.0".
+    // programInfo is sent as the PSK Reporter decoder software name/version.
     void setLocalStation(const QString& callsign,
                          const QString& grid,
-                         const QString& programInfo = QStringLiteral("Decodium/3.0"));
+                         const QString& programInfo = QStringLiteral("Decodium4"));
 
     // Buffer a received-station spot. Does not transmit immediately.
     // call    – callsign of the decoded station
@@ -81,7 +81,7 @@ private:
 
     QString m_myCall;
     QString m_myGrid;
-    QString m_programInfo{QStringLiteral("Decodium/3.0")};
+    QString m_programInfo{QStringLiteral("Decodium4")};
 
     bool m_enabled    {false};
     bool m_lastSendOk {false};

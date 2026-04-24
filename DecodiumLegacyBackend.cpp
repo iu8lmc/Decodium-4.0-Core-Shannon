@@ -533,6 +533,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                 this,
                 SIGNAL(waterfallRowReady(QByteArray const&,int,int,int,int,QString const&)));
         connect(m_mainWindow,
+                SIGNAL(legacyAudioSamplesReady(QByteArray const&)),
+                this,
+                SIGNAL(audioSamplesReady(QByteArray const&)));
+        connect(m_mainWindow,
                 SIGNAL(legacyWarningRaised(QString const&,QString const&,QString const&)),
                 this,
                 SIGNAL(warningRaised(QString const&,QString const&,QString const&)));
@@ -544,6 +548,10 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
                 SIGNAL(legacyPreferencesRequested()),
                 this,
                 SIGNAL(preferencesRequested()));
+        connect(m_mainWindow,
+                SIGNAL(legacyQuitRequested()),
+                this,
+                SIGNAL(quitRequested()));
         connect(m_mainWindow,
                 SIGNAL(legacyPttRequested(bool)),
                 this,

@@ -125,10 +125,11 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
 {
   // qDebug () << "mode:" << mode << "symbolsLength:" << symbolsLength << "framesPerSymbol:" << framesPerSymbol << "frequency:" << frequency << "toneSpacing:" << toneSpacing << "channel:" << channel << "synchronize:" << synchronize << "fastMode:" << fastMode << "dBSNR:" << dBSNR << "TRperiod:" << TRperiod;
   Q_ASSERT (stream);
-  // FT2 stability guard: keep encoder/modulator contract fixed even if
+  // Precomputed waveform guard: keep encoder/modulator contract fixed even if
   // a stale/incorrect queued start slips through.
-  bool const ft2_precomputed_wave = (mode == "FT2" && !m_tuning && toneSpacing < 0.0);
-  bool const ft4_precomputed_wave = (mode == "FT4" && !m_tuning && toneSpacing < 0.0);
+  bool const precomputed_wave = (!m_tuning && toneSpacing < 0.0);
+  bool const ft2_precomputed_wave = (mode == "FT2" && precomputed_wave);
+  bool const ft4_precomputed_wave = (mode == "FT4" && precomputed_wave);
   m_modeName = mode;
   m_ft2PrecomputedWave = ft2_precomputed_wave;
   m_ft4PrecomputedWave = ft4_precomputed_wave;
@@ -249,12 +250,10 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
 
           // adjust for late starts (only when synchronized to period)
           //
-          // FT2 is unusually sensitive here because its precomputed waveform is
-          // much shorter than the slot length. If we skip deep into the wave to
-          // "catch up", the radio can key with little or no payload audio left.
-          // Keep the nominal early-start alignment, but when FT2 starts late,
-          // transmit the full waveform from sample 0 instead of trimming it away.
-          if(!m_silentFrames && mstr >= delay_ms && !ft2_precomputed_wave && !ft4_precomputed_wave)
+          // Precomputed waveforms already contain the complete payload. If a
+          // queued TX starts late, do not trim into that payload to "catch up":
+          // doing so can leave only a fraction of the final FT8/FT4/FT2 message.
+          if(!m_silentFrames && mstr >= delay_ms && !precomputed_wave)
             {
               m_ic = (mstr - delay_ms) * m_frameRate / 1000;
             }

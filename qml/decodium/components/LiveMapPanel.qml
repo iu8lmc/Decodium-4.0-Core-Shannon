@@ -8,6 +8,9 @@ Rectangle {
     required property var engine
 
     color: "transparent"
+    property bool detachable: false
+    property bool detached: false
+    signal detachRequested()
 
     property color bgDeep: engine ? engine.themeManager.bgDeep : "#0b1220"
     property color primaryBlue: engine ? engine.themeManager.primaryColor : "#3f7cff"
@@ -90,6 +93,36 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
+
+                Rectangle {
+                    visible: root.detachable
+                    Layout.preferredWidth: root.detached ? 42 : 34
+                    Layout.preferredHeight: 18
+                    radius: 4
+                    color: liveMapDetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25) : "transparent"
+                    border.color: liveMapDetachMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.detached ? "Dock" : "Pop"
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: liveMapDetachMA.containsMouse ? secondaryCyan : textSecondary
+                    }
+
+                    MouseArea {
+                        id: liveMapDetachMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.detachRequested()
+                    }
+
+                    ToolTip.visible: liveMapDetachMA.containsMouse
+                    ToolTip.text: root.detached ? "Riaggancia Live Map" : "Stacca Live Map"
+                    ToolTip.delay: 500
+                }
 
                 Text {
                     text: engine && engine.grid ? engine.grid : ""

@@ -9,6 +9,7 @@
 #include <QMediaDevices>
 #include <QSysInfo>
 #include <QDebug>
+#include <QTimer>
 
 #include "Logger.hpp"
 
@@ -79,17 +80,18 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   format.setSampleRate (12000 * downSampleFactor);
   format.setSampleFormat (QAudioFormat::Int16);
 
-  // Se il device preferisce stereo, usiamo stereo anche se è stato richiesto mono.
-  // WASAPI su Windows spesso non funziona in mono su dispositivi USB audio.
-  {
-    QAudioFormat preferred = device.preferredFormat();
-    if (preferred.channelCount() > 1 && format.channelCount() == 1) {
-        format.setChannelCount(preferred.channelCount());
-        // Con stereo bisogna usare Left (non Mono) altrimenti bytesPerFrame()=2
-        // e store() leggerebbe male i frame stereo da 4 byte.
-        channel = AudioDevice::Left;
+  if (channel == AudioDevice::Mono)
+    {
+      QAudioFormat stereoFormat {format};
+      stereoFormat.setChannelCount (2);
+      if (device.isFormatSupported (stereoFormat))
+        {
+          // Capture stereo and let AudioDevice select the requested hardware
+          // channel. This avoids Qt/OS mono downmixing.
+          format = stereoFormat;
+          qDebug() << "SoundInput: using stereo capture for mono input selection";
+        }
     }
-  }
 
   if (m_stream
       && m_stream->state () == QAudio::ActiveState
@@ -131,6 +133,7 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   m_sampleRate = format.sampleRate();
   m_channelCount = format.channelCount();
   m_channelSelector = static_cast<int>(channel);
+  m_expectedSuspend_ = false;
   m_haveReportedState_ = false;
   m_lastStatusMessage.clear ();
 
@@ -141,7 +144,7 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
     {
       m_stream->setBufferSize (m_stream->format ().bytesForFrames (framesPerBuffer));
     }
-  if (m_sink->initialize (QIODevice::WriteOnly, channel))
+  if (m_sink->initialize (QIODevice::WriteOnly, channel, format.channelCount ()))
     {
       m_stream->start (sink);
       checkStream ();
@@ -157,7 +160,12 @@ void SoundInput::suspend ()
 {
   if (m_stream)
     {
-      m_stream->stop();
+      if (m_stream->state () == QAudio::ActiveState
+          || m_stream->state () == QAudio::IdleState)
+        {
+          m_expectedSuspend_ = true;
+          m_stream->suspend ();
+        }
       checkStream ();
     }
 }
@@ -176,7 +184,15 @@ void SoundInput::resume ()
           cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
           return;
         }
-      m_stream->start (m_sink);
+      if (m_stream->state () == QAudio::SuspendedState)
+        {
+          m_stream->resume ();
+        }
+      else if (m_stream->state () == QAudio::StoppedState)
+        {
+          m_stream->start (m_sink);
+        }
+      m_expectedSuspend_ = false;
       checkStream ();
       cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
     }
@@ -184,6 +200,12 @@ void SoundInput::resume ()
 
 void SoundInput::handleStateChanged (QAudio::State newState)
 {
+  auto *stream = qobject_cast<QAudioSource *> (sender ());
+  if (stream && stream != m_stream.data ())
+    {
+      return;
+    }
+
   QAudio::Error const streamError = m_stream ? m_stream->error () : QAudio::NoError;
   qDebug() << "SoundInput: handleStateChanged state=" << (int)newState
            << (m_stream ? " err=" + QString::number((int)streamError) : " no_stream");
@@ -208,7 +230,7 @@ void SoundInput::handleStateChanged (QAudio::State newState)
       break;
 
     case QAudio::SuspendedState:
-      emitStatusIfChanged (tr ("Suspended"), newState);
+      emitStatusIfChanged (m_expectedSuspend_ ? tr ("Receiving") : tr ("Suspended"), newState);
       break;
 
     case QAudio::StoppedState:
@@ -222,6 +244,30 @@ void SoundInput::handleStateChanged (QAudio::State newState)
         }
       break;
     }
+}
+
+void SoundInput::retireCurrentStream ()
+{
+  auto *stream = m_stream.take ();
+  if (!stream)
+    {
+      return;
+    }
+
+  QObject::disconnect (stream, nullptr, this, nullptr);
+  if (stream->state () != QAudio::StoppedState)
+    {
+      stream->stop ();
+    }
+
+#if defined(Q_OS_MACOS)
+  // QtMultimedia/CoreAudio can still have queued disconnect-listener work after
+  // stop(). Keep the QAudioSource alive briefly so those callbacks cannot outlive
+  // the object they belong to.
+  QTimer::singleShot (1500, stream, &QObject::deleteLater);
+#else
+  stream->deleteLater ();
+#endif
 }
 
 void SoundInput::reset (bool report_dropped_frames)
@@ -268,15 +314,12 @@ void SoundInput::reset (bool report_dropped_frames)
 
 void SoundInput::stop()
 {
-  if (m_stream)
-    {
-      m_stream->stop ();
-    }
-  m_stream.reset ();
+  retireCurrentStream ();
   m_deviceDescription.clear ();
   m_sampleRate = 0;
   m_channelCount = 0;
   m_channelSelector = static_cast<int>(AudioDevice::Mono);
+  m_expectedSuspend_ = false;
   m_lastStatusMessage.clear ();
   m_lastReportedState = QAudio::StoppedState;
   m_haveReportedState_ = false;

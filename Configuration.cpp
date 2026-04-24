@@ -1201,7 +1201,7 @@ void Configuration::set_audio_output_device (QString const& device_name)
 
 void Configuration::set_audio_input_channel (AudioDevice::Channel channel)
 {
-  if (channel > AudioDevice::Right)
+  if (channel > AudioDevice::Both)
     {
       channel = AudioDevice::Mono;
     }
@@ -4401,7 +4401,7 @@ void Configuration::impl::accept ()
     {
       next_audio_input_channel_ = static_cast<AudioDevice::Channel> (ui_->sound_input_channel_combo_box->currentIndex ());
     }
-  Q_ASSERT (next_audio_input_channel_ <= AudioDevice::Right);
+  Q_ASSERT (next_audio_input_channel_ <= AudioDevice::Both);
 
   if (next_audio_output_channel_ != static_cast<AudioDevice::Channel> (ui_->sound_output_channel_combo_box->currentIndex ()))
     {

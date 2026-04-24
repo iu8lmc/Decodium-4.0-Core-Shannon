@@ -1282,7 +1282,8 @@ void HamlibTransceiver::do_poll ()
       {
         m_->error_check (rc, tr ("getting PTT state"));
         CAT_TRACE ("rig_get_ptt PTT=" << p);
-        update_PTT (!(RIG_PTT_OFF == p));
+        ptt_on_ = !(RIG_PTT_OFF == p);
+        update_PTT (ptt_on_);
      }
    }
 

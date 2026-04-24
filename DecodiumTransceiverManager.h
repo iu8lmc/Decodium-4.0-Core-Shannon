@@ -49,6 +49,8 @@ class DecodiumTransceiverManager : public QObject
     Q_PROPERTY(QString mode        READ mode        NOTIFY modeChanged)
     Q_PROPERTY(bool    pttActive   READ pttActive   NOTIFY pttActiveChanged)
     Q_PROPERTY(bool    split       READ split       NOTIFY splitChanged)
+    Q_PROPERTY(double  powerWatts  READ powerWatts  NOTIFY powerWattsChanged)
+    Q_PROPERTY(double  swr         READ swr         NOTIFY swrChanged)
 
     // ── Liste per UI ──────────────────────────────────────────────────────
     Q_PROPERTY(QStringList rigList  READ rigList  NOTIFY rigListChanged)
@@ -90,6 +92,8 @@ public:
     QString mode()         const { return m_mode; }
     bool    pttActive()    const { return m_pttActive; }
     bool    split()        const { return m_split; }
+    double  powerWatts()   const { return m_powerWatts; }
+    double  swr()          const { return m_swr; }
 
     QStringList rigList()       const;
     QStringList portList()      const { return m_portList; }
@@ -102,11 +106,11 @@ public:
 
     // ── Scrittura proprietà ───────────────────────────────────────────────
     void setRigName(const QString&);
-    void setSerialPort(const QString& v)  { if (m_serialPort != v) { m_serialPort = v; emit serialPortChanged(); } }
+    void setSerialPort(const QString& v);
     void setBaudRate(int v)               { if (m_baudRate != v)   { m_baudRate = v;   emit baudRateChanged(); } }
     void setDataBits(const QString& v)    { if (m_dataBits != v)   { m_dataBits = v;   emit dataBitsChanged(); } }
     void setStopBits(const QString& v)    { if (m_stopBits != v)   { m_stopBits = v;   emit stopBitsChanged(); } }
-    void setHandshake(const QString& v)   { if (m_handshake != v)  { m_handshake = v;  emit handshakeChanged(); } }
+    void setHandshake(const QString& v);
     void setForceDtr(bool v);
     void setDtrHigh(bool v);
     void setForceRts(bool v);
@@ -114,7 +118,7 @@ public:
     void setNetworkPort(const QString& v) { if (m_networkPort != v){ m_networkPort = v; emit networkPortChanged(); } }
     void setTciPort(const QString& v)     { if (m_tciPort != v)    { m_tciPort = v;    emit tciPortChanged(); } }
     void setPttMethod(const QString& v);
-    void setPttPort(const QString& v)     { if (m_pttPort != v)    { m_pttPort = v;    emit pttPortChanged(); } }
+    void setPttPort(const QString& v);
     void setSplitMode(const QString& v)   { if (m_splitMode != v)  { m_splitMode = v;  emit splitModeChanged(); } }
     void setPollInterval(int v)           { if (m_pollInterval != v){ m_pollInterval = v; emit pollIntervalChanged(); } }
     void setCatAutoConnect(bool v)        { if (m_catAutoConnect != v){ m_catAutoConnect = v; emit catAutoConnectChanged(); } }
@@ -163,6 +167,8 @@ signals:
     void modeChanged();
     void pttActiveChanged();
     void splitChanged();
+    void powerWattsChanged();
+    void swrChanged();
     void catAutoConnectChanged();
     void audioAutoStartChanged();
     void errorOccurred(const QString& msg);
@@ -170,7 +176,11 @@ signals:
 
 
 private:
-    void enforceCatSerialDefaults();
+    void enforceForceLineAvailability();
+    void updateTelemetry(double powerWatts, double swr);
+    bool pttSharesCatPort() const;
+    bool forceDtrAvailable() const;
+    bool forceRtsAvailable() const;
     std::unique_ptr<DecodiumTransceiverManagerPrivate> d;
 
     bool    m_connected    {false};
@@ -197,6 +207,8 @@ private:
     QString m_mode;
     bool    m_pttActive    {false};
     bool    m_split        {false};
+    double  m_powerWatts   {0.0};
+    double  m_swr          {0.0};
 
     QStringList m_portList;
     bool    m_catAutoConnect {false};

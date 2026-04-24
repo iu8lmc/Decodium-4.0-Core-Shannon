@@ -11,7 +11,7 @@
 #include "Audio/AudioDevice.hpp"
 
 // DecodiumAudioSink: AudioDevice subclass that appends 16-bit PCM mono
-// samples into DecodiumBridge's m_audioBuffer and emits RMS audio levels.
+// samples into DecodiumBridge's m_audioBuffer and emits audio health metrics.
 //
 // downSampleFactor: campioni da scartare per ogni campione tenuto.
 // Es. dsf=4: QAudioSource cattura a 48000 Hz, sink scrive a 12000 Hz.
@@ -58,6 +58,10 @@ public:
         // non è thread-safe per scritture concorrenti.
         int prevSize = 0;
         int newSamples = 0;
+        double rms = 0.0;
+        double peak = 0.0;
+        int dynamicRange = 0;
+        int clippedSamples = 0;
         {
             QMutexLocker locker(m_bufferMutex);
             prevSize = m_buffer.size();
@@ -70,18 +74,34 @@ public:
                 m_dsfCounter = (m_dsfCounter + 1) % m_dsf;
             }
             newSamples = m_buffer.size() - prevSize;
-            // RMS calcolato dentro al lock perché legge constData() del buffer
-            // appena modificato; l'emit del segnale è fuori dal lock.
+            // Metriche calcolate dentro al lock perche leggono constData() del
+            // buffer appena modificato; gli emit dei segnali sono fuori dal lock.
             if (newSamples > 0) {
                 double sumSq = 0.0;
                 const short* s = m_buffer.constData() + prevSize;
-                for (int i = 0; i < newSamples; ++i) { double v = s[i]; sumSq += v*v; }
-                m_lastRms = std::sqrt(sumSq / newSamples) / 32768.0;
+                int minSample = 32767;
+                int maxSample = -32768;
+                int peakAbs = 0;
+                for (int i = 0; i < newSamples; ++i) {
+                    const int sample = s[i];
+                    const int absSample = sample < 0 ? -sample : sample;
+                    const double v = sample;
+                    sumSq += v * v;
+                    if (sample < minSample) minSample = sample;
+                    if (sample > maxSample) maxSample = sample;
+                    if (absSample > peakAbs) peakAbs = absSample;
+                    if (absSample >= 32700) ++clippedSamples;
+                }
+                rms = std::sqrt(sumSq / newSamples) / 32768.0;
+                peak = static_cast<double>(peakAbs) / 32768.0;
+                dynamicRange = maxSample - minSample;
+                m_lastRms = rms;
             }
         }
 
         if (newSamples > 0) {
             emit audioLevelChanged(m_lastRms);
+            emit audioHealthChanged(rms, peak, dynamicRange, clippedSamples, newSamples);
         }
 
         return maxSize;
@@ -89,6 +109,7 @@ public:
 
 signals:
     void audioLevelChanged(double level);
+    void audioHealthChanged(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
 
 private:
     QVector<short>& m_buffer;

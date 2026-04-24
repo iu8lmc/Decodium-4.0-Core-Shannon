@@ -40,8 +40,8 @@ namespace
 //      case Transceiver::CW_R: return "CW-R";
       case Transceiver::USB: return "usb";
       case Transceiver::LSB: return "lsb";
-//      case Transceiver::FSK: return "RTTY";
-//      case Transceiver::FSK_R: return "RTTY-R";
+      case Transceiver::FSK: return "fsk";
+      case Transceiver::FSK_R: return "fsk-r";
       case Transceiver::DIG_L: return "digl";
       case Transceiver::DIG_U: return "digu";
       case Transceiver::FM: return "wfm";
@@ -296,7 +296,7 @@ namespace
       }
     if (url.port () == -1)
       {
-        url.setPort (url.scheme ().toLower () == "wss" ? 443 : 40001);
+        url.setPort (url.scheme ().toLower () == "wss" ? 443 : 50001);
       }
     return url;
   }
@@ -1632,6 +1632,15 @@ auto TCITransceiver::get_mode (bool requested) -> MODE
     {
       m = USB;
     }
+    else if ("fsk" == requested_mode_ || "rtty" == requested_mode_)
+    {
+      m = FSK;
+    }
+    else if ("fsk-r" == requested_mode_ || "fskr" == requested_mode_
+             || "rtty-r" == requested_mode_ || "rttyr" == requested_mode_)
+    {
+      m = FSK_R;
+    }
     else if ("digl" == requested_mode_)
     {
       m = DIG_L;
@@ -1664,6 +1673,15 @@ auto TCITransceiver::get_mode (bool requested) -> MODE
     else if ("usb" == mode_)
     {
       m = USB;
+    }
+    else if ("fsk" == mode_ || "rtty" == mode_)
+    {
+      m = FSK;
+    }
+    else if ("fsk-r" == mode_ || "fskr" == mode_
+             || "rtty-r" == mode_ || "rttyr" == mode_)
+    {
+      m = FSK_R;
     }
     else if ("digl" == mode_)
     {

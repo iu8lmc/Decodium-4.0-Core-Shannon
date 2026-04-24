@@ -51,7 +51,7 @@ public:
     QString     rigName()       const { return m_rigName; }
     void        setRigName(const QString& v);
     QString     serialPort()    const { return m_serialPort; }
-    void        setSerialPort(const QString& v)  { if (m_serialPort != v)  { m_serialPort = v;  emit serialPortChanged(); } }
+    void        setSerialPort(const QString& v);
     int         baudRate()      const { return m_baudRate; }
     void        setBaudRate(int v)               { if (m_baudRate != v)    { m_baudRate = v;    emit baudRateChanged(); } }
     QString     dataBits()      const { return m_dataBits; }
@@ -59,7 +59,7 @@ public:
     QString     stopBits()      const { return m_stopBits; }
     void        setStopBits(const QString& v)    { if (m_stopBits != v)    { m_stopBits = v;    emit stopBitsChanged(); } }
     QString     handshake()     const { return m_handshake; }
-    void        setHandshake(const QString& v)   { if (m_handshake != v)   { m_handshake = v;   emit handshakeChanged(); } }
+    void        setHandshake(const QString& v);
     bool        forceDtr()      const { return m_forceDtr; }
     void        setForceDtr(bool v);
     bool        dtrHigh()       const { return m_dtrHigh; }
@@ -75,7 +75,7 @@ public:
     QString     pttMethod()     const { return m_pttMethod; }
     void        setPttMethod(const QString& v);
     QString     pttPort()       const { return m_pttPort; }
-    void        setPttPort(const QString& v)     { if (m_pttPort != v)     { m_pttPort = v;     emit pttPortChanged(); } }
+    void        setPttPort(const QString& v);
     int         civAddress()    const { return m_civAddress; }
     void        setCivAddress(int v)             { if (m_civAddress != v)  { m_civAddress = v;  emit civAddressChanged(); } }
     QString     splitMode()     const { return "none"; }
@@ -151,7 +151,10 @@ private slots:
     void onConnectTimeout();
 
 private:
-    void enforceCatSerialDefaults();
+    void enforceForceLineAvailability();
+    bool pttSharesCatPort() const;
+    bool forceDtrAvailable() const;
+    bool forceRtsAvailable() const;
     void applyRigDefaults(const QString& rigName);
     void sendCommand(const QByteArray& cmd);
     void processResponse(const QByteArray& resp);

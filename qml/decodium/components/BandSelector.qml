@@ -40,7 +40,7 @@ Item {
         { index: 14, lambda: "6M",   name: "50 MHz" }
     ]
 
-    // VHF bands for meteor scatter modes
+    // VHF/UHF bands for digital operation
     property var vhfBands: [
         { index: 16, lambda: "4M",   name: "70 MHz" },
         { index: 17, lambda: "2M",   name: "144 MHz" },
@@ -134,14 +134,14 @@ Item {
             }
         }
 
-        // VHF Bands row (optional - show in collapsed state or when needed)
+        // VHF/UHF Bands row
         RowLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: engine && (engine.mode === "MSK144" || engine.mode === "JTMS" || engine.mode === "FSK441")
+            visible: vhfBands.length > 0
 
             Text {
-                text: "VHF:"
+                text: "V/U:"
                 color: textSecondary
                 font.pixelSize: 10
                 Layout.preferredWidth: 24

@@ -105,9 +105,48 @@ QString normalizeDevicePath(QString value)
 #endif
 }
 
-bool isCatPttMethod(QString const& value)
+QString comparablePortName(QString value)
 {
-    return value.trimmed().compare(QStringLiteral("CAT"), Qt::CaseInsensitive) == 0;
+    value = normalizeDevicePath(value);
+    if (value.isEmpty() || value == "CAT" || value == "None")
+        return value;
+    if (value.startsWith(QStringLiteral("\\\\.\\")))
+        value.remove(0, 4);
+    if (value.startsWith(QStringLiteral("/dev/")))
+        value.remove(0, 5);
+    return value.toLower();
+}
+
+bool pttPortSharesCatPort(QString const& serialPort, QString const& pttPort)
+{
+    QString const trimmedPttPort = pttPort.trimmed();
+    if (trimmedPttPort.isEmpty()
+        || 0 == trimmedPttPort.compare(QStringLiteral("CAT"), Qt::CaseInsensitive)) {
+        return true;
+    }
+
+    return comparablePortName(trimmedPttPort) == comparablePortName(serialPort);
+}
+
+bool d3ForceDtrAvailable(QString const& portType, QString const& pttMethod,
+                         QString const& serialPort, QString const& pttPort)
+{
+    bool const serialCat = 0 == portType.compare(QStringLiteral("serial"), Qt::CaseInsensitive);
+    return serialCat
+        && !(0 == pttMethod.compare(QStringLiteral("DTR"), Qt::CaseInsensitive)
+             && pttPortSharesCatPort(serialPort, pttPort));
+}
+
+bool d3ForceRtsAvailable(QString const& portType, QString const& handshake,
+                         QString const& pttMethod, QString const& serialPort,
+                         QString const& pttPort)
+{
+    bool const serialCat = 0 == portType.compare(QStringLiteral("serial"), Qt::CaseInsensitive);
+    bool const hardwareHandshake = 0 == handshake.trimmed().compare(QStringLiteral("hardware"), Qt::CaseInsensitive);
+    return serialCat
+        && !hardwareHandshake
+        && !(0 == pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive)
+             && pttPortSharesCatPort(serialPort, pttPort));
 }
 }
 
@@ -164,32 +203,62 @@ DecodiumTransceiverManager::~DecodiumTransceiverManager()
     }
 }
 
-void DecodiumTransceiverManager::enforceCatSerialDefaults()
+bool DecodiumTransceiverManager::pttSharesCatPort() const
 {
-    if (!isCatPttMethod(m_pttMethod))
-        return;
+    return pttPortSharesCatPort(m_serialPort, m_pttPort);
+}
 
-    if (m_forceDtr) {
+bool DecodiumTransceiverManager::forceDtrAvailable() const
+{
+    return d3ForceDtrAvailable(m_portType, m_pttMethod, m_serialPort, m_pttPort);
+}
+
+bool DecodiumTransceiverManager::forceRtsAvailable() const
+{
+    return d3ForceRtsAvailable(m_portType, m_handshake, m_pttMethod, m_serialPort, m_pttPort);
+}
+
+void DecodiumTransceiverManager::enforceForceLineAvailability()
+{
+    if (!forceDtrAvailable() && m_forceDtr) {
         m_forceDtr = false;
         emit forceDtrChanged();
     }
-    if (m_dtrHigh) {
+    if ((!forceDtrAvailable() || !m_forceDtr) && m_dtrHigh) {
         m_dtrHigh = false;
         emit dtrHighChanged();
     }
-    if (m_forceRts) {
+    if (!forceRtsAvailable() && m_forceRts) {
         m_forceRts = false;
         emit forceRtsChanged();
     }
-    if (m_rtsHigh) {
+    if ((!forceRtsAvailable() || !m_forceRts) && m_rtsHigh) {
         m_rtsHigh = false;
         emit rtsHighChanged();
     }
 }
 
+void DecodiumTransceiverManager::setSerialPort(const QString& v)
+{
+    if (m_serialPort != v) {
+        m_serialPort = v;
+        emit serialPortChanged();
+    }
+    enforceForceLineAvailability();
+}
+
+void DecodiumTransceiverManager::setHandshake(const QString& v)
+{
+    if (m_handshake != v) {
+        m_handshake = v;
+        emit handshakeChanged();
+    }
+    enforceForceLineAvailability();
+}
+
 void DecodiumTransceiverManager::setForceDtr(bool v)
 {
-    bool const effective = isCatPttMethod(m_pttMethod) ? false : v;
+    bool const effective = forceDtrAvailable() ? v : false;
     if (m_forceDtr != effective) {
         m_forceDtr = effective;
         emit forceDtrChanged();
@@ -202,7 +271,7 @@ void DecodiumTransceiverManager::setForceDtr(bool v)
 
 void DecodiumTransceiverManager::setDtrHigh(bool v)
 {
-    bool const effective = (isCatPttMethod(m_pttMethod) || !m_forceDtr) ? false : v;
+    bool const effective = (forceDtrAvailable() && m_forceDtr) ? v : false;
     if (m_dtrHigh != effective) {
         m_dtrHigh = effective;
         emit dtrHighChanged();
@@ -211,7 +280,7 @@ void DecodiumTransceiverManager::setDtrHigh(bool v)
 
 void DecodiumTransceiverManager::setForceRts(bool v)
 {
-    bool const effective = isCatPttMethod(m_pttMethod) ? false : v;
+    bool const effective = forceRtsAvailable() ? v : false;
     if (m_forceRts != effective) {
         m_forceRts = effective;
         emit forceRtsChanged();
@@ -224,7 +293,7 @@ void DecodiumTransceiverManager::setForceRts(bool v)
 
 void DecodiumTransceiverManager::setRtsHigh(bool v)
 {
-    bool const effective = (isCatPttMethod(m_pttMethod) || !m_forceRts) ? false : v;
+    bool const effective = (forceRtsAvailable() && m_forceRts) ? v : false;
     if (m_rtsHigh != effective) {
         m_rtsHigh = effective;
         emit rtsHighChanged();
@@ -239,7 +308,16 @@ void DecodiumTransceiverManager::setPttMethod(const QString& v)
         m_pttMethod = effective;
         emit pttMethodChanged();
     }
-    enforceCatSerialDefaults();
+    enforceForceLineAvailability();
+}
+
+void DecodiumTransceiverManager::setPttPort(const QString& v)
+{
+    if (m_pttPort != v) {
+        m_pttPort = v;
+        emit pttPortChanged();
+    }
+    enforceForceLineAvailability();
 }
 
 // ── rigList ────────────────────────────────────────────────────────────────
@@ -269,6 +347,7 @@ void DecodiumTransceiverManager::setRigName(const QString& v)
     default:          m_portType = "none";    break;
     }
     emit portTypeChanged();
+    enforceForceLineAvailability();
 }
 
 // ── Helpers enum ──────────────────────────────────────────────────────────
@@ -295,6 +374,37 @@ static TransceiverFactory::DataBits parseData(const QString& s)
 static TransceiverFactory::StopBits parseStop(const QString& s)
 {
     return s == "2" ? TransceiverFactory::two_stop_bits : TransceiverFactory::one_stop_bit;
+}
+
+static TransceiverFactory::TXAudioSource configuredTxAudioSource()
+{
+    QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    QVariant const raw = s.value(QStringLiteral("TXAudioSource"), 0);
+    QString const text = raw.toString().trimmed();
+    if (text.compare(QStringLiteral("Front/Mic"), Qt::CaseInsensitive) == 0
+        || text.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0
+        || text.compare(QStringLiteral("mic"), Qt::CaseInsensitive) == 0) {
+        return TransceiverFactory::TX_audio_source_front;
+    }
+    if (text.compare(QStringLiteral("Rear/Data"), Qt::CaseInsensitive) == 0
+        || text.compare(QStringLiteral("rear"), Qt::CaseInsensitive) == 0
+        || text.compare(QStringLiteral("data"), Qt::CaseInsensitive) == 0) {
+        return TransceiverFactory::TX_audio_source_rear;
+    }
+
+    bool ok = false;
+    int const index = raw.toInt(&ok);
+    if (ok && index == 1) {
+        return TransceiverFactory::TX_audio_source_front;
+    }
+    return TransceiverFactory::TX_audio_source_rear;
+}
+
+static bool configuredPwrAndSwrEnabled()
+{
+    QSettings settings(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    return settings.value(QStringLiteral("PWRandSWR"), false).toBool()
+        || settings.value(QStringLiteral("CheckSWR"), false).toBool();
 }
 
 static TransceiverFactory::Handshake parseHandshake(const QString& s)
@@ -324,17 +434,23 @@ static QString modeStr(Transceiver::MODE m)
 
 static Transceiver::MODE parseMode(const QString& s)
 {
-    if (s == "CW")     return Transceiver::CW;
-    if (s == "CW-R")   return Transceiver::CW_R;
-    if (s == "USB")    return Transceiver::USB;
-    if (s == "LSB")    return Transceiver::LSB;
-    if (s == "FSK")    return Transceiver::FSK;
-    if (s == "FSK-R")  return Transceiver::FSK_R;
-    if (s == "DATA-U") return Transceiver::DIG_U;
-    if (s == "DATA-L") return Transceiver::DIG_L;
-    if (s == "AM")     return Transceiver::AM;
-    if (s == "FM")     return Transceiver::FM;
-    if (s == "DIG-FM") return Transceiver::DIG_FM;
+    QString const mode = s.trimmed().toUpper();
+    if (mode == "CW")     return Transceiver::CW;
+    if (mode == "CW-R")   return Transceiver::CW_R;
+    if (mode == "USB")    return Transceiver::USB;
+    if (mode == "LSB")    return Transceiver::LSB;
+    if (mode == "FSK")    return Transceiver::FSK;
+    if (mode == "FSK-R")  return Transceiver::FSK_R;
+    if (mode == "DATA-U" || mode == "DIGU") return Transceiver::DIG_U;
+    if (mode == "DATA-L" || mode == "DIGL") return Transceiver::DIG_L;
+    if (mode == "AM")     return Transceiver::AM;
+    if (mode == "FM")     return Transceiver::FM;
+    if (mode == "DIG-FM") return Transceiver::DIG_FM;
+    if (mode == "FT8" || mode == "FT4" || mode == "FT2" || mode == "Q65"
+        || mode == "MSK144" || mode == "JT65" || mode == "JT9" || mode == "JT4"
+        || mode == "FST4" || mode == "FST4W" || mode == "WSPR"
+        || mode.startsWith("FST4-") || mode.startsWith("FST4W-"))
+        return Transceiver::DIG_U;
     return Transceiver::UNK;
 }
 
@@ -342,7 +458,8 @@ static Transceiver::MODE parseMode(const QString& s)
 static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverManager* m)
 {
     TransceiverFactory::ParameterPack p;
-    bool const catPtt = isCatPttMethod(m->pttMethod());
+    bool const canForceDtr = d3ForceDtrAvailable(m->portType(), m->pttMethod(), m->serialPort(), m->pttPort());
+    bool const canForceRts = d3ForceRtsAvailable(m->portType(), m->handshake(), m->pttMethod(), m->serialPort(), m->pttPort());
     p.rig_name      = m->rigName();
     p.serial_port   = normalizeDevicePath(m->serialPort());
     p.network_port  = m->networkPort();
@@ -352,16 +469,18 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.data_bits     = parseData(m->dataBits());
     p.stop_bits     = parseStop(m->stopBits());
     p.handshake     = parseHandshake(m->handshake());
-    p.force_dtr     = !catPtt && m->forceDtr();
-    p.dtr_high      = !catPtt && m->dtrHigh();
-    p.force_rts     = !catPtt && m->forceRts();
-    p.rts_high      = !catPtt && m->rtsHigh();
+    p.force_dtr     = canForceDtr && m->forceDtr();
+    p.dtr_high      = canForceDtr && m->dtrHigh();
+    p.force_rts     = canForceRts && m->forceRts();
+    p.rts_high      = canForceRts && m->rtsHigh();
     p.ptt_type      = parsePtt(m->pttMethod());
-    p.audio_source  = TransceiverFactory::TX_audio_source_front;
+    p.audio_source  = configuredTxAudioSource();
     p.split_mode    = parseSplit(m->splitMode());
     // ptt_port: "CAT" usa la stessa porta CAT; altrimenti porta seriale dedicata
     p.ptt_port      = m->pttPort().isEmpty() ? "CAT" : normalizeDevicePath(m->pttPort());
     p.poll_interval = m->pollInterval();
+    if (configuredPwrAndSwrEnabled())
+        p.poll_interval |= do__pwr;
     return p;
 }
 
@@ -437,6 +556,7 @@ void DecodiumTransceiverManager::connectRig()
                     m_connected = false;
                     emit connectedChanged();
                 }
+                updateTelemetry(0.0, 0.0);
             },
             Qt::QueuedConnection);
 
@@ -464,6 +584,8 @@ void DecodiumTransceiverManager::connectRig()
                 if (m_mode    != mode) { m_mode    = mode; emit modeChanged(); }
                 if (m_pttActive != ptt) { m_pttActive = ptt; emit pttActiveChanged(); }
                 if (m_split   != spl)  { m_split   = spl;  emit splitChanged(); }
+                updateTelemetry(static_cast<double>(state.power()) / 1000.0,
+                                static_cast<double>(state.swr()) / 100.0);
             },
             Qt::QueuedConnection);
 
@@ -474,6 +596,7 @@ void DecodiumTransceiverManager::connectRig()
                 d->desired.online(false);
                 emit errorOccurred("CAT failure: " + sanitizeHamlibFailure(reason));
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
+                updateTelemetry(0.0, 0.0);
             },
             Qt::QueuedConnection);
 
@@ -522,7 +645,20 @@ void DecodiumTransceiverManager::disconnectRig()
         m_connected = false;
         emit connectedChanged();
     }
+    updateTelemetry(0.0, 0.0);
     emit statusUpdate("Disconnesso dal transceiver");
+}
+
+void DecodiumTransceiverManager::updateTelemetry(double powerWatts, double swr)
+{
+    if (m_powerWatts != powerWatts) {
+        m_powerWatts = powerWatts;
+        emit powerWattsChanged();
+    }
+    if (m_swr != swr) {
+        m_swr = swr;
+        emit swrChanged();
+    }
 }
 
 // ── sendState: invia TransceiverState al rig sul suo thread ───────────────
@@ -608,9 +744,10 @@ void DecodiumTransceiverManager::refreshPorts()
 // ── Persistenza ───────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::saveSettings()
 {
-    bool const catPtt = isCatPttMethod(m_pttMethod);
     const QString serialPort = normalizeDevicePath(m_serialPort);
     const QString pttPort = m_pttPort.isEmpty() ? QStringLiteral("CAT") : normalizeDevicePath(m_pttPort);
+    bool const canForceDtr = forceDtrAvailable();
+    bool const canForceRts = forceRtsAvailable();
 
     QSettings s("Decodium", "Decodium3");
     s.beginGroup("Transceiver");
@@ -620,13 +757,13 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("dataBits",     m_dataBits);
     s.setValue("stopBits",     m_stopBits);
     s.setValue("handshake",    m_handshake);
-    s.setValue("forceDtr",     catPtt ? false : m_forceDtr);
-    s.setValue("dtrHigh",      catPtt ? false : m_dtrHigh);
-    s.setValue("forceRts",     catPtt ? false : m_forceRts);
-    s.setValue("rtsHigh",      catPtt ? false : m_rtsHigh);
+    s.setValue("forceDtr",     canForceDtr && m_forceDtr);
+    s.setValue("dtrHigh",      canForceDtr && m_dtrHigh);
+    s.setValue("forceRts",     canForceRts && m_forceRts);
+    s.setValue("rtsHigh",      canForceRts && m_rtsHigh);
     s.setValue("networkPort",  m_networkPort);
     s.setValue("tciPort",      m_tciPort);
-    s.setValue("pttMethod",    catPtt ? QStringLiteral("CAT") : m_pttMethod);
+    s.setValue("pttMethod",    m_pttMethod);
     s.setValue("pttPort",      pttPort);
     s.setValue("splitMode",    m_splitMode);
     s.setValue("pollInterval", m_pollInterval);
@@ -659,9 +796,9 @@ void DecodiumTransceiverManager::loadSettings()
     m_pollInterval = get("pollInterval", m_pollInterval).toInt();
     m_catAutoConnect = get("catAutoConnect", m_catAutoConnect).toBool();
     m_audioAutoStart = get("audioAutoStart", m_audioAutoStart).toBool();
-    enforceCatSerialDefaults();
     // setRigName DOPO gli altri per aggiornare portType correttamente
     QString rig = get("rigName", m_rigName).toString();
     s.endGroup();
     setRigName(rig);
+    enforceForceLineAvailability();
 }

@@ -1,6 +1,7 @@
 #ifndef DETECTOR_HPP__
 #define DETECTOR_HPP__
 #include "Audio/AudioDevice.hpp"
+#include <QByteArray>
 #include <QScopedArrayPointer>
 
 //
@@ -30,6 +31,7 @@ public:
   bool reset () override;
 
   Q_SIGNAL void framesWritten (qint64) const;
+  Q_SIGNAL void audioSamplesReady (QByteArray const& pcmSamples) const;
   Q_SLOT void setBlockSize (unsigned);
   Q_SLOT void applyInputGainLinear (float gain);
 
@@ -43,6 +45,7 @@ protected:
 
 private:
   void clear ();		// discard buffer contents
+  void emitVisualSamples (qint16 const * samples, unsigned count);
 
   double   m_period;
   unsigned m_downSampleFactor;
@@ -54,6 +57,7 @@ private:
   // data (a signals worth) at
   // the input sample rate
   unsigned m_bufferPos;
+  unsigned m_visualDownsamplePhase {0};
   bool m_boundaryResetRequiresRuntimeLock {true};
 
 };

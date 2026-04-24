@@ -26,7 +26,11 @@ Dialog {
         if (f < 25500)  return "12m"
         if (f < 30000)  return "10m"
         if (f < 54000)  return "6m"
+        if (f < 71000)  return "4m"
         if (f < 200000) return "2m"
+        if (f < 450000) return "70cm"
+        if (f >= 2400000 && f < 2450000) return "QO100-U"
+        if (f >= 10489000 && f < 10491000) return "QO100-D"
         return "70cm"
     }
 
@@ -42,8 +46,11 @@ Dialog {
         "12m":  [{"dial": 24915.0, "mode": "FT8"}, {"dial": 24919.0, "mode": "FT4"}],
         "10m":  [{"dial": 28074.0, "mode": "FT8"}, {"dial": 28180.0, "mode": "FT4"}],
         "6m":   [{"dial": 50313.0, "mode": "FT8"}, {"dial": 50318.0, "mode": "FT4"}],
-        "2m":   [{"dial": 144174.0, "mode": "FT8"}, {"dial": 144170.0, "mode": "FT4"}],
-        "70cm": [{"dial": 432065.0, "mode": "FT8"}, {"dial": 432065.0, "mode": "FT4"}]
+        "4m":   [{"dial": 70154.0, "mode": "FT8"}, {"dial": 70157.0, "mode": "FT2"}],
+        "2m":   [{"dial": 144174.0, "mode": "FT8"}, {"dial": 144170.0, "mode": "FT4"}, {"dial": 144177.0, "mode": "FT2"}],
+        "70cm": [{"dial": 432174.0, "mode": "FT8"}, {"dial": 432177.0, "mode": "FT2"}],
+        "QO100-U": [{"dial": 2400040.0, "mode": "FT8"}],
+        "QO100-D": [{"dial": 10489540.0, "mode": "FT8"}]
     })
 
     background: Rectangle {
@@ -130,7 +137,7 @@ Dialog {
                         font.pixelSize: 11
                         font.bold: true
                         color: modelData.isCurrent ? "#00BCD4" : "#ECEFF1"
-                        Layout.preferredWidth: 46
+                        Layout.preferredWidth: 64
                     }
 
                     Text {

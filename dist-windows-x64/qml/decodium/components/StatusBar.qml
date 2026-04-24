@@ -14,6 +14,15 @@ Rectangle {
     property double audioLevel: 0.0  // raw RMS 0.0..1.0 da DecodiumAudioSink
     property double signalLevel: 0.0 // legacy S-meter in dB circa 0..90
     property double cpuUsage: 0.0    // 0.0 to 1.0
+    property double rigPowerWatts: bridge ? bridge.rigPowerWatts : 0.0
+    property double rigSwr: bridge ? bridge.rigSwr : 0.0
+    property bool pwrAndSwrEnabled: bridge ? bridge.getSetting("PWRandSWR", false) : false
+    property bool checkSwrEnabled: bridge ? bridge.getSetting("CheckSWR", false) : false
+    readonly property bool rigTelemetryBackendActive: bridge && (bridge.catBackend === "hamlib" || bridge.catBackend === "tci")
+    readonly property bool rigTelemetryVisible: pwrAndSwrEnabled && rigTelemetryBackendActive && catStatus === "Connected"
+    readonly property color swrStatusColor: rigSwr >= 2.0 ? "#f44336"
+        : rigSwr >= 1.5 ? "#ffeb3b"
+        : textSecondary
 
     // Scala logaritmica: -60 dBFS → 0.0, 0 dBFS → 1.0
     // Mappa valori RMS tipici (0.001..0.3) su tutto il range S-meter
@@ -34,6 +43,16 @@ Rectangle {
     property color textSecondary: themeManager ? themeManager.textSecondary : "#89B4D0"
     property color textPrimary: themeManager ? themeManager.textPrimary : "#E8F4FD"
     property color bgDeep: themeManager ? themeManager.bgDeep : "#111827"
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "PWRandSWR")
+                pwrAndSwrEnabled = value
+            else if (key === "CheckSWR")
+                checkSwrEnabled = value
+        }
+    }
 
     height: 36
     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
@@ -286,6 +305,64 @@ Rectangle {
                 text: "CAT: " + catStatus
                 font.pixelSize: 10
                 color: catStatus === "Connected" ? accentGreen : textSecondary
+            }
+        }
+
+        Rectangle {
+            width: 1
+            height: 20
+            visible: rigTelemetryVisible
+            color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+        }
+
+        RowLayout {
+            spacing: 8
+            visible: rigTelemetryVisible
+
+            Text {
+                text: "PWR:"
+                font.pixelSize: 10
+                color: textSecondary
+            }
+
+            Text {
+                text: rigPowerWatts > 0.05 ? Math.round(rigPowerWatts).toString() + "W" : "--"
+                font.family: "Monospace"
+                font.pixelSize: 10
+                color: rigPowerWatts > 0.05 ? accentGreen : textSecondary
+                Layout.preferredWidth: 34
+            }
+
+            Rectangle {
+                height: 18
+                width: 78
+                radius: 9
+                color: rigSwr >= 2.0 ? Qt.rgba(244/255, 67/255, 54/255, 0.35)
+                    : rigSwr >= 1.5 ? Qt.rgba(255/255, 235/255, 59/255, 0.28)
+                    : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
+                border.color: rigSwr > 0 ? swrStatusColor : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "SWR: " + (rigSwr > 0 ? rigSwr.toFixed(rigSwr < 10 ? 2 : 1) : "--")
+                    font.family: "Monospace"
+                    font.pixelSize: 10
+                    font.bold: rigSwr >= 1.5
+                    color: rigSwr >= 2.0 ? "#ffffff" : swrStatusColor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    ToolTip {
+                        visible: parent.containsMouse
+                        delay: 500
+                        text: checkSwrEnabled
+                            ? "Check SWR attivo: TX bloccato/interrotto se SWR > 2.5"
+                            : "Telemetria potenza/SWR dal CAT"
+                    }
+                }
             }
         }
 

@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QDateTime>
 #include <QMutex>
+#include <QFont>
 #include <atomic>
 #include <memory>
 
@@ -154,6 +155,8 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool catConnected READ catConnected NOTIFY catConnectedChanged)
     Q_PROPERTY(QString catRigName READ catRigName NOTIFY catRigNameChanged)
     Q_PROPERTY(QString catMode READ catMode NOTIFY catModeChanged)
+    Q_PROPERTY(double rigPowerWatts READ rigPowerWatts NOTIFY rigTelemetryChanged)
+    Q_PROPERTY(double rigSwr READ rigSwr NOTIFY rigTelemetryChanged)
     Q_PROPERTY(QString lastCatError READ lastCatError NOTIFY lastCatErrorChanged)
 
     // === LED STATUS INDICATORS ===
@@ -431,6 +434,8 @@ public:
     bool catConnected() const;
     QString catRigName() const;
     QString catMode() const;
+    double rigPowerWatts() const { return m_rigPowerWatts; }
+    double rigSwr() const { return m_rigSwr; }
     QString lastCatError() const { return m_lastCatError; }
 
     // LED status
@@ -707,6 +712,8 @@ public slots:
     // C13 — Grid distance/bearing
     Q_INVOKABLE double calcDistance(const QString& myGrid, const QString& dxGrid) const;
     Q_INVOKABLE double calcBearing(const QString& myGrid, const QString& dxGrid) const;
+    Q_INVOKABLE void replayWorldMapFeed();
+    Q_INVOKABLE void processMapContactClick(const QString& call, const QString& grid);
 
     // C14 — Grid to lat/lon (per AstroPanel)
     Q_INVOKABLE double latFromGrid(const QString& grid) const;
@@ -717,6 +724,21 @@ public slots:
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE QString fontSettingLabel(const QString& key,
+                                         const QString& fallbackFamily = QString(),
+                                         int fallbackPointSize = 0) const;
+    Q_INVOKABLE QString fontSettingFamily(const QString& key,
+                                          const QString& fallbackFamily = QString(),
+                                          int fallbackPointSize = 0) const;
+    Q_INVOKABLE int fontSettingPixelSize(const QString& key,
+                                         const QString& fallbackFamily = QString(),
+                                         int fallbackPointSize = 0) const;
+    Q_INVOKABLE void chooseFontSetting(const QString& key,
+                                       const QString& fallbackFamily = QString(),
+                                       int fallbackPointSize = 0);
+    Q_INVOKABLE void resetFontSetting(const QString& key,
+                                      const QString& fallbackFamily = QString(),
+                                      int fallbackPointSize = 0);
     Q_INVOKABLE int remoteWebSocketPort() const;
     Q_INVOKABLE QStringList networkInterfaceNames() const;
     Q_INVOKABLE QString udpInterfaceName() const;
@@ -798,6 +820,10 @@ signals:
     void audioOutputChannelChanged();
     void decodeListChanged();
     void rxDecodeListChanged();
+    void worldMapResetRequested();
+    void worldMapContactAdded(const QString& call, const QString& sourceGrid, const QString& destinationGrid, int role);
+    void worldMapContactAddedByLonLat(const QString& call, double sourceLon, double sourceLat, const QString& destinationGrid, int role);
+    void worldMapContactDowngraded(const QString& call);
     void periodProgressChanged();
     void utcTimeChanged();
     void tx1Changed(); void tx2Changed(); void tx3Changed();
@@ -829,6 +855,7 @@ signals:
     void catConnectedChanged();
     void catRigNameChanged();
     void catModeChanged();
+    void rigTelemetryChanged();
     void lastCatErrorChanged();
     void dxClusterConnectedChanged();
     void dxClusterSpotsChanged();
@@ -855,6 +882,7 @@ signals:
     void setupSettingsRequested(int tabIndex);
     void timeSyncSettingsRequested();
     void catSettingsRequested();
+    void quitRequested();
     void rigErrorRaised(const QString& title, const QString& summary, const QString& details);
     // B6 — cty.dat
     void ctyDatUpdatingChanged();
@@ -959,6 +987,7 @@ private slots:
                               int rxFrequencyHz,
                               int txFrequencyHz,
                               QString const& mode);
+    void onLegacyAudioSamples(QByteArray const& pcmSamples);
     void onAsyncDecodeTimer();   // FT2 turbo async ogni 100ms
     void regenerateTxMessages();  // auto-genera TX6 (CQ) e TX1-5 da callsign/grid/dxCall
     void processNextInQueue();   // mainwindow processNextInQueue: auto-handoff al prossimo caller
@@ -967,6 +996,19 @@ private:
     bool shouldIgnoreDecodeCallbacks() const;
     void beginDecodeCallbackShutdown();
     bool isTimeSyncDecodeMode(const QString& mode) const;
+    void resetRxPeriodAccumulation(bool reserveAudioBuffer);
+    void armPeriodTimerForCurrentMode(quint64 sessionId, const QString& reason);
+    int minimumDecodeSamplesForMode(const QString& mode) const;
+    void requestRigFrequencyFromBridge(double hz, const QString& reason);
+    bool shouldIgnoreCatFrequencyDuringLocalQsy(double hz, const QString& backend);
+    bool shouldIgnoreLegacyAudioFrequencyDuringLocalQsy(int hz, bool tx);
+    bool checkSwrAllowsTransmission(const QString& reason);
+    void enforceSwrTransmissionLimit(const QString& reason);
+    void applyRemoteDialFrequency(double hz, const QString& reason);
+    void applyRemoteBandChange(const QString& band);
+    QString configuredCatRigMode() const;
+    void applyConfiguredCatRigMode(const QString& reason);
+    void updateRigTelemetry(double powerWatts, double swr);
     void applyNtpSettings();
     void configureNtpClientForMode(const QString& mode);
     void resetStartupTransientQsoState();
@@ -978,7 +1020,7 @@ private:
                              const QString& decodeMode) const;
     QString autoCqBandKeyForFrequency(double freqHz) const;
     QString startupModeForFrequency(double dialFrequency) const;
-    void maybeApplyStartupModeFromRigFrequency(double dialFrequency);
+    void maybeApplyStartupModeFromRigFrequency(double dialFrequency, bool authoritativeRigFrequency = false);
     QString effectiveAdifLogPath() const;
     QString ensureAdifLogPath();
     int effectiveDecodeDepth() const;
@@ -993,7 +1035,9 @@ private:
     void rememberRecentAutoCqAbandoned(const QString& call, double freqHz, const QString& mode);
     void rememberRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
     void removeCallerFromQueue(const QString& call);
+    void maybeEnqueueMamCallerFromDecode(const QStringList& fields);
     QString inferredPartnerForAutolog() const;
+    QString pskReporterProgramInfo() const;
     void capturePendingAutoLogSnapshot();
     void clearPendingAutoLogSnapshot();
     void armLateAutoLogSnapshot();
@@ -1007,7 +1051,10 @@ private:
     void clearAutoCqPartnerLock();
     void updateAutoCqPartnerLock();
     void restoreAutoCqPartnerLock();
-    void enqueueCallerInternal(const QString& call, int freq = -1, int snr = -99);
+    bool enqueueCallerInternal(const QString& call,
+                               int freq = -1,
+                               int snr = -99,
+                               bool respectRecentDuplicateGuard = true);
 
     // Legacy INI sync helpers for UDP settings
     QString legacyIniPath() const;
@@ -1015,6 +1062,9 @@ private:
     bool isLegacySyncKey(const QString& key) const;
     void syncSettingToLegacyIni(const QString& key, const QVariant& value);
     QVariant readSettingFromLegacyIni(const QString& key) const;
+    QFont fontSettingFont(const QString& key,
+                          const QString& fallbackFamily,
+                          int fallbackPointSize) const;
 
     // Standalone UDP MessageClient for WSJT-X protocol
     void initUdpMessageClient();
@@ -1028,6 +1078,7 @@ private:
     QString m_mode {"FT2"};
     bool m_startupModeAutoPending {true};
     qint64 m_startupModeAutoUntilMs {0};
+    bool m_startupModeAutoAuthoritativeApplied {false};
     QString m_legacyStartupModeGuard;
     qint64 m_legacyStartupModeGuardUntilMs {0};
     bool m_preserveFrequencyOnModeChange {false};
@@ -1056,6 +1107,10 @@ private:
     int m_audioOutputChannel {0};
     QVariantList m_decodeList;
     QVariantList m_rxDecodeList;
+    QHash<QString, QString> m_worldMapGridByCall;
+    bool m_worldMapCall3Loaded {false};
+    QString m_mapLastClickCall;
+    qint64 m_mapLastClickMs {0};
     int m_periodProgress {0};
     QString m_utcTime;
     QString m_tx1, m_tx2, m_tx3, m_tx4, m_tx5, m_tx6;
@@ -1087,6 +1142,15 @@ private:
     QString m_catRigName;
     QString m_lastCatError;
     QString m_catMode;
+    double m_rigPowerWatts {0.0};
+    double m_rigSwr {0.0};
+    double m_localCatFrequencyTargetHz {0.0};
+    qint64 m_localCatFrequencyGuardUntilMs {0};
+    qint64 m_lastIgnoredCatFrequencyLogMs {0};
+    int    m_localRxFrequencyTargetHz {0};
+    qint64 m_localRxFrequencyGuardUntilMs {0};
+    int    m_localTxFrequencyTargetHz {0};
+    qint64 m_localTxFrequencyGuardUntilMs {0};
     bool   m_ledCoherentAveraging {false};
     bool   m_ledNeuralSync {false};
     bool   m_ledTurboFeedback {false};
@@ -1143,6 +1207,7 @@ private:
     mutable QMutex m_audioBufferMutex;
     quint64 m_decodeSerial {0};
     quint64 m_decodeSessionId {0};
+    quint64 m_periodTimerSessionId {0};
     // Period timer ticks at 250ms; mode determines how many ticks = 1 period
     int m_periodTicks {0};
     int m_periodTicksMax {60};   // FT8=60 (15s), FT4=30 (7.5s), FT2=15 (3.75s)
@@ -1182,6 +1247,12 @@ private:
     DecodiumAudioSink* m_audioSink   {nullptr};
     QAudioSink*        m_txAudioSink  {nullptr};
     bool               m_rxAudioSuspendedForTx {false};
+    qint64             m_txPlaybackHoldUntilMs {0};
+    bool               m_txPlaybackReleasePending {false};
+    qint64             m_audioUnhealthyStartMs {0};
+    qint64             m_lastAudioWatchdogRestartMs {0};
+    qint64             m_lastAudioWatchdogLogMs {0};
+    qint64             m_audioWatchdogIgnoreUntilMs {0};
     QBuffer*           m_txPcmBuffer  {nullptr};
     QByteArray         m_txPcmData;
     QTimer*            m_tuneTimer    {nullptr};
@@ -1364,6 +1435,7 @@ private:
     float m_lastPanMaxDb {0.f};
     float m_lastPanFreqMin {0.f};
     float m_lastPanFreqMax {0.f};
+    bool m_legacyPcmSpectrumFeed {false};
 
     QStringList ctyDatSearchPaths() const;
     bool reloadDxccLookup(QString* loadedPath = nullptr);
@@ -1375,12 +1447,17 @@ private:
     QStringList parseJt65Row(const QString& row) const;
     void startAudioCapture();
     void stopAudioCapture();
+    void handleAudioHealth(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
+    void restartAudioCaptureFromWatchdog(const QString& reason);
     void feedAudioToDecoder(qint64 completedUtcSlot = -1);
     void enumerateAudioDevices();
     void updatePeriodTicksMax();
     QVector<float> computeSpectrum() const;
     QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
     void initTxDevices();
+    void resumeRxAudioAfterTx(const QString& reason);
+    void completeTxPlayback(const QString& reason, bool error = false);
+    void finishModulatorIdlePlayback(const QString& reason);
     QString buildCurrentTxMessage() const;
     bool legacyBackendAvailable() const;
     bool ensureLegacyBackendAvailable();
@@ -1402,6 +1479,12 @@ private:
     bool shouldMirrorToRxPane(const QVariantMap& entry) const;
     void appendRxDecodeEntry(const QVariantMap& entry);
     void rebuildRxDecodeList();
+    void replayWorldMapEntry(const QVariantMap& entry);
+    void emitCurrentWorldMapQsoPath();
+    void rememberWorldMapGrid(const QString& call, const QString& grid);
+    QString lookupWorldMapGrid(const QString& call);
+    QString approximateWorldMapGridForCall(const QString& call);
+    void loadWorldMapCall3Cache();
     void genStdMsgs(const QString& hisCall, const QString& hisGrid);
     void checkAndStartPeriodicTx();
     void autoSequenceStep(const QStringList& parsedFields);

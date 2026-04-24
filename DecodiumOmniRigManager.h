@@ -88,9 +88,9 @@ public:
     bool        split()         const { return false; }
 
     QStringList rigList()       const { return {"OmniRig Rig 1","OmniRig Rig 2"}; }
-    QStringList portList()      const { return {}; }
+    QStringList portList()      const { return {"CAT"}; }
     QStringList baudList()      const { return {}; }
-    QStringList pttMethodList() const { return {"CAT","DTR","RTS"}; }
+    QStringList pttMethodList() const { return {"VOX","CAT","DTR","RTS"}; }
     QStringList splitModeList() const { return {"none"}; }
 
     bool catAutoConnect()       const { return m_catAutoConnect; }
@@ -121,7 +121,7 @@ public:
     // ── Comandi invokable ─────────────────────────────────────────────────────
     Q_INVOKABLE void setRigFrequency(double hz);
     Q_INVOKABLE void setRigTxFrequency(double)    {}
-    Q_INVOKABLE void setRigMode(const QString&)   {}
+    Q_INVOKABLE void setRigMode(const QString& mode);
     Q_INVOKABLE void setRigPtt(bool on);
     Q_INVOKABLE void refreshPorts()               {}
     Q_INVOKABLE void saveSettings();
@@ -165,15 +165,19 @@ private slots:
 private:
     void applyPollInterval();
     QString modeFromParam(int param) const;
+    int modeToParam(const QString& mode) const;
 
     QAxObject* m_omniRig   {nullptr};
     QAxObject* m_rig        {nullptr};
+    QAxObject* m_portBits   {nullptr};
     QTimer*    m_pollTimer  {nullptr};
 
     bool    m_connected     {false};
     QString m_rigName       {"OmniRig Rig 1"};
     QString m_pttMethod     {"CAT"};
     int     m_pollInterval  {2};
+    int     m_readableParams{0};
+    int     m_writableParams{0};
 
     double  m_frequency     {0.0};
     double  m_txFrequency   {0.0};
