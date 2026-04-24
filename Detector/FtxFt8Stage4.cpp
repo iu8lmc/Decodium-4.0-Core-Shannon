@@ -3416,7 +3416,7 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
       return;
     }
 
-  if (request.ndepth == 1 && request.nzhsym == 50)
+  if (request.nzhsym == 50 && stage_action != 4)
     {
       copy_audio_to_float (request.iwave, state.dd);
     }

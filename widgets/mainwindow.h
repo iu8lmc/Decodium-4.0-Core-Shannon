@@ -179,18 +179,10 @@ public:
   int legacyAudioOutputChannel() const;
   int legacyRxInputLevel() const;
   QString legacyWaterfallPalette() const;
-  bool legacyTxEnabled() const;
   bool legacyMonitoring() const;
   bool legacyTransmitting() const;
   bool legacyTuning() const;
   bool legacyCatConnected() const;
-  bool legacyAutoSpotEnabled() const;
-  bool legacyAsyncL2Enabled() const;
-  bool legacyDualCarrierEnabled() const;
-  bool legacyManualTxEnabled() const;
-  bool legacySpeedyContestEnabled() const;
-  bool legacyDigitalMorseEnabled() const;
-  bool legacyQuickQsoEnabled() const;
   double legacySignalLevel() const;
   int legacyBandActivityRevision() const;
   QStringList legacyBandActivityLines() const;
@@ -198,13 +190,9 @@ public:
   QStringList legacyRxFrequencyLines() const;
   QString legacyTxMessage(int index) const;
   int legacyCurrentTx() const;
-  QStringList legacyCallerQueue() const;
   QString legacyAdifLogPath() const;
   QString legacyAllTxtPath() const;
   int legacyTxOutputAttenuation() const;
-  int legacyFt2QsoMessageCount() const;
-  int legacyAsyncSnrDb() const;
-  QString legacyUiLanguage() const;
   void legacyClearBandActivity();
   void legacyClearRxFrequency();
   void legacySetMode(QString const& mode);
@@ -244,14 +232,6 @@ public:
   bool legacyTxFirst() const;
   void legacySetTxFirst(bool enabled);
   void legacySetRigControlEnabled(bool enabled);
-  void legacyRemoteSetAutoSpotEnabled(bool enabled);
-  void legacyRemoteSetAsyncL2Enabled(bool enabled);
-  void legacyRemoteSetDualCarrierEnabled(bool enabled);
-  void legacyRemoteSetManualTxEnabled(bool enabled);
-  void legacyRemoteSetSpeedyContestEnabled(bool enabled);
-  void legacyRemoteSetDigitalMorseEnabled(bool enabled);
-  void legacyRemoteSetQuickQsoEnabled(bool enabled);
-  void legacyRemoteSetFt2QsoMessageCount(int count);
   void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
   void legacySetEmbeddedMode(bool enabled);
   void legacyShutdownForEmbedding();
@@ -706,6 +686,7 @@ private slots:
   void onRemoteSelectCallerDue(QString const& commandId, QString const& call, QString const& grid);
   void onRemoteSetModeRequested(QString const& commandId, QString const& mode);
   void onRemoteSetBandRequested(QString const& commandId, QString const& band);
+  void onRemoteSetDialFrequencyRequested(QString const& commandId, qint64 dialFrequencyHz);
   void onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz);
   void onRemoteSetTxFrequencyRequested(QString const& commandId, int txFrequencyHz);
   void onRemoteSetTxEnabledRequested(QString const& commandId, bool enabled);
@@ -761,6 +742,7 @@ private:
                                          int rxFrequencyHz,
                                          int txFrequencyHz,
                                          QString const& mode) const;
+  Q_SIGNAL void legacyAudioSamplesReady (QByteArray const& pcmSamples) const;
   Q_SIGNAL void legacyWarningRaised (QString const& title,
                                      QString const& summary,
                                      QString const& details) const;
@@ -853,6 +835,9 @@ private:
   double m_rttyTciFramesPerSymbol {0.0};
   bool m_rttyManualTxActive {false};
   Transceiver::TransceiverState m_rigState;
+  Frequency m_remoteDialFrequencyTarget {0};
+  qint64 m_remoteDialFrequencyGuardUntilMs {0};
+  qint64 m_lastRemoteDialFrequencyRetryMs {0};
   Frequency  m_lastDialFreq;
   QString m_lastBand;
   QString m_lastCallsign;
@@ -1009,23 +994,23 @@ private:
   bool    m_startAnother;
 
   // start ft8md
-  bool    m_FT8EarlyStart;   
-  bool    m_FT8WideDxCallSearch; 
+  bool    m_FT8EarlyStart;
+  bool    m_FT8WideDxCallSearch;
   bool    m_skipTx1;
-  bool    m_swl; 
+  bool    m_swl;
   bool    m_filter;
   bool    m_agcc;
   bool    m_hint;
-  bool	  m_multithreadFT8; 
+  bool	  m_multithreadFT8;
   bool 	  m_houndMode;
   bool    m_commonFT8b;
-  bool	  m_manualDecode;   
-  bool	  m_modeChanged;   
+  bool	  m_manualDecode;
+  bool	  m_modeChanged;
   bool    m_bMyCallStd;
   bool    m_bHisCallStd;
   bool    m_multInst;
   bool    m_bandChanged;
-  bool 	  m_lasthint; 
+  bool 	  m_lasthint;
   // end ft8md
 
   bool    m_saveDecoded;
@@ -1185,7 +1170,7 @@ private:
   QByteArray download_content_type_;
   bool download_strict_https_same_host_ {false};
   QString download_expected_host_;
-  
+
   enum
     {
       CALLING,

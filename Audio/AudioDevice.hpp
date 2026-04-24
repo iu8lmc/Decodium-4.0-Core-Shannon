@@ -25,11 +25,11 @@ public:
     return "both" == s ? Both : "right" == s ? Right : "left" == s ? Left : Mono;
   }
 
-  bool initialize (OpenMode mode, Channel channel);
+  bool initialize (OpenMode mode, Channel channel, int sourceChannelCount = -1);
 
   bool isSequential () const override {return true;}
 
-  size_t bytesPerFrame () const {return sizeof (qint16) * (Mono == m_channel ? 1 : 2);}
+  size_t bytesPerFrame () const {return sizeof (qint16) * m_sourceChannelCount;}
 
   Channel channel () const {return m_channel;}
   void setInputGainLinear (float gain) {m_inputGainLinear = qMax (0.0f, gain);}
@@ -52,24 +52,31 @@ protected:
                                           qRound (static_cast<float> (sample) * m_inputGainLinear),
                                           32767));
     };
+    int const sourceChannels = qMax (1, m_sourceChannelCount);
     qint16 const * begin (reinterpret_cast<qint16 const *> (source));
-    for ( qint16 const * i = begin; i != begin + numFrames * (bytesPerFrame () / sizeof (qint16)); i += bytesPerFrame () / sizeof (qint16))
+    for (qint16 const * i = begin; i != begin + numFrames * sourceChannels; i += sourceChannels)
       {
+        qint16 const left = *i;
+        qint16 const right = sourceChannels > 1 ? *(i + 1) : left;
         switch (m_channel)
           {
           case Mono:
-            *dest++ = apply_input_gain (*i);
+            // Match Decodium3/Qt5 mono behavior: avoid OS/Qt downmixing but
+            // keep the first hardware channel. Users can explicitly select
+            // Right when an interface carries RX audio only on that side.
+            *dest++ = apply_input_gain (left);
             break;
 
           case Right:
-            *dest++ = apply_input_gain (*(i + 1));
+            *dest++ = apply_input_gain (right);
             break;
 
-          case Both:    // should be able to happen but if it
-            // does we'll take left
-            Q_ASSERT (Both == m_channel);
+          case Both:
+            *dest++ = apply_input_gain (static_cast<qint16> ((static_cast<int> (left) + static_cast<int> (right)) / 2));
+            break;
+
           case Left:
-            *dest++ = apply_input_gain (*i);
+            *dest++ = apply_input_gain (left);
             break;
           }
       }
@@ -103,6 +110,7 @@ protected:
 
 private:
   Channel m_channel;
+  int m_sourceChannelCount {1};
   float m_inputGainLinear {1.0f};
 };
 

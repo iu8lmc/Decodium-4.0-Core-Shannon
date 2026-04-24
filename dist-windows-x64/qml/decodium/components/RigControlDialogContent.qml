@@ -75,6 +75,38 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 34
                 model: cat ? cat.rigList : []
+                property string filterText: ""
+                property var filteredRigList: {
+                    var src = cat ? cat.rigList : []
+                    var q = filterText.trim().toLowerCase()
+                    if (q.length === 0)
+                        return src
+
+                    var terms = q.split(/\s+/)
+                    var out = []
+                    for (var i = 0; i < src.length; ++i) {
+                        var name = String(src[i])
+                        var haystack = name.toLowerCase()
+                        var match = true
+                        for (var t = 0; t < terms.length; ++t) {
+                            if (terms[t].length > 0 && haystack.indexOf(terms[t]) < 0) {
+                                match = false
+                                break
+                            }
+                        }
+                        if (match)
+                            out.push(name)
+                    }
+                    return out
+                }
+                function chooseRig(name) {
+                    var idx = model.indexOf(name)
+                    if (idx >= 0)
+                        currentIndex = idx
+                    if (cat)
+                        cat.rigName = name
+                    rigComboPopup.close()
+                }
                 Component.onCompleted: {
                     if (!cat) return
                     var idx = find(cat.rigName)
@@ -82,7 +114,79 @@ Rectangle {
                 }
                 onActivated: if (cat) cat.rigName = currentText
                 background: Rectangle { color: Qt.rgba(1,1,1,0.05); border.color: glassBorder; radius: 4 }
-                contentItem: Text { leftPadding: 8; text: rigCombo.displayText; color: textPrimary; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                contentItem: Text {
+                    leftPadding: 8
+                    text: rigCombo.currentIndex >= 0 ? rigCombo.displayText : (cat ? cat.rigName : "")
+                    color: textPrimary
+                    font.pixelSize: 12
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                popup: Popup {
+                    id: rigComboPopup
+                    width: rigCombo.width
+                    height: Math.min(360, 48 + Math.max(34, rigComboPopupList.contentHeight))
+                    focus: true
+                    onOpened: {
+                        rigCombo.filterText = ""
+                        rigSearchField.forceActiveFocus()
+                    }
+                    contentItem: Column {
+                        width: rigComboPopup.width
+                        spacing: 6
+
+                        TextField {
+                            id: rigSearchField
+                            x: 8
+                            width: parent.width - 16
+                            height: 34
+                            placeholderText: "Search radio..."
+                            text: rigCombo.filterText
+                            selectByMouse: true
+                            color: textPrimary
+                            placeholderTextColor: textSecondary
+                            font.pixelSize: 12
+                            leftPadding: 10
+                            rightPadding: 10
+                            onTextChanged: rigCombo.filterText = text
+                            background: Rectangle {
+                                color: Qt.rgba(1,1,1,0.05)
+                                border.color: glassBorder
+                                radius: 4
+                            }
+                        }
+
+                        ListView {
+                            id: rigComboPopupList
+                            x: 8
+                            width: parent.width - 16
+                            height: rigComboPopup.height - rigSearchField.height - 22
+                            clip: true
+                            model: rigCombo.filteredRigList
+                            boundsBehavior: Flickable.StopAtBounds
+                            flickableDirection: Flickable.VerticalFlick
+                            interactive: true
+                            delegate: ItemDelegate {
+                                width: rigComboPopupList.width
+                                height: 32
+                                highlighted: modelData === (cat ? cat.rigName : "")
+                                contentItem: Text {
+                                    text: modelData
+                                    color: parent.highlighted ? secondaryCyan : textPrimary
+                                    font.pixelSize: 11
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                                background: Rectangle {
+                                    color: hovered || parent.highlighted ? Qt.rgba(1,1,1,0.09) : Qt.rgba(0,0,0,0.10)
+                                }
+                                onClicked: rigCombo.chooseRig(modelData)
+                            }
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
+                        }
+                    }
+                    background: Rectangle { color: "#0B111D"; border.color: glassBorder; radius: 4 }
+                }
             }
 
             // Row 2 — COM port
@@ -122,14 +226,20 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 34
                 model: cat ? cat.baudList : []
-                Component.onCompleted: {
-                    if (!cat) return
-                    var idx = find(cat.baudRate.toString())
-                    if (idx >= 0) currentIndex = idx
+                currentIndex: {
+                    if (!cat)
+                        return -1
+                    return find(String(cat.baudRate).trim())
                 }
                 onActivated: if (cat) cat.baudRate = parseInt(currentText)
                 background: Rectangle { color: Qt.rgba(1,1,1,0.05); border.color: glassBorder; radius: 4 }
-                contentItem: Text { leftPadding: 8; text: baudCombo.displayText; color: textPrimary; font.pixelSize: 12; verticalAlignment: Text.AlignVCenter }
+                contentItem: Text {
+                    leftPadding: 8
+                    text: baudCombo.currentIndex >= 0 ? baudCombo.displayText : (cat ? String(cat.baudRate).trim() : "")
+                    color: textPrimary
+                    font.pixelSize: 12
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             // Row 4 — PTT method

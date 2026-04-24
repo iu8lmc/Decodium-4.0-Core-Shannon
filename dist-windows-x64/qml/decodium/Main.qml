@@ -14,10 +14,18 @@ import "components"
 
 ApplicationWindow {
     id: mainWindow
-    minimumWidth: 1200
-    minimumHeight: 700
+    readonly property int preferredMinimumWidth: 1200
+    readonly property int preferredMinimumHeight: 700
+    readonly property int currentScreenAvailableWidth: (Screen.desktopAvailableWidth > 0
+                                                        ? Screen.desktopAvailableWidth
+                                                        : (Screen.width > 0 ? Screen.width : preferredMinimumWidth))
+    readonly property int currentScreenAvailableHeight: (Screen.desktopAvailableHeight > 0
+                                                         ? Screen.desktopAvailableHeight
+                                                         : (Screen.height > 0 ? Screen.height : preferredMinimumHeight))
+
+    minimumWidth: Math.min(preferredMinimumWidth, currentScreenAvailableWidth)
+    minimumHeight: Math.min(preferredMinimumHeight, currentScreenAvailableHeight)
     visible: true
-    visibility: Window.Windowed
     flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
          | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
     title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
@@ -119,7 +127,7 @@ ApplicationWindow {
         var savedMap = safeStoredPanelWidth(savedLiveMapPanelWidth, 360, mapMin)
         var mapWidth = 0
 
-        if (mainWindow.liveMapPanelVisible) {
+        if (mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached) {
             var maxMapWidth = Math.max(mapMin, totalWidth - period1Min - rxMin)
             mapWidth = Math.min(savedMap, maxMapWidth)
         }
@@ -133,7 +141,7 @@ ApplicationWindow {
         period1Panel.userDraggedSplit = true
         period1Panel.targetPanelWidth = period1Width
         rxFreqPanel.targetPanelWidth = rxWidth
-        if (mainWindow.liveMapPanelVisible)
+        if (mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached)
             liveMapPanelHost.targetPanelWidth = mapWidth
     }
 
@@ -254,6 +262,7 @@ ApplicationWindow {
         bridge.saveWindowState("period2FloatingWindow", Math.round(period2FloatingWindow.x), Math.round(period2FloatingWindow.y), Math.round(period2FloatingWindow.width), Math.round(period2FloatingWindow.height), period2Detached, period2Minimized)
         bridge.saveWindowState("rxFreqFloatingWindow", Math.round(rxFreqFloatingWindow.x), Math.round(rxFreqFloatingWindow.y), Math.round(rxFreqFloatingWindow.width), Math.round(rxFreqFloatingWindow.height), rxFreqDetached, rxFreqMinimized)
         bridge.saveWindowState("txPanelFloatingWindow", Math.round(txPanelFloatingWindow.x), Math.round(txPanelFloatingWindow.y), Math.round(txPanelFloatingWindow.width), Math.round(txPanelFloatingWindow.height), txPanelDetached, txPanelMinimized)
+        bridge.saveWindowState("liveMapFloatingWindow", Math.round(liveMapFloatingWindow.x), Math.round(liveMapFloatingWindow.y), Math.round(liveMapFloatingWindow.width), Math.round(liveMapFloatingWindow.height), liveMapDetached, false)
     }
 
     // Salva impostazioni bridge al close
@@ -273,6 +282,7 @@ ApplicationWindow {
         if (period1FloatingWindow) period1FloatingWindow.close()
         if (period2FloatingWindow) period2FloatingWindow.close()
         if (rxFreqFloatingWindow) rxFreqFloatingWindow.close()
+        if (liveMapFloatingWindow) liveMapFloatingWindow.close()
         // Stop monitoring and cleanup
         bridge.stopMonitor()
         bridge.shutdown()
@@ -324,6 +334,8 @@ ApplicationWindow {
     // TxPanel detached and minimized states
     property bool txPanelDetached: false
     property bool txPanelMinimized: false
+    property bool liveMapDetached: false
+    property bool liveMapMinimized: false
     onWaterfallDetachedChanged: scheduleWindowStateSave()
     onWaterfallMinimizedChanged: scheduleWindowStateSave()
     onLogWindowDetachedChanged: scheduleWindowStateSave()
@@ -342,6 +354,14 @@ ApplicationWindow {
     onRxFreqMinimizedChanged: scheduleWindowStateSave()
     onTxPanelDetachedChanged: scheduleWindowStateSave()
     onTxPanelMinimizedChanged: scheduleWindowStateSave()
+    onLiveMapDetachedChanged: {
+        scheduleWindowStateSave()
+        Qt.callLater(function() {
+            mainWindow.syncLiveMapFloatingVisibility(false)
+            mainWindow.restoreDecodePanelWidths()
+        })
+    }
+    onLiveMapMinimizedChanged: scheduleWindowStateSave()
 
     // === GAP 3 — Nuovi pannelli (A3, B9, A4, C14) ===
     property bool timeSyncPanelVisible:       false
@@ -350,7 +370,36 @@ ApplicationWindow {
     property bool astroPanelVisible:          false
     property bool dxClusterPanelVisible:      false
     property bool liveMapPanelVisible:        bridge.getSetting("WorldMapDisplayed", true)
+    function syncLiveMapFloatingVisibility(activate) {
+        if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
+            return
+
+        if (mainWindow.liveMapPanelVisible && mainWindow.liveMapDetached && !mainWindow.liveMapMinimized) {
+            liveMapFloatingWindow.show()
+            if (activate) {
+                liveMapFloatingWindow.raise()
+                liveMapFloatingWindow.requestActivate()
+            }
+        } else {
+            liveMapFloatingWindow.hide()
+        }
+    }
+    function detachLiveMapPanel() {
+        mainWindow.liveMapPanelVisible = true
+        bridge.setSetting("WorldMapDisplayed", true)
+        mainWindow.liveMapDetached = true
+        mainWindow.liveMapMinimized = false
+        mainWindow.syncLiveMapFloatingVisibility(true)
+        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+    }
+    function dockLiveMapPanel() {
+        mainWindow.liveMapDetached = false
+        mainWindow.liveMapMinimized = false
+        mainWindow.syncLiveMapFloatingVisibility(false)
+        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+    }
     onLiveMapPanelVisibleChanged: Qt.callLater(function() {
+        mainWindow.syncLiveMapFloatingVisibility(false)
         if (mainWindow.decodePanelLayoutSaved)
             mainWindow.restoreDecodePanelWidths()
         else if (typeof period1Panel !== "undefined" && period1Panel)
@@ -427,11 +476,21 @@ ApplicationWindow {
     property color successGreen: bridge.themeManager.successColor
     property color glassOverlay: bridge.themeManager.glassOverlay
     property color glassBorder: bridge.themeManager.glassBorder
+    property string decodedTextFontFamily: bridge.fontSettingFamily("DecodedTextFont", "Courier", 10)
+    property int decodedTextFontPixelSize: bridge.fontSettingPixelSize("DecodedTextFont", "Courier", 10)
+    property int decodedTextHeaderPixelSize: Math.max(8, decodedTextFontPixelSize - 1)
+
+    function refreshDecodedTextFont() {
+        decodedTextFontFamily = bridge.fontSettingFamily("DecodedTextFont", "Courier", 10)
+        decodedTextFontPixelSize = bridge.fontSettingPixelSize("DecodedTextFont", "Courier", 10)
+    }
 
     Connections {
         target: bridge
         function onSettingValueChanged(key, value) {
-            if (key === "WorldMapDisplayed")
+            if (key === "DecodedTextFont")
+                mainWindow.refreshDecodedTextFont()
+            else if (key === "WorldMapDisplayed")
                 mainWindow.liveMapPanelVisible = !!value
             else if (key === "uiDecodePanelsLayoutSaved")
                 mainWindow.decodePanelLayoutSaved = !!value
@@ -3713,20 +3772,20 @@ ApplicationWindow {
                                         anchors.rightMargin: 6
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                        Text { text: "dB"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
-                                        Text { text: "DT"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                        Text { text: "Freq"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
+                                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
                                         Item {
                                             Layout.preferredWidth: period1Panel.dxccColumnWidth
                                             Layout.fillHeight: true
                                             Text {
                                                 anchors.fill: parent
                                                 text: "DXCC"
-                                                font.family: "Monospace"
-                                                font.pixelSize: Math.round(11 * fs)
+                                                font.family: mainWindow.decodedTextFontFamily
+                                                font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
                                                 horizontalAlignment: Text.AlignHCenter
@@ -3739,8 +3798,8 @@ ApplicationWindow {
                                             Text {
                                                 anchors.fill: parent
                                                 text: "Az"
-                                                font.family: "Monospace"
-                                                font.pixelSize: Math.round(11 * fs)
+                                                font.family: mainWindow.decodedTextFontFamily
+                                                font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
                                                 horizontalAlignment: Text.AlignHCenter
@@ -3846,20 +3905,20 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
-                                                Text { text: modelData.dt || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                                Text { text: modelData.freq || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
+                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
                                                 Item {
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
                                                     Layout.fillHeight: true
                                                     Text {
                                                         anchors.fill: parent
                                                         text: modelData.dxCountry || ""
-                                                        font.family: "Monospace"
-                                                        font.pixelSize: Math.round(11 * fs)
+                                                        font.family: mainWindow.decodedTextFontFamily
+                                                        font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
                                                         color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary
                                                         horizontalAlignment: Text.AlignRight
                                                         verticalAlignment: Text.AlignVCenter
@@ -3872,8 +3931,8 @@ ApplicationWindow {
                                                     Text {
                                                         anchors.fill: parent
                                                         text: formatBearingDegrees(modelData.dxBearing)
-                                                        font.family: "Monospace"
-                                                        font.pixelSize: Math.round(11 * fs)
+                                                        font.family: mainWindow.decodedTextFontFamily
+                                                        font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
                                                         color: secondaryCyan
                                                         horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
@@ -4089,11 +4148,11 @@ ApplicationWindow {
                                         anchors.rightMargin: 6
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-                                        Text { text: "dB"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
-                                        Text { text: "DT"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                         Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
+                                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
                                     }
                                 }
 
@@ -4178,11 +4237,11 @@ ApplicationWindow {
                                                 anchors.rightMargin: 6
                                                 spacing: 0
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
-                                                Text { text: modelData.dt || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(12 * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                                             }
                                         }
 
@@ -4201,7 +4260,7 @@ ApplicationWindow {
 
                         Rectangle {
                             id: liveMapPanelHost
-                            visible: mainWindow.liveMapPanelVisible
+                            visible: mainWindow.liveMapPanelVisible && !mainWindow.liveMapDetached
                             color: "transparent"
                             property int targetPanelWidth: mainWindow.savedLiveMapPanelWidth
                             SplitView.preferredWidth: visible ? targetPanelWidth : 0
@@ -4217,7 +4276,10 @@ ApplicationWindow {
                             LiveMapPanel {
                                 anchors.fill: parent
                                 engine: bridge
+                                detachable: true
+                                detached: false
                                 visible: parent.visible
+                                onDetachRequested: mainWindow.detachLiveMapPanel()
                             }
                         }
                     }
@@ -5715,6 +5777,27 @@ ApplicationWindow {
         }
 
         MenuItem {
+            enabled: liveMapPanelVisible
+            text: liveMapDetached ? "↙ Riaggancia Live Map" : "⇱ Stacca Live Map"
+            onTriggered: {
+                if (liveMapDetached)
+                    mainWindow.dockLiveMapPanel()
+                else
+                    mainWindow.detachLiveMapPanel()
+            }
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: liveMapPanelVisible ? (liveMapDetached ? successGreen : textSecondary) : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.45)
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
             text: bridge.foxMode ? "✓ Fox Mode (Caller Queue)" : "☐ Fox Mode (Caller Queue)"
             onTriggered: { bridge.foxMode = !bridge.foxMode; callerQueuePanelVisible = bridge.foxMode }
             background: Rectangle {
@@ -7026,6 +7109,54 @@ ApplicationWindow {
         RigControlDialogContent { }
     }
 
+    // ========== DETACHABLE LIVE MAP WINDOW ==========
+    Window {
+        id: liveMapFloatingWindow
+        width: 900
+        height: 560
+        minimumWidth: 480
+        minimumHeight: 320
+        visible: false
+        flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+             | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+        title: "Live Map - Decodium"
+        color: bgDeep
+
+        x: mainWindow.x + 80
+        y: mainWindow.y + 80
+        Component.onCompleted: {
+            mainWindow.restoreFloatingWindowState(liveMapFloatingWindow, "liveMapFloatingWindow", "liveMapDetached", "")
+            if (!mainWindow.liveMapPanelVisible)
+                liveMapFloatingWindow.hide()
+        }
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+
+        onClosing: function(close) {
+            mainWindow.dockLiveMapPanel()
+            close.accepted = true
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+            border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
+            border.width: 1
+
+            LiveMapPanel {
+                anchors.fill: parent
+                anchors.margins: 8
+                engine: bridge
+                detachable: true
+                detached: true
+                visible: liveMapFloatingWindow.visible
+                onDetachRequested: mainWindow.dockLiveMapPanel()
+            }
+        }
+    }
+
     // ========== DETACHABLE PERIOD 1 WINDOW ==========
     Window {
         id: period1FloatingWindow
@@ -7202,9 +7333,9 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
-                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; Layout.preferredWidth: 64 }
+                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
+                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                             }
 
                             MouseArea {
@@ -7428,9 +7559,9 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: textSecondary; Layout.preferredWidth: 64 }
-                                Text { text: modelData.db || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: "Monospace"; font.pixelSize: Math.round(11 * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; Layout.preferredWidth: 64 }
+                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
+                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                             }
 
                             MouseArea {

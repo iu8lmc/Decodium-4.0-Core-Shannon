@@ -3,7 +3,6 @@ name: Build Windows + SignPath Code Signing
 on:
   push:
     tags: ['v*']
-    branches: [main]
   workflow_dispatch:
 
 env:

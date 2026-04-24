@@ -29,6 +29,18 @@ bool isKenwoodRig(QString const& rigName)
         || normalized.contains(QStringLiteral("TS-"));
 }
 
+QString comparablePortName(QString value)
+{
+    value = value.trimmed();
+    if (value.isEmpty() || 0 == value.compare(QStringLiteral("CAT"), Qt::CaseInsensitive))
+        return QStringLiteral("CAT");
+    if (value.startsWith(QStringLiteral("\\\\.\\")))
+        value.remove(0, 4);
+    if (value.startsWith(QStringLiteral("/dev/")))
+        value.remove(0, 5);
+    return value.toLower();
+}
+
 bool supportsYaesuDataPtt(QString const& rigName)
 {
     QString const normalized = normalizedRigName(rigName);
@@ -70,11 +82,6 @@ char yaesuModeCode(QString const& modeIn)
     if (m == "DATA-U" || m == "DATA-USB" || m == "DATA" || m == "PKT" || m == "PKT-U") return 'C';
     if (m == "AM-N")           return 'D';
     return 0;
-}
-
-bool isCatPttMethod(QString const& value)
-{
-    return value.trimmed().compare(QStringLiteral("CAT"), Qt::CaseInsensitive) == 0;
 }
 
 // Tabella defaults per rig: baud/dataBits/stopBits/handshake/pttMethod + civAddress (ICOM).
@@ -213,32 +220,68 @@ DecodiumCatManager::~DecodiumCatManager()
     disconnectRig();
 }
 
-void DecodiumCatManager::enforceCatSerialDefaults()
+bool DecodiumCatManager::pttSharesCatPort() const
 {
-    if (!isCatPttMethod(m_pttMethod))
-        return;
+    QString const pttPort = m_pttPort.trimmed();
+    if (pttPort.isEmpty() || 0 == pttPort.compare(QStringLiteral("CAT"), Qt::CaseInsensitive))
+        return true;
 
-    if (m_forceDtr) {
+    return comparablePortName(pttPort) == comparablePortName(m_serialPort);
+}
+
+bool DecodiumCatManager::forceDtrAvailable() const
+{
+    return !(0 == m_pttMethod.compare(QStringLiteral("DTR"), Qt::CaseInsensitive) && pttSharesCatPort());
+}
+
+bool DecodiumCatManager::forceRtsAvailable() const
+{
+    bool const hardwareHandshake = 0 == m_handshake.trimmed().compare(QStringLiteral("hardware"), Qt::CaseInsensitive);
+    return !hardwareHandshake
+        && !(0 == m_pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive) && pttSharesCatPort());
+}
+
+void DecodiumCatManager::enforceForceLineAvailability()
+{
+    if (!forceDtrAvailable() && m_forceDtr) {
         m_forceDtr = false;
         emit forceDtrChanged();
     }
-    if (m_dtrHigh) {
+    if ((!forceDtrAvailable() || !m_forceDtr) && m_dtrHigh) {
         m_dtrHigh = false;
         emit dtrHighChanged();
     }
-    if (m_forceRts) {
+    if (!forceRtsAvailable() && m_forceRts) {
         m_forceRts = false;
         emit forceRtsChanged();
     }
-    if (m_rtsHigh) {
+    if ((!forceRtsAvailable() || !m_forceRts) && m_rtsHigh) {
         m_rtsHigh = false;
         emit rtsHighChanged();
     }
 }
 
+void DecodiumCatManager::setSerialPort(const QString& v)
+{
+    if (m_serialPort != v) {
+        m_serialPort = v;
+        emit serialPortChanged();
+    }
+    enforceForceLineAvailability();
+}
+
+void DecodiumCatManager::setHandshake(const QString& v)
+{
+    if (m_handshake != v) {
+        m_handshake = v;
+        emit handshakeChanged();
+    }
+    enforceForceLineAvailability();
+}
+
 void DecodiumCatManager::setForceDtr(bool v)
 {
-    bool const effective = isCatPttMethod(m_pttMethod) ? false : v;
+    bool const effective = forceDtrAvailable() ? v : false;
     if (m_forceDtr != effective) {
         m_forceDtr = effective;
         emit forceDtrChanged();
@@ -251,7 +294,7 @@ void DecodiumCatManager::setForceDtr(bool v)
 
 void DecodiumCatManager::setDtrHigh(bool v)
 {
-    bool const effective = (isCatPttMethod(m_pttMethod) || !m_forceDtr) ? false : v;
+    bool const effective = (forceDtrAvailable() && m_forceDtr) ? v : false;
     if (m_dtrHigh != effective) {
         m_dtrHigh = effective;
         emit dtrHighChanged();
@@ -260,7 +303,7 @@ void DecodiumCatManager::setDtrHigh(bool v)
 
 void DecodiumCatManager::setForceRts(bool v)
 {
-    bool const effective = isCatPttMethod(m_pttMethod) ? false : v;
+    bool const effective = forceRtsAvailable() ? v : false;
     if (m_forceRts != effective) {
         m_forceRts = effective;
         emit forceRtsChanged();
@@ -273,7 +316,7 @@ void DecodiumCatManager::setForceRts(bool v)
 
 void DecodiumCatManager::setRtsHigh(bool v)
 {
-    bool const effective = (isCatPttMethod(m_pttMethod) || !m_forceRts) ? false : v;
+    bool const effective = (forceRtsAvailable() && m_forceRts) ? v : false;
     if (m_rtsHigh != effective) {
         m_rtsHigh = effective;
         emit rtsHighChanged();
@@ -288,7 +331,16 @@ void DecodiumCatManager::setPttMethod(const QString& v)
         m_pttMethod = effective;
         emit pttMethodChanged();
     }
-    enforceCatSerialDefaults();
+    enforceForceLineAvailability();
+}
+
+void DecodiumCatManager::setPttPort(const QString& v)
+{
+    if (m_pttPort != v) {
+        m_pttPort = v;
+        emit pttPortChanged();
+    }
+    enforceForceLineAvailability();
 }
 
 // --- connectRig ---
@@ -329,9 +381,9 @@ void DecodiumCatManager::connectRig()
         serial->deleteLater();
         return;
     }
-    if (m_forceDtr)
+    if (forceDtrAvailable() && m_forceDtr)
         serial->setDataTerminalReady(m_dtrHigh);
-    if (m_forceRts)
+    if (forceRtsAvailable() && m_forceRts)
         serial->setRequestToSend(m_rtsHigh);
 
     m_serial = serial;
@@ -706,20 +758,22 @@ void DecodiumCatManager::refreshPorts()
 
 void DecodiumCatManager::saveSettings()
 {
-    bool const catPtt = isCatPttMethod(m_pttMethod);
     QSettings s("Decodium", "Decodium3");
     s.beginGroup("CAT_Native");
     s.setValue("rigName",        m_rigName);
     s.setValue("serialPort",     m_serialPort);
     s.setValue("baudRate",       m_baudRate);
-    s.setValue("pttMethod",      catPtt ? QStringLiteral("CAT") : m_pttMethod);
+    s.setValue("dataBits",       m_dataBits);
+    s.setValue("stopBits",       m_stopBits);
+    s.setValue("handshake",      m_handshake);
+    s.setValue("pttMethod",      m_pttMethod);
     s.setValue("pttPort",        m_pttPort);
     s.setValue("civAddress",     m_civAddress);
     s.setValue("pollInterval",   m_pollInterval);
-    s.setValue("forceDtr",       catPtt ? false : m_forceDtr);
-    s.setValue("dtrHigh",        catPtt ? false : m_dtrHigh);
-    s.setValue("forceRts",       catPtt ? false : m_forceRts);
-    s.setValue("rtsHigh",        catPtt ? false : m_rtsHigh);
+    s.setValue("forceDtr",       forceDtrAvailable() && m_forceDtr);
+    s.setValue("dtrHigh",        forceDtrAvailable() && m_dtrHigh);
+    s.setValue("forceRts",       forceRtsAvailable() && m_forceRts);
+    s.setValue("rtsHigh",        forceRtsAvailable() && m_rtsHigh);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
     s.endGroup();
@@ -732,6 +786,9 @@ void DecodiumCatManager::loadSettings()
     m_rigName        = s.value("rigName",        "Kenwood TS-590S").toString();
     m_serialPort     = s.value("serialPort",     "COM3").toString();
     m_baudRate       = s.value("baudRate",        57600).toInt();
+    m_dataBits       = s.value("dataBits",        m_dataBits).toString();
+    m_stopBits       = s.value("stopBits",        m_stopBits).toString();
+    m_handshake      = s.value("handshake",       m_handshake).toString();
     m_pttMethod      = s.value("pttMethod",       "CAT").toString().trimmed().toUpper();
     if (m_pttMethod.isEmpty())
         m_pttMethod = QStringLiteral("CAT");
@@ -745,5 +802,5 @@ void DecodiumCatManager::loadSettings()
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
     s.endGroup();
-    enforceCatSerialDefaults();
+    enforceForceLineAvailability();
 }

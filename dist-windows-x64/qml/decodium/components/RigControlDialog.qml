@@ -171,7 +171,7 @@ Dialog {
                 }
 
                 Repeater {
-                    model: [["native","Nativo (QSerialPort)"],["omnirig","OmniRig"],["hamlib","Hamlib (300+ radio)"]]
+                    model: [["native","Nativo (QSerialPort)"],["omnirig","OmniRig"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"]]
                     delegate: Rectangle {
                         property string bk: modelData[0]
                         property bool active: bridge.catBackend === bk
@@ -194,8 +194,11 @@ Dialog {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (!bridge.catManager.connected)
+                                if (!bridge.catManager.connected) {
                                     bridge.catBackend = bk
+                                    if (bk === "tci" && bridge.catManager && String(bridge.catManager.rigName || "").indexOf("TCI Client") !== 0)
+                                        bridge.catManager.rigName = "TCI Client RX1"
+                                }
                             }
                         }
                     }
@@ -314,7 +317,7 @@ Dialog {
                                 clip: true
                                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
                                 model: {
-                                    var src = bridge.catManager ? bridge.catManager.rigList : []
+                                    var src = bridge.catBackend === "tci" ? ["TCI Client RX1", "TCI Client RX2"] : (bridge.catManager ? bridge.catManager.rigList : [])
                                     var q = rigFilterField.text.toLowerCase()
                                     if (!q) return src
                                     return src.filter(function(r){ return r.toLowerCase().indexOf(q) >= 0 })
@@ -349,11 +352,11 @@ Dialog {
                     // Porta seriale (visibile se portType=serial/usb)
                     Text {
                         text: "Porta:"; color: textSecondary; font.pixelSize: 12
-                        visible: bridge.catManager.portType !== "network" && bridge.catManager.portType !== "tci"
+                        visible: bridge.catBackend !== "tci" && bridge.catManager.portType !== "network" && bridge.catManager.portType !== "tci"
                     }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 4
-                        visible: bridge.catManager.portType !== "network" && bridge.catManager.portType !== "tci"
+                        visible: bridge.catBackend !== "tci" && bridge.catManager.portType !== "network" && bridge.catManager.portType !== "tci"
                         ComboBox {
                             id: portCombo
                             Layout.fillWidth: true; implicitHeight: controlHeight
@@ -396,11 +399,19 @@ Dialog {
                         Layout.fillWidth: true; implicitHeight: controlHeight
                         visible: bridge.catManager.portType === "serial" || bridge.catManager.portType === "usb"
                         model: bridge.catManager.baudList
-                        Component.onCompleted: {
-                            var idx = find(bridge.catManager.baudRate.toString())
-                            currentIndex = idx >= 0 ? idx : find("57600")
+                        currentIndex: {
+                            if (!bridge.catManager)
+                                return -1
+                            return find(String(bridge.catManager.baudRate).trim())
                         }
-                        contentItem: Text { leftPadding: 8; text: baudCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; verticalAlignment: Text.AlignVCenter; height: baudCombo.height }
+                        contentItem: Text {
+                            leftPadding: 8
+                            text: baudCombo.currentIndex >= 0 ? baudCombo.displayText : (bridge.catManager ? String(bridge.catManager.baudRate).trim() : "")
+                            color: textPrimary
+                            font.pixelSize: controlFontSize
+                            verticalAlignment: Text.AlignVCenter
+                            height: baudCombo.height
+                        }
                         background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         delegate: ItemDelegate {
                             width: baudCombo.width
@@ -428,12 +439,12 @@ Dialog {
                     // Porta TCI
                     Text {
                         text: "TCI:"; color: textSecondary; font.pixelSize: 12
-                        visible: bridge.catManager.portType === "tci"
+                        visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
                     }
                     TextField {
                         id: tciField
                         Layout.fillWidth: true; implicitHeight: controlHeight
-                        visible: bridge.catManager.portType === "tci"
+                        visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
                         text: bridge.catManager.tciPort
                         placeholderText: "localhost:50001"
                         color: textPrimary; font.pixelSize: controlFontSize

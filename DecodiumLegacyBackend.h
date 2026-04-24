@@ -37,18 +37,10 @@ public:
     QString waterfallPalette() const;
     bool alt12Enabled() const;
     bool txFirst() const;
-    bool txEnabled() const;
     bool monitoring() const;
     bool transmitting() const;
     bool tuning() const;
     bool catConnected() const;
-    bool autoSpotEnabled() const;
-    bool asyncL2Enabled() const;
-    bool dualCarrierEnabled() const;
-    bool manualTxEnabled() const;
-    bool speedyContestEnabled() const;
-    bool digitalMorseEnabled() const;
-    bool quickQsoEnabled() const;
     bool rigControlEnabled() const { return m_rigControlEnabled; }
     double signalLevel() const;
     int bandActivityRevision() const;
@@ -57,16 +49,11 @@ public:
     QStringList rxFrequencyLines() const;
     QString txMessage(int index) const;
     int currentTx() const;
-    QStringList callerQueue() const;
     QString adifLogPath() const;
     QString allTxtPath() const;
     int txOutputAttenuation() const;
-    int ft2QsoMessageCount() const;
-    int asyncSnrDb() const;
-    QString uiLanguage() const;
 
     void setMode(const QString& mode);
-    void setBand(const QString& band);
     void setDialFrequency(double frequencyHz);
     void setMonitoring(bool enabled);
     void setAutoSeq(bool enabled);
@@ -103,14 +90,6 @@ public:
     void retryRigConnection();
     void setAlt12Enabled(bool enabled);
     void setTxFirst(bool enabled);
-    void setAutoSpotEnabled(bool enabled);
-    void setAsyncL2Enabled(bool enabled);
-    void setDualCarrierEnabled(bool enabled);
-    void setManualTxEnabled(bool enabled);
-    void setSpeedyContestEnabled(bool enabled);
-    void setDigitalMorseEnabled(bool enabled);
-    void setQuickQsoEnabled(bool enabled);
-    void setFt2QsoMessageCount(int count);
 
 Q_SIGNALS:
     void waterfallRowReady(QByteArray const& rowLevels,
@@ -119,6 +98,7 @@ Q_SIGNALS:
                            int rxFrequencyHz,
                            int txFrequencyHz,
                            QString const& mode) const;
+    void audioSamplesReady(QByteArray const& pcmSamples) const;
     void preferencesRequested() const;
     void quitRequested() const;
     void warningRaised(QString const& title,

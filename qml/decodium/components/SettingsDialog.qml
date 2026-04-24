@@ -6,6 +6,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Dialog {
@@ -21,6 +22,72 @@ Dialog {
     readonly property int fieldMinWidth: 300
     readonly property int wideFieldMinWidth: 420
     readonly property int portFieldMinWidth: 190
+    property string dataDownloadStatus: ""
+    property bool dataDownloadIsError: false
+    property string uiFontLabel: bridge.fontSettingLabel("Font", "", 0)
+    property string decodedFontLabel: bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)
+
+    function refreshFontLabels() {
+        uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
+        decodedFontLabel = bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)
+    }
+
+    function localDirectoryToUrl(path) {
+        var text = String(path || "").trim()
+        if (text.length === 0)
+            return ""
+        if (text.indexOf("file:") === 0)
+            return text
+        text = text.replace(/\\/g, "/")
+        if (Qt.platform.os === "windows" && /^[A-Za-z]:\//.test(text))
+            return "file:///" + encodeURI(text)
+        if (text.charAt(0) === "/")
+            return "file://" + encodeURI(text)
+        return "file:///" + encodeURI(text)
+    }
+
+    function folderUrlToLocalDirectory(url) {
+        var text = String(url || "")
+        if (text.indexOf("file:///") === 0) {
+            var absolutePath = decodeURIComponent(text.substring(8))
+            return Qt.platform.os === "windows" ? absolutePath : "/" + absolutePath
+        }
+        if (text.indexOf("file://") === 0)
+            return decodeURIComponent(text.substring(7))
+        return decodeURIComponent(text)
+    }
+
+    function openDirectoryPicker(settingKey, currentPath) {
+        directoryPickerDialog.settingKey = settingKey
+        var folderUrl = localDirectoryToUrl(currentPath)
+        if (folderUrl.length > 0)
+            directoryPickerDialog.currentFolder = folderUrl
+        directoryPickerDialog.open()
+    }
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "Font" || key === "DecodedTextFont")
+                settingsDialog.refreshFontLabels()
+        }
+        function onStatusMessage(msg) {
+            var text = String(msg || "")
+            var lower = text.toLowerCase()
+            if (lower.indexOf("cty.dat") >= 0 || lower.indexOf("call3.txt") >= 0) {
+                dataDownloadStatus = text
+                dataDownloadIsError = false
+            }
+        }
+        function onErrorMessage(msg) {
+            var text = String(msg || "")
+            var lower = text.toLowerCase()
+            if (lower.indexOf("cty.dat") >= 0 || lower.indexOf("call3.txt") >= 0) {
+                dataDownloadStatus = text
+                dataDownloadIsError = true
+            }
+        }
+    }
 
     function activeCatController() {
         return bridge.catManager ? bridge.catManager : null
@@ -40,6 +107,24 @@ Dialog {
         return String(controller.rigName)
     }
 
+    function activeBaudRateText() {
+        var controller = activeCatController()
+        if (!controller || controller.baudRate === undefined || controller.baudRate === null)
+            return ""
+        var text = String(controller.baudRate).trim()
+        return text === "0" ? "" : text
+    }
+
+    function activeStopBitsText() {
+        var controller = activeCatController()
+        if (!controller || controller.stopBits === undefined || controller.stopBits === null)
+            return "1"
+        var text = String(controller.stopBits).trim().toLowerCase()
+        if (text === "2" || text === "2.0" || text.indexOf("two") >= 0)
+            return "2"
+        return "1"
+    }
+
     function stringListIndexOf(list, value) {
         if (!list || value === undefined || value === null)
             return -1
@@ -55,6 +140,18 @@ Dialog {
                 return i
         }
         return -1
+    }
+
+    function selectTciRigIfNeeded() {
+        var controller = activeCatController()
+        if (!controller || controller.rigName === undefined || controller.rigName === null)
+            return
+        var currentRig = String(controller.rigName || "")
+        if (currentRig.indexOf("TCI Client") === 0)
+            return
+        var rigs = controller.rigList || []
+        var rx1Index = stringListIndexOf(rigs, "TCI Client RX1")
+        controller.rigName = rx1Index >= 0 ? String(rigs[rx1Index]) : "TCI Client RX1"
     }
 
     function normalizedRigName(value) {
@@ -77,22 +174,72 @@ Dialog {
     }
 
     function usesTciControls() {
-        return activeCatPortType() === "tci"
+        return bridge.catBackend === "tci" || activeCatPortType() === "tci"
+    }
+
+    function activePttMethod() {
+        var controller = activeCatController()
+        if (!controller || controller.pttMethod === undefined || controller.pttMethod === null)
+            return "CAT"
+        var method = String(controller.pttMethod).trim().toUpperCase()
+        return method === "" ? "CAT" : method
     }
 
     function usesSeparatePttPort() {
-        var controller = activeCatController()
-        if (!controller || controller.pttMethod === undefined || controller.pttMethod === null)
-            return false
-        var method = String(controller.pttMethod).trim().toUpperCase()
+        var method = activePttMethod()
         return method === "DTR" || method === "RTS"
     }
 
-    function pttMethodUsesCatDefaults() {
+    function normalizedPortName(value) {
+        var text = String(value || "").trim()
+        if (text === "" || text.toUpperCase() === "CAT")
+            return "CAT"
+        if (text.indexOf("/dev/") === 0)
+            text = text.substring(5)
+        return text.toLowerCase()
+    }
+
+    function pttSharesCatPort() {
         var controller = activeCatController()
-        if (!controller || controller.pttMethod === undefined || controller.pttMethod === null)
+        if (!controller)
             return false
-        return String(controller.pttMethod).trim().toUpperCase() === "CAT"
+        var pttPort = normalizedPortName(controller.pttPort)
+        if (pttPort === "CAT")
+            return true
+        return pttPort === normalizedPortName(controller.serialPort)
+    }
+
+    function forceDtrControlEnabled() {
+        return activeCatPortType() === "serial"
+                && !(activePttMethod() === "DTR" && pttSharesCatPort())
+    }
+
+    function forceRtsControlEnabled() {
+        var controller = activeCatController()
+        var handshake = controller && controller.handshake !== undefined && controller.handshake !== null
+                ? String(controller.handshake).trim().toLowerCase() : "none"
+        return activeCatPortType() === "serial"
+                && handshake !== "hardware"
+                && !(activePttMethod() === "RTS" && pttSharesCatPort())
+    }
+
+    function enforceForceLineAvailability() {
+        var controller = activeCatController()
+        if (!controller)
+            return
+        var changed = false
+        if (!forceDtrControlEnabled() && (controller.forceDtr || controller.dtrHigh)) {
+            controller.forceDtr = false
+            controller.dtrHigh = false
+            changed = true
+        }
+        if (!forceRtsControlEnabled() && (controller.forceRts || controller.rtsHigh)) {
+            controller.forceRts = false
+            controller.rtsHigh = false
+            changed = true
+        }
+        if (changed)
+            scheduleCatPersist()
     }
 
     function supportsSwrTelemetry() {
@@ -135,6 +282,10 @@ Dialog {
         var controller = activeCatController()
         if (!controller)
             return
+        if (lineName === "dtr" && !forceDtrControlEnabled())
+            value = "Default"
+        if (lineName === "rts" && !forceRtsControlEnabled())
+            value = "Default"
         var forceEnabled = value !== "Default"
         var highLevel = value === "On"
         if (lineName === "dtr") {
@@ -176,7 +327,15 @@ Dialog {
         if (controller && controller.refreshPorts) controller.refreshPorts()
     }
 
+    function refreshAudioDevices() {
+        if (bridge && bridge.refreshAudioDevices)
+            bridge.refreshAudioDevices()
+    }
+
     function scheduleCatPersist() {
+        var controller = activeCatController()
+        if (controller && controller.saveSettings)
+            controller.saveSettings()
         catPersistTimer.restart()
     }
 
@@ -200,6 +359,22 @@ Dialog {
         interval: 300
         repeat: false
         onTriggered: bridge.saveSettings()
+    }
+
+    FolderDialog {
+        id: directoryPickerDialog
+        property string settingKey: ""
+        title: settingKey === "AzElDirectory" ? "Seleziona directory AzEl" : "Seleziona directory salvataggio"
+        onAccepted: {
+            var path = settingsDialog.folderUrlToLocalDirectory(selectedFolder)
+            if (settingKey === "" || path === "")
+                return
+            bridge.setSetting(settingKey, path)
+            if (settingKey === "SaveDirectory")
+                saveDirectoryField.text = path
+            else if (settingKey === "AzElDirectory")
+                azElDirectoryField.text = path
+        }
     }
 
     // ── Theme colors ─────────────────────────────────────────────────────
@@ -514,7 +689,7 @@ Dialog {
                         Row {
                             Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 6
                             Repeater {
-                                model: [["native","Nativo (15 radio)"],["hamlib","Hamlib (300+ radio)"],["omnirig","OmniRig"]]
+                                model: [["native","Nativo (15 radio)"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"],["omnirig","OmniRig"]]
                                 delegate: Rectangle {
                                     property string bk: modelData[0]
                                     property bool active: bridge.catBackend === bk
@@ -525,6 +700,8 @@ Dialog {
                                     MouseArea { id: bkMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             bridge.catBackend = bk
+                                            if (bk === "tci")
+                                                settingsDialog.selectTciRigIfNeeded()
                                             settingsDialog.scheduleCatPersist()
                                         }
                                     }
@@ -590,15 +767,53 @@ Dialog {
                         Text { text: "Rig:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: rigCombo
-                            model: bridge.catManager ? bridge.catManager.rigList : []; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
+                            model: bridge.catBackend === "tci" ? ["TCI Client RX1", "TCI Client RX2"] : (bridge.catManager ? bridge.catManager.rigList : []); Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
                             Layout.minimumWidth: wideFieldMinWidth
+                            property string filterText: ""
+                            property var filteredRigList: {
+                                var src = bridge.catBackend === "tci" ? ["TCI Client RX1", "TCI Client RX2"] : (bridge.catManager ? bridge.catManager.rigList : [])
+                                var q = filterText.trim().toLowerCase()
+                                if (q.length === 0)
+                                    return src
+
+                                var terms = q.split(/\s+/)
+                                var out = []
+                                for (var i = 0; i < src.length; ++i) {
+                                    var name = String(src[i])
+                                    var haystack = name.toLowerCase()
+                                    var match = true
+                                    for (var t = 0; t < terms.length; ++t) {
+                                        if (terms[t].length > 0 && haystack.indexOf(terms[t]) < 0) {
+                                            match = false
+                                            break
+                                        }
+                                    }
+                                    if (match)
+                                        out.push(name)
+                                }
+                                return out
+                            }
+                            function chooseRig(name) {
+                                var idx = model.indexOf(name)
+                                if (idx >= 0)
+                                    currentIndex = idx
+                                if (bridge.catManager) {
+                                    bridge.catManager.rigName = name
+                                    settingsDialog.enforceForceLineAvailability()
+                                }
+                                settingsDialog.scheduleCatPersist()
+                                rigComboPopup.close()
+                            }
                             currentIndex: {
                                 if (!bridge.catManager)
                                     return -1
                                 return find(bridge.catManager.rigName)
                             }
                             onActivated: {
-                                if (bridge.catManager) bridge.catManager.rigName = currentText
+                                if (bridge.catManager) {
+                                    bridge.catManager.rigName = currentText
+                                    settingsDialog.enforceForceLineAvailability()
+                                }
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -610,23 +825,76 @@ Dialog {
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
                             }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup: Popup {
+                                id: rigComboPopup
                                 y: rigCombo.height
                                 width: Math.max(rigCombo.width, 560)
-                                implicitHeight: Math.min(contentItem.implicitHeight + 8, 360)
-                                padding: 4
+                                height: Math.min(420,
+                                                 Math.max(180,
+                                                          Math.min(settingsDialog.height - 160,
+                                                                   54 + Math.max(34, rigComboPopupList.contentHeight))))
+                                focus: true
+                                onOpened: {
+                                    rigCombo.filterText = ""
+                                    rigSearchField.forceActiveFocus()
+                                }
                                 background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
-                                contentItem: ListView {
-                                    clip: true
-                                    implicitHeight: contentHeight
-                                    model: rigCombo.popup.visible ? rigCombo.delegateModel : null
-                                    delegate: rigCombo.delegate
-                                    currentIndex: rigCombo.highlightedIndex
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    reuseItems: true
-                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                contentItem: Column {
+                                    width: rigComboPopup.width
+                                    spacing: 6
+
+                                    TextField {
+                                        id: rigSearchField
+                                        x: 8
+                                        width: parent.width - 16
+                                        height: 36
+                                        placeholderText: "Cerca radio, modello o marca..."
+                                        text: rigCombo.filterText
+                                        selectByMouse: true
+                                        color: textPrimary
+                                        placeholderTextColor: textSecondary
+                                        font.pixelSize: controlFontSize
+                                        leftPadding: 10
+                                        rightPadding: 10
+                                        onTextChanged: rigCombo.filterText = text
+                                        background: Rectangle {
+                                            color: bgMedium
+                                            border.color: activeFocus ? secondaryCyan : glassBorder
+                                            radius: 4
+                                        }
+                                    }
+
+                                    ListView {
+                                        id: rigComboPopupList
+                                        x: 8
+                                        width: parent.width - 16
+                                        height: rigComboPopup.height - rigSearchField.height - 22
+                                        clip: true
+                                        model: rigCombo.filteredRigList
+                                        currentIndex: -1
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        flickableDirection: Flickable.VerticalFlick
+                                        interactive: true
+                                        focus: true
+                                        reuseItems: true
+                                        delegate: ItemDelegate {
+                                            width: rigComboPopupList.width
+                                            height: 34
+                                            highlighted: modelData === settingsDialog.activeRigName()
+                                            contentItem: Text {
+                                                text: modelData
+                                                color: parent.highlighted ? secondaryCyan : textPrimary
+                                                font.pixelSize: 12
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
+                                            background: Rectangle {
+                                                color: hovered || parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
+                                            }
+                                            onClicked: rigCombo.chooseRig(modelData)
+                                        }
+                                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
+                                    }
                                 }
                             }
                         }
@@ -649,7 +917,10 @@ Dialog {
                                 return find(bridge.catManager.serialPort)
                             }
                             onActivated: {
-                                if (bridge.catManager) bridge.catManager.serialPort = currentText
+                                if (bridge.catManager) {
+                                    bridge.catManager.serialPort = currentText
+                                    settingsDialog.enforceForceLineAvailability()
+                                }
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -678,16 +949,21 @@ Dialog {
                             model: bridge.catManager && bridge.catManager.baudList ? bridge.catManager.baudList : ["4800","9600","19200","38400","57600","115200"]
                             Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
-                                if (!bridge.catManager)
-                                    return -1
-                                return find(String(bridge.catManager.baudRate))
+                                var baud = settingsDialog.activeBaudRateText()
+                                return baud === "" ? -1 : settingsDialog.stringListIndexOf(model, baud)
                             }
                             onActivated: {
                                 if (bridge.catManager) bridge.catManager.baudRate = parseInt(currentText)
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: baudCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            contentItem: Text {
+                                text: baudCombo.currentIndex >= 0 ? baudCombo.displayText : settingsDialog.activeBaudRateText()
+                                color: textPrimary
+                                font.pixelSize: controlFontSize
+                                leftPadding: 8
+                                verticalAlignment: Text.AlignVCenter
+                            }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
@@ -800,8 +1076,7 @@ Dialog {
                             onActivated: {
                                 if (bridge.catManager) {
                                     bridge.catManager.pttMethod = currentText
-                                    if (settingsDialog.pttMethodUsesCatDefaults())
-                                        settingsDialog.resetForcedSerialLines()
+                                    settingsDialog.enforceForceLineAvailability()
                                 }
                                 settingsDialog.scheduleCatPersist()
                             }
@@ -844,7 +1119,10 @@ Dialog {
                                 return find(bridge.catManager.pttPort)
                             }
                             onActivated: {
-                                if (bridge.catManager) bridge.catManager.pttPort = currentText
+                                if (bridge.catManager) {
+                                    bridge.catManager.pttPort = currentText
+                                    settingsDialog.enforceForceLineAvailability()
+                                }
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -911,9 +1189,7 @@ Dialog {
                             visible: settingsDialog.usesSerialControls()
                             model: ["1","2"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
-                                if (!bridge.catManager)
-                                    return 0
-                                return Math.max(0, find(String(bridge.catManager.stopBits)))
+                                return settingsDialog.activeStopBitsText() === "2" ? 1 : 0
                             }
                             onActivated: {
                                 if (bridge.catManager) bridge.catManager.stopBits = currentText
@@ -937,7 +1213,10 @@ Dialog {
                                 return Math.max(0, find(String(bridge.catManager.handshake)))
                             }
                             onActivated: {
-                                if (bridge.catManager) bridge.catManager.handshake = currentText
+                                if (bridge.catManager) {
+                                    bridge.catManager.handshake = currentText
+                                    settingsDialog.enforceForceLineAvailability()
+                                }
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -948,14 +1227,14 @@ Dialog {
                         }
                         Item { visible: settingsDialog.usesSerialControls(); Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { visible: settingsDialog.usesSerialControls(); text: "Force DTR:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceDtrControlEnabled(); text: "Force DTR:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: forceDtrCombo
                             visible: settingsDialog.usesSerialControls()
-                            enabled: !settingsDialog.pttMethodUsesCatDefaults()
-                            model: ["Default","Off","On"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceDtr : false,
-                                                                           bridge.catManager ? bridge.catManager.dtrHigh : false))
+                            enabled: settingsDialog.forceDtrControlEnabled()
+                            model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            currentIndex: enabled ? find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceDtr : false,
+                                                                                      bridge.catManager ? bridge.catManager.dtrHigh : false)) : 0
                             onActivated: settingsDialog.applyForceLineValue("dtr", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: forceDtrCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
@@ -963,14 +1242,14 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { visible: settingsDialog.usesSerialControls(); text: "Force RTS:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceRtsControlEnabled(); text: "Force RTS:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: forceRtsCombo
                             visible: settingsDialog.usesSerialControls()
-                            enabled: !settingsDialog.pttMethodUsesCatDefaults()
-                            model: ["Default","Off","On"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceRts : false,
-                                                                           bridge.catManager ? bridge.catManager.rtsHigh : false))
+                            enabled: settingsDialog.forceRtsControlEnabled()
+                            model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            currentIndex: enabled ? find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceRts : false,
+                                                                                      bridge.catManager ? bridge.catManager.rtsHigh : false)) : 0
                             onActivated: settingsDialog.applyForceLineValue("rts", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: forceRtsCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
@@ -1042,7 +1321,11 @@ Dialog {
                         CheckBox {
                             checked: settingsDialog.supportsSwrTelemetry() ? bridge.getSetting("CheckSWR", false) : false
                             enabled: settingsDialog.supportsSwrTelemetry()
-                            onCheckedChanged: if (enabled) bridge.setSetting("CheckSWR", checked)
+                            onCheckedChanged: if (enabled) {
+                                bridge.setSetting("CheckSWR", checked)
+                                if (checked && !bridge.getSetting("PWRandSWR", false))
+                                    bridge.setSetting("PWRandSWR", true)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -1120,7 +1403,30 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Dispositivi Audio ──
-                        Text { text: "DISPOSITIVI AUDIO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: "DISPOSITIVI AUDIO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 2; Layout.topMargin: 4 }
+                        Item { Layout.fillWidth: true }
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 28
+                            Layout.alignment: Qt.AlignRight
+                            radius: 6
+                            color: audioRefreshMA.containsMouse ? bgMedium : "transparent"
+                            border.color: glassBorder
+                            Text {
+                                anchors.centerIn: parent
+                                text: "↻  Aggiorna"
+                                color: secondaryCyan
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: audioRefreshMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: settingsDialog.refreshAudioDevices()
+                            }
+                        }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         Text { text: "Input Device:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
@@ -1143,7 +1449,7 @@ Dialog {
                         Text { text: "Input Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: audioInChCombo
-                            model: ["Mono","Left","Right"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Mono","Left","Right","Both"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             Layout.minimumWidth: fieldMinWidth
                             currentIndex: bridge.audioInputChannel
                             onActivated: bridge.audioInputChannel = currentIndex
@@ -1192,14 +1498,28 @@ Dialog {
 
                         Text { text: "RX Input Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
-                            from: 0; to: 100; value: bridge.rxInputLevel; Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.rxInputLevel = value
+                            id: setupRxInputLevelSlider
+                            from: 0; to: 100; live: true; stepSize: 1
+                            Layout.fillWidth: true; Layout.columnSpan: 3
+                            Binding on value { value: bridge.rxInputLevel; when: !setupRxInputLevelSlider.pressed }
+                            onMoved: bridge.rxInputLevel = value
+                            onPressedChanged: {
+                                if (!pressed && Math.abs(bridge.rxInputLevel - value) >= 0.5)
+                                    bridge.rxInputLevel = value
+                            }
                         }
 
                         Text { text: "TX Output Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
-                            from: 0; to: 450; value: Number(bridge.getSetting("TXOutputLevel", 100)); Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.setSetting("TXOutputLevel", value)
+                            id: setupTxOutputLevelSlider
+                            from: 450; to: 0; live: true; stepSize: 1
+                            Layout.fillWidth: true; Layout.columnSpan: 3
+                            Binding on value { value: bridge.txOutputLevel; when: !setupTxOutputLevelSlider.pressed }
+                            onMoved: bridge.txOutputLevel = value
+                            onPressedChanged: {
+                                if (!pressed && Math.abs(bridge.txOutputLevel - value) >= 0.5)
+                                    bridge.txOutputLevel = value
+                            }
                         }
 
                         // ── Directory ──
@@ -1208,18 +1528,32 @@ Dialog {
 
                         Text { text: "Save Directory:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
+                            id: saveDirectoryField
                             text: bridge.getSetting("SaveDirectory", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
                             color: textPrimary; font.pixelSize: controlFontSize
+                            readOnly: true
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("SaveDirectory", text)
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: settingsDialog.openDirectoryPicker("SaveDirectory", saveDirectoryField.text)
+                            }
                         }
 
                         Text { text: "AzEl Directory:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
+                            id: azElDirectoryField
                             text: bridge.getSetting("AzElDirectory", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
                             color: textPrimary; font.pixelSize: controlFontSize
+                            readOnly: true
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("AzElDirectory", text)
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: settingsDialog.openDirectoryPicker("AzElDirectory", azElDirectoryField.text)
+                            }
                         }
 
                         // ── Power Memory ──
@@ -1443,18 +1777,76 @@ Dialog {
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         Text { text: "Font:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("Font", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Font", text)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: controlHeight
+                                radius: 4
+                                color: bgMedium
+                                border.color: glassBorder
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    text: settingsDialog.uiFontLabel
+                                    color: textPrimary
+                                    font.pixelSize: controlFontSize
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            Rectangle {
+                                width: 78; height: controlHeight; radius: 4
+                                color: fontChooseMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
+                                border.color: primaryBlue
+                                Text { anchors.centerIn: parent; text: "Scegli"; color: primaryBlue; font.pixelSize: 11 }
+                                MouseArea { id: fontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.chooseFontSetting("Font", "", 0) }
+                            }
+                            Rectangle {
+                                width: 64; height: controlHeight; radius: 4
+                                color: fontResetMA.containsMouse ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.18) : bgMedium
+                                border.color: glassBorder
+                                Text { anchors.centerIn: parent; text: "Reset"; color: textSecondary; font.pixelSize: 11 }
+                                MouseArea { id: fontResetMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.resetFontSetting("Font", "", 0) }
+                            }
                         }
                         Text { text: "Decoded Font:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField {
-                            text: bridge.getSetting("DecodedTextFont", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
-                            color: textPrimary; font.pixelSize: controlFontSize
-                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("DecodedTextFont", text)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: controlHeight
+                                radius: 4
+                                color: bgMedium
+                                border.color: glassBorder
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    text: settingsDialog.decodedFontLabel
+                                    color: textPrimary
+                                    font.pixelSize: controlFontSize
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            Rectangle {
+                                width: 78; height: controlHeight; radius: 4
+                                color: decodedFontChooseMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
+                                border.color: primaryBlue
+                                Text { anchors.centerIn: parent; text: "Scegli"; color: primaryBlue; font.pixelSize: 11 }
+                                MouseArea { id: decodedFontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.chooseFontSetting("DecodedTextFont", "Courier", 10) }
+                            }
+                            Rectangle {
+                                width: 64; height: controlHeight; radius: 4
+                                color: decodedFontResetMA.containsMouse ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.18) : bgMedium
+                                border.color: glassBorder
+                                Text { anchors.centerIn: parent; text: "Reset"; color: textSecondary; font.pixelSize: 11 }
+                                MouseArea { id: decodedFontResetMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.resetFontSetting("DecodedTextFont", "Courier", 10) }
+                            }
                         }
 
                         // ── Decodifiche ──
@@ -1998,15 +2390,29 @@ Dialog {
 
                         Text { text: "Prompt to Log:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("PromptToLog", true)
-                            onCheckedChanged: bridge.setSetting("PromptToLog", checked)
+                            id: promptToLogCheck
+                            checked: bridge.getSetting("PromptToLog", false)
+                            onToggled: {
+                                if (checked) {
+                                    autoLogCheck.checked = false
+                                    bridge.setSetting("AutoLog", false)
+                                }
+                                bridge.setSetting("PromptToLog", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Auto Log:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AutoLog", false)
-                            onCheckedChanged: bridge.setSetting("AutoLog", checked)
+                            id: autoLogCheck
+                            checked: bridge.getSetting("AutoLog", true)
+                            onToggled: {
+                                if (checked) {
+                                    promptToLogCheck.checked = false
+                                    bridge.setSetting("PromptToLog", false)
+                                }
+                                bridge.setSetting("AutoLog", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -2035,7 +2441,9 @@ Dialog {
                         }
                         Text { text: "Contest Only:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ContestingOnly", false)
+                            enabled: !promptToLogCheck.checked
+                            opacity: enabled ? 1.0 : 0.45
+                            checked: bridge.getSetting("ContestingOnly", true)
                             onCheckedChanged: bridge.setSetting("ContestingOnly", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -2449,10 +2857,27 @@ Dialog {
                             Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 10
                             Rectangle {
                                 width: 170; height: controlHeight; radius: 4
-                                color: dlCtyMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
+                                opacity: bridge.ctyDatUpdating ? 0.65 : 1.0
+                                color: dlCtyMA.containsMouse && !bridge.ctyDatUpdating ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
                                 border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: "Download CTY.dat"; color: primaryBlue; font.pixelSize: 12 }
-                                MouseArea { id: dlCtyMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.checkCtyDatUpdate() }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: bridge.ctyDatUpdating ? "Download CTY.dat..." : "Download CTY.dat"
+                                    color: primaryBlue
+                                    font.pixelSize: 12
+                                }
+                                MouseArea {
+                                    id: dlCtyMA
+                                    anchors.fill: parent
+                                    enabled: !bridge.ctyDatUpdating
+                                    hoverEnabled: true
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: {
+                                        dataDownloadStatus = "Verifica cty.dat..."
+                                        dataDownloadIsError = false
+                                        bridge.checkCtyDatUpdate()
+                                    }
+                                }
                             }
                             Rectangle {
                                 width: 190; height: controlHeight; radius: 4
@@ -2463,8 +2888,8 @@ Dialog {
                             }
                         }
                         Text {
-                            text: "Dopo il click compare un messaggio di stato in basso con esito o errore."
-                            color: textSecondary
+                            text: dataDownloadStatus.length > 0 ? dataDownloadStatus : "Dopo il click compare qui un messaggio con esito o errore."
+                            color: dataDownloadIsError ? "#ff5555" : (dataDownloadStatus.length > 0 ? secondaryCyan : textSecondary)
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
                             Layout.columnSpan: 4
@@ -2851,6 +3276,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("OTPURL", text)
                         }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 4; Layout.preferredHeight: 80 }
                     }
                 }
 

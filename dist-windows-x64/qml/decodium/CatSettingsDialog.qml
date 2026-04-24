@@ -50,6 +50,37 @@ Dialog {
                 id: rigCombo
                 Layout.fillWidth: true
                 model: bridge.catManager.rigList
+                property string filterText: ""
+                property var filteredRigList: {
+                    var src = bridge.catManager ? bridge.catManager.rigList : []
+                    var q = filterText.trim().toLowerCase()
+                    if (q.length === 0)
+                        return src
+
+                    var terms = q.split(/\s+/)
+                    var out = []
+                    for (var i = 0; i < src.length; ++i) {
+                        var name = String(src[i])
+                        var haystack = name.toLowerCase()
+                        var match = true
+                        for (var t = 0; t < terms.length; ++t) {
+                            if (terms[t].length > 0 && haystack.indexOf(terms[t]) < 0) {
+                                match = false
+                                break
+                            }
+                        }
+                        if (match)
+                            out.push(name)
+                    }
+                    return out
+                }
+                function chooseRig(name) {
+                    var idx = model.indexOf(name)
+                    if (idx >= 0)
+                        currentIndex = idx
+                    bridge.catManager.rigName = name
+                    rigComboPopup.close()
+                }
                 currentIndex: model.indexOf(bridge.catManager.rigName)
                 contentItem: Text {
                     leftPadding: 8
@@ -61,20 +92,70 @@ Dialog {
                 background: Rectangle {
                     color: bgLight; border.color: accent; border.width: 1; radius: 4
                 }
-                delegate: ItemDelegate {
-                    width: rigCombo.width
-                    contentItem: Text { text: modelData; color: textColor; font.pixelSize: 11 }
-                    background: Rectangle {
-                        color: hovered ? "#1E2D42" : "#111827"
-                    }
-                }
                 popup: Popup {
+                    id: rigComboPopup
                     width: rigCombo.width
-                    height: Math.min(contentItem.implicitHeight, 200)
-                    contentItem: ListView {
-                        clip: true
-                        model: rigCombo.delegateModel
-                        ScrollBar.vertical: ScrollBar {}
+                    height: Math.min(360, 48 + Math.max(34, rigComboPopupList.contentHeight))
+                    focus: true
+                    onOpened: {
+                        rigCombo.filterText = ""
+                        rigSearchField.forceActiveFocus()
+                    }
+                    contentItem: Column {
+                        width: rigComboPopup.width
+                        spacing: 6
+
+                        TextField {
+                            id: rigSearchField
+                            x: 8
+                            width: parent.width - 16
+                            height: 34
+                            placeholderText: "Cerca radio..."
+                            text: rigCombo.filterText
+                            selectByMouse: true
+                            color: textColor
+                            placeholderTextColor: textSec
+                            font.pixelSize: 12
+                            leftPadding: 10
+                            rightPadding: 10
+                            onTextChanged: rigCombo.filterText = text
+                            background: Rectangle {
+                                color: bgLight
+                                border.color: accent
+                                border.width: 1
+                                radius: 4
+                            }
+                        }
+
+                        ListView {
+                            id: rigComboPopupList
+                            x: 8
+                            width: parent.width - 16
+                            height: rigComboPopup.height - rigSearchField.height - 22
+                            clip: true
+                            model: rigCombo.filteredRigList
+                            boundsBehavior: Flickable.StopAtBounds
+                            flickableDirection: Flickable.VerticalFlick
+                            interactive: true
+                            focus: true
+                            delegate: ItemDelegate {
+                                width: rigComboPopupList.width
+                                height: 32
+                                highlighted: modelData === bridge.catManager.rigName
+                                contentItem: Text {
+                                    text: modelData
+                                    color: parent.highlighted ? accent : textColor
+                                    font.pixelSize: 11
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                                background: Rectangle {
+                                    color: hovered || parent.highlighted ? "#1E2D42" : "#111827"
+                                }
+                                onClicked: rigCombo.chooseRig(modelData)
+                            }
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
+                        }
                     }
                     background: Rectangle { color: "#111827"; border.color: accent; radius: 4 }
                 }
@@ -140,10 +221,10 @@ Dialog {
                 id: baudCombo
                 Layout.fillWidth: true
                 model: bridge.catManager.baudList
-                currentIndex: model.indexOf(bridge.catManager.baudRate.toString())
+                currentIndex: model.indexOf(String(bridge.catManager.baudRate).trim())
                 contentItem: Text {
                     leftPadding: 8
-                    text: baudCombo.displayText
+                    text: baudCombo.currentIndex >= 0 ? baudCombo.displayText : String(bridge.catManager.baudRate).trim()
                     color: textColor
                     font.pixelSize: 12
                     verticalAlignment: Text.AlignVCenter

@@ -97,10 +97,13 @@ ComboBox {
     }
 
     popup: Popup {
+        id: controlPopup
         y: control.height + 2
         width: Math.max(control.width, control.popupMinWidth)
-        implicitHeight: Math.min(contentItem.implicitHeight + 12, 360)
+        height: Math.min(controlPopupList.implicitHeight + padding * 2, 360)
         padding: 6
+        focus: true
+        onOpened: controlPopupList.forceActiveFocus()
 
         background: Rectangle {
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
@@ -119,12 +122,17 @@ ComboBox {
         }
 
         contentItem: ListView {
+            id: controlPopupList
             anchors.fill: parent
             clip: true
             implicitHeight: contentHeight
             model: control.popup.visible ? control.delegateModel : null
             currentIndex: control.highlightedIndex
             spacing: 2
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: true
+            focus: true
 
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded

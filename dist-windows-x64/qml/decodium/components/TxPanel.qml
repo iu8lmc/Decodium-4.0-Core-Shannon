@@ -143,7 +143,7 @@ Item {
                         spacing: 4
 
                         Rectangle {
-                            width: Math.min(440, topControlsFlow.width)
+                            width: Math.min(560, topControlsFlow.width)
                             height: 28
                             radius: 4
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
@@ -164,16 +164,34 @@ Item {
                                     spacing: 1
 
                                     Repeater {
-                                        model: ["160", "80", "60", "40", "30", "20", "17", "15", "12", "10", "6"]
+                                        model: [
+                                            { label: "160", lambda: "160M" },
+                                            { label: "80", lambda: "80M" },
+                                            { label: "60", lambda: "60M" },
+                                            { label: "40", lambda: "40M" },
+                                            { label: "30", lambda: "30M" },
+                                            { label: "20", lambda: "20M" },
+                                            { label: "17", lambda: "17M" },
+                                            { label: "15", lambda: "15M" },
+                                            { label: "12", lambda: "12M" },
+                                            { label: "10", lambda: "10M" },
+                                            { label: "6", lambda: "6M" },
+                                            { label: "4", lambda: "4M" },
+                                            { label: "2", lambda: "2M" },
+                                            { label: "70cm", lambda: "70CM" }
+                                        ]
 
                                         Rectangle {
                                             id: bandRect
-                                            width: 38
+                                            readonly property string bandLabel: modelData.label
+                                            readonly property string bandLambda: modelData.lambda
+
+                                            width: bandLabel.length > 2 ? 46 : 38
                                             height: 26
                                             radius: 3
 
                                             readonly property bool isSelected: engine && engine.bandManager &&
-                                                                               engine.bandManager.currentBandLambda === (modelData + "M")
+                                                                               engine.bandManager.currentBandLambda === bandLambda
 
                                             color: isSelected ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                                             border.color: isSelected ? secondaryCyan : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
@@ -181,7 +199,7 @@ Item {
 
                                             Text {
                                                 anchors.centerIn: parent
-                                                text: modelData
+                                                text: bandRect.bandLabel
                                                 font.pixelSize: 10
                                                 font.bold: bandRect.isSelected
                                                 color: bandRect.isSelected ? "#ffffff" : textPrimary
@@ -193,7 +211,7 @@ Item {
                                                 hoverEnabled: true
                                                 onClicked: {
                                                     if (engine && engine.bandManager)
-                                                        engine.bandManager.changeBandByLambda(modelData + "M")
+                                                        engine.bandManager.changeBandByLambda(bandRect.bandLambda)
                                                 }
                                             }
                                         }

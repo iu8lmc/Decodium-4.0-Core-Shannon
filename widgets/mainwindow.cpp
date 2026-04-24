@@ -2643,6 +2643,12 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (this, &MainWindow::FFTSize, m_detector, &Detector::setBlockSize);
   m_detectorFramesWrittenConnection =
       connect (m_detector, &Detector::framesWritten, this, &MainWindow::dataSink);
+  connect (m_detector, &Detector::audioSamplesReady, this, [this] (QByteArray const& pcmSamples) {
+    if (m_embeddedShellMode && m_monitoring)
+      {
+        Q_EMIT legacyAudioSamplesReady (pcmSamples);
+      }
+  });
   connect (&m_audioThread, &QThread::finished, m_detector, &QObject::deleteLater);
 
   // setup the waterfall
@@ -2932,6 +2938,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   // Optional remote WS + HTTP control:
   // 1) env var override (FT2_REMOTE_*)
   // 2) Settings -> General -> Experimental Remote Dashboard.
+  if (!m_embeddedShellMode)
   {
     QString wsPortText = m_env.value("FT2_REMOTE_WS_PORT").trimmed();
     QString httpPortText = m_env.value("FT2_REMOTE_HTTP_PORT").trimmed();
@@ -3121,6 +3128,8 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
                     this, &MainWindow::onRemoteSetModeRequested);
             connect(m_remoteCommandServer, &RemoteCommandServer::setBandRequested,
                     this, &MainWindow::onRemoteSetBandRequested);
+            connect(m_remoteCommandServer, &RemoteCommandServer::setDialFrequencyRequested,
+                    this, &MainWindow::onRemoteSetDialFrequencyRequested);
             connect(m_remoteCommandServer, &RemoteCommandServer::setRxFrequencyRequested,
                     this, &MainWindow::onRemoteSetRxFrequencyRequested);
             connect(m_remoteCommandServer, &RemoteCommandServer::setTxFrequencyRequested,
@@ -4198,11 +4207,6 @@ QString MainWindow::legacyWaterfallPalette() const
                     : QStringLiteral ("Default");
 }
 
-bool MainWindow::legacyTxEnabled() const
-{
-  return m_auto;
-}
-
 bool MainWindow::legacyMonitoring() const
 {
   return m_monitoring;
@@ -4221,41 +4225,6 @@ bool MainWindow::legacyTuning() const
 bool MainWindow::legacyCatConnected() const
 {
   return m_config.is_transceiver_online();
-}
-
-bool MainWindow::legacyAutoSpotEnabled() const
-{
-  return m_autoSpotEnabled;
-}
-
-bool MainWindow::legacyAsyncL2Enabled() const
-{
-  return ui && ui->cbAsyncDecode && ui->cbAsyncDecode->isChecked();
-}
-
-bool MainWindow::legacyDualCarrierEnabled() const
-{
-  return ui && ui->cbDualCarrier && ui->cbDualCarrier->isChecked();
-}
-
-bool MainWindow::legacyManualTxEnabled() const
-{
-  return ui && ui->cbManualTx && ui->cbManualTx->isChecked();
-}
-
-bool MainWindow::legacySpeedyContestEnabled() const
-{
-  return ui && ui->cbSpeedyContest && ui->cbSpeedyContest->isChecked();
-}
-
-bool MainWindow::legacyDigitalMorseEnabled() const
-{
-  return ui && ui->cbDigitalMorse && ui->cbDigitalMorse->isChecked();
-}
-
-bool MainWindow::legacyQuickQsoEnabled() const
-{
-  return ui && ui->btnQuickQSO && ui->btnQuickQSO->isChecked();
 }
 
 double MainWindow::legacySignalLevel() const
@@ -4330,16 +4299,6 @@ int MainWindow::legacyCurrentTx() const
   return qBound (1, static_cast<int> (m_ntx), 6);
 }
 
-QStringList MainWindow::legacyCallerQueue() const
-{
-  QStringList queue;
-  queue.reserve(m_callerQueue.size());
-  for (QString const& entry : m_callerQueue) {
-    queue << entry;
-  }
-  return queue;
-}
-
 QString MainWindow::legacyAdifLogPath() const
 {
   return m_logBook.path ();
@@ -4353,32 +4312,6 @@ QString MainWindow::legacyAllTxtPath() const
 int MainWindow::legacyTxOutputAttenuation() const
 {
   return (ui && ui->outAttenuation) ? ui->outAttenuation->value() : 0;
-}
-
-int MainWindow::legacyFt2QsoMessageCount() const
-{
-  return ft2QsoMessageCount(m_ft2QsoMessageProfile);
-}
-
-int MainWindow::legacyAsyncSnrDb() const
-{
-  return (m_mode == "FT2" && m_asyncVis) ? m_asyncVis->snr() : -99;
-}
-
-QString MainWindow::legacyUiLanguage() const
-{
-  QString language = m_settings
-      ? m_settings->value(QStringLiteral("UILanguage")).toString().trimmed()
-      : QString {};
-  if (language.isEmpty())
-    {
-      language = QLocale::system().name().trimmed();
-    }
-  if (language.isEmpty())
-    {
-      language = QStringLiteral("en");
-    }
-  return language;
 }
 
 void MainWindow::legacyClearBandActivity()
@@ -4409,6 +4342,11 @@ void MainWindow::legacySetDialFrequency(Frequency frequency)
   if (!frequency || frequency == m_freqNominal) {
     return;
   }
+  if (m_embeddedShellMode)
+    {
+      onRemoteSetDialFrequencyRequested(QString {}, static_cast<qint64>(frequency));
+      return;
+    }
   setRig(frequency);
 }
 
@@ -4552,7 +4490,7 @@ void MainWindow::legacySetAudioOutputDeviceName(QString const& name)
 
 void MainWindow::legacySetAudioInputChannel(int channel)
 {
-  m_config.set_audio_input_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 1)));
+  m_config.set_audio_input_channel (static_cast<AudioDevice::Channel> (qBound (0, channel, 3)));
   if (m_embeddedShellMode && !m_monitoring)
     {
       return;
@@ -4669,22 +4607,23 @@ void MainWindow::refreshConfiguredAudioDevicesAfterHotplug (QString const& reaso
 void MainWindow::legacySetRxInputLevel(int value)
 {
   int const bounded = qBound (0, value, 100);
-  if (m_legacyRxInputLevel == bounded) {
-    return;
-  }
-
   m_legacyRxInputLevel = bounded;
-  float const inputGain = bounded <= 50
+  float const requestedInputGain = bounded <= 50
       ? static_cast<float> (bounded / 50.0)
       : static_cast<float> (1.0 + ((bounded - 50.0) / 50.0) * 3.0);
+  float const inputGain = m_embeddedShellMode ? qMin (requestedInputGain, 1.0f) : requestedInputGain;
   int const sampleDb = inputGain <= 0.0001f
       ? -60
       : qBound(-60, qRound(20.0 * std::log10(static_cast<double>(inputGain))), 12);
   // RX level now acts on the captured samples directly. Keep legacy DSP extra
   // gain neutral so waterfall, S-meter and decode all track the same signal.
+  // In embedded Decodium4 mode, never boost the legacy decoder above unity:
+  // the bridge already presents a normalized audio stream and extra gain can
+  // clip strong USB audio devices, reducing FT8/FT4 SNR by several dB.
   m_inGain = 0;
-  debugToFile(QString{"legacyRxLvl  ui:%1 linear:%2 sampleDb:%3 dspDb:%4"}
+  debugToFile(QString{"legacyRxLvl  ui:%1 linear:%2 applied:%3 sampleDb:%4 dspDb:%5"}
                 .arg(bounded)
+                .arg(requestedInputGain, 0, 'f', 3)
                 .arg(inputGain, 0, 'f', 3)
                 .arg(sampleDb)
                 .arg(m_inGain));
@@ -4953,46 +4892,6 @@ void MainWindow::legacySetRigControlEnabled(bool enabled)
       m_first_error = true;
       m_config.transceiver_offline ();
     }
-}
-
-void MainWindow::legacyRemoteSetAutoSpotEnabled(bool enabled)
-{
-  onRemoteSetAutoSpotRequested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetAsyncL2Enabled(bool enabled)
-{
-  onRemoteSetAsyncL2Requested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetDualCarrierEnabled(bool enabled)
-{
-  onRemoteSetDualCarrierRequested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetManualTxEnabled(bool enabled)
-{
-  onRemoteSetManualTxRequested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetSpeedyContestEnabled(bool enabled)
-{
-  onRemoteSetSpeedyContestRequested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetDigitalMorseEnabled(bool enabled)
-{
-  onRemoteSetDigitalMorseRequested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetQuickQsoEnabled(bool enabled)
-{
-  onRemoteSetQuickQsoRequested(QString {}, enabled);
-}
-
-void MainWindow::legacyRemoteSetFt2QsoMessageCount(int count)
-{
-  onRemoteSetFt2QsoMessageCountRequested(QString {}, count);
 }
 
 void MainWindow::legacyRaiseWarning(QString const& title,
@@ -11225,6 +11124,10 @@ void MainWindow::decode()                                       //decode()
     dec_data.params.ndelay=m_delay;
     dec_data.params.nfqso=m_wideGraph->rxFreq();
     dec_data.params.ndepth=m_ndepth;
+    qDebug() << "[DEPTHDBG] FT8-MT set: m_ndepth=" << m_ndepth
+             << " ndepth=" << dec_data.params.ndepth
+             << " ihsym=" << m_ihsym
+             << " early=" << m_earlyDecode << " early2=" << m_earlyDecode2;
     dec_data.params.nranera=m_config.ntrials();
     dec_data.params.lmultift8=m_multithreadFT8; //ft8md
     dec_data.params.ntrials10=0; //ft8md was =m_config.ntrials10();
@@ -11238,6 +11141,7 @@ void MainWindow::decode()                                       //decode()
     if (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2 or (m_specOp==SpecOp::HOUND && m_config.superFox())) {
       dec_data.params.lmultift8 = false; // use the standard FT8 decoder for early decoding step
       if (m_ihsym==m_earlyDecode2) dec_data.params.ndepth=2;
+      qDebug() << "[DEPTHDBG] FT8-MT EARLY override: lmultift8=false ndepth=" << dec_data.params.ndepth;
     }
     dec_data.params.ndiskdat=0;
     if(m_diskData) dec_data.params.ndiskdat=1;
@@ -17323,23 +17227,15 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
         auto const& word_3 = message_words.at (4);
         auto word_3_as_number = word_3.toInt ();
         bool const localSignoffAlreadySent =
-            m_logAfterOwn73
-            || (m_ntx == 5)
-            || (m_nTx73 > 0)
-            || message_is_73 (m_currentMessageType,
-                              m_currentMessage.split (' ', SkipEmptyParts))
+            (m_nTx73 > 0)
             || message_is_73 (m_lastMessageType,
                               m_lastMessageSent.split (' ', SkipEmptyParts));
-        // AutoCQ queued callers can legitimately answer our TX2/report with
-        // RR73 right away. Once we've already reached REPORT, treat 73/RR73
-        // as a real final ack so the state machine stays on TX5/log instead
-        // of slipping back to TX4/RR73 via stale replayed state.
         bool const partnerSignoff73 =
             (word_3_as_number == 73
-             && (m_QSOProgress >= REPORT));
+             && (m_QSOProgress >= ROGER_REPORT));
         bool const partnerSignoffRR73 =
             (word_3 == "RR73"
-             && (m_QSOProgress >= REPORT));
+             && (m_QSOProgress >= ROGER_REPORT));
         bool const partnerAnySignoff = partnerSignoff73 || partnerSignoffRR73;
         bool const profileNeedsOwn73BeforeLog =
             ((m_mode == "FT2"
@@ -18425,18 +18321,6 @@ void MainWindow::enqueueCaller (QString const& call, int freq, int snr, float dt
     debugAutoCq ("queue-skip-empty", QString {"raw:%1"}.arg (call.trimmed ()));
     return;
   }
-  auto activeQueuedBase = Radio::base_callsign (m_hisCall).trimmed ().toUpper ();
-  if (activeQueuedBase.isEmpty ()) {
-    activeQueuedBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
-  }
-  if (activeQueuedBase.isEmpty ()) {
-    activeQueuedBase = Radio::base_callsign (m_autoCqLockedCall).trimmed ().toUpper ();
-  }
-  if (!activeQueuedBase.isEmpty ()
-      && queuedCall.trimmed ().toUpper () == activeQueuedBase) {
-    debugAutoCq ("queue-skip-active", QString {"call:%1 freq:%2 snr:%3"}.arg (queuedCall).arg (freq).arg (snr));
-    return;
-  }
   if (isRecentAutoCqDuplicate (queuedCall)) {
     debugAutoCq ("queue-skip-recent", QString {"call:%1 freq:%2 snr:%3"}.arg (queuedCall).arg (freq).arg (snr));
     return;
@@ -18501,7 +18385,6 @@ void MainWindow::processNextInQueue ()
     m_hisCall0 = parts.at (0);
     m_hisGrid.clear ();
     ui->dxCallEntry->setText (parts.at (0));
-    removeCallerFromQueue (parts.at (0));
     ui->RxFreqSpinBox->setValue (freq);
     ui->rptSpinBox->setValue (snr);
     genStdMsgs (QString::number (snr));
@@ -19659,9 +19542,6 @@ void MainWindow::on_dxCallEntry_textChanged (QString const& call)
   m_hisCall = call;
   auto const newBase = Radio::base_callsign (m_hisCall).trimmed ().toUpper ();
   if (!newBase.isEmpty () && newBase != previousBase) {
-    if ((m_autoCQ || !m_callerQueue.isEmpty ()) && (m_auto || m_bAutoReply || m_QSOProgress > CALLING)) {
-      removeCallerFromQueue (newBase);
-    }
     // AutoCQ retry counters are per-partner; reset when the active DX call changes.
     m_logAfterOwn73 = false;
     m_ft2QuickPeerSignaled = false;
@@ -19794,6 +19674,10 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   auto const currentTxIs73 =
       message_is_73 (m_currentMessageType,
                      m_currentMessage.split (' ', SkipEmptyParts));
+  bool const shouldStopAfterLoggedSignoff =
+      !m_autoCQ
+      && !m_bDXpedMode
+      && (currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF);
   if (m_autoCQ && !m_pendingAutoLogValid && currentTxIs73) {
     // Recovery path: after deferred RR73 retries, call context can be missing in m_hisCall.
     capturePendingAutoLogSnapshot ();
@@ -19935,6 +19819,28 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   });
   stopWRTimer.stop();           // Stop any Wait & Reply timeout
   stopWCTimer.stop();           // Stop any Wait & Call timeout
+
+  if (shouldStopAfterLoggedSignoff) {
+    QTimer::singleShot (0, this, [this, loggedBase] {
+      auto const currentBase = Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper ();
+      if (!loggedBase.isEmpty () && !currentBase.isEmpty () && currentBase != loggedBase) {
+        return;
+      }
+      debugToFile (QString {"logQSO-stop after signoff logged:%1 current:%2 ntx:%3 qso:%4"}
+                       .arg (loggedBase, currentBase)
+                       .arg (m_ntx)
+                       .arg (m_QSOProgress));
+      m_tx_when_ready = false;
+      m_restart = false;
+      m_btxok = false;
+      m_bCallingCQ = false;
+      m_bAutoReply = false;
+      clearDX ();
+      if (m_auto) {
+        auto_tx_mode (false);
+      }
+    });
+  }
 
   // Auto CQ: restart CQ calling after logging the QSO
   // DXped mode: skip reset, la macchina a stati DXped gestisce la continuazione
@@ -22843,8 +22749,51 @@ void MainWindow::setFreq4(int rxFreq, int txFreq)
   }
 }
 
-void MainWindow::handle_transceiver_update (Transceiver::TransceiverState const& s)
+void MainWindow::handle_transceiver_update (Transceiver::TransceiverState const& reportedState)
 {
+  Transceiver::TransceiverState s {reportedState};
+  if (m_remoteDialFrequencyTarget && m_remoteDialFrequencyGuardUntilMs > 0)
+    {
+      auto const nowMs = QDateTime::currentMSecsSinceEpoch();
+      if (nowMs > m_remoteDialFrequencyGuardUntilMs)
+        {
+          m_remoteDialFrequencyTarget = 0;
+          m_remoteDialFrequencyGuardUntilMs = 0;
+          m_lastRemoteDialFrequencyRetryMs = 0;
+        }
+      else
+        {
+          auto const reportedDial = s.frequency();
+          auto const delta = reportedDial > m_remoteDialFrequencyTarget
+                               ? reportedDial - m_remoteDialFrequencyTarget
+                               : m_remoteDialFrequencyTarget - reportedDial;
+          if (delta <= 1)
+            {
+              m_remoteDialFrequencyTarget = 0;
+              m_remoteDialFrequencyGuardUntilMs = 0;
+              m_lastRemoteDialFrequencyRetryMs = 0;
+            }
+          else
+            {
+              if (nowMs - m_lastRemoteDialFrequencyRetryMs >= 750)
+                {
+                  m_lastRemoteDialFrequencyRetryMs = nowMs;
+                  if (!m_transmitting
+                      && !(m_embeddedShellMode && !m_embeddedRigControlEnabled)
+                      && m_config.transceiver_online(false))
+                    {
+                      m_config.transceiver_frequency(m_remoteDialFrequencyTarget + m_astroCorrection.rx);
+                    }
+                }
+              s.frequency(m_remoteDialFrequencyTarget);
+              if (!s.split() || !s.tx_frequency())
+                {
+                  s.tx_frequency(m_remoteDialFrequencyTarget);
+                }
+            }
+        }
+    }
+
   Transceiver::TransceiverState old_state {m_rigState};
   //transmitDisplay (s.ptt ());
   if (s.ptt () // && !m_rigState.ptt ()
@@ -23441,6 +23390,12 @@ void MainWindow::transmit (double snr)
                        .arg (m_ntx)
                        .arg (m_QSOProgress));
       logQSOTimer.start (0);
+    }
+    if (!m_autoCQ) {
+      m_QSOProgress = SIGNOFF;
+      QTimer::singleShot (0, this, [this] {
+        auto_tx_mode (false);
+      });
     }
   }
 
@@ -30132,6 +30087,59 @@ void MainWindow::onRemoteSetBandRequested(QString const& commandId, QString cons
   if (requestedToken == QStringLiteral("70cm")) { on_pb70_clicked();  showStatusMessage(tr("Remote band set: 70cm")); return; }
 
   showStatusMessage(tr("Remote band ignored: unsupported band \"%1\"").arg(requestedBand));
+}
+
+void MainWindow::onRemoteSetDialFrequencyRequested(QString const& commandId, qint64 dialFrequencyHz)
+{
+  Q_UNUSED(commandId);
+  if (dialFrequencyHz <= 0)
+    {
+      return;
+    }
+
+  auto const frequency = static_cast<Frequency>(dialFrequencyHz);
+  if (!frequency)
+    {
+      return;
+    }
+
+  auto const nowMs = QDateTime::currentMSecsSinceEpoch();
+  m_remoteDialFrequencyTarget = frequency;
+  m_remoteDialFrequencyGuardUntilMs = nowMs + 12000;
+  m_lastRemoteDialFrequencyRetryMs = 0;
+
+  keep_frequency = true;
+  setRig(frequency);
+  if (!m_transmitting
+      && !(m_embeddedShellMode && !m_embeddedRigControlEnabled)
+      && m_config.transceiver_online(false))
+    {
+      m_config.transceiver_frequency(frequency + m_astroCorrection.rx);
+    }
+  m_rigState.frequency(frequency);
+  if (!m_rigState.split() || !m_rigState.tx_frequency())
+    {
+      m_rigState.tx_frequency(frequency);
+    }
+  m_currentBand = m_config.bands()->find(frequency);
+  if (ui && ui->bandComboBox)
+    {
+      auto const row = m_config.frequencies()->best_working_frequency(frequency);
+      if (row >= 0)
+        {
+          QSignalBlocker blocker {ui->bandComboBox};
+          ui->bandComboBox->setCurrentIndex(row);
+        }
+    }
+  if (m_wideGraph)
+    {
+      m_wideGraph->setDialFreq(frequency / 1.e6);
+    }
+  displayDialFrequency();
+  statusChanged();
+  QTimer::singleShot(1000, [=] { keep_frequency = false; });
+  showStatusMessage(tr("Remote dial frequency set: %1 MHz")
+                    .arg(static_cast<double>(frequency) / 1000000.0, 0, 'f', 6));
 }
 
 void MainWindow::onRemoteSetRxFrequencyRequested(QString const& commandId, int rxFrequencyHz)

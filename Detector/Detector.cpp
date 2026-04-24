@@ -59,9 +59,45 @@ void Detector::clear ()
   // dec_data.params.kin = qMin ((msInPeriod * m_frameRate) / 1000, static_cast<unsigned> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0])));
   dec_data.params.kin = 0;
   m_bufferPos = 0;
+  m_visualDownsamplePhase = 0;
 
   // fill buffer with zeros (G4WJS commented out because it might cause decoder hangs)
   // qFill (dec_data.d2, dec_data.d2 + sizeof (dec_data.d2) / sizeof (dec_data.d2[0]), 0);
+}
+
+void Detector::emitVisualSamples (qint16 const * samples, unsigned count)
+{
+  if (!samples || count == 0)
+    {
+      return;
+    }
+
+  QByteArray pcmSamples;
+  if (m_downSampleFactor <= 1)
+    {
+      pcmSamples = QByteArray {
+        reinterpret_cast<char const *> (samples),
+        static_cast<int> (count * sizeof (qint16))
+      };
+    }
+  else
+    {
+      pcmSamples.reserve (static_cast<int> ((count / m_downSampleFactor + 1) * sizeof (qint16)));
+      for (unsigned i = 0; i < count; ++i)
+        {
+          if (m_visualDownsamplePhase == 0)
+            {
+              pcmSamples.append (reinterpret_cast<char const *> (samples + i),
+                                 static_cast<int> (sizeof (qint16)));
+            }
+          m_visualDownsamplePhase = (m_visualDownsamplePhase + 1) % m_downSampleFactor;
+        }
+    }
+
+  if (!pcmSamples.isEmpty ())
+    {
+      Q_EMIT audioSamplesReady (pcmSamples);
+    }
 }
 
 void Detector::applyInputGainLinear (float gain)
@@ -161,8 +197,10 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
                                        m_downSampleFactor - m_bufferPos, remaining));
 
       if(m_downSampleFactor > 1) {
+        qint16 * const storedSamples = &m_buffer[m_bufferPos];
         store (&data[(framesAccepted - remaining) * bytesPerFrame ()],
-               numFramesProcessed, &m_buffer[m_bufferPos]);
+               numFramesProcessed, storedSamples);
+        emitVisualSamples (storedSamples, static_cast<unsigned> (numFramesProcessed));
         m_bufferPos += numFramesProcessed;
 
         if(m_bufferPos==m_samplesPerFFT*m_downSampleFactor) {
@@ -185,8 +223,10 @@ qint64 Detector::writeData (char const * data, qint64 maxSize)
         }
 
       } else {
+        qint16 * const storedSamples = &dec_data.d2[dec_data.params.kin];
         store (&data[(framesAccepted - remaining) * bytesPerFrame ()],
-               numFramesProcessed, &dec_data.d2[dec_data.params.kin]);
+               numFramesProcessed, storedSamples);
+        emitVisualSamples (storedSamples, static_cast<unsigned> (numFramesProcessed));
         m_bufferPos += numFramesProcessed;
         dec_data.params.kin += numFramesProcessed;
         if (m_bufferPos == static_cast<unsigned> (m_samplesPerFFT)) {

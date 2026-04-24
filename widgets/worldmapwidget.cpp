@@ -277,7 +277,6 @@ void WorldMapWidget::setTransmitState(bool transmitting, QString const& targetCa
   bool wasTransmitting = m_transmitting;
   m_transmitting = transmitting;
   m_txTravelMs = travelMs;
-  bool removedOutgoing = false;
 
   if (transmitting)
     {
@@ -314,23 +313,6 @@ void WorldMapWidget::setTransmitState(bool transmitting, QString const& targetCa
             }
           m_postTxQueueUntilMs = hasQueuedCallers ? (QDateTime::currentMSecsSinceEpoch() + kPostTxQueueMs) : 0;
         }
-      for (auto it = m_contacts.begin(); it != m_contacts.end(); )
-        {
-          if (it.value().role == PathRole::OutgoingFromMe)
-            {
-              it = m_contacts.erase(it);
-              removedOutgoing = true;
-            }
-          else
-            {
-              ++it;
-            }
-        }
-    }
-
-  if (removedOutgoing)
-    {
-      updateViewportTargets();
     }
 
   update();
@@ -667,10 +649,6 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
       for (int i = 0; i < contacts.size() && drawn < limit; ++i)
         {
           auto const& contact = contacts[i];
-          if (contact.role == PathRole::OutgoingFromMe)
-            {
-              continue;
-            }
           if (queueActive)
             {
               if (contact.role != PathRole::IncomingToMe || !contact.queuedDuringTx)
@@ -679,7 +657,7 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
                 }
             }
           bool drawLabel = drawn < 20;
-          bool drawArrow = (contact.role == PathRole::IncomingToMe);
+          bool drawArrow = (contact.role == PathRole::IncomingToMe || contact.role == PathRole::OutgoingFromMe);
           drawContact(&painter, mapBounds, contact, &usedLabelAreas, drawLabel, drawArrow);
           if (contact.role == PathRole::BandOnly)
             {
@@ -1560,10 +1538,6 @@ void WorldMapWidget::updateViewportTargets()
               continue;
             }
         }
-      if (!m_transmitting && contact.role == PathRole::OutgoingFromMe)
-        {
-          continue;
-        }
       points << contact.sourceLonLat;
       if (contact.role != PathRole::BandOnly)
         {
@@ -1777,7 +1751,8 @@ void WorldMapWidget::pruneExpiredContacts()
         }
       else
         {
-          if (it.value().role == PathRole::IncomingToMe && ageMs > downgradeMs)
+          if ((it.value().role == PathRole::IncomingToMe || it.value().role == PathRole::OutgoingFromMe)
+              && ageMs > downgradeMs)
             {
               it.value().role = PathRole::BandOnly;
               it.value().queuedDuringTx = false;

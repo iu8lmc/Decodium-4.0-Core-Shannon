@@ -55,6 +55,7 @@ private:
 
   bool checkStream ();
   void emitStatusIfChanged (QString const& message, QAudio::State state);
+  void retireCurrentStream ();
 
   QScopedPointer<QAudioSource> m_stream;
   QPointer<AudioDevice> m_sink;
