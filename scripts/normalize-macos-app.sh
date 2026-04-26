@@ -143,6 +143,55 @@ normalized_framework_dependency() {
   return 1
 }
 
+copy_absolute_dependency_into_bundle() {
+  local dep_path="$1"
+  local framework_root=""
+  local framework_name=""
+  local framework_inside=""
+  local dest_root=""
+  local dest_path=""
+  local dep_name=""
+
+  case "${dep_path}" in
+    /System/*|/usr/lib/*)
+      return 1
+      ;;
+    /opt/*|/usr/local/*|/Users/*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  mkdir -p "${FRAMEWORKS_DIR}"
+
+  if [[ "${dep_path}" == *.framework/* ]]; then
+    framework_root="${dep_path%%.framework/*}.framework"
+    framework_name="$(basename "${framework_root}")"
+    framework_inside="${dep_path#${framework_root}/}"
+    dest_root="${FRAMEWORKS_DIR}/${framework_name}"
+    dest_path="${dest_root}/${framework_inside}"
+
+    if [[ ! -e "${dest_path}" ]]; then
+      rm -rf "${dest_root}"
+      ditto "${framework_root}" "${dest_root}"
+    fi
+
+    printf '@rpath/%s/%s\n' "${framework_name}" "${framework_inside}"
+    return 0
+  fi
+
+  dep_name="$(basename "${dep_path}")"
+  dest_path="${FRAMEWORKS_DIR}/${dep_name}"
+  if [[ ! -e "${dest_path}" ]]; then
+    cp -fL "${dep_path}" "${dest_path}"
+    chmod u+w "${dest_path}"
+  fi
+
+  printf '@rpath/%s\n' "${dep_name}"
+  return 0
+}
+
 install_id_of() {
   otool -D "$1" 2>/dev/null | awk 'NR==2 {print $1; exit}'
 }
@@ -187,38 +236,71 @@ normalize_bundle_macho_paths() {
   local dep_path=""
   local new_dep=""
   local rpath=""
+  local pass=0
+  local changed=0
+
+  for pass in {1..8}; do
+    changed=0
+    while IFS= read -r file_path; do
+      [[ -n "${file_path}" ]] || continue
+      if ! is_macho "${file_path}"; then
+        continue
+      fi
+
+      chmod u+w "${file_path}"
+
+      current_id="$(install_id_of "${file_path}")"
+      if new_id="$(desired_install_id "${file_path}" 2>/dev/null)"; then
+        if [[ -n "${current_id}" && "${current_id}" != "${new_id}" ]]; then
+          install_name_tool -id "${new_id}" "${file_path}"
+          current_id="${new_id}"
+          changed=1
+        fi
+      fi
+
+      while IFS= read -r dep_path; do
+        [[ -n "${dep_path}" ]] || continue
+        if [[ -n "${current_id}" && "${dep_path}" == "${current_id}" ]]; then
+          continue
+        fi
+        if new_dep="$(copy_absolute_dependency_into_bundle "${dep_path}" 2>/dev/null)"; then
+          if [[ "${new_dep}" != "${dep_path}" ]]; then
+            install_name_tool -change "${dep_path}" "${new_dep}" "${file_path}"
+            changed=1
+          fi
+          continue
+        fi
+        if new_dep="$(normalized_framework_dependency "${dep_path}" 2>/dev/null)"; then
+          if [[ "${new_dep}" != "${dep_path}" ]]; then
+            install_name_tool -change "${dep_path}" "${new_dep}" "${file_path}"
+            changed=1
+          fi
+        fi
+      done < <(otool -L "${file_path}" | awk 'NR>1 {print $1}')
+
+      if rpath="$(framework_rpath_for_file "${file_path}" 2>/dev/null)"; then
+        ensure_rpath "${file_path}" "${rpath}"
+      fi
+    done < <(find "${CONTENTS_DIR}" -type f | sort)
+
+    if [[ "${changed}" -eq 0 ]]; then
+      break
+    fi
+  done
 
   while IFS= read -r file_path; do
     [[ -n "${file_path}" ]] || continue
     if ! is_macho "${file_path}"; then
       continue
     fi
-
-    chmod u+w "${file_path}"
-
     current_id="$(install_id_of "${file_path}")"
-    if new_id="$(desired_install_id "${file_path}" 2>/dev/null)"; then
-      if [[ -n "${current_id}" && "${current_id}" != "${new_id}" ]]; then
-        install_name_tool -id "${new_id}" "${file_path}"
-        current_id="${new_id}"
-      fi
-    fi
-
     while IFS= read -r dep_path; do
       [[ -n "${dep_path}" ]] || continue
       if [[ -n "${current_id}" && "${dep_path}" == "${current_id}" ]]; then
         continue
       fi
-      if new_dep="$(normalized_framework_dependency "${dep_path}" 2>/dev/null)"; then
-        if [[ "${new_dep}" != "${dep_path}" ]]; then
-          install_name_tool -change "${dep_path}" "${new_dep}" "${file_path}"
-        fi
-      fi
+      copy_absolute_dependency_into_bundle "${dep_path}" >/dev/null 2>&1 && continue
     done < <(otool -L "${file_path}" | awk 'NR>1 {print $1}')
-
-    if rpath="$(framework_rpath_for_file "${file_path}" 2>/dev/null)"; then
-      ensure_rpath "${file_path}" "${rpath}"
-    fi
   done < <(find "${CONTENTS_DIR}" -type f | sort)
 }
 

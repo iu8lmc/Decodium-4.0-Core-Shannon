@@ -19,13 +19,18 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QLockFile>
 #include <QList>
 #include <QLocale>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <clocale>
 #include <cstring>
+#include <mutex>
+#include <thread>
 
 #ifdef Q_OS_WIN
 #ifndef WIN32_LEAN_AND_MEAN
@@ -66,6 +71,29 @@ static void L(const char* msg) {
 }
 
 static std::atomic_bool g_shuttingDown {false};
+
+static void writeStartupLogLine(const QByteArray& logPath, const QByteArray& msg)
+{
+    FILE* f = fopen(logPath.constData(), "a");
+    if (f) {
+        fputs(msg.constData(), f);
+        fputc('\n', f);
+        fclose(f);
+    }
+    std::fprintf(stderr, "%s\n", msg.constData());
+}
+
+static void logEnvVar(const char* name)
+{
+    QByteArray line(name);
+    line += "=";
+    if (qEnvironmentVariableIsSet(name)) {
+        line += qgetenv(name);
+    } else {
+        line += "<unset>";
+    }
+    L(line.constData());
+}
 
 #ifdef Q_OS_WIN
 static bool hasCommandLineSwitch(int argc, char* argv[], const char* name)
@@ -176,7 +204,8 @@ int main(int argc, char* argv[])
         backendMessage += qgetenv("QSG_RHI_BACKEND");
         L(backendMessage.constData());
     } else {
-        L("Qt Quick graphics backend: Qt Windows default");
+        qputenv("QSG_RHI_BACKEND", "opengl");
+        L("RHI backend forced to OpenGL for compatibility");
     }
     setWindowsAppUserModelId();
 #endif
@@ -184,6 +213,17 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
+    L((QByteArray("Qt version: ") + qVersion()).constData());
+    L((QByteArray("OS: ") + QSysInfo::prettyProductName().toLocal8Bit()
+       + " ABI=" + QSysInfo::buildAbi().toLocal8Bit()
+       + " CPU=" + QSysInfo::currentCpuArchitecture().toLocal8Bit()).constData());
+    logEnvVar("QSG_RHI_BACKEND");
+    logEnvVar("QSG_RHI_PREFER_SOFTWARE_RENDERER");
+    logEnvVar("QT_OPENGL");
+    logEnvVar("QT_QUICK_BACKEND");
+    logEnvVar("QML_DISABLE_DISK_CACHE");
+    logEnvVar("DECODIUM_SAFE_GRAPHICS");
+    logEnvVar("DECODIUM_DISABLE_QML_CACHE");
     app.setWindowIcon(QIcon(QStringLiteral(":/icon_128x128.png")));
 
     QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
@@ -332,6 +372,9 @@ int main(int argc, char* argv[])
     });
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
     engine.addImportPath(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+    for (const QString& importPath : engine.importPathList()) {
+        L(("QML import path: " + importPath.toLocal8Bit()).constData());
+    }
 
     engine.rootContext()->setContextProperty("bridge", &bridge);
     engine.rootContext()->setContextProperty("appEngine", &bridge);
@@ -382,17 +425,42 @@ int main(int argc, char* argv[])
     // Watchdog: log if QML loading takes too long (helps diagnose hangs)
     QElapsedTimer loadTimer;
     loadTimer.start();
-    QTimer watchdog;
-    watchdog.setInterval(5000);
-    QObject::connect(&watchdog, &QTimer::timeout, [&loadTimer]() {
-        qWarning("QML WATCHDOG: engine.load() still running after %lld ms — possible hang in component init",
-                 loadTimer.elapsed());
+    std::atomic_bool qmlLoadDone {false};
+    std::mutex qmlLoadWatchdogMutex;
+    std::condition_variable qmlLoadWatchdogCv;
+    QByteArray const startupLogPath =
+        (QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+         + QStringLiteral("/decodium-start.log")).toLocal8Bit();
+    QByteArray const watchedQmlPath = qmlPath.toLocal8Bit();
+    std::thread qmlLoadWatchdog([&qmlLoadDone, &qmlLoadWatchdogMutex, &qmlLoadWatchdogCv,
+                                  startupLogPath, watchedQmlPath]() {
+        std::unique_lock<std::mutex> lock(qmlLoadWatchdogMutex);
+        for (int elapsedSeconds = 10; elapsedSeconds <= 900; elapsedSeconds += 10) {
+            if (qmlLoadWatchdogCv.wait_for(lock, std::chrono::seconds(10),
+                                           [&qmlLoadDone]() {
+                                               return qmlLoadDone.load(std::memory_order_relaxed);
+                                           })) {
+                return;
+            }
+
+            QByteArray msg("QML LOAD WATCHDOG: engine.load(");
+            msg += watchedQmlPath;
+            msg += ") still running after ";
+            msg += QByteArray::number(elapsedSeconds);
+            msg += " s";
+            writeStartupLogLine(startupLogPath, msg);
+        }
     });
-    watchdog.start();
 
     engine.load(QUrl::fromLocalFile(qmlPath));
 
-    watchdog.stop();
+    {
+        std::lock_guard<std::mutex> lock(qmlLoadWatchdogMutex);
+        qmlLoadDone.store(true, std::memory_order_relaxed);
+    }
+    qmlLoadWatchdogCv.notify_all();
+    if (qmlLoadWatchdog.joinable())
+        qmlLoadWatchdog.join();
     L(("engine.load() returned in " + QByteArray::number(loadTimer.elapsed()) + " ms").constData());
 
 
