@@ -71,16 +71,16 @@ jobs:
           # Crea pkg-config file
           mkdir -p /mingw64/lib/pkgconfig
           cat > /mingw64/lib/pkgconfig/hamlib.pc <<'PCEOF'
-prefix=/mingw64
-exec_prefix=${prefix}
-libdir=${exec_prefix}/lib
-includedir=${prefix}/include
-Name: Hamlib
-Description: Ham Radio Control Libraries
-Version: 4.7.0
-Libs: -L${libdir} -lhamlib
-Cflags: -I${includedir}
-PCEOF
+          prefix=/mingw64
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
+          Name: Hamlib
+          Description: Ham Radio Control Libraries
+          Version: 4.7.0
+          Libs: -L${libdir} -lhamlib
+          Cflags: -I${includedir}
+          PCEOF
           echo "=== Hamlib installed ==="
           ls -la /mingw64/lib/libhamlib* 2>/dev/null || echo "no hamlib in lib"
           ls -la /mingw64/bin/libhamlib* 2>/dev/null || echo "no hamlib in bin"
@@ -274,5 +274,5 @@ PCEOF
         uses: softprops/action-gh-release@v2
         with:
           files: installer/output/Decodium_*.exe
-          draft: true
+          draft: false
           generate_release_notes: true
