@@ -1855,7 +1855,6 @@ endif (WIN32)
 if (APPLE)
     install (FILES
         Darwin/ReadMe.txt
-        Darwin/com.wsjtx.sysctl.plist
         DESTINATION .
         #COMPONENT runtime
     )
