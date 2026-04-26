@@ -32,6 +32,26 @@ Dialog {
         decodedFontLabel = bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)
     }
 
+    function boolSetting(key, fallback) {
+        var value = bridge.getSetting(key, fallback)
+        if (value === true || value === false)
+            return value
+        if (typeof value === "number")
+            return value !== 0
+
+        var text = String(value).trim().toLowerCase()
+        if (text === "true" || text === "1" || text === "yes" || text === "on")
+            return true
+        if (text === "false" || text === "0" || text === "no" || text === "off" || text.length === 0)
+            return false
+        return !!fallback
+    }
+
+    function setBoolSettingIfChanged(key, value, fallback) {
+        if (boolSetting(key, fallback) !== value)
+            bridge.setSetting(key, value)
+    }
+
     function localDirectoryToUrl(path) {
         var text = String(path || "").trim()
         if (text.length === 0)
@@ -190,6 +210,30 @@ Dialog {
         return method === "DTR" || method === "RTS"
     }
 
+    function pttPortOptions() {
+        var controller = activeCatController()
+        var options = []
+        if (!controller || !usesSeparatePttPort())
+            return options
+
+        if (activeCatPortType() === "serial")
+            options.push("CAT")
+
+        var ports = controller.portList || []
+        for (var i = 0; i < ports.length; ++i) {
+            var port = String(ports[i]).trim()
+            if (port !== "" && settingsDialog.stringListIndexOf(options, port) < 0)
+                options.push(port)
+        }
+
+        var saved = controller.pttPort !== undefined && controller.pttPort !== null
+                ? String(controller.pttPort).trim() : ""
+        if (saved !== "" && saved.toUpperCase() !== "CAT"
+                && settingsDialog.stringListIndexOf(options, saved) < 0)
+            options.push(saved)
+        return options
+    }
+
     function normalizedPortName(value) {
         var text = String(value || "").trim()
         if (text === "" || text.toUpperCase() === "CAT")
@@ -270,6 +314,20 @@ Dialog {
             options.push({ value: value, label: splitModeLabel(value) })
         }
         return options
+    }
+
+    function settingChoiceIndex(key, choices, fallbackIndex) {
+        var raw = bridge.getSetting(key, fallbackIndex)
+        var numeric = Number(raw)
+        if (!isNaN(numeric) && numeric >= 0 && numeric < choices.length)
+            return numeric
+
+        var text = String(raw).trim().toLowerCase()
+        for (var i = 0; i < choices.length; ++i) {
+            if (String(choices[i]).trim().toLowerCase() === text)
+                return i
+        }
+        return fallbackIndex
     }
 
     function forceLineMode(forceEnabled, highLevel) {
@@ -1060,6 +1118,32 @@ Dialog {
                             }
                         }
 
+                        Text {
+                            visible: settingsDialog.usesTciControls()
+                            text: "TCI Audio:"
+                            color: textSecondary
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 100
+                        }
+                        CheckBox {
+                            visible: settingsDialog.usesTciControls()
+                            checked: bridge.catManager ? bridge.catManager.tciAudioEnabled : true
+                            text: "RX via TCI"
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 3
+                            onCheckedChanged: {
+                                if (bridge.catManager) bridge.catManager.tciAudioEnabled = checked
+                                settingsDialog.scheduleCatPersist()
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: textPrimary
+                                font.pixelSize: 12
+                                leftPadding: 26
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
                         Text { text: "PTT Method:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: pttCombo
@@ -1102,7 +1186,7 @@ Dialog {
                         }
                         Text {
                             visible: settingsDialog.usesSeparatePttPort()
-                            text: "PTT COM:"
+                            text: "PTT Port:"
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: labelWidth
@@ -1110,13 +1194,14 @@ Dialog {
                         ComboBox {
                             id: pttPortCombo
                             visible: settingsDialog.usesSeparatePttPort()
-                            model: bridge.catManager ? bridge.catManager.portList : []
+                            model: settingsDialog.pttPortOptions()
                             Layout.fillWidth: true
                             implicitHeight: controlHeight
                             currentIndex: {
                                 if (!bridge.catManager)
                                     return -1
-                                return find(bridge.catManager.pttPort)
+                                var idx = find(bridge.catManager.pttPort)
+                                return idx >= 0 ? idx : (count > 0 ? 0 : -1)
                             }
                             onActivated: {
                                 if (bridge.catManager) {
@@ -1290,8 +1375,8 @@ Dialog {
                         ComboBox {
                             id: modeCombo
                             model: ["USB","Data/Pkt","None"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: Number(bridge.getSetting("CATMode", 0))
-                            onActivated: bridge.setSetting("CATMode", currentIndex)
+                            currentIndex: settingsDialog.settingChoiceIndex("CATMode", model, 0)
+                            onActivated: bridge.setSetting("CATMode", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: modeCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
@@ -1303,8 +1388,8 @@ Dialog {
                         ComboBox {
                             id: txAudioSrcCombo
                             model: ["Rear/Data","Front/Mic"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: Number(bridge.getSetting("TXAudioSource", 0))
-                            onActivated: bridge.setSetting("TXAudioSource", currentIndex)
+                            currentIndex: settingsDialog.settingChoiceIndex("TXAudioSource", model, 0)
+                            onActivated: bridge.setSetting("TXAudioSource", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: txAudioSrcCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
@@ -2179,6 +2264,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
+                        Text { text: "AP Decode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.ft8ApEnabled
+                            onCheckedChanged: bridge.ft8ApEnabled = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
                         Text { text: "Avg Decode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.avgDecodeEnabled
@@ -2186,7 +2279,6 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
                     }
                 }
 
@@ -2588,6 +2680,26 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
+                        Text { text: "Secondary UDP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        CheckBox {
+                            id: udpSecondaryCheck
+                            checked: boolSetting("UDPSecondaryEnabled", true)
+                            onToggled: setBoolSettingIfChanged("UDPSecondaryEnabled", checked, true)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: "Secondary Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: udpSecondaryPortSpin
+                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPSecondaryServerPort", 2239)); editable: true
+                            enabled: udpSecondaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("UDPSecondaryServerPort", value)
+                            contentItem: TextInput { text: udpSecondaryPortSpin.textFromValue(udpSecondaryPortSpin.value, udpSecondaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryPortSpin.editable; validator: udpSecondaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpSecondaryPortSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
                         Text { text: "Listen Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: udpListenSpin
@@ -2913,15 +3025,15 @@ Dialog {
 
                         Text { text: "Monitor OFF:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("MonitorOFF", false)
-                            onCheckedChanged: bridge.setSetting("MonitorOFF", checked)
+                            checked: settingsDialog.boolSetting("MonitorOFF", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("MonitorOFF", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Monitor Last:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("MonitorLastUsed", false)
-                            onCheckedChanged: bridge.setSetting("MonitorLastUsed", checked)
+                            checked: settingsDialog.boolSetting("MonitorLastUsed", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("MonitorLastUsed", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }

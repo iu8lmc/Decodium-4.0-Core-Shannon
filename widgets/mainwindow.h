@@ -1234,8 +1234,11 @@ private:
   decodium::ft8::FT8DecodeWorker * m_ft8DecodeWorker {nullptr};
   quint64 m_ft8DecodeSerial {0};
   bool m_ft8DecodePending {false};
+  int m_ft8DecodePendingUtc {0};
   bool m_ft8QueuedDecodePending {false};
   decodium::ft8::DecodeRequest m_ft8QueuedDecodeRequest;
+  QVector<short> m_ft8LiveAudioSnapshot;
+  int m_ft8LiveAudioSnapshotSamples {0};
   QThread m_jt9FastDecodeThread;
   decodium::jt9fast::JT9FastDecodeWorker * m_jt9FastDecodeWorker {nullptr};
   quint64 m_jt9FastDecodeSerial {0};
@@ -1292,7 +1295,7 @@ private:
   };
   QHash<QString, DecodeDedupeEntry> m_decodeDedupeCache;
   qint64 m_decodeDedupeLastPruneMs {0};
-  int m_decodeDedupeWindowMs {5000};   // keep strongest duplicate within 5 seconds
+  int m_decodeDedupeWindowMs {12000};  // suppress duplicate FT8 rows within one live slot
 
   // Manual TX Timing (contest skill mode)
   bool m_bManualTxPending {false};    // decode received, waiting for operator TX

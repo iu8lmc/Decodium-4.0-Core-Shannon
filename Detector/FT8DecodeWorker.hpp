@@ -6,6 +6,7 @@
 #include <QByteArray>
 #include <QStringList>
 #include <QVector>
+#include <atomic>
 
 namespace decodium
 {
@@ -32,6 +33,10 @@ struct DecodeRequest
   int lapcqonly {0};
   int napwid {50};
   int ldiskdat {0};
+  int maxDecodeMs {0};
+  int availableSamples {0};
+  bool hasFreshAudio {true};
+  bool supplemental {false};
   QByteArray mycall;
   QByteArray hiscall;
   QByteArray hisgrid;
@@ -45,9 +50,15 @@ public:
   explicit FT8DecodeWorker (QObject * parent = nullptr);
 
   void decode (DecodeRequest const& request);
+  void resetDecoderState ();
+  void cancelCurrentDecode ();
+  void beginShutdown ();
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
+
+private:
+  std::atomic<bool> m_shuttingDown {false};
 };
 
 }

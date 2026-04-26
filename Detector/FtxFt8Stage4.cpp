@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -31,7 +32,11 @@ namespace
 constexpr int kFt8NMax {15 * 12000};
 constexpr int kFt8Nn {79};
 constexpr int kFt8Nh1 {1920};
-constexpr int kFt8MaxCand {1000};
+constexpr int kFt8DefaultMaxCand {1000};
+constexpr int kFt8DeepMaxCand {2400};
+constexpr int kFt8MaxCand {4800};
+constexpr int kFt8StrictHardErrors {36};
+constexpr int kFt8MaxHardErrors {58};
 constexpr int kFt8MaxEarly {200};
 constexpr int kFt8MaxLines {200};
 constexpr int kFt8Bits {77};
@@ -52,6 +57,53 @@ constexpr int kFt8A8MaxMsg {206};
 constexpr int kFt8PhaseTableSize {65536};
 constexpr float kFt8A8Bt {2.0f};
 constexpr float kFt8TwoPi {6.28318530717958647692f};
+
+std::atomic<bool>& stage4_cancel_requested ()
+{
+  static std::atomic<bool> cancel {false};
+  return cancel;
+}
+
+std::atomic<long long>& stage4_deadline_ms ()
+{
+  static std::atomic<long long> deadline {0};
+  return deadline;
+}
+
+std::atomic<int>& stage4_ldpc_maxosd_override ()
+{
+  static std::atomic<int> value {-1};
+  return value;
+}
+
+std::atomic<int>& stage4_ldpc_norder_override ()
+{
+  static std::atomic<int> value {0};
+  return value;
+}
+
+std::atomic<bool>& stage4_supplemental_requested ()
+{
+  static std::atomic<bool> value {false};
+  return value;
+}
+
+long long steady_clock_ms ()
+{
+  using namespace std::chrono;
+  return duration_cast<milliseconds> (steady_clock::now ().time_since_epoch ()).count ();
+}
+
+bool stage4_should_cancel ()
+{
+  if (stage4_cancel_requested ().load (std::memory_order_relaxed))
+    {
+      return true;
+    }
+
+  long long const deadline = stage4_deadline_ms ().load (std::memory_order_relaxed);
+  return deadline > 0 && steady_clock_ms () >= deadline;
+}
 
 extern "C"
 {
@@ -450,6 +502,95 @@ bool is_grid4 (std::string const& grid)
       && between (grid[1], 'A', 'R')
       && between (grid[2], '0', '9')
       && between (grid[3], '0', '9');
+}
+
+bool is_standard_call_word (std::string const& word)
+{
+  if (word.empty () || word.size () > 12)
+    {
+      return false;
+    }
+
+  FixedChars<12> call = blank_fixed<12> ();
+  std::copy_n (word.data (), word.size (), call.data ());
+  return is_standard_call (call.data (), static_cast<int> (call.size ()));
+}
+
+bool is_cq_modifier (std::string const& word)
+{
+  return word == "DX"
+      || word == "NA"
+      || word == "SA"
+      || word == "EU"
+      || word == "AF"
+      || word == "AS"
+      || word == "OC"
+      || word == "TEST";
+}
+
+bool is_report_token (std::string const& word)
+{
+  if (word == "RRR" || word == "RR73" || word == "73")
+    {
+      return true;
+    }
+  size_t offset = 0;
+  if (!word.empty () && word[0] == 'R')
+    {
+      offset = 1;
+    }
+  if (word.size () != offset + 3)
+    {
+      return false;
+    }
+  return (word[offset] == '-' || word[offset] == '+')
+      && word[offset + 1] >= '0' && word[offset + 1] <= '9'
+      && word[offset + 2] >= '0' && word[offset + 2] <= '9';
+}
+
+bool is_standard_ft8_exchange_tail (std::string const& word)
+{
+  return is_grid4 (word) || is_report_token (word);
+}
+
+std::vector<std::string> split_words (std::string const& text);
+
+bool is_strict_standard_ft8_message (FixedChars<kFt8DecodedChars> const& decoded)
+{
+  std::vector<std::string> const words = split_words (trim_fixed (decoded));
+  if (words.size () < 2 || words.size () > 4)
+    {
+      return false;
+    }
+
+  if (words[0] == "CQ")
+    {
+      size_t callIndex = 1;
+      if (words.size () >= 3 && is_cq_modifier (words[1]))
+        {
+          callIndex = 2;
+        }
+      if (callIndex >= words.size () || !is_standard_call_word (words[callIndex]))
+        {
+          return false;
+        }
+      return callIndex + 1 == words.size ()
+          || (callIndex + 2 == words.size () && is_grid4 (words[callIndex + 1]));
+    }
+
+  if (!is_standard_call_word (words[0]) || !is_standard_call_word (words[1]))
+    {
+      return false;
+    }
+  if (words.size () == 2)
+    {
+      return true;
+    }
+  if (!is_standard_ft8_exchange_tail (words[2]))
+    {
+      return false;
+    }
+  return words.size () == 3;
 }
 
 std::vector<std::string> split_words (std::string const& text)
@@ -2220,21 +2361,28 @@ struct Ft8Stage4State
   std::array<bool, kFt8MaxEarly> lsubtracted {};
   std::array<Ft8A7Slot, kFt8SequenceCount> a7 {};
   int nutc0 {-1};
+  int early_nutc {-1};
   int ndec_early {0};
 
-  void reset ()
+  void resetEarlySlotState ()
   {
-    dd.fill (0.0f);
-    dd1.fill (0.0f);
     allmessages.fill (blank_fixed<kFt8DecodedChars> ());
     allsnrs.fill (0);
     itone_save.fill (0);
     f1_save.fill (0.0f);
     xdt_save.fill (0.0f);
     lsubtracted.fill (false);
+    ndec_early = 0;
+  }
+
+  void reset ()
+  {
+    dd.fill (0.0f);
+    dd1.fill (0.0f);
+    resetEarlySlotState ();
     a7 = {};
     nutc0 = -1;
-    ndec_early = 0;
+    early_nutc = -1;
   }
 };
 
@@ -2400,11 +2548,44 @@ int ft8_candidate_sync_threshold (int imetric, int ndepth)
     {
       syncmin = 7;
     }
+  if (ndepth >= 4)
+    {
+      syncmin = std::min (syncmin, 5);
+    }
+  else if (ndepth >= 3)
+    {
+      syncmin = std::min (syncmin, 6);
+    }
   if (ndepth <= 2)
     {
       syncmin = 8;
     }
+  if (ndepth == 1)
+    {
+      syncmin = 7;
+    }
+  if (ndepth >= 4 && stage4_supplemental_requested ().load (std::memory_order_relaxed))
+    {
+      syncmin = std::min (syncmin, 4);
+    }
   return syncmin;
+}
+
+int ft8_candidate_budget (int ndepth)
+{
+  if (ndepth >= 4 && stage4_supplemental_requested ().load (std::memory_order_relaxed))
+    {
+      return kFt8MaxCand;
+    }
+  if (ndepth >= 4)
+    {
+      return 3200;
+    }
+  if (ndepth >= 3)
+    {
+      return kFt8DeepMaxCand;
+    }
+  return kFt8DefaultMaxCand;
 }
 
 void plan_ft8_ldpc_decode (Ft8Request const& request, float f1,
@@ -2415,6 +2596,19 @@ void plan_ft8_ldpc_decode (Ft8Request const& request, float f1,
   if (request.ndepth == 1)
     {
       maxosd = -1;
+    }
+  else
+    {
+      int const overrideMaxOsd = stage4_ldpc_maxosd_override ().load (std::memory_order_relaxed);
+      int const overrideNOrder = stage4_ldpc_norder_override ().load (std::memory_order_relaxed);
+      if (overrideMaxOsd >= 0)
+        {
+          maxosd = overrideMaxOsd;
+        }
+      if (overrideNOrder > 0)
+        {
+          norder = overrideNOrder;
+        }
     }
   if (request.ndepth == 3
       && (std::fabs (static_cast<float> (request.nfqso) - f1) <= static_cast<float> (request.napwid)
@@ -2455,6 +2649,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
     {
       return false;
     }
+  if (stage4_should_cancel ())
+    {
+      return false;
+    }
 
   auto const mycall13 = widen_call_for_pack77 (request.mycall);
   auto const hiscall13 = widen_call_for_pack77 (request.hiscall);
@@ -2475,6 +2673,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   int local_newdat = *newdat;
   ftx_ft8_downsample_c (dd0, &local_newdat, f1,
                         reinterpret_cast<fftwf_complex*> (cd0.data ()));
+  if (stage4_should_cancel ())
+    {
+      return false;
+    }
 
   int ibest = 0;
   float delfbest = 0.0f;
@@ -2484,6 +2686,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
   int second_pass_newdat = 0;
   ftx_ft8_downsample_c (dd0, &second_pass_newdat, f1,
                         reinterpret_cast<fftwf_complex*> (cd0.data ()));
+  if (stage4_should_cancel ())
+    {
+      return false;
+    }
 
   ftx_ft8_a7_refine_search_c (cd0.data (), kFt8A7Np2, kFt8A7Fs2, ibest,
                               &ibest, &sync, &xdt);
@@ -2515,6 +2721,10 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
 
   for (int pass_index = pass_first; pass_index <= pass_last; ++pass_index)
     {
+      if (stage4_should_cancel ())
+        {
+          return false;
+        }
       int pass_iaptype = 0;
       if (ftx_ft8_prepare_decode_pass_c (pass_index, request.nqsoprogress,
                                          request.lapcqonly, request.ncontest,
@@ -2543,7 +2753,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
       ftx_decode174_91_c (llrz.data (), Keff, maxosd, norder, apmask_bits.data (),
                           message91.data (), cw.data (), &ntype,
                           &pass_nharderrors, &pass_dmin);
-      if (pass_nharderrors < 0 || pass_nharderrors > 36)
+      if (stage4_should_cancel ())
+        {
+          return false;
+        }
+      if (pass_nharderrors < 0 || pass_nharderrors > kFt8MaxHardErrors)
         {
           continue;
         }
@@ -2557,6 +2771,11 @@ bool decode_main_candidate_cpp (float* dd0, int* newdat, Ft8Request const& reque
       if (ftx_ft8_validate_candidate_meta_c (message77.data (), cw.data (),
                                              pass_nharderrors, unpack_ok, quirky,
                                              request.ncontest) == 0)
+        {
+          continue;
+        }
+      if (pass_nharderrors > kFt8StrictHardErrors
+          && !is_strict_standard_ft8_message (candidate_msg))
         {
           continue;
         }
@@ -2761,6 +2980,10 @@ void run_main_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq
 
   for (int ipass = 1; ipass <= npass; ++ipass)
     {
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
       int pass_newdat = 1;
       float syncmin = 0.0f;
       int imetric = 0;
@@ -2777,10 +3000,15 @@ void run_main_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq
       ftx_sync8_search_c (state.dd.data (), kFt8NMax,
                           static_cast<float> (ifa), static_cast<float> (ifb),
                           syncmin, static_cast<float> (request.nfqso),
-                          kFt8MaxCand, candidate.data (), &ncand, sbase.data ());
+                          ft8_candidate_budget (request.ndepth), candidate.data (), &ncand,
+                          sbase.data ());
 
       for (int icand = 0; icand < ncand; ++icand)
         {
+          if (stage4_should_cancel ())
+            {
+              return;
+            }
           float sync = 0.0f;
           float f1 = 0.0f;
           float xdt = 0.0f;
@@ -2799,6 +3027,10 @@ void run_main_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq
                                      kFt8Nh1, sync, f1, xdt, xbase, nharderrors,
                                      dmin, nbadcrc, candidate_pass, iaptype,
                                      msg37, xsnr, itone, message77);
+          if (stage4_should_cancel ())
+            {
+              return;
+            }
 
           xdt -= 0.5f;
 
@@ -2867,6 +3099,10 @@ void run_ap_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq,
       int newdat_a7 = 1;
       for (int i = 0; i < slot.previous_count && i < kFt8MaxEarly; ++i)
         {
+          if (stage4_should_cancel ())
+            {
+              return;
+            }
           Ft8A7Entry const& previous = slot.previous[static_cast<size_t> (i)];
 
           float f1 = 0.0f;
@@ -2895,6 +3131,10 @@ void run_ap_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq,
           FixedChars<kFt8DecodedChars> msg37 = blank_fixed<kFt8DecodedChars> ();
           ftx_ft8_a7d_c (state.dd.data (), &newdat_a7, call_1.data (), call_2.data (), grid4.data (),
                          &xdt, &f1, &xbase, &nharderrors, &dmin, msg37.data (), &xsnr);
+          if (stage4_should_cancel ())
+            {
+              return;
+            }
 
           if (nharderrors >= 0)
             {
@@ -2921,6 +3161,10 @@ void run_ap_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq,
     {
       return;
     }
+  if (stage4_should_cancel ())
+    {
+      return;
+    }
 
   float f1 = static_cast<float> (request.nfqso);
   float xdt = 0.0f;
@@ -2930,6 +3174,10 @@ void run_ap_passes (Ft8Stage4State& state, Ft8Request const& request, int jseq,
   FixedChars<kFt8DecodedChars> msg37 = blank_fixed<kFt8DecodedChars> ();
   ftx_ft8_a8d_c (state.dd.data (), request.mycall.data (), request.hiscall.data (),
                  request.hisgrid.data (), &f1, &xdt, &fbest, &xsnr, &plog, msg37.data ());
+  if (stage4_should_cancel ())
+    {
+      return;
+    }
 
   if (msg37[0] == ' ')
     {
@@ -2970,6 +3218,10 @@ extern "C" void ftx_ft8_a7d_c (float* dd0, int* newdat, char const call_1[12],
     }
 
   if (!dd0 || !xdt || !f1 || !xbase || !nharderrors || !dmin || !msg37 || !xsnr)
+    {
+      return;
+    }
+  if (stage4_should_cancel ())
     {
       return;
     }
@@ -3025,6 +3277,10 @@ extern "C" void ftx_ft8_a7d_c (float* dd0, int* newdat, char const call_1[12],
 
   for (int imsg = 1; imsg <= kFt8A7MaxMsg; ++imsg)
     {
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
       FixedChars<kFt8DecodedChars> candidate_message = blank_fixed<kFt8DecodedChars> ();
       if (ftx_prepare_ft8_a7_candidate_c (imsg, call_1, call_2, grid4,
                                           candidate_message.data ()) == 0)
@@ -3099,6 +3355,10 @@ extern "C" void ftx_ft8_a8d_c (float* dd, char const mycall[12], char const dxca
     {
       return;
     }
+  if (stage4_should_cancel ())
+    {
+      return;
+    }
 
   float const f1 = *f1a;
   int newdat = 1;
@@ -3113,6 +3373,10 @@ extern "C" void ftx_ft8_a8d_c (float* dd, char const mycall[12], char const dxca
 
   for (int imsg = 1; imsg <= kFt8A8MaxMsg; ++imsg)
     {
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
       FixedChars<kFt8DecodedChars> candidate_message = blank_fixed<kFt8DecodedChars> ();
       if (ftx_prepare_ft8_a8_candidate_c (imsg, mycall, dxcall, dxgrid,
                                           candidate_message.data ()) == 0)
@@ -3344,6 +3608,27 @@ extern "C" void ftx_ft8_stage4_reset_c ()
   stage4_state ().reset ();
 }
 
+extern "C" void ftx_ft8_stage4_set_cancel_c (int cancel)
+{
+  stage4_cancel_requested ().store (cancel != 0, std::memory_order_relaxed);
+}
+
+extern "C" void ftx_ft8_stage4_set_deadline_ms_c (long long deadline_ms)
+{
+  stage4_deadline_ms ().store (deadline_ms, std::memory_order_relaxed);
+}
+
+extern "C" void ftx_ft8_stage4_set_ldpc_osd_c (int maxosd, int norder)
+{
+  stage4_ldpc_maxosd_override ().store (maxosd, std::memory_order_relaxed);
+  stage4_ldpc_norder_override ().store (norder, std::memory_order_relaxed);
+}
+
+extern "C" void ftx_ft8_stage4_set_supplemental_c (int supplemental)
+{
+  stage4_supplemental_requested ().store (supplemental != 0, std::memory_order_relaxed);
+}
+
 extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
                                                int* nqsoprogress, int* nfqso, int* nftx,
                                                int* nutc, int* nfa, int* nfb,
@@ -3379,6 +3664,10 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
   collector.decodeds = decodeds;
   collector.nout = nout;
   collector.reset ();
+  if (stage4_should_cancel ())
+    {
+      return;
+    }
 
   Ft8Request request;
   request.iwave = iwave;
@@ -3403,6 +3692,14 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
   request.hisgrid = fixed_from_chars<6> (hisgrid);
 
   Ft8Stage4State& state = stage4_state ();
+  if (request.nutc != state.early_nutc)
+    {
+      // Early/full FT8 passes may be interrupted by the live deadline. Never
+      // carry saved early decodes, tones, or subtractions into the next UTC
+      // slot; otherwise stale AP decodes are emitted with a fresh timestamp.
+      state.resetEarlySlotState ();
+      state.early_nutc = request.nutc;
+    }
   int const jseq = sequence_index_for_utc (request.nutc);
   prepare_a7_tables (state.a7, state.nutc0, request.nutc, request.nzhsym, jseq);
 
@@ -3413,6 +3710,10 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
   if (stage_action == 1)
     {
       state.ndec_early = 0;
+      return;
+    }
+  if (stage4_should_cancel ())
+    {
       return;
     }
 
@@ -3447,12 +3748,20 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
         {
           state.ndec_early = ndecodes;
         }
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
       run_ap_passes (state, request, jseq, std::array<float, kFt8Nh1> {}, collector);
       return;
     }
 
   if (stage_action == 3)
     {
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
       state.lsubtracted.fill (false);
       ftx_ft8_apply_saved_subtractions_c (state.dd.data (), state.itone_save.data (), kFt8Nn,
                                           state.ndec_early, state.f1_save.data (),
@@ -3465,6 +3774,10 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
 
   if (stage_action == 4)
     {
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
       restore_carried_audio (state.dd, state.dd1, request.iwave);
       ftx_ft8_apply_saved_subtractions_c (state.dd.data (), state.itone_save.data (), kFt8Nn,
                                           state.ndec_early, state.f1_save.data (),
@@ -3482,7 +3795,15 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
     }
 
   std::array<float, kFt8Nh1> sbase {};
+  if (stage4_should_cancel ())
+    {
+      return;
+    }
   run_main_passes (state, request, jseq, apsym, aph10, ifa, ifb, ndecodes, sbase, collector);
+  if (stage4_should_cancel ())
+    {
+      return;
+    }
 
   state.ndec_early = 0;
   if (request.nzhsym < 50)

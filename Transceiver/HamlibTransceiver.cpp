@@ -471,7 +471,7 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
 
     case TransceiverFactory::PTT_method_DTR:
     case TransceiverFactory::PTT_method_RTS:
-      if (!ptt_port.isEmpty ())
+      if (!ptt_port.isEmpty () && ptt_port != "None")
         {
 #if defined (WIN32)
           m_->set_conf ("ptt_pathname", ("\\\\.\\" + ptt_port).toLatin1 ().data ());

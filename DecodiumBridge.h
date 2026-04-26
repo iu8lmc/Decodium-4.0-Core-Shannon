@@ -142,6 +142,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int  autoCqMaxCycles  READ autoCqMaxCycles  WRITE setAutoCqMaxCycles  NOTIFY autoCqMaxCyclesChanged)
     Q_PROPERTY(int  autoCqPauseSec   READ autoCqPauseSec   WRITE setAutoCqPauseSec   NOTIFY autoCqPauseSecChanged)
     Q_PROPERTY(bool avgDecodeEnabled READ avgDecodeEnabled WRITE setAvgDecodeEnabled NOTIFY avgDecodeEnabledChanged)
+    Q_PROPERTY(bool ft8ApEnabled READ ft8ApEnabled WRITE setFt8ApEnabled NOTIFY ft8ApEnabledChanged)
     Q_PROPERTY(int  txPeriod         READ txPeriod         WRITE setTxPeriod         NOTIFY txPeriodChanged)
     Q_PROPERTY(bool alt12Enabled     READ alt12Enabled     WRITE setAlt12Enabled     NOTIFY alt12EnabledChanged)
     // FT2-specific: async TX (no period sync) e dual carrier
@@ -389,6 +390,8 @@ public:
     void setAutoCqPauseSec(int v) { if (m_autoCqPauseSec != v) { m_autoCqPauseSec = qBound(0, v, 300); emit autoCqPauseSecChanged(); } }
     bool avgDecodeEnabled()  const { return m_avgDecodeEnabled; }
     void setAvgDecodeEnabled(bool v){ if (m_avgDecodeEnabled != v) { m_avgDecodeEnabled = v; emit avgDecodeEnabledChanged(); } }
+    bool ft8ApEnabled() const { return m_ft8ApEnabled; }
+    void setFt8ApEnabled(bool v) { if (m_ft8ApEnabled != v) { m_ft8ApEnabled = v; emit ft8ApEnabledChanged(); } }
     int  txPeriod()          const { return m_txPeriod; }
     void setTxPeriod(int v);
     bool alt12Enabled()      const { return m_alt12Enabled; }
@@ -845,6 +848,7 @@ signals:
     void autoCqMaxCyclesChanged();
     void autoCqPauseSecChanged();
     void avgDecodeEnabledChanged();
+    void ft8ApEnabledChanged();
     void txPeriodChanged();
     void alt12EnabledChanged();
     void asyncTxEnabledChanged();
@@ -1002,6 +1006,11 @@ private:
     void requestRigFrequencyFromBridge(double hz, const QString& reason);
     bool shouldIgnoreCatFrequencyDuringLocalQsy(double hz, const QString& backend);
     bool shouldIgnoreLegacyAudioFrequencyDuringLocalQsy(int hz, bool tx);
+    bool catSplitOperationActiveForMode() const;
+    int catSplitXitHzForTxFrequency(int txFrequencyHz) const;
+    int effectiveTxAudioFrequencyHz() const;
+    double catSplitTxDialFrequencyHz() const;
+    void syncActiveCatTxSplitFrequency(const QString& reason);
     bool checkSwrAllowsTransmission(const QString& reason);
     void enforceSwrTransmissionLimit(const QString& reason);
     void applyRemoteDialFrequency(double hz, const QString& reason);
@@ -1069,8 +1078,15 @@ private:
     // Standalone UDP MessageClient for WSJT-X protocol
     void initUdpMessageClient();
     void shutdownUdpMessageClient();
+    void scheduleUdpMessageClientRestart();
     void udpSendStatus();
     void udpSendDecode(bool isNew, const QString& rawLine, quint64 serial);
+    void udpSendLoggedQso(const QString& dxCall, const QString& dxGrid,
+                          double freqHz, const QString& mode,
+                          const QDateTime& timeOnUtc,
+                          const QString& rstSent, const QString& rstRcvd,
+                          const QByteArray& adifRecord);
+    void udpSendN1mmLoggedQso(const QString& dxCall, const QByteArray& adifRecord);
 
     QString m_callsign {"IU8LMC"};
     QString m_grid {"JN70"};
@@ -1216,6 +1232,18 @@ private:
     // counter di tick Qt (che può perdere/ritardare scatti sotto event loop
     // carico — UI, UDP, Hamlib, WebSocket). -1 = non ancora inizializzato.
     qint64 m_lastPeriodSlot {-1};
+    qint64 m_ft8EarlyDecodeSlot {-1};
+    bool m_ft8EarlyDecode41Sent {false};
+    bool m_ft8EarlyDecode47Sent {false};
+    QSet<quint64> m_ft8EarlyDecodeSerials;
+    qint64 m_ft4EarlyDecodeSlot {-1};
+    bool m_ft4EarlyDecodeSent {false};
+    QVector<short> m_pendingTimeSyncDecodeAudio;
+    qint64 m_pendingTimeSyncDecodeSlot {-1};
+    QString m_pendingTimeSyncDecodeMode;
+    bool m_pendingTimeSyncDecodeActive {false};
+    QVector<short> m_forcedDecodeAudioSnapshot;
+    bool m_forcedDecodeAudioSnapshotActive {false};
     static constexpr int TIMER_MS = 250;
     static constexpr int SAMPLE_RATE = 12000;
 
@@ -1255,10 +1283,14 @@ private:
     qint64             m_audioWatchdogIgnoreUntilMs {0};
     QBuffer*           m_txPcmBuffer  {nullptr};
     QByteArray         m_txPcmData;
+    bool               m_tciAudioCaptureActive {false};
+    qint64             m_lastTciAudioLogMs {0};
     QTimer*            m_tuneTimer    {nullptr};
     DecodiumLegacyBackend* m_legacyBackend {nullptr};
     bool m_useLegacyTxBackend {false};
     MessageClient* m_udpMessageClient {nullptr};
+    MessageClient* m_udpSecondaryMessageClient {nullptr};
+    bool m_udpMessageClientRestartPending {false};
     int  m_legacyBandActivityRevision {-1};
     int  m_legacyRxFrequencyRevision {-1};
     QString m_legacyAllTxtRevisionKey;
@@ -1298,7 +1330,7 @@ private:
     int     m_contestType {0};
     bool    m_zapEnabled {false};
     bool    m_deepSearchEnabled {false};
-    bool    m_ft8ApEnabled {false};
+    bool    m_ft8ApEnabled {true};
     bool    m_asyncDecodeEnabled {false};
     bool    m_alertOnCq {false};
     bool    m_alertOnMyCall {false};
@@ -1424,13 +1456,14 @@ private:
     bool  m_asyncDecodePending {false};  // previene overlap
 
     // Spectrum ring buffer — buffer circolare separato per waterfall (non consumato dal decoder)
-    static constexpr int WF_RING_SIZE = 16384;  // ~1.37s a 12kHz — sufficiente per FFT 8192
+    static constexpr int WF_RING_SIZE = 16384;  // ~1.37s a 12kHz, enough for the visual FFT
     short m_wfRing[WF_RING_SIZE] {};
     int   m_wfRingPos {0};
     QVector<short> m_spectrumBuf;
     static constexpr int SPECTRUM_FFT_SIZE    = 512;   // legacy WaterfallItem
-    static constexpr int PANADAPTER_FFT_SIZE  = 8192;  // massima risoluzione (~1.46 Hz/bin)
+    static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // visual panadapter (~2.93 Hz/bin @ 12kHz)
     QVector<float> m_lastPanadapterData;   // ultimo spettro valido (evita fasce nere)
+    qint64 m_lastPanadapterFrameMs {0};     // throttle visual FFT so decode keeps priority
     float m_lastPanMinDb {0.f};
     float m_lastPanMaxDb {0.f};
     float m_lastPanFreqMin {0.f};
@@ -1447,9 +1480,26 @@ private:
     QStringList parseJt65Row(const QString& row) const;
     void startAudioCapture();
     void stopAudioCapture();
+    bool usingTciAudioInput() const;
+    void startTciAudioCapture();
+    void stopTciAudioCapture();
+    void onTciPcmSamplesReady(const QVector<short>& samples);
     void handleAudioHealth(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
     void restartAudioCaptureFromWatchdog(const QString& reason);
     void feedAudioToDecoder(qint64 completedUtcSlot = -1);
+    void dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot, const QString& modeSnapshot,
+                                         quint64 sessionId, qint64 deadlineMs);
+    void maybeDispatchFt8EarlyDecode(qint64 utcSlot, int msInSlot, int periodMs);
+    void maybeDispatchFt4EarlyDecode(qint64 utcSlot, int msInSlot, int periodMs);
+    void queueFt8DecodeRequest(const QVector<short>& audioSnapshot, quint64 serial,
+                               int nutc, qint64 slotIndexForUtc, int decodeDepth,
+                               int decodeQsoProgress, int cqHint, int nzhsym,
+                               bool ft8ApEnabled, bool suppressUiRows);
+    void queueFt4DecodeRequest(const QVector<short>& audioSnapshot, quint64 serial,
+                               int nutc, qint64 slotIndexForUtc, int decodeDepth,
+                               int decodeQsoProgress, int cqHint);
+    void resetEarlyDecodeSchedule();
+    int targetDecodeSamplesForMode(const QString& mode) const;
     void enumerateAudioDevices();
     void updatePeriodTicksMax();
     QVector<float> computeSpectrum() const;

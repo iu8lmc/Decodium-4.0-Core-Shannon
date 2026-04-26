@@ -108,6 +108,40 @@ bool isOmniRigRigName(const QString& rigName)
 {
     return rigName.trimmed().startsWith(QStringLiteral("OmniRig"), Qt::CaseInsensitive);
 }
+
+bool envFlagEnabled(const char* name)
+{
+    const QString value = qEnvironmentVariable(name).trimmed().toLower();
+    return value == QStringLiteral("1")
+        || value == QStringLiteral("true")
+        || value == QStringLiteral("yes")
+        || value == QStringLiteral("on");
+}
+
+bool omniRigMockRequested()
+{
+    QSettings s("Decodium", "Decodium3");
+    s.beginGroup("CAT_OmniRig");
+    const bool settingEnabled = s.value(QStringLiteral("mockEnabled"), false).toBool();
+    s.endGroup();
+    return settingEnabled || envFlagEnabled("DECODIUM_OMNIRIG_MOCK");
+}
+
+double omniRigMockFrequency()
+{
+    bool ok = false;
+    const double envFreq = qEnvironmentVariable("DECODIUM_OMNIRIG_MOCK_FREQ").toDouble(&ok);
+    if (ok && envFreq > 0.0) {
+        return envFreq;
+    }
+    return 14074000.0;
+}
+
+QString omniRigMockMode()
+{
+    const QString mode = qEnvironmentVariable("DECODIUM_OMNIRIG_MOCK_MODE").trimmed().toUpper();
+    return mode.isEmpty() ? QStringLiteral("DATA-U") : mode;
+}
 }
 
 #if defined(Q_OS_WIN) && DECODIUM_HAS_QAXOBJECT
@@ -209,6 +243,29 @@ void DecodiumOmniRigManager::connectRig()
 {
     if (m_connected) return;
 
+    m_mockEnabled = omniRigMockRequested();
+    if (m_mockEnabled) {
+        m_frequency = omniRigMockFrequency();
+        m_txFrequency = m_frequency;
+        m_mode = omniRigMockMode();
+        m_readableParams = OMNI_PM_FREQ | OMNI_PM_FREQA | OMNI_PM_FREQB
+                         | OMNI_PM_RX | OMNI_PM_TX
+                         | OMNI_PM_CW_U | OMNI_PM_CW_L
+                         | OMNI_PM_SSB_U | OMNI_PM_SSB_L
+                         | OMNI_PM_DIG_U | OMNI_PM_DIG_L
+                         | OMNI_PM_AM | OMNI_PM_FM;
+        m_writableParams = m_readableParams;
+        m_connected = true;
+        emit connectedChanged();
+        emit frequencyChanged();
+        emit txFrequencyChanged();
+        emit modeChanged();
+        emit statusUpdate(QStringLiteral("OmniRig mock connesso: %1 Hz, %2")
+                          .arg(QString::number(m_frequency, 'f', 0), m_mode));
+        m_pollTimer->start();
+        return;
+    }
+
     emit statusUpdate("Connessione a OmniRig (" + m_rigName + ")…");
 
     if (!ensureOmniRigComServerAvailable(this)) {
@@ -288,6 +345,17 @@ void DecodiumOmniRigManager::disconnectRig()
     if (m_pttActive)
         setRigPtt(false);
 
+    if (m_mockEnabled) {
+        m_readableParams = 0;
+        m_writableParams = 0;
+        if (m_connected) {
+            m_connected = false;
+            emit connectedChanged();
+            emit statusUpdate(QStringLiteral("OmniRig mock disconnesso."));
+        }
+        return;
+    }
+
     delete m_portBits; m_portBits = nullptr;
     delete m_rig;    m_rig    = nullptr;
     delete m_omniRig; m_omniRig = nullptr;
@@ -303,6 +371,10 @@ void DecodiumOmniRigManager::disconnectRig()
 
 void DecodiumOmniRigManager::onPollTimer()
 {
+    if (m_mockEnabled) {
+        return;
+    }
+
     if (!m_rig || m_rig->isNull()) return;
 
     // Frequenza RX
@@ -338,6 +410,23 @@ void DecodiumOmniRigManager::onPollTimer()
 
 void DecodiumOmniRigManager::setRigFrequency(double hz)
 {
+    if (m_mockEnabled) {
+        if (!m_connected) {
+            emit errorOccurred(QStringLiteral("OmniRig mock: rig non connesso"));
+            return;
+        }
+        if (m_frequency != hz) {
+            m_frequency = hz;
+            emit frequencyChanged();
+        }
+        if (m_txFrequency != hz) {
+            m_txFrequency = hz;
+            emit txFrequencyChanged();
+        }
+        emit statusUpdate("OmniRig mock: freq -> " + QString::number(hz / 1e6, 'f', 6) + " MHz");
+        return;
+    }
+
     if (!m_rig || m_rig->isNull()) {
         emit errorOccurred("OmniRig: impossibile impostare frequenza — rig non connesso");
         return;
@@ -361,6 +450,20 @@ void DecodiumOmniRigManager::setRigFrequency(double hz)
 
 void DecodiumOmniRigManager::setRigPtt(bool on)
 {
+    if (m_mockEnabled) {
+        if (!m_connected) {
+            emit errorOccurred(QStringLiteral("OmniRig mock: rig non connesso"));
+            return;
+        }
+        emit statusUpdate(on ? QStringLiteral("OmniRig mock: PTT ON")
+                             : QStringLiteral("OmniRig mock: PTT OFF"));
+        if (m_pttActive != on) {
+            m_pttActive = on;
+            emit pttActiveChanged();
+        }
+        return;
+    }
+
     if (!m_rig || m_rig->isNull()) {
         emit errorOccurred("OmniRig: impossibile PTT — rig non connesso");
         return;
@@ -396,6 +499,20 @@ void DecodiumOmniRigManager::setRigPtt(bool on)
 
 void DecodiumOmniRigManager::setRigMode(const QString& mode)
 {
+    if (m_mockEnabled) {
+        if (!m_connected) {
+            emit errorOccurred(QStringLiteral("OmniRig mock: rig non connesso"));
+            return;
+        }
+        const QString normalized = mode.trimmed().toUpper();
+        if (!normalized.isEmpty() && m_mode != normalized) {
+            m_mode = normalized;
+            emit modeChanged();
+        }
+        emit statusUpdate(QStringLiteral("OmniRig mock: mode -> %1").arg(m_mode));
+        return;
+    }
+
     if (!m_rig || m_rig->isNull()) {
         emit errorOccurred("OmniRig: impossibile impostare modo — rig non connesso");
         return;
@@ -461,6 +578,7 @@ void DecodiumOmniRigManager::loadSettings()
     if (!hasPollInterval && s.contains("Polling"))
         m_pollInterval = boundedPollInterval(s.value("Polling", m_pollInterval).toInt());
 
+    m_mockEnabled = omniRigMockRequested();
     applyPollInterval();
 }
 #else
@@ -489,6 +607,24 @@ DecodiumOmniRigManager::~DecodiumOmniRigManager()
 
 void DecodiumOmniRigManager::connectRig()
 {
+    m_mockEnabled = omniRigMockRequested();
+    if (m_mockEnabled) {
+        m_frequency = omniRigMockFrequency();
+        m_txFrequency = m_frequency;
+        m_mode = omniRigMockMode();
+        m_connected = true;
+        emit connectedChanged();
+        emit frequencyChanged();
+        emit txFrequencyChanged();
+        emit modeChanged();
+        emit statusUpdate(QStringLiteral("OmniRig mock connesso: %1 Hz, %2")
+                          .arg(QString::number(m_frequency, 'f', 0), m_mode));
+        if (m_pollTimer) {
+            m_pollTimer->start();
+        }
+        return;
+    }
+
     emit errorOccurred("OmniRig support is not available in this build.");
 }
 
@@ -503,12 +639,34 @@ void DecodiumOmniRigManager::disconnectRig()
 
 void DecodiumOmniRigManager::onPollTimer() {}
 
-void DecodiumOmniRigManager::setRigFrequency(double) {}
+void DecodiumOmniRigManager::setRigFrequency(double hz)
+{
+    if (!m_mockEnabled || !m_connected) return;
+    if (m_frequency != hz) {
+        m_frequency = hz;
+        emit frequencyChanged();
+    }
+    if (m_txFrequency != hz) {
+        m_txFrequency = hz;
+        emit txFrequencyChanged();
+    }
+    emit statusUpdate("OmniRig mock: freq -> " + QString::number(hz / 1e6, 'f', 6) + " MHz");
+}
 
-void DecodiumOmniRigManager::setRigMode(const QString&) {}
+void DecodiumOmniRigManager::setRigMode(const QString& mode)
+{
+    if (!m_mockEnabled || !m_connected) return;
+    const QString normalized = mode.trimmed().toUpper();
+    if (!normalized.isEmpty() && m_mode != normalized) {
+        m_mode = normalized;
+        emit modeChanged();
+    }
+    emit statusUpdate(QStringLiteral("OmniRig mock: mode -> %1").arg(m_mode));
+}
 
 void DecodiumOmniRigManager::setRigPtt(bool on)
 {
+    if (!m_mockEnabled || !m_connected) return;
     if (m_pttActive != on) {
         m_pttActive = on;
         emit pttActiveChanged();
@@ -559,6 +717,7 @@ void DecodiumOmniRigManager::loadSettings()
     if (!hasPollInterval && s.contains("Polling"))
         m_pollInterval = boundedPollInterval(s.value("Polling", m_pollInterval).toInt());
 
+    m_mockEnabled = omniRigMockRequested();
     applyPollInterval();
 }
 #endif

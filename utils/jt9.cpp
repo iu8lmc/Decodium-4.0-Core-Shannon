@@ -40,6 +40,7 @@
 #include "Detector/Q65DecodeWorker.hpp"
 #include "revision_utils.hpp"
 
+#if !defined(DECODIUM_FTX_HELPER_ONLY)
 extern "C"
 {
   void symspec_ (dec_data_t* shared_data, int* k, double* trperiod, int* nsps,
@@ -47,6 +48,7 @@ extern "C"
                  float* pxdb, float* spectrum, float* df3, int* ihsym,
                  int* npts8, float* pxdbmax, float* npct);
 }
+#endif
 
 namespace
 {
@@ -54,8 +56,10 @@ namespace
   constexpr int kFt4Samples {21 * 3456};
   constexpr int kShmemWaitMs {10};
   constexpr int kShmemRetryCount {200};
+#if !defined(DECODIUM_FTX_HELPER_ONLY)
   constexpr int kJt9Nsps {6912};
   constexpr int kJt9KStep {kJt9Nsps / 2};
+#endif
   constexpr int kJt9SpectrumSize {184 * NSMAX};
 
   struct WavData
@@ -90,6 +94,7 @@ namespace
     int mtDecodeSensitivity {3};
     int mtStartTime {3};
     bool wideDxSearch {true};
+    bool supplementalFt8 {false};
     int mode {0};
     bool quiet {false};
     int qsoProgress {0};
@@ -284,6 +289,7 @@ namespace
     return audio;
   }
 
+#if !defined(DECODIUM_FTX_HELPER_ONLY)
   LegacySpectra compute_jt9_spectra (QVector<short> const& audio, double trPeriod)
   {
     std::unique_ptr<dec_data_t> shared {new dec_data_t {}};
@@ -334,6 +340,7 @@ namespace
     result.nzhsym = std::max (0, nhsym0);
     return result;
   }
+#endif
 
   params_block_t make_params (Options const& options, int mode, int nutc)
   {
@@ -505,6 +512,8 @@ namespace
                                       QStringLiteral ("3"));
     QCommandLineOption skipWideDxOption ({QStringLiteral ("Z"), QStringLiteral ("Skip-MTft8-WideDxCallSearch")},
                                          QStringLiteral ("Disable MT FT8 wide DX call search"));
+    QCommandLineOption supplementalFt8Option ({QStringLiteral ("supplemental-ft8")},
+                                             QStringLiteral ("Run the deeper FT8 supplemental pass"));
     QCommandLineOption q65Option ({QStringLiteral ("3"), QStringLiteral ("q65")},
                                   QStringLiteral ("Q65 mode"));
     QCommandLineOption jt4Option ({QStringLiteral ("4"), QStringLiteral ("jt4")},
@@ -566,7 +575,7 @@ namespace
       lowestOption, highestOption, splitOption, rxFreqOption, tolOption,
       patienceOption, fftThreadsOption, multift8Option, mtCyclesOption,
       hideDupesOption, rxSensOption, mtThreadsOption, mtDecodeSensOption,
-      mtStartOption, skipWideDxOption, q65Option, jt4Option, ft4Option,
+      mtStartOption, skipWideDxOption, supplementalFt8Option, q65Option, jt4Option, ft4Option,
       jt65Option, fst4Option, fst4wOption, fst4wHashOption, ft8Option,
       jt9Option, quietOption, mskOption, qsoOption, subModeOption,
       depthOption, txJt9Option, myCallOption, myGridOption, hisCallOption,
@@ -604,6 +613,7 @@ namespace
     parsed.mtDecodeSensitivity = parser.value (mtDecodeSensOption).toInt ();
     parsed.mtStartTime = parser.value (mtStartOption).toInt ();
     parsed.wideDxSearch = !parser.isSet (skipWideDxOption);
+    parsed.supplementalFt8 = parser.isSet (supplementalFt8Option);
     parsed.quiet = parser.isSet (quietOption);
     parsed.qsoProgress = parser.value (qsoOption).toInt ();
     parsed.depth = parser.value (depthOption).toInt ();
@@ -819,7 +829,8 @@ namespace
 	    return run_worker (worker, &decodium::ft4::FT4DecodeWorker::decodeReady, request);
 	  }
 
-	  QStringList decode_ft8_mode (params_block_t const& params, QVector<short> const& audio)
+	  QStringList decode_ft8_mode (params_block_t const& params, QVector<short> const& audio,
+                                  bool supplemental)
 	  {
 	    decodium::ft8::FT8DecodeWorker worker;
 	    decodium::ft8::DecodeRequest request;
@@ -833,6 +844,10 @@ namespace
 	    request.nfb = qMax (request.nfa + 50, qBound (0, int (params.nfb), 5000));
 	    request.nzhsym = qBound (41, int (params.nzhsym), 50);
 	    request.ndepth = qBound (1, int (params.ndepth), 4);
+	    if (supplemental) {
+	      request.ndepth = 4;
+	      request.supplemental = true;
+	    }
 	    request.emedelay = params.emedelay;
 	    request.ncontest = qBound (0, int (params.nexp_decode & 7), 16);
 	    request.nagain = params.nagain ? 1 : 0;
@@ -898,12 +913,12 @@ namespace
   }
 
 	  int run_native_ftx (params_block_t params, QVector<short> const& audio,
-	                      QString const& tempDir, bool quiet)
+	                      QString const& tempDir, bool quiet, bool supplementalFt8)
 	  {
 	    Q_UNUSED (tempDir);
 	    QStringList rows;
 
-	    if (params.nmode == 8 && params.ndiskdat && !params.nagain)
+	    if (params.nmode == 8 && params.ndiskdat && !params.nagain && !supplementalFt8)
 	      {
 	        QVector<short> early = audio;
 	        for (int nearly : {41, 47})
@@ -915,7 +930,7 @@ namespace
 	              {
 	                std::fill (early.begin () + keep, early.end (), 0);
 	              }
-	            rows << decode_ft8_mode (earlyParams, early);
+	            rows << decode_ft8_mode (earlyParams, early, false);
 	            early = audio;
 	          }
 	      }
@@ -929,7 +944,7 @@ namespace
 	        rows << decode_ft4_mode (params, audio);
 	        break;
 	      case 8:
-	        rows << decode_ft8_mode (params, audio);
+	        rows << decode_ft8_mode (params, audio, supplementalFt8);
 	        break;
 	      case 66:
 	        rows << decode_q65_mode (params, audio);
@@ -967,11 +982,12 @@ namespace
   }
 
   int decode_from_params (params_block_t const& params, QVector<short> const& audio,
-                          QVector<float> const& spectra, QString const& tempDir, bool quiet)
+                          QVector<float> const& spectra, QString const& tempDir, bool quiet,
+                          bool supplementalFt8)
   {
     if (params.nmode == 5 || params.nmode == 8 || params.nmode == 66)
       {
-        return run_native_ftx (params, audio, tempDir, quiet);
+        return run_native_ftx (params, audio, tempDir, quiet, supplementalFt8);
       }
 
     QStringList const rows = decode_via_workers (params, audio, spectra, tempDir);
@@ -1070,7 +1086,8 @@ namespace
                       .arg (segment.errorString ()));
           }
 
-        decode_from_params (params, audio, spectra, options.tempDir, options.quiet);
+        decode_from_params (params, audio, spectra, options.tempDir, options.quiet,
+                            options.supplementalFt8);
 
         while (true)
           {
@@ -1105,6 +1122,12 @@ namespace
         params_block_t params = make_params (options, effectiveMode, nutc);
 
         QVector<float> spectra;
+#if defined(DECODIUM_FTX_HELPER_ONLY)
+        if (effectiveMode == 9 || effectiveMode == 74)
+          {
+            fail (QStringLiteral ("legacy JT9/JT65 file decoding is not available in this helper"));
+          }
+#else
         if (effectiveMode == 9 || effectiveMode == 74)
           {
             LegacySpectra const computed = compute_jt9_spectra (audio, options.trPeriod);
@@ -1112,8 +1135,10 @@ namespace
             params.npts8 = computed.npts8;
             params.nzhsym = computed.nzhsym;
           }
+#endif
 
-        decode_from_params (params, audio, spectra, options.tempDir, options.quiet);
+        decode_from_params (params, audio, spectra, options.tempDir, options.quiet,
+                            options.supplementalFt8);
       }
   }
 }

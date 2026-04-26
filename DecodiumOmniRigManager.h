@@ -186,4 +186,5 @@ private:
 
     bool    m_catAutoConnect{false};
     bool    m_audioAutoStart{false};
+    bool    m_mockEnabled   {false};
 };

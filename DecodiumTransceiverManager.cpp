@@ -11,6 +11,7 @@
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QMetaObject>
+#include <QMetaType>
 #include <QDebug>
 #include <QRegularExpression>
 #include <atomic>
@@ -167,6 +168,7 @@ DecodiumTransceiverManager::DecodiumTransceiverManager(QObject* parent)
     : QObject(parent)
     , d(std::make_unique<DecodiumTransceiverManagerPrivate>())
 {
+    qRegisterMetaType<QVector<short>>("QVector<short>");
     refreshPorts();
     loadSettings();
 }
@@ -216,6 +218,17 @@ bool DecodiumTransceiverManager::forceDtrAvailable() const
 bool DecodiumTransceiverManager::forceRtsAvailable() const
 {
     return d3ForceRtsAvailable(m_portType, m_handshake, m_pttMethod, m_serialPort, m_pttPort);
+}
+
+void DecodiumTransceiverManager::reconnectRigForParameterChange(const QString& reason)
+{
+    if (!m_connected || !d->transceiver) {
+        return;
+    }
+
+    emit statusUpdate(reason + QStringLiteral(": riconnessione CAT per applicare il PTT"));
+    disconnectRig();
+    connectRig();
 }
 
 void DecodiumTransceiverManager::enforceForceLineAvailability()
@@ -307,20 +320,68 @@ void DecodiumTransceiverManager::setPttMethod(const QString& v)
     if (m_pttMethod != effective) {
         m_pttMethod = effective;
         emit pttMethodChanged();
+        reconnectRigForParameterChange(QStringLiteral("PTT Method"));
     }
     enforceForceLineAvailability();
 }
 
 void DecodiumTransceiverManager::setPttPort(const QString& v)
 {
-    if (m_pttPort != v) {
-        m_pttPort = v;
+    QString const effective = v.trimmed().isEmpty() ? QStringLiteral("CAT") : v.trimmed();
+    if (m_pttPort != effective) {
+        m_pttPort = effective;
         emit pttPortChanged();
+        reconnectRigForParameterChange(QStringLiteral("PTT Port"));
     }
     enforceForceLineAvailability();
 }
 
+void DecodiumTransceiverManager::setTciAudioEnabled(bool v)
+{
+    if (m_tciAudioEnabled == v) {
+        return;
+    }
+
+    bool const reconnect = m_connected && d->transceiver
+        && 0 == m_portType.compare(QStringLiteral("tci"), Qt::CaseInsensitive);
+    m_tciAudioEnabled = v;
+    emit tciAudioEnabledChanged();
+
+    if (reconnect) {
+        emit statusUpdate(QStringLiteral("Audio TCI: riconnessione CAT per applicare %1")
+                              .arg(v ? QStringLiteral("ON") : QStringLiteral("OFF")));
+        disconnectRig();
+        connectRig();
+    }
+}
+
 // ── rigList ────────────────────────────────────────────────────────────────
+void DecodiumTransceiverManager::setSplitMode(const QString& v)
+{
+    QString normalized = v.trimmed().toLower();
+    if (normalized != QStringLiteral("rig") && normalized != QStringLiteral("emulate")) {
+        normalized = QStringLiteral("none");
+    }
+    if (m_splitMode == normalized) {
+        return;
+    }
+
+    bool const reconnect = m_connected && d->transceiver;
+    m_splitMode = normalized;
+    emit splitModeChanged();
+
+    if (reconnect) {
+        emit statusUpdate(QStringLiteral("Split: riconnessione CAT per applicare %1")
+                              .arg(normalized == QStringLiteral("emulate")
+                                       ? QStringLiteral("Fake It")
+                                       : normalized == QStringLiteral("rig")
+                                           ? QStringLiteral("Rig")
+                                           : QStringLiteral("None")));
+        disconnectRig();
+        connectRig();
+    }
+}
+
 QStringList DecodiumTransceiverManager::rigList() const
 {
     QStringList list;
@@ -357,6 +418,24 @@ static TransceiverFactory::PTTMethod parsePtt(const QString& s)
     if (s == "DTR") return TransceiverFactory::PTT_method_DTR;
     if (s == "RTS") return TransceiverFactory::PTT_method_RTS;
     return TransceiverFactory::PTT_method_VOX;
+}
+
+static QString resolvedPttPort(const DecodiumTransceiverManager* m)
+{
+    QString const method = m->pttMethod().trimmed().toUpper();
+    if (method != QStringLiteral("DTR") && method != QStringLiteral("RTS")) {
+        return QStringLiteral("None");
+    }
+
+    QString const raw = m->pttPort().trimmed();
+    if (raw.isEmpty() || 0 == raw.compare(QStringLiteral("CAT"), Qt::CaseInsensitive)) {
+        if (0 == m->portType().compare(QStringLiteral("serial"), Qt::CaseInsensitive)) {
+            return normalizeDevicePath(m->serialPort());
+        }
+        return QStringLiteral("None");
+    }
+
+    return normalizeDevicePath(raw);
 }
 
 static TransceiverFactory::SplitMode parseSplit(const QString& s)
@@ -476,11 +555,15 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.ptt_type      = parsePtt(m->pttMethod());
     p.audio_source  = configuredTxAudioSource();
     p.split_mode    = parseSplit(m->splitMode());
-    // ptt_port: "CAT" usa la stessa porta CAT; altrimenti porta seriale dedicata
-    p.ptt_port      = m->pttPort().isEmpty() ? "CAT" : normalizeDevicePath(m->pttPort());
+    // "CAT" in PTT Port means "use the same serial port as CAT", as in WSJT-X.
+    p.ptt_port      = resolvedPttPort(m);
     p.poll_interval = m->pollInterval();
     if (configuredPwrAndSwrEnabled())
         p.poll_interval |= do__pwr;
+    if (m->tciAudioEnabled()
+        && 0 == m->portType().compare(QStringLiteral("tci"), Qt::CaseInsensitive)) {
+        p.poll_interval |= tci__audio;
+    }
     return p;
 }
 
@@ -564,7 +647,13 @@ void DecodiumTransceiverManager::connectRig()
     connect(xcv, &Transceiver::update,
             this,
             [this](Transceiver::TransceiverState const& state, unsigned /*seq*/) {
+                auto const requestedAudio = d->desired.audio();
+                auto const requestedPeriod = d->desired.period();
+                auto const requestedBlocksize = d->desired.blocksize();
                 d->desired = state;
+                d->desired.audio(requestedAudio);
+                d->desired.period(requestedPeriod);
+                d->desired.blocksize(requestedBlocksize);
                 double  freq = static_cast<double>(state.frequency());
                 double  txf  = static_cast<double>(state.tx_frequency());
                 QString mode = modeStr(state.mode());
@@ -598,6 +687,12 @@ void DecodiumTransceiverManager::connectRig()
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
                 updateTelemetry(0.0, 0.0);
             },
+            Qt::QueuedConnection);
+    connect(xcv, &Transceiver::tciPcmSamplesReady,
+            this, &DecodiumTransceiverManager::tciPcmSamplesReady,
+            Qt::QueuedConnection);
+    connect(xcv, &Transceiver::tci_mod_active,
+            this, &DecodiumTransceiverManager::tciModActiveChanged,
             Qt::QueuedConnection);
 
     thread->start();
@@ -722,6 +817,18 @@ void DecodiumTransceiverManager::setRigMode(const QString& mode)
     sendState(d.get());
 }
 
+void DecodiumTransceiverManager::setRigAudio(bool on, double periodSeconds, int blockSize)
+{
+    d->desired.online(true);
+    d->desired.period(qBound(0.1, periodSeconds, 1800.0));
+    d->desired.blocksize(qBound(256, blockSize, 48000));
+    d->desired.audio(on);
+    if (on)
+        sendState(d.get());
+    else
+        sendStateSync(d.get());
+}
+
 // ── refreshPorts ──────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::refreshPorts()
 {
@@ -769,6 +876,7 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("pollInterval", m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
+    s.setValue("tciAudioEnabled", m_tciAudioEnabled);
     s.endGroup();
 }
 
@@ -793,9 +901,13 @@ void DecodiumTransceiverManager::loadSettings()
         m_pttMethod = QStringLiteral("CAT");
     m_pttPort      = normalizeDevicePath(get("pttPort",      m_pttPort).toString());
     m_splitMode    = get("splitMode",    m_splitMode).toString();
-    m_pollInterval = get("pollInterval", m_pollInterval).toInt();
+    int const rawPollInterval = get("pollInterval", m_pollInterval).toInt();
+    int const secondsPart = rawPollInterval & 0xffff;
+    m_pollInterval = qBound(1, secondsPart > 0 ? secondsPart : rawPollInterval, 99);
     m_catAutoConnect = get("catAutoConnect", m_catAutoConnect).toBool();
     m_audioAutoStart = get("audioAutoStart", m_audioAutoStart).toBool();
+    bool const legacyTciAudioFlag = (rawPollInterval & tci__audio) == tci__audio;
+    m_tciAudioEnabled = get("tciAudioEnabled", m_tciAudioEnabled || legacyTciAudioFlag).toBool();
     // setRigName DOPO gli altri per aggiornare portType correttamente
     QString rig = get("rigName", m_rigName).toString();
     s.endGroup();

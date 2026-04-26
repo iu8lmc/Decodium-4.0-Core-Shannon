@@ -7,6 +7,7 @@
 #include <QStyleFactory>
 #include <QFont>
 #include <QFontDatabase>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -23,6 +24,17 @@
 #include <atomic>
 #include <cstdio>
 #include <clocale>
+#include <cstring>
+
+#ifdef Q_OS_WIN
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 #include "DecodiumBridge.h"
 #include "DecodiumDiagnostics.h"
@@ -52,6 +64,27 @@ static void L(const char* msg) {
 }
 
 static std::atomic_bool g_shuttingDown {false};
+
+#ifdef Q_OS_WIN
+static void setWindowsAppUserModelId()
+{
+    using SetAppIdFn = HRESULT (WINAPI *)(PCWSTR);
+    HMODULE shell32 = LoadLibraryW(L"shell32.dll");
+    if (!shell32)
+        return;
+
+    FARPROC proc = GetProcAddress(shell32, "SetCurrentProcessExplicitAppUserModelID");
+    if (proc) {
+        SetAppIdFn setAppId = nullptr;
+        static_assert(sizeof(setAppId) == sizeof(proc),
+                      "Unexpected function pointer size");
+        std::memcpy(&setAppId, &proc, sizeof(setAppId));
+        setAppId(L"IU8LMC.Decodium4");
+    }
+
+    FreeLibrary(shell32);
+}
+#endif
 
 static bool isIgnorableShutdownQmlMessage(const QString& msg)
 {
@@ -117,9 +150,14 @@ int main(int argc, char* argv[])
     QQuickStyle::setStyle("Material");
     L("QQuickStyle OK");
 
+#ifdef Q_OS_WIN
+    setWindowsAppUserModelId();
+#endif
+
     QApplication app(argc, argv);
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
+    app.setWindowIcon(QIcon(QStringLiteral(":/icon_128x128.png")));
 
     QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     if (!fixedFontFamily.isEmpty()) {
@@ -260,17 +298,24 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty("bridge", &bridge);
     engine.rootContext()->setContextProperty("appEngine", &bridge);
 
-    // Load BootLoader.qml first — it shows a splash window immediately,
-    // then loads Main.qml asynchronously via Loader { asynchronous: true }.
-    // This guarantees the window appears even if component compilation is slow.
-    QString qmlPath = QDir(QCoreApplication::applicationDirPath())
-                          .absoluteFilePath("qml/decodium/BootLoader.qml");
+    // On Windows, load Main.qml directly so Explorer tracks one stable
+    // taskbar window. Other platforms keep the asynchronous BootLoader.
+    // Main.qml still shows the in-app splash overlay after it is loaded.
+    QDir const qmlDir {QDir(QCoreApplication::applicationDirPath())
+                           .absoluteFilePath(QStringLiteral("qml/decodium"))};
+
+#ifdef Q_OS_WIN
+    QString qmlPath = qmlDir.absoluteFilePath(QStringLiteral("Main.qml"));
+    if (!QFile::exists(qmlPath))
+        qmlPath = qmlDir.absoluteFilePath(QStringLiteral("BootLoader.qml"));
+#else
+    QString qmlPath = qmlDir.absoluteFilePath(QStringLiteral("BootLoader.qml"));
 
     // Fallback to Main.qml if BootLoader doesn't exist (portable/dev builds)
     if (!QFile::exists(qmlPath)) {
-        qmlPath = QDir(QCoreApplication::applicationDirPath())
-                      .absoluteFilePath("qml/decodium/Main.qml");
+        qmlPath = qmlDir.absoluteFilePath(QStringLiteral("Main.qml"));
     }
+#endif
 
     if (!QFile::exists(qmlPath)) {
         L("QML file NOT FOUND");

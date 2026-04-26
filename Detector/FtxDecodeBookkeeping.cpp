@@ -24,6 +24,8 @@ extern "C" void ftx_ft8var_chkgrid_c (char const callsign[12], char const grid[1
 
 namespace
 {
+constexpr int kFt8MaxHardErrors {58};
+
 constexpr float kTiny = 1.0e-30f;
 constexpr float kTwoPi = 6.28318530717958647692f;
 constexpr int kFt8PeakupNp2 = 2812;
@@ -2504,7 +2506,7 @@ extern "C" void ftx_ft8_prepare_pass_c (int ndepth, int ipass, int ndecodes,
   else
     {
       local_imetric = 2;
-      if (ndecodes == 0)
+      if (ndecodes == 0 && (ndepth <= 2 || ipass >= 4))
         {
           local_run_pass = 0;
         }
@@ -2898,7 +2900,7 @@ extern "C" int ftx_ft8_prepare_decode_pass_c (int ipass, int nQSOProgress, int l
 extern "C" int ftx_ft8_validate_candidate_c (int nharderrors, int zero_count, int i3, int n3,
                                               int unpack_ok, int quirky, int ncontest)
 {
-  if (nharderrors < 0 || nharderrors > 36)
+  if (nharderrors < 0 || nharderrors > kFt8MaxHardErrors)
     {
       return 0;
     }

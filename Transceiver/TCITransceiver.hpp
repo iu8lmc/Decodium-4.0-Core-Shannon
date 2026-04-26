@@ -30,9 +30,10 @@ typedef struct
 	quint32 format; //!< data field format (0 - int16, 1 - int24, 2 - int32, 3 - float32, 4 - float64)
 	quint32 codec; //!< compression algorithm (not implemented), always 0
 	quint32 crc; //!< checksum
-	quint32 length; //!< data field length number of float numbers
+	quint32 length; //!< number of real samples in the data field
 	quint32 type; //!< data stream type
-	quint32 reserv[9]; //!< reserved
+	quint32 channels; //!< number of channels in the data field
+	quint32 reserv[8]; //!< reserved
 	float data[8192]; //!< data field
 }Data_Stream;
 
@@ -42,7 +43,16 @@ typedef enum
     RxAudioStream,
     TxAudioStream,
     TxChrono,
+    LineoutStream,
 }Stream_Type;
+
+typedef enum
+{
+    SampleInt16 = 0,
+    SampleInt24,
+    SampleInt32,
+    SampleFloat32,
+}Sample_Type;
 
 class TCITransceiver final
   : public PollingTransceiver
@@ -116,6 +126,7 @@ Cmd_RxSensors,
 Cmd_TxSensors,
 Cmd_AgcMode,
 Cmd_AgcGain,
+Cmd_RxChannelSensors,
 Cmd_Lock
 };
 Q_ENUM (Tci_Cmd);

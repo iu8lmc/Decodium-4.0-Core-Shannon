@@ -1,4 +1,5 @@
 build/
+build-local-macos/
 build-mac/
 build-codex-check/
 build-win-mingw/

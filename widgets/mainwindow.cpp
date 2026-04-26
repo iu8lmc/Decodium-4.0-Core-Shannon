@@ -20,6 +20,7 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <cinttypes>
+#include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <limits>
@@ -27,6 +28,7 @@
 #include <fstream>
 #include <iterator>
 #include <algorithm>
+#include <memory>
 #include <numeric>
 #include <fftw3.h>
 #include <thread> // TCI
@@ -38,7 +40,9 @@
 #include <QWheelEvent>
 #include <QProcessEnvironment>
 #include <QProcess>
+#include <QPointer>
 #include <QSharedMemory>
+#include <QDataStream>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
@@ -4071,6 +4075,9 @@ MainWindow::~MainWindow()
   if (m_ft2DecodeWorker) {
     m_ft2DecodeWorker->beginShutdown ();
   }
+  if (m_ft8DecodeWorker) {
+    m_ft8DecodeWorker->beginShutdown ();
+  }
   QObject::disconnect (m_applicationStateChangedConnection);
   m_applicationStateChangedConnection = {};
   QObject::disconnect (m_detectorFramesWrittenConnection);
@@ -5959,6 +5966,29 @@ void MainWindow::dataSink(qint64 frames)
       m_last_audio_frame_ms = QDateTime::currentMSecsSinceEpoch ();
     }
 
+  bool const snapshotFt8LiveAudio =
+      m_mode == "FT8" && !m_diskData && m_embeddedShellMode && !m_multithreadFT8;
+  if (snapshotFt8LiveAudio) {
+    int constexpr kFt8SlotSamples {15 * RX_SAMPLE_RATE};
+    if (m_ft8LiveAudioSnapshot.size () != kFt8SlotSamples) {
+      m_ft8LiveAudioSnapshot.fill (0, kFt8SlotSamples);
+      m_ft8LiveAudioSnapshotSamples = 0;
+    }
+    int const snapshotSamples = qBound (0, k, kFt8SlotSamples);
+    if (snapshotSamples < m_ft8LiveAudioSnapshotSamples) {
+      std::fill (m_ft8LiveAudioSnapshot.begin (), m_ft8LiveAudioSnapshot.end (), 0);
+      m_ft8LiveAudioSnapshotSamples = 0;
+    }
+    if (snapshotSamples > m_ft8LiveAudioSnapshotSamples) {
+      std::copy (dec_data.d2 + m_ft8LiveAudioSnapshotSamples,
+                 dec_data.d2 + snapshotSamples,
+                 m_ft8LiveAudioSnapshot.begin () + m_ft8LiveAudioSnapshotSamples);
+      m_ft8LiveAudioSnapshotSamples = snapshotSamples;
+    }
+  } else {
+    m_ft8LiveAudioSnapshotSamples = 0;
+  }
+
   static float s[NSMAX];
 
   // Async FT2: fill ring buffer with latest audio
@@ -6244,7 +6274,10 @@ void MainWindow::dataSink(qint64 frames)
        && (m_ihsym==m_earlyDecode or m_ihsym==m_earlyDecode2)) return;
     if (!m_diskData)
       {
-        if (!(m_mode=="FT8" && m_multithreadFT8)) Q_EMIT reset_audio_input_stream (true); // reports dropped samples
+        bool const liveEmbeddedFt8 =
+            m_mode == "FT8" && m_embeddedShellMode && !m_multithreadFT8;
+        if (!(m_mode=="FT8" && (m_multithreadFT8 || liveEmbeddedFt8)))
+          Q_EMIT reset_audio_input_stream (true); // reports dropped samples
       }
     if(!m_diskData and (m_saveAll or m_saveDecoded or m_mode=="WSPR")) {
       //Always save unless "Save None"; may delete later
@@ -9609,6 +9642,9 @@ void MainWindow::closeEvent(QCloseEvent * e)
   if (m_ft2DecodeWorker) {
     m_ft2DecodeWorker->beginShutdown ();
   }
+  if (m_ft8DecodeWorker) {
+    m_ft8DecodeWorker->beginShutdown ();
+  }
   QObject::disconnect (m_detectorFramesWrittenConnection);
   m_detectorFramesWrittenConnection = {};
   QObject::disconnect (m_tciFramesWrittenConnection);
@@ -10897,18 +10933,23 @@ void MainWindow::decode()                                       //decode()
          && !m_diskData
          && m_dateTimeSeqStart.isValid ());
 
-    // Embedded FT8 single-thread can overrun into the next 15 s boundary on
-    // dense slots. Keep one full-slot request queued instead of dropping the
-    // whole slot when the previous decode is still running.
-    queueEmbeddedFt8FullSlot =
+    bool const ft8MayPreempt =
         (m_mode == "FT8"
          && m_embeddedShellMode
-         && !m_diskData
          && !m_multithreadFT8
+         && m_ft8DecodePending
+         && m_ft8DecodeWorker
+         && m_ft8DecodeThread.isRunning ()
+         && !m_diskData
          && m_ihsym == m_hsymStop
          && m_dateTimeSeqStart.isValid ());
 
-    if (!ft2MayPreempt && !queueEmbeddedFt8FullSlot) {
+    // Live FT8 must not publish one slot late. The worker has its own live
+    // time budget, so if it still overruns a boundary this decode is stale and
+    // the current slot takes priority.
+    queueEmbeddedFt8FullSlot = false;
+
+    if (!ft2MayPreempt && !ft8MayPreempt && !queueEmbeddedFt8FullSlot) {
       return;                          //Don't start decoder if it's already busy.
     }
 
@@ -10925,6 +10966,24 @@ void MainWindow::decode()                                       //decode()
         }
 
       cancelPendingInProcessDecode ();
+    }
+
+    if (ft8MayPreempt) {
+      auto const t = m_dateTimeSeqStart.time ();
+      int pendingUtc = t.hour () * 100 + t.minute ();
+      if (m_TRperiod < 60.)
+        {
+          pendingUtc = pendingUtc * 100 + t.second ();
+        }
+      if (pendingUtc == m_ft8DecodePendingUtc)
+        {
+          return;
+        }
+
+      if (!queueEmbeddedFt8FullSlot)
+        {
+          cancelPendingInProcessDecode ();
+        }
     }
   }
   m_fetched=0;
@@ -12031,8 +12090,12 @@ bool MainWindow::cancelPendingInProcessDecode ()
   }
 
   if (m_ft8DecodePending) {
+    if (m_ft8DecodeWorker) {
+      m_ft8DecodeWorker->cancelCurrentDecode ();
+    }
     ++m_ft8DecodeSerial;
     m_ft8DecodePending = false;
+    m_ft8DecodePendingUtc = 0;
     cancelled = true;
   }
   if (m_ft8QueuedDecodePending) {
@@ -12235,14 +12298,20 @@ void MainWindow::queueInProcessFt8Decode ()
   // previous embedded FT8 decode is still running. The queued request is
   // launched as soon as the current worker result is consumed.
   m_ft8QueuedDecodeRequest = buildFt8DecodeRequest ();
+  if (!m_ft8QueuedDecodeRequest.hasFreshAudio) {
+    m_ft8QueuedDecodePending = false;
+    m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
+    return;
+  }
   m_ft8QueuedDecodePending = true;
 }
 
 decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
 {
   decodium::ft8::DecodeRequest request;
-  request.audio.resize (15 * RX_SAMPLE_RATE);
-  std::copy_n (dec_data.d2, request.audio.size (), request.audio.begin ());
+  int constexpr kFt8SlotSamples {15 * RX_SAMPLE_RATE};
+  request.audio.resize (kFt8SlotSamples);
+  std::fill (request.audio.begin (), request.audio.end (), 0);
   request.nqsoprogress = qBound (0, int (dec_data.params.nQSOProgress), 6);
   request.nfqso = qBound (0, int (dec_data.params.nfqso), 5000);
   request.nftx = qBound (0, int (dec_data.params.nftx), 5000);
@@ -12259,6 +12328,43 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
   request.lapcqonly = dec_data.params.lapcqonly ? 1 : 0;
   request.napwid = qBound (0, int (dec_data.params.napwid), 200);
   request.ldiskdat = dec_data.params.ndiskdat ? 1 : 0;
+  int const snapshotSamples = qBound (0, m_ft8LiveAudioSnapshotSamples,
+                                      qMin (kFt8SlotSamples, m_ft8LiveAudioSnapshot.size ()));
+  bool const useLiveAudioSnapshot =
+      m_embeddedShellMode && !m_diskData && !m_multithreadFT8 && snapshotSamples > 0;
+  request.availableSamples = useLiveAudioSnapshot
+      ? snapshotSamples
+      : qBound (0, int (dec_data.params.kin), kFt8SlotSamples);
+  if (request.availableSamples > 0) {
+    if (useLiveAudioSnapshot) {
+      std::copy_n (m_ft8LiveAudioSnapshot.constBegin (), request.availableSamples,
+                   request.audio.begin ());
+    } else {
+      std::copy_n (dec_data.d2, request.availableSamples, request.audio.begin ());
+    }
+  }
+  if (!m_diskData) {
+    double const slotFraction = request.nzhsym >= 50
+        ? 1.0
+        : qBound (0.0, double (request.nzhsym) / 50.0, 1.0);
+    int const expectedSamples = qRound (kFt8SlotSamples * slotFraction);
+    int const minimumFreshSamples = qRound (expectedSamples * 0.88);
+    request.hasFreshAudio = request.availableSamples >= minimumFreshSamples;
+  }
+  if (m_embeddedShellMode && !m_diskData && !m_multithreadFT8) {
+    if (request.nzhsym >= 50) {
+      if (request.ndepth >= 4) {
+        request.maxDecodeMs = 14500;
+        request.lft8apon = 1;
+      } else if (request.ndepth >= 3) {
+        request.maxDecodeMs = 12000;
+      } else {
+        request.maxDecodeMs = 6500;
+      }
+    } else {
+      request.maxDecodeMs = request.ndepth >= 4 ? 3500 : 2500;
+    }
+  }
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
   request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
   request.hisgrid = QByteArray (dec_data.params.hisgrid, int (sizeof dec_data.params.hisgrid));
@@ -12272,8 +12378,18 @@ void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request)
     return;
   }
 
+  if (!request.hasFreshAudio) {
+    debugToFile (QString {"ft8Decode   skip stale/partial audio utc:%1 nzhsym:%2 samples:%3 kin:%4"}
+                   .arg (request.nutc)
+                   .arg (request.nzhsym)
+                   .arg (request.availableSamples)
+                   .arg (dec_data.params.kin));
+    return;
+  }
+
   request.serial = ++m_ft8DecodeSerial;
   m_ft8DecodePending = true;
+  m_ft8DecodePendingUtc = request.nutc;
   m_decodedTransportQueue.clear ();
   m_decodeStartMs = QDateTime::currentMSecsSinceEpoch ();
   decodeBusy (true);
@@ -27104,6 +27220,7 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
   }
 
   m_ft8DecodePending = false;
+  m_ft8DecodePendingUtc = 0;
 
   if (m_mode != "FT8") {
     m_ft8QueuedDecodePending = false;

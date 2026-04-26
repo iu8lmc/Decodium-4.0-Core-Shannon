@@ -472,6 +472,18 @@ Dialog {
                         background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                     }
 
+                    Text {
+                        text: "TCI audio:"; color: textSecondary; font.pixelSize: 12
+                        visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
+                    }
+                    CheckBox {
+                        text: "RX via TCI"
+                        visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
+                        checked: bridge.catManager.tciAudioEnabled
+                        onCheckedChanged: bridge.catManager.tciAudioEnabled = checked
+                        contentItem: Text { text: parent.text; leftPadding: 4; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
+                    }
+
                     // PTT method
                     Text { text: "PTT:"; color: textSecondary; font.pixelSize: 12 }
                     ComboBox {

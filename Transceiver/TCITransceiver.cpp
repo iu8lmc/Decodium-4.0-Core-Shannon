@@ -6,6 +6,8 @@
 #include <QQueue>
 #include <cstdlib>
 #include <cmath>
+#include <cstddef>
+#include <cstring>
 #include <limits>
 #include <qmath.h>
 
@@ -205,6 +207,10 @@ namespace
   static const QString CmdAudioSR("audio_samplerate");
   static const QString CmdAudioStart("audio_start");
   static const QString CmdAudioStop("audio_stop");
+  static const QString CmdAudioStreamSampleType("audio_stream_sample_type");
+  static const QString CmdAudioStreamChannels("audio_stream_channels");
+  static const QString CmdAudioStreamSamples("audio_stream_samples");
+  static const QString CmdTxStreamAudioBuffering("tx_stream_audio_buffering");
   static const QString CmdAppFocus("app_focus");
   static const QString CmdVolume("volume");
   static const QString CmdSqlEnable("sql_enable");
@@ -216,20 +222,42 @@ namespace
   static const QString CmdTxSensorsEnable("tx_sensors_enable");
   static const QString CmdRxSensors("rx_sensors");
   static const QString CmdTxSensors("tx_sensors");
+  static const QString CmdRxChannelSensors("rx_channel_sensors");
   static const QString CmdAgcMode("agc_mode");
   static const QString CmdAgcGain("agc_gain");
   static const QString CmdLock("lock");
 
   constexpr int kMaxKin = NTMAX * RX_SAMPLE_RATE;
-  constexpr quint64 kFloatPairBytes = sizeof(float) * 2ULL;
 
-  bool checked_payload_size (quint32 length, int available_bytes, quint64 * required_bytes)
+  quint64 sample_size_for_format (quint32 format)
+  {
+    switch (format)
+      {
+      case SampleInt16: return 2;
+      case SampleInt24: return 3;
+      case SampleInt32:
+      case SampleFloat32: return 4;
+      default: return 0;
+      }
+  }
+
+  quint32 stream_channels (Data_Stream const * stream)
+  {
+    return stream && stream->channels ? stream->channels : 2;
+  }
+
+  bool checked_payload_size (quint32 length, quint32 format, int available_bytes, quint64 * required_bytes)
   {
     if (available_bytes < 0)
       {
         return false;
       }
-    quint64 req = static_cast<quint64> (length) * kFloatPairBytes;
+    auto const bytes_per_sample = sample_size_for_format (format);
+    if (!bytes_per_sample)
+      {
+        return false;
+      }
+    quint64 req = static_cast<quint64> (length) * bytes_per_sample;
     if (req > static_cast<quint64> (available_bytes))
       {
         return false;
@@ -389,6 +417,7 @@ void TCITransceiver::register_transceivers (logger_type *, TransceiverFactory::T
 }
 
 static constexpr quint32 AudioHeaderSize = 16u*sizeof(quint32);
+static_assert(offsetof(Data_Stream, data) == AudioHeaderSize, "TCI stream header must be 64 bytes");
 
 TCITransceiver::TCITransceiver (logger_type * logger, std::unique_ptr<TransceiverBase> wrapped,QString const& rignr,
                                QString const& address, bool use_for_ptt,
@@ -511,6 +540,7 @@ TCITransceiver::TCITransceiver (logger_type * logger, std::unique_ptr<Transceive
   mapCmd_[CmdTxSensorsEnable] = Cmd_TxSensorsEnable;
   mapCmd_[CmdRxSensors]    = Cmd_RxSensors;
   mapCmd_[CmdTxSensors]    = Cmd_TxSensors;
+  mapCmd_[CmdRxChannelSensors] = Cmd_RxChannelSensors;
   mapCmd_[CmdAgcMode]      = Cmd_AgcMode;
   mapCmd_[CmdAgcGain]      = Cmd_AgcGain;
   mapCmd_[CmdLock]         = Cmd_Lock;
@@ -584,7 +614,21 @@ void TCITransceiver::shutdown_socket_worker ()
 void TCITransceiver::onConnected()
 {
   inConnected = true;
+  error_.clear ();
   CAT_TRACE ("TCITransceiver entered TCI onConnected and inConnected==true\n");
+
+  if (!busy_split_)
+    {
+      busy_split_ = true;
+      const QString cmd = CmdSplitEnable + SmDP + rx_ + SmCM + "false" + SmTZ;
+      sendTextMessage (cmd);
+      arm_wait_timer (tci_timer5_, 500, "startup/split-off");
+    }
+  if (rig_power_ && !_power_)
+    {
+      rig_power (true);
+      arm_wait_timer (tci_timer6_, 1000, "startup/power-on");
+    }
 }
 
 void TCITransceiver::onDisconnected()
@@ -780,47 +824,8 @@ int TCITransceiver::do_start ()
   Q_EMIT request_socket_open (url_);
   tci_done6();
   arm_wait_timer (tci_timer6_, 2000, "startup/open");
-  busy_split_ = true;
-  const QString cmd = CmdSplitEnable + SmDP + "false" + SmTZ;
-  sendTextMessage(cmd);
-  arm_wait_timer (tci_timer5_, 500, "startup/split-off");
   if (error_.isEmpty()) {
-    tci_Ready = true;
-    if (!_power_) {
-      if (rig_power_) {
-        rig_power(true);
-        arm_wait_timer (tci_timer6_, 1000, "startup/power-on");
-      } else {
-        tci_Ready = false;
-        throw error {tr ("TCI SDR is not switched on")};
-      }
-    }
-    if (rx_ == "1" && !rx2_) {
-      rx2_enable (true);
-    }
-    if (tci_audio_) {
-      stream_audio (true);
-      arm_wait_timer (tci_timer6_, 500, "startup/audio-on");
-    }
-    if (ESDR3) {
-      const QString cmd = CmdRxSensorsEnable + SmDP + (do_snr_ ? "true" : "false") + SmCM + "500" +  SmTZ;
-      sendTextMessage(cmd);
-    } else if (do_snr_) {
-      const QString cmd = CmdSmeter + SmDP + rx_ + SmCM + "0" +  SmTZ;
-      sendTextMessage(cmd);
-    }
-//    if (!requested_rx_frequency_.isEmpty()) do_frequency(string_to_frequency (requested_rx_frequency_),get_mode(true),false);
-//    if (!requested_other_frequency_.isEmpty()) do_tx_frequency(string_to_frequency (requested_other_frequency_),get_mode(true),false);
-//    else if (requested_split_ != split_) {rig_split();}
-
-    do_poll ();
-    if (ESDR3) {
-      const QString cmd = CmdTxSensorsEnable + SmDP + (do_pwr_ ? "true" : "false") + SmCM + "500" +  SmTZ;
-      sendTextMessage(cmd);
-    }
-    if (stream_audio_) do_audio(true);
-
-    CAT_TRACE ("TCITransceiver started\n");
+    CAT_TRACE ("TCITransceiver startup pending async websocket handshake\n");
     return 0;
   } else {
     CAT_TRACE("TCITransceiver not started with error " + error_ + '\n');
@@ -845,7 +850,7 @@ void TCITransceiver::do_stop ()
   if (tci_Ready && inConnected && _power_) {
     requested_other_frequency_ = "";
     busy_split_ = true;
-    const QString cmd = CmdSplitEnable + SmDP + "false" + SmTZ;
+    const QString cmd = CmdSplitEnable + SmDP + rx_ + SmCM + "false" + SmTZ;
     sendTextMessage(cmd);
     arm_wait_timer (tci_timer5_, 500, "stop/split-off");
     requested_split_ = false;
@@ -921,7 +926,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
         continue;
       }
 
-    auto const command_name = tci_unescape (command_name_raw).trimmed ();
+    auto const command_name = tci_unescape (command_name_raw).trimmed ().toLower ();
     if (command_name.isEmpty ())
       {
         continue;
@@ -936,7 +941,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
       }
     auto const arg = [&args] (int index) -> QString { return args.value (index).trimmed (); };
     Tci_Cmd idCmd = mapCmd_.value (command_name, Cmd_Unknown);
-    if (idCmd != Cmd_Power && idCmd != Cmd_SWR && idCmd != Cmd_Smeter && idCmd != Cmd_AppFocus && idCmd != Cmd_RxSensors && idCmd != Cmd_TxSensors) { printf("%s TCI message received:|%s| ",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),str.toStdString().c_str()); printf("idCmd : %d args : %s\n",idCmd,args.join("|").toStdString().c_str());}
+    if (idCmd != Cmd_Power && idCmd != Cmd_SWR && idCmd != Cmd_Smeter && idCmd != Cmd_AppFocus && idCmd != Cmd_RxSensors && idCmd != Cmd_RxChannelSensors && idCmd != Cmd_TxSensors) { printf("%s TCI message received:|%s| ",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),str.toStdString().c_str()); printf("idCmd : %d args : %s\n",idCmd,args.join("|").toStdString().c_str());}
     qDebug() << cmds << idCmd;
     if (idCmd <=0) continue;
 
@@ -946,6 +951,10 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_RxSensors:
         if(arg (0) == rx_) level_ = arg (1).split ('.', Qt::KeepEmptyParts).value (0).toInt () + 73;
+        printf("Smeter=%d\n",level_);
+        break;
+      case Cmd_RxChannelSensors:
+        if(arg (0) == rx_ && arg (1) == "0") level_ = arg (2).split ('.', Qt::KeepEmptyParts).value (0).toInt () + 73;
         printf("Smeter=%d\n",level_);
         break;
       case Cmd_TxSensors:
@@ -1039,8 +1048,8 @@ void TCITransceiver::onMessageReceived(const QString &str)
       case Cmd_SplitEnable:
         printf("%s Cmd_SplitEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
-          if (arg (1) == "false") split_ = false;
-          else if (arg (1) == "true") split_ = true;
+          if (arg (1).compare (QStringLiteral ("false"), Qt::CaseInsensitive) == 0) split_ = false;
+          else if (arg (1).compare (QStringLiteral ("true"), Qt::CaseInsensitive) == 0) split_ = true;
           if (!tci_Ready) {started_split_ = split_;}
           else if (busy_split_) tci_done5();  //was tci_done2
           else if (tci_timer5_ && requested_split_ != split_ && !tci_timer5_->isActive()) { //was tci_timer2
@@ -1063,8 +1072,8 @@ void TCITransceiver::onMessageReceived(const QString &str)
       case Cmd_Trx:
         printf("%s Cmd_Trx : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
-          if (arg (1) == "false") PTT_ = false;
-          else if (arg (1) == "true") PTT_ = true;
+          if (arg (1).compare (QStringLiteral ("false"), Qt::CaseInsensitive) == 0) PTT_ = false;
+          else if (arg (1).compare (QStringLiteral ("true"), Qt::CaseInsensitive) == 0) PTT_ = true;
           if (tci_Ready && requested_PTT_ == PTT_) tci_done3();
           else if (tci_Ready && !PTT_) {
             requested_PTT_ = PTT_;
@@ -1087,8 +1096,8 @@ void TCITransceiver::onMessageReceived(const QString &str)
       case Cmd_RxEnable:
         printf("%s Cmd_RxEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == "1") {
-          if (arg (1) == "false") rx2_ = false;
-          else if (arg (1) == "true") rx2_ = true;
+          if (arg (1).compare (QStringLiteral ("false"), Qt::CaseInsensitive) == 0) rx2_ = false;
+          else if (arg (1).compare (QStringLiteral ("true"), Qt::CaseInsensitive) == 0) rx2_ = true;
           if(!tci_Ready) {requested_rx2_ = rx2_; started_rx2_ = rx2_;}
           else if (tci_Ready && busy_rx2_ && requested_rx2_ == rx2_) {
             tci_done4();
@@ -1134,8 +1143,8 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_Version:
         printf("%s CmdVersion : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        if(arg (0) == "ExpertSDR3") ESDR3 = true;
-        else if (arg (0) == "Thetis") HPSDR = true;
+        if(arg (0).compare (QStringLiteral ("ExpertSDR3"), Qt::CaseInsensitive) == 0) ESDR3 = true;
+        else if (arg (0).compare (QStringLiteral ("Thetis"), Qt::CaseInsensitive) == 0) HPSDR = true;
         break;
       case Cmd_Device:
         printf("%s CmdDevice : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
@@ -1172,11 +1181,19 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
   auto const * pStream = reinterpret_cast<Data_Stream const *> (data.constData ());
   auto const payload_bytes = data.size () - static_cast<int> (AudioHeaderSize);
   quint64 required_bytes = 0;
-  if (!checked_payload_size (pStream->length, payload_bytes, &required_bytes))
+  if (!checked_payload_size (pStream->length, pStream->format, payload_bytes, &required_bytes))
     {
       qWarning () << "TCI: dropping malformed binary frame, type=" << pStream->type
                   << "length=" << pStream->length
+                  << "format=" << pStream->format
                   << "payload=" << payload_bytes;
+      return;
+    }
+
+  if (pStream->format != SampleFloat32)
+    {
+      qWarning () << "TCI: unsupported stream sample format" << pStream->format
+                  << "type=" << pStream->type;
       return;
     }
 
@@ -1202,8 +1219,17 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
       emit sendIqData (pStream->receiver, pStream->length, const_cast<float *> (pStream->data), tx);
       qDebug () << "IQ" << data.size () << pStream->length;
     }
-  else if (pStream->type == RxAudioStream && audio_ && pStream->receiver == rx_.toUInt ())
+  else if (pStream->type == RxAudioStream && pStream->receiver == rx_.toUInt ())
     {
+      if (!audio_)
+        {
+          return;
+        }
+      if (stream_channels (pStream) != 2)
+        {
+          qWarning () << "TCI: unsupported RX audio channel count" << stream_channels (pStream);
+          return;
+        }
       writeAudioData (const_cast<float *> (pStream->data), static_cast<qint32> (pStream->length));
     }
   else if (pStream->type == TxChrono && pStream->receiver == rx_.toUInt ())
@@ -1222,13 +1248,15 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
           m_tx1[tx_fifo].resize (ssize);
         }
       auto * pOStream1 = reinterpret_cast<Data_Stream *> (m_tx1[tx_fifo].data ());
+      std::memset (pOStream1, 0, AudioHeaderSize);
       pOStream1->receiver = pStream->receiver;
       pOStream1->sampleRate = pStream->sampleRate;
-      pOStream1->format = pStream->format;
+      pOStream1->format = SampleFloat32;
       pOStream1->codec = 0;
       pOStream1->crc = 0;
       pOStream1->length = pStream->length;
       pOStream1->type = TxAudioStream;
+      pOStream1->channels = stream_channels (pStream);
       quint16 done = readAudioData (pOStream1->data, static_cast<qint32> (pOStream1->length), txAtten);
       if (done && done != pOStream1->length)
         {
@@ -1246,16 +1274,19 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
 void TCITransceiver::txAudioData(quint32 len, float * data)
 {
   QByteArray tx;
-  tx.resize(AudioHeaderSize+len*sizeof(float)*2);
+  quint32 const sample_count = len * 2;
+  tx.resize(AudioHeaderSize + sample_count * sizeof(float));
   Data_Stream * pStream = (Data_Stream*)(tx.data());
+  std::memset (pStream, 0, AudioHeaderSize);
   pStream->receiver = 0;
   pStream->sampleRate = audioSampleRate;
-  pStream->format = 3;
+  pStream->format = SampleFloat32;
   pStream->codec = 0;
   pStream->crc = 0;
-  pStream->length = len;
+  pStream->length = sample_count;
   pStream->type = TxAudioStream;
-  memcpy(pStream->data,data,len*sizeof(float)*2);
+  pStream->channels = 2;
+  memcpy(pStream->data, data, sample_count * sizeof(float));
   if (inConnected && socket_worker_)
     {
       Q_EMIT request_socket_send_binary (tx);
@@ -1328,7 +1359,11 @@ quint32 TCITransceiver::writeAudioData (float * data, qint32 maxSize)
                     {
                       fil4_ (&m_buffer[0], &framesToProcess, &dec_data.d2[boundedKin],
                              &framesAfterDownSample, &dec_data.d2[boundedKin]);
+                      QVector<short> pcm (framesAfterDownSample);
+                      std::memcpy (pcm.data (), &dec_data.d2[boundedKin],
+                                   static_cast<size_t> (framesAfterDownSample) * sizeof (short));
                       dec_data.params.kin = boundedKin + framesAfterDownSample;
+                      Q_EMIT tciPcmSamplesReady (pcm);
                     }
                   else
                     {
@@ -1356,6 +1391,13 @@ quint32 TCITransceiver::writeAudioData (float * data, qint32 maxSize)
               if (writableFrames < numFramesProcessed)
                 {
                   qWarning () << "TCI: truncated write to dec_data.d2 due to bounds";
+                }
+              if (writableFrames > 0)
+                {
+                  QVector<short> pcm (static_cast<int> (writableFrames));
+                  std::memcpy (pcm.data (), &dec_data.d2[boundedKin],
+                               writableFrames * sizeof (short));
+                  Q_EMIT tciPcmSamplesReady (pcm);
                 }
               if (m_bufferPos >= static_cast<unsigned> (m_samplesPerFFT))
                 {
@@ -1387,8 +1429,7 @@ void TCITransceiver::rig_split ()
   if (busy_split_) return;
   if (tci_timer5_ && tci_timer5_->isActive()) return;
   busy_split_ = true;
-  const QString cmd = CmdSplitEnable + SmDP + rx_ + SmCM +  "false" + SmTZ;  // changed from below so split always false
-  //const QString cmd = CmdSplitEnable + SmDP + rx_ + SmCM + (requested_split_ ? "true" : "false") + SmTZ;
+  const QString cmd = CmdSplitEnable + SmDP + rx_ + SmCM + (requested_split_ ? "true" : "false") + SmTZ;
   sendTextMessage(cmd);
   arm_wait_timer (tci_timer5_, 500, "rig_split");
   if (requested_split_ == split_) update_split (split_);
@@ -1415,6 +1456,11 @@ void TCITransceiver::stream_audio (bool on)
   if (on != stream_audio_ && tci_Ready) {
     requested_stream_audio_ = on;
     if (on) {
+      sendTextMessage (CmdAudioSR + SmDP + QString::number (audioSampleRate) + SmTZ);
+      sendTextMessage (CmdAudioStreamSampleType + SmDP + QStringLiteral ("float32") + SmTZ);
+      sendTextMessage (CmdAudioStreamChannels + SmDP + QStringLiteral ("2") + SmTZ);
+      sendTextMessage (CmdAudioStreamSamples + SmDP + QStringLiteral ("2048") + SmTZ);
+      sendTextMessage (CmdTxStreamAudioBuffering + SmDP + QStringLiteral ("100") + SmTZ);
       const QString cmd = CmdAudioStart + SmDP + rx_ + SmTZ;
       sendTextMessage(cmd);
     } else {
@@ -1427,11 +1473,14 @@ void TCITransceiver::stream_audio (bool on)
 void TCITransceiver::do_audio (bool on)
 {
   TRACE_CAT ("TCITransceiver", on << state ());
+  audio_ = on;
   if (on) {
     dec_data.params.kin = 0;
     m_bufferPos = 0;
   }
-  audio_ = on;
+  if (tci_audio_ && tci_Ready && inConnected && _power_) {
+    stream_audio (on);
+  }
 }
 
 void TCITransceiver::do_period (double period)
@@ -1466,7 +1515,7 @@ void TCITransceiver::do_ptt (bool on)
       else if (busy_PTT_ || !tci_Ready || !_power_) return;
       else busy_PTT_ = true;
       requested_PTT_ = on;
-      if (ESDR3) {
+      if (ESDR3 && tci_audio_ && (tx_audio_ || m_state != Idle)) {
         const QString cmd = CmdTrx + SmDP + rx_ + SmCM + (on ? "true" : "false") + SmCM + "tci"+ SmTZ;
         sendTextMessage(cmd);
       } else {
@@ -1581,10 +1630,52 @@ void TCITransceiver::do_poll ()
       if (inConnected && _power_)
         {
           tci_Ready = true;
+          if (rx_ == "1" && !rx2_)
+            {
+              rx2_enable (true);
+            }
+          if (tci_audio_ && audio_)
+            {
+              stream_audio (true);
+              arm_wait_timer (tci_timer6_, 500, "startup/audio-on");
+            }
+          if (ESDR3)
+            {
+              const QString cmd = CmdRxSensorsEnable + SmDP + (do_snr_ ? "true" : "false") + SmCM + "500" +  SmTZ;
+              sendTextMessage (cmd);
+            }
+          else if (do_snr_)
+            {
+              const QString cmd = CmdSmeter + SmDP + rx_ + SmCM + "0" +  SmTZ;
+              sendTextMessage (cmd);
+            }
+          if (ESDR3)
+            {
+              const QString cmd = CmdTxSensorsEnable + SmDP + (do_pwr_ ? "true" : "false") + SmCM + "500" +  SmTZ;
+              sendTextMessage (cmd);
+            }
+          if (stream_audio_)
+            {
+              do_audio (true);
+            }
+          CAT_TRACE ("TCITransceiver async websocket handshake complete\n");
         }
       else
         {
           return;
+        }
+    }
+  if (tci_audio_ && tci_Ready && inConnected && _power_)
+    {
+      if (audio_ && !stream_audio_)
+        {
+          stream_audio (true);
+          arm_wait_timer (tci_timer6_, 500, "poll/audio-on");
+        }
+      else if (!audio_ && stream_audio_)
+        {
+          stream_audio (false);
+          arm_wait_timer (tci_timer6_, 500, "poll/audio-off");
         }
     }
   update_rx_frequency (string_to_frequency (rx_frequency_));
@@ -1810,6 +1901,7 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
   }
   m_state = (synchronize && m_silentFrames) ?
                 Synchronizing : Active;
+  tx_audio_ = true;
   printf("%s TCI modulator startdelay_ms=%d ASR=%d mstr=%d m_ic=%d s_Frames=%lld synchronize=%d m_tuning=%d State=%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),delay_ms,audioSampleRate,mstr,m_ic,m_silentFrames,synchronize,m_tuning,m_state);
   Q_EMIT tci_mod_active(m_state != Idle);
 }
@@ -1994,7 +2086,7 @@ quint16 TCITransceiver::readAudioData (float * data, qint32 maxSize, qreal txAtt
         ++m_ic;
       }
 
-      // Precomputed wave finished (FT2/Fox) — clean exit after ramp-down
+      // Precomputed wave finished (FT2/Fox) Ã¢â‚¬â€ clean exit after ramp-down
       if (!m_tuning && m_toneSpacing < 0 && m_ic > i1) {
         m_state = Idle;
         Q_EMIT tci_mod_active(m_state != Idle);

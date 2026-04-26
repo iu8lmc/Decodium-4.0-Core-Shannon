@@ -331,9 +331,9 @@ Item {
                                 id: apBtn
                                 anchors.fill: parent
                                 checkable: true
-                                checked: engine ? engine.avgDecodeEnabled : false
+                                checked: engine ? engine.ft8ApEnabled : false
                                 padding: 0
-                                onCheckedChanged: if (engine) engine.avgDecodeEnabled = checked
+                                onCheckedChanged: if (engine) engine.ft8ApEnabled = checked
                                 background: Rectangle { color: "transparent" }
                                 contentItem: ToolbarButtonContent {
                                     label: "AP"

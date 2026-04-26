@@ -33,6 +33,8 @@ extern "C"
   void ftx_ft8_cpp_dsp_rollout_stage_override_c (int stage);
   void ftx_ft8_cpp_dsp_rollout_stage_reset_c ();
   void ftx_ft8_stage4_reset_c ();
+  void ftx_ft8_stage4_set_ldpc_osd_c (int maxosd, int norder);
+  void ftx_ft8_stage4_set_supplemental_c (int supplemental);
 }
 
 namespace
@@ -282,6 +284,7 @@ namespace
                            int nfqso, int nftx, int nutc, int nfa, int nfb, int nzhsym,
                            int ndepth, float emedelay, int ncontest, int nagain,
                            int lft8apon, int lapcqonly, int napwid, int ldiskdat,
+                           int supplemental, int maxosd, int norder,
                            QByteArray const& mycall, QByteArray const& hiscall,
                            QByteArray const& hisgrid)
   {
@@ -359,12 +362,16 @@ namespace
 
     QMutexLocker locker {&decodium::fortran::runtime_mutex ()};
     ftx_ft8_stage4_reset_c ();
+    ftx_ft8_stage4_set_supplemental_c (supplemental);
+    ftx_ft8_stage4_set_ldpc_osd_c (maxosd, norder);
     if (nzhsym >= 50)
       {
         invoke_decode (41);
         invoke_decode (47);
       }
     nout = invoke_decode (nzhsym);
+    ftx_ft8_stage4_set_supplemental_c (0);
+    ftx_ft8_stage4_set_ldpc_osd_c (-1, 0);
     ftx_ft8_stage4_reset_c ();
     locker.unlock ();
 
@@ -589,6 +596,24 @@ int main (int argc, char * argv[])
           QStringLiteral ("value"),
           QStringLiteral ("1")
       };
+      QCommandLineOption const supplemental_option {
+          QStringLiteral ("supplemental"),
+          QStringLiteral ("Enable FT8 supplemental candidate search flag (0/1)."),
+          QStringLiteral ("value"),
+          QStringLiteral ("0")
+      };
+      QCommandLineOption const maxosd_option {
+          QStringLiteral ("maxosd"),
+          QStringLiteral ("LDPC max OSD override (-1 for decoder default)."),
+          QStringLiteral ("value"),
+          QStringLiteral ("-1")
+      };
+      QCommandLineOption const norder_option {
+          QStringLiteral ("norder"),
+          QStringLiteral ("LDPC OSD order override (0 for decoder default)."),
+          QStringLiteral ("value"),
+          QStringLiteral ("0")
+      };
       QCommandLineOption const mycall_option {
           QStringLiteral ("mycall"),
           QStringLiteral ("Optional mycall override."),
@@ -624,6 +649,9 @@ int main (int argc, char * argv[])
       parser.addOption (lapcqonly_option);
       parser.addOption (napwid_option);
       parser.addOption (ldiskdat_option);
+      parser.addOption (supplemental_option);
+      parser.addOption (maxosd_option);
+      parser.addOption (norder_option);
       parser.addOption (mycall_option);
       parser.addOption (hiscall_option);
       parser.addOption (hisgrid_option);
@@ -653,6 +681,9 @@ int main (int argc, char * argv[])
       int const lapcqonly = parse_int_option (parser, lapcqonly_option, QStringLiteral ("lapcqonly"));
       int const napwid = parse_int_option (parser, napwid_option, QStringLiteral ("napwid"));
       int const ldiskdat = parse_int_option (parser, ldiskdat_option, QStringLiteral ("ldiskdat"));
+      int const supplemental = parse_int_option (parser, supplemental_option, QStringLiteral ("supplemental"));
+      int const maxosd = parse_int_option (parser, maxosd_option, QStringLiteral ("maxosd"));
+      int const norder = parse_int_option (parser, norder_option, QStringLiteral ("norder"));
 
       QString const wav_path = QFileInfo {positional.constFirst ()}.absoluteFilePath ();
       WavData const wav = read_wav_file (wav_path);
@@ -689,6 +720,9 @@ int main (int argc, char * argv[])
           << " lapcqonly=" << lapcqonly
           << " napwid=" << napwid
           << " ldiskdat=" << ldiskdat
+          << " supplemental=" << supplemental
+          << " maxosd=" << maxosd
+          << " norder=" << norder
           << '\n';
 
       std::vector<DecodeResult> results;
@@ -698,6 +732,7 @@ int main (int argc, char * argv[])
           results.push_back (run_decode (wav.samples, stage, nqsoprogress, nfqso, nftx, nutc,
                                          nfa, nfb, nzhsym, depth, emedelay, ncontest,
                                          nagain, lft8apon, lapcqonly, napwid, ldiskdat,
+                                         supplemental, maxosd, norder,
                                          parser.value (mycall_option).toLatin1 (),
                                          parser.value (hiscall_option).toLatin1 (),
                                          parser.value (hisgrid_option).toLatin1 ()));

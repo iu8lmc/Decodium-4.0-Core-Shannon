@@ -7,6 +7,7 @@
 #include <boost/log/sources/severity_channel_logger.hpp>
 
 #include <QObject>
+#include <QVector>
 
 #include "qt_helpers.hpp"
 #include "Radio.hpp"
@@ -240,6 +241,7 @@ public:
 
   // rig audio data transfer w3sz tci
   Q_SIGNAL void tciframeswritten (qint64);
+  Q_SIGNAL void tciPcmSamplesReady (QVector<short> const& samples);
 
   // rig audio data transfer  w3sz tci
   Q_SIGNAL void tci_mod_active (bool);

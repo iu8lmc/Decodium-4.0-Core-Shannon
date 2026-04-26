@@ -6,6 +6,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVector>
 #include <memory>
 
 // Forward-declare per nascondere le dipendenze Boost/Hamlib dall'header
@@ -62,6 +63,7 @@ class DecodiumTransceiverManager : public QObject
     // ── Comportamenti automatici ──────────────────────────────────────────
     Q_PROPERTY(bool catAutoConnect READ catAutoConnect WRITE setCatAutoConnect NOTIFY catAutoConnectChanged)
     Q_PROPERTY(bool audioAutoStart READ audioAutoStart WRITE setAudioAutoStart NOTIFY audioAutoStartChanged)
+    Q_PROPERTY(bool tciAudioEnabled READ tciAudioEnabled WRITE setTciAudioEnabled NOTIFY tciAudioEnabledChanged)
 
 public:
     explicit DecodiumTransceiverManager(QObject* parent = nullptr);
@@ -103,6 +105,7 @@ public:
 
     bool catAutoConnect() const { return m_catAutoConnect; }
     bool audioAutoStart() const { return m_audioAutoStart; }
+    bool tciAudioEnabled() const { return m_tciAudioEnabled; }
 
     // ── Scrittura proprietà ───────────────────────────────────────────────
     void setRigName(const QString&);
@@ -119,10 +122,11 @@ public:
     void setTciPort(const QString& v)     { if (m_tciPort != v)    { m_tciPort = v;    emit tciPortChanged(); } }
     void setPttMethod(const QString& v);
     void setPttPort(const QString& v);
-    void setSplitMode(const QString& v)   { if (m_splitMode != v)  { m_splitMode = v;  emit splitModeChanged(); } }
+    void setSplitMode(const QString& v);
     void setPollInterval(int v)           { if (m_pollInterval != v){ m_pollInterval = v; emit pollIntervalChanged(); } }
     void setCatAutoConnect(bool v)        { if (m_catAutoConnect != v){ m_catAutoConnect = v; emit catAutoConnectChanged(); } }
     void setAudioAutoStart(bool v)        { if (m_audioAutoStart != v){ m_audioAutoStart = v; emit audioAutoStartChanged(); } }
+    void setTciAudioEnabled(bool v);
 
     // ── Comandi QML-invokable ─────────────────────────────────────────────
     // Compatibilità con DecodiumCatManager: PTT disponibile se connesso
@@ -132,6 +136,7 @@ public:
     Q_INVOKABLE void setRigTxFrequency(double hz);
     Q_INVOKABLE void setRigPtt(bool on);
     Q_INVOKABLE void setRigMode(const QString& mode);
+    Q_INVOKABLE void setRigAudio(bool on, double periodSeconds = 15.0, int blockSize = 6912 / 2);
 
     Q_INVOKABLE void refreshPorts();
     Q_INVOKABLE void saveSettings();
@@ -171,13 +176,17 @@ signals:
     void swrChanged();
     void catAutoConnectChanged();
     void audioAutoStartChanged();
+    void tciAudioEnabledChanged();
     void errorOccurred(const QString& msg);
     void statusUpdate(const QString& msg);
+    void tciPcmSamplesReady(const QVector<short>& samples);
+    void tciModActiveChanged(bool active);
 
 
 private:
     void enforceForceLineAvailability();
     void updateTelemetry(double powerWatts, double swr);
+    void reconnectRigForParameterChange(const QString& reason);
     bool pttSharesCatPort() const;
     bool forceDtrAvailable() const;
     bool forceRtsAvailable() const;
@@ -213,4 +222,5 @@ private:
     QStringList m_portList;
     bool    m_catAutoConnect {false};
     bool    m_audioAutoStart {false};
+    bool    m_tciAudioEnabled {true};
 };

@@ -2,6 +2,7 @@
 #include "Detector/FT8DecodeWorker.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 
 #include <QMutexLocker>
@@ -11,6 +12,11 @@
 #include "Detector/FortranRuntimeGuard.hpp"
 extern "C"
 {
+  void ftx_ft8_stage4_reset_c ();
+  void ftx_ft8_stage4_set_cancel_c (int cancel);
+  void ftx_ft8_stage4_set_deadline_ms_c (long long deadline_ms);
+  void ftx_ft8_stage4_set_ldpc_osd_c (int maxosd, int norder);
+  void ftx_ft8_stage4_set_supplemental_c (int supplemental);
   void ftx_ft8_async_decode_stage4_c (short const* iwave, int* nqsoprogress, int* nfqso, int* nftx,
                                       int* nutc, int* nfa, int* nfb, int* nzhsym, int* ndepth,
                                       float* emedelay, int* ncontest, int* nagain,
@@ -29,14 +35,29 @@ namespace
   constexpr int kDecodedChars {37};
   constexpr int kFt8StableDspStage {4};
 
+  void set_ft8_stage4_cancel (bool cancel)
+  {
+    ftx_ft8_stage4_set_cancel_c (cancel ? 1 : 0);
+  }
+
+  long long ft8_stage4_deadline_ms_from_now (int maxDecodeMs)
+  {
+    if (maxDecodeMs <= 0)
+      {
+        return 0;
+      }
+    using namespace std::chrono;
+    auto const now = steady_clock::now ().time_since_epoch ();
+    return duration_cast<milliseconds> (now).count () + maxDecodeMs;
+  }
+
   QString format_decode_utc (int nutc)
   {
     if (nutc <= 0)
       {
         return QString {};
       }
-    int const width = nutc > 9999 ? 6 : 4;
-    return QString::number (nutc).rightJustified (width, QLatin1Char {'0'});
+    return QString::number (nutc).rightJustified (6, QLatin1Char {'0'});
   }
 
   QByteArray to_fortran_field (QByteArray value, int width)
@@ -132,10 +153,45 @@ FT8DecodeWorker::FT8DecodeWorker (QObject * parent)
 {
 }
 
+void FT8DecodeWorker::cancelCurrentDecode ()
+{
+  set_ft8_stage4_cancel (true);
+}
+
+void FT8DecodeWorker::beginShutdown ()
+{
+  m_shuttingDown.store (true, std::memory_order_relaxed);
+  set_ft8_stage4_cancel (true);
+}
+
 void FT8DecodeWorker::decode (DecodeRequest const& request)
 {
+  if (m_shuttingDown.load (std::memory_order_relaxed))
+    {
+      return;
+    }
+  set_ft8_stage4_cancel (false);
   log_ft8_dsp_rollout_once ();
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+
+  if (m_shuttingDown.load (std::memory_order_relaxed))
+    {
+      return;
+    }
+  ftx_ft8_stage4_set_deadline_ms_c (ft8_stage4_deadline_ms_from_now (request.maxDecodeMs));
+  ftx_ft8_stage4_set_supplemental_c (request.supplemental ? 1 : 0);
+  if (request.supplemental && request.ndepth >= 4)
+    {
+      ftx_ft8_stage4_set_ldpc_osd_c (3, 4);
+    }
+  else if (request.supplemental && request.ndepth >= 3)
+    {
+      ftx_ft8_stage4_set_ldpc_osd_c (3, 3);
+    }
+  else
+    {
+      ftx_ft8_stage4_set_ldpc_osd_c (-1, 0);
+    }
 
   short int iwave[kFt8SampleCount] {};
   int const copyCount = std::min (static_cast<int>(request.audio.size ()), static_cast<int>(kFt8SampleCount));
@@ -181,10 +237,23 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
                                  nullptr,
                                  &snrs[0], &dts[0], &freqs[0], &naps[0], &quals[0],
                                  &bits77[0], &decodeds[0], &nout);
+  ftx_ft8_stage4_set_deadline_ms_c (0);
+  ftx_ft8_stage4_set_ldpc_osd_c (-1, 0);
+  ftx_ft8_stage4_set_supplemental_c (0);
 
+  if (m_shuttingDown.load (std::memory_order_relaxed))
+    {
+      return;
+    }
   QString const utcPrefix = format_decode_utc (request.nutc);
   Q_EMIT decodeReady (request.serial, build_rows (utcPrefix, nout, snrs, dts, freqs, naps, quals,
                                                   decodeds));
+}
+
+void FT8DecodeWorker::resetDecoderState ()
+{
+  QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
+  ftx_ft8_stage4_reset_c ();
 }
 
 }

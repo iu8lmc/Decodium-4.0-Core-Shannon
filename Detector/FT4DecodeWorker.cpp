@@ -36,8 +36,7 @@ namespace
       {
         return QString {};
       }
-    int const width = nutc > 9999 ? 6 : 4;
-    return QString::number (nutc).rightJustified (width, QLatin1Char {'0'});
+    return QString::number (nutc).rightJustified (6, QLatin1Char {'0'});
   }
 
   QByteArray to_fortran_field (QByteArray value, int width)
