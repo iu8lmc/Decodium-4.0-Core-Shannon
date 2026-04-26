@@ -516,37 +516,59 @@ Dialog {
                                 color: accentOrange
                             }
 
-                            TextField {
-                                id: feedbackSubject
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                placeholderText: "Oggetto..."
-                                font.pixelSize: 12
-                                color: textPrimary
-                                placeholderTextColor: textSecondary
-                                background: Rectangle {
-                                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                                    border.color: feedbackSubject.activeFocus ? secondaryCyan : glassBorder
-                                    radius: 6
+                                spacing: 5
+
+                                Text {
+                                    text: "Oggetto"
+                                    color: textSecondary
+                                    font.pixelSize: 11
+                                }
+
+                                TextField {
+                                    id: feedbackSubject
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 42
+                                    font.pixelSize: 12
+                                    color: textPrimary
+                                    leftPadding: 12
+                                    rightPadding: 12
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    background: Rectangle {
+                                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
+                                        border.color: feedbackSubject.activeFocus ? secondaryCyan : glassBorder
+                                        radius: 6
+                                    }
                                 }
                             }
 
-                            TextArea {
-                                id: feedbackMessage
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 100
-                                placeholderText: "Scrivi il tuo messaggio, suggerimento o segnalazione bug..."
-                                font.pixelSize: 12
-                                color: textPrimary
-                                placeholderTextColor: textSecondary
-                                wrapMode: TextArea.Wrap
-                                leftPadding: 10
-                                rightPadding: 10
-                                topPadding: 10
-                                bottomPadding: 10
-                                background: Rectangle {
-                                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                                    border.color: feedbackMessage.activeFocus ? secondaryCyan : glassBorder
-                                    radius: 6
+                                spacing: 5
+
+                                Text {
+                                    text: "Messaggio, suggerimento o segnalazione bug"
+                                    color: textSecondary
+                                    font.pixelSize: 11
+                                }
+
+                                TextArea {
+                                    id: feedbackMessage
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 112
+                                    font.pixelSize: 12
+                                    color: textPrimary
+                                    wrapMode: TextArea.Wrap
+                                    leftPadding: 12
+                                    rightPadding: 12
+                                    topPadding: 12
+                                    bottomPadding: 12
+                                    background: Rectangle {
+                                        color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
+                                        border.color: feedbackMessage.activeFocus ? secondaryCyan : glassBorder
+                                        radius: 6
+                                    }
                                 }
                             }
 

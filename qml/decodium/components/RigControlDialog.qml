@@ -30,6 +30,10 @@ Dialog {
         positionInitialized = true
     }
 
+    function usesTciControls() {
+        return bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
+    }
+
     onAboutToShow: ensureInitialPosition()
 
     property color bgDeep:        bridge.themeManager.bgDeep
@@ -477,8 +481,8 @@ Dialog {
                         visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
                     }
                     CheckBox {
-                        text: "RX via TCI"
-                        visible: bridge.catBackend === "tci" || bridge.catManager.portType === "tci"
+                        text: "RX/TX via TCI"
+                        visible: rigDialog.usesTciControls()
                         checked: bridge.catManager.tciAudioEnabled
                         onCheckedChanged: bridge.catManager.tciAudioEnabled = checked
                         contentItem: Text { text: parent.text; leftPadding: 4; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
@@ -489,9 +493,10 @@ Dialog {
                     ComboBox {
                         id: pttCombo
                         Layout.fillWidth: true; implicitHeight: controlHeight
-                        model: bridge.catManager.pttMethodList
-                        Component.onCompleted: { var i = find(bridge.catManager.pttMethod); currentIndex = i>=0?i:0 }
-                        contentItem: Text { leftPadding: 8; text: pttCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; verticalAlignment: Text.AlignVCenter; height: pttCombo.height }
+                        enabled: !rigDialog.usesTciControls()
+                        model: rigDialog.usesTciControls() ? ["CAT"] : bridge.catManager.pttMethodList
+                        Component.onCompleted: { var i = find(rigDialog.usesTciControls() ? "CAT" : bridge.catManager.pttMethod); currentIndex = i>=0?i:0 }
+                        contentItem: Text { leftPadding: 8; text: pttCombo.displayText; color: pttCombo.enabled ? textPrimary : textSecondary; font.pixelSize: controlFontSize; verticalAlignment: Text.AlignVCenter; height: pttCombo.height }
                         background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         delegate: ItemDelegate {
                             width: pttCombo.width

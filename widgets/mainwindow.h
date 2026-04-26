@@ -300,6 +300,7 @@ private:
   void queueInProcessFt8Decode ();
   decodium::ft8::DecodeRequest buildFt8DecodeRequest () const;
   void dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request);
+  void seedFt8A7HistoryFromAllTxt ();
   bool needsEmbeddedMonitorPhaseResync () const;
   void scheduleEmbeddedMonitorPhaseResync (QString const& reason);
   void performEmbeddedMonitorPhaseResync (qint64 expected_at_ms, QString const& reason);

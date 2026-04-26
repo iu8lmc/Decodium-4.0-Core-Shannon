@@ -3393,6 +3393,8 @@ void Configuration::impl::read_settings ()
   rig_params_.ptt_port = settings_->value ("PTTport").toString ();
   data_mode_ = settings_->value ("DataMode", QVariant::fromValue (data_mode_none)).value<Configuration::DataMode> ();
   bLowSidelobes_ = settings_->value("LowSidelobes",true).toBool();
+  bool const has_prompt_to_log_setting = settings_->contains ("PromptToLog");
+  bool const has_auto_log_setting = settings_->contains ("AutoLog");
   prompt_to_log_ = settings_->value ("PromptToLog", false).toBool ();
   lotw_pwd_ = secure_settings::load_or_import (
     settings_,
@@ -3401,6 +3403,15 @@ void Configuration::impl::read_settings ()
     settings_->value ("Lotw_pwd", QString {}).toString ());    //avt 9/23/25
   nonQsl_ = settings_->value ("NonQsl", false).toBool ();    //avt 9/23/25
   autoLog_ = settings_->value ("AutoLog", true).toBool ();
+  if (prompt_to_log_ && autoLog_) {
+    if (has_prompt_to_log_setting && !has_auto_log_setting) {
+      autoLog_ = false;
+      settings_->setValue ("AutoLog", false);
+    } else {
+      prompt_to_log_ = false;
+      settings_->setValue ("PromptToLog", false);
+    }
+  }
   contestingOnly_ = settings_->value ("ContestingOnly", true).toBool ();
   ZZ00_ = settings_->value("ZZ00",false).toBool ();
   log4digitGrids_ = settings_->value ("Log4digitGrids", false).toBool ();
@@ -3744,6 +3755,9 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("CATHandshake", QVariant::fromValue (rig_params_.handshake));
   settings_->setValue ("DataMode", QVariant::fromValue (data_mode_));
   settings_->setValue ("LowSidelobes",bLowSidelobes_);
+  if (prompt_to_log_ && autoLog_) {
+    prompt_to_log_ = false;
+  }
   settings_->setValue ("PromptToLog", prompt_to_log_);
   settings_->setValue (
     "Lotw_pwd",

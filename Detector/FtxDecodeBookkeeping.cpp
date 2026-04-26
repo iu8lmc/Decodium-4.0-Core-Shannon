@@ -1927,7 +1927,7 @@ extern "C" void ftx_ft8_finalize_main_result_c (float xsnr, float xdt_in, float 
 
 extern "C" int ftx_ft8_should_run_a7_c (int lft8apon, int ncontest, int nzhsym, int previous_count)
 {
-  return lft8apon != 0 && ncontest != 6 && ncontest != 7 && nzhsym == 50 && previous_count >= 1;
+  return lft8apon != 0 && ncontest != 6 && ncontest != 7 && nzhsym >= 47 && previous_count >= 1;
 }
 
 extern "C" int ftx_ft8_should_run_a8_c (int lft8apon, int ncontest, int nzhsym, int la8,
@@ -2637,8 +2637,9 @@ namespace
 int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int ncontest,
                           int nfqso, int nftx, float f1, int napwid,
                           int const* apsym, int const* aph10,
-                          float const* llra, float const* llrc,
-                          float* llrz, int* apmask, int* iaptype_out)
+                          float const* llra, float const* llrb, float const* llrc,
+                          float* llrz, int* apmask, int* iaptype_out,
+                          bool force_cq_sequence)
 {
   if (!apsym || !aph10 || !llra || !llrc || !llrz || !apmask || !iaptype_out)
     {
@@ -2648,13 +2649,16 @@ int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int nconte
   int const progress = std::max (0, std::min (nQSOProgress, 5));
   std::fill_n (apmask, 174, 0);
 
-  float const* source = (((ipass - 5) % 2) == 1) ? llra : llrc;
-  std::copy_n (source, 174, llrz);
-  float const apmag = std::fabs (*std::max_element (llrz, llrz + 174,
-    [] (float lhs, float rhs) { return std::fabs (lhs) < std::fabs (rhs); })) * 1.1f;
-
   int iaptype = 1;
-  if (lapcqonly == 0)
+  if (force_cq_sequence)
+    {
+      if (!llrb || ipass < 6 || ipass > 8)
+        {
+          return 0;
+        }
+      iaptype = 1;
+    }
+  else if (lapcqonly == 0)
     {
       int const pass_index = std::max (0, std::min (((ipass - 4) / 2) - 1, 3));
       iaptype = kApTypes[static_cast<size_t> (progress)][static_cast<size_t> (pass_index)];
@@ -2663,6 +2667,17 @@ int prepare_ap_pass_impl (int ipass, int nQSOProgress, int lapcqonly, int nconte
     {
       return 0;
     }
+
+  float const* source = (((ipass - 5) % 2) == 1) ? llra : llrc;
+  if (force_cq_sequence)
+    {
+      if (ipass == 6) source = llrc;
+      else if (ipass == 7) source = llrb;
+      else source = llra;
+    }
+  std::copy_n (source, 174, llrz);
+  float const apmag = std::fabs (*std::max_element (llrz, llrz + 174,
+    [] (float lhs, float rhs) { return std::fabs (lhs) < std::fabs (rhs); })) * 1.1f;
 
   if (ncontest <= 5 && iaptype >= 3
       && (std::fabs (f1 - static_cast<float> (nfqso)) > static_cast<float> (napwid))
@@ -2850,7 +2865,18 @@ extern "C" int ftx_ft8_prepare_ap_pass_c (int ipass, int nQSOProgress, int lapcq
 {
   return prepare_ap_pass_impl (ipass, nQSOProgress, lapcqonly, ncontest,
                                nfqso, nftx, f1, napwid, apsym, aph10,
-                               llra, llrc, llrz, apmask, iaptype_out);
+                               llra, nullptr, llrc, llrz, apmask, iaptype_out, false);
+}
+
+extern "C" int ftx_ft8_prepare_cq_ap_pass_c (int ipass, int nQSOProgress, int lapcqonly, int ncontest,
+                                              int nfqso, int nftx, float f1, int napwid,
+                                              int const* apsym, int const* aph10,
+                                              float const* llra, float const* llrb, float const* llrc,
+                                              float* llrz, int* apmask, int* iaptype_out)
+{
+  return prepare_ap_pass_impl (ipass, nQSOProgress, lapcqonly, ncontest,
+                               nfqso, nftx, f1, napwid, apsym, aph10,
+                               llra, llrb, llrc, llrz, apmask, iaptype_out, true);
 }
 
 extern "C" int ftx_ft8_prepare_decode_pass_c (int ipass, int nQSOProgress, int lapcqonly, int ncontest,
@@ -2893,7 +2919,7 @@ extern "C" int ftx_ft8_prepare_decode_pass_c (int ipass, int nQSOProgress, int l
     default:
       return prepare_ap_pass_impl (ipass, nQSOProgress, lapcqonly, ncontest,
                                    nfqso, nftx, f1, napwid, apsym, aph10,
-                                   llra, llrc, llrz, apmask, iaptype_out);
+                                   llra, llrb, llrc, llrz, apmask, iaptype_out, false);
     }
 }
 

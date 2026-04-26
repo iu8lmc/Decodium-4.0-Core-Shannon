@@ -134,7 +134,7 @@ jobs:
           cp contrib/Ephemeris/JPLEPH "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp -r sounds "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp -r Palettes "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
-          cp icons/Unix/wsjtx_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/ft2.png"
+          cp icons/Unix/decodium_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/ft2.png"
 
           cat > "${APPDIR}/usr/share/applications/ft2.desktop" <<'DESKTOP'
           [Desktop Entry]
@@ -184,7 +184,7 @@ jobs:
             --plugin qt \
             --output appimage
 
-          APPIMAGE_NAME="decodium3-ft2-${VERSION}-linux-x86_64.AppImage"
+          APPIMAGE_NAME="decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
           APPIMAGE_SRC="$(find . -maxdepth 1 -name '*.AppImage' ! -name 'linuxdeploy*.AppImage' | head -n1)"
           mv "${APPIMAGE_SRC}" "${APPIMAGE_NAME}"
           sha256sum "${APPIMAGE_NAME}" > "${APPIMAGE_NAME}.sha256.txt"
@@ -193,11 +193,11 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: decodium3-ft2-${{ env.VERSION }}-linux-x86_64
+          name: decodium4-ft2-${{ env.VERSION }}-linux-x86_64
           if-no-files-found: error
           path: |
-            decodium3-ft2-${{ env.VERSION }}-linux-x86_64.AppImage
-            decodium3-ft2-${{ env.VERSION }}-linux-x86_64.AppImage.sha256.txt
+            decodium4-ft2-${{ env.VERSION }}-linux-x86_64.AppImage
+            decodium4-ft2-${{ env.VERSION }}-linux-x86_64.AppImage.sha256.txt
 
   build-aarch64:
     name: Build Linux AppImage aarch64 (Debian Trixie)
@@ -234,11 +234,11 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: decodium3-ft2-${{ env.VERSION }}-linux-aarch64
+          name: decodium4-ft2-${{ env.VERSION }}-linux-aarch64
           if-no-files-found: error
           path: |
-            ${{ runner.temp }}/build-arm-output/decodium3-ft2-${{ env.VERSION }}-linux-aarch64.AppImage
-            ${{ runner.temp }}/build-arm-output/decodium3-ft2-${{ env.VERSION }}-linux-aarch64.AppImage.sha256.txt
+            ${{ runner.temp }}/build-arm-output/decodium4-ft2-${{ env.VERSION }}-linux-aarch64.AppImage
+            ${{ runner.temp }}/build-arm-output/decodium4-ft2-${{ env.VERSION }}-linux-aarch64.AppImage.sha256.txt
 
   publish:
     name: Publish AppImage to GitHub release
@@ -261,7 +261,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: decodium3-ft2-${{ steps.version.outputs.version }}-linux-*
+          pattern: decodium4-ft2-${{ steps.version.outputs.version }}-linux-*
           merge-multiple: true
           path: release-assets
 
@@ -269,10 +269,10 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           ls -lh release-assets
-          test -f "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage"
-          test -f "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
-          test -f "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage"
-          test -f "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
+          test -f "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
+          test -f "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+          test -f "release-assets/decodium4-ft2-${VERSION}-linux-aarch64.AppImage"
+          test -f "release-assets/decodium4-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
 
       - name: Publish assets
         env:
@@ -281,10 +281,10 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           REPO="${GITHUB_REPOSITORY}"
           ASSETS=(
-            "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage"
-            "release-assets/decodium3-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
-            "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage"
-            "release-assets/decodium3-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
+            "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
+            "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+            "release-assets/decodium4-ft2-${VERSION}-linux-aarch64.AppImage"
+            "release-assets/decodium4-ft2-${VERSION}-linux-aarch64.AppImage.sha256.txt"
           )
 
           if gh release view "${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
@@ -297,11 +297,11 @@ jobs:
             elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
               cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
             else
-              printf "# Decodium 3 FT2 %s\n\nLinux x86_64 and aarch64 AppImage release.\n" "${VERSION}" > "${NOTES_FILE}"
+              printf "# Decodium 4 FT2 %s\n\nLinux x86_64 and aarch64 AppImage release.\n" "${VERSION}" > "${NOTES_FILE}"
             fi
             gh release create "${VERSION}" "${ASSETS[@]}" \
               --repo "${REPO}" \
-              --title "Decodium 3 FT2 ${VERSION}" \
+              --title "Decodium 4 FT2 ${VERSION}" \
               --notes-file "${NOTES_FILE}"
             rm -f "${NOTES_FILE}"
           fi

@@ -384,7 +384,7 @@ Searched paths:
     <message>
         <location filename="../widgets/about.ui" line="9"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>關於Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/about.ui" line="60"/>
@@ -716,82 +716,82 @@ The cluster window and AutoSpot now use the same endpoint.</source>
     <message>
         <location filename="../Configuration.cpp" line="2140"/>
         <source>RTTY Modem</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 數據機</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2143"/>
         <source>Baud rate:</source>
-        <translation type="unfinished"></translation>
+        <translation>波特率：</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2149"/>
         <source>RTTY baud rate used for both receive and transmit.</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 用於接收和發送的波特率。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2152"/>
         <source>Mark tone (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>標記音（Hz）：</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2157"/>
         <source>Base mark tone. Space tone is mark tone plus shift.</source>
-        <translation type="unfinished"></translation>
+        <translation>基本標記音。空聲是標記聲加移聲。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2160"/>
         <source>Shift (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>頻移（赫茲）：</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2165"/>
         <source>Difference between mark and space tones.</source>
-        <translation type="unfinished"></translation>
+        <translation>標記音和空格音之間的區別。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2168"/>
         <source>Stop bits:</source>
-        <translation type="unfinished"></translation>
+        <translation>停止位：</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2174"/>
         <source>Transmit stop bits appended after each 5-bit Baudot character.</source>
-        <translation type="unfinished"></translation>
+        <translation>在每個 5 位元 Baudot 字元後附加傳輸停止位元。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2177"/>
         <source>Reverse / normal</source>
-        <translation type="unfinished"></translation>
+        <translation>反向/正常</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2179"/>
         <source>Swap mark and space tones for both decoding and transmitting.</source>
-        <translation type="unfinished"></translation>
+        <translation>交換標記音和空格音以進行解碼和傳輸。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2181"/>
         <source>Macro CQ:</source>
-        <translation type="unfinished"></translation>
+        <translation>宏CQ：</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2184"/>
         <source>Text sent by the CQ macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>由 CQ 巨集按鈕傳送的文字。支援的佔位符：&lt;MYCALL&gt;、&lt;MYGRID&gt;、&lt;DXCALL&gt;、&lt;DXGRID&gt;。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2187"/>
         <source>Macro 73:</source>
-        <translation type="unfinished"></translation>
+        <translation>宏 73：</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2190"/>
         <source>Text sent by the 73 macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>由 73 巨集按鈕傳送的文字。支援的佔位符：&lt;MYCALL&gt;、&lt;MYGRID&gt;、&lt;DXCALL&gt;、&lt;DXGRID&gt;。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2194"/>
         <source>These settings apply to the built-in RTTY modem. Mark stays fixed; space is mark tone plus shift. Reverse swaps mark and space. Placeholders for CQ/73 macros: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>這些設定適用於內建 RTTY 數據機。馬克保持不動；空格是標記音加移位。反向交換標記和空格。 CQ/73 巨集的佔位符：&lt;MYCALL&gt;、&lt;MYGRID&gt;、&lt;DXCALL&gt;、&lt;DXGRID&gt;。</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2228"/>
@@ -3320,7 +3320,7 @@ Error: %2</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5364"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>關於Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6028"/>
@@ -3976,7 +3976,7 @@ Error: %2</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5684"/>
         <source>RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5778"/>
@@ -6402,8 +6402,7 @@ to ensure the signal is clean and not distorted.</source>
 %4%L5 ±%L6 Hz
 
 %7%L8
-%9%L10 Hz§P15%L8
-%9%L10 Hz§P15%L8P12</translation>
+%9%L10 Hz&lt;/pre&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8219"/>
@@ -7498,7 +7497,7 @@ Remote tag: %2</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="7868"/>
         <source>No subprocess diagnostic output was captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>未捕獲任何子流程診斷輸出。</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8234"/>
@@ -7713,54 +7712,53 @@ Current operator: %1</source>
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="vanished">&lt;table cellspacing=1&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc&lt;/b&gt;&lt;/td&gt;&lt;td&gt;停止Tx，中止QSO，清除下一個呼叫佇列&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F1&lt;/b&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F1&lt;/b&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F1&lt;/b&gt;
-5P16§&lt;td&gt;P13§F1&lt;/b&gt;
-P16§&lt;td&gt;P13§F1&lt;/b&gt;&lt;/td&gt;P16§」P12&lt;b&gt;F1&lt;/b&gt;&lt;/td&gt;P16§)P12(P16§TP15§T§T§T§T)。 x6)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1&lt;/b&gt;&lt;/td&gt;&lt;td&gt;版權聲明&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ct4F1§
-P29§&lt;td&gt;&lt;b&gt;Ct441§P§P§P&lt;b&gt;CF135 Decodium v3.0 FT2 Raptor&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F2&lt;/b&gt;&lt;/td&gt;&lt;td&gt;開啟設定視窗（Alt：傳輸Tx2）&lt;/td&gt;§P45&lt;td&gt;開啟設定視窗（Alt：傳輸Tx2）&lt;/td&gt;&lt;/tr&gt;P
-P4745 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;顯示鍵盤快速鍵（Alt：傳輸 Tx3）&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;§P58網格、§F4&lt;/b&gt;&lt;/td&gt;&lt;td&gt;清除 DX 呼叫、DX 網格、§F4&lt;/b&gt;&lt;/td&gt;&lt;td&gt;清除 DX 呼叫、DX 網格、§F4&lt;/b&gt;&lt;/td&gt;&lt;td&gt;清除 DX、DX 網格、Tx 訊息 1-4（Alt：传输Tx4)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4&lt;/b&gt;&lt;/td&gt;&lt;td&gt;退出程序&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F5&lt;/b&gt;&lt;/td&gt;&lt;td&gt;显示特殊鼠标命令(Alt:傳輸Tx5)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F6&lt;/b&gt;&lt;/td&gt;&lt;td&gt;開啟目錄中的下一個檔案（Alt：切換「呼叫第一個」）&lt;/td&gt;&lt;/tr&gt;§P9156F§F§PF§P5F§P &lt;/b&gt;&lt;/td&gt;&lt;td&gt;解碼目錄中的所有剩餘文件&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;F7&lt;/b&gt;&lt;/td&gt;&lt;td&gt;&lt;b&gt;F7&lt;/b&gt;&lt;/td&gt;&lt;td&gt;&lt;b&gt;F7&lt;/b&gt;&lt;/td&gt;§P106&lt;b&gt;P107§P1088§P &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11 &lt;/b&gt;P114§&lt;td&gt;將接收頻率降低 1 Hz&lt;/td&gt;P117§
-&lt;tr&gt;&lt;td&gt;§P121 §Ctrl+F18§&lt;tr&gt;&lt;td&gt;§P121 §Ctrl+F11§&lt;tr&gt;P120§§P121 §Ctrl+F111515123151§P Hz&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11&lt;/b&gt;&lt;/td&gt;&lt;td&gt;將發射頻率降低 60 Hz (FT8) 或 90 Hz (FTFTP133§將發射頻率降低 60 Hz (FT8) 或 90 Hz (FTFT4)&lt;/td&gt;16 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;將撥號頻率降低 1000 Hz&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;§P147
-P144§
-&lt;tr&gt;§P147
-P144§
-&lt;tr&gt;§P147
-P1441515頻率上調 1 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;將相同的 Rx 和 Tx 頻率上調 1 Hz§P161&lt;td&gt;將相同的 Rx 和 Tx 頻率上調 1 Hz§P161 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;將發射頻率提高 60 Hz (FT8) 或 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
-P173172§P175175(F§ &lt;/b&gt;&lt;/td&gt;&lt;td&gt;將撥號頻率提高 1000 Hz&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;現在在選項卡上設定傳輸到此號碼1&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6&lt;/b&gt;&lt;/td&gt;§P196在選項卡1&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A 上將下一個傳輸設定為該號碼&lt;/b&gt;&lt;/td&gt;&lt;td&gt;§P208854&lt;/td&gt;P206§P2151 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;切換「最佳 S+P」狀態&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C &lt;/b&gt;&lt;/td&gt;&lt;td&gt;切換「呼叫第一個」複選框&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D&lt;/b&gt;&lt;/td&gt;&lt;td&gt;再解碼Q232§再次解碼Q232§再次解碼Q232§再次解碼Q232§頻率&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D &lt;/b&gt;&lt;/td&gt;P241§全解碼（兩個視窗）&lt;/td&gt;&lt;/tr&gt;
-§P245兩個視窗）&lt;/td&gt;&lt;/tr&gt;
-§P245兩個視窗)
-P &lt;/b&gt;&lt;/td&gt;&lt;td&gt;開啟 TX 偶數/第一&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E &lt;/b&gt;&lt;/td&gt;§P259&lt;b&gt;Shift+E &lt;/b&gt;&lt;/td&gt;§P259&lt;b&gt;Shift+E &lt;/b&gt;&lt;/td&gt;§P259956§ 2696146 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;刪除&lt;/td&gt;&lt;/tr&gt;P271§&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F &lt;/b&gt;&lt;/td&gt;&lt;td&gt;編輯免費簡訊框&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G &lt;/b&gt;&lt;/td&gt;&lt;td&gt;產生標準訊息&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H &lt;/b&gt;&lt;/td&gt;&lt;td&gt;停止Tx&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I&lt;/b&gt;&lt;/td&gt;&lt;td&gt;將Dx§Ctrl+I&lt;/b&gt;&lt;/td&gt;&lt;td&gt;將Dx§Ctrl+I&lt;/b&gt;&lt;/td&gt;&lt;td&gt;將Dx§Ctrl+I&lt;/b&gt;&lt;/td&gt;&lt;td&gt;將Dx§Ctrl+I&lt;/b&gt;&lt;/td&gt;&lt;td&gt;將Dx§Ctrl+I&lt;/b&gt;§P3665§P306 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L &lt;/b&gt;&lt;/td&gt;&lt;td&gt;在資料庫中找出呼號，產生標準訊息&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M &lt;/b&gt;&lt;/td&gt;&lt;td&gt;監測&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N&lt;/b&gt;&lt;/td&gt;§P331 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;開啟 .wav 檔&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;更改操作符&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q§P3 56§&lt;/td&gt;&lt;td&gt;開啟「記錄QSO」視窗&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;將 Tx4 訊息設定為 RRR（FT4 中沒有）&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R §P374&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R &lt;/b&gt;P375§P376訊息設定為RR73&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R&lt;/b&gt;&lt;/td&gt;&lt;td&gt;刷新活動電台視窗&lt;/td&gt;&lt;/tr&gt;§P388385§F§S§P§P§t &lt;/b&gt;&lt;/td&gt;&lt;td&gt;停止監聽&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T&lt;/b&gt;&lt;/td&gt;&lt;td&gt;切換調校檔次調&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z &lt;/b&gt;&lt;/td&gt;&lt;td&gt;清除掛起解碼器狀態&lt;/td&gt;&lt;/tr&gt;
+        <translation>&lt;table cellspacing=1&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, abort QSO, clear next-call queue&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Online User's Guide (Alt: transmit Tx6)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Copyright Notice&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;About Decodium v3.0 FT2 Raptor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open settings window (Alt: transmit Tx2)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display keyboard shortcuts (Alt: transmit Tx3)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear DX Call, DX Grid, Tx messages 1-4 (Alt: transmit Tx4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Exit program&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display special mouse commands (Alt: transmit Tx5)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open next file in directory (Alt: toggle "Call 1st")&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode all remaining files in directory&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display Message Averaging window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency down 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency down 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency up 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency up 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set now transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set next transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear Active Stations for QMAP&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Best S+P" status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Call 1st" checkbox&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode again at QSO frequency&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Full decode (both windows)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn on TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn off TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Erase&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Edit the free text message box&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Add Dx Call to the Ignore List&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lookup callsign in database, generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Enable Tx"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open a .wav file&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Change operator&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open "Log QSO" window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RRR (not in FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RR73&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Refresh Active Stations window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop monitoring&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Tune status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear hung decoder status&lt;/td&gt;&lt;/tr&gt;
 
 &lt;/table&gt;</translation>
     </message>
@@ -7816,12 +7814,60 @@ P &lt;/b&gt;&lt;/td&gt;&lt;td&gt;開啟 TX 偶數/第一&lt;/td&gt;&lt;/tr&gt;
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="unfinished"></translation>
+        <translation>&lt;table cellspacing=1&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, abort QSO, clear next-call queue&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Online User's Guide (Alt: transmit Tx6)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Copyright Notice&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;About Decodium&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open settings window (Alt: transmit Tx2)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display keyboard shortcuts (Alt: transmit Tx3)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear DX Call, DX Grid, Tx messages 1-4 (Alt: transmit Tx4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Exit program&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display special mouse commands (Alt: transmit Tx5)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open next file in directory (Alt: toggle "Call 1st")&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode all remaining files in directory&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display Message Averaging window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency down 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency down 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency up 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency up 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set now transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set next transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear Active Stations for QMAP&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Best S+P" status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Call 1st" checkbox&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode again at QSO frequency&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Full decode (both windows)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn on TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn off TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Erase&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Edit the free text message box&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Add Dx Call to the Ignore List&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lookup callsign in database, generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Enable Tx"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open a .wav file&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Change operator&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open "Log QSO" window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RRR (not in FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RR73&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Refresh Active Stations window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop monitoring&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Tune status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear hung decoder status&lt;/td&gt;&lt;/tr&gt;
+
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="10767"/>
         <source>Embedded WSPR decoder unavailable.</source>
-        <translation type="unfinished"></translation>
+        <translation>嵌入式 WSPR 解碼器不可用。</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="12992"/>
@@ -7997,32 +8043,32 @@ DXpedition：%1（%2）
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18875"/>
         <source>%1 baud Baudot terminal. Mark %2 Hz, shift %3 Hz, %4, %5 stop bits. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 波特率 Baudot 端子。標記 %2 Hz，移位 %3 Hz、%4、%5 停止位元。收到的文字出現在上方；在下面輸入要傳送的文字。</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>反向</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>normal</source>
-        <translation type="unfinished"></translation>
+        <translation>普通的</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18924"/>
         <source>RTTY text contains no encodable Baudot characters</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 文字不包含可編碼的 Baudot 字符</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19068"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 收到文本</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19069"/>
         <source>RTTY Transmitted Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 傳輸的文本</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19138"/>
@@ -8103,7 +8149,7 @@ DXpedition：%1（%2）
     <message>
         <location filename="../widgets/mainwindow.cpp" line="24834"/>
         <source>Embedded WSPR decoder failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>嵌入式 WSPR 解碼器失敗：%1</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="26693"/>
@@ -8247,7 +8293,7 @@ Error(%2): %3</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27593"/>
         <source>Remote mode request ignored: RTTY is hidden in this release</source>
-        <translation type="unfinished"></translation>
+        <translation>忽略遠端模式請求：RTTY 在此版本中隱藏</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27599"/>
@@ -8382,17 +8428,17 @@ Error(%2): %3</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27793"/>
         <source>Remote Monitoring ignored: cannot enable while transmitting</source>
-        <translation type="unfinished"></translation>
+        <translation>遠端監控被忽略：傳輸時無法啟用</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring enabled</source>
-        <translation type="unfinished"></translation>
+        <translation>啟用遠端監控</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring disabled</source>
-        <translation type="unfinished"></translation>
+        <translation>遠端監控已停用</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27813"/>
@@ -8941,7 +8987,7 @@ UDP 伺服器 %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="137"/>
         <source>secret-tool lookup failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>secret-tool 查找啟動失敗</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="142"/>
@@ -8986,7 +9032,7 @@ UDP 伺服器 %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="284"/>
         <source>secret-tool clear failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>secret-tool清除啟動失敗</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="289"/>
@@ -8996,7 +9042,7 @@ UDP 伺服器 %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="302"/>
         <source>secret-tool clear failed</source>
-        <translation type="unfinished"></translation>
+        <translation>secret-tool 清除失敗</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18093"/>
@@ -9043,14 +9089,18 @@ UDP 伺服器 %2:%3</translation>
         <source>Network Error:
 Unsupported download URL or scheme:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>網路錯誤：
+不支援的下載URL或方案：
+%1</translation>
     </message>
     <message>
         <location filename="../Network/FileDownload.cpp" line="77"/>
         <source>Network Error:
 Downloaded file exceeds limit of %1 MiB:
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>網路錯誤：
+下載的檔案超出了 %1 MiB 的限制：
+%2</translation>
     </message>
 </context>
 <context>
@@ -9486,42 +9536,42 @@ Message</source>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="34"/>
         <source>45.45 baud Baudot terminal. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>45.45 波特 Baudot 終端機。收到的文字出現在上方；在下面輸入要傳送的文字。</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="39"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 收到文本</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="40"/>
         <source>Clear RX</source>
-        <translation type="unfinished"></translation>
+        <translation>清除 RX</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="50"/>
         <source>Waiting for RTTY traffic...</source>
-        <translation type="unfinished"></translation>
+        <translation>正在等待 RTTY 流量...</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="57"/>
         <source>RTTY Transmit Buffer</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY 傳送緩衝器</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="58"/>
         <source>Clear TX</source>
-        <translation type="unfinished"></translation>
+        <translation>清除 TX</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="67"/>
         <source>Type your RTTY message here, then press Send RTTY.</source>
-        <translation type="unfinished"></translation>
+        <translation>在此輸入您的 RTTY 訊息，然後按發送 RTTY。</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="71"/>
         <source>Send RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>發送RTTY</translation>
     </message>
 </context>
 <context>
@@ -12352,12 +12402,12 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2526"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Porta fissa su cui Decodium ascolta comandi UDP in ingresso (es. da DecoAlert). Default 0 = porta casuale, compatibile con il comportamento storico WSJT-X/CQRLOG. Imposta un valore fisso solo se un controller esterno lo richiede esplicitamente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;固定端口，Decodium在該連接埠上偵聽傳入的UDP指令指令（例如來自DecoAlert）。預設 0 = 隨機端口，與 WSJT-X/CQRLOG 歷史行為相容。僅當外部控制器明確要求時才設定固定值。 &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3058"/>
         <source>https://lotw.arrl.org/lotw-user-activity.csv</source>
-        <translation type="unfinished"></translation>
+        <translation>https://lotw.arrl.org/lotw-user-activity.csv</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3765"/>
@@ -13191,4 +13241,119 @@ Right click for insert and delete options.</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;雙擊一種顏色進行編輯.&lt;/p&gt;&lt;p&gt;右鍵單擊可插入或刪除顏色.&lt;/p&gt;&lt;p&gt;頂部的顏色代表微弱的信號&lt;/p&gt;&lt;p&gt;底部的顏色代表強烈&lt;/p&gt;&lt;p&gt;信號. 您最多可以有256種顏色.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
+    <context>
+        <name>SettingsDialog</name>
+        <message>
+            <source>Settings</source>
+            <translation>設定</translation>
+        </message>
+        <message>
+            <source>Changes are applied immediately where supported.</source>
+            <translation>支援的變更會立即套用。</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>關閉</translation>
+        </message>
+        <message>
+            <source>Station</source>
+            <translation>電台</translation>
+        </message>
+        <message>
+            <source>Radio</source>
+            <translation>無線電</translation>
+        </message>
+        <message>
+            <source>Audio</source>
+            <translation>音訊</translation>
+        </message>
+        <message>
+            <source>TX</source>
+            <translation>TX</translation>
+        </message>
+        <message>
+            <source>Display</source>
+            <translation>顯示</translation>
+        </message>
+        <message>
+            <source>Decode</source>
+            <translation>解碼</translation>
+        </message>
+        <message>
+            <source>Reporting</source>
+            <translation>回報</translation>
+        </message>
+        <message>
+            <source>Colors</source>
+            <translation>顏色</translation>
+        </message>
+        <message>
+            <source>Advanced</source>
+            <translation>進階</translation>
+        </message>
+        <message>
+            <source>Alerts</source>
+            <translation>警示</translation>
+        </message>
+        <message>
+            <source>Filters</source>
+            <translation>篩選器</translation>
+        </message>
+        <message>
+            <source>Choose Decoded Font</source>
+            <translation>選擇解碼字型</translation>
+        </message>
+        <message>
+            <source>Choose Font</source>
+            <translation>選擇字型</translation>
+        </message>
+        <message>
+            <source>Search:</source>
+            <translation>搜尋：</translation>
+        </message>
+        <message>
+            <source>filter by name</source>
+            <translation>依名稱篩選</translation>
+        </message>
+        <message>
+            <source>Monospaced fonts:</source>
+            <translation>等寬字型：</translation>
+        </message>
+        <message>
+            <source>Fonts:</source>
+            <translation>字型：</translation>
+        </message>
+        <message>
+            <source>Selected:</source>
+            <translation>已選取：</translation>
+        </message>
+        <message>
+            <source>Size:</source>
+            <translation>大小：</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>取消</translation>
+        </message>
+        <message>
+            <source>Apply</source>
+            <translation>套用</translation>
+        </message>
+        <message>
+            <source>Search radio, model or brand...</source>
+            <translation>搜尋無線電、型號或品牌...</translation>
+        </message>
+        <message>
+            <source>STATION INFO</source>
+            <translation>電台資訊</translation>
+        </message>
+        <message>
+            <source>Station Name:</source>
+            <translation>電台名稱：</translation>
+        </message>
+        <message>
+            <source>Choose</source>
+            <translation>選擇</translation>
+        </message>
+    </context>
 </TS>

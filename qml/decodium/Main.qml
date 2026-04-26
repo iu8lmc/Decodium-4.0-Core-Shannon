@@ -368,7 +368,56 @@ ApplicationWindow {
     property bool callerQueuePanelVisible:    false
     property bool astroPanelVisible:          false
     property bool dxClusterPanelVisible:      false
+    property bool dxClusterToolbarVisible:    !!bridge.getSetting("uiDxClusterToolbarVisible", true)
+    property bool pskReporterToolbarVisible: !!bridge.getSetting("uiPskReporterToolbarVisible", true)
     property bool liveMapPanelVisible:        bridge.getSetting("WorldMapDisplayed", true)
+    property string uiLanguage: normalizeUiLanguage(String(bridge.getSetting("UILanguage", "en") || "en"))
+    readonly property var uiLanguageOptions: [
+        { code: "en", name: "English" },
+        { code: "ca", name: "Català" },
+        { code: "da", name: "Dansk" },
+        { code: "de", name: "Deutsch" },
+        { code: "es", name: "Español" },
+        { code: "fr", name: "Français" },
+        { code: "hu", name: "Magyar" },
+        { code: "it", name: "Italiano" },
+        { code: "ja", name: "日本語" },
+        { code: "ru", name: "Русский" },
+        { code: "zh", name: "简体中文" },
+        { code: "zh_TW", name: "繁體中文" }
+    ]
+    function normalizeUiLanguage(code) {
+        code = String(code || "en").replace("-", "_")
+        return code.indexOf("en_") === 0 ? "en" : code
+    }
+    function uiLanguageName(code) {
+        code = normalizeUiLanguage(code)
+        for (var i = 0; i < uiLanguageOptions.length; ++i) {
+            if (uiLanguageOptions[i].code === code)
+                return uiLanguageOptions[i].name
+        }
+        return "English"
+    }
+    function setUiLanguage(code) {
+        code = normalizeUiLanguage(code)
+        if (!code || code === uiLanguage)
+            return
+        uiLanguage = code
+        bridge.setSetting("UILanguage", code)
+        showStatusToast("Lingua impostata: " + uiLanguageName(code) + ". Riavvia Decodium per applicarla.", accentOrange)
+    }
+    function setDxClusterToolbarVisible(visible) {
+        dxClusterToolbarVisible = visible
+        bridge.setSetting("uiDxClusterToolbarVisible", visible)
+        if (!visible)
+            dxClusterPanelVisible = false
+    }
+    function setPskReporterToolbarVisible(visible) {
+        pskReporterToolbarVisible = visible
+        bridge.setSetting("uiPskReporterToolbarVisible", visible)
+        if (!visible && typeof pskSearchPopup !== "undefined")
+            pskSearchPopup.close()
+    }
     function syncLiveMapFloatingVisibility(activate) {
         if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
             return
@@ -383,10 +432,24 @@ ApplicationWindow {
             liveMapFloatingWindow.hide()
         }
     }
-    function detachLiveMapPanel() {
-        mainWindow.liveMapPanelVisible = true
-        bridge.setSetting("WorldMapDisplayed", true)
-        mainWindow.liveMapDetached = true
+	    function detachWaterfallPanel() {
+	        mainWindow.waterfallDetached = true
+	        mainWindow.waterfallMinimized = false
+	        waterfallPanel.isDockHighlighted = false
+	        waterfallWindow.show()
+	        waterfallWindow.raise()
+	        waterfallWindow.requestActivate()
+	    }
+	    function dockWaterfallPanel() {
+	        waterfallPanel.isDockHighlighted = false
+	        mainWindow.waterfallDetached = false
+	        mainWindow.waterfallMinimized = false
+	        waterfallWindow.hide()
+	    }
+	    function detachLiveMapPanel() {
+	        mainWindow.liveMapPanelVisible = true
+	        bridge.setSetting("WorldMapDisplayed", true)
+	        mainWindow.liveMapDetached = true
         mainWindow.liveMapMinimized = false
         mainWindow.syncLiveMapFloatingVisibility(true)
         Qt.callLater(mainWindow.restoreDecodePanelWidths)
@@ -394,12 +457,42 @@ ApplicationWindow {
     function dockLiveMapPanel() {
         mainWindow.liveMapDetached = false
         mainWindow.liveMapMinimized = false
-        mainWindow.syncLiveMapFloatingVisibility(false)
-        Qt.callLater(mainWindow.restoreDecodePanelWidths)
-    }
-    onLiveMapPanelVisibleChanged: Qt.callLater(function() {
-        mainWindow.syncLiveMapFloatingVisibility(false)
-        if (mainWindow.decodePanelLayoutSaved)
+	        mainWindow.syncLiveMapFloatingVisibility(false)
+	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+	    }
+	    function detachFullSpectrumPanel() {
+	        mainWindow.period1Detached = true
+	        mainWindow.period1Minimized = false
+	        period1FloatingWindow.show()
+	        period1FloatingWindow.raise()
+	        period1FloatingWindow.requestActivate()
+	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+	    }
+	    function dockFullSpectrumPanel() {
+	        mainWindow.period1DockHighlighted = false
+	        mainWindow.period1Detached = false
+	        mainWindow.period1Minimized = false
+	        period1FloatingWindow.hide()
+	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+	    }
+	    function detachSignalRxPanel() {
+	        mainWindow.rxFreqDetached = true
+	        mainWindow.rxFreqMinimized = false
+	        rxFreqFloatingWindow.show()
+	        rxFreqFloatingWindow.raise()
+	        rxFreqFloatingWindow.requestActivate()
+	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+	    }
+	    function dockSignalRxPanel() {
+	        mainWindow.rxFreqDockHighlighted = false
+	        mainWindow.rxFreqDetached = false
+	        mainWindow.rxFreqMinimized = false
+	        rxFreqFloatingWindow.hide()
+	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
+	    }
+	    onLiveMapPanelVisibleChanged: Qt.callLater(function() {
+	        mainWindow.syncLiveMapFloatingVisibility(false)
+	        if (mainWindow.decodePanelLayoutSaved)
             mainWindow.restoreDecodePanelWidths()
         else if (typeof period1Panel !== "undefined" && period1Panel)
             period1Panel.applyCenterSplit()
@@ -497,6 +590,12 @@ ApplicationWindow {
                 mainWindow.refreshDecodedTextFont()
             else if (key === "WorldMapDisplayed")
                 mainWindow.liveMapPanelVisible = !!value
+            else if (key === "uiDxClusterToolbarVisible")
+                mainWindow.dxClusterToolbarVisible = !!value
+            else if (key === "uiPskReporterToolbarVisible")
+                mainWindow.pskReporterToolbarVisible = !!value
+            else if (key === "UILanguage")
+                mainWindow.uiLanguage = mainWindow.normalizeUiLanguage(String(value || "en"))
             else if (key === "uiDecodePanelsLayoutSaved")
                 mainWindow.decodePanelLayoutSaved = !!value
         }
@@ -1984,18 +2083,25 @@ ApplicationWindow {
                     } // End Rectangle
                 } // End Grouped buttons Item
 
-                // World Clock with Analog Display
-                Item {
-                    id: worldClock
-                    width: 252
-                    height: 80
-                    readonly property int analogClockWidth: 60
-                    readonly property int cardMargins: 10
-                    readonly property int rowSpacing: 12
-                    readonly property int infoColumnWidth: Math.max(116, width - (cardMargins * 2) - analogClockWidth - rowSpacing - 4)
+	                // World Clock with Analog Display
+	                Item {
+	                    id: worldClock
+	                    visible: showWorldClock
+	                    width: showWorldClock ? compactWidth : 0
+	                    height: 80
+	                    readonly property int analogClockWidth: 60
+	                    readonly property int cardMargins: 10
+	                    readonly property int rowSpacing: 12
+	                    readonly property bool hasInfoColumn: showDigitalClock || showWorldClockCities
+	                    readonly property int infoColumnWidth: showWorldClockCities ? 160 : 126
+	                    readonly property int compactWidth: Math.max(74,
+	                        (cardMargins * 2)
+	                        + (showAnalogClock ? analogClockWidth : 0)
+	                        + (showAnalogClock && hasInfoColumn ? rowSpacing : 0)
+	                        + (hasInfoColumn ? infoColumnWidth : 0))
 
-                    property var timezones: [
-                        { name: "UTC", zoneId: "UTC" },
+	                    property var timezones: [
+	                        { name: "UTC", zoneId: "UTC" },
                         { name: "London", zoneId: "Europe/London" },
                         { name: "Rome", zoneId: "Europe/Rome" },
                         { name: "Moscow", zoneId: "Europe/Moscow" },
@@ -2006,19 +2112,56 @@ ApplicationWindow {
                         { name: "Los Angeles", zoneId: "America/Los_Angeles" }
                     ]
                     property int selectedTz: 0
-                    property int hours: 0
-                    property int minutes: 0
-                    property int seconds: 0
-                    property string dateStr: ""
+	                    property int hours: 0
+	                    property int minutes: 0
+	                    property int seconds: 0
+	                    property string dateStr: ""
+	                    property bool showWorldClock: !!bridge.getSetting("uiWorldClockVisible", true)
+	                    property bool showAnalogClock: !!bridge.getSetting("uiWorldClockShowAnalog", true)
+	                    property bool showDigitalClock: !!bridge.getSetting("uiWorldClockShowDigital", true)
+	                    property bool showWorldClockCities: !!bridge.getSetting("uiWorldClockShowCities", true)
 
-                    Timer {
-                        interval: 1000
-                        running: true
-                        repeat: true
-                        onTriggered: worldClock.updateTime()
-                    }
+	                    Timer {
+	                        interval: 1000
+	                        running: worldClock.showWorldClock
+	                        repeat: true
+	                        onTriggered: worldClock.updateTime()
+	                    }
 
-                    Component.onCompleted: updateTime()
+	                    Component.onCompleted: {
+	                        ensureVisiblePart()
+	                        updateTime()
+	                    }
+
+	                    function ensureVisiblePart() {
+	                        if (!showAnalogClock && !showDigitalClock && !showWorldClockCities) {
+	                            showDigitalClock = true
+	                        }
+	                    }
+
+	                    function setClockPart(part, visible) {
+	                        if (part === "analog") {
+	                            showAnalogClock = visible
+	                        } else if (part === "digital") {
+	                            showDigitalClock = visible
+	                        } else if (part === "cities") {
+	                            showWorldClockCities = visible
+	                        }
+
+	                        ensureVisiblePart()
+	                        bridge.setSetting("uiWorldClockShowAnalog", showAnalogClock)
+	                        bridge.setSetting("uiWorldClockShowDigital", showDigitalClock)
+	                        bridge.setSetting("uiWorldClockShowCities", showWorldClockCities)
+	                    }
+
+	                    function setClockVisible(visible) {
+	                        showWorldClock = visible
+	                        if (showWorldClock) {
+	                            ensureVisiblePart()
+	                            updateTime()
+	                        }
+	                        bridge.setSetting("uiWorldClockVisible", showWorldClock)
+	                    }
 
                     function updateTime() {
                         if (selectedTz < 0 || selectedTz >= timezones.length) {
@@ -2049,15 +2192,16 @@ ApplicationWindow {
                             id: clockHover
                         }
 
-                        Rectangle {
-                            id: analogClockFace
-                            anchors.left: parent.left
-                            anchors.leftMargin: worldClock.cardMargins
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: worldClock.analogClockWidth
-                            height: 60
-                            radius: 30
-                            color: bgMedium
+	                        Rectangle {
+	                            id: analogClockFace
+	                            visible: worldClock.showAnalogClock
+	                            anchors.left: parent.left
+	                            anchors.leftMargin: worldClock.showAnalogClock ? worldClock.cardMargins : 0
+	                            anchors.verticalCenter: parent.verticalCenter
+	                            width: worldClock.showAnalogClock ? worldClock.analogClockWidth : 0
+	                            height: 60
+	                            radius: 30
+	                            color: bgMedium
                             border.color: secondaryCyan
                             border.width: 1
 
@@ -2099,73 +2243,132 @@ ApplicationWindow {
                             }
                         }
 
-                        Text {
-                            id: worldClockTimeText
-                            anchors.left: analogClockFace.right
-                            anchors.leftMargin: worldClock.rowSpacing
-                            anchors.right: parent.right
-                            anchors.rightMargin: worldClock.cardMargins
-                            anchors.top: parent.top
-                            anchors.topMargin: 2
-                            font.pixelSize: 22
-                            minimumPixelSize: 17
-                            fontSizeMode: Text.Fit
-                            font.family: "Monospace"
-                            font.bold: true
-                            color: textPrimary
-                            elide: Text.ElideRight
-                            text: ("0" + worldClock.hours).slice(-2) + ":" +
-                                  ("0" + worldClock.minutes).slice(-2) + ":" +
-                                  ("0" + worldClock.seconds).slice(-2)
-                        }
+	                        Item {
+	                            id: worldClockInfoColumn
+	                            visible: worldClock.hasInfoColumn
+	                            anchors.left: analogClockFace.right
+	                            anchors.leftMargin: worldClock.showAnalogClock ? worldClock.rowSpacing : worldClock.cardMargins
+	                            anchors.right: parent.right
+	                            anchors.rightMargin: worldClock.cardMargins
+	                            anchors.verticalCenter: parent.verticalCenter
+	                            height: (worldClock.showDigitalClock ? 39 : 0)
+	                                    + (worldClock.showWorldClockCities ? 32 : 0)
+	                                    + (worldClock.showDigitalClock && worldClock.showWorldClockCities ? 4 : 0)
 
-                        Text {
-                            id: worldClockDateText
-                            anchors.left: worldClockTimeText.left
-                            anchors.right: worldClockTimeText.right
-                            anchors.top: worldClockTimeText.bottom
-                            anchors.topMargin: 2
-                            text: worldClock.dateStr
-                            font.pixelSize: 11
-                            font.family: "Monospace"
-                            color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
-                            elide: Text.ElideRight
-                        }
+	                            Text {
+	                                id: worldClockTimeText
+	                                visible: worldClock.showDigitalClock
+	                                anchors.left: parent.left
+	                                anchors.right: parent.right
+	                                anchors.top: parent.top
+	                                height: 25
+	                                font.pixelSize: 22
+	                                minimumPixelSize: 17
+	                                fontSizeMode: Text.Fit
+	                                font.family: "Monospace"
+	                                font.bold: true
+	                                color: textPrimary
+	                                elide: Text.ElideRight
+	                                text: ("0" + worldClock.hours).slice(-2) + ":" +
+	                                      ("0" + worldClock.minutes).slice(-2) + ":" +
+	                                      ("0" + worldClock.seconds).slice(-2)
+	                            }
 
-                        StyledComboBox {
-                            id: timezoneCombo
-                            anchors.left: worldClockTimeText.left
-                            anchors.right: worldClockTimeText.right
-                            anchors.top: worldClockDateText.bottom
-                            anchors.topMargin: 2
-                            height: 32
-                            font.pixelSize: 11
-                            itemHeight: 34
-                            popupMinWidth: width
-                            textHorizontalAlignment: Text.AlignLeft
-                            topPadding: 4
-                            bottomPadding: 4
-                            leftPadding: 12
-                            rightPadding: 32
-                            model: worldClock.timezones.map(function(t) { return t.name })
-                            currentIndex: Math.max(0, worldClock.selectedTz)
-                            accentColor: secondaryCyan
-                            textColor: textPrimary
-                            bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
-                            borderColor: glassBorder
-                            onActivated: {
-                                worldClock.selectedTz = currentIndex
-                                worldClock.updateTime()
-                            }
-                            onCurrentIndexChanged: {
-                                if (currentIndex >= 0 && worldClock.selectedTz !== currentIndex) {
-                                    worldClock.selectedTz = currentIndex
-                                    worldClock.updateTime()
-                                }
-                            }
-                        }
-                    }
-                }
+	                            Text {
+	                                id: worldClockDateText
+	                                visible: worldClock.showDigitalClock
+	                                anchors.left: parent.left
+	                                anchors.right: parent.right
+	                                anchors.top: worldClockTimeText.bottom
+	                                anchors.topMargin: 1
+	                                height: 13
+	                                text: worldClock.dateStr
+	                                font.pixelSize: 11
+	                                font.family: "Monospace"
+	                                color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.7)
+	                                elide: Text.ElideRight
+	                            }
+
+	                            StyledComboBox {
+	                                id: timezoneCombo
+	                                visible: worldClock.showWorldClockCities
+	                                anchors.left: parent.left
+	                                anchors.right: parent.right
+	                                anchors.top: worldClock.showDigitalClock ? worldClockDateText.bottom : parent.top
+	                                anchors.topMargin: worldClock.showDigitalClock ? 4 : 0
+	                                height: 32
+	                                font.pixelSize: 11
+	                                itemHeight: 34
+	                                popupMinWidth: width
+	                                textHorizontalAlignment: Text.AlignLeft
+	                                topPadding: 4
+	                                bottomPadding: 4
+	                                leftPadding: 12
+	                                rightPadding: 32
+	                                model: worldClock.timezones.map(function(t) { return t.name })
+	                                currentIndex: Math.max(0, worldClock.selectedTz)
+	                                accentColor: secondaryCyan
+	                                textColor: textPrimary
+	                                bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+	                                borderColor: glassBorder
+	                                onActivated: {
+	                                    worldClock.selectedTz = currentIndex
+	                                    worldClock.updateTime()
+	                                }
+	                                onCurrentIndexChanged: {
+	                                    if (currentIndex >= 0 && worldClock.selectedTz !== currentIndex) {
+	                                        worldClock.selectedTz = currentIndex
+	                                        worldClock.updateTime()
+	                                    }
+	                                }
+	                            }
+	                        }
+
+	                        MouseArea {
+	                            anchors.fill: parent
+	                            acceptedButtons: Qt.RightButton
+	                            cursorShape: Qt.PointingHandCursor
+	                            onClicked: function(mouse) {
+	                                if (mouse.button === Qt.RightButton) {
+	                                    worldClockMenu.popup(mouse.x, mouse.y)
+	                                }
+	                            }
+	                        }
+
+	                        Menu {
+	                            id: worldClockMenu
+	                            padding: 6
+	                            width: 230
+	                            background: Rectangle {
+	                                implicitWidth: 230
+	                                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+	                                border.color: secondaryCyan
+	                                border.width: 1
+	                                radius: 8
+	                            }
+
+	                            MenuItem {
+	                                text: (worldClock.showAnalogClock ? "✓ " : "☐ ") + "Orologio analogico"
+	                                onTriggered: worldClock.setClockPart("analog", !worldClock.showAnalogClock)
+	                            }
+	                            MenuItem {
+	                                text: (worldClock.showDigitalClock ? "✓ " : "☐ ") + "Orologio digitale"
+	                                onTriggered: worldClock.setClockPart("digital", !worldClock.showDigitalClock)
+	                            }
+	                            MenuItem {
+	                                text: (worldClock.showWorldClockCities ? "✓ " : "☐ ") + "Indicazione citta"
+	                                onTriggered: worldClock.setClockPart("cities", !worldClock.showWorldClockCities)
+	                            }
+	                            MenuSeparator {
+	                                contentItem: Rectangle { implicitHeight: 1; color: glassBorder }
+	                            }
+	                            MenuItem {
+	                                text: "Nascondi orologio"
+	                                onTriggered: worldClock.setClockVisible(false)
+	                            }
+	                        }
+	                    }
+	                }
 
                 // Waterfall restore button (visible when minimized)
                 Rectangle {
@@ -2323,9 +2526,10 @@ ApplicationWindow {
                     }
                 }
 
-                // DX Cluster toggle button — sempre visibile nella toolbar
+                // DX Cluster toggle button
                 Rectangle {
-                    width: 74
+                    visible: dxClusterToolbarVisible
+                    width: dxClusterToolbarVisible ? 74 : 0
                     height: 74
                     radius: 8
                     color: dxClusterPanelVisible
@@ -2493,8 +2697,8 @@ ApplicationWindow {
                     }
                 }
 
-                // Period 1 restore button
-                Rectangle {
+	                // Full Spectrum restore button
+	                Rectangle {
                     width: 74
                     height: 74
                     radius: 8
@@ -2507,18 +2711,20 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 4
 
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "1️⃣"
-                            font.pixelSize: 24
-                        }
+	                        Text {
+	                            anchors.horizontalCenter: parent.horizontalCenter
+	                            text: "FS"
+	                            font.pixelSize: 20
+	                            font.bold: true
+	                            color: "#4CAF50"
+	                        }
 
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Period 1"
-                            font.pixelSize: 10
-                            font.bold: true
-                            color: secondaryCyan
+	                        Text {
+	                            anchors.horizontalCenter: parent.horizontalCenter
+	                            text: "Full Spectrum"
+	                            font.pixelSize: 10
+	                            font.bold: true
+	                            color: secondaryCyan
                         }
                     }
 
@@ -2533,8 +2739,8 @@ ApplicationWindow {
                         }
                     }
 
-                    ToolTip.visible: p1RestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Period 1"
+	                    ToolTip.visible: p1RestoreMA.containsMouse
+	                    ToolTip.text: "Ripristina Full Spectrum"
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -2703,7 +2909,8 @@ ApplicationWindow {
 
                 // PSK Reporter Search
                 Rectangle {
-                    width: 160
+                    visible: pskReporterToolbarVisible
+                    width: pskReporterToolbarVisible ? 160 : 0
                     height: 74
                     radius: 8
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
@@ -3037,7 +3244,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: waterfallPanel.isDockHighlighted ? "🧲 Rilascia qui!" : "🌊 Waterfall Detached"
+	                            text: waterfallPanel.isDockHighlighted ? "Dock Waterfall" : "Waterfall detached"
                                 color: waterfallPanel.isDockHighlighted ? secondaryCyan : textSecondary
                                 font.pixelSize: waterfallPanel.isDockHighlighted ? 16 : 12
                                 font.bold: waterfallPanel.isDockHighlighted
@@ -3045,7 +3252,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "Trascina la finestra qui"
+	                                text: "Use Dock to reattach it"
                                 color: textSecondary
                                 font.pixelSize: 10
                                 visible: !waterfallPanel.isDockHighlighted
@@ -3077,14 +3284,14 @@ ApplicationWindow {
                         visible: !waterfallDetached
                         color: "transparent"
 
-                        // Header - DRAGGABLE for magnetic detach
-                        Rectangle {
-                            id: waterfallHeader
+	                        // Header
+	                        Rectangle {
+	                            id: waterfallHeader
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
                             height: 28
-                            color: embeddedDragArea.isDragging ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.4) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
+	                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
                             radius: 8
 
                             Behavior on color { ColorAnimation { duration: 100 } }
@@ -3097,55 +3304,12 @@ ApplicationWindow {
                                 color: parent.color
                             }
 
-                            // Drag area for magnetic detach
-                            MouseArea {
-                                id: embeddedDragArea
-                                anchors.fill: parent
-                                property bool isDragging: false
-                                property point startPos: Qt.point(0, 0)
-                                property point dragOffset: Qt.point(0, 0)
+	                            RowLayout {
+	                                anchors.fill: parent
+	                                anchors.margins: 6
+	                                spacing: 8
 
-                                cursorShape: Qt.SizeAllCursor
-
-                                onPressed: function(mouse) {
-                                    startPos = mapToGlobal(mouse.x, mouse.y)
-                                    isDragging = false
-                                }
-
-                                onPositionChanged: function(mouse) {
-                                    if (pressed) {
-                                        var currentPos = mapToGlobal(mouse.x, mouse.y)
-                                        var deltaX = currentPos.x - startPos.x
-                                        var deltaY = currentPos.y - startPos.y
-                                        var distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
-
-                                        // Start detach if dragged more than 50 pixels
-                                        if (distance > 50 && !isDragging) {
-                                            isDragging = true
-                                            waterfallDetached = true
-                                            // Position window at cursor
-                                            waterfallWindow.x = currentPos.x - 100
-                                            waterfallWindow.y = currentPos.y - 20
-                                            waterfallWindow.show()
-                                        }
-                                    }
-                                }
-
-                                onReleased: {
-                                    isDragging = false
-                                }
-                            }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 6
-                                spacing: 8
-
-                                Text {
-                                    text: "⋮⋮⋮"
-                                    font.pixelSize: 14
-                                    color: secondaryCyan
-                                }
+	                                Rectangle { Layout.preferredWidth: 8; Layout.preferredHeight: 8; radius: 4; color: secondaryCyan }
 
                                 Text {
                                     text: "Waterfall"
@@ -3154,16 +3318,38 @@ ApplicationWindow {
                                     color: secondaryCyan
                                 }
 
-                                Text {
-                                    text: "— trascina per sganciare"
-                                    font.pixelSize: 10
-                                    color: textSecondary
-                                    opacity: 0.6
-                                }
+	                                Item { Layout.fillWidth: true }
 
-                                Item { Layout.fillWidth: true }
-                            }
-                        }
+	                                Rectangle {
+	                                    Layout.preferredWidth: 38
+	                                    Layout.preferredHeight: 20
+	                                    radius: 4
+	                                    color: waterfallPopMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
+	                                    border.color: waterfallPopMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
+	                                    border.width: 1
+
+	                                    Text {
+	                                        anchors.centerIn: parent
+	                                        text: "Pop"
+	                                        font.pixelSize: 10
+	                                        font.bold: true
+	                                        color: waterfallPopMA.containsMouse ? secondaryCyan : textSecondary
+	                                    }
+
+	                                    MouseArea {
+	                                        id: waterfallPopMA
+	                                        anchors.fill: parent
+	                                        hoverEnabled: true
+	                                        cursorShape: Qt.PointingHandCursor
+	                                        onClicked: mainWindow.detachWaterfallPanel()
+	                                    }
+
+	                                    ToolTip.visible: waterfallPopMA.containsMouse
+	                                    ToolTip.text: "Pop out Waterfall"
+	                                    ToolTip.delay: 500
+	                                }
+	                            }
+	                        }
 
                         Waterfall {
                             id: waterfallDisplayEmbedded
@@ -3609,10 +3795,10 @@ ApplicationWindow {
                                     anchors.centerIn: parent
                                     spacing: 6
 
-                                    Text {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        text: period1DockHighlighted ? "🧲 Rilascia qui!" : "1️⃣ Period 1 Detached"
-                                        color: period1DockHighlighted ? "#4CAF50" : textSecondary
+	                                    Text {
+	                                        anchors.horizontalCenter: parent.horizontalCenter
+	                                        text: period1DockHighlighted ? "🧲 Rilascia qui!" : "Full Spectrum detached"
+	                                        color: period1DockHighlighted ? "#4CAF50" : textSecondary
                                         font.pixelSize: period1DockHighlighted ? 16 : 12
                                         font.bold: period1DockHighlighted
                                     }
@@ -3735,34 +3921,33 @@ ApplicationWindow {
                                             }
                                         }
 
-                                        // Detach button
-                                        Rectangle {
-                                            width: 20
-                                            height: 20
-                                            radius: 4
-                                            color: p1DetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
-                                            border.color: p1DetachMA.containsMouse ? secondaryCyan : "transparent"
+	                                        // Pop button
+	                                        Rectangle {
+	                                            Layout.preferredWidth: 34
+	                                            Layout.preferredHeight: 18
+	                                            radius: 4
+	                                            color: p1DetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
+	                                            border.color: p1DetachMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+	                                            border.width: 1
 
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "⇗"
-                                                font.pixelSize: 12
-                                                color: p1DetachMA.containsMouse ? secondaryCyan : textSecondary
-                                            }
+	                                            Text {
+	                                                anchors.centerIn: parent
+	                                                text: "Pop"
+	                                                font.pixelSize: 10
+	                                                font.bold: true
+	                                                color: p1DetachMA.containsMouse ? secondaryCyan : textSecondary
+	                                            }
 
                                             MouseArea {
                                                 id: p1DetachMA
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    period1Detached = true
-                                                    period1FloatingWindow.show()
-                                                }
-                                            }
+	                                                anchors.fill: parent
+	                                                hoverEnabled: true
+	                                                cursorShape: Qt.PointingHandCursor
+	                                                onClicked: mainWindow.detachFullSpectrumPanel()
+	                                            }
 
-                                            ToolTip.visible: p1DetachMA.containsMouse
-                                            ToolTip.text: "Sgancia Period 1"
+	                                            ToolTip.visible: p1DetachMA.containsMouse
+	                                            ToolTip.text: "Stacca Full Spectrum"
                                             ToolTip.delay: 500
                                         }
                                     }
@@ -4124,34 +4309,33 @@ ApplicationWindow {
                                             ToolTip.text: "Pulisci Signal RX"
                                         }
 
-                                        // Detach button
-                                        Rectangle {
-                                            width: 20
-                                            height: 20
-                                            radius: 4
-                                            color: rxDetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
-                                            border.color: rxDetachMA.containsMouse ? secondaryCyan : "transparent"
+	                                        // Pop button
+	                                        Rectangle {
+	                                            Layout.preferredWidth: 34
+	                                            Layout.preferredHeight: 18
+	                                            radius: 4
+	                                            color: rxDetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
+	                                            border.color: rxDetachMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+	                                            border.width: 1
 
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "⇗"
-                                                font.pixelSize: 12
-                                                color: rxDetachMA.containsMouse ? secondaryCyan : textSecondary
-                                            }
+	                                            Text {
+	                                                anchors.centerIn: parent
+	                                                text: "Pop"
+	                                                font.pixelSize: 10
+	                                                font.bold: true
+	                                                color: rxDetachMA.containsMouse ? secondaryCyan : textSecondary
+	                                            }
 
                                             MouseArea {
                                                 id: rxDetachMA
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    rxFreqDetached = true
-                                                    rxFreqFloatingWindow.show()
-                                                }
-                                            }
+	                                                anchors.fill: parent
+	                                                hoverEnabled: true
+	                                                cursorShape: Qt.PointingHandCursor
+	                                                onClicked: mainWindow.detachSignalRxPanel()
+	                                            }
 
-                                            ToolTip.visible: rxDetachMA.containsMouse
-                                            ToolTip.text: "Sgancia Signal RX"
+	                                            ToolTip.visible: rxDetachMA.containsMouse
+	                                            ToolTip.text: "Stacca Signal RX"
                                             ToolTip.delay: 500
                                         }
                                     }
@@ -5506,39 +5690,6 @@ ApplicationWindow {
             }
         }
 
-        // ===== AUTO SEQUENCE OPTIONS =====
-        MenuItem {
-            text: bridge.confirm73 ? "✓ Conferma 73" : "☐ Conferma 73"
-            onTriggered: bridge.confirm73 = !bridge.confirm73
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: bridge.confirm73 ? successGreen : textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: bridge.startFromTx2 ? "✓ Start da TX2" : "☐ Start da TX2"
-            onTriggered: bridge.startFromTx2 = !bridge.startFromTx2
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: bridge.startFromTx2 ? successGreen : textSecondary
-                leftPadding: 10
-            }
-        }
-
         MenuItem {
             text: bridge.directLogQso ? "✓ Log QSO Diretto" : "☐ Log QSO Diretto"
             onTriggered: bridge.directLogQso = !bridge.directLogQso
@@ -5652,11 +5803,157 @@ ApplicationWindow {
             }
         }
 
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
+	        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
 
-        MenuItem {
-            text: timeSyncPanelVisible ? "✓ Time Sync Panel" : "☐ Time Sync Panel"
-            onTriggered: timeSyncPanelVisible = !timeSyncPanelVisible
+		        MenuItem {
+		            text: worldClock.showWorldClock ? "✓ Mostra orologio" : "☐ Mostra orologio"
+		            onTriggered: worldClock.setClockVisible(!worldClock.showWorldClock)
+		            background: Rectangle {
+	                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+	                radius: 6
+	            }
+	            contentItem: Text {
+	                text: parent.text
+	                font.pixelSize: 12
+	                color: worldClock.showWorldClock ? successGreen : textSecondary
+		                leftPadding: 10
+		            }
+		        }
+
+		        MenuItem {
+		            text: dxClusterToolbarVisible ? "✓ Mostra DX Cluster" : "☐ Mostra DX Cluster"
+		            onTriggered: mainWindow.setDxClusterToolbarVisible(!dxClusterToolbarVisible)
+		            background: Rectangle {
+		                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+		                radius: 6
+		            }
+		            contentItem: Text {
+		                text: parent.text
+		                font.pixelSize: 12
+		                color: dxClusterToolbarVisible ? successGreen : textSecondary
+		                leftPadding: 10
+		            }
+		        }
+
+		        MenuItem {
+		            text: pskReporterToolbarVisible ? "✓ Mostra PSK Reporter" : "☐ Mostra PSK Reporter"
+		            onTriggered: mainWindow.setPskReporterToolbarVisible(!pskReporterToolbarVisible)
+		            background: Rectangle {
+		                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+		                radius: 6
+		            }
+		            contentItem: Text {
+		                text: parent.text
+		                font.pixelSize: 12
+		                color: pskReporterToolbarVisible ? successGreen : textSecondary
+		                leftPadding: 10
+		            }
+		        }
+
+		        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
+
+		        MenuItem {
+		            enabled: false
+		            text: "Lingua: " + mainWindow.uiLanguageName(uiLanguage)
+		            background: Rectangle { color: "transparent"; radius: 6 }
+		            contentItem: Text {
+		                text: parent.text
+		                font.pixelSize: 12
+		                font.bold: true
+		                color: secondaryCyan
+		                leftPadding: 10
+		            }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "en" ? "✓ English" : "☐ English"
+		            onTriggered: mainWindow.setUiLanguage("en")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "en" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "ca" ? "✓ Català" : "☐ Català"
+		            onTriggered: mainWindow.setUiLanguage("ca")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ca" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "da" ? "✓ Dansk" : "☐ Dansk"
+		            onTriggered: mainWindow.setUiLanguage("da")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "da" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "de" ? "✓ Deutsch" : "☐ Deutsch"
+		            onTriggered: mainWindow.setUiLanguage("de")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "de" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "es" ? "✓ Español" : "☐ Español"
+		            onTriggered: mainWindow.setUiLanguage("es")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "es" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "fr" ? "✓ Français" : "☐ Français"
+		            onTriggered: mainWindow.setUiLanguage("fr")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "fr" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "hu" ? "✓ Magyar" : "☐ Magyar"
+		            onTriggered: mainWindow.setUiLanguage("hu")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "hu" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "it" ? "✓ Italiano" : "☐ Italiano"
+		            onTriggered: mainWindow.setUiLanguage("it")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "it" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "ja" ? "✓ 日本語" : "☐ 日本語"
+		            onTriggered: mainWindow.setUiLanguage("ja")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ja" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "ru" ? "✓ Русский" : "☐ Русский"
+		            onTriggered: mainWindow.setUiLanguage("ru")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ru" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "zh" ? "✓ 简体中文" : "☐ 简体中文"
+		            onTriggered: mainWindow.setUiLanguage("zh")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "zh" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuItem {
+		            text: uiLanguage === "zh_TW" ? "✓ 繁體中文" : "☐ 繁體中文"
+		            onTriggered: mainWindow.setUiLanguage("zh_TW")
+		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "zh_TW" ? successGreen : textSecondary; leftPadding: 10 }
+		        }
+
+		        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
+
+		        MenuItem {
+		            text: timeSyncPanelVisible ? "✓ Time Sync Panel" : "☐ Time Sync Panel"
+		            onTriggered: timeSyncPanelVisible = !timeSyncPanelVisible
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
                 radius: 6
@@ -5747,12 +6044,12 @@ ApplicationWindow {
                 color: astroPanelVisible ? successGreen : textSecondary
                 leftPadding: 10
             }
-        }
+	        }
 
-        MenuItem {
-            text: dxClusterPanelVisible ? "✓ DX Cluster" : "☐ DX Cluster"
-            onTriggered: dxClusterPanelVisible = !dxClusterPanelVisible
-            background: Rectangle {
+	        MenuItem {
+	            text: dxClusterPanelVisible ? "✓ Pannello DX Cluster" : "☐ Pannello DX Cluster"
+	            onTriggered: dxClusterPanelVisible = !dxClusterPanelVisible
+	            background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
                 radius: 6
             }
@@ -6055,11 +6352,11 @@ ApplicationWindow {
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
 
-        // Handle window close
-        onClosing: function(close) {
-            waterfallDetached = false
-            close.accepted = true
-        }
+	        // Handle window close
+	        onClosing: function(close) {
+	            mainWindow.dockWaterfallPanel()
+	            close.accepted = true
+	        }
 
         // Drag support for frameless window
         property point dragStartPos: Qt.point(0, 0)
@@ -6467,13 +6764,33 @@ ApplicationWindow {
                             }
                         }
 
-                        // Info text
-                        Text {
-                            text: "— trascina sulla finestra principale per agganciare"
-                            font.pixelSize: 10
-                            color: textSecondary
-                            opacity: 0.6
-                        }
+	                        Rectangle {
+	                            width: 42
+	                            height: 24
+	                            radius: 4
+	                            color: waterfallDockMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.08)
+	                            border.color: waterfallDockMA.containsMouse ? secondaryCyan : glassBorder
+
+	                            Text {
+	                                anchors.centerIn: parent
+	                                text: "Dock"
+	                                font.pixelSize: 10
+	                                font.bold: true
+	                                color: waterfallDockMA.containsMouse ? secondaryCyan : textPrimary
+	                            }
+
+	                            MouseArea {
+	                                id: waterfallDockMA
+	                                anchors.fill: parent
+	                                hoverEnabled: true
+	                                cursorShape: Qt.PointingHandCursor
+	                                onClicked: mainWindow.dockWaterfallPanel()
+	                            }
+
+	                            ToolTip.visible: waterfallDockMA.containsMouse
+	                            ToolTip.text: "Dock Waterfall"
+	                            ToolTip.delay: 500
+	                        }
 
                         // Minimize button
                         Rectangle {
@@ -6503,7 +6820,7 @@ ApplicationWindow {
                             }
 
                             ToolTip.visible: minimizeMA.containsMouse
-                            ToolTip.text: "Riduci a icona"
+	                            ToolTip.text: "Minimize"
                             ToolTip.delay: 500
                         }
 
@@ -6528,15 +6845,13 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    waterfallDetached = false
-                                    waterfallMinimized = false
-                                    waterfallWindow.close()
-                                }
-                            }
+	                                onClicked: {
+	                                    mainWindow.dockWaterfallPanel()
+	                                }
+	                            }
 
                             ToolTip.visible: closeMA.containsMouse
-                            ToolTip.text: "Chiudi e riaggancia"
+	                            ToolTip.text: "Close and dock"
                             ToolTip.delay: 500
                         }
                     }
@@ -7081,16 +7396,16 @@ ApplicationWindow {
         }
     }
 
-    // ========== DETACHABLE PERIOD 1 WINDOW ==========
-    Window {
-        id: period1FloatingWindow
+	    // ========== DETACHABLE FULL SPECTRUM WINDOW ==========
+	    Window {
+	        id: period1FloatingWindow
         width: 500
         height: 400
         minimumWidth: 350
         minimumHeight: 250
         visible: false
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "Period 1 - Decodium"
+	        title: "Full Spectrum - Decodium"
         color: "transparent"
 
         x: mainWindow.x + 100
@@ -7101,10 +7416,10 @@ ApplicationWindow {
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
 
-        onClosing: function(close) {
-            period1Detached = false
-            close.accepted = true
-        }
+	        onClosing: function(close) {
+	            mainWindow.dockFullSpectrumPanel()
+	            close.accepted = true
+	        }
 
         Rectangle {
             anchors.fill: parent
@@ -7168,14 +7483,12 @@ ApplicationWindow {
                             }
                         }
 
-                        onReleased: {
-                            if (period1DockHighlighted) {
-                                period1DockHighlighted = false
-                                period1Detached = false
-                                period1FloatingWindow.close()
-                            }
-                            hasMovedAway = false
-                        }
+	                        onReleased: {
+	                            if (period1DockHighlighted) {
+	                                mainWindow.dockFullSpectrumPanel()
+	                            }
+	                            hasMovedAway = false
+	                        }
                     }
 
                     RowLayout {
@@ -7184,12 +7497,39 @@ ApplicationWindow {
                         spacing: 8
 
                         Text { text: "⋮⋮"; font.pixelSize: 12; color: "#4CAF50" }
-                        Rectangle { width: 10; height: 10; radius: 5; color: "#4CAF50" }
-                        Text { text: "Period 1 (0,30s)"; font.pixelSize: 14; font.bold: true; color: "#4CAF50" }
-                        Item { Layout.fillWidth: true }
+	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: "#4CAF50" }
+	                        Text { text: "Full Spectrum"; font.pixelSize: 14; font.bold: true; color: "#4CAF50" }
+	                        Item { Layout.fillWidth: true }
 
-                        Rectangle {
-                            width: 24; height: 24; radius: 4
+	                        Rectangle {
+	                            Layout.preferredWidth: 42
+	                            Layout.preferredHeight: 22
+	                            radius: 4
+	                            color: p1FloatDockMA.containsMouse ? Qt.rgba(76/255, 175/255, 80/255, 0.3) : "transparent"
+	                            border.color: p1FloatDockMA.containsMouse ? "#4CAF50" : Qt.rgba(76/255, 175/255, 80/255, 0.45)
+	                            border.width: 1
+	                            Text {
+	                                anchors.centerIn: parent
+	                                text: "Dock"
+	                                font.pixelSize: 10
+	                                font.bold: true
+	                                color: p1FloatDockMA.containsMouse ? "#4CAF50" : textPrimary
+	                            }
+	                            MouseArea {
+	                                id: p1FloatDockMA
+	                                anchors.fill: parent
+	                                hoverEnabled: true
+	                                cursorShape: Qt.PointingHandCursor
+	                                onClicked: mainWindow.dockFullSpectrumPanel()
+	                            }
+	                            ToolTip.visible: p1FloatDockMA.containsMouse
+	                            ToolTip.text: "Riaggancia Full Spectrum"
+	                        }
+
+		                        Rectangle {
+		                            Layout.preferredWidth: 24
+		                            Layout.preferredHeight: 24
+		                            radius: 4
                             color: p1FloatMinMA.containsMouse ? Qt.rgba(255/255, 193/255, 7/255, 0.3) : "transparent"
                             Text { anchors.centerIn: parent; text: "−"; font.pixelSize: 16; font.bold: true; color: p1FloatMinMA.containsMouse ? "#ffc107" : textPrimary }
                             MouseArea { id: p1FloatMinMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -7197,14 +7537,16 @@ ApplicationWindow {
                             }
                         }
 
-                        Rectangle {
-                            width: 24; height: 24; radius: 4
-                            color: p1FloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: p1FloatCloseMA.containsMouse ? "#f44336" : textPrimary }
-                            MouseArea { id: p1FloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { period1Detached = false; period1Minimized = false; period1FloatingWindow.close() }
-                            }
-                        }
+		                        Rectangle {
+		                            Layout.preferredWidth: 24
+		                            Layout.preferredHeight: 24
+		                            radius: 4
+	                            color: p1FloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
+	                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: p1FloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+	                            MouseArea { id: p1FloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+	                                onClicked: mainWindow.dockFullSpectrumPanel()
+	                            }
+	                        }
                     }
                 }
 
@@ -7337,10 +7679,10 @@ ApplicationWindow {
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
 
-        onClosing: function(close) {
-            rxFreqDetached = false
-            close.accepted = true
-        }
+	        onClosing: function(close) {
+	            mainWindow.dockSignalRxPanel()
+	            close.accepted = true
+	        }
 
         Rectangle {
             anchors.fill: parent
@@ -7404,14 +7746,12 @@ ApplicationWindow {
                             }
                         }
 
-                        onReleased: {
-                            if (rxFreqDockHighlighted) {
-                                rxFreqDockHighlighted = false
-                                rxFreqDetached = false
-                                rxFreqFloatingWindow.close()
-                            }
-                            hasMovedAway = false
-                        }
+	                        onReleased: {
+	                            if (rxFreqDockHighlighted) {
+	                                mainWindow.dockSignalRxPanel()
+	                            }
+	                            hasMovedAway = false
+	                        }
                     }
 
                     RowLayout {
@@ -7420,12 +7760,12 @@ ApplicationWindow {
                         spacing: 8
 
                         Text { text: "⋮⋮"; font.pixelSize: 12; color: primaryBlue }
-                        Rectangle { width: 10; height: 10; radius: 5; color: primaryBlue }
-                        Text { text: "Signal RX"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
+	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: primaryBlue }
+	                        Text { text: "Signal RX"; font.pixelSize: 14; font.bold: true; color: primaryBlue }
 
-                        Rectangle {
-                            width: 70
-                            height: 20
+	                        Rectangle {
+	                            Layout.preferredWidth: 70
+	                            Layout.preferredHeight: 20
                             color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
                             radius: 4
                             border.color: primaryBlue
@@ -7440,10 +7780,37 @@ ApplicationWindow {
                             }
                         }
 
-                        Item { Layout.fillWidth: true }
+	                        Item { Layout.fillWidth: true }
 
-                        Rectangle {
-                            width: 24; height: 24; radius: 4
+	                        Rectangle {
+	                            Layout.preferredWidth: 42
+	                            Layout.preferredHeight: 22
+	                            radius: 4
+	                            color: rxFloatDockMA.containsMouse ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3) : "transparent"
+	                            border.color: rxFloatDockMA.containsMouse ? primaryBlue : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.45)
+	                            border.width: 1
+	                            Text {
+	                                anchors.centerIn: parent
+	                                text: "Dock"
+	                                font.pixelSize: 10
+	                                font.bold: true
+	                                color: rxFloatDockMA.containsMouse ? primaryBlue : textPrimary
+	                            }
+	                            MouseArea {
+	                                id: rxFloatDockMA
+	                                anchors.fill: parent
+	                                hoverEnabled: true
+	                                cursorShape: Qt.PointingHandCursor
+	                                onClicked: mainWindow.dockSignalRxPanel()
+	                            }
+	                            ToolTip.visible: rxFloatDockMA.containsMouse
+	                            ToolTip.text: "Riaggancia Signal RX"
+	                        }
+
+		                        Rectangle {
+		                            Layout.preferredWidth: 24
+		                            Layout.preferredHeight: 24
+		                            radius: 4
                             color: rxFloatMinMA.containsMouse ? Qt.rgba(255/255, 193/255, 7/255, 0.3) : "transparent"
                             Text { anchors.centerIn: parent; text: "−"; font.pixelSize: 16; font.bold: true; color: rxFloatMinMA.containsMouse ? "#ffc107" : textPrimary }
                             MouseArea { id: rxFloatMinMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -7451,14 +7818,16 @@ ApplicationWindow {
                             }
                         }
 
-                        Rectangle {
-                            width: 24; height: 24; radius: 4
-                            color: rxFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: rxFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
-                            MouseArea { id: rxFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { rxFreqDetached = false; rxFreqMinimized = false; rxFreqFloatingWindow.close() }
-                            }
-                        }
+		                        Rectangle {
+		                            Layout.preferredWidth: 24
+		                            Layout.preferredHeight: 24
+		                            radius: 4
+	                            color: rxFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
+	                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: rxFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+	                            MouseArea { id: rxFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+	                                onClicked: mainWindow.dockSignalRxPanel()
+	                            }
+	                        }
                     }
                 }
 

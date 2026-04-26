@@ -736,6 +736,23 @@ public slots:
     Q_INVOKABLE int fontSettingPixelSize(const QString& key,
                                          const QString& fallbackFamily = QString(),
                                          int fallbackPointSize = 0) const;
+    Q_INVOKABLE int fontSettingPointSize(const QString& key,
+                                         const QString& fallbackFamily = QString(),
+                                         int fallbackPointSize = 0) const;
+    Q_INVOKABLE bool fontSettingBold(const QString& key,
+                                     const QString& fallbackFamily = QString(),
+                                     int fallbackPointSize = 0) const;
+    Q_INVOKABLE bool fontSettingItalic(const QString& key,
+                                       const QString& fallbackFamily = QString(),
+                                       int fallbackPointSize = 0) const;
+    Q_INVOKABLE QStringList availableFontFamilies(bool fixedPitchOnly = false) const;
+    Q_INVOKABLE void setFontSetting(const QString& key,
+                                    const QString& family,
+                                    int pointSize,
+                                    bool bold,
+                                    bool italic,
+                                    const QString& fallbackFamily = QString(),
+                                    int fallbackPointSize = 0);
     Q_INVOKABLE void chooseFontSetting(const QString& key,
                                        const QString& fallbackFamily = QString(),
                                        int fallbackPointSize = 0);
@@ -1481,10 +1498,17 @@ private:
     void startAudioCapture();
     void stopAudioCapture();
     bool usingTciAudioInput() const;
+    bool startTciTxAudioStream(QVector<float> const& wave, QString const& mode,
+                               unsigned symbolsLength, double framesPerSymbol,
+                               double frequency, double toneSpacing,
+                               bool synchronize, double periodSeconds);
+    bool startTciTuneAudioStream(double frequency);
+    void stopTciTxAudioStream(bool quick = true);
     void startTciAudioCapture();
     void stopTciAudioCapture();
     void onTciPcmSamplesReady(const QVector<short>& samples);
     void handleAudioHealth(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
+    void restartAudioCaptureForModeChange(const QString& previousMode);
     void restartAudioCaptureFromWatchdog(const QString& reason);
     void feedAudioToDecoder(qint64 completedUtcSlot = -1);
     void dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot, const QString& modeSnapshot,

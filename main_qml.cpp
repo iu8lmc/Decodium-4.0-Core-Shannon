@@ -12,6 +12,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QLibraryInfo>
 #include <QMessageBox>
@@ -40,6 +41,7 @@
 #include "DecodiumDiagnostics.h"
 #include "DecodiumDxCluster.h"
 #include "DecodiumLogging.hpp"
+#include "L10nLoader.hpp"
 #include "MetaDataRegistry.hpp"
 #include "Radio.hpp"
 #include "Configuration.hpp"
@@ -64,6 +66,17 @@ static void L(const char* msg) {
 }
 
 static std::atomic_bool g_shuttingDown {false};
+
+#ifdef Q_OS_WIN
+static bool hasCommandLineSwitch(int argc, char* argv[], const char* name)
+{
+    for (int i = 1; i < argc; ++i) {
+        if (QString::fromLocal8Bit(argv[i]) == QLatin1String(name))
+            return true;
+    }
+    return false;
+}
+#endif
 
 #ifdef Q_OS_WIN
 static void setWindowsAppUserModelId()
@@ -151,6 +164,20 @@ int main(int argc, char* argv[])
     L("QQuickStyle OK");
 
 #ifdef Q_OS_WIN
+    bool const safeGraphicsRequested =
+        qEnvironmentVariableIsSet("DECODIUM_SAFE_GRAPHICS")
+        || hasCommandLineSwitch(argc, argv, "--safe-graphics");
+    if (safeGraphicsRequested) {
+        qputenv("QSG_RHI_BACKEND", "d3d11");
+        qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "1");
+        L("Qt Quick safe graphics enabled: D3D11 WARP software renderer");
+    } else if (qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
+        QByteArray backendMessage("Qt Quick graphics backend from environment: ");
+        backendMessage += qgetenv("QSG_RHI_BACKEND");
+        L(backendMessage.constData());
+    } else {
+        L("Qt Quick graphics backend: Qt Windows default");
+    }
     setWindowsAppUserModelId();
 #endif
 
@@ -162,16 +189,6 @@ int main(int argc, char* argv[])
     QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     if (!fixedFontFamily.isEmpty()) {
         QFont::insertSubstitution(QStringLiteral("Consolas"), fixedFontFamily);
-    }
-
-    // Qt6 RHI backend: if the GPU driver is too old or has known issues,
-    // fall back to software rendering to prevent QML hang on startup.
-    // Users can override with QSG_RHI_BACKEND=opengl env var.
-    if (qEnvironmentVariableIsEmpty("QSG_RHI_BACKEND")) {
-        // Check for Intel HD Graphics with low VRAM (known to hang with D3D11 RHI)
-        // Also helps with Remote Desktop, VMs, and headless setups.
-        qputenv("QSG_RHI_BACKEND", "opengl");  // OpenGL is more compatible than D3D11
-        L("RHI backend forced to OpenGL for compatibility");
     }
 
     // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
@@ -201,10 +218,13 @@ int main(int argc, char* argv[])
                                             QStringLiteral("language"));
     QCommandLineOption const testOption(QStringList {} << "test-mode",
                                         QStringLiteral("Writable files in test location. Use with caution, for testing only."));
+    QCommandLineOption const safeGraphicsOption(QStringList {} << "safe-graphics",
+                                                QStringLiteral("Use the Windows software graphics renderer for Qt Quick startup troubleshooting."));
     parser.addOption(rigOption);
     parser.addOption(configOption);
     parser.addOption(languageOption);
     parser.addOption(testOption);
+    parser.addOption(safeGraphicsOption);
 
     if (!parser.parse(app.arguments())) {
         L(("Command line error: " + parser.errorText()).toLocal8Bit().constData());
@@ -244,10 +264,21 @@ int main(int argc, char* argv[])
         rootSettings.setValue(QStringLiteral("CurrentMultiSettingsConfiguration"), configName);
         rootSettings.sync();
     }
-    QString const languageOverride = parser.value(languageOption).trimmed();
+    QString languageOverride = parser.value(languageOption).trimmed();
+    if (languageOverride.isEmpty()) {
+        languageOverride = rootSettings.value(QStringLiteral("UILanguage")).toString().trimmed();
+    }
+    if (languageOverride.startsWith(QStringLiteral("en_"), Qt::CaseInsensitive)
+        || languageOverride.startsWith(QStringLiteral("en-"), Qt::CaseInsensitive)) {
+        languageOverride = QStringLiteral("en");
+        rootSettings.setValue(QStringLiteral("UILanguage"), languageOverride);
+        rootSettings.sync();
+    }
     if (!languageOverride.isEmpty()) {
         app.setProperty("decodiumLanguageOverride", languageOverride);
     }
+    QLocale const uiLocale;
+    L10nLoader l10n {&app, uiLocale, languageOverride};
 
     // Single-instance detection: prevent multiple QML instances from running
     QDir tempDir{QStandardPaths::writableLocation(QStandardPaths::TempLocation)};
@@ -274,10 +305,17 @@ int main(int argc, char* argv[])
     // bindings still reevaluate while root objects are being torn down.
     // If the context object dies first, QML sees bridge == null and floods the
     // terminal with TypeError messages on exit.
-    // Disable QML disk cache to prevent stale .qmlc files from overriding
-    // updated .qml sources after an upgrade.  The compiled cache is a
-    // micro-optimisation (<50ms) that is not worth the risk of loading old UI.
-    qputenv("QML_DISABLE_DISK_CACHE", "1");
+    // Keep QML disk cache enabled by default. Disabling it forces every launch
+    // to recompile QML/JS and is expensive on Windows when antivirus scans the
+    // installed Qt/QML tree. Use DECODIUM_DISABLE_QML_CACHE=1 only for diagnosis.
+    if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_QML_CACHE")) {
+        qputenv("QML_DISABLE_DISK_CACHE", "1");
+        L("QML disk cache disabled by DECODIUM_DISABLE_QML_CACHE");
+    } else if (qEnvironmentVariableIsSet("QML_DISABLE_DISK_CACHE")) {
+        L("QML disk cache disabled by environment");
+    } else {
+        L("QML disk cache enabled");
+    }
 
     QQmlApplicationEngine engine;
     L("engine OK");

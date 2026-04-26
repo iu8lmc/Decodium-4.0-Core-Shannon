@@ -7,6 +7,7 @@
 #include "Transceiver/Transceiver.hpp"
 #include "Transceiver/TransceiverBase.hpp"
 
+#include <QElapsedTimer>
 #include <QThread>
 #include <QSerialPortInfo>
 #include <QSettings>
@@ -169,7 +170,6 @@ DecodiumTransceiverManager::DecodiumTransceiverManager(QObject* parent)
     , d(std::make_unique<DecodiumTransceiverManagerPrivate>())
 {
     qRegisterMetaType<QVector<short>>("QVector<short>");
-    refreshPorts();
     loadSettings();
 }
 
@@ -316,7 +316,10 @@ void DecodiumTransceiverManager::setRtsHigh(bool v)
 void DecodiumTransceiverManager::setPttMethod(const QString& v)
 {
     QString const normalized = v.trimmed().toUpper();
-    QString const effective = normalized.isEmpty() ? QStringLiteral("CAT") : normalized;
+    QString const effective =
+        0 == m_portType.compare(QStringLiteral("tci"), Qt::CaseInsensitive)
+            ? QStringLiteral("CAT")
+            : (normalized.isEmpty() ? QStringLiteral("CAT") : normalized);
     if (m_pttMethod != effective) {
         m_pttMethod = effective;
         emit pttMethodChanged();
@@ -408,6 +411,11 @@ void DecodiumTransceiverManager::setRigName(const QString& v)
     default:          m_portType = "none";    break;
     }
     emit portTypeChanged();
+    if (0 == m_portType.compare(QStringLiteral("tci"), Qt::CaseInsensitive)
+        && m_pttMethod != QStringLiteral("CAT")) {
+        m_pttMethod = QStringLiteral("CAT");
+        emit pttMethodChanged();
+    }
     enforceForceLineAvailability();
 }
 
@@ -552,7 +560,9 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.dtr_high      = canForceDtr && m->dtrHigh();
     p.force_rts     = canForceRts && m->forceRts();
     p.rts_high      = canForceRts && m->rtsHigh();
-    p.ptt_type      = parsePtt(m->pttMethod());
+    p.ptt_type      = 0 == m->portType().compare(QStringLiteral("tci"), Qt::CaseInsensitive)
+                      ? TransceiverFactory::PTT_method_CAT
+                      : parsePtt(m->pttMethod());
     p.audio_source  = configuredTxAudioSource();
     p.split_mode    = parseSplit(m->splitMode());
     // "CAT" in PTT Port means "use the same serial port as CAT", as in WSJT-X.
@@ -829,9 +839,45 @@ void DecodiumTransceiverManager::setRigAudio(bool on, double periodSeconds, int 
         sendStateSync(d.get());
 }
 
+void DecodiumTransceiverManager::setRigTune(bool on)
+{
+    d->desired.online(true);
+    d->desired.tune(on);
+    sendStateSync(d.get());
+}
+
+void DecodiumTransceiverManager::startRigTxAudio(const QString& mode, unsigned symbolsLength,
+                                                 double framesPerSymbol, double frequency,
+                                                 double toneSpacing, bool synchronize,
+                                                 bool fastMode, double dbsnr, double trPeriod)
+{
+    d->desired.online(true);
+    d->desired.jtmode(mode);
+    d->desired.symbolslength(symbolsLength);
+    d->desired.framespersymbol(framesPerSymbol);
+    d->desired.trfrequency(frequency);
+    d->desired.tonespacing(toneSpacing);
+    d->desired.synchronize(synchronize);
+    d->desired.fastmode(fastMode);
+    d->desired.dbsnr(dbsnr);
+    d->desired.trperiod(trPeriod);
+    d->desired.tx_audio(true);
+    sendStateSync(d.get());
+}
+
+void DecodiumTransceiverManager::stopRigTxAudio(bool quick)
+{
+    d->desired.online(true);
+    d->desired.quick(quick);
+    d->desired.tx_audio(false);
+    sendStateSync(d.get());
+}
+
 // ── refreshPorts ──────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::refreshPorts()
 {
+    QElapsedTimer timer;
+    timer.start();
     QStringList ports;
     for (const auto& info : QSerialPortInfo::availablePorts()) {
 #if defined(Q_OS_WIN)
@@ -845,6 +891,10 @@ void DecodiumTransceiverManager::refreshPorts()
     if (ports != m_portList) {
         m_portList = ports;
         emit portListChanged();
+    }
+    if (timer.elapsed() > 1000) {
+        qWarning("Hamlib serial port enumeration took %lld ms (%lld ports)",
+                 timer.elapsed(), static_cast<long long>(m_portList.size()));
     }
 }
 

@@ -66,6 +66,11 @@ Window {
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
     property int decodeListVersion: 0
     property var bandActivityModel: appEngine.decodeList
+    property bool highlight73: bridge.getSetting("Highlight73", true)
+    property bool highlightOrange: bridge.getSetting("HighlightOrange", false)
+    property bool highlightBlue: bridge.getSetting("HighlightBlue", false)
+    property string highlightOrangeCallsigns: bridge.getSetting("HighlightOrangeCallsigns", "")
+    property string highlightBlueCallsigns: bridge.getSetting("HighlightBlueCallsigns", "")
     // Signal RX model: property-backed come bandActivityModel — evita il
     // reset del layout ListView che si verifica con function-call model
     // (new array reference ad ogni invocazione → contentY azzerato).
@@ -108,29 +113,65 @@ Window {
                 decodeWindow.showDxccInfo = !!value
             else if (key === "TXMessagesToRX" || key === "Tx2QSO")
                 decodeWindow.showTxMessagesInRx = !!value
+            else if (key === "Highlight73")
+                decodeWindow.highlight73 = !!value
+            else if (key === "HighlightOrange")
+                decodeWindow.highlightOrange = !!value
+            else if (key === "HighlightBlue")
+                decodeWindow.highlightBlue = !!value
+            else if (key === "HighlightOrangeCallsigns" || key === "OrangeCallsigns")
+                decodeWindow.highlightOrangeCallsigns = String(value || "")
+            else if (key === "HighlightBlueCallsigns" || key === "BlueCallsigns")
+                decodeWindow.highlightBlueCallsigns = String(value || "")
         }
     }
 
     // Shannon-compatible color scheme
-    readonly property color colorB4:          "#606060"   // Grigio — già lavorato (B4)
-    readonly property color colorWorked:      "#606060"   // alias B4
-    readonly property color colorNewBand:     "#FFD700"   // Oro — nuovo su questa banda
-    readonly property color colorNewCountry:  "#00BB00"   // Verde — nuovo paese
-    readonly property color colorMostWanted:  "#FF00FF"   // Magenta — most wanted
-    readonly property color colorMyCall:      "#FF4444"   // Rosso — nostro callsign
     readonly property color colorTx:          "#FF8C00"   // Arancione — TX
     readonly property color colorLotw:        "#44BBFF"   // Azzurro — utente LotW
 
+    function isSignoffMessage(message) {
+        var words = String(message || "").toUpperCase().replace(/[<>;,]/g, " ").split(/\s+/)
+        for (var i = 0; i < words.length; ++i) {
+            if (words[i] === "73" || words[i] === "RR73" || words[i] === "RRR")
+                return true
+        }
+        return false
+    }
+
+    function highlightListMatches(message, listText) {
+        var wanted = String(listText || "").toUpperCase().split(/[,\s;]+/)
+        var messageText = " " + String(message || "").toUpperCase().replace(/[<>;,]/g, " ") + " "
+        for (var i = 0; i < wanted.length; ++i) {
+            var token = wanted[i].trim()
+            if (token.length > 0 && messageText.indexOf(" " + token + " ") !== -1)
+                return true
+        }
+        return false
+    }
+
+    function customHighlightColor(modelData) {
+        var message = modelData.message || ""
+        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
+            return "#E14B00"
+        if (highlightBlue && highlightListMatches(message, highlightBlueCallsigns))
+            return "#0064FF"
+        return ""
+    }
+
     // Shannon-compatible coloring (priorità DecodeHighlightingModel)
     function getDxccColor(modelData) {
+        var customColor = customHighlightColor(modelData)
         if (modelData.isTx)     return colorTx
-        if (modelData.isMyCall) return colorMyCall
-        if (modelData.isB4 || modelData.dxIsWorked) return colorB4
+        if (modelData.isMyCall) return bridge.colorMyCall
+        if (customColor !== "") return customColor
+        if (highlight73 && isSignoffMessage(modelData.message)) return bridge.color73
+        if (modelData.isB4 || modelData.dxIsWorked) return bridge.colorB4
         if (modelData.isLotw)   return colorLotw
-        if (modelData.dxIsMostWanted) return colorMostWanted
-        if (modelData.dxIsNewCountry) return colorNewCountry
-        if (modelData.dxIsNewBand)    return colorNewBand
-        if (modelData.isCQ)     return accentGreen
+        if ((modelData.dxCountry && String(modelData.dxCountry).length > 0)
+            || modelData.dxIsMostWanted || modelData.dxIsNewCountry || modelData.dxIsNewBand)
+            return bridge.colorDXEntity
+        if (modelData.isCQ)     return bridge.colorCQ
         return textPrimary
     }
 
@@ -593,8 +634,7 @@ Window {
                                             text: modelData.dxCountry || ""
                                             font.family: "Monospace"
                                             font.pixelSize: 11
-                                            color: modelData.dxIsNewCountry ? colorNewCountry :
-                                                   modelData.dxIsMostWanted ? colorMostWanted : textSecondary
+                                            color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideRight

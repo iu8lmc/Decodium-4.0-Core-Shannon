@@ -20,8 +20,8 @@
         <location filename="../widgets/AbstractLogWindow.cpp" line="67"/>
         <source>Are you sure you want to delete the %n selected QSO(s) from the log?</source>
         <translation>
-            <numerusform>Êtes-vous sûr de vouloir supprimer le ou les QSO sélectionnés du journal&#xa0;?</numerusform>
-            <numerusform>Êtes-vous sûr de vouloir supprimer le ou les QSO sélectionnés du journal&#xa0;?</numerusform>
+            <numerusform>Êtes-vous sûr de vouloir supprimer le %n QSO sélectionné du journal&#xa0;?</numerusform>
+            <numerusform>Êtes-vous sûr de vouloir supprimer les %n QSO sélectionnés du journal&#xa0;?</numerusform>
         </translation>
     </message>
 </context>
@@ -377,7 +377,7 @@ Chemins recherchés&#xa0;:
     <message>
         <location filename="../widgets/about.ui" line="9"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>À propos de Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/about.ui" line="60"/>
@@ -713,82 +713,82 @@ La fenêtre du cluster et AutoSpot utilisent désormais le même point de termin
     <message>
         <location filename="../Configuration.cpp" line="2140"/>
         <source>RTTY Modem</source>
-        <translation type="unfinished"></translation>
+        <translation>Modem RTTY</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2143"/>
         <source>Baud rate:</source>
-        <translation type="unfinished"></translation>
+        <translation>Débit en bauds :</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2149"/>
         <source>RTTY baud rate used for both receive and transmit.</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY baud rate used for both receive and transmit.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2152"/>
         <source>Mark tone (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>Tonalité de marquage (Hz) :</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2157"/>
         <source>Base mark tone. Space tone is mark tone plus shift.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tonalité de la marque de base. Le ton spatial est le ton de marque plus le décalage.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2160"/>
         <source>Shift (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>Décalage (Hz) :</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2165"/>
         <source>Difference between mark and space tones.</source>
-        <translation type="unfinished"></translation>
+        <translation>Différence entre les tons de marque et d'espace.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2168"/>
         <source>Stop bits:</source>
-        <translation type="unfinished"></translation>
+        <translation>Bits d'arrêt :</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2174"/>
         <source>Transmit stop bits appended after each 5-bit Baudot character.</source>
-        <translation type="unfinished"></translation>
+        <translation>Transmettez les bits d’arrêt ajoutés après chaque caractère Baudot de 5 bits.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2177"/>
         <source>Reverse / normal</source>
-        <translation type="unfinished"></translation>
+        <translation>Inversé / normal</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2179"/>
         <source>Swap mark and space tones for both decoding and transmitting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Échangez les tonalités de marque et d'espace pour le décodage et la transmission.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2181"/>
         <source>Macro CQ:</source>
-        <translation type="unfinished"></translation>
+        <translation>Macro CQ :</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2184"/>
         <source>Text sent by the CQ macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Texte envoyé par le bouton macro CQ. Espaces réservés pris en charge : &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2187"/>
         <source>Macro 73:</source>
-        <translation type="unfinished"></translation>
+        <translation>Macro-73 :</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2190"/>
         <source>Text sent by the 73 macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Texte envoyé par le bouton macro 73. Espaces réservés pris en charge : &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2194"/>
         <source>These settings apply to the built-in RTTY modem. Mark stays fixed; space is mark tone plus shift. Reverse swaps mark and space. Placeholders for CQ/73 macros: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ces paramètres s'appliquent au modem RTTY intégré. Mark reste fixe ; l'espace est le ton de marque plus le décalage. Inverser la marque et l'espace des échanges. Espaces réservés pour les macros CQ/73 : &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2228"/>
@@ -5224,12 +5224,12 @@ liste. La liste peut être gérée dans Paramètres (F2).</translation>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5364"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>À propos de Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5684"/>
         <source>RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6007"/>
@@ -6291,7 +6291,55 @@ pour garantir que le signal est propre et non déformé.</translation>
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="unfinished"></translation>
+        <translation>&lt;table cellspacing=1&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Arrêter l'émission, abandonner QSO, effacer le prochain appel file d'attente&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Guide de l'utilisateur en ligne (Alt : transmettre Tx6)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Avis de droits d'auteur&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;À propos de Decodium&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Ouvrir la fenêtre des paramètres (Alt : transmettre Tx2)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Affichage des raccourcis clavier (Alt : transmettre Tx3)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Effacer DX Appel, grille DX, messages Tx 1-4 (Alt : transmettre Tx4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Quitter le programme&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Afficher les commandes spéciales de la souris (Alt : transmettre Tx5)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Ouvrir le fichier suivant dans le répertoire (Alt : basculer "Appeler le 1er")&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Décoder tous les fichiers restants dans le répertoire&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Fenêtre de moyenne des messages d'affichage&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mabaisser la fréquence Rx de 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Abaisser les fréquences Rx et Tx identiques de 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mabaisser la fréquence d'émission de 60 Hz (FT8) ou 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Maj+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Abaisser la fréquence de numérotation de 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Maugmenter la fréquence Rx de 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Augmenter les fréquences Rx et Tx identiques de 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Augmenter la fréquence d'émission de 60 Hz (FT8) ou 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Maj+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Augmenter la fréquence de numérotation de 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Définir maintenant la transmission à ce numéro sur l'onglet 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Définir la prochaine transmission à ce numéro sur l'onglet 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stations actives claires pour QMAP&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Tactiver le statut "Meilleur S+P"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C &lt;/b&gt;&lt;/td&gt;&lt;td&gt;TCocher la case "Appeler en premier"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Décoder à nouveau à la fréquence QSO&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Décodage complet (les deux fenêtres)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Allumer TX même/1er&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Téteindre TX même/1er&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Effacer&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Modifier la zone de message texte libre&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Générer des messages standard&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Ajouter un appel Dx à la liste des ignorés&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lookup d'indicatif dans la base de données, générer des messages standard&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Activer Tx"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Ouvrir un fichier .wav&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Changer d'opérateur&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Ouvrir la fenêtre "Journal QSO"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Définir le message Tx4 sur RRR (pas dans FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Définir le message Tx4 sur RR73&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Maj+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Fenêtre Actualiser les stations actives&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Arrêter la surveillance&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Tune status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Effacer l'état du décodeur accroché&lt;/td&gt;&lt;/tr&gt;
+
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="9051"/>
@@ -6306,7 +6354,7 @@ pour garantir que le signal est propre et non déformé.</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="10767"/>
         <source>Embedded WSPR decoder unavailable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Décodeur WSPR intégré indisponible.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="12790"/>
@@ -6697,7 +6745,7 @@ est déjà dans CALL3.TXT, souhaitez-vous le remplacer&#xa0;?</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="2446"/>
         <source>Remote Web disabled: invalid configured HTTP port %1</source>
-        <translation>Web distant désactivé&#xa0;: port HTTP configuré non valide</translation>
+        <translation>Web distant désactivé&#xa0;: port HTTP configuré non valide %1</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="2500"/>
@@ -6844,7 +6892,7 @@ Remote tag: %2</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="7868"/>
         <source>No subprocess diagnostic output was captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune sortie de diagnostic de sous-processus n’a été capturée.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8234"/>
@@ -7281,32 +7329,32 @@ Empreinte digitale&#xa0;: %8</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18875"/>
         <source>%1 baud Baudot terminal. Mark %2 Hz, shift %3 Hz, %4, %5 stop bits. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Borne %1 bauds Baudot. Marque %2 Hz, décalage %3 Hz, %4, embouts d'arrêt %5. Le texte reçu apparaît ci-dessus ; tapez le texte à envoyer ci-dessous.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>inverse</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>normal</source>
-        <translation type="unfinished"></translation>
+        <translation>normale</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18924"/>
         <source>RTTY text contains no encodable Baudot characters</source>
-        <translation type="unfinished"></translation>
+        <translation>Le texte RTTY ne contient aucun caractère Baudot codable.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19068"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Texte reçu</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19069"/>
         <source>RTTY Transmitted Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Texte transmis</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19138"/>
@@ -7382,7 +7430,7 @@ Empreinte digitale&#xa0;: %8</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="24834"/>
         <source>Embedded WSPR decoder failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Échec du décodeur WSPR intégré : %1</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="26693"/>
@@ -7526,7 +7574,7 @@ Erreur (%2) : %3</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27593"/>
         <source>Remote mode request ignored: RTTY is hidden in this release</source>
-        <translation type="unfinished"></translation>
+        <translation>Demande de mode distant ignorée : RTTY est masqué dans cette version</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27599"/>
@@ -7661,17 +7709,17 @@ Erreur (%2) : %3</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27793"/>
         <source>Remote Monitoring ignored: cannot enable while transmitting</source>
-        <translation type="unfinished"></translation>
+        <translation>Surveillance à distance ignorée : impossible à activer pendant la transmission</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring enabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Surveillance à distance activée</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring disabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Surveillance à distance désactivée</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27813"/>
@@ -8198,7 +8246,7 @@ Serveur UDP %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="137"/>
         <source>secret-tool lookup failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>La recherche secret-tool n'a ​​pas pu démarrer</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="142"/>
@@ -8243,7 +8291,7 @@ Serveur UDP %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="284"/>
         <source>secret-tool clear failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>secret-tool n'a ​​pas pu démarrer</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="289"/>
@@ -8253,7 +8301,7 @@ Serveur UDP %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="302"/>
         <source>secret-tool clear failed</source>
-        <translation type="unfinished"></translation>
+        <translation>Échec de la suppression de secret-tool</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18093"/>
@@ -8300,14 +8348,18 @@ Serveur UDP %2:%3</translation>
         <source>Network Error:
 Unsupported download URL or scheme:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur réseau :
+Téléchargement URL ou schéma non pris en charge :
+%1</translation>
     </message>
     <message>
         <location filename="../Network/FileDownload.cpp" line="77"/>
         <source>Network Error:
 Downloaded file exceeds limit of %1 MiB:
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur réseau :
+Le fichier téléchargé dépasse la limite de MiB %1 :
+%2</translation>
     </message>
 </context>
 <context>
@@ -8739,42 +8791,42 @@ Message</translation>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="34"/>
         <source>45.45 baud Baudot terminal. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Borne Baudot 45,45 bauds. Le texte reçu apparaît ci-dessus ; tapez le texte à envoyer ci-dessous.</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="39"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Texte reçu</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="40"/>
         <source>Clear RX</source>
-        <translation type="unfinished"></translation>
+        <translation>Effacer RX</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="50"/>
         <source>Waiting for RTTY traffic...</source>
-        <translation type="unfinished"></translation>
+        <translation>En attente du trafic RTTY...</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="57"/>
         <source>RTTY Transmit Buffer</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Tampon de transmission</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="58"/>
         <source>Clear TX</source>
-        <translation type="unfinished"></translation>
+        <translation>Effacer TX</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="67"/>
         <source>Type your RTTY message here, then press Send RTTY.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tapez votre message RTTY ici, puis appuyez sur Envoyer RTTY.</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="71"/>
         <source>Send RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>Envoyer RTTY</translation>
     </message>
 </context>
 <context>
@@ -11305,7 +11357,7 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
     <message>
         <location filename="../Configuration.ui" line="3058"/>
         <source>https://lotw.arrl.org/lotw-user-activity.csv</source>
-        <translation type="unfinished"></translation>
+        <translation>https://lotw.arrl.org/lotw-user-activity.csv</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3085"/>
@@ -11774,7 +11826,7 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
     <message>
         <location filename="../Configuration.ui" line="3512"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ARRL International Digital Contest&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>ZXPROTECT00007Concours numérique international ZX&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ARRL International Digital Contest&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3515"/>
@@ -12258,4 +12310,119 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double-cliquez sur une couleur pour la modifier.&lt;/p&gt;&lt;p&gt;Cliquez avec le bouton droit pour insérer ou supprimer des couleurs.&lt;/p&gt;&lt;p&gt;Les couleurs en haut représentent signaux faibles&lt;/p&gt;&lt;p&gt;et les couleurs en bas représentent les signaux forts&lt;/p&gt;&lt;p&gt;. Vous pouvez avoir jusqu&apos;à 256 couleurs.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
+    <context>
+        <name>SettingsDialog</name>
+        <message>
+            <source>Settings</source>
+            <translation>Paramètres</translation>
+        </message>
+        <message>
+            <source>Changes are applied immediately where supported.</source>
+            <translation>Les modifications sont appliquées immédiatement lorsque c’est pris en charge.</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>Fermer</translation>
+        </message>
+        <message>
+            <source>Station</source>
+            <translation>Station</translation>
+        </message>
+        <message>
+            <source>Radio</source>
+            <translation>Radio</translation>
+        </message>
+        <message>
+            <source>Audio</source>
+            <translation>Audio</translation>
+        </message>
+        <message>
+            <source>TX</source>
+            <translation>TX</translation>
+        </message>
+        <message>
+            <source>Display</source>
+            <translation>Affichage</translation>
+        </message>
+        <message>
+            <source>Decode</source>
+            <translation>Décodage</translation>
+        </message>
+        <message>
+            <source>Reporting</source>
+            <translation>Rapports</translation>
+        </message>
+        <message>
+            <source>Colors</source>
+            <translation>Couleurs</translation>
+        </message>
+        <message>
+            <source>Advanced</source>
+            <translation>Avancé</translation>
+        </message>
+        <message>
+            <source>Alerts</source>
+            <translation>Alertes</translation>
+        </message>
+        <message>
+            <source>Filters</source>
+            <translation>Filtres</translation>
+        </message>
+        <message>
+            <source>Choose Decoded Font</source>
+            <translation>Choisir la police décodée</translation>
+        </message>
+        <message>
+            <source>Choose Font</source>
+            <translation>Choisir la police</translation>
+        </message>
+        <message>
+            <source>Search:</source>
+            <translation>Rechercher :</translation>
+        </message>
+        <message>
+            <source>filter by name</source>
+            <translation>filtrer par nom</translation>
+        </message>
+        <message>
+            <source>Monospaced fonts:</source>
+            <translation>Polices monospace :</translation>
+        </message>
+        <message>
+            <source>Fonts:</source>
+            <translation>Polices :</translation>
+        </message>
+        <message>
+            <source>Selected:</source>
+            <translation>Sélectionné :</translation>
+        </message>
+        <message>
+            <source>Size:</source>
+            <translation>Taille :</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>Annuler</translation>
+        </message>
+        <message>
+            <source>Apply</source>
+            <translation>Appliquer</translation>
+        </message>
+        <message>
+            <source>Search radio, model or brand...</source>
+            <translation>Rechercher radio, modèle ou marque...</translation>
+        </message>
+        <message>
+            <source>STATION INFO</source>
+            <translation>INFO STATION</translation>
+        </message>
+        <message>
+            <source>Station Name:</source>
+            <translation>Nom de la station :</translation>
+        </message>
+        <message>
+            <source>Choose</source>
+            <translation>Choisir</translation>
+        </message>
+    </context>
 </TS>

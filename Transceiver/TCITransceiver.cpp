@@ -529,6 +529,10 @@ TCITransceiver::TCITransceiver (logger_type * logger, std::unique_ptr<Transceive
   mapCmd_[CmdAudioSR]      = Cmd_AudioSR;
   mapCmd_[CmdAudioStart]   = Cmd_AudioStart;
   mapCmd_[CmdAudioStop]    = Cmd_AudioStop;
+  mapCmd_[CmdAudioStreamSampleType] = Cmd_AudioStreamSampleType;
+  mapCmd_[CmdAudioStreamChannels] = Cmd_AudioStreamChannels;
+  mapCmd_[CmdAudioStreamSamples] = Cmd_AudioStreamSamples;
+  mapCmd_[CmdTxStreamAudioBuffering] = Cmd_TxStreamAudioBuffering;
   mapCmd_[CmdAppFocus]     = Cmd_AppFocus;
   mapCmd_[CmdVolume]       = Cmd_Volume;
   mapCmd_[CmdSqlEnable]    = Cmd_SqlEnable;
@@ -1114,6 +1118,11 @@ void TCITransceiver::onMessageReceived(const QString &str)
           }
         }
         break;
+      case Cmd_AudioStreamSampleType:
+      case Cmd_AudioStreamChannels:
+      case Cmd_AudioStreamSamples:
+      case Cmd_TxStreamAudioBuffering:
+        break;
       case Cmd_Start:
         printf("%s CmdStart : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         _power_ = true;
@@ -1460,7 +1469,7 @@ void TCITransceiver::stream_audio (bool on)
       sendTextMessage (CmdAudioStreamSampleType + SmDP + QStringLiteral ("float32") + SmTZ);
       sendTextMessage (CmdAudioStreamChannels + SmDP + QStringLiteral ("2") + SmTZ);
       sendTextMessage (CmdAudioStreamSamples + SmDP + QStringLiteral ("2048") + SmTZ);
-      sendTextMessage (CmdTxStreamAudioBuffering + SmDP + QStringLiteral ("100") + SmTZ);
+      sendTextMessage (CmdTxStreamAudioBuffering + SmDP + QString::number (HPSDR ? 50 : 100) + SmTZ);
       const QString cmd = CmdAudioStart + SmDP + rx_ + SmTZ;
       sendTextMessage(cmd);
     } else {
@@ -1515,7 +1524,7 @@ void TCITransceiver::do_ptt (bool on)
       else if (busy_PTT_ || !tci_Ready || !_power_) return;
       else busy_PTT_ = true;
       requested_PTT_ = on;
-      if (ESDR3 && tci_audio_ && (tx_audio_ || m_state != Idle)) {
+      if (tci_audio_ && on) {
         const QString cmd = CmdTrx + SmDP + rx_ + SmCM + (on ? "true" : "false") + SmCM + "tci"+ SmTZ;
         sendTextMessage(cmd);
       } else {
@@ -1639,7 +1648,7 @@ void TCITransceiver::do_poll ()
               stream_audio (true);
               arm_wait_timer (tci_timer6_, 500, "startup/audio-on");
             }
-          if (ESDR3)
+          if (ESDR3 || HPSDR)
             {
               const QString cmd = CmdRxSensorsEnable + SmDP + (do_snr_ ? "true" : "false") + SmCM + "500" +  SmTZ;
               sendTextMessage (cmd);
@@ -1649,7 +1658,7 @@ void TCITransceiver::do_poll ()
               const QString cmd = CmdSmeter + SmDP + rx_ + SmCM + "0" +  SmTZ;
               sendTextMessage (cmd);
             }
-          if (ESDR3)
+          if (ESDR3 || HPSDR)
             {
               const QString cmd = CmdTxSensorsEnable + SmDP + (do_pwr_ ? "true" : "false") + SmCM + "500" +  SmTZ;
               sendTextMessage (cmd);
@@ -1688,7 +1697,7 @@ void TCITransceiver::do_poll ()
   if (do_pwr_ && PTT_) {update_power (power_ * 100); update_swr (swr_*10);}
   if (do_snr_ && !PTT_) {
     update_level (level_);
-    if(!ESDR3) {
+    if(!ESDR3 && !HPSDR) {
       const QString cmd = CmdSmeter + SmDP + rx_ + SmCM + "0" +  SmTZ;
       sendTextMessage(cmd);
     }

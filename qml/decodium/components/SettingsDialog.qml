@@ -11,7 +11,7 @@ import QtQuick.Layouts
 
 Dialog {
     id: settingsDialog
-    title: "Impostazioni"
+    title: qsTr("Settings")
     modal: true
     width: parent ? Math.min(Math.round(parent.width * 0.94), 1520) : 1360
     height: parent ? Math.min(Math.round(parent.height * 0.94), 980) : 900
@@ -26,6 +26,16 @@ Dialog {
     property bool dataDownloadIsError: false
     property string uiFontLabel: bridge.fontSettingLabel("Font", "", 0)
     property string decodedFontLabel: bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)
+    property string fontPickerKey: ""
+    property string fontPickerFallbackFamily: ""
+    property int fontPickerFallbackPointSize: 0
+    property string fontPickerFamily: ""
+    property int fontPickerPointSize: 10
+    property bool fontPickerBold: false
+    property bool fontPickerItalic: false
+    property bool fontPickerFixedOnly: false
+    property string fontPickerSearch: ""
+    property var fontPickerFamilies: []
 
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
@@ -50,6 +60,24 @@ Dialog {
     function setBoolSettingIfChanged(key, value, fallback) {
         if (boolSetting(key, fallback) !== value)
             bridge.setSetting(key, value)
+    }
+
+    function setAlertEnabled(value) {
+        bridge.alertSoundsEnabled = value
+        bridge.setSetting("alertSoundsEnabled", value)
+        bridge.setSetting("alert_Enabled", value)
+    }
+
+    function setAlertCq(value) {
+        bridge.alertOnCq = value
+        bridge.setSetting("alertOnCq", value)
+        bridge.setSetting("alert_CQ", value)
+    }
+
+    function setAlertMyCall(value) {
+        bridge.alertOnMyCall = value
+        bridge.setSetting("alertOnMyCall", value)
+        bridge.setSetting("alert_MyCall", value)
     }
 
     function localDirectoryToUrl(path) {
@@ -167,6 +195,8 @@ Dialog {
         if (!controller || controller.rigName === undefined || controller.rigName === null)
             return
         var currentRig = String(controller.rigName || "")
+        if (controller.pttMethod !== undefined)
+            controller.pttMethod = "CAT"
         if (currentRig.indexOf("TCI Client") === 0)
             return
         var rigs = controller.rigList || []
@@ -390,6 +420,45 @@ Dialog {
             bridge.refreshAudioDevices()
     }
 
+    function filteredFontFamilies() {
+        var filter = String(fontPickerSearch || "").trim().toLowerCase()
+        if (filter === "")
+            return fontPickerFamilies
+        var result = []
+        for (var i = 0; i < fontPickerFamilies.length; ++i) {
+            var family = String(fontPickerFamilies[i])
+            if (family.toLowerCase().indexOf(filter) !== -1)
+                result.push(family)
+        }
+        return result
+    }
+
+    function openFontPicker(key, fallbackFamily, fallbackPointSize, fixedOnly) {
+        fontPickerKey = key
+        fontPickerFallbackFamily = fallbackFamily
+        fontPickerFallbackPointSize = fallbackPointSize
+        fontPickerFixedOnly = fixedOnly
+        fontPickerFamilies = bridge.availableFontFamilies(fixedOnly)
+        fontPickerFamily = bridge.fontSettingFamily(key, fallbackFamily, fallbackPointSize)
+        fontPickerPointSize = bridge.fontSettingPointSize(key, fallbackFamily, fallbackPointSize)
+        fontPickerBold = bridge.fontSettingBold(key, fallbackFamily, fallbackPointSize)
+        fontPickerItalic = bridge.fontSettingItalic(key, fallbackFamily, fallbackPointSize)
+        fontPickerSearch = ""
+        fontPicker.open()
+    }
+
+    function applyFontPicker() {
+        bridge.setFontSetting(fontPickerKey,
+                              fontPickerFamily,
+                              fontPickerPointSize,
+                              fontPickerBold,
+                              fontPickerItalic,
+                              fontPickerFallbackFamily,
+                              fontPickerFallbackPointSize)
+        refreshFontLabels()
+        fontPicker.close()
+    }
+
     function scheduleCatPersist() {
         var controller = activeCatController()
         if (controller && controller.saveSettings)
@@ -454,6 +523,194 @@ Dialog {
         "#9933ff","#ff33cc","#ffffff","#cccccc","#666666","#000000"
     ]
 
+    Popup {
+        id: fontPicker
+        modal: true
+        focus: true
+        width: Math.min(settingsDialog.width - 80, 760)
+        height: Math.min(settingsDialog.height - 80, 680)
+        x: Math.round((settingsDialog.width - width) / 2)
+        y: Math.round((settingsDialog.height - height) / 2)
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: fontSearchField.forceActiveFocus()
+
+        background: Rectangle {
+            color: bgDeep
+            border.color: secondaryCyan
+            border.width: 1
+            radius: 8
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            Text {
+                text: fontPickerKey === "DecodedTextFont" ? qsTr("Choose Decoded Font") : qsTr("Choose Font")
+                color: secondaryCyan
+                font.pixelSize: 14
+                font.bold: true
+                Layout.fillWidth: true
+            }
+
+            Text {
+                text: qsTr("Search:")
+                color: textSecondary
+                font.pixelSize: 11
+            }
+
+            TextField {
+                id: fontSearchField
+                Layout.fillWidth: true
+                implicitHeight: controlHeight
+                text: settingsDialog.fontPickerSearch
+                placeholderText: qsTr("filter by name")
+                color: textPrimary
+                font.pixelSize: controlFontSize
+                selectByMouse: true
+                onTextChanged: settingsDialog.fontPickerSearch = text
+                background: Rectangle {
+                    color: bgMedium
+                    border.color: parent.activeFocus ? secondaryCyan : glassBorder
+                    radius: 4
+                }
+            }
+
+            Text {
+                text: settingsDialog.fontPickerFixedOnly ? qsTr("Monospaced fonts:") : qsTr("Fonts:")
+                color: textSecondary
+                font.pixelSize: 11
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 190
+                color: bgMedium
+                border.color: glassBorder
+                radius: 4
+
+                ListView {
+                    id: fontFamilyList
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    clip: true
+                    model: settingsDialog.filteredFontFamilies()
+                    currentIndex: -1
+                    delegate: ItemDelegate {
+                        width: fontFamilyList.width
+                        height: 32
+                        highlighted: modelData === settingsDialog.fontPickerFamily
+                        onClicked: settingsDialog.fontPickerFamily = String(modelData)
+                        background: Rectangle {
+                            color: parent.highlighted
+                                   ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.32)
+                                   : (parent.hovered ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+                        }
+                        contentItem: Text {
+                            text: modelData
+                            color: textPrimary
+                            font.family: modelData
+                            font.pixelSize: 12
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 4
+                columnSpacing: 10
+                rowSpacing: 8
+
+                Text { text: qsTr("Selected:"); color: textSecondary; font.pixelSize: 11 }
+                Text {
+                    text: settingsDialog.fontPickerFamily
+                    color: textPrimary
+                    font.pixelSize: 12
+                    font.bold: true
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                Text { text: qsTr("Size:"); color: textSecondary; font.pixelSize: 11 }
+                SpinBox {
+                    id: fontPointSpin
+                    from: 6
+                    to: 48
+                    value: settingsDialog.fontPickerPointSize
+                    editable: true
+                    Layout.preferredWidth: 140
+                    onValueChanged: settingsDialog.fontPickerPointSize = value
+                    contentItem: TextInput {
+                        text: fontPointSpin.textFromValue(fontPointSpin.value, fontPointSpin.locale)
+                        color: textPrimary
+                        font.pixelSize: controlFontSize
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        readOnly: !fontPointSpin.editable
+                        validator: fontPointSpin.validator
+                    }
+                    background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                }
+
+                CheckBox {
+                    text: "Bold"
+                    checked: settingsDialog.fontPickerBold
+                    onCheckedChanged: settingsDialog.fontPickerBold = checked
+                    contentItem: Text { text: parent.text; leftPadding: 26; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
+                }
+
+                CheckBox {
+                    text: "Italic"
+                    checked: settingsDialog.fontPickerItalic
+                    onCheckedChanged: settingsDialog.fontPickerItalic = checked
+                    contentItem: Text { text: parent.text; leftPadding: 26; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
+                }
+
+                Item { Layout.fillWidth: true }
+                Item { Layout.preferredWidth: 140 }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 84
+                color: Qt.rgba(1, 1, 1, 0.04)
+                border.color: glassBorder
+                radius: 4
+                Text {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    text: "173045  -21  0.1  1045  CQ LB9ZG JP20"
+                    color: textPrimary
+                    font.family: settingsDialog.fontPickerFamily
+                    font.pointSize: settingsDialog.fontPickerPointSize
+                    font.bold: settingsDialog.fontPickerBold
+                    font.italic: settingsDialog.fontPickerItalic
+                    wrapMode: Text.Wrap
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Button {
+                    text: qsTr("Cancel")
+                    Layout.fillWidth: true
+                    onClicked: fontPicker.close()
+                }
+                Button {
+                    text: qsTr("Apply")
+                    Layout.fillWidth: true
+                    enabled: settingsDialog.fontPickerFamily !== ""
+                    onClicked: settingsDialog.applyFontPicker()
+                }
+            }
+        }
+    }
+
     background: Rectangle {
         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
         border.color: secondaryCyan; border.width: 2; radius: 12
@@ -484,7 +741,7 @@ Dialog {
             anchors.fill: parent; anchors.margins: 16; spacing: 10
 
             Text {
-                text: "Impostazioni"
+                text: qsTr("Settings")
                 font.pixelSize: 16; font.bold: true
                 color: secondaryCyan
             }
@@ -514,7 +771,7 @@ Dialog {
 
             Text {
                 Layout.fillWidth: true
-                text: "Le modifiche vengono applicate subito dove previsto."
+                text: qsTr("Changes are applied immediately where supported.")
                 color: textSecondary
                 font.pixelSize: 11
                 elide: Text.ElideRight
@@ -529,7 +786,7 @@ Dialog {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Chiudi"
+                    text: qsTr("Close")
                     color: textPrimary
                     font.pixelSize: 12
                 }
@@ -593,7 +850,7 @@ Dialog {
                     spacing: 2
 
                     Repeater {
-                        model: ["Stazione","Radio","Audio","TX","Display","Decodifica","Reporting","Colori","Avanzate","Alerts","Filtri"]
+                        model: [qsTr("Station"), qsTr("Radio"), qsTr("Audio"), qsTr("TX"), qsTr("Display"), qsTr("Decode"), qsTr("Reporting"), qsTr("Colors"), qsTr("Advanced"), qsTr("Alerts"), qsTr("Filters")]
                         delegate: Rectangle {
                             width: parent.width; height: 36; radius: 6
                             color: tabStack.currentIndex === index ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (tabMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
@@ -683,10 +940,10 @@ Dialog {
                         }
 
                         // ── Info Stazione ──
-                        Text { text: "INFO STAZIONE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("STATION INFO"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Nome Stazione:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Station Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.stationName; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -906,7 +1163,7 @@ Dialog {
                                         x: 8
                                         width: parent.width - 16
                                         height: 36
-                                        placeholderText: "Cerca radio, modello o marca..."
+                                        placeholderText: qsTr("Search radio, model or brand...")
                                         text: rigCombo.filterText
                                         selectByMouse: true
                                         color: textPrimary
@@ -1128,7 +1385,7 @@ Dialog {
                         CheckBox {
                             visible: settingsDialog.usesTciControls()
                             checked: bridge.catManager ? bridge.catManager.tciAudioEnabled : true
-                            text: "RX via TCI"
+                            text: "RX/TX via TCI"
                             Layout.fillWidth: true
                             Layout.columnSpan: 3
                             onCheckedChanged: {
@@ -1147,9 +1404,14 @@ Dialog {
                         Text { text: "PTT Method:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: pttCombo
-                            model: bridge.catManager && bridge.catManager.pttMethodList ? bridge.catManager.pttMethodList : ["CAT","DTR","RTS","VOX"]
+                            enabled: !settingsDialog.usesTciControls()
+                            model: settingsDialog.usesTciControls()
+                                   ? ["CAT"]
+                                   : (bridge.catManager && bridge.catManager.pttMethodList ? bridge.catManager.pttMethodList : ["CAT","DTR","RTS","VOX"])
                             Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
+                                if (settingsDialog.usesTciControls())
+                                    return 0
                                 var methods = (bridge.catManager && bridge.catManager.pttMethodList)
                                               ? bridge.catManager.pttMethodList
                                               : ["CAT","DTR","RTS","VOX"]
@@ -1175,7 +1437,7 @@ Dialog {
                                     }
                                     return "CAT"
                                 }
-                                color: textPrimary
+                                color: pttCombo.enabled ? textPrimary : textSecondary
                                 font.pixelSize: controlFontSize
                                 leftPadding: 8
                                 verticalAlignment: Text.AlignVCenter
@@ -1384,9 +1646,10 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "TX Audio Src:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: !settingsDialog.usesTciControls(); text: "TX Audio Src:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: txAudioSrcCombo
+                            visible: !settingsDialog.usesTciControls()
                             model: ["Rear/Data","Front/Mic"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: settingsDialog.settingChoiceIndex("TXAudioSource", model, 0)
                             onActivated: bridge.setSetting("TXAudioSource", currentText)
@@ -1395,6 +1658,19 @@ Dialog {
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
+                        Text { visible: settingsDialog.usesTciControls(); text: "TX Audio:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        TextField {
+                            visible: settingsDialog.usesTciControls()
+                            text: "TCI Audio"
+                            readOnly: true
+                            enabled: false
+                            Layout.fillWidth: true
+                            implicitHeight: controlHeight
+                            leftPadding: 8
+                            color: textSecondary
+                            font.pixelSize: controlFontSize
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -1679,28 +1955,52 @@ Dialog {
                         Text { text: "TX Frequency:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txFreqSpin
-                            from: 0; to: 5000; value: Number(bridge.getSetting("TXFrequency", 1500)); editable: true
+                            from: 0; to: 5000; value: bridge.txFrequency; editable: true
                             implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("TXFrequency", value)
+                            onValueChanged: {
+                                if (bridge.txFrequency !== value)
+                                    bridge.txFrequency = value
+                                bridge.setSetting("txFrequency", value)
+                            }
                             contentItem: TextInput { text: txFreqSpin.textFromValue(txFreqSpin.value, txFreqSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txFreqSpin.editable; validator: txFreqSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "TX Period:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Text { text: bridge.txPeriod !== undefined ? bridge.txPeriod + " s" : "15 s"; color: textPrimary; font.pixelSize: controlFontSize; Layout.fillWidth: true }
+                        Text { text: "TX Slot:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        ComboBox {
+                            id: txSlotCombo
+                            model: ["Secondo (:15/:45)", "Primo (:00/:30)"]
+                            currentIndex: bridge.txPeriod === 1 ? 1 : 0
+                            Layout.fillWidth: true; implicitHeight: controlHeight
+                            onActivated: {
+                                bridge.txPeriod = currentIndex === 1 ? 1 : 0
+                                bridge.setSetting("txPeriod", bridge.txPeriod)
+                            }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            contentItem: Text { text: txSlotCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
+                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
 
                         Text { text: "TX Delay (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txDelaySpin
-                            from: 0; to: 30; value: Number(bridge.getSetting("TXDelay", 2)); editable: true
+                            from: 0; to: 5; stepSize: 1; value: Math.round(Number(bridge.getSetting("TxDelay", 0.2)) * 10); editable: true
+                            textFromValue: function(value, locale) { return Number(value / 10).toLocaleString(locale, "f", 1) }
+                            valueFromText: function(text, locale) {
+                                var parsed = Number.fromLocaleString(locale, text)
+                                return isNaN(parsed) ? 0 : Math.round(parsed * 10)
+                            }
+                            validator: DoubleValidator { bottom: 0.0; top: 0.5; decimals: 1; notation: DoubleValidator.StandardNotation }
                             implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("TXDelay", value)
+                            onValueChanged: bridge.setSetting("TxDelay", value / 10)
                             contentItem: TextInput { text: txDelaySpin.textFromValue(txDelaySpin.value, txDelaySpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txDelaySpin.editable; validator: txDelaySpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
                         Text { text: "Allow TX QSY:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AllowTXQSY", false)
-                            onCheckedChanged: bridge.setSetting("AllowTXQSY", checked)
+                            checked: bridge.getSetting("TxQSYAllowed", false)
+                            onCheckedChanged: bridge.setSetting("TxQSYAllowed", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -1712,52 +2012,46 @@ Dialog {
                         Text { text: "Auto Sequence:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.autoSeq
-                            onCheckedChanged: bridge.autoSeq = checked
+                            onCheckedChanged: {
+                                bridge.autoSeq = checked
+                                bridge.setSetting("autoSeq", checked)
+                                bridge.setSetting("AutoSeq", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Start from TX2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.startFromTx2
-                            onCheckedChanged: bridge.startFromTx2 = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
                         Text { text: "Send RR73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.sendRR73
-                            onCheckedChanged: bridge.sendRR73 = checked
+                            onCheckedChanged: {
+                                bridge.sendRR73 = checked
+                                bridge.setSetting("sendRR73", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Quick QSO:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.quickQsoEnabled
-                            onCheckedChanged: bridge.quickQsoEnabled = checked
+                            onCheckedChanged: {
+                                bridge.quickQsoEnabled = checked
+                                bridge.setSetting("quickQsoEnabled", checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: "Disable TX after 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.getSetting("73TxDisable", true)
+                            onCheckedChanged: bridge.setSetting("73TxDisable", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Confirm 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: "MSK/Q65 TX until 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.confirm73
-                            onCheckedChanged: bridge.confirm73 = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "Disable TX 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("DisableTXon73", false)
-                            onCheckedChanged: bridge.setSetting("DisableTXon73", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: "Repeat TX 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("RepeatTXuntil73", false)
-                            onCheckedChanged: bridge.setSetting("RepeatTXuntil73", checked)
+                            checked: bridge.getSetting("RepeatTx", false)
+                            onCheckedChanged: bridge.setSetting("RepeatTx", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -1770,27 +2064,36 @@ Dialog {
                         Text { text: "TX Watchdog (min):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txWdSpin
-                            from: 0; to: 999; value: Number(bridge.getSetting("TXWatchdog", 6)); editable: true
+                            from: 0; to: 999; value: Number(bridge.getSetting("TxWatchdog", bridge.txWatchdogMode === 1 ? bridge.txWatchdogTime : 6)); editable: true
+                            property bool completed: false
+                            function applyWatchdog() {
+                                bridge.txWatchdogTime = value
+                                bridge.txWatchdogMode = value > 0 ? 1 : 0
+                                bridge.setSetting("TxWatchdog", value)
+                                bridge.setSetting("txWatchdogMode", bridge.txWatchdogMode)
+                                bridge.setSetting("txWatchdogTime", bridge.txWatchdogTime)
+                            }
                             implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("TXWatchdog", value)
+                            onValueChanged: if (completed) applyWatchdog()
+                            Component.onCompleted: { completed = true; applyWatchdog() }
                             contentItem: TextInput { text: txWdSpin.textFromValue(txWdSpin.value, txWdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txWdSpin.editable; validator: txWdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Tune Watchdog:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: "Tune Watchdog (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 6
                             CheckBox {
                                 id: tuneWdCheck
-                                checked: bridge.getSetting("TuneWatchdogEnabled", false)
-                                onCheckedChanged: bridge.setSetting("TuneWatchdogEnabled", checked)
+                                checked: bridge.getSetting("TuneWatchdog", true)
+                                onCheckedChanged: bridge.setSetting("TuneWatchdog", checked)
                                 indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                                 contentItem: Text { text: ""; leftPadding: 24 }
                             }
                             SpinBox {
                                 id: tuneWdSpin
-                                from: 1; to: 120; value: Number(bridge.getSetting("TuneWatchdogMin", 5)); editable: true; enabled: tuneWdCheck.checked
+                                from: 0; to: 300; value: Number(bridge.getSetting("TuneWatchdogTime", 90)); editable: true; enabled: tuneWdCheck.checked
                                 implicitHeight: controlHeight; Layout.fillWidth: true
-                                onValueChanged: bridge.setSetting("TuneWatchdogMin", value)
+                                onValueChanged: bridge.setSetting("TuneWatchdogTime", value)
                                 contentItem: TextInput { text: tuneWdSpin.textFromValue(tuneWdSpin.value, tuneWdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !tuneWdSpin.editable; validator: tuneWdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                                 background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             }
@@ -1802,17 +2105,17 @@ Dialog {
 
                         Text { text: "CW ID after 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("CWIDafter73", false)
-                            onCheckedChanged: bridge.setSetting("CWIDafter73", checked)
+                            checked: bridge.getSetting("After73", false)
+                            onCheckedChanged: bridge.setSetting("After73", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "CW ID Interval:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: "CW ID Interval (min):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: cwIdIntSpin
-                            from: 0; to: 999; value: Number(bridge.getSetting("CWIDInterval", 10)); editable: true
+                            from: 0; to: 999; value: Number(bridge.getSetting("IDint", 0)); editable: true
                             implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("CWIDInterval", value)
+                            onValueChanged: bridge.setSetting("IDint", value)
                             contentItem: TextInput { text: cwIdIntSpin.textFromValue(cwIdIntSpin.value, cwIdIntSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !cwIdIntSpin.editable; validator: cwIdIntSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
@@ -1823,23 +2126,43 @@ Dialog {
 
                         Text { text: "2x Tone Spacing:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
+                            id: x2ToneSpacingCheck
                             checked: bridge.getSetting("x2ToneSpacing", false)
-                            onCheckedChanged: bridge.setSetting("x2ToneSpacing", checked)
+                            onCheckedChanged: {
+                                if (checked) {
+                                    x4ToneSpacingCheck.checked = false
+                                    bridge.setSetting("x4ToneSpacing", false)
+                                }
+                                bridge.setSetting("x2ToneSpacing", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "4x Tone Spacing:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
+                            id: x4ToneSpacingCheck
                             checked: bridge.getSetting("x4ToneSpacing", false)
-                            onCheckedChanged: bridge.setSetting("x4ToneSpacing", checked)
+                            onCheckedChanged: {
+                                if (checked) {
+                                    x2ToneSpacingCheck.checked = false
+                                    bridge.setSetting("x2ToneSpacing", false)
+                                }
+                                bridge.setSetting("x4ToneSpacing", checked)
+                            }
+                            Component.onCompleted: {
+                                if (checked && x2ToneSpacingCheck.checked) {
+                                    x2ToneSpacingCheck.checked = false
+                                    bridge.setSetting("x2ToneSpacing", false)
+                                }
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "Alt F1-F6 Bind:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlternateF1F6Bindings", false)
-                            onCheckedChanged: bridge.setSetting("AlternateF1F6Bindings", checked)
+                            checked: bridge.getSetting("AlternateBindings", false)
+                            onCheckedChanged: bridge.setSetting("AlternateBindings", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -1886,8 +2209,8 @@ Dialog {
                                 width: 78; height: controlHeight; radius: 4
                                 color: fontChooseMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
                                 border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: "Scegli"; color: primaryBlue; font.pixelSize: 11 }
-                                MouseArea { id: fontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.chooseFontSetting("Font", "", 0) }
+                                Text { anchors.centerIn: parent; text: qsTr("Choose"); color: primaryBlue; font.pixelSize: 11 }
+                                MouseArea { id: fontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.openFontPicker("Font", "", 0, false) }
                             }
                             Rectangle {
                                 width: 64; height: controlHeight; radius: 4
@@ -1922,8 +2245,8 @@ Dialog {
                                 width: 78; height: controlHeight; radius: 4
                                 color: decodedFontChooseMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
                                 border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: "Scegli"; color: primaryBlue; font.pixelSize: 11 }
-                                MouseArea { id: decodedFontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.chooseFontSetting("DecodedTextFont", "Courier", 10) }
+                                Text { anchors.centerIn: parent; text: qsTr("Choose"); color: primaryBlue; font.pixelSize: 11 }
+                                MouseArea { id: decodedFontChooseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsDialog.openFontPicker("DecodedTextFont", "Courier", 10, true) }
                             }
                             Rectangle {
                                 width: 64; height: controlHeight; radius: 4
@@ -1945,58 +2268,6 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Country Names:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("ShowCountryNames", false)
-                            onCheckedChanged: bridge.setSetting("ShowCountryNames", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: "Principal Prefix:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("PrincipalPrefix", false)
-                            onCheckedChanged: bridge.setSetting("PrincipalPrefix", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "HL DX Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("HighlightDXGrid", false)
-                            onCheckedChanged: bridge.setSetting("HighlightDXGrid", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: "HL DX Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("HighlightDXCall", false)
-                            onCheckedChanged: bridge.setSetting("HighlightDXCall", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "Blank Line:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("InsertBlankLine", true)
-                            onCheckedChanged: bridge.setSetting("InsertBlankLine", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: "Detailed Blank:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("DetailedBlank", true)
-                            onCheckedChanged: bridge.setSetting("DetailedBlank", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "From Top:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("DecodesFromTop", false)
-                            onCheckedChanged: bridge.setSetting("DecodesFromTop", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
 
                         Text { text: "TX Msg to RX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
@@ -2005,26 +2276,10 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Mappa e Distanza ──
                         Text { text: "MAPPA E DISTANZA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: "Show Distance:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("ShowDistance", false)
-                            onCheckedChanged: bridge.setSetting("ShowDistance", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "Show Azimuth:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("ShowAzimuth", false)
-                            onCheckedChanged: bridge.setSetting("ShowAzimuth", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
 
                         Text { text: "Miles:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
@@ -2048,13 +2303,6 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Grid to State:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("MapGridToState", false)
-                            onCheckedChanged: bridge.setSetting("MapGridToState", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
 
                         Text { text: "Click TX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
@@ -2063,7 +2311,6 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Allineamento ──
                         Text { text: "ALLINEAMENTO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
@@ -2507,6 +2754,13 @@ Dialog {
                             }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
+                            Component.onCompleted: {
+                                if (checked) {
+                                    if (promptToLogCheck.checked)
+                                        promptToLogCheck.checked = false
+                                    bridge.setSetting("AutoLog", true)
+                                }
+                            }
                         }
 
                         Text { text: "Direct Log QSO:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -2792,7 +3046,7 @@ Dialog {
                                 id: colorCqPop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
                                 Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
                                     Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorCQ = modelData; colorCqPop.close() } }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorCQ = modelData; bridge.setSetting("colorCQ", modelData); colorCqPop.close() } }
                                     } }
                                 }
                             }
@@ -2807,7 +3061,7 @@ Dialog {
                                 id: colorMyCallPop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
                                 Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
                                     Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorMyCall = modelData; colorMyCallPop.close() } }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorMyCall = modelData; bridge.setSetting("colorMyCall", modelData); colorMyCallPop.close() } }
                                     } }
                                 }
                             }
@@ -2823,7 +3077,7 @@ Dialog {
                                 id: colorDxEntPop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
                                 Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
                                     Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorDXEntity = modelData; colorDxEntPop.close() } }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorDXEntity = modelData; bridge.setSetting("colorDXEntity", modelData); colorDxEntPop.close() } }
                                     } }
                                 }
                             }
@@ -2838,7 +3092,7 @@ Dialog {
                                 id: color73Pop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
                                 Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
                                     Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.color73 = modelData; color73Pop.close() } }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.color73 = modelData; bridge.setSetting("color73", modelData); color73Pop.close() } }
                                     } }
                                 }
                             }
@@ -2854,7 +3108,7 @@ Dialog {
                                 id: colorB4Pop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
                                 Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
                                     Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorB4 = modelData; colorB4Pop.close() } }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorB4 = modelData; bridge.setSetting("colorB4", modelData); colorB4Pop.close() } }
                                     } }
                                 }
                             }
@@ -2862,7 +3116,10 @@ Dialog {
                         Text { text: "B4 Strikethrough:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.b4Strikethrough
-                            onCheckedChanged: bridge.b4Strikethrough = checked
+                            onCheckedChanged: {
+                                bridge.b4Strikethrough = checked
+                                bridge.setSetting("b4Strikethrough", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -2871,35 +3128,14 @@ Dialog {
                         Text { text: "HIGHLIGHTING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Only Sought:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("OnlyFieldsSought", false)
-                            onCheckedChanged: bridge.setSetting("OnlyFieldsSought", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "WAE Entities:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("IncludeWAEEntities", false)
-                            onCheckedChanged: bridge.setSetting("IncludeWAEEntities", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
                         Text { text: "Highlight 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("Highlight73", false)
+                            checked: bridge.getSetting("Highlight73", true)
                             onCheckedChanged: bridge.setSetting("Highlight73", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "HL by Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("HighlightByMode", false)
-                            onCheckedChanged: bridge.setSetting("HighlightByMode", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         Text { text: "HL Orange:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
@@ -2910,10 +3146,10 @@ Dialog {
                         }
                         Text { text: "Orange Calls:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
-                            text: bridge.getSetting("OrangeCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            text: bridge.getSetting("HighlightOrangeCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("OrangeCallsigns", text)
+                            onTextChanged: bridge.setSetting("HighlightOrangeCallsigns", text.toUpperCase())
                         }
 
                         Text { text: "HL Blue:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -2925,10 +3161,10 @@ Dialog {
                         }
                         Text { text: "Blue Calls:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
-                            text: bridge.getSetting("BlueCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            text: bridge.getSetting("HighlightBlueCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("BlueCallsigns", text)
+                            onTextChanged: bridge.setSetting("HighlightBlueCallsigns", text.toUpperCase())
                         }
 
                         // ── Spettro ──
@@ -2938,9 +3174,12 @@ Dialog {
                         Text { text: "Palette:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: paletteCombo
-                            model: ["Default","Blue","Green","AFMHot","LinRad","CubeYF"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
-                            currentIndex: Number(bridge.getSetting("SpectrumPalette", 0))
-                            onActivated: bridge.setSetting("SpectrumPalette", currentIndex)
+                            model: ["SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR","Aether Default","Aether BlueGreen","Aether Fire","Aether Plasma","FlexRadio"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
+                            currentIndex: Math.max(0, bridge.uiPaletteIndex)
+                            onActivated: {
+                                bridge.uiPaletteIndex = currentIndex
+                                bridge.setSetting("uiPaletteIndex", currentIndex)
+                            }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: paletteCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
@@ -2948,16 +3187,22 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Ref Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: "Black Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
-                            from: -40; to: 40; value: Number(bridge.getSetting("SpectrumRefLevel", 0)); Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.setSetting("SpectrumRefLevel", value)
+                            from: 0; to: 100; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallBlackLevel", 15)); Layout.fillWidth: true; Layout.columnSpan: 3
+                            onValueChanged: bridge.setSetting("uiWaterfallBlackLevel", value)
                         }
 
-                        Text { text: "Dynamic Range:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: "Color Gain:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
-                            from: 10; to: 120; value: Number(bridge.getSetting("SpectrumDynRange", 60)); Layout.fillWidth: true; Layout.columnSpan: 3
-                            onValueChanged: bridge.setSetting("SpectrumDynRange", value)
+                            from: 0; to: 100; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallColorGain", 50)); Layout.fillWidth: true; Layout.columnSpan: 3
+                            onValueChanged: bridge.setSetting("uiWaterfallColorGain", value)
+                        }
+
+                        Text { text: "Contrast:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Slider {
+                            from: 10; to: 150; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallContrast", 80)); Layout.fillWidth: true; Layout.columnSpan: 3
+                            onValueChanged: bridge.setSetting("uiWaterfallContrast", value)
                         }
 
                         // ── Download Dati ──
@@ -3047,23 +3292,23 @@ Dialog {
                         }
                         Text { text: "kHz no k:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("kHzWithoutk", false)
-                            onCheckedChanged: bridge.setSetting("kHzWithoutk", checked)
+                            checked: settingsDialog.boolSetting("kHzWithoutK", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("kHzWithoutK", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "Progress Red:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ProgressBarRed", false)
-                            onCheckedChanged: bridge.setSetting("ProgressBarRed", checked)
+                            checked: settingsDialog.boolSetting("ProgressBarRed", true)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("ProgressBarRed", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "High DPI:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("HighDPI", false)
-                            onCheckedChanged: bridge.setSetting("HighDPI", checked)
+                            checked: settingsDialog.boolSetting("HighDPI", true)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("HighDPI", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3083,15 +3328,15 @@ Dialog {
 
                         Text { text: "Quick Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("QuickCall", false)
-                            onCheckedChanged: bridge.setSetting("QuickCall", checked)
+                            checked: settingsDialog.boolSetting("QuickCall", true)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("QuickCall", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Force Call 1st:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ForceCall1st", false)
-                            onCheckedChanged: bridge.setSetting("ForceCall1st", checked)
+                            checked: settingsDialog.boolSetting("ForceCallFirst", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("ForceCallFirst", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3099,59 +3344,62 @@ Dialog {
                         Text { text: "VHF/UHF:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.vhfUhfFeatures
-                            onCheckedChanged: bridge.vhfUhfFeatures = checked
+                            onToggled: {
+                                bridge.vhfUhfFeatures = checked
+                                bridge.setSetting("VHFUHF", checked)
+                            }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Wait Features:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("EnableWaitFeatures", false)
-                            onCheckedChanged: bridge.setSetting("EnableWaitFeatures", checked)
+                            checked: settingsDialog.boolSetting("WaitFeaturesEnabled", true)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("WaitFeaturesEnabled", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "Erase Band Act:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("EraseBandActivity", false)
-                            onCheckedChanged: bridge.setSetting("EraseBandActivity", checked)
+                            checked: settingsDialog.boolSetting("erase_BandActivity", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("erase_BandActivity", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Clear DX Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ClearDXGrid", false)
-                            onCheckedChanged: bridge.setSetting("ClearDXGrid", checked)
+                            checked: settingsDialog.boolSetting("clear_DXgrid", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXgrid", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "Clear DX Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ClearDXCall", false)
-                            onCheckedChanged: bridge.setSetting("ClearDXCall", checked)
+                            checked: settingsDialog.boolSetting("clear_DXcall", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXcall", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "RX>TX after QSO:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("RXtoTXafterQSO", false)
-                            onCheckedChanged: bridge.setSetting("RXtoTXafterQSO", checked)
+                            checked: settingsDialog.boolSetting("set_RXtoTX", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("set_RXtoTX", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "Alt Erase Btn:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlternateEraseButton", false)
-                            onCheckedChanged: bridge.setSetting("AlternateEraseButton", checked)
+                            checked: settingsDialog.boolSetting("AlternateEraseButtonBehavior", true)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("AlternateEraseButtonBehavior", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "No Btn Color:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("DisableButtonColoring", false)
-                            onCheckedChanged: bridge.setSetting("DisableButtonColoring", checked)
+                            checked: settingsDialog.boolSetting("TxWarningDisabled", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("TxWarningDisabled", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3160,21 +3408,6 @@ Dialog {
                         Text { text: "MODO OPERATIVO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Split Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.splitMode
-                            onCheckedChanged: bridge.splitMode = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "SWL Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.swlMode
-                            onCheckedChanged: bridge.swlMode = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
                         Text { text: "Fox Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.foxMode
@@ -3182,25 +3415,17 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Hound Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.houndMode
-                            onCheckedChanged: bridge.houndMode = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
                         Text { text: "SuperFox:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("SuperFox", false)
-                            onCheckedChanged: bridge.setSetting("SuperFox", checked)
+                            checked: settingsDialog.boolSetting("SuperFox", true)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("SuperFox", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Show OTP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("ShowOTP", false)
-                            onCheckedChanged: bridge.setSetting("ShowOTP", checked)
+                            checked: settingsDialog.boolSetting("ShowOTP", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("ShowOTP", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3212,9 +3437,14 @@ Dialog {
                         Text { text: "Activity:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: contestCombo
-                            model: ["None","ARRL Digi","WW DIGI","Field Day","RTTY Roundup","EU VHF","NA VHF","Fox","Hound","Q65 Pileup"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
-                            currentIndex: Number(bridge.getSetting("SelectedActivity", 0))
-                            onActivated: bridge.setSetting("SelectedActivity", currentIndex)
+                            model: ["None","NA VHF","EU VHF","Field Day","RTTY Roundup","WW DIGI","Fox","Hound","ARRL Digi","Q65 Pileup"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
+                            currentIndex: settingsDialog.boolSetting("SpecialOpActivity", false)
+                                          ? Math.max(0, Math.min(model.length - 1, Number(bridge.getSetting("SelectedActivity", 1))))
+                                          : 0
+                            onActivated: {
+                                bridge.setSetting("SelectedActivity", currentIndex)
+                                bridge.setSetting("SpecialOpActivity", currentIndex !== 0)
+                            }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: contestCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
@@ -3224,38 +3454,38 @@ Dialog {
 
                         Text { text: "FD Exchange:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
-                            text: bridge.getSetting("FieldDayExchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            text: bridge.getSetting("Field_Day_Exchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("FieldDayExchange", text)
+                            onTextChanged: bridge.setSetting("Field_Day_Exchange", text.toUpperCase())
                         }
                         Text { text: "RTTY Exchange:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
-                            text: bridge.getSetting("RTTYExchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            text: bridge.getSetting("RTTY_Exchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("RTTYExchange", text)
+                            onTextChanged: bridge.setSetting("RTTY_Exchange", text.toUpperCase())
                         }
 
                         Text { text: "Contest Name:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
-                            text: bridge.getSetting("ContestName", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            text: bridge.getSetting("Contest_Name", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("ContestName", text)
+                            onTextChanged: bridge.setSetting("Contest_Name", text.toUpperCase())
                         }
                         Text { text: "Indiv Name:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("IndividualContestName", false)
-                            onCheckedChanged: bridge.setSetting("IndividualContestName", checked)
+                            checked: settingsDialog.boolSetting("Individual_Contest_Name", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("Individual_Contest_Name", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "NCCC Sprint:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("NCCCSprint", false)
-                            onCheckedChanged: bridge.setSetting("NCCCSprint", checked)
+                            checked: settingsDialog.boolSetting("NCCC_Sprint", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("NCCC_Sprint", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3330,29 +3560,6 @@ Dialog {
                             Layout.columnSpan: 4
                         }
 
-                        // ── Clock Compensation ──
-                        Text { text: "CLOCK COMPENSATION"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        Text { text: "DT Synced (ms):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: dtSyncSpin
-                            from: 0; to: 9999; value: Number(bridge.getSetting("DTClampSynced", 500)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("DTClampSynced", value)
-                            contentItem: TextInput { text: dtSyncSpin.textFromValue(dtSyncSpin.value, dtSyncSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !dtSyncSpin.editable; validator: dtSyncSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-                        Text { text: "DT Unsync (ms):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        SpinBox {
-                            id: dtUnsyncSpin
-                            from: 0; to: 9999; value: Number(bridge.getSetting("DTClampUnsynced", 1000)); editable: true
-                            implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("DTClampUnsynced", value)
-                            contentItem: TextInput { text: dtUnsyncSpin.textFromValue(dtUnsyncSpin.value, dtUnsyncSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !dtUnsyncSpin.editable; validator: dtUnsyncSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
                         // ── OTP ──
                         Text { text: "OTP"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
@@ -3375,18 +3582,18 @@ Dialog {
                         Text { text: "OTP Interval:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: otpIntSpin
-                            from: 1; to: 3600; value: Number(bridge.getSetting("OTPInterval", 30)); editable: true
+                            from: 1; to: 3600; value: Number(bridge.getSetting("OTPinterval", 1)); editable: true
                             implicitHeight: controlHeight; Layout.fillWidth: true
-                            onValueChanged: bridge.setSetting("OTPInterval", value)
+                            onValueChanged: bridge.setSetting("OTPinterval", value)
                             contentItem: TextInput { text: otpIntSpin.textFromValue(otpIntSpin.value, otpIntSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !otpIntSpin.editable; validator: otpIntSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
                         Text { text: "OTP URL:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
-                            text: bridge.getSetting("OTPURL", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
+                            text: bridge.getSetting("OTPUrl", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("OTPURL", text)
+                            onTextChanged: bridge.setSetting("OTPUrl", text)
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 4; Layout.preferredHeight: 80 }
                     }
@@ -3409,7 +3616,7 @@ Dialog {
                         Text { text: "Alerts Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.alertSoundsEnabled
-                            onCheckedChanged: bridge.alertSoundsEnabled = checked
+                            onToggled: settingsDialog.setAlertEnabled(checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3419,104 +3626,104 @@ Dialog {
                         Text { text: "CQ in Msg:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.alertOnCq
-                            onCheckedChanged: bridge.alertOnCq = checked
+                            onToggled: settingsDialog.setAlertCq(checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "My Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertMyCall", false)
-                            onCheckedChanged: bridge.setSetting("AlertMyCall", checked)
+                            checked: bridge.alertOnMyCall
+                            onToggled: settingsDialog.setAlertMyCall(checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "New DXCC:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewDXCC", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewDXCC", checked)
+                            checked: settingsDialog.boolSetting("alert_DXCC", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXCC", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "New DXCC Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewDXCCBand", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewDXCCBand", checked)
+                            checked: settingsDialog.boolSetting("alert_DXCCOB", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXCCOB", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "New Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewGrid", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewGrid", checked)
+                            checked: settingsDialog.boolSetting("alert_Grid", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_Grid", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "New Grid Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewGridBand", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewGridBand", checked)
+                            checked: settingsDialog.boolSetting("alert_GridOB", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_GridOB", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "New Continent:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewContinent", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewContinent", checked)
+                            checked: settingsDialog.boolSetting("alert_Continent", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_Continent", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "New Cont Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewContinentBand", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewContinentBand", checked)
+                            checked: settingsDialog.boolSetting("alert_ContinentOB", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_ContinentOB", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "New CQ Zone:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewCQZone", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewCQZone", checked)
+                            checked: settingsDialog.boolSetting("alert_CQZ", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_CQZ", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "CQ Zone Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewCQZoneBand", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewCQZoneBand", checked)
+                            checked: settingsDialog.boolSetting("alert_CQZOB", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_CQZOB", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "New ITU Zone:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewITUZone", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewITUZone", checked)
+                            checked: settingsDialog.boolSetting("alert_ITUZ", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_ITUZ", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "ITU Zone Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertNewITUZoneBand", false)
-                            onCheckedChanged: bridge.setSetting("AlertNewITUZoneBand", checked)
+                            checked: settingsDialog.boolSetting("alert_ITUZOB", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_ITUZOB", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         Text { text: "DX Call/Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertDXCallGrid", false)
-                            onCheckedChanged: bridge.setSetting("AlertDXCallGrid", checked)
+                            checked: settingsDialog.boolSetting("alert_DXcall", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXcall", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "QSY Message:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlertQSYMessage", false)
-                            onCheckedChanged: bridge.setSetting("AlertQSYMessage", checked)
+                            checked: settingsDialog.boolSetting("alert_QSYmessage", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("alert_QSYmessage", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3539,8 +3746,8 @@ Dialog {
 
                         Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("BlacklistEnabled", false)
-                            onCheckedChanged: bridge.setSetting("BlacklistEnabled", checked)
+                            checked: settingsDialog.boolSetting("Blacklisted", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("Blacklisted", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3549,45 +3756,45 @@ Dialog {
                         // Blacklist 1-12 (2 per row)
                         Text { text: "Blacklist 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist1", text) }
+                            onTextChanged: bridge.setSetting("Blacklist1", text.toUpperCase()) }
                         Text { text: "Blacklist 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist2", text) }
+                            onTextChanged: bridge.setSetting("Blacklist2", text.toUpperCase()) }
 
                         Text { text: "Blacklist 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist3", text) }
+                            onTextChanged: bridge.setSetting("Blacklist3", text.toUpperCase()) }
                         Text { text: "Blacklist 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist4", text) }
+                            onTextChanged: bridge.setSetting("Blacklist4", text.toUpperCase()) }
 
                         Text { text: "Blacklist 5:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist5", text) }
+                            onTextChanged: bridge.setSetting("Blacklist5", text.toUpperCase()) }
                         Text { text: "Blacklist 6:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist6", text) }
+                            onTextChanged: bridge.setSetting("Blacklist6", text.toUpperCase()) }
 
                         Text { text: "Blacklist 7:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist7", text) }
+                            onTextChanged: bridge.setSetting("Blacklist7", text.toUpperCase()) }
                         Text { text: "Blacklist 8:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist8", text) }
+                            onTextChanged: bridge.setSetting("Blacklist8", text.toUpperCase()) }
 
                         Text { text: "Blacklist 9:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist9", text) }
+                            onTextChanged: bridge.setSetting("Blacklist9", text.toUpperCase()) }
                         Text { text: "Blacklist 10:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist10", text) }
+                            onTextChanged: bridge.setSetting("Blacklist10", text.toUpperCase()) }
 
                         Text { text: "Blacklist 11:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist11", text) }
+                            onTextChanged: bridge.setSetting("Blacklist11", text.toUpperCase()) }
                         Text { text: "Blacklist 12:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Blacklist12", text) }
+                            onTextChanged: bridge.setSetting("Blacklist12", text.toUpperCase()) }
 
                         // ── Whitelist ──
                         Text { text: "WHITELIST"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
@@ -3595,8 +3802,8 @@ Dialog {
 
                         Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("WhitelistEnabled", false)
-                            onCheckedChanged: bridge.setSetting("WhitelistEnabled", checked)
+                            checked: settingsDialog.boolSetting("Whitelisted", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("Whitelisted", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -3604,45 +3811,45 @@ Dialog {
 
                         Text { text: "Whitelist 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist1", text) }
+                            onTextChanged: bridge.setSetting("Whitelist1", text.toUpperCase()) }
                         Text { text: "Whitelist 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist2", text) }
+                            onTextChanged: bridge.setSetting("Whitelist2", text.toUpperCase()) }
 
                         Text { text: "Whitelist 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist3", text) }
+                            onTextChanged: bridge.setSetting("Whitelist3", text.toUpperCase()) }
                         Text { text: "Whitelist 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist4", text) }
+                            onTextChanged: bridge.setSetting("Whitelist4", text.toUpperCase()) }
 
                         Text { text: "Whitelist 5:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist5", text) }
+                            onTextChanged: bridge.setSetting("Whitelist5", text.toUpperCase()) }
                         Text { text: "Whitelist 6:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist6", text) }
+                            onTextChanged: bridge.setSetting("Whitelist6", text.toUpperCase()) }
 
                         Text { text: "Whitelist 7:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist7", text) }
+                            onTextChanged: bridge.setSetting("Whitelist7", text.toUpperCase()) }
                         Text { text: "Whitelist 8:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist8", text) }
+                            onTextChanged: bridge.setSetting("Whitelist8", text.toUpperCase()) }
 
                         Text { text: "Whitelist 9:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist9", text) }
+                            onTextChanged: bridge.setSetting("Whitelist9", text.toUpperCase()) }
                         Text { text: "Whitelist 10:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist10", text) }
+                            onTextChanged: bridge.setSetting("Whitelist10", text.toUpperCase()) }
 
                         Text { text: "Whitelist 11:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist11", text) }
+                            onTextChanged: bridge.setSetting("Whitelist11", text.toUpperCase()) }
                         Text { text: "Whitelist 12:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("Whitelist12", text) }
+                            onTextChanged: bridge.setSetting("Whitelist12", text.toUpperCase()) }
 
                         // ── Always Pass ──
                         Text { text: "ALWAYS PASS"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
@@ -3650,54 +3857,54 @@ Dialog {
 
                         Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("AlwaysPassEnabled", false)
-                            onCheckedChanged: bridge.setSetting("AlwaysPassEnabled", checked)
+                            checked: settingsDialog.boolSetting("AlwaysPass", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("AlwaysPass", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         Text { text: "Always Pass 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass1", text) }
+                        TextField { text: bridge.getSetting("Pass1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass1", text.toUpperCase()) }
                         Text { text: "Always Pass 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass2", text) }
+                        TextField { text: bridge.getSetting("Pass2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass2", text.toUpperCase()) }
 
                         Text { text: "Always Pass 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass3", text) }
+                        TextField { text: bridge.getSetting("Pass3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass3", text.toUpperCase()) }
                         Text { text: "Always Pass 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass4", text) }
+                        TextField { text: bridge.getSetting("Pass4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass4", text.toUpperCase()) }
 
                         Text { text: "Always Pass 5:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass5", text) }
+                        TextField { text: bridge.getSetting("Pass5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass5", text.toUpperCase()) }
                         Text { text: "Always Pass 6:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass6", text) }
+                        TextField { text: bridge.getSetting("Pass6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass6", text.toUpperCase()) }
 
                         Text { text: "Always Pass 7:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass7", text) }
+                        TextField { text: bridge.getSetting("Pass7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass7", text.toUpperCase()) }
                         Text { text: "Always Pass 8:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass8", text) }
+                        TextField { text: bridge.getSetting("Pass8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass8", text.toUpperCase()) }
 
                         Text { text: "Always Pass 9:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass9", text) }
+                        TextField { text: bridge.getSetting("Pass9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass9", text.toUpperCase()) }
                         Text { text: "Always Pass 10:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass10", text) }
+                        TextField { text: bridge.getSetting("Pass10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass10", text.toUpperCase()) }
 
                         Text { text: "Always Pass 11:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass11", text) }
+                        TextField { text: bridge.getSetting("Pass11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass11", text.toUpperCase()) }
                         Text { text: "Always Pass 12:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("AlwaysPass12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            onTextChanged: bridge.setSetting("AlwaysPass12", text) }
+                        TextField { text: bridge.getSetting("Pass12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Pass12", text.toUpperCase()) }
 
                         // ── Territory ──
                         Text { text: "TERRITORY"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
@@ -3723,26 +3930,19 @@ Dialog {
 
                         Text { text: "Wait & Pounce:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("FiltersWaitPounceOnly", false)
-                            onCheckedChanged: bridge.setSetting("FiltersWaitPounceOnly", checked)
+                            checked: settingsDialog.boolSetting("FiltersForWaitAndPounceOnly", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWaitAndPounceOnly", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: "Calling Only:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("FiltersCallingOnly", false)
-                            onCheckedChanged: bridge.setSetting("FiltersCallingOnly", checked)
+                            checked: settingsDialog.boolSetting("FiltersForWord2", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWord2", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Worked Today+:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("QuickFilterWorked", false)
-                            onCheckedChanged: bridge.setSetting("QuickFilterWorked", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
                     }
                 }

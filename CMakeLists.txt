@@ -1214,9 +1214,9 @@ set (LANGUAGES
 				# translation loaders loading the
 				# second preference UI languge, it
 				# doesn't need to be populated)
-  en_GB				# English UK
   es				# Spanish
   fr				# French
+  hu				# Hungarian
   it				# Italian
   ja				# Japanese
   #no				# Norwegian
@@ -1225,7 +1225,6 @@ set (LANGUAGES
   #sv				# Swedish
   zh				# Chinese
   zh_TW				# Chinese traditional
-  it				# Italian
   )
 foreach (lang_ ${LANGUAGES})
   set (ts_source_ "${CMAKE_SOURCE_DIR}/translations/decodium_${lang_}.ts")

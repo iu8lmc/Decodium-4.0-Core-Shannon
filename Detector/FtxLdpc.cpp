@@ -506,11 +506,11 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
     {
       indices[static_cast<size_t> (i)] = i;
     }
-  std::stable_sort (indices.begin (), indices.end (), [&absrx] (int lhs, int rhs) {
+  std::sort (indices.begin (), indices.end (), [&absrx] (int lhs, int rhs) {
     return absrx[static_cast<size_t> (lhs)] > absrx[static_cast<size_t> (rhs)];
   });
 
-  std::vector<Codeword174> genmrb (static_cast<size_t> (k));
+  std::array<Codeword174, kLdpc17491K> genmrb {};
   for (int row = 0; row < k; ++row)
     {
       for (int col = 0; col < kLdpc17491N; ++col)
@@ -747,7 +747,11 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
 
       if (npre2 == 1)
         {
-          std::vector<std::vector<std::pair<int, int>>> boxes (static_cast<size_t> (1u << ntau));
+          int constexpr kMaxPairs = kLdpc17491K * (kLdpc17491K - 1) / 2;
+          std::vector<int> box_heads (static_cast<size_t> (1u << ntau), -1);
+          std::array<int, kMaxPairs> box_next {};
+          std::array<std::pair<int, int>, kMaxPairs> box_pairs {};
+          int box_count = 0;
           for (int i1 = k - 1; i1 >= 0; --i1)
             {
               for (int i2 = i1 - 1; i2 >= 0; --i2)
@@ -760,7 +764,13 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
                         g2[static_cast<size_t> (k + bit)][static_cast<size_t> (i2)];
                       pattern = (pattern << 1) | value;
                     }
-                  boxes[static_cast<size_t> (pattern)].emplace_back (i1, i2);
+                  if (box_count < kMaxPairs)
+                    {
+                      box_pairs[static_cast<size_t> (box_count)] = {i1, i2};
+                      box_next[static_cast<size_t> (box_count)] = box_heads[static_cast<size_t> (pattern)];
+                      box_heads[static_cast<size_t> (pattern)] = box_count;
+                      ++box_count;
+                    }
                 }
             }
 
@@ -799,8 +809,11 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
                         }
                       pattern = (pattern << 1) | value;
                     }
-                  for (auto const& match : boxes[static_cast<size_t> (pattern)])
+                  for (int match_index = box_heads[static_cast<size_t> (pattern)];
+                       match_index >= 0;
+                       match_index = box_next[static_cast<size_t> (match_index)])
                     {
+                      auto const& match = box_pairs[static_cast<size_t> (match_index)];
                       mi2 = misub;
                       mi2[static_cast<size_t> (match.first)] = 1;
                       mi2[static_cast<size_t> (match.second)] = 1;
@@ -1071,7 +1084,7 @@ extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, i
       auto zn_osd = zsave[static_cast<size_t> (i)];
       osd174_91_cpp (zn_osd.data (), Keff, apmask.data (), norder, message91.data (),
                      cw_osd.data (), &nhard, &dmin);
-      if (nhard > 0)
+      if (nhard >= 0)
         {
           ftx_ldpc174_91_metrics_c (cw_osd.data (), llr.data (), &nhard, &dmin);
           if (message91_out)

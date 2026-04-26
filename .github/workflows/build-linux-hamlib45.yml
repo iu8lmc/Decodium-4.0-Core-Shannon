@@ -96,7 +96,7 @@ jobs:
           cp contrib/Ephemeris/JPLEPH "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp -r sounds "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp -r Palettes "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
-          cp icons/Unix/wsjtx_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/ft2.png"
+          cp icons/Unix/decodium_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/ft2.png"
 
           cat > "${APPDIR}/usr/share/applications/ft2.desktop" <<'DESKTOP'
           [Desktop Entry]
@@ -144,7 +144,7 @@ jobs:
             --plugin qt \
             --output appimage
 
-          APPIMAGE_NAME="decodium3-ft2-experimental-linux-x86_64.AppImage"
+          APPIMAGE_NAME="decodium4-ft2-experimental-linux-x86_64.AppImage"
           APPIMAGE_SRC="$(find . -maxdepth 1 -name '*.AppImage' ! -name 'linuxdeploy*.AppImage' | head -n1)"
           mv "${APPIMAGE_SRC}" "${APPIMAGE_NAME}"
           sha256sum "${APPIMAGE_NAME}" > "${APPIMAGE_NAME}.sha256.txt"
@@ -152,7 +152,7 @@ jobs:
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: decodium3-ft2-experimental-linux-x86_64
+          name: decodium4-ft2-experimental-linux-x86_64
           path: |
-            decodium3-ft2-experimental-linux-x86_64.AppImage
-            decodium3-ft2-experimental-linux-x86_64.AppImage.sha256.txt
+            decodium4-ft2-experimental-linux-x86_64.AppImage
+            decodium4-ft2-experimental-linux-x86_64.AppImage.sha256.txt

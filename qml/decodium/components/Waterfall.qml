@@ -511,6 +511,29 @@ Item {
         }
         function onRxFrequencyChanged() { waterfallDisplay.rxFreq = bridge.rxFrequency }
         function onTxFrequencyChanged() { waterfallDisplay.txFreq = bridge.txFrequency }
+        function onSettingValueChanged(key, value) {
+            if (key !== "uiPaletteIndex"
+                && key !== "uiWaterfallBlackLevel"
+                && key !== "uiWaterfallColorGain"
+                && key !== "uiWaterfallContrast")
+                return
+
+            waterfallPanel.restoringSettings = true
+            if (key === "uiPaletteIndex") {
+                paletteCombo.currentIndex = Math.max(0, Number(value))
+                waterfallDisplay.paletteIndex = paletteCombo.currentIndex
+            } else if (key === "uiWaterfallBlackLevel") {
+                blackSlider.value = Number(value)
+                waterfallDisplay.blackLevel = blackSlider.value
+            } else if (key === "uiWaterfallColorGain") {
+                gainSlider.value = Number(value)
+                waterfallDisplay.colorGain = gainSlider.value
+            } else if (key === "uiWaterfallContrast") {
+                contrastSlider.value = Number(value)
+                waterfallPanel.applyManualContrast()
+            }
+            waterfallPanel.restoringSettings = false
+        }
 
         // Aggiorna i callsign decodificati sul grafico spettro
         function onDecodeListChanged() {

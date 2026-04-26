@@ -563,7 +563,7 @@ Item {
                                 padding: 0
                                 background: Rectangle { color: "transparent" }
                                 contentItem: ToolbarButtonContent {
-                                    label: engine && engine.txPeriod === 1 ? "1ST" : "EVEN"
+                                    label: engine && engine.txPeriod === 1 ? "1ST" : "2ND"
                                     glyph: engine && engine.txPeriod === 1 ? "\u2460" : "\u2461"
                                     foreground: engine && engine.txPeriod === 1 ? primaryBlue : textPrimary
                                     glyphSize: 15
@@ -571,7 +571,7 @@ Item {
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Tx even/1st\n(come Decodium 3)"
+                                ToolTip.text: "TX slot\n1st: :00/:30\n2nd: :15/:45"
                                 ToolTip.delay: 500
                                 onClicked: if (engine) engine.txPeriod = engine.txPeriod === 1 ? 0 : 1
                             }
@@ -604,33 +604,6 @@ Item {
                                 ToolTip.text: "Auto CQ: alterna le fasi Tx/Rx dopo CQ ripetuti senza risposta"
                                 ToolTip.delay: 500
                                 onClicked: if (engine) engine.alt12Enabled = !engine.alt12Enabled
-                            }
-                        }
-
-                        Rectangle {
-                            width: 86
-                            height: 36
-                            radius: 6
-                            color: engine && engine.startFromTx2 ? Qt.alpha(warningOrange, 0.3) : Qt.alpha(textPrimary, 0.05)
-                            border.color: engine && engine.startFromTx2 ? warningOrange : Qt.alpha(textPrimary, 0.2)
-                            border.width: engine && engine.startFromTx2 ? 2 : 1
-
-                            Button {
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "Q.Call"
-                                    glyph: "⚡"
-                                    foreground: engine && engine.startFromTx2 ? warningOrange : textPrimary
-                                    glyphSize: 15
-                                    labelSize: 10
-                                    boldLabel: engine && engine.startFromTx2
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: "Quick Call\n(Doppio click su decode abilita TX automaticamente\ncome Shannon: 'Double-click on call sets Tx enable')"
-                                ToolTip.delay: 500
-                                onClicked: if (engine) engine.startFromTx2 = !engine.startFromTx2
                             }
                         }
 

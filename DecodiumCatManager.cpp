@@ -2,6 +2,8 @@
 #include "DecodiumLogging.hpp"
 
 #include <cmath>
+#include <QDebug>
+#include <QElapsedTimer>
 #include <QSerialPortInfo>
 #include <QSettings>
 
@@ -211,7 +213,6 @@ void DecodiumCatManager::applyRigDefaults(const QString& rigName)
 DecodiumCatManager::DecodiumCatManager(QObject* parent)
     : QObject(parent)
 {
-    refreshPorts();
     loadSettings();
 }
 
@@ -748,9 +749,15 @@ void DecodiumCatManager::applyPollInterval()
 
 void DecodiumCatManager::refreshPorts()
 {
+    QElapsedTimer timer;
+    timer.start();
     m_portList.clear();
     for (const QSerialPortInfo& info : QSerialPortInfo::availablePorts())
         m_portList.append(info.portName());
+    if (timer.elapsed() > 1000) {
+        qWarning("CAT serial port enumeration took %lld ms (%lld ports)",
+                 timer.elapsed(), static_cast<long long>(m_portList.size()));
+    }
     emit portListChanged();
 }
 

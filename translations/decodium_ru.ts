@@ -41,7 +41,7 @@
     <message>
         <location filename="../widgets/activeStations.ui" line="34"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Total score accumulated since most recent reset of Cabrillo log.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Общий балл, накопленный с момента последнего сброса журнала Cabrillo.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Total score accumulated since most recent reset of Cabrillo log.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="37"/>
@@ -392,7 +392,7 @@ Searched paths:
     <message>
         <location filename="../widgets/about.ui" line="9"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>О Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/about.ui" line="60"/>
@@ -731,82 +731,82 @@ The cluster window and AutoSpot now use the same endpoint.</source>
     <message>
         <location filename="../Configuration.cpp" line="2140"/>
         <source>RTTY Modem</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Модем</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2143"/>
         <source>Baud rate:</source>
-        <translation type="unfinished"></translation>
+        <translation>Скорость передачи данных:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2149"/>
         <source>RTTY baud rate used for both receive and transmit.</source>
-        <translation type="unfinished"></translation>
+        <translation>Скорость передачи данных RTTY используется как для приема, так и для передачи.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2152"/>
         <source>Mark tone (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>Тон отметки (Гц):</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2157"/>
         <source>Base mark tone. Space tone is mark tone plus shift.</source>
-        <translation type="unfinished"></translation>
+        <translation>Базовый тон отметки. Пробел – это тон отметки плюс сдвиг.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2160"/>
         <source>Shift (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>Сдвиг (Гц):</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2165"/>
         <source>Difference between mark and space tones.</source>
-        <translation type="unfinished"></translation>
+        <translation>Разница между знаками и пробелами.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2168"/>
         <source>Stop bits:</source>
-        <translation type="unfinished"></translation>
+        <translation>Стоп-биты:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2174"/>
         <source>Transmit stop bits appended after each 5-bit Baudot character.</source>
-        <translation type="unfinished"></translation>
+        <translation>Стоповые биты передачи добавляются после каждого 5-битного символа Baudot.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2177"/>
         <source>Reverse / normal</source>
-        <translation type="unfinished"></translation>
+        <translation>Реверс/нормальный</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2179"/>
         <source>Swap mark and space tones for both decoding and transmitting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Поменяйте местами знаки и пробелы как для декодирования, так и для передачи.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2181"/>
         <source>Macro CQ:</source>
-        <translation type="unfinished"></translation>
+        <translation>Макрос CQ:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2184"/>
         <source>Text sent by the CQ macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Текст, отправленный макрос-кнопкой CQ. Поддерживаемые заполнители: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2187"/>
         <source>Macro 73:</source>
-        <translation type="unfinished"></translation>
+        <translation>Макрос 73:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2190"/>
         <source>Text sent by the 73 macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Текст, отправленный кнопкой макроса 73. Поддерживаемые заполнители: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2194"/>
         <source>These settings apply to the built-in RTTY modem. Mark stays fixed; space is mark tone plus shift. Reverse swaps mark and space. Placeholders for CQ/73 macros: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Эти настройки применяются к встроенному модему RTTY. Марк остается неподвижным; пробел — это знак тона плюс сдвиг. Обратные местами меняют знак и пробел. Заполнители для макросов CQ/73: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2228"/>
@@ -2193,7 +2193,7 @@ Error: %2</source>
     <message>
         <location filename="../widgets/FoxLogWindow.ui" line="99"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Last 10: Average rate (QSOs/hour) for the last 10 QSOs.&lt;br/&gt;Last 100:  Average rate (QSOs/hour) for the last 100 QSOs. &lt;br/&gt;Last 60m: Average rate (QSOs/hour) for the last 60 minutes.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Last 10: Средняя скорость (QSO/час) за последние 10 QSO. &lt;br/&gt;Last 100: Средняя скорость (QSO/час) за последние 100 QSO. &lt;br/&gt;Последние 60 минут: Средняя скорость (связей в час) за последние 60 минут.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Last 10: Average rate (QSOs/hour) for the last 10 QSOs.&lt;br/&gt;Last 100:  Average rate (QSOs/hour) for the last 100 QSOs. &lt;br/&gt;Last 60m: Average rate (QSOs/hour) for the last 60 minutes.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/FoxLogWindow.cpp" line="55"/>
@@ -4587,7 +4587,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1082"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Toggle a pure Tx tone On/Off &lt;br&gt;Right-click to tune rig&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Включение/выключение чистого тона Tx &lt;br&gt;Щелкните правой кнопкой мыши для настройки установки&lt;/p&gt;&lt;/body&gt;P7§</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Toggle a pure Tx tone On/Off &lt;br&gt;Right-click to tune rig&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1168"/>
@@ -4607,7 +4607,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1381"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Put callsign on the Ignore List.&lt;br&gt;Right-click searches for callsign on qrzcq.com.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Поместить позывной в список игнорируемых.&lt;br&gt;Нажмите правой кнопкой мыши для поиска позывного на qrzcq.com.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Put callsign on the Ignore List.&lt;br&gt;Right-click searches for callsign on qrzcq.com.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1384"/>
@@ -4622,7 +4622,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1756"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: None&lt;/span&gt; to choose callers manually.&lt;/p&gt;&lt;p&gt;Select &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: First&lt;/span&gt; to respond automatically to the first decoded reply to your CQ. &lt;/p&gt;&lt;p&gt;Select &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Max Dist&lt;/span&gt; to respond automatically to the reply yielding most points in the ARRL International Digital Contest, or in general to the most distant station, if its message has a valid grid.&lt;/p&gt;&lt;p&gt;Select &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Max dB&lt;/span&gt; to respond automatically to the the strongest station&apos;s reply to your CQ. &lt;/p&gt;&lt;p&gt;Select &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Min dB&lt;/span&gt; to respond automatically to the the weakest station&apos;s reply to your CQ. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2&lt;p&gt;Выберите &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Нет&lt;/span&gt;, чтобы выбрать абонентов вручную. &lt;/p&gt;&lt;p&gt;Выберите &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Первый&lt;/span&gt;, чтобы автоматически отвечать на первый декодированный ответ на ваш CQ. &lt;/p&gt;&lt;p&gt;Выберите &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Max Dist&lt;/span&gt;, чтобы автоматически отвечать на ответ, набравший наибольшее количество очков в Международном цифровом конкурсе ARRL, или вообще на самую удаленную станцию, если ее сообщение имеет действительную сетку. &lt;/p&gt;&lt;p&gt;Выберите &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Max dB&lt;/span&gt;, чтобы автоматически отвечать на ответ самой мощной станции на ваш CQ. &lt;/p&gt;P19§Выберите &lt;span style=&quot; font-weight:600;&quot;&gt;CQ: Мин. дБ&lt;/span&gt;, чтобы автоматически реагировать на ответ самой слабой станции на ваш CQ. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select &lt;span style=" font-weight:600;"&gt;CQ: None&lt;/span&gt; to choose callers manually.&lt;/p&gt;&lt;p&gt;Select &lt;span style=" font-weight:600;"&gt;CQ: First&lt;/span&gt; to respond automatically to the first decoded reply to your CQ. &lt;/p&gt;&lt;p&gt;Select &lt;span style=" font-weight:600;"&gt;CQ: Max Dist&lt;/span&gt; to respond automatically to the reply yielding most points in the ARRL International Digital Contest, or in general to the most distant station, if its message has a valid grid.&lt;/p&gt;&lt;p&gt;Select &lt;span style=" font-weight:600;"&gt;CQ: Max dB&lt;/span&gt; to respond automatically to the the strongest station's reply to your CQ. &lt;/p&gt;&lt;p&gt;Select &lt;span style=" font-weight:600;"&gt;CQ: Min dB&lt;/span&gt; to respond automatically to the the weakest station's reply to your CQ. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="1775"/>
@@ -4643,7 +4643,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="2058"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to T/R 15 s and Submode C.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Переключение на T/R 15 с и подрежим C.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to T/R 15 s and Submode C.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="2061"/>
@@ -4653,7 +4653,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="2074"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to T/R 15 s and Submode A.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Переключение на T/R 15 с и подрежим A.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to T/R 15 s and Submode A.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="2077"/>
@@ -4870,7 +4870,7 @@ list. The list can be maintained in Settings (F2).</source>
         <location filename="../widgets/mainwindow.ui" line="2676"/>
         <location filename="../widgets/mainwindow.ui" line="2679"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to this Tx message NOW&lt;/p&gt;&lt;p&gt;Double-click to reset to the standard 73 message&lt;/p&gt;&lt;p&gt;Right-click to retain Tx5 free text&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Переключитесь на это сообщение Tx СЕЙЧАС&lt;/p&gt;&lt;p&gt;Двойной щелчок, чтобы вернуться к стандартному сообщению 73&lt;/p&gt;&lt;p&gt;Щелкните правой кнопкой мыши, чтобы сохранить свободный текст Tx5&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to this Tx message NOW&lt;/p&gt;&lt;p&gt;Double-click to reset to the standard 73 message&lt;/p&gt;&lt;p&gt;Right-click to retain Tx5 free text&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="2940"/>
@@ -4920,7 +4920,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="3135"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select a desired sort order for callsigns in the queue.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Выберите желаемый порядок сортировки позывных в очереди.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select a desired sort order for callsigns in the queue.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="3170"/>
@@ -4950,7 +4950,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="3220"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Maximum number of concurrent streams for Fox transmissions.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Максимальное количество одновременных потоков для передач Fox.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Maximum number of concurrent streams for Fox transmissions.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="3302"/>
@@ -5312,7 +5312,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="4884"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to Q65 mode.&lt;br&gt; Right-click to switch to Q65 Pileup mode.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Переключитесь в режим Q65.&lt;br&gt; Щелкните правой кнопкой мыши, чтобы переключиться в режим Pileup Q65.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Switch to Q65 mode.&lt;br&gt; Right-click to switch to Q65 Pileup mode.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="4909"/>
@@ -5407,12 +5407,12 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5364"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>О Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5684"/>
         <source>RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6007"/>
@@ -5427,7 +5427,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6015"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Go to the Decodium v3.0 SE KP5 home page.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Перейти на домашнюю страницу Decodium v3.0 SE KP5.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Go to the Decodium v3.0 SE KP5 home page.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6020"/>
@@ -5437,7 +5437,7 @@ list. The list can be maintained in Settings (F2).</source>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6023"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Overview on the additional features of Decodium v3.0 SE KP5.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Обзор дополнительных возможностей Decodium v3.0 SE KP5.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Overview on the additional features of Decodium v3.0 SE KP5.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>About WSJT-X</source>
@@ -6749,113 +6749,116 @@ to ensure the signal is clean and not distorted.</source>
 &lt;/table&gt;</source>
         <extracomment>Mouse commands help window contents</extracomment>
         <translation>&lt;table cellpadding=5&gt;
- &lt;tr&gt;
- &lt;th align=&quot;right&quot;&gt;Нажмите &lt;/th&gt;
- &lt;th align=&quot;left&quot;&gt;Действие&lt;/th&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Водопад:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы установить Rx частота.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы установить частоту передачи.&lt;br/&gt;
- &lt;b&gt;Дважды щелкните правой кнопкой мыши&lt;/b&gt;, чтобы установить частоты приема и передачи.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Декодированный текст:&lt;/td&gt;
- &lt;td&gt;P39§Дважды щелкните &lt;/b&gt;, чтобы скопировать второй позывной в Dx Call, локатор в Dx Grid, изменить Rx&lt;br/&gt;
- и частоту Tx на частоту декодированного сигнала и сгенерировать стандартные сообщения. &lt;br/&gt;
- Удерживайте &lt;b&gt;Alt&lt;/b&gt;, чтобы запретить включение Tx &lt;b&gt;двойной щелчок&lt;/b&gt;.&lt;br/&gt;
- Если отмечен &lt;b&gt;Hold Tx Freq&lt;/b&gt; или первый позывной в сообщении&#xa0;— это ваш &lt;br/&gt;
- собственный вызов, частота передачи не изменяется, пока &lt;b&gt;Ctrl&lt;/b&gt; не удерживается нажатой.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt; Частота набора: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Поверните колесо мыши&lt;/b&gt;, чтобы изменить значения кГц, или: &lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы увеличить частоту на 1 кГц.&lt;br/&gt;
- &lt;b&gt;Щелкните левой кнопкой мыши&lt;/b&gt;, чтобы уменьшить частота на 1 кГц.&lt;br/&gt;
- Указатель мыши должен находиться над индикатором частоты набора.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;H Кнопка: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Щелкните &lt;/b&gt;, чтобы переключить режим FT8 Hound Mode Вкл/Выкл.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы активировать или деактивировать режим SuperFox.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;FT8 Кнопка: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы переключиться в режим отслеживания FT8.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы включить/выключить последнее использованное специальное рабочее действие.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Q65 Кнопка: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы переключиться в режим Q65.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы переключиться в режим Q65 Pileup.
- &lt;/td&gt;P133§ &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;JT65 Кнопка: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы переключиться в режим JT65. &lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы переключиться на JT9 Режим.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Кнопка Tx5: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt; Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы сохранить свободный текст Tx5.
- &lt;/td&gt;P163§ &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Tx Четный/1-й: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt; Щелкните правой кнопкой мыши &lt;/b&gt;, чтобы зафиксировать состояние флажка. &lt;br/&gt;
- &lt;b&gt; Щелкните правой кнопкой мыши кнопку FT8 &lt;/b&gt;, чтобы разморозить.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt; Кнопка включения передачи: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы включить/выключить режим автоматической передачи.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы включить/выключить режим ожидания и атаки.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Кнопка стирания: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы стереть частоту приема. окно.&lt;br/&gt;
- &lt;b&gt;Дважды щелкните &lt;/b&gt;, чтобы стереть окна частоты приема и активности диапазона.&lt;br/&gt;
- Если отмечен &lt;b&gt;Альтернативное поведение кнопки стирания&lt;/b&gt;: &lt;br/&gt;
- &lt;b&gt;Нажмите &lt;/b&gt;, чтобы стереть активность диапазона. окно.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы стереть окно частоты приема.&lt;br/&gt;
- &lt;b&gt;Дважды щелкните &lt;/b&gt;, чтобы стереть окна частоты приема и активности диапазона.
- &lt;/td&gt;
- &lt;/tr&gt;P232§ &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Кнопка вызова DX: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы включить или выключить ожидание и вызов. &lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши &lt;/b&gt;, чтобы очистить Dx-вызов, сетку Dx и стандартные сообщения. 
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Кнопка поиска: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt; для поиска позывного в базе данных. &lt;br/&gt;
- &lt;b&gt; Щелкните правой кнопкой мыши&lt;/b&gt; для поиска Dx Call on qrz.com.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt; Кнопка «Добавить»: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt; Щелкните &lt;/b&gt;, чтобы добавить позывной и локатор в базу данных.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt; для поиска Dx Call на hamqth.com.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Кнопка «Игнорировать»:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы добавить позывной в список игнорируемых.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы найти Dx Call на qrzcq.com.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Кнопки диапазона: &lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Нажмите &lt;/b&gt;, чтобы переключить диапазон/режим частот по умолчанию.&lt;br/&gt;
- &lt;b&gt;Щелкните правой кнопкой мыши&lt;/b&gt;, чтобы переключить частоты FT8 DX-экспедиции.
- &lt;/td&gt;
- &lt;/tr&gt;
-P318§</translation>
+  &lt;tr&gt;
+    &lt;th align="right"&gt;Click on&lt;/th&gt;
+    &lt;th align="left"&gt;Action&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Waterfall:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to set Rx frequency.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to set Tx frequency.&lt;br/&gt;
+        &lt;b&gt;Double-right-click&lt;/b&gt; to set Rx and Tx frequencies.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Decoded text:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Double-click&lt;/b&gt; to copy second callsign to Dx Call, locator to Dx Grid, change Rx&lt;br/&gt;
+        and Tx frequency to decoded signal's frequency, and generate standard messages.&lt;br/&gt;
+        Hold down &lt;b&gt;Alt&lt;/b&gt; to prevent Tx from being enabled on &lt;b&gt;double-click&lt;/b&gt;.&lt;br/&gt;
+        If &lt;b&gt;Hold Tx Freq&lt;/b&gt; is checked or first callsign in message is your&lt;br/&gt;
+        own call, Tx frequency is not changed unless &lt;b&gt;Ctrl&lt;/b&gt; is held down.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Dial Frequency:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Turn the mouse wheel&lt;/b&gt; to change the kHz values, or:&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to increase frequency by 1 kHz.&lt;br/&gt;
+        &lt;b&gt;Left-click&lt;/b&gt; to decrease frequency by 1 kHz.&lt;br/&gt;
+        The mouse pointer must be over the Dial Frequency indicator.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;H Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle FT8 Hound Mode On/Off.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to activate or deactivate SuperFox mode.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;FT8 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to switch to FT8 Hound Mode.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to toggle last used Special Operating Activity On/Off.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Q65 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to switch to Q65 Mode.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to switch to Q65 Pileup Mode.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;JT65 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to switch to JT65 Mode.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to switch to JT9 Mode.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Tx5 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Right-click&lt;/b&gt; to retain Tx5 free text.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Tx Even/1st:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Right-click&lt;/b&gt; to freeze the state of the checkbox.&lt;br/&gt;
+        &lt;b&gt;Right-click on the FT8 Button&lt;/b&gt; to unfreeze.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Enable Tx Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle Auto-Tx mode On/Off.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to toggle Wait &amp; Pounce On/Off.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Erase button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to erase Rx Frequency window.&lt;br/&gt;
+        &lt;b&gt;Double-click&lt;/b&gt; to erase Rx Frequency and Band Activity windows.&lt;br/&gt;
+        If &lt;b&gt;Alternate Erase button behavior&lt;/b&gt; is checked:&lt;br/&gt;
+        &lt;b&gt;Click&lt;/b&gt; to erase Band Activity window.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to erase Rx Frequency window.&lt;br/&gt;
+        &lt;b&gt;Double-click&lt;/b&gt; to erase Rx Frequency and Band Activity windows.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;DX Call Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle Wait &amp; Call On/Off.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to clear the Dx Call, Dx Grid and Std Msgs.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Lookup Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to search for callsign in database.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to search for Dx Call on qrz.com.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Add Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to add callsign and locator to database.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to search for Dx Call on hamqth.com.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Ignore Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to add callsign to the Ignore List.&lt;br/&gt;
+       &lt;b&gt;Right-click&lt;/b&gt; to search for Dx Call on qrzcq.com.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+  &lt;td align="right"&gt;Band Buttons:&lt;/td&gt;
+  &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle band / mode default frequencies.&lt;br/&gt;
+      &lt;b&gt;Right-click&lt;/b&gt; to toggle FT8 DXpedition frequencies.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8991"/>
@@ -6909,12 +6912,60 @@ P318§</translation>
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="unfinished"></translation>
+        <translation>&lt;table cellspacing=1&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, прервать QSO, очистить следующий вызов очередь&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Интернет-руководство пользователя (Alt: передать Tx6) &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уведомление об авторских правах&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;О Decodium&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F2 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть окно настроек (Alt: передать Tx2) &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F3 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Отображение сочетаний клавиш (Alt: передача Tx3) &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Очистить DX Вызов, DX Сетка, Tx-сообщения 1-4 (Alt: передать Tx4) &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Выйти из программы &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F5 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Отображение специальных команд мыши (Alt: передача Tx5) &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть следующий файл в каталоге (Alt: переключить «Первый вызов») &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Декодировать все оставшиеся файлы в каталоге &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F7 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Отображение окна усреднения сообщений &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уменьшить частоту приема на 1 Гц&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переместить одинаковые частоты приема и передачи вниз на 1 Гц &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уменьшить частоту передачи на 60 Гц (FT8) или 90 Гц (FT4)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уменьшить частоту набора на 1000 Гц &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Увеличить частоту приема на 1 Гц&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переместить одинаковые частоты приема и передачи вверх на 1 Гц &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Увеличить частоту передачи на 60 Гц (FT8) или 90 Гц (FT4)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Увеличить частоту набора на 1000 Гц &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить передачу на этот номер на вкладке 1&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить следующую передачу на этот номер на вкладке 1&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Очистить активные станции для QMAP&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переключить статус «Лучший S+P» &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C &lt;/b&gt;&lt;/td&gt;&lt;td&gt;TУстановить флажок «Первый вызов»&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Снова декодируйте на частоте QSO&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Полное декодирование (оба окна) &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Включить TX четный/1-й&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Выключить TX четный/1-й&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Стереть &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Редактирование окна текстовых сообщений &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Создать стандартные сообщения&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Добавить Dx-вызов в список игнорирования&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lпоиск позывных в базе данных, формирование стандартных сообщений &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переключить «Включить передачу» &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть файл WAV &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Смена оператора &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть «Журнал QSO» окно&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установите для сообщения Tx4 значение RRR (нет в FT4)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить сообщение Tx4 в RR73&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Обновить окно активных станций&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Остановить мониторинг &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Статус настройки &lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Очистить состояние зависшего декодера &lt;/td&gt;&lt;/tr&gt;
+
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="10767"/>
         <source>Embedded WSPR decoder unavailable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Встроенный декодер WSPR недоступен.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="13035"/>
@@ -7220,7 +7271,7 @@ Remote tag: %2</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="7868"/>
         <source>No subprocess diagnostic output was captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выводы диагностики подпроцесса не были записаны.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8234"/>
@@ -7435,50 +7486,55 @@ Current operator: %1</source>
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="vanished">&lt;table cellspacing=1&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Остановить передачу, прервать QSO, очистить очередь следующего вызова&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Интерактивное руководство пользователя (Alt: передать Tx6)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уведомление об авторских правах&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;О Decodium v3.0 FT2 Raptor&lt;/td&gt;&lt;/tr&gt;P37§ &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть окно настроек (Alt: передать Tx2)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Отображение сочетаний клавиш (Alt: передать Tx3)&lt;/td&gt;&lt;/tr&gt;P55§ &lt;tr&gt;&lt;td&gt;P58§F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Очистить вызов DX, сетку DX, сообщения Tx 1–4 (Alt: передать Tx4)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Выход из программы&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Отображение специальных команд мыши (Alt: передача Tx5)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;P84§&lt;b&gt;F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть следующий файл в каталоге (Alt: переключить «Вызов первым»)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Декодировать все оставшиеся файлы в каталоге&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Отображение окна усреднения сообщений&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11 &lt;/b&gt;&lt;/td&gt;P115§Уменьшить частоту приема на 1 герц&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переместить одинаковые частоты приема и передачи вниз на 1 Гц&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уменьшить частоту передачи на 60 Гц (FT8) или 90 Гц (FT4)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Уменьшить частоту набора на 1000 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Увеличить частоту приема на 1 Гц&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P157§Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переместить одинаковые частоты приема и передачи вверх на 1 Гц&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переместить частоту передачи вверх на 60 Гц (FT8) или 90 Гц (FT4)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переместить частоту набора вверх на 1000 Гц&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить сейчас передачу на этот номер на вкладке 1&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P193§Ctl+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить следующую передачу на этот номер номер на вкладке 1&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Очистить активные станции для QMAP&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переключить статус «Лучший S+P»&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переключить флажок «Вызов первым»&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Снова декодируйте на частоте QSO&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Полное декодирование (оба windows)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P247§Ctrl+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Включить передачу даже/1-го&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Выключить четную/первую передачу&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Стереть&lt;/td&gt;&lt;/tr&gt;P271§ &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Изменить поле текстовых сообщений&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Создать стандарт сообщения&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;P297§
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Добавить Dx-вызов в список игнорирования&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Поиск позывного в базе данных, создание стандартных сообщений&lt;/td&gt;P315§
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Монитор&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P328§Alt+N &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переключить «Включить» Tx&quot;&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Открыть файл .wav&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Смена оператора&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q &lt;/b&gt;&lt;/td&gt;P358§Открыть окно «Журнал QSO»&lt;/td&gt;&lt;/tr&gt;P361§ &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить для сообщения Tx4 значение RRR (не в FT4)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Установить для сообщения Tx4 значение RR73&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Обновить окно активных станций&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P391§Alt+S &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Остановить мониторинг&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Переключить статус настройки&lt;/td&gt;&lt;/tr&gt;P406§ &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Очистить зависший статус декодера&lt;/td&gt;&lt;/tr&gt;
+        <translation>&lt;table cellspacing=1&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, abort QSO, clear next-call queue&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Online User's Guide (Alt: transmit Tx6)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Copyright Notice&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;About Decodium v3.0 FT2 Raptor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open settings window (Alt: transmit Tx2)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display keyboard shortcuts (Alt: transmit Tx3)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear DX Call, DX Grid, Tx messages 1-4 (Alt: transmit Tx4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Exit program&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display special mouse commands (Alt: transmit Tx5)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open next file in directory (Alt: toggle "Call 1st")&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode all remaining files in directory&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display Message Averaging window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency down 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency down 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency up 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency up 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set now transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set next transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear Active Stations for QMAP&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Best S+P" status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Call 1st" checkbox&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode again at QSO frequency&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Full decode (both windows)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn on TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn off TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Erase&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Edit the free text message box&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Add Dx Call to the Ignore List&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lookup callsign in database, generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Enable Tx"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open a .wav file&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Change operator&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open "Log QSO" window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RRR (not in FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RR73&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Refresh Active Stations window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop monitoring&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Tune status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear hung decoder status&lt;/td&gt;&lt;/tr&gt;
 
-P417§</translation>
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="12992"/>
@@ -7654,32 +7710,32 @@ DX-экспедиция: %1 (%2)
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18875"/>
         <source>%1 baud Baudot terminal. Mark %2 Hz, shift %3 Hz, %4, %5 stop bits. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 бод Терминал Baudot. Отметьте %2 Гц, сдвиньте стоповые биты %3 Гц, %4, %5. Полученный текст отображается выше; введите текст для отправки ниже.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>обеспечить регресс</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>normal</source>
-        <translation type="unfinished"></translation>
+        <translation>нормальный</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18924"/>
         <source>RTTY text contains no encodable Baudot characters</source>
-        <translation type="unfinished"></translation>
+        <translation>Текст RTTY не ​​содержит кодируемых символов Baudot.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19068"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Получен текст</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19069"/>
         <source>RTTY Transmitted Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Передаваемый текст</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19138"/>
@@ -7760,7 +7816,7 @@ DX-экспедиция: %1 (%2)
     <message>
         <location filename="../widgets/mainwindow.cpp" line="24834"/>
         <source>Embedded WSPR decoder failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Сбой встроенного декодера WSPR: %1</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="26693"/>
@@ -7904,7 +7960,7 @@ Error(%2): %3</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27593"/>
         <source>Remote mode request ignored: RTTY is hidden in this release</source>
-        <translation type="unfinished"></translation>
+        <translation>Запрос удаленного режима игнорируется: RTTY скрыт в этом выпуске.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27599"/>
@@ -8039,17 +8095,17 @@ Error(%2): %3</source>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27793"/>
         <source>Remote Monitoring ignored: cannot enable while transmitting</source>
-        <translation type="unfinished"></translation>
+        <translation>Удаленный мониторинг игнорируется: невозможно включить во время передачи</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring enabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Удаленный мониторинг включен</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring disabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Удаленный мониторинг отключен</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27813"/>
@@ -8598,7 +8654,7 @@ UDP-сервер %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="137"/>
         <source>secret-tool lookup failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось запустить поиск secret-tool.</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="142"/>
@@ -8643,7 +8699,7 @@ UDP-сервер %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="284"/>
         <source>secret-tool clear failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>secret-tool очистить не удалось запустить</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="289"/>
@@ -8653,7 +8709,7 @@ UDP-сервер %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="302"/>
         <source>secret-tool clear failed</source>
-        <translation type="unfinished"></translation>
+        <translation>Ошибка очистки secret-tool</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18093"/>
@@ -8700,14 +8756,18 @@ UDP-сервер %2:%3</translation>
         <source>Network Error:
 Unsupported download URL or scheme:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Сетевая ошибка:
+Неподдерживаемая загрузка URL или схема:
+%1</translation>
     </message>
     <message>
         <location filename="../Network/FileDownload.cpp" line="77"/>
         <source>Network Error:
 Downloaded file exceeds limit of %1 MiB:
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Сетевая ошибка:
+Загруженный файл превышает лимит %1 MiB:
+%2</translation>
     </message>
 </context>
 <context>
@@ -9139,42 +9199,42 @@ Message</source>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="34"/>
         <source>45.45 baud Baudot terminal. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Терминал Baudot, 45,45 бод. Полученный текст отображается выше; введите текст для отправки ниже.</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="39"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Получен текст</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="40"/>
         <source>Clear RX</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="50"/>
         <source>Waiting for RTTY traffic...</source>
-        <translation type="unfinished"></translation>
+        <translation>Ожидание трафика RTTY...</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="57"/>
         <source>RTTY Transmit Buffer</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Буфер передачи</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="58"/>
         <source>Clear TX</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="67"/>
         <source>Type your RTTY message here, then press Send RTTY.</source>
-        <translation type="unfinished"></translation>
+        <translation>Введите здесь свое сообщение RTTY, затем нажмите «Отправить RTTY».</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="71"/>
         <source>Send RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>Отправить RTTY</translation>
     </message>
 </context>
 <context>
@@ -10476,7 +10536,7 @@ quiet period when decoding is done.</source>
     <message>
         <location filename="../Configuration.ui" line="408"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Tx until 73 is received when in MSK144 or Q65 mode. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Tx до получения 73 в режиме MSK144 или Q65. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Tx until 73 is received when in MSK144 or Q65 mode. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="411"/>
@@ -10486,7 +10546,7 @@ quiet period when decoding is done.</source>
     <message>
         <location filename="../Configuration.ui" line="418"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Allow kHz frequency offset entry without &apos;k&apos; suffix.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Разрешить ввод смещения частоты в кГц без суффикса «k».&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Allow kHz frequency offset entry without 'k' suffix.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="421"/>
@@ -10556,7 +10616,7 @@ quiet period when decoding is done.</source>
     <message>
         <location filename="../Configuration.ui" line="616"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Erase Band Activity and Rx frequency windows after band change.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Стирание окон активности диапазона и частоты приема после смены диапазона.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Erase Band Activity and Rx frequency windows after band change.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="619"/>
@@ -10641,7 +10701,7 @@ quiet period when decoding is done.</source>
     <message>
         <location filename="../Configuration.ui" line="756"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use only VFO A for split operation (the program temporarily changes the QRG of your rig during transmission).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Используйте только VFO A для работы в режиме разделения (программа временно меняет QRG вашего оборудования во время передачи).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use only VFO A for split operation (the program temporarily changes the QRG of your rig during transmission).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="772"/>
@@ -11101,7 +11161,7 @@ transmitting periods.</source>
     <message>
         <location filename="../Configuration.ui" line="2503"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sets the number or router hops that multicast datagrams are allowed to make. Almost everyone should set this to 1 to keep outgoing multicast traffic withn the local subnet.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;P3§Задает количество переходов маршрутизатора, которые разрешено совершать многоадресным дейтаграммам. Почти каждому следует установить значение 1, чтобы исходящий многоадресный трафик оставался в локальной подсети. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sets the number or router hops that multicast datagrams are allowed to make. Almost everyone should set this to 1 to keep outgoing multicast traffic withn the local subnet.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2493"/>
@@ -11202,7 +11262,7 @@ both here.</source>
     <message>
         <location filename="../Configuration.ui" line="1514"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Download the latest libhamlib-4.dll file from https://n0nb.users.sourceforge.net/. &lt;/p&gt;&lt;p&gt;Note: This function is only available on Windows.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Загрузите последнюю версию файла libhamlib-4.dll с https://n0nb.users.sourceforge.net/. &lt;/p&gt;&lt;p&gt;Примечание. Эта функция доступна только в Windows.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Download the latest libhamlib-4.dll file from https://n0nb.users.sourceforge.net/. &lt;/p&gt;&lt;p&gt;Note: This function is only available on Windows.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="1526"/>
@@ -11237,7 +11297,7 @@ both here.</source>
     <message>
         <location filename="../Configuration.ui" line="1682"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Read and display transmit PWR and SWR of your rig.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Чтение и отображение мощности и КСВ передачи вашего оборудования.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Read and display transmit PWR and SWR of your rig.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="1685"/>
@@ -11292,7 +11352,7 @@ both here.</source>
     <message>
         <location filename="../Configuration.ui" line="1944"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Hide the usually unusable ALSA CARD subdevices on Linux.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Скрыть обычно непригодные для использования подустройства ALSA CARD в Linux.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Hide the usually unusable ALSA CARD subdevices on Linux.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="1947"/>
@@ -11351,7 +11411,7 @@ Nazhmite, ch</translation>
     <message>
         <location filename="../Configuration.ui" line="2064"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables additional line in azel.dat for Dpol parameter.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Включает дополнительную строку в azel.dat для параметра Dpol.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables additional line in azel.dat for Dpol parameter.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2067"/>
@@ -11455,7 +11515,7 @@ Click, SHIFT+Click and, CRTL+Click to select items</source>
     <message>
         <location filename="../Configuration.ui" line="2296"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Log &apos;ZZ00&apos; as grid if the other station doesn&apos;t send you a grid.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Зарегистрируйте &apos;ZZ00&apos; как сетку, если другая станция не отправляет вам сетку.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Log 'ZZ00' as grid if the other station doesn't send you a grid.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2299"/>
@@ -11740,7 +11800,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2526"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Porta fissa su cui Decodium ascolta comandi UDP in ingresso (es. da DecoAlert). Default 0 = porta casuale, compatibile con il comportamento storico WSJT-X/CQRLOG. Imposta un valore fisso solo se un controller esterno lo richiede esplicitamente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Фиксированный порт, на котором Decodium прослушивает входящие команды UDP (например, от DecoAlert). По умолчанию 0 = произвольный порт, совместимый с историческим поведением WSJT-X/CQRLOG. Устанавливайте фиксированное значение только в том случае, если внешний контроллер явно запрашивает это.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2942"/>
@@ -11780,7 +11840,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3058"/>
         <source>https://lotw.arrl.org/lotw-user-activity.csv</source>
-        <translation type="unfinished"></translation>
+        <translation>https://lotw.arrl.org/lotw-user-activity.csv</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3065"/>
@@ -11947,7 +12007,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3531"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;World-Wide Digi-mode contest&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Всемирный конкурс цифрового режима&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;World-Wide Digi-mode contest&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3534"/>
@@ -12014,7 +12074,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2240"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Also download from LOTW any QSOs that have not been QSL&apos;d in the last 30 days, to try these callers again.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Также загрузите с LOTW все QSO, по которым не было QSL за последние 30 дней, чтобы снова попробовать этих абонентов.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Also download from LOTW any QSOs that have not been QSL'd in the last 30 days, to try these callers again.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2243"/>
@@ -12029,7 +12089,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2341"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use &apos;Log automatically&apos; only for special operating activities.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Используйте «Автоматический журнал» только для особых операций.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use 'Log automatically' only for special operating activities.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2344"/>
@@ -12039,12 +12099,12 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2366"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Some logging programs will not accept Decodium v3.0 SE KP5 mode names.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Некоторые программы регистрации не принимают имена режимов Decodium v3.0 SE KP5.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Some logging programs will not accept Decodium v3.0 SE KP5 mode names.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2376"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Shorten 6-digit grid entries and log 4-digit grids instead.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Сократите 6-значные записи сетки и вместо этого регистрируйте 4-значные сетки.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Shorten 6-digit grid entries and log 4-digit grids instead.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2379"/>
@@ -12054,12 +12114,12 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2466"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter the service port number of the UDP server that Decodium v3.0 SE KP5 should send updates to. If this is zero no updates will be sent.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Введите номер сервисного порта UDP-сервера, на который Decodium v3.0 SE KP5 должен отправлять обновления. Если это значение равно нулю, обновления отправляться не будут. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;.</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter the service port number of the UDP server that Decodium v3.0 SE KP5 should send updates to. If this is zero no updates will be sent.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2486"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When sending updates to a multicast group address it is necessary to specify which network interface(s) to send them to. If the loop-back interface is multicast capable then at least that one will be selected.&lt;/p&gt;&lt;p&gt;For most users the loop-back interface is all that is needed, that will allow multiple other applications on the same machine to interoperate with Decodium v3.0 SE KP5. If applications running on other hosts are to receive status updates then a suitable network interface should be used.&lt;/p&gt;&lt;p&gt;On some Linux systems it may be necessary to enable multicast on the loop-back network interface.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;При отправке обновлений на адрес группы многоадресной рассылки необходимо указать, на какой сетевой интерфейс(ы) их отправлять. Если интерфейс обратной связи поддерживает многоадресную рассылку, то будет выбран по крайней мере этот интерфейс. &lt;/p&gt;&lt;p&gt;Для большинства пользователей интерфейс обратной связи — это все, что необходимо, что позволит множеству других приложений на одной машине взаимодействовать с Decodium v3.0 SE KP5. Если приложения, работающие на других хостах, должны получать обновления статуса, следует использовать подходящий сетевой интерфейс. &lt;/p&gt;&lt;p&gt;В некоторых системах Linux может потребоваться включить многоадресную рассылку на петлевом сетевом интерфейсе.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When sending updates to a multicast group address it is necessary to specify which network interface(s) to send them to. If the loop-back interface is multicast capable then at least that one will be selected.&lt;/p&gt;&lt;p&gt;For most users the loop-back interface is all that is needed, that will allow multiple other applications on the same machine to interoperate with Decodium v3.0 SE KP5. If applications running on other hosts are to receive status updates then a suitable network interface should be used.&lt;/p&gt;&lt;p&gt;On some Linux systems it may be necessary to enable multicast on the loop-back network interface.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2516"/>
@@ -12068,7 +12128,7 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Porta fissa su cui Decodium ascolta comandi UDP in ingresso (es. da DecoAlert). Default 2238. 0 = porta casuale.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Порта, которую можно использовать для декодирования команды UDP при входе (например, da DecoAlert). По умолчанию 2238. 0 = случайный порт.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;.</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Porta fissa su cui Decodium ascolta comandi UDP in ingresso (es. da DecoAlert). Default 2238. 0 = porta casuale.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2543"/>
@@ -12083,12 +12143,12 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="2621"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter the port number that Decodium v3.0 SE KP5 should use for UDP broadcasts of ADIF log information. For N1MM Logger+, this value should be 2333. If this is zero,  no updates will be broadcast.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Введите номер порта, который Decodium v3.0 SE KP5 должен использовать для широковещательной передачи UDP информации журнала ADIF. Для N1MM Logger+ это значение должно быть 2333. Если оно равно нулю, обновления не будут транслироваться. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter the port number that Decodium v3.0 SE KP5 should use for UDP broadcasts of ADIF log information. For N1MM Logger+, this value should be 2333. If this is zero,  no updates will be broadcast.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2657"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;See &amp;quot;Frequency Calibration&amp;quot; in the Decodium v3.0 SE KP5 User Guide for details of how to determine these parameters for your radio.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;См. &amp;quot;Калибровка частоты&amp;quot; в Руководстве пользователя Decodium v3.0 SE KP5 для получения подробной информации о том, как определить эти параметры для вашей радиостанции. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;See &amp;quot;Frequency Calibration&amp;quot; in the Decodium v3.0 SE KP5 User Guide for details of how to determine these parameters for your radio.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2877"/>
@@ -12184,7 +12244,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3295"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;HighDPI scaling enables a larger and more proportionally correct display of the controls on 4K monitors (if supported by the OS).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Масштабирование HighDPI обеспечивает более крупное и пропорционально правильное отображение элементов управления на мониторах 4K (если поддерживается ОС).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;HighDPI scaling enables a larger and more proportionally correct display of the controls on 4K monitors (if supported by the OS).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3298"/>
@@ -12287,7 +12347,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3547"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Toggle the NCCC Sprint FT4 short message protocol On/Off.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Включение/выключение протокола коротких сообщений NCCC Sprint FT4.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Toggle the NCCC Sprint FT4 short message protocol On/Off.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3550"/>
@@ -12313,7 +12373,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3753"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check this box to transmit (Fox) or receive (Hound) the SuperFox waveform.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt; Установите этот флажок, чтобы передавать (Fox) или принимать (Hound) сигнал SuperFox.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check this box to transmit (Fox) or receive (Hound) the SuperFox waveform.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3756"/>
@@ -12323,7 +12383,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3765"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Show OTP messages in the Band Activity window.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Показывать сообщения OTP в окне активности группы.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Show OTP messages in the Band Activity window.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3768"/>
@@ -12368,7 +12428,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="3923"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Fox&apos;s key to generate OTP Codes.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Ключ Fox для генерации OTP-кодов.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Fox's key to generate OTP Codes.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="3926"/>
@@ -12389,7 +12449,7 @@ Right click for insert and delete options.</source>
         <location filename="../Configuration.ui" line="3989"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Call CQ with an individual contest name instead of TEST, RU, or WW (for example CQ PACC).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
 </source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Вызовите CQ с индивидуальным именем контеста вместо TEST, RU или WW (например, CQ PACC).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Call CQ with an individual contest name instead of TEST, RU, or WW (for example CQ PACC).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
 </translation>
     </message>
     <message>
@@ -12662,7 +12722,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="4731"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use filters for Wait and Pounce, CQ: First, etc. only (all messages are still displayed).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Используйте фильтры только для режима ожидания и атаки, CQ: First и т. д. (все сообщения по-прежнему отображаются).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use filters for Wait and Pounce, CQ: First, etc. only (all messages are still displayed).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="4734"/>
@@ -12682,7 +12742,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="4837"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Apply filters only to the callsigns of the calling stations. Usually the second word of the messages is analyzed, for directional calls the third word.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Применять фильтры только к позывным вызывающих станций. Обычно анализируется второе слово сообщений, для направленных вызовов – третье слово.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Apply filters only to the callsigns of the calling stations. Usually the second word of the messages is analyzed, for directional calls the third word.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="4840"/>
@@ -12697,7 +12757,7 @@ Right click for insert and delete options.</source>
     <message>
         <location filename="../Configuration.ui" line="4875"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use “worked today and yesterday” instead of “worked today” for the 3 related Quick Filters.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;P2§&lt;p&gt;Используйте «работал сегодня и вчера» вместо «работал сегодня» для трех связанных быстрых фильтров.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use “worked today and yesterday” instead of “worked today” for the 3 related Quick Filters.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="4878"/>
@@ -12774,4 +12834,119 @@ Right click for insert and delete options.</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Дважды щелкните цвет, чтобы отредактировать его.&lt;/p&gt;&lt;p&gt;Щелкните правой кнопкой мыши , чтобы вставлять или удалять цвета.&lt;/p&gt;&lt;p&gt;Цвета в верхней части представляют слабые сигналы. и цвета внизу сильные.&lt;/p&gt;&lt;p&gt;Вы можете использовать до 256 цветов.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
+    <context>
+        <name>SettingsDialog</name>
+        <message>
+            <source>Settings</source>
+            <translation>Настройки</translation>
+        </message>
+        <message>
+            <source>Changes are applied immediately where supported.</source>
+            <translation>Изменения применяются сразу, где это поддерживается.</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>Закрыть</translation>
+        </message>
+        <message>
+            <source>Station</source>
+            <translation>Станция</translation>
+        </message>
+        <message>
+            <source>Radio</source>
+            <translation>Радио</translation>
+        </message>
+        <message>
+            <source>Audio</source>
+            <translation>Аудио</translation>
+        </message>
+        <message>
+            <source>TX</source>
+            <translation>TX</translation>
+        </message>
+        <message>
+            <source>Display</source>
+            <translation>Дисплей</translation>
+        </message>
+        <message>
+            <source>Decode</source>
+            <translation>Декодирование</translation>
+        </message>
+        <message>
+            <source>Reporting</source>
+            <translation>Отчеты</translation>
+        </message>
+        <message>
+            <source>Colors</source>
+            <translation>Цвета</translation>
+        </message>
+        <message>
+            <source>Advanced</source>
+            <translation>Дополнительно</translation>
+        </message>
+        <message>
+            <source>Alerts</source>
+            <translation>Оповещения</translation>
+        </message>
+        <message>
+            <source>Filters</source>
+            <translation>Фильтры</translation>
+        </message>
+        <message>
+            <source>Choose Decoded Font</source>
+            <translation>Выбрать шрифт декодирования</translation>
+        </message>
+        <message>
+            <source>Choose Font</source>
+            <translation>Выбрать шрифт</translation>
+        </message>
+        <message>
+            <source>Search:</source>
+            <translation>Поиск:</translation>
+        </message>
+        <message>
+            <source>filter by name</source>
+            <translation>фильтр по имени</translation>
+        </message>
+        <message>
+            <source>Monospaced fonts:</source>
+            <translation>Моноширинные шрифты:</translation>
+        </message>
+        <message>
+            <source>Fonts:</source>
+            <translation>Шрифты:</translation>
+        </message>
+        <message>
+            <source>Selected:</source>
+            <translation>Выбрано:</translation>
+        </message>
+        <message>
+            <source>Size:</source>
+            <translation>Размер:</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>Отмена</translation>
+        </message>
+        <message>
+            <source>Apply</source>
+            <translation>Применить</translation>
+        </message>
+        <message>
+            <source>Search radio, model or brand...</source>
+            <translation>Поиск радио, модели или марки...</translation>
+        </message>
+        <message>
+            <source>STATION INFO</source>
+            <translation>ИНФО СТАНЦИИ</translation>
+        </message>
+        <message>
+            <source>Station Name:</source>
+            <translation>Название станции:</translation>
+        </message>
+        <message>
+            <source>Choose</source>
+            <translation>Выбрать</translation>
+        </message>
+    </context>
 </TS>

@@ -101,6 +101,18 @@ std::vector<float> make_ft8_window ()
   return window;
 }
 
+std::array<float, kFt8VarEdgeWindow> make_ft8_sync8var_edge_window ()
+{
+  std::array<float, kFt8VarEdgeWindow> window {};
+  constexpr float facx = 1.0f / 300.0f;
+  for (int i = 0; i < kFt8VarEdgeWindow; ++i)
+    {
+      window[static_cast<size_t> (i)] =
+          facx * (1.0f + std::cos (static_cast<float> (i) * kPi / 200.0f)) * 0.5f;
+    }
+  return window;
+}
+
 template <typename T>
 T clamp_value (T value, T lo, T hi)
 {
@@ -126,6 +138,81 @@ struct Ft8VarCandidate
 inline float s_at (std::vector<float> const& s, int i, int j)
 {
   return s[static_cast<size_t> (i + kNH1 * j)];
+}
+
+void fill_ft8_stage4_sbase (float const* dd, int npts, float nfa, float nfb, float* sbase)
+{
+  if (!dd || !sbase || npts < kNSPS)
+    {
+      return;
+    }
+
+  auto& fft = fft_buffers ();
+  if (!fft.valid ())
+    {
+      return;
+    }
+
+  std::vector<float> const window = make_ft8_window ();
+  float const df = kSampleRate / static_cast<float> (kNFFT1);
+  int ia = std::max (1, static_cast<int> (std::lround (nfa / df)));
+  int ib = static_cast<int> (std::lround (nfb / df));
+  int const nwin = static_cast<int> (nfb - nfa);
+  if (nfa < 100.0f)
+    {
+      nfa = 100.0f;
+      ia = std::max (1, static_cast<int> (std::lround (nfa / df)));
+      if (nwin < 100)
+        {
+          nfb = nfa + static_cast<float> (nwin);
+          ib = static_cast<int> (std::lround (nfb / df));
+        }
+    }
+  if (nfb > 4910.0f)
+    {
+      nfb = 4910.0f;
+      ib = static_cast<int> (std::lround (nfb / df));
+      if (nwin < 100)
+        {
+          nfa = nfb - static_cast<float> (nwin);
+          ia = std::max (1, static_cast<int> (std::lround (nfa / df)));
+        }
+    }
+  ia = clamp_value (ia, 1, kNH1);
+  ib = clamp_value (ib, 1, kNH1);
+  if (ib < ia)
+    {
+      return;
+    }
+
+  constexpr int kNST = kNFFT1 / 2;
+  constexpr int kNF = 93;
+  std::vector<float> savg_base (kNH1, 0.0f);
+  for (int j = 0; j < kNF; ++j)
+    {
+      int const ofs = j * kNST;
+      if (ofs + kNFFT1 > npts)
+        {
+          break;
+        }
+      for (int i = 0; i < kNFFT1; ++i)
+        {
+          fft.in[i] = dd[ofs + i] * window[static_cast<size_t> (i)];
+        }
+      fftwf_execute (fft.plan);
+      for (int i = 0; i < kNH1; ++i)
+        {
+          float const re = fft.out[i + 1][0];
+          float const im = fft.out[i + 1][1];
+          savg_base[static_cast<size_t> (i)] += re * re + im * im;
+        }
+    }
+  for (float& item : savg_base)
+    {
+      item /= static_cast<float> (kNF);
+    }
+
+  ftx_baseline_fit_c (savg_base.data (), kNH1, ia, ib, 0.65f, 0, sbase);
 }
 
 }
@@ -794,6 +881,45 @@ extern "C" void ftx_sync8var_c (float const* dd8, float const* windowx, float fa
         }
       *ncand = ncandfqso + static_cast<int> (std::lround (static_cast<float> (*ncand - ncandfqso) * rcandthin));
     }
+}
+
+extern "C" void ftx_sync8_search_stage4_c (float const* dd, int npts, float nfa, float nfb,
+                                            float syncmin, float nfqso, int maxcand, int ipass,
+                                            float* candidate, int* ncand, float* sbase)
+{
+  if (!dd || !candidate || !ncand || !sbase || maxcand <= 0 || npts < kNSPS)
+    {
+      return;
+    }
+
+  std::fill (candidate, candidate + 4 * maxcand, 0.0f);
+  std::fill (sbase, sbase + kNH1, 0.0f);
+  *ncand = 0;
+
+  fill_ft8_stage4_sbase (dd, npts, nfa, nfb, sbase);
+
+  std::array<float, kFt8VarEdgeWindow> const edge_window = make_ft8_sync8var_edge_window ();
+  std::array<float, 4 * 460> var_candidate {};
+  int var_ncand = 0;
+  int const nfa_i = static_cast<int> (std::lround (nfa));
+  int const nfb_i = static_cast<int> (std::lround (nfb));
+  int const nfqso_i = static_cast<int> (std::lround (nfqso));
+  int const pass = std::max (1, std::min (ipass, 9));
+
+  ftx_sync8var_c (dd, edge_window.data (), 1.0f / 300.0f,
+                  nfa_i, nfb_i, syncmin, nfqso_i,
+                  var_candidate.data (), &var_ncand,
+                  -62, 62, pass, 0, 100, 0, 0, 0, nfa_i, nfb_i);
+
+  int const out_count = std::min (std::max (0, var_ncand), std::min (maxcand, 460));
+  for (int i = 0; i < out_count; ++i)
+    {
+      candidate[i * 4 + 0] = var_candidate[4 * i + 0];
+      candidate[i * 4 + 1] = var_candidate[4 * i + 1];
+      candidate[i * 4 + 2] = var_candidate[4 * i + 2];
+      candidate[i * 4 + 3] = var_candidate[4 * i + 3];
+    }
+  *ncand = out_count;
 }
 
 extern "C" void sync8_ (float* dd, int* npts, int* nfa, int* nfb,

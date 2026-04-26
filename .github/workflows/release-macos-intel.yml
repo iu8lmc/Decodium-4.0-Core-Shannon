@@ -127,12 +127,12 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}
+          name: decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}
           if-no-files-found: error
           path: |
-            build/decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.dmg
-            build/decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.zip
-            build/decodium3-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}-sha256.txt
+            build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.dmg
+            build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}.zip
+            build/decodium4-ft2-${{ env.VERSION }}-${{ matrix.asset_suffix }}-sha256.txt
 
   publish:
     name: Publish GitHub release
@@ -158,7 +158,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: decodium3-ft2-${{ steps.version.outputs.version }}-macos-*x86_64
+          pattern: decodium4-ft2-${{ steps.version.outputs.version }}-macos-*x86_64
           merge-multiple: true
           path: release-assets
 
@@ -166,12 +166,12 @@ jobs:
         run: |
           ls -lh release-assets
           VERSION="${{ steps.version.outputs.version }}"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.zip"
-          test -f "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
-          if [[ -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
-                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
-                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.zip"
+          test -f "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
+          if [[ -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
+                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
+                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
             echo "Monterey Intel artifact detected and will be published."
           else
             echo "Monterey Intel artifact not produced in this run (experimental target)."
@@ -191,21 +191,21 @@ jobs:
           elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
             cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
           else
-            printf "# Decodium 3 FT2 %s\n\nSee CHANGELOG.md for details.\n" "${VERSION}" > "${NOTES_FILE}"
+            printf "# Decodium 4 FT2 %s\n\nSee CHANGELOG.md for details.\n" "${VERSION}" > "${NOTES_FILE}"
           fi
 
           ASSETS=(
-            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
-            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64.zip"
-            "release-assets/decodium3-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
+            "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.dmg"
+            "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64.zip"
+            "release-assets/decodium4-ft2-${VERSION}-macos-sequoia-x86_64-sha256.txt"
           )
-          if [[ -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
-                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
-                -f "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
+          if [[ -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.dmg" && \
+                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.zip" && \
+                -f "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt" ]]; then
             ASSETS+=(
-              "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.dmg"
-              "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64.zip"
-              "release-assets/decodium3-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt"
+              "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.dmg"
+              "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64.zip"
+              "release-assets/decodium4-ft2-${VERSION}-macos-monterey-x86_64-sha256.txt"
             )
           fi
 
@@ -215,7 +215,7 @@ jobs:
           else
             gh release create "${VERSION}" "${ASSETS[@]}" \
               --repo "${REPO}" \
-              --title "Decodium 3 FT2 ${VERSION} (macOS Intel)" \
+              --title "Decodium 4 FT2 ${VERSION} (macOS Intel)" \
               --notes-file "${NOTES_FILE}"
           fi
 

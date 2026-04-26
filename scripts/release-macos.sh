@@ -11,7 +11,7 @@ Usage:
 
 Examples:
   scripts/release-macos.sh
-  scripts/release-macos.sh <version> --publish --repo elisir80/decodium3-build-macos
+  scripts/release-macos.sh <version> --publish --repo elisir80/Decodium-4.0-Core-Shannon
 
 What it does:
   1) Configures the project in ./build
@@ -20,9 +20,9 @@ What it does:
   4) Verifies bundle compatibility (absolute deps + minos threshold)
   5) Re-signs the app bundle (ad-hoc by default)
   6) Creates versioned assets:
-       decodium3-ft2-<version>-<asset-suffix>.dmg
-       decodium3-ft2-<version>-<asset-suffix>.zip
-       decodium3-ft2-<version>-<asset-suffix>-sha256.txt
+       decodium4-ft2-<version>-<asset-suffix>.dmg
+       decodium4-ft2-<version>-<asset-suffix>.zip
+       decodium4-ft2-<version>-<asset-suffix>-sha256.txt
   7) Optionally creates/updates the GitHub release when --publish is used
 EOF
 }
@@ -44,7 +44,7 @@ fi
 VERSION="${VERSION_RAW#v}"
 
 PUBLISH=0
-REPO="elisir80/decodium3-build-macos"
+REPO="elisir80/Decodium-4.0-Core-Shannon"
 COMPAT_MACOS="15.0"
 SKIP_COMPAT_CHECK=0
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
@@ -285,7 +285,7 @@ done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
-PREFIX="decodium3-ft2"
+PREFIX="decodium4-ft2"
 ARCH="$(uname -m)"
 
 if [[ "$ARCH" == "x86_64" ]]; then
@@ -342,7 +342,7 @@ echo "[2/7] Building project..."
 cmake --build "$BUILD_DIR" -j"$JOBS"
 
 echo "[3/7] Generating DMG with CPack..."
-CPACK_VOLUME_MOUNT="/Volumes/Decodium v3.0 SE"
+CPACK_VOLUME_MOUNT="/Volumes/Decodium 4.0 Core Shannon"
 detach_mountpoint_if_present "${CPACK_VOLUME_MOUNT}" || true
 cpack_status=0
 (
@@ -409,7 +409,7 @@ if [[ "$PUBLISH" -eq 1 ]]; then
 
   NOTES_FILE="$(mktemp)"
   cat >"$NOTES_FILE" <<EOF
-# Decodium 3 FT2 ${VERSION} (macOS)
+# Decodium 4 FT2 ${VERSION} (macOS)
 
 ## English (UK)
 This release includes fork updates up to \`${VERSION}\`.
@@ -466,7 +466,7 @@ EOF
       "${BUILD_DIR}/${ZIP_OUT}" \
       "${BUILD_DIR}/${SHA_OUT}" \
       --repo "$REPO" \
-      --title "Decodium 3 FT2 ${VERSION} (macOS)" \
+      --title "Decodium 4 FT2 ${VERSION} (macOS)" \
       --notes-file "$NOTES_FILE"
   fi
 

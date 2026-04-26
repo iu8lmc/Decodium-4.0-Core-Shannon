@@ -137,6 +137,12 @@ public:
     Q_INVOKABLE void setRigPtt(bool on);
     Q_INVOKABLE void setRigMode(const QString& mode);
     Q_INVOKABLE void setRigAudio(bool on, double periodSeconds = 15.0, int blockSize = 6912 / 2);
+    Q_INVOKABLE void setRigTune(bool on);
+    Q_INVOKABLE void startRigTxAudio(const QString& mode, unsigned symbolsLength,
+                                     double framesPerSymbol, double frequency,
+                                     double toneSpacing, bool synchronize,
+                                     bool fastMode, double dbsnr, double trPeriod);
+    Q_INVOKABLE void stopRigTxAudio(bool quick = true);
 
     Q_INVOKABLE void refreshPorts();
     Q_INVOKABLE void saveSettings();

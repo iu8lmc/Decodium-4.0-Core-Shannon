@@ -78,6 +78,8 @@
 #include <QButtonGroup>
 #include <QActionGroup>
 #include <QComboBox>
+
+extern "C" void ftx_ft8_a7_save_c (int jseq, float dt, float freq, char const* msg37);
 #include <QMessageBox>
 #include <QMenu>
 #include <QMediaDevices>
@@ -3970,6 +3972,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   //testing# included:
   debugToFile(QString{"40           data_dir:'%1' writeable_data_dir:'%2'"}.arg(m_config.data_dir().absolutePath()).arg(m_config.writeable_data_dir().absolutePath()));
   debugToFile("             sslLibVer:" + QSslSocket::sslLibraryVersionString() + " sslLibBuild:" + QSslSocket::sslLibraryBuildVersionString()); 
+  seedFt8A7HistoryFromAllTxt ();
 
   initExternalCtrl();
 
@@ -4314,6 +4317,120 @@ QString MainWindow::legacyAdifLogPath() const
 QString MainWindow::legacyAllTxtPath() const
 {
   return m_config.writeable_data_dir().absoluteFilePath(QStringLiteral("ALL.TXT"));
+}
+
+void MainWindow::seedFt8A7HistoryFromAllTxt ()
+{
+  static bool seeded = false;
+  if (seeded)
+    {
+      return;
+    }
+  seeded = true;
+
+  QFile file {legacyAllTxtPath ()};
+  if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
+    {
+      return;
+    }
+
+  constexpr qint64 kTailBytes = 512 * 1024;
+  if (file.size () > kTailBytes)
+    {
+      file.seek (file.size () - kTailBytes);
+      file.readLine ();
+    }
+
+  struct SeedEntry
+  {
+    int jseq {};
+    float dt {};
+    float freq {};
+    QByteArray msg37;
+  };
+
+  QVector<SeedEntry> entries;
+  while (!file.atEnd ())
+    {
+      QString const line = QString::fromLatin1 (file.readLine ()).simplified ();
+      if (line.isEmpty ())
+        {
+          continue;
+        }
+
+      QStringList parts = line.split (QLatin1Char (' '), Qt::SkipEmptyParts);
+      if (parts.size () < 8 || parts.value (3) != QStringLiteral ("FT8"))
+        {
+          continue;
+        }
+
+      QString const timestamp = parts.value (0);
+      int const underscore = timestamp.indexOf (QLatin1Char ('_'));
+      if (underscore < 0 || underscore + 7 > timestamp.size ())
+        {
+          continue;
+        }
+
+      bool okUtc = false;
+      int const nutc = timestamp.mid (underscore + 1, 6).toInt (&okUtc);
+      bool okDt = false;
+      float const dt = parts.value (5).toFloat (&okDt);
+      bool okFreq = false;
+      float const freq = parts.value (6).toFloat (&okFreq);
+      if (!okUtc || !okDt || !okFreq || freq <= 0.0f)
+        {
+          continue;
+        }
+
+      QStringList msgParts = parts.mid (7);
+      while (!msgParts.isEmpty ())
+        {
+          QString const tail = msgParts.constLast ();
+          if (tail == QStringLiteral ("?") || tail == QStringLiteral ("*")
+              || tail == QStringLiteral ("a*")
+              || QRegularExpression {QStringLiteral ("^a\\d+$")}.match (tail).hasMatch ())
+            {
+              msgParts.removeLast ();
+              continue;
+            }
+          break;
+        }
+
+      QString const message = msgParts.join (QLatin1Char (' ')).trimmed ().toUpper ();
+      if (message.size () < 5)
+        {
+          continue;
+        }
+
+      QByteArray msg37 (37, ' ');
+      QByteArray const ascii = message.toLatin1 ();
+      std::copy_n (ascii.constData (), std::min (ascii.size (), msg37.size ()), msg37.data ());
+
+      SeedEntry entry;
+      entry.jseq = std::abs ((nutc / 5) % 2);
+      entry.dt = dt;
+      entry.freq = freq;
+      entry.msg37 = msg37;
+      entries.append (entry);
+    }
+
+  constexpr int kMaxSeedEntries = 160;
+  int const entryCount = static_cast<int> (entries.size ());
+  int const first = std::max (0, entryCount - kMaxSeedEntries);
+  int seededCount = 0;
+  for (int i = entryCount - 1; i >= first; --i)
+    {
+      SeedEntry const& entry = entries.at (i);
+      ftx_ft8_a7_save_c (entry.jseq, entry.dt, entry.freq, entry.msg37.constData ());
+      ++seededCount;
+    }
+
+  if (seededCount > 0)
+    {
+      debugToFile (QString {"ft8A7Seed   entries:%1 path:%2"}
+                     .arg (seededCount)
+                     .arg (legacyAllTxtPath ()));
+    }
 }
 
 int MainWindow::legacyTxOutputAttenuation() const
@@ -12352,10 +12469,16 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
     request.hasFreshAudio = request.availableSamples >= minimumFreshSamples;
   }
   if (m_embeddedShellMode && !m_diskData && !m_multithreadFT8) {
+    if (request.ndepth >= 4) {
+      if (request.nzhsym == 47) {
+        request.lft8apon = 1;
+      } else if (request.nzhsym >= 50) {
+        request.lft8apon = 1;
+      }
+    }
     if (request.nzhsym >= 50) {
       if (request.ndepth >= 4) {
         request.maxDecodeMs = 14500;
-        request.lft8apon = 1;
       } else if (request.ndepth >= 3) {
         request.maxDecodeMs = 12000;
       } else {
@@ -12392,6 +12515,12 @@ void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request)
   m_ft8DecodePendingUtc = request.nutc;
   m_decodedTransportQueue.clear ();
   m_decodeStartMs = QDateTime::currentMSecsSinceEpoch ();
+  debugToFile (QString {"ft8Decode   start utc:%1 nzhsym:%2 depth:%3 maxMs:%4 samples:%5"}
+                 .arg (request.nutc)
+                 .arg (request.nzhsym)
+                 .arg (request.ndepth)
+                 .arg (request.maxDecodeMs)
+                 .arg (request.availableSamples));
   decodeBusy (true);
 
   auto * worker = m_ft8DecodeWorker;
@@ -26608,7 +26737,7 @@ void MainWindow::set_mode (QString const& mode)
   bool const embedded_hot_mode_switch =
       m_embeddedShellMode
       && m_monitoring
-      && !m_tci_audio
+      && !m_transmitting
       && !requested_mode.isEmpty()
       && requested_mode != previous_mode;
 
@@ -26643,7 +26772,17 @@ void MainWindow::set_mode (QString const& mode)
       m_dialFreqRxWSPR = 0;
       m_last_audio_frame_ms = 0;
       ui->DecodeButton->setChecked (false);
-      Q_EMIT suspendAudioInputStream ();
+      if (m_tci_audio)
+        {
+          if (ui->bandComboBox->currentText () != "OOB")
+            {
+              Q_EMIT m_config.transceiver_audio (false);
+            }
+        }
+      else
+        {
+          Q_EMIT suspendAudioInputStream ();
+        }
     }
 
   if ("RTTY" == mode) {
@@ -26698,21 +26837,36 @@ void MainWindow::set_mode (QString const& mode)
 
   if (embedded_hot_mode_switch)
     {
-      debugToFile (QString {"modeSwitch  cycle monitor from:%1 to:%2 monitor:%3"}
+      debugToFile (QString {"modeSwitch  schedule audio reopen from:%1 to:%2 monitor:%3"}
                      .arg (previous_mode)
                      .arg (m_mode)
                      .arg (m_monitoring));
-      bool const restoreMonitor = m_monitoring;
-      if (restoreMonitor)
-        {
-          monitor (false);
-          monitor (true);
-        }
-      else
-        {
+      QTimer::singleShot (180, this, [this, previous_mode, requested_mode] {
+          if (!m_embeddedShellMode
+              || !m_monitoring
+              || m_transmitting
+              || m_diskData
+              || m_mode.toUpper () != requested_mode)
+            {
+              return;
+            }
+
+          debugToFile (QString {"modeSwitch  reopen audio from:%1 to:%2 tci:%3"}
+                         .arg (previous_mode)
+                         .arg (m_mode)
+                         .arg (m_tci_audio));
+          if (m_tci_audio)
+            {
+              if (ui->bandComboBox->currentText () != "OOB")
+                {
+                  Q_EMIT m_config.transceiver_audio (true);
+                }
+              return;
+            }
+
           restartConfiguredAudioStreams (true);
           armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
-        }
+        });
     }
 }
 
@@ -27219,6 +27373,10 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
     return;
   }
 
+  int const completedUtc = m_ft8DecodePendingUtc;
+  qint64 const elapsedMs = m_decodeStartMs > 0
+      ? QDateTime::currentMSecsSinceEpoch () - m_decodeStartMs
+      : -1;
   m_ft8DecodePending = false;
   m_ft8DecodePendingUtc = 0;
 
@@ -27229,6 +27387,12 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
     }
     return;
   }
+
+  debugToFile (QString {"ft8Decode   done utc:%1 rows:%2 elapsedMs:%3 queued:%4"}
+                 .arg (completedUtc)
+                 .arg (rows.size ())
+                 .arg (elapsedMs)
+                 .arg (m_ft8QueuedDecodePending ? 1 : 0));
 
   for (auto const& row : rows) {
     if (!row.trimmed ().isEmpty ()) {

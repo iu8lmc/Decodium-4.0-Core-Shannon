@@ -294,24 +294,20 @@ float sync8var_scan_metric (float const* s, int nh1, int i, int j, int ipass,
           float const sya = std::accumulate (tall.begin (), tall.begin () + 7, 0.0f);
           float const sycq = std::accumulate (tall.begin () + 7, tall.begin () + 16, 0.0f);
           float const sybc = std::accumulate (tall.begin () + 16, tall.end (), 0.0f);
-          float const syb = std::accumulate (tall.begin () + 16, tall.begin () + 23, 0.0f);
-          float const syc = std::accumulate (tall.begin () + 23, tall.end (), 0.0f);
           float const sync_abc = std::max ((sya + sycq + sybc) / 30.0f, (sya + sybc) / 21.0f);
           float const sy1 = (sycq + sybc) / 23.0f;
           float const sy2 = sybc / 14.0f;
           float const sync_bc = std::max (sy1, sy2);
           if (sy1 > sy2) lcq = true;
           lcq_out = lcq;
-          return std::max (std::max (sync_abc, sync_bc), std::max ((sya + syb) / 14.0f, (sya + syc) / 14.0f));
+          return std::max (sync_abc, sync_bc);
         }
 
       float const sya = std::accumulate (tall.begin (), tall.begin () + 7, 0.0f);
       float const sybc = std::accumulate (tall.begin () + 16, tall.end (), 0.0f);
-      float const syb = std::accumulate (tall.begin () + 16, tall.begin () + 23, 0.0f);
-      float const syc = std::accumulate (tall.begin () + 23, tall.end (), 0.0f);
       float const sync_abc = (sya + sybc) / 21.0f;
       float const sync_bc = sybc / 14.0f;
-      return std::max (std::max (sync_abc, sync_bc), std::max ((sya + syb) / 14.0f, (sya + syc) / 14.0f));
+      return std::max (sync_abc, sync_bc);
     }
 
   constexpr int nfos6 = 16;
@@ -382,20 +378,8 @@ float sync8var_scan_metric (float const* s, int nh1, int i, int j, int ipass,
   float const syncs = std::max (t1 / (7.0f * t01), (t1 / 7.0f + tcq / 9.0f) / t02);
   bool const lcq2 = ((t1 / 7.0f + tcq / 9.0f) / t02) > (t1 / (7.0f * t01));
 
-  t1 = ta + tb;
-  t01 = t0a + t0b;
-  t01 = (t01 - t1 * 2.0f) / 28.0f;
-  if (t01 < 1.0e-8f) t01 = 1.0f;
-  float const sync_ab = t1 / (7.0f * t01);
-
-  t1 = ta + tc;
-  t01 = t0a + t0c;
-  t01 = (t01 - t1 * 2.0f) / 28.0f;
-  if (t01 < 1.0e-8f) t01 = 1.0f;
-  float const sync_ac = t1 / (7.0f * t01);
-
   lcq_out = (syncf > syncs) ? lcq : lcq2;
-  return std::max (std::max (syncf, syncs), std::max (sync_ab, sync_ac));
+  return std::max (syncf, syncs);
 }
 
 }

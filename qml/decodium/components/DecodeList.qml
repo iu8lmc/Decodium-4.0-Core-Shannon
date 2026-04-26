@@ -12,6 +12,11 @@ Item {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color errorRed: bridge.themeManager.errorColor
+    property bool highlight73: bridge.getSetting("Highlight73", true)
+    property bool highlightOrange: bridge.getSetting("HighlightOrange", false)
+    property bool highlightBlue: bridge.getSetting("HighlightBlue", false)
+    property string highlightOrangeCallsigns: bridge.getSetting("HighlightOrangeCallsigns", "")
+    property string highlightBlueCallsigns: bridge.getSetting("HighlightBlueCallsigns", "")
 
     signal decodeSelected(int index)
     signal decodeDoubleClicked(int index)
@@ -25,6 +30,70 @@ Item {
         return normalized.indexOf(" " + myCall + " ") >= 0
             ? Text.ElideMiddle
             : Text.ElideRight
+    }
+
+    function isSignoffMessage(message) {
+        var words = String(message || "").toUpperCase().replace(/[<>;,]/g, " ").split(/\s+/)
+        for (var i = 0; i < words.length; ++i) {
+            if (words[i] === "73" || words[i] === "RR73" || words[i] === "RRR")
+                return true
+        }
+        return false
+    }
+
+    function highlightListMatches(message, listText) {
+        var wanted = String(listText || "").toUpperCase().split(/[,\s;]+/)
+        var messageText = " " + String(message || "").toUpperCase().replace(/[<>;,]/g, " ") + " "
+        for (var i = 0; i < wanted.length; ++i) {
+            var token = wanted[i].trim()
+            if (token.length > 0 && messageText.indexOf(" " + token + " ") !== -1)
+                return true
+        }
+        return false
+    }
+
+    function customHighlightColor(modelData) {
+        var message = modelData.message || ""
+        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
+            return "#E14B00"
+        if (highlightBlue && highlightListMatches(message, highlightBlueCallsigns))
+            return "#0064FF"
+        return ""
+    }
+
+    function decodeTextColor(modelData) {
+        var customColor = customHighlightColor(modelData)
+        if (modelData.isTx)
+            return errorRed
+        if (modelData.isMyCall)
+            return bridge.colorMyCall
+        if (customColor !== "")
+            return customColor
+        if (highlight73 && isSignoffMessage(modelData.message))
+            return bridge.color73
+        if (modelData.isCQ)
+            return bridge.colorCQ
+        if (modelData.isB4)
+            return bridge.colorB4
+        if (modelData.dxCountry && String(modelData.dxCountry).length > 0)
+            return bridge.colorDXEntity
+        return textPrimary
+    }
+
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "Highlight73")
+                decodeListComponent.highlight73 = !!value
+            else if (key === "HighlightOrange")
+                decodeListComponent.highlightOrange = !!value
+            else if (key === "HighlightBlue")
+                decodeListComponent.highlightBlue = !!value
+            else if (key === "HighlightOrangeCallsigns" || key === "OrangeCallsigns")
+                decodeListComponent.highlightOrangeCallsigns = String(value || "")
+            else if (key === "HighlightBlueCallsigns" || key === "BlueCallsigns")
+                decodeListComponent.highlightBlueCallsigns = String(value || "")
+        }
     }
 
     ListView {
@@ -128,13 +197,7 @@ Item {
                     font.pixelSize: 12
                     font.bold: modelData.isCQ || modelData.isTx
                     // B7 — C13: applica colori dinamici
-                    color: {
-                        if (modelData.isTx)     return errorRed
-                        if (modelData.isMyCall) return bridge.colorMyCall
-                        if (modelData.isCQ)     return bridge.colorCQ
-                        if (modelData.isB4)     return bridge.colorB4
-                        return textPrimary
-                    }
+                    color: decodeListComponent.decodeTextColor(modelData)
                     font.strikeout: modelData.isB4 !== undefined && modelData.isB4 && bridge.showB4Strikethrough
                     opacity: modelData.isB4 !== undefined && modelData.isB4 ? 0.55 : 1.0
                     Layout.fillWidth: true

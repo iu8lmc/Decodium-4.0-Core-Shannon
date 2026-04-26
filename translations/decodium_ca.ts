@@ -389,7 +389,7 @@ Searched paths:
     <message>
         <location filename="../widgets/about.ui" line="9"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>Quant a Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/about.ui" line="60"/>
@@ -728,82 +728,82 @@ La finestra cluster e AutoSpot ora usano lo stesso endpoint.</translation>
     <message>
         <location filename="../Configuration.cpp" line="2140"/>
         <source>RTTY Modem</source>
-        <translation type="unfinished"></translation>
+        <translation>Mòdem RTTY</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2143"/>
         <source>Baud rate:</source>
-        <translation type="unfinished"></translation>
+        <translation>Velocitat de transmissió:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2149"/>
         <source>RTTY baud rate used for both receive and transmit.</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY velocitat de transmissió utilitzada tant per rebre com per transmetre.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2152"/>
         <source>Mark tone (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>To de marca (Hz):</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2157"/>
         <source>Base mark tone. Space tone is mark tone plus shift.</source>
-        <translation type="unfinished"></translation>
+        <translation>To de marca base. El to d'espai és el to de marca més el desplaçament.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2160"/>
         <source>Shift (Hz):</source>
-        <translation type="unfinished"></translation>
+        <translation>Desplaçament (Hz):</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2165"/>
         <source>Difference between mark and space tones.</source>
-        <translation type="unfinished"></translation>
+        <translation>Diferència entre els tons de marca i espai.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2168"/>
         <source>Stop bits:</source>
-        <translation type="unfinished"></translation>
+        <translation>Bits de parada:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2174"/>
         <source>Transmit stop bits appended after each 5-bit Baudot character.</source>
-        <translation type="unfinished"></translation>
+        <translation>Transmet els bits de parada afegits després de cada caràcter Baudot de 5 bits.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2177"/>
         <source>Reverse / normal</source>
-        <translation type="unfinished"></translation>
+        <translation>Inversa / normal</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2179"/>
         <source>Swap mark and space tones for both decoding and transmitting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Canvia els tons de marca i espai per a la descodificació i la transmissió.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2181"/>
         <source>Macro CQ:</source>
-        <translation type="unfinished"></translation>
+        <translation>Macro CQ:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2184"/>
         <source>Text sent by the CQ macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Text enviat pel botó de macro CQ. Marcadors de posició admesos: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2187"/>
         <source>Macro 73:</source>
-        <translation type="unfinished"></translation>
+        <translation>Macro 73:</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2190"/>
         <source>Text sent by the 73 macro button. Supported placeholders: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Text enviat pel botó de macro 73. Marcadors de posició admesos: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2194"/>
         <source>These settings apply to the built-in RTTY modem. Mark stays fixed; space is mark tone plus shift. Reverse swaps mark and space. Placeholders for CQ/73 macros: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Aquests paràmetres s'apliquen al mòdem RTTY integrat. Mark es manté fix; L'espai és el to de marca més el desplaçament. Canvia la marca i l'espai al revés. Marcadors de posició per a macros CQ/73: &lt;MYCALL&gt;, &lt;MYGRID&gt;, &lt;DXCALL&gt;, &lt;DXGRID&gt;.</translation>
     </message>
     <message>
         <location filename="../Configuration.cpp" line="2228"/>
@@ -5409,12 +5409,12 @@ La llista es pot mantenir a la configuració (F2).</translation>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5364"/>
         <source>About Decodium</source>
-        <translation type="unfinished"></translation>
+        <translation>Quant a Decodium</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="5684"/>
         <source>RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.ui" line="6007"/>
@@ -6763,104 +6763,116 @@ per assegurar-vos que el senyal estigui net i no estigui distorsionat.</translat
 &lt;/table&gt;</source>
         <extracomment>Mouse commands help window contents</extracomment>
         <translation>&lt;table cellpadding=5&gt;
- &lt;tr&gt;
- &lt;th align=&quot;right&quot;&gt;Feu clic a&lt;/th&gt;
- &lt;th align=&quot;left&quot;&gt;Acció&lt;/th&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Cascada:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;P18§9§ freqüència.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per establir la freqüència de Tx.&lt;br/&gt;
- &lt;b&gt;Feu doble clic amb el botó dret&lt;/b&gt; per establir les freqüències de Rx i Tx.
- &lt;/td&gt;
- &lt;/tr&gt;
-P3§De §3§3
-D text:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu doble clic&lt;/b&gt; per copiar el segon indicatiu a Dx Call, el localitzador a Dx Grid, canviar Rx&lt;br/&gt;
- i la freqüència Tx a la freqüència del senyal descodificat i generar missatges estàndard. &lt;b&gt;feu doble clic&lt;/b&gt;.&lt;br/&gt;
- Si està marcat &lt;b&gt;Hold Tx Freq&lt;/b&gt; o el primer missatge d&apos;indicador de trucada és la vostra pròpia trucada&lt;br/&gt;
-, la freqüència de Tx no es modifica tret que es mantingui premut &lt;b&gt;Ctrl&lt;/b&gt;7&lt;/th&gt;P5§5§. &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Freqüència de marcatge:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Gireu la roda del ratolí&lt;/b&gt; per canviar els valors de kHz, o bé:&lt;br/&gt;
- §P72
-P72§Clic dret§P per augmentar la freqüència amb el botó dret. kHz.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó esquerre&lt;/b&gt; per reduir la freqüència en 1 kHz.&lt;br/&gt;
- El punter del ratolí ha de situar-se sobre l&apos;indicador de freqüència de marcatge.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;/tr&gt;
- &lt;tr&gt;§8P8P8§8§8&lt;tr&gt;P§8P &lt;td&gt;&lt;b&gt;Feu clic &lt;/b&gt; per activar/desactivar el mode Hound FT8.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per activar o desactivar el mode SuperFox.
- &lt;/td&gt;
- &lt;/tr&gt;&lt;/tr&gt;P102§1§102§100§100§100§100§100§100§100§100§100§1001 Botó:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic &lt;/b&gt; per canviar al mode Hound FT8.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per activar/desactivar l&apos;última activitat operativa especial utilitzada. 
-§
-§ &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Q65 Botó:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic&lt;/b&gt; per canviar al mode Q65.&lt;br/&gt;
-&lt;br/&gt;
-&lt;br/&gt;P128
- §P129&lt;b&gt;P129&lt;b&gt;P129§P1 Mode.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;JT65 Botó:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic a&lt;/b&gt; per canviar al mode P§ JT64§5§14§4§ &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per canviar al mode JT9.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Tx5 Botó:&lt;/td&gt;
-&lt;/td&gt;
-§R-P15§9§1 Text lliure Tx5.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Tx Parell/1r:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic amb el botó dret&lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;P7 per alliberar l&apos;estat de la casella P173§7. &lt;b&gt;Feu clic amb el botó dret al botó FT8&lt;/b&gt; per desbloquejar-lo.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Habilita el botó Tx:&lt;/td&gt;§P186&lt;b&gt;1§9§18§9§ activa/desactiva el mode de transmissió automàtica.&lt;br/&gt;
- &lt;b&gt;Fes clic amb el botó dret&lt;/b&gt; per activar/desactivar Espera i saltar.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;E&lt;td align=&quot;right&quot;&gt;P202§ botó:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic &lt;/b&gt; per esborrar la finestra Freqüència de recepció.&lt;br/&gt;
- &lt;b&gt;Feu doble clic &lt;/b&gt; per esborrar les finestres Freqüència de recepció i Activitat de banda.
-§Botó Esborrar P213§§Alternatiu Comportament&lt;/b&gt; està marcat:&lt;br/&gt;
- &lt;b&gt;Feu clic &lt;/b&gt; per esborrar la finestra Activitat de banda.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per esborrar la finestra Freqüència de recepció.&lt;br/&gt;§&lt;b&gt;P226§per esborrar. Finestres de freqüència de recepció i activitat de banda.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;DX Botó de trucada:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Click toggle Wait &amp;§P240 Activat/Desactivat.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per esborrar la trucada Dx, la quadrícula Dx i els missatges std.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;&lt;td align=&quot;right&quot;&gt;P252
-Lo Botó:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic &lt;/b&gt; per cercar l&apos;indicador de trucada a la base de dades.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per cercar Dx Call a qrz.com.
-§&lt;tr&gt;6P264
-6 &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Botó Afegeix:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic &lt;/b&gt; per afegir indicatiu i localitzador a la base de dades.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt;§ per cercar P278§§. &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Botó Ignora:&lt;/td&gt;
- &lt;td&gt;&lt;b&gt;Feu clic a&lt;/b&gt; per afegir l&apos;indicatiu a la llista d&apos;ignorar.&lt;br/&gt;P293§ &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per cercar Dx Call a qrzcq.com.
- &lt;/td&gt;
- &lt;/tr&gt;
- &lt;tr&gt;
- &lt;td align=&quot;right&quot;&gt;Botons de banda:&lt;/td&gt;§P305 &lt;td&gt;&lt;b&gt;Feu clic &lt;/b&gt; per canviar les freqüències predeterminades de banda/mode.&lt;br/&gt;
- &lt;b&gt;Feu clic amb el botó dret&lt;/b&gt; per canviar les freqüències d&apos;enviament FT8 DX.
- &lt;/td&gt;&lt;/tr&gt;&lt;/tr&gt;&lt;/tr&gt;§P</translation>
+  &lt;tr&gt;
+    &lt;th align="right"&gt;Click on&lt;/th&gt;
+    &lt;th align="left"&gt;Action&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Waterfall:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to set Rx frequency.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to set Tx frequency.&lt;br/&gt;
+        &lt;b&gt;Double-right-click&lt;/b&gt; to set Rx and Tx frequencies.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Decoded text:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Double-click&lt;/b&gt; to copy second callsign to Dx Call, locator to Dx Grid, change Rx&lt;br/&gt;
+        and Tx frequency to decoded signal's frequency, and generate standard messages.&lt;br/&gt;
+        Hold down &lt;b&gt;Alt&lt;/b&gt; to prevent Tx from being enabled on &lt;b&gt;double-click&lt;/b&gt;.&lt;br/&gt;
+        If &lt;b&gt;Hold Tx Freq&lt;/b&gt; is checked or first callsign in message is your&lt;br/&gt;
+        own call, Tx frequency is not changed unless &lt;b&gt;Ctrl&lt;/b&gt; is held down.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Dial Frequency:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Turn the mouse wheel&lt;/b&gt; to change the kHz values, or:&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to increase frequency by 1 kHz.&lt;br/&gt;
+        &lt;b&gt;Left-click&lt;/b&gt; to decrease frequency by 1 kHz.&lt;br/&gt;
+        The mouse pointer must be over the Dial Frequency indicator.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;H Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle FT8 Hound Mode On/Off.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to activate or deactivate SuperFox mode.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;FT8 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to switch to FT8 Hound Mode.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to toggle last used Special Operating Activity On/Off.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Q65 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to switch to Q65 Mode.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to switch to Q65 Pileup Mode.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;JT65 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to switch to JT65 Mode.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to switch to JT9 Mode.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Tx5 Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Right-click&lt;/b&gt; to retain Tx5 free text.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Tx Even/1st:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Right-click&lt;/b&gt; to freeze the state of the checkbox.&lt;br/&gt;
+        &lt;b&gt;Right-click on the FT8 Button&lt;/b&gt; to unfreeze.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Enable Tx Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle Auto-Tx mode On/Off.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to toggle Wait &amp; Pounce On/Off.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Erase button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to erase Rx Frequency window.&lt;br/&gt;
+        &lt;b&gt;Double-click&lt;/b&gt; to erase Rx Frequency and Band Activity windows.&lt;br/&gt;
+        If &lt;b&gt;Alternate Erase button behavior&lt;/b&gt; is checked:&lt;br/&gt;
+        &lt;b&gt;Click&lt;/b&gt; to erase Band Activity window.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to erase Rx Frequency window.&lt;br/&gt;
+        &lt;b&gt;Double-click&lt;/b&gt; to erase Rx Frequency and Band Activity windows.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;DX Call Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle Wait &amp; Call On/Off.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to clear the Dx Call, Dx Grid and Std Msgs.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Lookup Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to search for callsign in database.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to search for Dx Call on qrz.com.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Add Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to add callsign and locator to database.&lt;br/&gt;
+        &lt;b&gt;Right-click&lt;/b&gt; to search for Dx Call on hamqth.com.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td align="right"&gt;Ignore Button:&lt;/td&gt;
+    &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to add callsign to the Ignore List.&lt;br/&gt;
+       &lt;b&gt;Right-click&lt;/b&gt; to search for Dx Call on qrzcq.com.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+  &lt;td align="right"&gt;Band Buttons:&lt;/td&gt;
+  &lt;td&gt;&lt;b&gt;Click&lt;/b&gt; to toggle band / mode default frequencies.&lt;br/&gt;
+      &lt;b&gt;Right-click&lt;/b&gt; to toggle FT8 DXpedition frequencies.
+    &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="13035"/>
@@ -7165,7 +7177,7 @@ Etiqueta remota: %2</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="7868"/>
         <source>No subprocess diagnostic output was captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>No s'ha capturat cap sortida de diagnòstic de subprocés.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8234"/>
@@ -7380,54 +7392,55 @@ Operador actual: %1</translation>
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="vanished">&lt;table cellspacing=1&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Aturar Tx, avortar QSO, esborrar la cua de trucades següents&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1 &lt;/b&gt;&lt;/td&gt;§P16 &lt;/b&gt;&lt;/td&gt;§P16 Tx6)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Maj+F1 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Avís de drets d&apos;autor&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;&lt;td&gt;&lt;b&gt;Ctr3§2+F1 &lt;td&gt;2+F1 &lt;td&gt;2+F1 v3.0 FT2 Raptor&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Obre la finestra de configuració (Alt: transmetre Tx2)&lt;/td&gt;&lt;/tr&gt;
-9 &lt;tr&gt;&lt;td&gt;3§P &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mostra les dreceres del teclat (Alt: transmetre Tx3)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Esborra trucada DX, quadrícula DX, missatges Tx: transmetre 1-4 Tx4)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Surt del programa&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;§F5 &lt;/b&gt;§P78 &lt;/b&gt;&lt;/td&gt; Tx5)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Obre el fitxer següent al directori (Alt: alterna &quot;Trucada 1a&quot;)&lt;/td&gt;&lt;/tr&gt;
- §P92&lt;/tr&gt;P93Shi§ft &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Descodificar tots els fitxers restants al directori&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mostra la finestra de mitjana de missatges&lt;/td&gt;
-P109§ &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mou la freqüència Rx cap avall 1 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1§1&lt;td&gt;1&lt;/b&gt;&lt;/td&gt;&lt;/td&gt;&lt;/td&gt;&lt;/td&gt;
- Freqüències de Tx baixar 1 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Maj+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Bajar la freqüència de Tx 60 Hz (FT8) o 90 Hz (FT4§4&lt;b&gt;4&lt;b&gt;4&lt;b&gt;) &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Maj+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Baix la freqüència de marcatge 1000 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P148§F &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mou la freqüència Rx cap amunt 1 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mou les freqüències Tx idèntiques i cap amunt Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Maj+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mou la freqüència Tx cap amunt 60 Hz (FT8) o 90 Hz (FT4)&lt;/td&gt;§
+        <translation>&lt;table cellspacing=1&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, abort QSO, clear next-call queue&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Online User's Guide (Alt: transmit Tx6)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Copyright Notice&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;About Decodium v3.0 FT2 Raptor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open settings window (Alt: transmit Tx2)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display keyboard shortcuts (Alt: transmit Tx3)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear DX Call, DX Grid, Tx messages 1-4 (Alt: transmit Tx4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Exit program&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display special mouse commands (Alt: transmit Tx5)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open next file in directory (Alt: toggle "Call 1st")&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode all remaining files in directory&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display Message Averaging window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency down 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency down 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency up 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency up 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set now transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set next transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear Active Stations for QMAP&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Best S+P" status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Call 1st" checkbox&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode again at QSO frequency&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Full decode (both windows)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn on TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn off TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Erase&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Edit the free text message box&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Add Dx Call to the Ignore List&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lookup callsign in database, generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Enable Tx"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open a .wav file&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Change operator&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open "Log QSO" window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RRR (not in FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RR73&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Refresh Active Stations window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop monitoring&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Tune status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear hung decoder status&lt;/td&gt;&lt;/tr&gt;
 
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Maj+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Mou la freqüència de marcatge cap amunt 1000 Hz&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;P184§ &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Estableix ara la transmissió a aquest número a la pestanya 1&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Configura la següent transmissió a aquest número a la pestanya 1&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Esborra estacions actives per a QMAP&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;b&gt;&lt;b&gt;§P21 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Canvia l&apos;estat &quot;Millor S+P&quot;&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Canvia la casella &quot;Truca §2§2§2§4§2§2&quot; &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Descodificar de nou a la freqüència QSO&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Maj+D &lt;/b&gt;§§P241&lt;/b&gt;§P24 windows)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Activar TX parell/1r&lt;/td&gt;&lt;/tr&gt;
-&lt;td&gt;P25§E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Desactivar TX parell/1r&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Erase&lt;/td&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Edita el quadre de missatge de text lliure&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G &lt;/b&gt;&lt;/td&gt;&lt;/td&gt;
-P280§ missatges&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;P30+1§C§P30 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Afegeix una trucada Dx a la llista d&apos;ignoració&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Buscar missatges estàndard a la base de dades d&apos;identificació de trucada4§3§3&lt;b&gt;3§3§1 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N &lt;/b&gt;&lt;/td&gt;§P3 &quot;Enable&quot; Tx&quot;&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Obre un fitxer .wav&lt;/td&gt;&lt;/tr&gt;
- &lt;td&gt;P345&lt;td&gt;P345&lt;td&gt;P &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Canvia d&apos;operador&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Obre la finestra &quot;Registre QSO&quot;&lt;/td&gt;§
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Defineix el missatge Tx4 a RRR (no a FT4)&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Estableix el missatge Tx4 a RR73&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Maj+R &lt;/b&gt;&lt;/td&gt;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;P385§§&lt;/td&gt;§&lt;td&gt;§§P387 activa &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Aturar la supervisió&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T &lt;/b&gt;&lt;td&gt;Togg estat&lt;/td&gt;&lt;/tr&gt;
- &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Esborra l&apos;estat del descodificador penjat&lt;/td&gt;&lt;/tr&gt;
-
-§P417</translation>
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="8991"/>
@@ -7481,12 +7494,60 @@ P280§ missatges&lt;/td&gt;&lt;/tr&gt;
 
 &lt;/table&gt;</source>
         <extracomment>Keyboard shortcuts help window contents</extracomment>
-        <translation type="unfinished"></translation>
+        <translation>&lt;table cellspacing=1&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop Tx, abort QSO, clear next-call queue&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F1       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Online User's Guide (Alt: transmit Tx6)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Copyright Notice&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F1  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;About Decodium&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F2       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open settings window (Alt: transmit Tx2)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F3       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display keyboard shortcuts (Alt: transmit Tx3)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F4       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear DX Call, DX Grid, Tx messages 1-4 (Alt: transmit Tx4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+F4   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Exit program&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F5       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display special mouse commands (Alt: transmit Tx5)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F6       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open next file in directory (Alt: toggle "Call 1st")&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F6 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode all remaining files in directory&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F7       &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Display Message Averaging window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F11      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies down 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency down 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F11 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency down 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;F12      &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Rx frequency up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move identical Rx and Tx frequencies up 1 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move Tx frequency up 60 Hz (FT8) or 90 Hz (FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+F12 &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Move dial frequency up 1000 Hz&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set now transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctl+1-6  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set next transmission to this number on Tab 1&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+A    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear Active Stations for QMAP&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+B    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Best S+P" status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+C    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Call 1st" checkbox&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+D    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Decode again at QSO frequency&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+D  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Full decode (both windows)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+E   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn on TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+E  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Turn off TX even/1st&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+E    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Erase&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Edit the free text message box&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+G    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+H    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Halt Tx&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+I   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Add Dx Call to the Ignore List&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+L   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Lookup callsign in database, generate standard messages&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+M    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Monitor&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+N    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle "Enable Tx"&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+O   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open a .wav file&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+O    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Change operator&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Q    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Open "Log QSO" window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+R   &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RRR (not in FT4)&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+R    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Set Tx4 message to RR73&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+Shift+R  &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Refresh Active Stations window&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+S    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Stop monitoring&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+T    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Toggle Tune status&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+Z    &lt;/b&gt;&lt;/td&gt;&lt;td&gt;Clear hung decoder status&lt;/td&gt;&lt;/tr&gt;
+
+&lt;/table&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="10767"/>
         <source>Embedded WSPR decoder unavailable.</source>
-        <translation type="unfinished"></translation>
+        <translation>El descodificador WSPR incrustat no està disponible.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="12992"/>
@@ -7662,32 +7723,32 @@ Empremta digital: %8</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18875"/>
         <source>%1 baud Baudot terminal. Mark %2 Hz, shift %3 Hz, %4, %5 stop bits. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Terminal %1 en bauds Baudot. Marqueu %2 Hz, canvieu els bits de parada %3 Hz, %4, %5. El text rebut apareix a dalt; escriviu el text que voleu enviar a continuació.</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>reverse</source>
-        <translation type="unfinished"></translation>
+        <translation>revés</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18879"/>
         <source>normal</source>
-        <translation type="unfinished"></translation>
+        <translation>normal</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18924"/>
         <source>RTTY text contains no encodable Baudot characters</source>
-        <translation type="unfinished"></translation>
+        <translation>El text RTTY no conté caràcters Baudot codificables</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19068"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Text rebut</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19069"/>
         <source>RTTY Transmitted Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Text transmès</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="19138"/>
@@ -7768,7 +7829,7 @@ Empremta digital: %8</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="24834"/>
         <source>Embedded WSPR decoder failed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>El descodificador WSPR incrustat ha fallat: %1</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="26693"/>
@@ -7912,7 +7973,7 @@ Error(%2): %3</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27593"/>
         <source>Remote mode request ignored: RTTY is hidden in this release</source>
-        <translation type="unfinished"></translation>
+        <translation>S'ha ignorat la sol·licitud de mode remot: RTTY està amagat en aquesta versió</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27599"/>
@@ -8047,17 +8108,17 @@ Error(%2): %3</translation>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27793"/>
         <source>Remote Monitoring ignored: cannot enable while transmitting</source>
-        <translation type="unfinished"></translation>
+        <translation>Supervisió remota ignorada: no es pot activar durant la transmissió</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring enabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Monitorització remota activada</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27801"/>
         <source>Remote Monitoring disabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Monitorització remota desactivada</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="27813"/>
@@ -8610,7 +8671,7 @@ Servidor UDP %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="137"/>
         <source>secret-tool lookup failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>La cerca secret-tool no s'ha pogut iniciar</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="142"/>
@@ -8655,7 +8716,7 @@ Servidor UDP %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="284"/>
         <source>secret-tool clear failed to start</source>
-        <translation type="unfinished"></translation>
+        <translation>secret-tool clear no s'ha pogut iniciar</translation>
     </message>
     <message>
         <location filename="../SecureSettings.cpp" line="289"/>
@@ -8665,7 +8726,7 @@ Servidor UDP %2:%3</translation>
     <message>
         <location filename="../SecureSettings.cpp" line="302"/>
         <source>secret-tool clear failed</source>
-        <translation type="unfinished"></translation>
+        <translation>No s'ha pogut esborrar secret-tool</translation>
     </message>
     <message>
         <location filename="../widgets/mainwindow.cpp" line="18093"/>
@@ -8712,14 +8773,18 @@ Servidor UDP %2:%3</translation>
         <source>Network Error:
 Unsupported download URL or scheme:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Error de xarxa:
+Descàrrega no admesa URL o esquema:
+%1</translation>
     </message>
     <message>
         <location filename="../Network/FileDownload.cpp" line="77"/>
         <source>Network Error:
 Downloaded file exceeds limit of %1 MiB:
 %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Error de xarxa:
+El fitxer baixat supera el límit de %1 MiB:
+%2</translation>
     </message>
 </context>
 <context>
@@ -9151,42 +9216,42 @@ Missatge</translation>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="34"/>
         <source>45.45 baud Baudot terminal. Received text appears above; type the text to send below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Terminal Baudot de 45,45 bauds. El text rebut apareix a dalt; escriviu el text que voleu enviar a continuació.</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="39"/>
         <source>RTTY Received Text</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Text rebut</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="40"/>
         <source>Clear RX</source>
-        <translation type="unfinished"></translation>
+        <translation>Esborra RX</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="50"/>
         <source>Waiting for RTTY traffic...</source>
-        <translation type="unfinished"></translation>
+        <translation>S'està esperant el trànsit RTTY...</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="57"/>
         <source>RTTY Transmit Buffer</source>
-        <translation type="unfinished"></translation>
+        <translation>RTTY Buffer de transmissió</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="58"/>
         <source>Clear TX</source>
-        <translation type="unfinished"></translation>
+        <translation>Esborra TX</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="67"/>
         <source>Type your RTTY message here, then press Send RTTY.</source>
-        <translation type="unfinished"></translation>
+        <translation>Escriviu el vostre missatge RTTY aquí i, a continuació, premeu Envia RTTY.</translation>
     </message>
     <message>
         <location filename="../widgets/RTTYTerminalWidget.cpp" line="71"/>
         <source>Send RTTY</source>
-        <translation type="unfinished"></translation>
+        <translation>Envia RTTY</translation>
     </message>
 </context>
 <context>
@@ -10484,7 +10549,7 @@ període tranquil quan es fa la descodificació.</translation>
     <message>
         <location filename="../Configuration.ui" line="391"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open the Astronomical Data window automatically when switching to Q65 or JT65 mode and Decode after EME delay is enabled, and close it when no longer needed.&lt;/p&gt;&lt;p&gt;Open the QSYMessage Creator automatically if the VHF Features are enabled and such QSY messages are applicable.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Obre automàticament la finestra de dades astronòmiques quan es canvia al mode Q65 o JT65 i Descodifica després que el retard EME estigui habilitat, i tanqueu-la quan ja no sigui necessari.&lt;/p&gt;&lt;p&gt;Obre el QSYMessage Creator automàticament si les funcions de VHF estan habilitades i aquests missatges QSY són aplicables§7&lt;/p&gt;§§P.</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open the Astronomical Data window automatically when switching to Q65 or JT65 mode and Decode after EME delay is enabled, and close it when no longer needed.&lt;/p&gt;&lt;p&gt;Open the QSYMessage Creator automatically if the VHF Features are enabled and such QSY messages are applicable.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="394"/>
@@ -11801,7 +11866,7 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
     <message>
         <location filename="../Configuration.ui" line="2526"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Porta fissa su cui Decodium ascolta comandi UDP in ingresso (es. da DecoAlert). Default 0 = porta casuale, compatibile con il comportamento storico WSJT-X/CQRLOG. Imposta un valore fisso solo se un controller esterno lo richiede esplicitamente.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Port fix on Decodium escolta les ordres entrants de UDP (p. ex., de DecoAlert). Per defecte 0 = port aleatori, compatible amb el comportament històric de WSJT-X/CQRLOG. Establiu un valor fix només si un controlador extern ho sol·licita explícitament.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../Configuration.ui" line="2942"/>
@@ -12769,4 +12834,119 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Fes doble clic sobre un color per editar-lo.&lt;/p&gt;&lt;p&gt;Fes clic amb el botó dret per inserir o eliminar els colors.&lt;/p&gt;&lt;p&gt;Els colors a la part superior representen senyals febles,&lt;/p&gt;&lt;p&gt;i els colors a la part inferior representen senyals fortes.&lt;/p&gt;&lt;p&gt;Pot tenir fins a 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
+    <context>
+        <name>SettingsDialog</name>
+        <message>
+            <source>Settings</source>
+            <translation>Configuració</translation>
+        </message>
+        <message>
+            <source>Changes are applied immediately where supported.</source>
+            <translation>Els canvis s’apliquen immediatament quan és compatible.</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>Tanca</translation>
+        </message>
+        <message>
+            <source>Station</source>
+            <translation>Estació</translation>
+        </message>
+        <message>
+            <source>Radio</source>
+            <translation>Ràdio</translation>
+        </message>
+        <message>
+            <source>Audio</source>
+            <translation>Àudio</translation>
+        </message>
+        <message>
+            <source>TX</source>
+            <translation>TX</translation>
+        </message>
+        <message>
+            <source>Display</source>
+            <translation>Pantalla</translation>
+        </message>
+        <message>
+            <source>Decode</source>
+            <translation>Descodifica</translation>
+        </message>
+        <message>
+            <source>Reporting</source>
+            <translation>Informes</translation>
+        </message>
+        <message>
+            <source>Colors</source>
+            <translation>Colors</translation>
+        </message>
+        <message>
+            <source>Advanced</source>
+            <translation>Avançat</translation>
+        </message>
+        <message>
+            <source>Alerts</source>
+            <translation>Alertes</translation>
+        </message>
+        <message>
+            <source>Filters</source>
+            <translation>Filtres</translation>
+        </message>
+        <message>
+            <source>Choose Decoded Font</source>
+            <translation>Tria el font decodificat</translation>
+        </message>
+        <message>
+            <source>Choose Font</source>
+            <translation>Tria el font</translation>
+        </message>
+        <message>
+            <source>Search:</source>
+            <translation>Cerca:</translation>
+        </message>
+        <message>
+            <source>filter by name</source>
+            <translation>filtra per nom</translation>
+        </message>
+        <message>
+            <source>Monospaced fonts:</source>
+            <translation>Fonts monoespaiats:</translation>
+        </message>
+        <message>
+            <source>Fonts:</source>
+            <translation>Fonts:</translation>
+        </message>
+        <message>
+            <source>Selected:</source>
+            <translation>Seleccionat:</translation>
+        </message>
+        <message>
+            <source>Size:</source>
+            <translation>Mida:</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>Cancel·la</translation>
+        </message>
+        <message>
+            <source>Apply</source>
+            <translation>Aplica</translation>
+        </message>
+        <message>
+            <source>Search radio, model or brand...</source>
+            <translation>Cerca ràdio, model o marca...</translation>
+        </message>
+        <message>
+            <source>STATION INFO</source>
+            <translation>INFO ESTACIÓ</translation>
+        </message>
+        <message>
+            <source>Station Name:</source>
+            <translation>Nom de l’estació:</translation>
+        </message>
+        <message>
+            <source>Choose</source>
+            <translation>Tria</translation>
+        </message>
+    </context>
 </TS>
