@@ -388,6 +388,12 @@ set (wsjtx_CXXSRCS
   main.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodiumDiagnostics.cpp
+  DecodiumDiagnostics.h
+  DecodiumLegacyBackend.cpp
+  DecodiumLegacyBackend.h
+  DecodiumPropagationManager.cpp
+  DecodiumPropagationManager.h
   DecodiumAudioSink.h
   controllers/ActiveStationsModel.cpp
   controllers/ActiveStationsModel.hpp
