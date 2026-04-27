@@ -8,6 +8,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QIcon>
+#include <QIODevice>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -104,6 +105,22 @@ static bool hasCommandLineSwitch(int argc, char* argv[], const char* name)
     }
     return false;
 }
+
+static QString slowQmlStartupFlagPath()
+{
+    return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+        .absoluteFilePath(QStringLiteral("decodium-slow-qml-startup.flag"));
+}
+
+static void writeSlowQmlStartupFlag(const QByteArray& flagPath, const QByteArray& reason)
+{
+    QFile flagFile {QString::fromLocal8Bit(flagPath)};
+    if (!flagFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return;
+
+    flagFile.write(reason);
+    flagFile.write("\n");
+}
 #endif
 
 #ifdef Q_OS_WIN
@@ -192,13 +209,21 @@ int main(int argc, char* argv[])
     L("QQuickStyle OK");
 
 #ifdef Q_OS_WIN
+    QString const slowQmlStartupFlag = slowQmlStartupFlagPath();
+    bool const envSafeGraphics = qEnvironmentVariableIsSet("DECODIUM_SAFE_GRAPHICS");
+    bool const commandLineSafeGraphics = hasCommandLineSwitch(argc, argv, "--safe-graphics");
+    bool const autoSafeGraphics = QFile::exists(slowQmlStartupFlag);
     bool const safeGraphicsRequested =
-        qEnvironmentVariableIsSet("DECODIUM_SAFE_GRAPHICS")
-        || hasCommandLineSwitch(argc, argv, "--safe-graphics");
+        envSafeGraphics || commandLineSafeGraphics || autoSafeGraphics;
     if (safeGraphicsRequested) {
         qputenv("QSG_RHI_BACKEND", "d3d11");
         qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "1");
-        L("Qt Quick safe graphics enabled: D3D11 WARP software renderer");
+        if (autoSafeGraphics && !envSafeGraphics && !commandLineSafeGraphics) {
+            L(("Qt Quick safe graphics auto-enabled after previous slow QML startup: "
+               + slowQmlStartupFlag.toLocal8Bit()).constData());
+        } else {
+            L("Qt Quick safe graphics enabled: D3D11 WARP software renderer");
+        }
     } else if (qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
         QByteArray backendMessage("Qt Quick graphics backend from environment: ");
         backendMessage += qgetenv("QSG_RHI_BACKEND");
@@ -432,8 +457,13 @@ int main(int argc, char* argv[])
         (QStandardPaths::writableLocation(QStandardPaths::TempLocation)
          + QStringLiteral("/decodium-start.log")).toLocal8Bit();
     QByteArray const watchedQmlPath = qmlPath.toLocal8Bit();
+    QByteArray slowQmlStartupFlagBytes;
+#ifdef Q_OS_WIN
+    slowQmlStartupFlagBytes = slowQmlStartupFlag.toLocal8Bit();
+#endif
     std::thread qmlLoadWatchdog([&qmlLoadDone, &qmlLoadWatchdogMutex, &qmlLoadWatchdogCv,
-                                  startupLogPath, watchedQmlPath]() {
+                                  startupLogPath, watchedQmlPath,
+                                  slowQmlStartupFlagBytes]() {
         std::unique_lock<std::mutex> lock(qmlLoadWatchdogMutex);
         for (int elapsedSeconds = 10; elapsedSeconds <= 900; elapsedSeconds += 10) {
             if (qmlLoadWatchdogCv.wait_for(lock, std::chrono::seconds(10),
@@ -449,6 +479,16 @@ int main(int argc, char* argv[])
             msg += QByteArray::number(elapsedSeconds);
             msg += " s";
             writeStartupLogLine(startupLogPath, msg);
+
+#ifdef Q_OS_WIN
+            if (elapsedSeconds == 60 && !slowQmlStartupFlagBytes.isEmpty()) {
+                QByteArray reason("QML load exceeded 60 seconds; use safe graphics on next launch");
+                writeSlowQmlStartupFlag(slowQmlStartupFlagBytes, reason);
+                QByteArray flagMsg("QML LOAD WATCHDOG: slow startup marker written: ");
+                flagMsg += slowQmlStartupFlagBytes;
+                writeStartupLogLine(startupLogPath, flagMsg);
+            }
+#endif
         }
     });
 
@@ -462,6 +502,17 @@ int main(int argc, char* argv[])
     if (qmlLoadWatchdog.joinable())
         qmlLoadWatchdog.join();
     L(("engine.load() returned in " + QByteArray::number(loadTimer.elapsed()) + " ms").constData());
+
+#ifdef Q_OS_WIN
+    if (loadTimer.elapsed() > 60000) {
+        QByteArray reason("Last QML load took ");
+        reason += QByteArray::number(loadTimer.elapsed());
+        reason += " ms; use safe graphics on next launch";
+        writeSlowQmlStartupFlag(slowQmlStartupFlag.toLocal8Bit(), reason);
+        L(("Slow QML startup marker kept for next launch: "
+           + slowQmlStartupFlag.toLocal8Bit()).constData());
+    }
+#endif
 
 
     if (engine.rootObjects().isEmpty()) {

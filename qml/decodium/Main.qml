@@ -174,6 +174,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         console.log("Main.qml Component.onCompleted — restoring window state")
+        callerQueuePanelVisible = bridge.foxMode
         var state = {}
         try { state = bridge.loadWindowState("mainWindow") || {} } catch(e) { console.log("loadWindowState error: " + e) }
         if (state.width !== undefined && state.width > 0) width = state.width
@@ -273,10 +274,10 @@ ApplicationWindow {
         console.log("Main window closing - shutting down application")
         // Close all floating windows
         if (waterfallWindow) waterfallWindow.close()
-        if (logWindow) logWindow.close()
-        if (astroWindow) astroWindow.close()
-        if (macroDialog) macroDialog.close()
-        if (rigControlDialog) rigControlDialog.close()
+        closeLoaded(logWindowLoader)
+        closeLoaded(astroWindowLoader)
+        closeLoaded(macroDialogLoader)
+        closeLoaded(rigControlDialogLoader)
         if (txPanelFloatingWindow) txPanelFloatingWindow.close()
         if (period1FloatingWindow) period1FloatingWindow.close()
         if (period2FloatingWindow) period2FloatingWindow.close()
@@ -511,6 +512,28 @@ ApplicationWindow {
         qsyDialogLoader.item.open()
     }
 
+    function runWhenLoaded(loader, action) {
+        if (loader.item) {
+            action(loader.item)
+            return
+        }
+        loader.pendingAction = action
+        loader.active = true
+    }
+
+    function closeLoaded(loader) {
+        if (loader.item && loader.item.close)
+            loader.item.close()
+    }
+
+    function openLogWindow() { runWhenLoaded(logWindowLoader, function(item) { item.open() }) }
+    function openMacroDialog() { runWhenLoaded(macroDialogLoader, function(item) { item.open() }) }
+    function openAstroWindow() { runWhenLoaded(astroWindowLoader, function(item) { item.open() }) }
+    function openSettingsDialog() { runWhenLoaded(settingsDialogLoader, function(item) { item.open() }) }
+    function openSettingsTab(tabIndex) {
+        runWhenLoaded(settingsDialogLoader, function(item) { item.openTab(tabIndex) })
+    }
+
     property string rigErrorDialogTitle: ""
     property string rigErrorSummary: ""
     property string rigErrorDetails: ""
@@ -570,6 +593,11 @@ ApplicationWindow {
     property color glassBorder: bridge.themeManager.glassBorder
     property bool showDxccInfo: bridge.getSetting("ShowDXCC", true)
     property bool showTxMessagesInRx: bridge.getSetting("TXMessagesToRX", true)
+    property bool highlight73: bridge.getSetting("Highlight73", true)
+    property bool highlightOrange: bridge.getSetting("HighlightOrange", false)
+    property bool highlightBlue: bridge.getSetting("HighlightBlue", false)
+    property string highlightOrangeCallsigns: bridge.getSetting("HighlightOrangeCallsigns", "")
+    property string highlightBlueCallsigns: bridge.getSetting("HighlightBlueCallsigns", "")
     property string decodedTextFontFamily: bridge.fontSettingFamily("DecodedTextFont", "Courier", 10)
     property int decodedTextFontPixelSize: bridge.fontSettingPixelSize("DecodedTextFont", "Courier", 10)
     property int decodedTextHeaderPixelSize: Math.max(8, decodedTextFontPixelSize - 1)
@@ -586,6 +614,16 @@ ApplicationWindow {
                 mainWindow.showDxccInfo = !!value
             else if (key === "TXMessagesToRX" || key === "Tx2QSO")
                 mainWindow.showTxMessagesInRx = !!value
+            else if (key === "Highlight73")
+                mainWindow.highlight73 = !!value
+            else if (key === "HighlightOrange")
+                mainWindow.highlightOrange = !!value
+            else if (key === "HighlightBlue")
+                mainWindow.highlightBlue = !!value
+            else if (key === "HighlightOrangeCallsigns" || key === "OrangeCallsigns")
+                mainWindow.highlightOrangeCallsigns = String(value || "")
+            else if (key === "HighlightBlueCallsigns" || key === "BlueCallsigns")
+                mainWindow.highlightBlueCallsigns = String(value || "")
             else if (key === "DecodedTextFont")
                 mainWindow.refreshDecodedTextFont()
             else if (key === "WorldMapDisplayed")
@@ -613,16 +651,48 @@ ApplicationWindow {
     property real dxccTooltipX: 0
     property real dxccTooltipY: 0
 
+    function isSignoffMessage(message) {
+        var words = String(message || "").toUpperCase().replace(/[<>;,]/g, " ").split(/\s+/)
+        for (var i = 0; i < words.length; ++i) {
+            if (words[i] === "73" || words[i] === "RR73" || words[i] === "RRR")
+                return true
+        }
+        return false
+    }
+
+    function highlightListMatches(message, listText) {
+        var wanted = String(listText || "").toUpperCase().split(/[,\s;]+/)
+        var messageText = " " + String(message || "").toUpperCase().replace(/[<>;,]/g, " ") + " "
+        for (var i = 0; i < wanted.length; ++i) {
+            var token = wanted[i].trim()
+            if (token.length > 0 && messageText.indexOf(" " + token + " ") !== -1)
+                return true
+        }
+        return false
+    }
+
+    function customHighlightColor(modelData) {
+        var message = modelData.message || ""
+        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
+            return "#E14B00"
+        if (highlightBlue && highlightListMatches(message, highlightBlueCallsigns))
+            return "#0064FF"
+        return ""
+    }
+
     // Shannon-compatible color function (allineato a DecodeWindow.qml)
     function getDxccColor(modelData) {
+        var customColor = customHighlightColor(modelData)
         if (modelData.isTx)     return "#FF8C00"
-        if (modelData.isMyCall) return "#FF4444"
-        if (modelData.isB4 === true || modelData.dxIsWorked === true) return "#606060"
+        if (modelData.isMyCall) return bridge.colorMyCall
+        if (customColor !== "") return customColor
+        if (highlight73 && isSignoffMessage(modelData.message)) return bridge.color73
+        if (modelData.isB4 === true || modelData.dxIsWorked === true) return bridge.colorB4
         if (modelData.isLotw === true) return "#44BBFF"
-        if (modelData.dxIsMostWanted === true) return colorMostWanted
-        if (modelData.dxIsNewCountry === true) return colorNewCountry
-        if (modelData.dxIsNewBand === true) return colorNewBand
-        if (modelData.isCQ) return accentGreen
+        if ((modelData.dxCountry && String(modelData.dxCountry).length > 0)
+            || modelData.dxIsMostWanted === true || modelData.dxIsNewCountry === true || modelData.dxIsNewBand === true)
+            return bridge.colorDXEntity
+        if (modelData.isCQ) return bridge.colorCQ
         return textPrimary
     }
 
@@ -1832,7 +1902,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsDialog.open()
+                                onClicked: openSettingsDialog()
                             }
 
                             ToolTip.visible: settingsMA.containsMouse
@@ -1951,7 +2021,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: logWindow.open()
+                                onClicked: openLogWindow()
                             }
 
                             ToolTip.visible: logMA.containsMouse
@@ -1991,7 +2061,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: macroDialog.open()
+                                onClicked: openMacroDialog()
                             }
 
                             ToolTip.visible: macroMA.containsMouse
@@ -2027,7 +2097,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: astroWindow.open()
+                                onClicked: openAstroWindow()
                             }
 
                             ToolTip.visible: astroMA.containsMouse
@@ -2073,7 +2143,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsDialog.openTab(1)
+                                onClicked: openSettingsTab(1)
                             }
 
                             ToolTip.visible: catMA.containsMouse
@@ -2458,7 +2528,7 @@ ApplicationWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             logWindowMinimized = false
-                            logWindow.open()
+                            openLogWindow()
                         }
                     }
 
@@ -2510,7 +2580,7 @@ ApplicationWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             astroWindowMinimized = false
-                            astroWindow.open()
+                            openAstroWindow()
                         }
                     }
 
@@ -2529,9 +2599,10 @@ ApplicationWindow {
                 // DX Cluster toggle button
                 Rectangle {
                     visible: dxClusterToolbarVisible
-                    width: dxClusterToolbarVisible ? 74 : 0
-                    height: 74
+                    width: dxClusterToolbarVisible ? (bridge.dxCluster && bridge.dxCluster.connected ? 104 : 86) : 0
+                    height: bridge.dxCluster && bridge.dxCluster.connected ? 116 : 74
                     radius: 8
+                    clip: true
                     color: dxClusterPanelVisible
                            ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
                            : dxcBtnMA.containsMouse
@@ -2543,6 +2614,7 @@ ApplicationWindow {
 
                     Column {
                         anchors.centerIn: parent
+                        anchors.verticalCenterOffset: bridge.dxCluster && bridge.dxCluster.connected ? -14 : 0
                         spacing: 4
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -2568,7 +2640,10 @@ ApplicationWindow {
 
                     MouseArea {
                         id: dxcBtnMA
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        height: parent.height - (autoSpotRow.visible ? 34 : 0)
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -2582,6 +2657,68 @@ ApplicationWindow {
                                 if (bridge.dxCluster && !bridge.dxCluster.connected) {
                                     bridge.connectDxCluster(bridge.dxCluster.host, bridge.dxCluster.port)
                                 }
+                            }
+                        }
+                    }
+
+                    Item {
+                        id: autoSpotRow
+                        z: 3
+                        visible: bridge.dxCluster && bridge.dxCluster.connected
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        anchors.bottomMargin: 12
+                        height: 20
+
+                        Row {
+                            id: autoSpotContent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 4
+
+                            Rectangle {
+                                id: autoSpotBox
+                                width: 13
+                                height: 13
+                                radius: 3
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: bridge.autoSpotEnabled ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.9) : "transparent"
+                                border.color: bridge.autoSpotEnabled ? accentGreen : textSecondary
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: bridge.autoSpotEnabled ? "✓" : ""
+                                    color: bgDeep
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                }
+                            }
+
+                            Text {
+                                text: "Auto Spot"
+                                width: Math.max(0, autoSpotContent.width - autoSpotBox.width - autoSpotContent.spacing)
+                                color: bridge.autoSpotEnabled ? accentGreen : textSecondary
+                                font.pixelSize: 8
+                                font.bold: true
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignLeft
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            z: 10
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton
+                            onClicked: {
+                                bridge.autoSpotEnabled = !bridge.autoSpotEnabled
                             }
                         }
                     }
@@ -2629,7 +2766,7 @@ ApplicationWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             macroDialogMinimized = false
-                            macroDialog.open()
+                            openMacroDialog()
                         }
                     }
 
@@ -2681,7 +2818,7 @@ ApplicationWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             rigControlMinimized = false
-                            settingsDialog.openTab(1)
+                            openSettingsTab(1)
                         }
                     }
 
@@ -4115,7 +4252,7 @@ ApplicationWindow {
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
+                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
                                                 Item {
                                                     visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
@@ -4125,7 +4262,7 @@ ApplicationWindow {
                                                         text: modelData.dxCountry || ""
                                                         font.family: mainWindow.decodedTextFontFamily
                                                         font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
-                                                        color: modelData.dxIsNewCountry ? colorNewCountry : modelData.dxIsMostWanted ? colorMostWanted : textSecondary
+                                                        color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
                                                         horizontalAlignment: Text.AlignRight
                                                         verticalAlignment: Text.AlignVCenter
                                                         elide: Text.ElideRight
@@ -4487,7 +4624,7 @@ ApplicationWindow {
                                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); color: modelData.isTx ? "#f1c40f" : getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                                             }
                                         }
 
@@ -4898,7 +5035,7 @@ ApplicationWindow {
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
-                    settingsDialog.openTab(1)
+                    openSettingsTab(1)
                 }
             }
 
@@ -5048,34 +5185,100 @@ ApplicationWindow {
         }
     }
 
-    // Log Window
-    LogWindow {
-        id: logWindow
+    Loader {
+        id: logWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/LogWindow.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: LogWindow")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
-    // Macro Dialog
-    MacroDialog {
-        id: macroDialog
+    Loader {
+        id: macroDialogLoader
+        active: false
+        asynchronous: true
+        source: "components/MacroDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: MacroDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
-    // Astro Window
-    AstroWindow {
-        id: astroWindow
+    Loader {
+        id: astroWindowLoader
+        active: false
+        asynchronous: true
+        source: "components/AstroWindow.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: AstroWindow")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
-    // Rig Control Dialog
-    RigControlDialog {
-        id: rigControlDialog
+    Loader {
+        id: rigControlDialogLoader
+        active: false
+        asynchronous: true
+        source: "components/RigControlDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: RigControlDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
-    // Settings Dialog (sostituisce il legacy WSJT-X settings)
-    SettingsDialog {
-        id: settingsDialog
+    Loader {
+        id: settingsDialogLoader
+        active: false
+        asynchronous: true
+        source: "components/SettingsDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: SettingsDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
-    // Bug Report Dialog — in-app diagnostics and issue submission
-    BugReportDialog {
-        id: bugReportDialog
+    Loader {
+        id: bugReportDialogLoader
+        active: false
+        asynchronous: true
+        source: "components/BugReportDialog.qml"
+        property var pendingAction: null
+        onLoaded: {
+            console.log("Lazy component loaded: BugReportDialog")
+            if (pendingAction) {
+                var action = pendingAction
+                pendingAction = null
+                action(item)
+            }
+        }
     }
 
     // Apri CAT dialog quando bridge.openCatSettings() viene chiamato
@@ -5117,13 +5320,13 @@ ApplicationWindow {
         }
         function onTimeSyncSettingsRequested() {
             timeSyncPanelVisible = true
-            settingsDialog.openTab(8)
+            openSettingsTab(8)
         }
         function onSetupSettingsRequested(tabIndex) {
-            settingsDialog.openTab(tabIndex !== undefined && tabIndex >= 0 ? tabIndex : 0)
+            openSettingsTab(tabIndex !== undefined && tabIndex >= 0 ? tabIndex : 0)
         }
         function onCatSettingsRequested() {
-            settingsDialog.openTab(1)
+            openSettingsTab(1)
         }
         function onQuitRequested() {
             mainWindow.close()
@@ -6033,6 +6236,20 @@ ApplicationWindow {
         }
 
         MenuItem {
+            text: bridge.houndMode ? "✓ Hound Mode" : "☐ Hound Mode"
+            onTriggered: { bridge.houndMode = !bridge.houndMode; callerQueuePanelVisible = bridge.foxMode }
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text; font.pixelSize: 12
+                color: bridge.houndMode ? "#FF9800" : textSecondary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
             text: astroPanelVisible ? "✓ Astro / EME" : "☐ Astro / EME"
             onTriggered: astroPanelVisible = !astroPanelVisible
             background: Rectangle {
@@ -6721,9 +6938,9 @@ ApplicationWindow {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (waterfallDisplayDetached.maxFreq < 5000) {
-                                            waterfallDisplayDetached.maxFreq += 500
-                                        }
+                                        var wf = waterfallDetachedLoader.item
+                                        if (wf && wf.maxFreq < 5000)
+                                            wf.maxFreq += 500
                                     }
                                 }
                             }
@@ -6749,15 +6966,17 @@ ApplicationWindow {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (waterfallDisplayDetached.maxFreq > 1000) {
-                                            waterfallDisplayDetached.maxFreq -= 500
-                                        }
+                                        var wf = waterfallDetachedLoader.item
+                                        if (wf && wf.maxFreq > 1000)
+                                            wf.maxFreq -= 500
                                     }
                                 }
                             }
 
                             Text {
-                                text: waterfallDisplayDetached.minFreq + "-" + waterfallDisplayDetached.maxFreq + " Hz"
+                                text: waterfallDetachedLoader.item
+                                      ? waterfallDetachedLoader.item.minFreq + "-" + waterfallDetachedLoader.item.maxFreq + " Hz"
+                                      : "0-3200 Hz"
                                 font.pixelSize: 10
                                 font.family: "Monospace"
                                 color: textSecondary
@@ -6857,22 +7076,32 @@ ApplicationWindow {
                     }
                 }
 
-                // Waterfall content
-                Waterfall {
-                    id: waterfallDisplayDetached
+                Loader {
+                    id: waterfallDetachedLoader
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: waterfallDetached
-                    showControls: true
-                    minFreq: 0
-                    maxFreq: 3200
-                    spectrumHeight: 150
+                    active: waterfallWindow.visible
+                    asynchronous: true
+                    sourceComponent: waterfallDetachedComponent
+                }
 
-                    onFrequencySelected: function(freq) {
-                        bridge.rxFrequency = freq              // tasto destro = RX
-                    }
-                    onTxFrequencySelected: function(freq) {
-                        bridge.txFrequency = freq              // tasto sinistro = TX
+                Component {
+                    id: waterfallDetachedComponent
+
+                    Waterfall {
+                        id: waterfallDisplayDetached
+                        visible: waterfallDetached
+                        showControls: true
+                        minFreq: 0
+                        maxFreq: 3200
+                        spectrumHeight: 150
+
+                        onFrequencySelected: function(freq) {
+                            bridge.rxFrequency = freq              // tasto destro = RX
+                        }
+                        onTxFrequencySelected: function(freq) {
+                            bridge.txFrequency = freq              // tasto sinistro = TX
+                        }
                     }
                 }
 
@@ -7026,7 +7255,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: logWindowDetached
+                    active: logFloatingWindow.visible
+                    asynchronous: true
                     sourceComponent: logContentComponent
                 }
             }
@@ -7130,7 +7360,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: astroWindowDetached
+                    active: astroFloatingWindow.visible
+                    asynchronous: true
                     sourceComponent: astroContentComponent
                 }
             }
@@ -7233,7 +7464,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: macroDialogDetached
+                    active: macroFloatingWindow.visible
+                    asynchronous: true
                     sourceComponent: macroContentComponent
                 }
             }
@@ -7336,7 +7568,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: rigControlDetached
+                    active: rigFloatingWindow.visible
+                    asynchronous: true
                     sourceComponent: rigContentComponent
                 }
             }
@@ -7384,14 +7617,24 @@ ApplicationWindow {
             border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
             border.width: 1
 
-            LiveMapPanel {
+            Loader {
+                id: liveMapFloatingLoader
                 anchors.fill: parent
                 anchors.margins: 8
-                engine: bridge
-                detachable: true
-                detached: true
-                visible: liveMapFloatingWindow.visible
-                onDetachRequested: mainWindow.dockLiveMapPanel()
+                active: liveMapFloatingWindow.visible
+                asynchronous: true
+                sourceComponent: liveMapFloatingComponent
+            }
+
+            Component {
+                id: liveMapFloatingComponent
+
+                LiveMapPanel {
+                    engine: bridge
+                    detachable: true
+                    detached: true
+                    onDetachRequested: mainWindow.dockLiveMapPanel()
+                }
             }
         }
     }
@@ -7610,7 +7853,7 @@ ApplicationWindow {
                                 spacing: 6
                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; Layout.preferredWidth: 80 }
                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                             }
 
                             MouseArea {
@@ -7905,7 +8148,7 @@ ApplicationWindow {
                                 spacing: 6
                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; Layout.preferredWidth: 80 }
                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
                             }
 
                             MouseArea {
@@ -8282,7 +8525,7 @@ ApplicationWindow {
     // CallerQueuePanel — visibile solo in Fox mode, angolo in basso a destra
     Item {
         id: callerQueueOverlay
-        visible: bridge.foxMode
+        visible: bridge.foxMode && callerQueuePanelVisible
         z: 200
         x: mainWindow.width - width - 12
         y: mainWindow.height - height - 200
@@ -8300,8 +8543,24 @@ ApplicationWindow {
         Loader {
             id: callerQueueLoader
             anchors.fill: parent
-            active: bridge.foxMode
+            active: bridge.foxMode && callerQueuePanelVisible
             source: "../panels/CallerQueuePanel.qml"
+        }
+
+        Connections {
+            target: callerQueueLoader.item
+            ignoreUnknownSignals: true
+            function onCloseRequested() {
+                callerQueuePanelVisible = false
+            }
+        }
+    }
+
+    Connections {
+        target: bridge
+        ignoreUnknownSignals: true
+        function onFoxModeChanged() {
+            callerQueuePanelVisible = bridge.foxMode
         }
     }
 

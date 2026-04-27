@@ -329,10 +329,10 @@ Dialog {
 
     function splitModeLabel(value) {
         if (value === "rig")
-            return "Rig"
+            return qsTr("Rig")
         if (value === "emulate")
-            return "Fake It"
-        return "None"
+            return qsTr("Fake It")
+        return qsTr("None")
     }
 
     function splitModeOptions() {
@@ -344,6 +344,31 @@ Dialog {
             options.push({ value: value, label: splitModeLabel(value) })
         }
         return options
+    }
+
+    function setupChoiceLabel(value) {
+        var text = String(value)
+        if (text === "None")
+            return qsTr("None")
+        if (text === "Default")
+            return qsTr("Default")
+        if (text === "On")
+            return qsTr("On")
+        if (text === "Off")
+            return qsTr("Off")
+        if (text === "Mono")
+            return qsTr("Mono")
+        if (text === "Left")
+            return qsTr("Left")
+        if (text === "Right")
+            return qsTr("Right")
+        if (text === "Both")
+            return qsTr("Both")
+        if (text === "Rear/Data")
+            return qsTr("Rear/Data")
+        if (text === "Front/Mic")
+            return qsTr("Front/Mic")
+        return text
     }
 
     function settingChoiceIndex(key, choices, fallbackIndex) {
@@ -656,14 +681,14 @@ Dialog {
                 }
 
                 CheckBox {
-                    text: "Bold"
+                    text: qsTr("Bold")
                     checked: settingsDialog.fontPickerBold
                     onCheckedChanged: settingsDialog.fontPickerBold = checked
                     contentItem: Text { text: parent.text; leftPadding: 26; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
                 }
 
                 CheckBox {
-                    text: "Italic"
+                    text: qsTr("Italic")
                     checked: settingsDialog.fontPickerItalic
                     onCheckedChanged: settingsDialog.fontPickerItalic = checked
                     contentItem: Text { text: parent.text; leftPadding: 26; color: textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter }
@@ -809,7 +834,7 @@ Dialog {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "OK"
+                    text: qsTr("OK")
                     color: accentGreen
                     font.pixelSize: 12
                     font.bold: true
@@ -883,17 +908,17 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Dettagli Stazione ──
-                        Text { text: "DETTAGLI STAZIONE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("STATION DETAILS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "My Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("My Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.callsign; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.callsign = text
                         }
-                        Text { text: "My Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("My Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             text: bridge.grid; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -901,14 +926,14 @@ Dialog {
                             onTextChanged: bridge.grid = text
                         }
 
-                        Text { text: "Auto Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Auto Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("AutoGrid", false)
                             onCheckedChanged: bridge.setSetting("AutoGrid", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "IARU Region:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("IARU Region:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             model: ["1","2","3"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: Number(bridge.getSetting("Region", 0))
@@ -920,9 +945,9 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Type 2 Msg Gen:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Type 2 Msg Gen:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
-                            model: ["Full","Type 1 prefix","Type 2 prefix"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: [qsTr("Full"),qsTr("Type 1 prefix"),qsTr("Type 2 prefix")]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: Number(bridge.getSetting("Type2MsgGen", 0))
                             onActivated: bridge.setSetting("Type2MsgGen", currentIndex)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -931,7 +956,7 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Op Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Op Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("OpCall", ""); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -950,7 +975,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.stationName = text
                         }
-                        Text { text: "QTH:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("QTH:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.stationQth; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -958,14 +983,14 @@ Dialog {
                             onTextChanged: bridge.stationQth = text
                         }
 
-                        Text { text: "Rig Info:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Rig Info:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.stationRigInfo; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.stationRigInfo = text
                         }
-                        Text { text: "Antenna:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Antenna:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.stationAntenna; Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -973,7 +998,7 @@ Dialog {
                             onTextChanged: bridge.stationAntenna = text
                         }
 
-                        Text { text: "Potenza (W):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Power (W):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: stPowerSpin
                             from: 0; to: 9999; value: bridge.stationPowerWatts; editable: true
@@ -997,14 +1022,14 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Backend CAT ──
-                        Text { text: "BACKEND CAT"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("BACKEND CAT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Backend:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Backend:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Row {
                             Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 6
                             Repeater {
-                                model: [["native","Nativo (15 radio)"],["hamlib","Hamlib (300+ radio)"],["tci","TCI"],["omnirig","OmniRig"]]
+                                model: [["native",qsTr("Native (15 radios)")],["hamlib",qsTr("Hamlib (300+ radios)")],["tci","TCI"],["omnirig","OmniRig"]]
                                 delegate: Rectangle {
                                     property string bk: modelData[0]
                                     property bool active: bridge.catBackend === bk
@@ -1043,23 +1068,23 @@ Dialog {
                                     wrapMode: Text.WordWrap
                                     color: textPrimary
                                     font.pixelSize: 11
-                                    text: bridge.lastCatError + "\nSuggerimento: chiudi OmniRig dalla tray icon di Windows, poi premi di nuovo Connetti."
+                                    text: bridge.lastCatError + "\n" + qsTr("Tip: close OmniRig from the Windows tray icon, then press Connect again.")
                                 }
                             }
                         }
 
                         // ── Stato connessione ──
-                        Text { text: "Stato:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Row {
                             Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 8
                             Rectangle { width: 12; height: 12; radius: 6; color: bridge.catConnected ? accentGreen : "#f44336"; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: bridge.catConnected ? "Connesso — " + bridge.catRigName + " — " + bridge.catMode : "Disconnesso"; color: bridge.catConnected ? accentGreen : "#f44336"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: bridge.catConnected ? qsTr("Connected") + " — " + bridge.catRigName + " — " + bridge.catMode : qsTr("Disconnected"); color: bridge.catConnected ? accentGreen : "#f44336"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                             Item { width: 20; height: 1 }
                             Rectangle {
                                 width: 100; height: 28; radius: 6
                                 color: connMA.containsMouse ? (bridge.catConnected ? Qt.rgba(0.95,0.26,0.21,0.2) : Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.2)) : "transparent"
                                 border.color: bridge.catConnected ? "#f44336" : accentGreen
-                                Text { anchors.centerIn: parent; text: bridge.catConnected ? "Disconnetti" : "Connetti"; color: bridge.catConnected ? "#f44336" : accentGreen; font.pixelSize: 11 }
+                                Text { anchors.centerIn: parent; text: bridge.catConnected ? qsTr("Disconnect") : qsTr("Connect"); color: bridge.catConnected ? "#f44336" : accentGreen; font.pixelSize: 11 }
                                 MouseArea { id: connMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: settingsDialog.toggleCatConnection()
                                 }
@@ -1076,10 +1101,10 @@ Dialog {
                         }
 
                         // ── Controllo CAT ──
-                        Text { text: "CONTROLLO CAT"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("CAT CONTROL"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Rig:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Rig:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: rigCombo
                             model: bridge.catBackend === "tci" ? ["TCI Client RX1", "TCI Client RX2"] : (bridge.catManager ? bridge.catManager.rigList : []); Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
@@ -1216,7 +1241,7 @@ Dialog {
 
                         Text {
                             visible: settingsDialog.usesSerialControls()
-                            text: "Serial Port:"
+                            text: qsTr("Serial Port:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
@@ -1253,7 +1278,7 @@ Dialog {
                         }
                         Text {
                             visible: settingsDialog.usesSerialControls()
-                            text: "Baud Rate:"
+                            text: qsTr("Baud Rate:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
@@ -1287,7 +1312,7 @@ Dialog {
                         // ── CI-V Address (solo rig ICOM) ──
                         Text {
                             visible: settingsDialog.usesSerialControls() && settingsDialog.rigIsIcom()
-                            text: "CI-V Addr:"
+                            text: qsTr("CI-V Addr:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
@@ -1325,7 +1350,7 @@ Dialog {
 
                         Text {
                             visible: settingsDialog.usesNetworkControls()
-                            text: "Host:Port:"
+                            text: qsTr("Host:Port:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
@@ -1351,7 +1376,7 @@ Dialog {
 
                         Text {
                             visible: settingsDialog.usesTciControls()
-                            text: "TCI Host:Port:"
+                            text: qsTr("TCI Host:Port:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
@@ -1377,7 +1402,7 @@ Dialog {
 
                         Text {
                             visible: settingsDialog.usesTciControls()
-                            text: "TCI Audio:"
+                            text: qsTr("TCI Audio:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
@@ -1385,7 +1410,7 @@ Dialog {
                         CheckBox {
                             visible: settingsDialog.usesTciControls()
                             checked: bridge.catManager ? bridge.catManager.tciAudioEnabled : true
-                            text: "RX/TX via TCI"
+                            text: qsTr("RX/TX via TCI")
                             Layout.fillWidth: true
                             Layout.columnSpan: 3
                             onCheckedChanged: {
@@ -1401,7 +1426,7 @@ Dialog {
                             }
                         }
 
-                        Text { text: "PTT Method:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("PTT Method:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: pttCombo
                             enabled: !settingsDialog.usesTciControls()
@@ -1448,7 +1473,7 @@ Dialog {
                         }
                         Text {
                             visible: settingsDialog.usesSeparatePttPort()
-                            text: "PTT Port:"
+                            text: qsTr("PTT Port:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: labelWidth
@@ -1479,7 +1504,7 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
                         Item { visible: settingsDialog.usesSeparatePttPort(); Layout.fillWidth: true; Layout.columnSpan: 2 }
-                        Text { text: "Poll Interval (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Poll Interval (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: pollSpin
                             from: 1; to: 99; value: bridge.catManager ? bridge.catManager.pollInterval : 3; editable: true
@@ -1495,7 +1520,7 @@ Dialog {
                         // ── Parametri Seriali ──
                         Text {
                             visible: settingsDialog.usesSerialControls()
-                            text: "PARAMETRI SERIALI"
+                            text: qsTr("SERIAL PARAMETERS")
                             color: secondaryCyan
                             font.pixelSize: 12
                             font.bold: true
@@ -1510,7 +1535,7 @@ Dialog {
                             color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3)
                         }
 
-                        Text { visible: settingsDialog.usesSerialControls(); text: "Data Bits:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Data Bits:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: dataBitsCombo
                             visible: settingsDialog.usesSerialControls()
@@ -1530,7 +1555,7 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { visible: settingsDialog.usesSerialControls(); text: "Stop Bits:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Stop Bits:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: stopBitsCombo
                             visible: settingsDialog.usesSerialControls()
@@ -1549,7 +1574,7 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { visible: settingsDialog.usesSerialControls(); text: "Handshake:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Handshake:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: handshakeCombo
                             visible: settingsDialog.usesSerialControls()
@@ -1567,14 +1592,14 @@ Dialog {
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: handshakeCombo.displayText === "none" ? "None" : (handshakeCombo.displayText === "xonxoff" ? "XON/XOFF" : "Hardware"); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData === "none" ? "None" : (modelData === "xonxoff" ? "XON/XOFF" : "Hardware"); color: textPrimary; font.pixelSize: 12 }
+                            contentItem: Text { text: handshakeCombo.displayText === "none" ? qsTr("None") : (handshakeCombo.displayText === "xonxoff" ? "XON/XOFF" : qsTr("Hardware")); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: modelData === "none" ? qsTr("None") : (modelData === "xonxoff" ? "XON/XOFF" : qsTr("Hardware")); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
                         Item { visible: settingsDialog.usesSerialControls(); Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceDtrControlEnabled(); text: "Force DTR:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceDtrControlEnabled(); text: qsTr("Force DTR:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: forceDtrCombo
                             visible: settingsDialog.usesSerialControls()
@@ -1584,12 +1609,12 @@ Dialog {
                                                                                       bridge.catManager ? bridge.catManager.dtrHigh : false)) : 0
                             onActivated: settingsDialog.applyForceLineValue("dtr", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: forceDtrCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceRtsControlEnabled(); text: "Force RTS:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceRtsControlEnabled(); text: qsTr("Force RTS:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: forceRtsCombo
                             visible: settingsDialog.usesSerialControls()
@@ -1599,17 +1624,17 @@ Dialog {
                                                                                       bridge.catManager ? bridge.catManager.rtsHigh : false)) : 0
                             onActivated: settingsDialog.applyForceLineValue("rts", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: forceRtsCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
                         // ── Operazione Split ──
-                        Text { text: "OPERAZIONE SPLIT"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("SPLIT OPERATION"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Split:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Split:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: splitCombo
                             model: settingsDialog.splitModeOptions(); Layout.fillWidth: true; implicitHeight: controlHeight
@@ -1633,20 +1658,20 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: modeCombo
                             model: ["USB","Data/Pkt","None"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: settingsDialog.settingChoiceIndex("CATMode", model, 0)
                             onActivated: bridge.setSetting("CATMode", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: modeCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(modeCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { visible: !settingsDialog.usesTciControls(); text: "TX Audio Src:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: !settingsDialog.usesTciControls(); text: qsTr("TX Audio Src:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: txAudioSrcCombo
                             visible: !settingsDialog.usesTciControls()
@@ -1654,15 +1679,15 @@ Dialog {
                             currentIndex: settingsDialog.settingChoiceIndex("TXAudioSource", model, 0)
                             onActivated: bridge.setSetting("TXAudioSource", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: txAudioSrcCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(txAudioSrcCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { visible: settingsDialog.usesTciControls(); text: "TX Audio:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { visible: settingsDialog.usesTciControls(); text: qsTr("TX Audio:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             visible: settingsDialog.usesTciControls()
-                            text: "TCI Audio"
+                            text: qsTr("TCI Audio")
                             readOnly: true
                             enabled: false
                             Layout.fillWidth: true
@@ -1675,10 +1700,10 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Diagnostica ──
-                        Text { text: "DIAGNOSTICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("DIAGNOSTICS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Check SWR:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Check SWR:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.supportsSwrTelemetry() ? bridge.getSetting("CheckSWR", false) : false
                             enabled: settingsDialog.supportsSwrTelemetry()
@@ -1690,7 +1715,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "PWR and SWR:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("PWR and SWR:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.supportsSwrTelemetry() ? bridge.getSetting("PWRandSWR", false) : false
                             enabled: settingsDialog.supportsSwrTelemetry()
@@ -1706,20 +1731,20 @@ Dialog {
                                 width: 100; height: controlHeight; radius: 4
                                 color: catConnMA.containsMouse ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.3) : bgMedium
                                 border.color: accentGreen
-                                Text { anchors.centerIn: parent; text: "Connect"; color: accentGreen; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: qsTr("Connect"); color: accentGreen; font.pixelSize: 12 }
                                 MouseArea { id: catConnMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.connectRig() } }
                             }
                             Rectangle {
                                 width: 100; height: controlHeight; radius: 4
                                 color: catDiscMA.containsMouse ? Qt.rgba(1,0.3,0.3,0.3) : bgMedium
                                 border.color: "#f44336"
-                                Text { anchors.centerIn: parent; text: "Disconnect"; color: "#f44336"; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: qsTr("Disconnect"); color: "#f44336"; font.pixelSize: 12 }
                                 MouseArea { id: catDiscMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.disconnectRig() } }
                             }
                         }
                         Text {
                             visible: bridge.catBackend === "hamlib"
-                            text: "Hamlib:"
+                            text: qsTr("Hamlib:")
                             color: textSecondary
                             font.pixelSize: 12
                             Layout.preferredWidth: labelWidth
@@ -1733,7 +1758,7 @@ Dialog {
                                 width: 180; height: controlHeight; radius: 4
                                 color: hamlibUpdateMA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
                                 border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: "Apri update Hamlib"; color: primaryBlue; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: qsTr("Open Hamlib update"); color: primaryBlue; font.pixelSize: 12 }
                                 MouseArea {
                                     id: hamlibUpdateMA
                                     anchors.fill: parent
@@ -1744,7 +1769,7 @@ Dialog {
                             }
                             Text {
                                 Layout.fillWidth: true
-                                text: "Windows: DLL aggiornata dal sito Hamlib. macOS/Linux: documentazione e release ufficiali."
+                                text: qsTr("Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.")
                                 wrapMode: Text.Wrap
                                 color: textSecondary
                                 font.pixelSize: 11
@@ -1764,7 +1789,7 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Dispositivi Audio ──
-                        Text { text: "DISPOSITIVI AUDIO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 2; Layout.topMargin: 4 }
+                        Text { text: qsTr("AUDIO DEVICES"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 2; Layout.topMargin: 4 }
                         Item { Layout.fillWidth: true }
                         Rectangle {
                             Layout.preferredWidth: 110
@@ -1775,7 +1800,7 @@ Dialog {
                             border.color: glassBorder
                             Text {
                                 anchors.centerIn: parent
-                                text: "↻  Aggiorna"
+                                text: qsTr("↻  Refresh")
                                 color: secondaryCyan
                                 font.pixelSize: 11
                                 font.bold: true
@@ -1790,7 +1815,7 @@ Dialog {
                         }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Input Device:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Input Device:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: audioInDevCombo
                             model: bridge.audioInputDevices
@@ -1807,10 +1832,10 @@ Dialog {
                             popup.width: Math.max(audioInDevCombo.width, 560)
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Input Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Input Channel:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: audioInChCombo
-                            model: ["Mono","Left","Right","Both"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: [qsTr("Mono"),qsTr("Left"),qsTr("Right"),qsTr("Both")]; Layout.fillWidth: true; implicitHeight: controlHeight
                             Layout.minimumWidth: fieldMinWidth
                             currentIndex: bridge.audioInputChannel
                             onActivated: bridge.audioInputChannel = currentIndex
@@ -1822,7 +1847,7 @@ Dialog {
                         }
                         Item { Layout.columnSpan: 2 }
 
-                        Text { text: "Output Device:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Output Device:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: audioOutDevCombo
                             model: bridge.audioOutputDevices
@@ -1839,10 +1864,10 @@ Dialog {
                             popup.width: Math.max(audioOutDevCombo.width, 560)
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Output Channel:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Output Channel:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: audioOutChCombo
-                            model: ["Mono","Left","Right","Both"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: [qsTr("Mono"),qsTr("Left"),qsTr("Right"),qsTr("Both")]; Layout.fillWidth: true; implicitHeight: controlHeight
                             Layout.minimumWidth: fieldMinWidth
                             currentIndex: bridge.audioOutputChannel
                             onActivated: bridge.audioOutputChannel = currentIndex
@@ -1854,10 +1879,10 @@ Dialog {
                         }
 
                         // ── Livelli ──
-                        Text { text: "LIVELLI"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("LEVELS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "RX Input Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("RX Input Level:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
                             id: setupRxInputLevelSlider
                             from: 0; to: 100; live: true; stepSize: 1
@@ -1870,7 +1895,7 @@ Dialog {
                             }
                         }
 
-                        Text { text: "TX Output Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TX Output Level:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
                             id: setupTxOutputLevelSlider
                             from: 450; to: 0; live: true; stepSize: 1
@@ -1884,10 +1909,10 @@ Dialog {
                         }
 
                         // ── Directory ──
-                        Text { text: "DIRECTORY"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("DIRECTORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Save Directory:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Save Directory:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             id: saveDirectoryField
                             text: bridge.getSetting("SaveDirectory", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
@@ -1902,7 +1927,7 @@ Dialog {
                             }
                         }
 
-                        Text { text: "AzEl Directory:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("AzEl Directory:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             id: azElDirectoryField
                             text: bridge.getSetting("AzElDirectory", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
@@ -1918,17 +1943,17 @@ Dialog {
                         }
 
                         // ── Power Memory ──
-                        Text { text: "POWER MEMORY"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("POWER MEMORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Band TX Memory:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Band TX Memory:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("PowerBandTXMemory", false)
                             onCheckedChanged: bridge.setSetting("PowerBandTXMemory", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Band Tune Mem:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Band Tune Mem:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("PowerBandTuneMemory", false)
                             onCheckedChanged: bridge.setSetting("PowerBandTuneMemory", checked)
@@ -1949,10 +1974,10 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Frequenza e Timing ──
-                        Text { text: "FREQUENZA E TIMING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("FREQUENCY AND TIMING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "TX Frequency:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TX Frequency:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txFreqSpin
                             from: 0; to: 5000; value: bridge.txFrequency; editable: true
@@ -1965,10 +1990,10 @@ Dialog {
                             contentItem: TextInput { text: txFreqSpin.textFromValue(txFreqSpin.value, txFreqSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txFreqSpin.editable; validator: txFreqSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "TX Slot:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TX Slot:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: txSlotCombo
-                            model: ["Secondo (:15/:45)", "Primo (:00/:30)"]
+                            model: [qsTr("Second (:15/:45)"), qsTr("First (:00/:30)")]
                             currentIndex: bridge.txPeriod === 1 ? 1 : 0
                             Layout.fillWidth: true; implicitHeight: controlHeight
                             onActivated: {
@@ -1982,7 +2007,7 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "TX Delay (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TX Delay (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txDelaySpin
                             from: 0; to: 5; stepSize: 1; value: Math.round(Number(bridge.getSetting("TxDelay", 0.2)) * 10); editable: true
@@ -1997,7 +2022,7 @@ Dialog {
                             contentItem: TextInput { text: txDelaySpin.textFromValue(txDelaySpin.value, txDelaySpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txDelaySpin.editable; validator: txDelaySpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Allow TX QSY:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Allow TX QSY:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("TxQSYAllowed", false)
                             onCheckedChanged: bridge.setSetting("TxQSYAllowed", checked)
@@ -2006,10 +2031,10 @@ Dialog {
                         }
 
                         // ── Sequenza Automatica ──
-                        Text { text: "SEQUENZA AUTOMATICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("AUTO SEQUENCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Auto Sequence:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Auto Sequence:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.autoSeq
                             onCheckedChanged: {
@@ -2020,7 +2045,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Send RR73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Send RR73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.sendRR73
                             onCheckedChanged: {
@@ -2030,7 +2055,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Quick QSO:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Quick QSO:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.quickQsoEnabled
                             onCheckedChanged: {
@@ -2040,7 +2065,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Disable TX after 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Disable TX after 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("73TxDisable", true)
                             onCheckedChanged: bridge.setSetting("73TxDisable", checked)
@@ -2048,7 +2073,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "MSK/Q65 TX until 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("MSK/Q65 TX until 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("RepeatTx", false)
                             onCheckedChanged: bridge.setSetting("RepeatTx", checked)
@@ -2058,10 +2083,10 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Watchdog ──
-                        Text { text: "WATCHDOG"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("WATCHDOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "TX Watchdog (min):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TX Watchdog (min):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: txWdSpin
                             from: 0; to: 999; value: Number(bridge.getSetting("TxWatchdog", bridge.txWatchdogMode === 1 ? bridge.txWatchdogTime : 6)); editable: true
@@ -2079,7 +2104,7 @@ Dialog {
                             contentItem: TextInput { text: txWdSpin.textFromValue(txWdSpin.value, txWdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !txWdSpin.editable; validator: txWdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Tune Watchdog (s):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Tune Watchdog (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 6
                             CheckBox {
@@ -2100,17 +2125,17 @@ Dialog {
                         }
 
                         // ── CW ID ──
-                        Text { text: "CW ID"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("CW ID"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "CW ID after 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("CW ID after 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("After73", false)
                             onCheckedChanged: bridge.setSetting("After73", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "CW ID Interval (min):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("CW ID Interval (min):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: cwIdIntSpin
                             from: 0; to: 999; value: Number(bridge.getSetting("IDint", 0)); editable: true
@@ -2121,10 +2146,10 @@ Dialog {
                         }
 
                         // ── Tone Spacing ──
-                        Text { text: "TONE SPACING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("TONE SPACING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "2x Tone Spacing:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("2x Tone Spacing:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             id: x2ToneSpacingCheck
                             checked: bridge.getSetting("x2ToneSpacing", false)
@@ -2138,7 +2163,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "4x Tone Spacing:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("4x Tone Spacing:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             id: x4ToneSpacingCheck
                             checked: bridge.getSetting("x4ToneSpacing", false)
@@ -2159,7 +2184,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Alt F1-F6 Bind:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Alt F1-F6 Bind:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("AlternateBindings", false)
                             onCheckedChanged: bridge.setSetting("AlternateBindings", checked)
@@ -2181,10 +2206,10 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Font ──
-                        Text { text: "FONT"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("FONT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Font:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Font:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
@@ -2216,11 +2241,11 @@ Dialog {
                                 width: 64; height: controlHeight; radius: 4
                                 color: fontResetMA.containsMouse ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.18) : bgMedium
                                 border.color: glassBorder
-                                Text { anchors.centerIn: parent; text: "Reset"; color: textSecondary; font.pixelSize: 11 }
+                                Text { anchors.centerIn: parent; text: qsTr("Reset"); color: textSecondary; font.pixelSize: 11 }
                                 MouseArea { id: fontResetMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.resetFontSetting("Font", "", 0) }
                             }
                         }
-                        Text { text: "Decoded Font:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Decoded Font:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
@@ -2252,16 +2277,16 @@ Dialog {
                                 width: 64; height: controlHeight; radius: 4
                                 color: decodedFontResetMA.containsMouse ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.18) : bgMedium
                                 border.color: glassBorder
-                                Text { anchors.centerIn: parent; text: "Reset"; color: textSecondary; font.pixelSize: 11 }
+                                Text { anchors.centerIn: parent; text: qsTr("Reset"); color: textSecondary; font.pixelSize: 11 }
                                 MouseArea { id: decodedFontResetMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.resetFontSetting("DecodedTextFont", "Courier", 10) }
                             }
                         }
 
                         // ── Decodifiche ──
-                        Text { text: "DECODIFICHE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("DECODES"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Show DXCC:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Show DXCC:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("ShowDXCC", true)
                             onCheckedChanged: bridge.setSetting("ShowDXCC", checked)
@@ -2269,7 +2294,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "TX Msg to RX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TX Msg to RX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("TXMessagesToRX", true)
                             onCheckedChanged: bridge.setSetting("TXMessagesToRX", checked)
@@ -2278,17 +2303,17 @@ Dialog {
                         }
 
                         // ── Mappa e Distanza ──
-                        Text { text: "MAPPA E DISTANZA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("MAP AND DISTANCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Miles:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Miles:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("Miles", false)
                             onCheckedChanged: bridge.setSetting("Miles", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Greyline:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Greyline:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("ShowGreyline", false)
                             onCheckedChanged: bridge.setSetting("ShowGreyline", checked)
@@ -2296,7 +2321,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Map All Msgs:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Map All Msgs:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("MapAllMessages", false)
                             onCheckedChanged: bridge.setSetting("MapAllMessages", checked)
@@ -2304,7 +2329,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Click TX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Click TX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("MapSingleClickTX", false)
                             onCheckedChanged: bridge.setSetting("MapSingleClickTX", checked)
@@ -2313,17 +2338,17 @@ Dialog {
                         }
 
                         // ── Allineamento ──
-                        Text { text: "ALLINEAMENTO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("ALIGNMENT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Align:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Align:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("Align", false)
                             onCheckedChanged: bridge.setSetting("Align", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Align Steps:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Align Steps:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: alignStepsSpin
                             from: 0; to: 999; value: Number(bridge.getSetting("AlignSteps", 0)); editable: true
@@ -2333,7 +2358,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Align Steps 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Align Steps 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: alignSteps2Spin
                             from: 0; to: 999; value: Number(bridge.getSetting("AlignSteps2", 0)); editable: true
@@ -2357,13 +2382,13 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Parametri Decodifica ──
-                        Text { text: "PARAMETRI DECODIFICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("DECODE PARAMETERS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Decode Depth:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Decode Depth:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: decodeDepthCombo
-                            model: ["Fast","Normal","Deep"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: [qsTr("Fast"),qsTr("Normal"),qsTr("Deep")]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: bridge.ndepth - 1
                             onActivated: bridge.ndepth = currentIndex + 1
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -2374,7 +2399,7 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { text: "Low Freq (Hz):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Low Freq (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: nfaSpin
                             from: 0; to: 5000; value: bridge.nfa; editable: true
@@ -2383,7 +2408,7 @@ Dialog {
                             contentItem: TextInput { text: nfaSpin.textFromValue(nfaSpin.value, nfaSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !nfaSpin.editable; validator: nfaSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "High Freq (Hz):"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("High Freq (Hz):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: nfbSpin
                             from: 0; to: 5000; value: bridge.nfb; editable: true
@@ -2393,7 +2418,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "RX Bandwidth:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("RX Bandwidth:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: rxBwSpin
                             from: 100; to: 5000; value: Number(bridge.getSetting("RXBandwidth", 2500)); editable: true
@@ -2402,7 +2427,7 @@ Dialog {
                             contentItem: TextInput { text: rxBwSpin.textFromValue(rxBwSpin.value, rxBwSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !rxBwSpin.editable; validator: rxBwSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Decode at 52s:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Decode at 52s:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("DecodeAt52s", false)
                             onCheckedChanged: bridge.setSetting("DecodeAt52s", checked)
@@ -2410,7 +2435,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Single Decode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Single Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("SingleDecode", false)
                             onCheckedChanged: bridge.setSetting("SingleDecode", checked)
@@ -2420,10 +2445,10 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── JT65 VHF/UHF ──
-                        Text { text: "JT65 VHF/UHF"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("JT65 VHF/UHF"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Erasure Patterns:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Erasure Patterns:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: erasurePatSpin
                             from: 0; to: 99999; value: Number(bridge.getSetting("RandomErasurePatterns", 7)); editable: true
@@ -2432,7 +2457,7 @@ Dialog {
                             contentItem: TextInput { text: erasurePatSpin.textFromValue(erasurePatSpin.value, erasurePatSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !erasurePatSpin.editable; validator: erasurePatSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Aggressive:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Aggressive:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: aggressiveSpin
                             from: 0; to: 10; value: Number(bridge.getSetting("AggressiveLevel", 0)); editable: true
@@ -2442,7 +2467,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Two-Pass:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Two-Pass:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("TwoPassDecoding", false)
                             onCheckedChanged: bridge.setSetting("TwoPassDecoding", checked)
@@ -2452,13 +2477,13 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Sidelobe Control ──
-                        Text { text: "SIDELOBE CONTROL"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("SIDELOBE CONTROL"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Sidelobe Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Sidelobe Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: sidelobeCombo
-                            model: ["Low Sidelobes","Max Sensitivity"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: [qsTr("Low Sidelobes"),qsTr("Max Sensitivity")]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: Number(bridge.getSetting("SidelobeMode", 0))
                             onActivated: bridge.setSetting("SidelobeMode", currentIndex)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
@@ -2467,7 +2492,7 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Degrade S/N:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Degrade S/N:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: degradeSnSpin
                             from: 0; to: 100; value: Number(bridge.getSetting("DegradeSN", 0)); editable: true
@@ -2478,17 +2503,17 @@ Dialog {
                         }
 
                         // ── Filtri Decodifica ──
-                        Text { text: "FILTRI DECODIFICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("DECODE FILTERS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "CQ Only:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("CQ Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.filterCqOnly
                             onCheckedChanged: bridge.filterCqOnly = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "My Call Only:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("My Call Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.filterMyCallOnly
                             onCheckedChanged: bridge.filterMyCallOnly = checked
@@ -2496,14 +2521,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Zap:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Zap:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.zapEnabled
                             onCheckedChanged: bridge.zapEnabled = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Deep Search:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Deep Search:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.deepSearchEnabled
                             onCheckedChanged: bridge.deepSearchEnabled = checked
@@ -2511,7 +2536,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "AP Decode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("AP Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.ft8ApEnabled
                             onCheckedChanged: bridge.ft8ApEnabled = checked
@@ -2519,7 +2544,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Avg Decode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Avg Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.avgDecodeEnabled
                             onCheckedChanged: bridge.avgDecodeEnabled = checked
@@ -2540,17 +2565,17 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Servizi di Rete ──
-                        Text { text: "SERVIZI DI RETE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("NETWORK SERVICES"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "PSK Reporter:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("PSK Reporter:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.pskReporterEnabled
                             onCheckedChanged: bridge.pskReporterEnabled = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "TCP/IP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("TCP/IP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("PSKRtcpip", false)
                             onCheckedChanged: bridge.setSetting("PSKRtcpip", checked)
@@ -2559,10 +2584,10 @@ Dialog {
                         }
 
                         // ── DX Cluster ──
-                        Text { text: "DX CLUSTER"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("DX CLUSTER"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Server:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             id: dxClusterHostField
                             text: bridge.dxCluster ? bridge.dxCluster.host : ""
@@ -2576,7 +2601,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onEditingFinished: if (bridge.dxCluster) bridge.dxCluster.host = text.trim()
                         }
-                        Text { text: "Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: dxClusterPortSpin
                             from: 1; to: 65535
@@ -2590,14 +2615,14 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Status:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         RowLayout {
                             Layout.fillWidth: true
                             Layout.columnSpan: 3
                             spacing: 10
 
                             Text {
-                                text: bridge.dxCluster && bridge.dxCluster.connected ? "Connesso" : "Disconnesso"
+                                text: bridge.dxCluster && bridge.dxCluster.connected ? qsTr("Connected") : qsTr("Disconnected")
                                 color: bridge.dxCluster && bridge.dxCluster.connected ? accentGreen : textSecondary
                                 font.pixelSize: 12
                             }
@@ -2606,7 +2631,7 @@ Dialog {
                                 width: 96; height: controlHeight; radius: 4
                                 color: dxClusterConnMA.containsMouse ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.25) : bgMedium
                                 border.color: accentGreen
-                                Text { anchors.centerIn: parent; text: "Connetti"; color: accentGreen; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: qsTr("Connect"); color: accentGreen; font.pixelSize: 12 }
                                 MouseArea {
                                     id: dxClusterConnMA
                                     anchors.fill: parent
@@ -2626,7 +2651,7 @@ Dialog {
                                 width: 110; height: controlHeight; radius: 4
                                 color: dxClusterDiscMA.containsMouse ? Qt.rgba(0.95,0.26,0.21,0.2) : bgMedium
                                 border.color: "#f44336"
-                                Text { anchors.centerIn: parent; text: "Disconnetti"; color: "#f44336"; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: qsTr("Disconnect"); color: "#f44336"; font.pixelSize: 12 }
                                 MouseArea {
                                     id: dxClusterDiscMA
                                     anchors.fill: parent
@@ -2637,9 +2662,9 @@ Dialog {
                             }
                         }
 
-                        Text { text: "Dettaglio:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Detail:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         Text {
-                            text: bridge.dxCluster && bridge.dxCluster.lastStatus ? bridge.dxCluster.lastStatus : "Nessun messaggio"
+                            text: bridge.dxCluster && bridge.dxCluster.lastStatus ? bridge.dxCluster.lastStatus : qsTr("No message")
                             color: textSecondary
                             font.pixelSize: 12
                             wrapMode: Text.Wrap
@@ -2648,10 +2673,10 @@ Dialog {
                         }
 
                         // ── Cloudlog ──
-                        Text { text: "CLOUDLOG"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("CLOUDLOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.cloudlogEnabled
                             onCheckedChanged: bridge.cloudlogEnabled = checked
@@ -2660,7 +2685,7 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { text: "API URL:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("API URL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.cloudlogUrl; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -2668,7 +2693,7 @@ Dialog {
                             onTextChanged: bridge.cloudlogUrl = text
                         }
 
-                        Text { text: "API Key:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("API Key:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.cloudlogApiKey; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
                             color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
@@ -2676,7 +2701,7 @@ Dialog {
                             onTextChanged: bridge.cloudlogApiKey = text
                         }
 
-                        Text { text: "Station ID:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Station ID:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: cloudlogStIdSpin
                             from: 0; to: 999; value: Number(bridge.getSetting("CloudlogStationID", 1)); editable: true
@@ -2688,17 +2713,17 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── LotW ──
-                        Text { text: "LOTW"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("LOTW"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "LotW Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("LotW Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.lotwEnabled
                             onCheckedChanged: bridge.lotwEnabled = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Password:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Password:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("LoTWPassword", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
@@ -2706,14 +2731,14 @@ Dialog {
                             onTextChanged: bridge.setSetting("LoTWPassword", text)
                         }
 
-                        Text { text: "Non-QSL'd:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Non-QSL'd:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("LoTWNonQSL", false)
                             onCheckedChanged: bridge.setSetting("LoTWNonQSL", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Days Upload:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Days Upload:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: lotwDaysSpin
                             from: 0; to: 9999; value: Number(bridge.getSetting("LoTWDaysSinceUpload", 365)); editable: true
@@ -2724,10 +2749,10 @@ Dialog {
                         }
 
                         // ── Logging ──
-                        Text { text: "LOGGING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("LOGGING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Prompt to Log:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Prompt to Log:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             id: promptToLogCheck
                             checked: bridge.getSetting("PromptToLog", false)
@@ -2741,7 +2766,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Auto Log:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Auto Log:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             id: autoLogCheck
                             checked: bridge.getSetting("AutoLog", true)
@@ -2763,14 +2788,14 @@ Dialog {
                             }
                         }
 
-                        Text { text: "Direct Log QSO:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Direct Log QSO:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.directLogQso
                             onCheckedChanged: bridge.directLogQso = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Log as RTTY:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Log as RTTY:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("LogAsRTTY", false)
                             onCheckedChanged: bridge.setSetting("LogAsRTTY", checked)
@@ -2778,14 +2803,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "4-digit Grids:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("4-digit Grids:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("Log4DigitGrids", false)
                             onCheckedChanged: bridge.setSetting("Log4DigitGrids", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Contest Only:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Contest Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             enabled: !promptToLogCheck.checked
                             opacity: enabled ? 1.0 : 0.45
@@ -2795,14 +2820,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Spec Op Cmts:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Spec Op Cmts:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("SpecOpInComments", false)
                             onCheckedChanged: bridge.setSetting("SpecOpInComments", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "dB in Cmts:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("dB in Cmts:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("dBReportsToComments", false)
                             onCheckedChanged: bridge.setSetting("dBReportsToComments", checked)
@@ -2810,7 +2835,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "ZZ00:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("ZZ00:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("ZZ00", false)
                             onCheckedChanged: bridge.setSetting("ZZ00", checked)
@@ -2820,17 +2845,17 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Registrazione ──
-                        Text { text: "REGISTRAZIONE"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("RECORDING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Record RX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Record RX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.recordRxEnabled
                             onCheckedChanged: bridge.recordRxEnabled = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Record TX:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Record TX:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.recordTxEnabled
                             onCheckedChanged: bridge.recordTxEnabled = checked
@@ -2838,7 +2863,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "WSPR Upload:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("WSPR Upload:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.wsprUploadEnabled
                             onCheckedChanged: bridge.wsprUploadEnabled = checked
@@ -2848,17 +2873,17 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Remote Web Dashboard ──
-                        Text { text: "REMOTE WEB DASHBOARD (LAN)"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("REMOTE WEB DASHBOARD (LAN)"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("RemoteWebEnabled", false)
                             onCheckedChanged: bridge.setSetting("RemoteWebEnabled", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "HTTP port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("HTTP port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: remoteHttpPortSpin
                             from: 1025; to: 65535; value: Number(bridge.getSetting("RemoteHttpPort", 19091)); editable: true
@@ -2868,7 +2893,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "WS socket port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("WS socket port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             readOnly: true
                             text: String(bridge.remoteWebSocketPort())
@@ -2881,14 +2906,14 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "WS bind:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("WS bind:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             text: bridge.getSetting("RemoteWsBind", "0.0.0.0"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("RemoteWsBind", text)
                         }
-                        Text { text: "Username:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Username:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             text: bridge.getSetting("RemoteUser", "admin"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -2896,17 +2921,17 @@ Dialog {
                             onTextChanged: bridge.setSetting("RemoteUser", text)
                         }
 
-                        Text { text: "Access token:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Access token:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("RemoteToken", ""); Layout.fillWidth: true; Layout.columnSpan: 3; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
-                            placeholderText: "Richiesto per LAN/WAN"
+                            placeholderText: qsTr("Required for LAN/WAN")
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("RemoteToken", text)
                         }
 
                         Text {
-                            text: "Richiede riavvio dell'app. Su LAN/WAN usa un token di almeno 12 caratteri."
+                            text: qsTr("App restart required. For LAN/WAN, use a token of at least 12 characters.")
                             color: textSecondary
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
@@ -2914,17 +2939,17 @@ Dialog {
                         }
 
                         // ── UDP Server ──
-                        Text { text: "UDP SERVER"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("UDP SERVER"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Server Name:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Server Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             text: bridge.getSetting("UDPServer", "127.0.0.1"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("UDPServer", text)
                         }
-                        Text { text: "Server Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Server Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: udpPortSpin
                             from: 1; to: 65535; value: Number(bridge.getSetting("UDPServerPort", 2237)); editable: true
@@ -2934,27 +2959,7 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Secondary UDP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        CheckBox {
-                            id: udpSecondaryCheck
-                            checked: boolSetting("UDPSecondaryEnabled", true)
-                            onToggled: setBoolSettingIfChanged("UDPSecondaryEnabled", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: "Secondary Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
-                        SpinBox {
-                            id: udpSecondaryPortSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPSecondaryServerPort", 2239)); editable: true
-                            enabled: udpSecondaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
-                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
-                            onValueChanged: bridge.setSetting("UDPSecondaryServerPort", value)
-                            contentItem: TextInput { text: udpSecondaryPortSpin.textFromValue(udpSecondaryPortSpin.value, udpSecondaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryPortSpin.editable; validator: udpSecondaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpSecondaryPortSpin.enabled }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                        }
-
-                        Text { text: "Listen Port:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Listen Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: udpListenSpin
                             from: 1; to: 65535; value: Number(bridge.getSetting("UDPListenPort", 2238)); editable: true
@@ -2963,7 +2968,7 @@ Dialog {
                             contentItem: TextInput { text: udpListenSpin.textFromValue(udpListenSpin.value, udpListenSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpListenSpin.editable; validator: udpListenSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "Multicast TTL:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Multicast TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: udpTtlSpin
                             from: 0; to: 255; value: Number(bridge.getSetting("UDPTTL", 1)); editable: true
@@ -2973,10 +2978,10 @@ Dialog {
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Interface Used:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        Text { text: qsTr("Interface Used:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         ComboBox {
                             id: udpInterfaceCombo
-                            model: ["All interfaces"].concat(bridge.networkInterfaceNames())
+                            model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
                             Layout.fillWidth: true
                             Layout.minimumWidth: fieldMinWidth
                             implicitHeight: controlHeight
@@ -2991,9 +2996,88 @@ Dialog {
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                        Text { text: qsTr("Send ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            id: udpPrimaryAdifCheck
+                            checked: boolSetting("UDPPrimaryLoggedAdifEnabled", true)
+                            onToggled: setBoolSettingIfChanged("UDPPrimaryLoggedAdifEnabled", checked, true)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
 
-                        Text { text: "Accept UDP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Secondary UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        CheckBox {
+                            id: udpSecondaryCheck
+                            checked: boolSetting("UDPSecondaryEnabled", true)
+                            onToggled: setBoolSettingIfChanged("UDPSecondaryEnabled", checked, true)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("Secondary Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        TextField {
+                            text: bridge.getSetting("UDPSecondaryServer", bridge.getSetting("UDPServer", "127.0.0.1")); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
+                            enabled: udpSecondaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            color: textPrimary; font.pixelSize: controlFontSize
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("UDPSecondaryServer", text)
+                        }
+
+                        Text { text: qsTr("Secondary Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: udpSecondaryPortSpin
+                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPSecondaryServerPort", 2239)); editable: true
+                            enabled: udpSecondaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("UDPSecondaryServerPort", value)
+                            contentItem: TextInput { text: udpSecondaryPortSpin.textFromValue(udpSecondaryPortSpin.value, udpSecondaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryPortSpin.editable; validator: udpSecondaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpSecondaryPortSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+                        Text { text: qsTr("Secondary TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: udpSecondaryTtlSpin
+                            from: 0; to: 255; value: Number(bridge.getSetting("UDPSecondaryTTL", bridge.getSetting("UDPTTL", 1))); editable: true
+                            enabled: udpSecondaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("UDPSecondaryTTL", value)
+                            contentItem: TextInput { text: udpSecondaryTtlSpin.textFromValue(udpSecondaryTtlSpin.value, udpSecondaryTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryTtlSpin.editable; validator: udpSecondaryTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpSecondaryTtlSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        Text { text: qsTr("Secondary Interface:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        ComboBox {
+                            id: udpSecondaryInterfaceCombo
+                            model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
+                            enabled: udpSecondaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: fieldMinWidth
+                            implicitHeight: controlHeight
+                            Component.onCompleted: {
+                                var saved = String(bridge.getSetting("UDPSecondaryInterface", ""))
+                                currentIndex = saved && saved.length ? Math.max(0, find(saved)) : 0
+                            }
+                            onActivated: bridge.setSetting("UDPSecondaryInterface", currentIndex <= 0 ? "" : currentText)
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            contentItem: Text { text: udpSecondaryInterfaceCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
+                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
+                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
+                        Text { text: qsTr("Secondary ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            id: udpSecondaryAdifCheck
+                            checked: boolSetting("UDPSecondaryLoggedAdifEnabled", true)
+                            enabled: udpSecondaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            onToggled: setBoolSettingIfChanged("UDPSecondaryLoggedAdifEnabled", checked, true)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
+                        Text { text: qsTr("Accept UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             // Default allineato con Configuration.cpp (true) per evitare
                             // che il primo onCheckedChanged scriva `false` nel legacy INI
@@ -3003,7 +3087,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Notify Request:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Notify Request:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("NotifyOnRequest", false)
                             onCheckedChanged: bridge.setSetting("NotifyOnRequest", checked)
@@ -3011,7 +3095,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Restore Win:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Restore Win:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("udpWindowRestore", false)
                             onCheckedChanged: bridge.setSetting("udpWindowRestore", checked)
@@ -3019,6 +3103,46 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // ── ADIF TCP ──
+                        Text { text: qsTr("ADIF TCP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Enable TCP ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        CheckBox {
+                            id: adifTcpCheck
+                            checked: boolSetting("ADIFTcpEnabled", false)
+                            onToggled: setBoolSettingIfChanged("ADIFTcpEnabled", checked, false)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("TCP Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: adifTcpPortSpin
+                            from: 1; to: 65535; value: Number(bridge.getSetting("ADIFTcpPort", 52001)); editable: true
+                            enabled: adifTcpCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("ADIFTcpPort", value)
+                            contentItem: TextInput { text: adifTcpPortSpin.textFromValue(adifTcpPortSpin.value, adifTcpPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !adifTcpPortSpin.editable; validator: adifTcpPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: adifTcpPortSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        Text { text: qsTr("TCP Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        TextField {
+                            text: bridge.getSetting("ADIFTcpServer", "127.0.0.1"); Layout.fillWidth: true; Layout.columnSpan: 3; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
+                            enabled: adifTcpCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            color: textPrimary; font.pixelSize: controlFontSize
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("ADIFTcpServer", text)
+                        }
+
+                        Item {
+                            Layout.columnSpan: 4
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 96
+                        }
                     }
                 }
 
@@ -3033,11 +3157,11 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Colori Decodifica ──
-                        Text { text: "COLORI DECODIFICA"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("DECODE COLORS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         // Color CQ
-                        Text { text: "Color CQ:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Color CQ:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Rectangle {
                             id: colorCqRect
                             width: 60; height: 24; radius: 4; color: bridge.colorCQ; border.color: glassBorder
@@ -3052,7 +3176,7 @@ Dialog {
                             }
                         }
                         // Color My Call
-                        Text { text: "Color My Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Color My Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Rectangle {
                             id: colorMyCallRect
                             width: 60; height: 24; radius: 4; color: bridge.colorMyCall; border.color: glassBorder
@@ -3068,7 +3192,7 @@ Dialog {
                         }
 
                         // Color DX Entity
-                        Text { text: "Color DX Entity:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Color DX Entity:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Rectangle {
                             id: colorDxEntRect
                             width: 60; height: 24; radius: 4; color: bridge.colorDXEntity; border.color: glassBorder
@@ -3083,7 +3207,7 @@ Dialog {
                             }
                         }
                         // Color 73
-                        Text { text: "Color 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Color 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Rectangle {
                             id: color73Rect
                             width: 60; height: 24; radius: 4; color: bridge.color73; border.color: glassBorder
@@ -3099,7 +3223,7 @@ Dialog {
                         }
 
                         // Color B4
-                        Text { text: "Color B4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Color B4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Rectangle {
                             id: colorB4Rect
                             width: 60; height: 24; radius: 4; color: bridge.colorB4; border.color: glassBorder
@@ -3113,7 +3237,7 @@ Dialog {
                                 }
                             }
                         }
-                        Text { text: "B4 Strikethrough:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("B4 Strikethrough:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.b4Strikethrough
                             onCheckedChanged: {
@@ -3125,10 +3249,10 @@ Dialog {
                         }
 
                         // ── Highlighting ──
-                        Text { text: "HIGHLIGHTING"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("HIGHLIGHTING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Highlight 73:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Highlight 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("Highlight73", true)
                             onCheckedChanged: bridge.setSetting("Highlight73", checked)
@@ -3137,14 +3261,14 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { text: "HL Orange:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("HL Orange:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("HighlightOrange", false)
                             onCheckedChanged: bridge.setSetting("HighlightOrange", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Orange Calls:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Orange Calls:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("HighlightOrangeCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -3152,14 +3276,14 @@ Dialog {
                             onTextChanged: bridge.setSetting("HighlightOrangeCallsigns", text.toUpperCase())
                         }
 
-                        Text { text: "HL Blue:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("HL Blue:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("HighlightBlue", false)
                             onCheckedChanged: bridge.setSetting("HighlightBlue", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Blue Calls:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blue Calls:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("HighlightBlueCallsigns", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -3168,10 +3292,10 @@ Dialog {
                         }
 
                         // ── Spettro ──
-                        Text { text: "SPETTRO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("SPECTRUM"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Palette:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Palette:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: paletteCombo
                             model: ["SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR","Aether Default","Aether BlueGreen","Aether Fire","Aether Plasma","FlexRadio"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
@@ -3187,26 +3311,26 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "Black Level:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Black Level:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
                             from: 0; to: 100; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallBlackLevel", 15)); Layout.fillWidth: true; Layout.columnSpan: 3
                             onValueChanged: bridge.setSetting("uiWaterfallBlackLevel", value)
                         }
 
-                        Text { text: "Color Gain:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Color Gain:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
                             from: 0; to: 100; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallColorGain", 50)); Layout.fillWidth: true; Layout.columnSpan: 3
                             onValueChanged: bridge.setSetting("uiWaterfallColorGain", value)
                         }
 
-                        Text { text: "Contrast:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Contrast:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Slider {
                             from: 10; to: 150; stepSize: 1; value: Number(bridge.getSetting("uiWaterfallContrast", 80)); Layout.fillWidth: true; Layout.columnSpan: 3
                             onValueChanged: bridge.setSetting("uiWaterfallContrast", value)
                         }
 
                         // ── Download Dati ──
-                        Text { text: "DOWNLOAD DATI"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("DATA DOWNLOAD"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         Text { text: ""; Layout.preferredWidth: 100 }
@@ -3240,7 +3364,7 @@ Dialog {
                                 width: 190; height: controlHeight; radius: 4
                                 color: dlCall3MA.containsMouse ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium
                                 border.color: primaryBlue
-                                Text { anchors.centerIn: parent; text: "Download CALL3.TXT"; color: primaryBlue; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: qsTr("Download CALL3.TXT"); color: primaryBlue; font.pixelSize: 12 }
                                 MouseArea { id: dlCall3MA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bridge.downloadCall3Txt() }
                             }
                         }
@@ -3265,17 +3389,17 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Avvio ──
-                        Text { text: "AVVIO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("STARTUP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Monitor OFF:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Monitor OFF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("MonitorOFF", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("MonitorOFF", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Monitor Last:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Monitor Last:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("MonitorLastUsed", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("MonitorLastUsed", checked, false)
@@ -3283,14 +3407,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Auto Astro:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Auto Astro:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("AutoAstroWindow", false)
                             onCheckedChanged: bridge.setSetting("AutoAstroWindow", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "kHz no k:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("kHz no k:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("kHzWithoutK", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("kHzWithoutK", checked, false)
@@ -3298,14 +3422,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Progress Red:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Progress Red:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("ProgressBarRed", true)
                             onToggled: settingsDialog.setBoolSettingIfChanged("ProgressBarRed", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "High DPI:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("High DPI:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("HighDPI", true)
                             onToggled: settingsDialog.setBoolSettingIfChanged("HighDPI", checked, true)
@@ -3313,7 +3437,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Larger Tab:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Larger Tab:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("LargerTabWidget", false)
                             onCheckedChanged: bridge.setSetting("LargerTabWidget", checked)
@@ -3323,17 +3447,17 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Comportamento ──
-                        Text { text: "COMPORTAMENTO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("BEHAVIOR"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Quick Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Quick Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("QuickCall", true)
                             onToggled: settingsDialog.setBoolSettingIfChanged("QuickCall", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Force Call 1st:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Force Call 1st:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("ForceCallFirst", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("ForceCallFirst", checked, false)
@@ -3341,7 +3465,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "VHF/UHF:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("VHF/UHF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.vhfUhfFeatures
                             onToggled: {
@@ -3351,7 +3475,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Wait Features:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Wait Features:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("WaitFeaturesEnabled", true)
                             onToggled: settingsDialog.setBoolSettingIfChanged("WaitFeaturesEnabled", checked, true)
@@ -3359,14 +3483,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Erase Band Act:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Erase Band Act:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("erase_BandActivity", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("erase_BandActivity", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Clear DX Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Clear DX Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("clear_DXgrid", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXgrid", checked, false)
@@ -3374,14 +3498,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Clear DX Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Clear DX Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("clear_DXcall", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXcall", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "RX>TX after QSO:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("RX>TX after QSO:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("set_RXtoTX", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("set_RXtoTX", checked, false)
@@ -3389,14 +3513,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "Alt Erase Btn:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Alt Erase Btn:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("AlternateEraseButtonBehavior", true)
                             onToggled: settingsDialog.setBoolSettingIfChanged("AlternateEraseButtonBehavior", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "No Btn Color:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("No Btn Color:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("TxWarningDisabled", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("TxWarningDisabled", checked, false)
@@ -3405,24 +3529,31 @@ Dialog {
                         }
 
                         // ── Modo Operativo ──
-                        Text { text: "MODO OPERATIVO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("OPERATING MODE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Fox Mode:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Fox Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.foxMode
-                            onCheckedChanged: bridge.foxMode = checked
+                            onToggled: bridge.foxMode = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "SuperFox:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Hound Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.houndMode
+                            onToggled: bridge.houndMode = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("SuperFox:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("SuperFox", true)
                             onToggled: settingsDialog.setBoolSettingIfChanged("SuperFox", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Show OTP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Show OTP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("ShowOTP", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("ShowOTP", checked, false)
@@ -3431,19 +3562,16 @@ Dialog {
                         }
 
                         // ── Contest ──
-                        Text { text: "CONTEST"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("CONTEST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Activity:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Activity:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
                             id: contestCombo
-                            model: ["None","NA VHF","EU VHF","Field Day","RTTY Roundup","WW DIGI","Fox","Hound","ARRL Digi","Q65 Pileup"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
-                            currentIndex: settingsDialog.boolSetting("SpecialOpActivity", false)
-                                          ? Math.max(0, Math.min(model.length - 1, Number(bridge.getSetting("SelectedActivity", 1))))
-                                          : 0
+                            model: [qsTr("None"),"NA VHF","EU VHF",qsTr("Field Day"),"RTTY Roundup","WW DIGI",qsTr("Fox"),qsTr("Hound"),"ARRL Digi","Q65 Pileup"]; Layout.fillWidth: true; implicitHeight: controlHeight; Layout.columnSpan: 3
+                            currentIndex: Math.max(0, Math.min(model.length - 1, bridge.specialOperationActivity))
                             onActivated: {
-                                bridge.setSetting("SelectedActivity", currentIndex)
-                                bridge.setSetting("SpecialOpActivity", currentIndex !== 0)
+                                bridge.specialOperationActivity = currentIndex
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: contestCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
@@ -3452,14 +3580,14 @@ Dialog {
                             popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
-                        Text { text: "FD Exchange:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("FD Exchange:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("Field_Day_Exchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Field_Day_Exchange", text.toUpperCase())
                         }
-                        Text { text: "RTTY Exchange:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("RTTY Exchange:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("RTTY_Exchange", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -3467,14 +3595,14 @@ Dialog {
                             onTextChanged: bridge.setSetting("RTTY_Exchange", text.toUpperCase())
                         }
 
-                        Text { text: "Contest Name:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Contest Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("Contest_Name", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Contest_Name", text.toUpperCase())
                         }
-                        Text { text: "Indiv Name:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Indiv Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("Individual_Contest_Name", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("Individual_Contest_Name", checked, false)
@@ -3482,7 +3610,7 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "NCCC Sprint:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("NCCC Sprint:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("NCCC_Sprint", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("NCCC_Sprint", checked, false)
@@ -3492,10 +3620,10 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── NTP Time Sync ──
-                        Text { text: "NTP TIME SYNC"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("NTP TIME SYNC"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Enable NTP:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Enable NTP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.ntpEnabled
                             onClicked: bridge.setSetting("NTPEnabled", checked)
@@ -3512,7 +3640,7 @@ Dialog {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        Text { text: "Custom Server:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Custom Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             id: ntpServerField
                             text: bridge.getSetting("NTPCustomServer", "")
@@ -3522,7 +3650,7 @@ Dialog {
                             leftPadding: 8
                             color: textPrimary
                             font.pixelSize: controlFontSize
-                            placeholderText: "Vuoto = server pubblici automatici"
+                            placeholderText: qsTr("Empty = automatic public servers")
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onEditingFinished: bridge.setSetting("NTPCustomServer", text.trim())
                         }
@@ -3537,7 +3665,7 @@ Dialog {
                             opacity: bridge.ntpEnabled ? 1.0 : 0.55
                             Text {
                                 anchors.centerIn: parent
-                                text: "Sync Now"
+                                text: qsTr("Sync Now")
                                 color: bridge.ntpEnabled ? textPrimary : textSecondary
                                 font.pixelSize: 12
                                 font.bold: bridge.ntpEnabled
@@ -3553,7 +3681,7 @@ Dialog {
                         }
 
                         Text {
-                            text: "Lascia il server vuoto per usare automaticamente pool.ntp.org, Apple, Cloudflare e Google."
+                            text: qsTr("Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.")
                             color: textSecondary
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
@@ -3561,17 +3689,17 @@ Dialog {
                         }
 
                         // ── OTP ──
-                        Text { text: "OTP"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("OTP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "OTP Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("OTP Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("OTPEnabled", false)
                             onCheckedChanged: bridge.setSetting("OTPEnabled", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "OTP Seed:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("OTP Seed:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("OTPSeed", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
@@ -3579,7 +3707,7 @@ Dialog {
                             onTextChanged: bridge.setSetting("OTPSeed", text)
                         }
 
-                        Text { text: "OTP Interval:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("OTP Interval:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         SpinBox {
                             id: otpIntSpin
                             from: 1; to: 3600; value: Number(bridge.getSetting("OTPinterval", 1)); editable: true
@@ -3588,7 +3716,7 @@ Dialog {
                             contentItem: TextInput { text: otpIntSpin.textFromValue(otpIntSpin.value, otpIntSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !otpIntSpin.editable; validator: otpIntSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
-                        Text { text: "OTP URL:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("OTP URL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
                             text: bridge.getSetting("OTPUrl", ""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8
                             color: textPrimary; font.pixelSize: controlFontSize
@@ -3610,10 +3738,10 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Audio Alerts ──
-                        Text { text: "AUDIO ALERTS"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("AUDIO ALERTS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Alerts Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Alerts Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.alertSoundsEnabled
                             onToggled: settingsDialog.setAlertEnabled(checked)
@@ -3623,14 +3751,14 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // Alert grid
-                        Text { text: "CQ in Msg:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("CQ in Msg:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.alertOnCq
                             onToggled: settingsDialog.setAlertCq(checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "My Call:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("My Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.alertOnMyCall
                             onToggled: settingsDialog.setAlertMyCall(checked)
@@ -3638,14 +3766,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "New DXCC:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New DXCC:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_DXCC", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXCC", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "New DXCC Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New DXCC Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_DXCCOB", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXCCOB", checked, false)
@@ -3653,14 +3781,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "New Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_Grid", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_Grid", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "New Grid Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New Grid Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_GridOB", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_GridOB", checked, false)
@@ -3668,14 +3796,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "New Continent:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New Continent:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_Continent", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_Continent", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "New Cont Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New Cont Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_ContinentOB", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_ContinentOB", checked, false)
@@ -3683,14 +3811,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "New CQ Zone:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New CQ Zone:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_CQZ", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_CQZ", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "CQ Zone Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("CQ Zone Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_CQZOB", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_CQZOB", checked, false)
@@ -3698,14 +3826,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "New ITU Zone:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("New ITU Zone:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_ITUZ", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_ITUZ", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "ITU Zone Band:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("ITU Zone Band:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_ITUZOB", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_ITUZOB", checked, false)
@@ -3713,14 +3841,14 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
-                        Text { text: "DX Call/Grid:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("DX Call/Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_DXcall", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_DXcall", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "QSY Message:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("QSY Message:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("alert_QSYmessage", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("alert_QSYmessage", checked, false)
@@ -3741,10 +3869,10 @@ Dialog {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
                         // ── Blacklist ──
-                        Text { text: "BLACKLIST"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("BLACKLIST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("Blacklisted", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("Blacklisted", checked, false)
@@ -3754,53 +3882,53 @@ Dialog {
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // Blacklist 1-12 (2 per row)
-                        Text { text: "Blacklist 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist1", text.toUpperCase()) }
-                        Text { text: "Blacklist 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist2", text.toUpperCase()) }
 
-                        Text { text: "Blacklist 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist3", text.toUpperCase()) }
-                        Text { text: "Blacklist 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist4", text.toUpperCase()) }
 
-                        Text { text: "Blacklist 5:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 5:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist5", text.toUpperCase()) }
-                        Text { text: "Blacklist 6:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 6:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist6", text.toUpperCase()) }
 
-                        Text { text: "Blacklist 7:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 7:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist7", text.toUpperCase()) }
-                        Text { text: "Blacklist 8:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 8:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist8", text.toUpperCase()) }
 
-                        Text { text: "Blacklist 9:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 9:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist9", text.toUpperCase()) }
-                        Text { text: "Blacklist 10:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 10:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist10", text.toUpperCase()) }
 
-                        Text { text: "Blacklist 11:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 11:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist11", text.toUpperCase()) }
-                        Text { text: "Blacklist 12:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Blacklist 12:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Blacklist12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Blacklist12", text.toUpperCase()) }
 
                         // ── Whitelist ──
-                        Text { text: "WHITELIST"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("WHITELIST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("Whitelisted", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("Whitelisted", checked, false)
@@ -3809,53 +3937,53 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { text: "Whitelist 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist1", text.toUpperCase()) }
-                        Text { text: "Whitelist 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist2", text.toUpperCase()) }
 
-                        Text { text: "Whitelist 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist3", text.toUpperCase()) }
-                        Text { text: "Whitelist 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist4", text.toUpperCase()) }
 
-                        Text { text: "Whitelist 5:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 5:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist5", text.toUpperCase()) }
-                        Text { text: "Whitelist 6:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 6:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist6", text.toUpperCase()) }
 
-                        Text { text: "Whitelist 7:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 7:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist7", text.toUpperCase()) }
-                        Text { text: "Whitelist 8:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 8:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist8", text.toUpperCase()) }
 
-                        Text { text: "Whitelist 9:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 9:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist9", text.toUpperCase()) }
-                        Text { text: "Whitelist 10:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 10:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist10", text.toUpperCase()) }
 
-                        Text { text: "Whitelist 11:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 11:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist11", text.toUpperCase()) }
-                        Text { text: "Whitelist 12:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Whitelist 12:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Whitelist12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Whitelist12", text.toUpperCase()) }
 
                         // ── Always Pass ──
-                        Text { text: "ALWAYS PASS"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("ALWAYS PASS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Enabled:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("AlwaysPass", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("AlwaysPass", checked, false)
@@ -3864,78 +3992,78 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        Text { text: "Always Pass 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass1", text.toUpperCase()) }
-                        Text { text: "Always Pass 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass2", text.toUpperCase()) }
 
-                        Text { text: "Always Pass 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass3", text.toUpperCase()) }
-                        Text { text: "Always Pass 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass4", text.toUpperCase()) }
 
-                        Text { text: "Always Pass 5:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 5:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass5",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass5", text.toUpperCase()) }
-                        Text { text: "Always Pass 6:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 6:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass6",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass6", text.toUpperCase()) }
 
-                        Text { text: "Always Pass 7:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 7:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass7",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass7", text.toUpperCase()) }
-                        Text { text: "Always Pass 8:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 8:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass8",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass8", text.toUpperCase()) }
 
-                        Text { text: "Always Pass 9:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 9:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass9",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass9", text.toUpperCase()) }
-                        Text { text: "Always Pass 10:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 10:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass10",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass10", text.toUpperCase()) }
 
-                        Text { text: "Always Pass 11:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 11:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass11",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass11", text.toUpperCase()) }
-                        Text { text: "Always Pass 12:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Always Pass 12:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Pass12",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Pass12", text.toUpperCase()) }
 
                         // ── Territory ──
-                        Text { text: "TERRITORY"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("TERRITORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Territory 1:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Territory 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Territory1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory1", text) }
-                        Text { text: "Territory 2:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Territory 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Territory2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory2", text) }
 
-                        Text { text: "Territory 3:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Territory 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Territory3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory3", text) }
-                        Text { text: "Territory 4:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Territory 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField { text: bridge.getSetting("Territory4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory4", text) }
 
                         // ── Opzioni Filtro ──
-                        Text { text: "OPZIONI FILTRO"; color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Text { text: qsTr("FILTER OPTIONS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: "Wait & Pounce:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Wait & Pounce:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("FiltersForWaitAndPounceOnly", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWaitAndPounceOnly", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: "Calling Only:"; color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Text { text: qsTr("Calling Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("FiltersForWord2", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWord2", checked, false)

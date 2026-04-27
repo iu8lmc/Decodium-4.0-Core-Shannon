@@ -52,6 +52,9 @@ public:
     QString adifLogPath() const;
     QString allTxtPath() const;
     int txOutputAttenuation() const;
+    int specialOperationActivity() const;
+    bool superFoxEnabled() const;
+    QStringList foxCallerQueueLines() const;
 
     void setMode(const QString& mode);
     void setDialFrequency(double frequencyHz);
@@ -82,6 +85,8 @@ public:
     void stopTransmission();
     void armCurrentTx();
     void logQso();
+    void setAutoSpotEnabled(bool enabled);
+    void setNextLogClusterSpotState(bool available, bool checked);
     void clearBandActivity();
     void clearRxFrequency();
     void setWaterfallPalette(const QString& palette);
@@ -90,6 +95,8 @@ public:
     void retryRigConnection();
     void setAlt12Enabled(bool enabled);
     void setTxFirst(bool enabled);
+    void setSpecialOperationActivity(int activity);
+    void setSuperFoxEnabled(bool enabled);
 
 Q_SIGNALS:
     void waterfallRowReady(QByteArray const& rowLevels,

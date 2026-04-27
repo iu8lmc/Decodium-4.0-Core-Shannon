@@ -12,6 +12,8 @@ Rectangle {
     implicitWidth: 240
     implicitHeight: Math.min(contentHeight + 50, 230)
 
+    signal closeRequested()
+
     property int contentHeight: queueList.contentHeight
 
     Column {
@@ -41,7 +43,7 @@ Rectangle {
                 color: "#B0BEC5"
             }
 
-            // Clear queue button
+            // Close panel button
             Rectangle {
                 width: 18; height: 18; radius: 2
                 color: mouseAreaClear.containsMouse ? Qt.rgba(1,1,1,0.1) : "transparent"
@@ -55,7 +57,8 @@ Rectangle {
                     id: mouseAreaClear
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: bridge.clearCallerQueue()
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: callerQueuePanel.closeRequested()
                 }
             }
         }

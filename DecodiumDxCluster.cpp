@@ -384,6 +384,42 @@ void DecodiumDxCluster::sendCommand(const QString& cmd)
     m_socket->write(line.toUtf8());
 }
 
+bool DecodiumDxCluster::sendSpot(const QString& dxCall, double freqKhz, const QString& comment)
+{
+    QString call = dxCall.trimmed().toUpper();
+    if (call.isEmpty() || freqKhz <= 0.0) {
+        emit errorOccurred(tr("Cannot send spot: invalid call or frequency."));
+        return false;
+    }
+
+    if (!m_socket || m_socket->state() != QAbstractSocket::ConnectedState || !m_connected) {
+        emit errorOccurred(tr("Cannot send spot: not connected."));
+        return false;
+    }
+
+    QString spotComment = comment.simplified();
+    spotComment.replace(QRegularExpression(QStringLiteral("[\\r\\n]+")), QStringLiteral(" "));
+    if (spotComment.isEmpty()) {
+        spotComment = QStringLiteral("Decodium");
+    }
+    if (spotComment.size() > 80) {
+        spotComment = spotComment.left(80).trimmed();
+    }
+
+    QString const freq = QString::number(freqKhz, 'f', 1);
+    QString const line = QStringLiteral("DX %1 %2 %3\r\n").arg(freq, call, spotComment);
+    qint64 const written = m_socket->write(line.toUtf8());
+    if (written < 0) {
+        QString const msg = tr("Cannot send spot: %1").arg(m_socket->errorString());
+        emit errorOccurred(msg);
+        return false;
+    }
+    m_socket->flush();
+    setLastStatus(tr("Spot inviato: %1 %2 kHz").arg(call, freq));
+    emit statusUpdate(tr("Spot sent: %1 %2 kHz").arg(call, freq));
+    return true;
+}
+
 void DecodiumDxCluster::clearSpots()
 {
     m_spots.clear();

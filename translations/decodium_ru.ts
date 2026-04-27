@@ -12948,5 +12948,1357 @@ Right click for insert and delete options.</source>
             <source>Choose</source>
             <translation>Выбрать</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x интервал между тонами:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>4-символьные локаторы:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>4-кратный интервал между тонами:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>ВЫРАВНИВАНИЕ</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>ВСЕГДА ПРОХОДИТЕ</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>Декодирование AP:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>Ключ API:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>АУДИО ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>АУДИО УСТРОЙСТВА</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>АВТО ПОСЛЕДОВАТЕЛЬНОСТЬ</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>Примите UDP:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>Токен доступа:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>Деятельность:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>Агрессивный:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>Оповещения включены:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>Выровняйте шаги 2:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>Выровнять шаги:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>Выровнять:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>Все интерфейсы</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>Разрешить TX QSY:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Альтернативная кнопка стирания:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 Привязка:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>Всегда проходите 10:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>Всегда проходите 11:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>Всегда проходите 12:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>Всегда проходить 1:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>Всегда пас 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>Всегда проходите 3:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>Всегда проходите 4:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>Всегда проходите 5:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>Всегда проходите 6:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>Всегда проходите 7:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>Всегда проходите 8:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>Всегда проходите 9:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>Антенна:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>Требуется перезапуск приложения. Для LAN/WAN используйте токен длиной не менее 12 символов.</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>Авто Астро:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>Автолокатор:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>Автоматический журнал:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>Автоматическая последовательность:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>Среднее декодирование:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>Каталог AzEl:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 Зачеркивание:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>БЕЗОПАСНОСТЬ CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>ПОВЕДЕНИЕ</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>ЧЕРНЫЙ СПИСОК</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>Бэкэнд:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>Группа TX Память:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>Память настройки группы:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>Скорость:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>Уровень черного:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>Черный список 10:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>Черный список 11:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>Черный список 12:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>Черный список 1:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>Черный список 2:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>Черный список 3:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>Черный список 4:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>Черный список 5:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>Черный список 6:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>Черный список 7:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>Черный список 8:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>Черный список 9:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>Синие позывные:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>Жирный</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>Оба</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CAT УПРАВЛЕНИЕ</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V Адрес:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>ОБЛАЧНЫЙ ЛОГ</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>КОНКУРС</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>CQ Только:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ Зонный диапазон:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>CQ в сообщении:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>идентификатор CW</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>Интервал идентификатора CW (мин):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>CW ID после 73:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>Только вызывающие станции:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>Проверьте SWR:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>Очистить DX-позывной:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>Очистить DX-локатор:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>Нажмите TX:</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>Цвет 73:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>Цвет B4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>Цвет CQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>Цвет DX Объект:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>Усиление цвета:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>Цвет моего позывного:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>Подключиться</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>Подключено</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>Название конкурса:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>Только конкурс:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>Контраст:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>Пользовательский сервер:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>ЗАГРУЗКА ДАННЫХ</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>ДЕКОДИРОВАТЬ ЦВЕТА</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>ФИЛЬТРЫ ДЕКОДИРОВАНИЯ</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>ПАРАМЕТРЫ ДЕКОДИРОВАНИЯ</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>ДЕКОДИРОВАНИЕ</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>ДИАГНОСТИКА</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>СПРАВОЧНИК</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX КЛАСТЕР</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>DX-позывной/локатор:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>Биты данных:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>Дни загрузки:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>Глубина декодирования:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>Декодирование на 52 с:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>Декодированный шрифт:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>Глубокий</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>Глубокий поиск:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>По умолчанию</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>Ухудшить S/N:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>Деталь:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>Прямой журнал QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>Отключить TX после 73:</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>Отключить</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>Отключено</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>Скачать CALL3.TXT</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>Пусто = автоматические общедоступные серверы.</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>Включите NTP:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>Включите TCP ADIF:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>Включено:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>Закон о стирании полосы:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>Шаблоны стирания:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD Обмен:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>ВАРИАНТЫ ФИЛЬТРА</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>ШРИФТ</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>ЧАСТОТА И ТАЙМИНГ</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>Подделать это</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>Быстрый</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>День поля</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>Первый (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>Шрифт:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>Принудительно позывной первым:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>Принудительно DTR:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>Принудительно RTS:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>Фокс</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Режим Fox:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>Фронтальный/Микрофон</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>Полный</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>Серая линия:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>МЕЛИРОВАНИЕ</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>ХЛ Синий:</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>ХЛ Оранжевый:</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>HTTP-порт:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (более 300 радиостанций)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>Рукопожатие:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>Аппаратное обеспечение</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>Высокое разрешение:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>Высокая частота (Гц):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>Выделение 73:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>Хост:Порт:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>Гончая</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Режим Hound:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>IARU регион:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>Зональный диапазон МСЭ:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>Имя Индива:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>Входной канал:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>Устройство ввода:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>Используемый интерфейс:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>Курсив</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>УРОВНИ</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>РЕГИСТРАЦИЯ</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>ЛОТВ</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>Большая вкладка:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>Оставьте сервер пустым, чтобы автоматически использовать Pool.ntp.org, Apple, Cloudflare и Google.</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>Левый</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>Слушать порт:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>Войдите как RTTY:</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW Включено:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>Низкая частота (Гц):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>Низкие боковые лепестки</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>КАРТА И РАССТОЯНИЕ</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX до 73:</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>Сопоставить все сообщения:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>Макс. чувствительность</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>Майлз:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>Режим:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>Последний мониторинг:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>Монитор ВЫКЛ:</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>Моно</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>Многоадресный TTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>Только мой позывной:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>Мой позывной:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>Мой локатор:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC Спринт:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>СЕТЕВЫЕ УСЛУГИ</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP СИНХРОНИЗАЦИЯ ВРЕМЕНИ</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>Родной (15 радиостанций)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>Новая зона CQ:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>Новая группа продолжения:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>Новый Континент:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>Новый ремешок DXCC:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>Новый DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>Новый локатор по диапазону:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>Новый локатор:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>Новая зона МСЭ:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>Нет цвета кнопки:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>Нет сообщения</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>Нет</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>Нормальный</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>Уведомить запрос:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>ОК</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>РЕЖИМ РАБОТЫ</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>ОТП</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP Включено:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP Интервал:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP Сид:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>URL-адрес OTP:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>Выкл.</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>Вкл.</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>Позывной оператора:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Откройте обновление Hamlib.</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>Оранжевые позывные:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>Выходной канал:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>Устройство вывода:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>ПИТАНИЕ ПАМЯТЬ</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT Метод:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>PTT Порт:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR и SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>Палитра:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>Пароль:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>Интервал опроса (сек):</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>Порт:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>Мощность (Вт):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>Прогресс Красный:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>Подсказка для входа:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY Сообщение:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>Быстрый вызов:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>Быстрый QSO:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>ЗАПИСЬ</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>УДАЛЕННАЯ ВЕБ-ПАНЕЛЬ (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY Обмен:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX Пропускная способность:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX Уровень ввода:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX через TCI</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;TX после QSO:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>Задний/данные</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>Запишите RX:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>Запишите TX:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>Требуется для LAN/WAN</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>Сброс</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>Восстановить победу:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>Трансивер</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>Информация о буровой установке:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>Трансивер:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>Правый</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>СЕРИЙНЫЕ ПАРАМЕТРЫ</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>БОКОВОЕ УПРАВЛЕНИЕ</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>СПЕКТР</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>РАЗДЕЛЕННАЯ ОПЕРАЦИЯ</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>СТАРТАП</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>ДАННЫЕ СТАНЦИИ</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>Сохранить каталог:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>Второй (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>Вторичный ADIF:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>Вторичный интерфейс:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>Вторичный порт:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>Вторичный сервер:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>Вторичный срок жизни:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>Вторичный UDP:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>Отправьте ADIF:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>Отправьте RR73:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>COM порт:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>Имя сервера:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>Порт сервера:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>Сервер:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>Показать DXCC:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>Показать OTP:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>Режим бокового лепестка:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>Одиночное декодирование:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>Технические характеристики:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>Сплит:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>Идентификатор станции:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>Статус:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>Стоп-биты:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>Синхронизировать сейчас</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>ТЦИ Аудио</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>ТКИ Аудио:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>Хост TCI:Порт:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>TCP Порт:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>TCP Сервер:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>ТЕРРИТОРИЯ</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>РАЗМЕЩЕНИЕ ТОНОВ</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX Источник звука:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX Аудио:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX Задержка (с):</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX Частота:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX Сообщение RX:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX Уровень вывода:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>Слот TX:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX Сторожевой таймер (мин):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>Территория 1:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>Территория 2:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>Территория 3:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>Территория 4:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>Совет: закройте OmniRig с помощью значка на панели задач Windows, затем снова нажмите «Подключиться».</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>Настройте сторожевого пса(ов):</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>Двухпроходной:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>Префикс типа 1</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>Тип 2 Генерация сообщений:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>Префикс типа 2</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>UDP СЕРВЕР</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>Имя пользователя:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>СТОРОЖЕВОЙ ПЕС</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>БЕЛЫЙ СПИСОК</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>Привязка WS:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>Разъем WS:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR Загрузить:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>Подождите и набросьтесь:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>Особенности ожидания:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>Белый список 10:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>Белый список 11:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>Белый список 12:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>Белый список 1:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>Белый список 2:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>Белый список 3:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>Белый список 4:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>Белый список 5:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>Белый список 6:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>Белый список 7:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>Белый список 8:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>Белый список 9:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL обновлена с сайта Hamlib. macOS/Linux: официальная документация и выпуски.</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ЗЗ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>Зап:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB в Cmts:</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz нет к:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  Обновить</translation>
+        </message>
+</context>
 </TS>

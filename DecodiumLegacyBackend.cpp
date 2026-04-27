@@ -745,6 +745,21 @@ int DecodiumLegacyBackend::txOutputAttenuation() const
     return m_mainWindow ? m_mainWindow->legacyTxOutputAttenuation() : 0;
 }
 
+int DecodiumLegacyBackend::specialOperationActivity() const
+{
+    return m_mainWindow ? m_mainWindow->legacySpecialOperationActivity() : 0;
+}
+
+bool DecodiumLegacyBackend::superFoxEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacySuperFoxEnabled();
+}
+
+QStringList DecodiumLegacyBackend::foxCallerQueueLines() const
+{
+    return m_mainWindow ? m_mainWindow->legacyFoxCallerQueueLines() : QStringList {};
+}
+
 void DecodiumLegacyBackend::setMode(const QString& mode)
 {
     if (m_mainWindow) {
@@ -981,6 +996,20 @@ void DecodiumLegacyBackend::logQso()
     }
 }
 
+void DecodiumLegacyBackend::setAutoSpotEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetAutoSpotEnabled(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setNextLogClusterSpotState(bool available, bool checked)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetNextLogClusterSpotState(available, checked);
+    }
+}
+
 void DecodiumLegacyBackend::clearBandActivity()
 {
     if (m_mainWindow) {
@@ -1036,6 +1065,23 @@ void DecodiumLegacyBackend::setTxFirst(bool enabled)
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetTxFirst(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::setSpecialOperationActivity(int activity)
+{
+    if (m_mainWindow) {
+        if (m_mainWindow->legacySpecialOperationActivity() == activity) {
+            return;
+        }
+        m_mainWindow->legacySetSpecialOperationActivity(activity);
+    }
+}
+
+void DecodiumLegacyBackend::setSuperFoxEnabled(bool enabled)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetSuperFoxEnabled(enabled);
     }
 }
 

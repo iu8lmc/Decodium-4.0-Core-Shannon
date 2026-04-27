@@ -230,6 +230,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QVariantList dxClusterSpots READ dxClusterSpots NOTIFY dxClusterSpotsChanged)
     Q_PROPERTY(QString dxClusterHost READ dxClusterHost WRITE setDxClusterHost NOTIFY dxClusterHostChanged)
     Q_PROPERTY(int dxClusterPort READ dxClusterPort WRITE setDxClusterPort NOTIFY dxClusterPortChanged)
+    Q_PROPERTY(bool autoSpotEnabled READ autoSpotEnabled WRITE setAutoSpotEnabled NOTIFY autoSpotEnabledChanged)
     // WSPR upload
     Q_PROPERTY(bool wsprUploadEnabled READ wsprUploadEnabled WRITE setWsprUploadEnabled NOTIFY wsprUploadEnabledChanged)
 
@@ -248,6 +249,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int nfb READ nfb WRITE setNfb NOTIFY nfbChanged)
     Q_PROPERTY(int ndepth READ ndepth WRITE setNdepth NOTIFY ndepthChanged)
     Q_PROPERTY(int ncontest READ ncontest WRITE setNcontest NOTIFY ncontestChanged)
+    Q_PROPERTY(int specialOperationActivity READ specialOperationActivity WRITE setSpecialOperationActivity NOTIFY specialOperationActivityChanged)
 
     // === SPECTRUM / WATERFALL ===
     Q_PROPERTY(int   spectrumColorPalette READ spectrumColorPalette WRITE setSpectrumColorPalette NOTIFY spectrumColorPaletteChanged)
@@ -542,6 +544,8 @@ public:
     int nfb() const; void setNfb(int);
     int ndepth() const; void setNdepth(int);
     int ncontest() const; void setNcontest(int);
+    int specialOperationActivity() const { return m_specialOperationActivity; }
+    void setSpecialOperationActivity(int activity);
 
     // Spectrum
     int    spectrumColorPalette() const { return m_spectrumColorPalette; }
@@ -600,9 +604,9 @@ public:
 
     // A4 — Fox/Hound
     bool        foxMode()        const { return m_foxMode; }
-    void        setFoxMode(bool v)   { if (m_foxMode!=v){m_foxMode=v; emit foxModeChanged();} }
+    void        setFoxMode(bool v);
     bool        houndMode()      const { return m_houndMode; }
-    void        setHoundMode(bool v) { if (m_houndMode!=v){m_houndMode=v; emit houndModeChanged();} }
+    void        setHoundMode(bool v);
     QStringList callerQueue()    const { return m_callerQueue; }
     int         callerQueueSize()const { return m_callerQueue.size(); }
     QObject*    logManager() { return this; }
@@ -646,12 +650,15 @@ public slots:
     Q_INVOKABLE void connectDxCluster();
     Q_INVOKABLE void connectDxCluster(const QString& host, int port);
     Q_INVOKABLE void disconnectDxCluster();
+    Q_INVOKABLE void setNextLogClusterSpotEnabled(bool enabled);
     bool dxClusterConnected() const { return m_dxCluster && m_dxCluster->connected(); }
     QVariantList dxClusterSpots() const { return m_dxCluster ? m_dxCluster->spots() : QVariantList{}; }
     QString dxClusterHost() const { return m_dxCluster ? m_dxCluster->host() : QString{}; }
     int dxClusterPort() const { return m_dxCluster ? m_dxCluster->port() : 8000; }
     void setDxClusterHost(const QString& h) { if (m_dxCluster) { m_dxCluster->setHost(h); emit dxClusterHostChanged(); } }
     void setDxClusterPort(int p) { if (m_dxCluster) { m_dxCluster->setPort(p); emit dxClusterPortChanged(); } }
+    bool autoSpotEnabled() const { return m_autoSpotEnabled; }
+    void setAutoSpotEnabled(bool enabled);
 
     // Decode
     Q_INVOKABLE void clearDecodeList();
@@ -727,6 +734,8 @@ public slots:
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE QStringList satelliteOptions() const;
+    Q_INVOKABLE QStringList satModeOptions() const;
     Q_INVOKABLE QString fontSettingLabel(const QString& key,
                                          const QString& fallbackFamily = QString(),
                                          int fallbackPointSize = 0) const;
@@ -882,6 +891,7 @@ signals:
     void dxClusterSpotsChanged();
     void dxClusterHostChanged();
     void dxClusterPortChanged();
+    void autoSpotEnabledChanged();
     void ledCoherentAveragingChanged();
     void ledNeuralSyncChanged();
     void ledTurboFeedbackChanged();
@@ -893,6 +903,7 @@ signals:
     void fontScaleChanged();
     void nfaChanged(); void nfbChanged();
     void ndepthChanged(); void ncontestChanged();
+    void specialOperationActivityChanged();
     void spectrumColorPaletteChanged();
     void spectrumRefLevelChanged();
     void spectrumDynRangeChanged();
@@ -1062,6 +1073,7 @@ private:
     void rememberRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
     void removeCallerFromQueue(const QString& call);
     void maybeEnqueueMamCallerFromDecode(const QStringList& fields);
+    void clearNextLogClusterSpotOverride();
     QString inferredPartnerForAutolog() const;
     QString pskReporterProgramInfo() const;
     void capturePendingAutoLogSnapshot();
@@ -1102,8 +1114,13 @@ private:
                           double freqHz, const QString& mode,
                           const QDateTime& timeOnUtc,
                           const QString& rstSent, const QString& rstRcvd,
-                          const QByteArray& adifRecord);
+                          const QByteArray& adifRecord,
+                          const QString& propMode = QString(),
+                          const QString& satellite = QString(),
+                          const QString& satMode = QString(),
+                          const QString& freqRx = QString());
     void udpSendN1mmLoggedQso(const QString& dxCall, const QByteArray& adifRecord);
+    void tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord);
 
     QString m_callsign {"IU8LMC"};
     QString m_grid {"JN70"};
@@ -1197,6 +1214,8 @@ private:
     bool        m_pskReporterEnabled {false};
     double m_fontScale {1.0};
     int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
+    int m_specialOperationActivity {0};
+    bool m_forceLegacyTxForSpecialOp {false};
 
     // Spectrum/Waterfall settings
     int    m_spectrumColorPalette {0};
@@ -1217,6 +1236,9 @@ private:
     bool                          m_suppressCatErrors {false};
     RemoteCommandServer*          m_remoteServer {nullptr};
     DecodiumDxCluster*    m_dxCluster     {nullptr};
+    bool                  m_autoSpotEnabled {false};
+    bool                  m_nextLogClusterSpotOverrideValid {false};
+    bool                  m_nextLogClusterSpotEnabled {false};
     DecodiumPskReporterLite* m_pskReporter {nullptr};
     DecodiumCloudlogLite*    m_cloudlog    {nullptr};
     DecodiumWsprUploader*    m_wsprUploader{nullptr};
@@ -1449,7 +1471,11 @@ private:
     QString          m_adifLogPath;   // path file .adi
     void appendAdifRecord(const QString& dxCall, const QString& dxGrid,
                           double freqHz, const QString& mode, const QDateTime& utc,
-                          const QString& rstSent, const QString& rstRcvd);
+                          const QString& rstSent, const QString& rstRcvd,
+                          const QString& propMode = QString(),
+                          const QString& satellite = QString(),
+                          const QString& satMode = QString(),
+                          const QString& freqRx = QString());
 
     // LotW lite
     bool          m_lotwEnabled  {false};
@@ -1511,6 +1537,10 @@ private:
     void onTciPcmSamplesReady(const QVector<short>& samples);
     void handleAudioHealth(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
     void restartAudioCaptureForModeChange(const QString& previousMode);
+    void scheduleModeChangeMonitorRecovery(const QString& previousMode,
+                                           const QString& requestedMode,
+                                           quint64 sessionId,
+                                           bool monitorWasActive);
     void restartAudioCaptureFromWatchdog(const QString& reason);
     void feedAudioToDecoder(qint64 completedUtcSlot = -1);
     void dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot, const QString& modeSnapshot,
@@ -1538,8 +1568,12 @@ private:
     QString buildCurrentTxMessage() const;
     bool legacyBackendAvailable() const;
     bool ensureLegacyBackendAvailable();
+    bool legacyTxBackendRequested() const;
+    bool specialOperationRequiresLegacyTx() const;
     bool usingLegacyBackendForTx() const;
     bool useModernSpectrumFeedWithLegacy() const;
+    void syncSpecialOperationToLegacyBackend();
+    void updateSpecialOperationFromLegacy(int activity);
     void syncLegacyBackendDialogState();
     void syncLegacyBackendTxState();
     void syncLegacyBackendState();

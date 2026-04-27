@@ -13528,5 +13528,1357 @@ Højre klik for at indsætte eller slette elementer.</translation>
             <source>Choose</source>
             <translation>Vælg</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x toneafstand:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>4-tegns locators:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>4x toneafstand:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>JUSTERING</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>BESTÅ ALTID</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>AP-afkodning:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>API Nøgle:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>AUDIO ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>LYDENHEDER</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>AUTO SEKVENS</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>Accepter UDP:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>Adgangstoken:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>Aktivitet:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>Aggressiv:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>Underretninger aktiveret:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>Juster trin 2:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>Juster trin:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>Juster:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>Alle grænseflader</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>Tillad TX QSY:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt Slet Btn:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 Bind:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>Bestå altid 10:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>Bestå altid 11:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>Bestå altid 12:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>Altid bestået 1:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>Altid bestået 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>Altid bestået 3:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>Altid bestået 4:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>Altid bestået 5:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>Altid bestået 6:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>Altid bestået 7:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>Altid bestået 8:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>Bestå altid 9:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>Antenne:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>App genstart påkrævet. For LAN/WAN skal du bruge et token på mindst 12 tegn.</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>Auto Astro:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>Automatisk locator:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>Automatisk log:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>Automatisk sekvens:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>Gns. afkodning:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>AzEl Directory:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 Gennemstreget:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>BACKEND CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>ADFÆRD</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>SORTLISTE</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>Backend:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>Bånd TX Hukommelse:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>Band Tune Mem:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>Baud rate:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>Sort niveau:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>Sortliste 10:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>Sortliste 11:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>Sortliste 12:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>Sortliste 1:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>Sortliste 2:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>Sortliste 3:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>Sortliste 4:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>Sortliste 5:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>Sortliste 6:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>Sortliste 7:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>Sortliste 8:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>Sortliste 9:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>Blå kaldesignaler:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>Fed</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>Begge</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CAT KONTROL</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V Adr:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>CLOUDLOG</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>KONKURRENCE</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>Kun CQ:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ zonebånd:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>CQ i besked:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>CW ID</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>CW ID-interval (min):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>CW ID efter 73:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>Kun kaldende stationer:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>Tjek SWR:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>Ryd DX-kaldesignal:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>Ryd DX-locator:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>Klik på TX:</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>Farve 73:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>Farve B4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>Farve CQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>Farve DX Entitet:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>Farveforstærkning:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>Farve for mit kaldesignal:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>Forbind</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>Forbundet</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>Konkurrencens navn:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>Kun konkurrence:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>Kontrast:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>Brugerdefineret server:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>DOWNLOAD DATA</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>AFKOD FARVER</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>AFKOD FILTRE</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>AFKOD PARAMETRE</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>AFKODER</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>DIAGNOSTIK</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>KODEBOG</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX KLUSTER</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>DX-kaldesignal/locator:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>Databits:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>Dags upload:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>Afkodningsdybde:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>Afkode ved 52s:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>Afkodet skrifttype:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>Dybt</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>Dyb søgning:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>Standard</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>Degrader S/N:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>Detaljer:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>Direkte log QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>Deaktiver TX efter 73:</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>Afbryd forbindelsen</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>Afbrudt</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>Download CALL3.TXT</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>Tom = automatiske offentlige servere</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>Aktiver NTP:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>Aktiver TCP ADIF:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>Aktiveret:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>Erase Band Act:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>Sletningsmønstre:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD Exchange:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>FILTERMULIGHEDER</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>FONT</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>FREKVENS OG TIMING</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>Falske det</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>Hurtig</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>Markdag</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>Først (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>Skrifttype:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>Tving kald først:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>Force DTR:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>Force RTS:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>Ræv</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Fox tilstand:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>Front/mikrofon</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>Fuld</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>Grålinje:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>FREMHÆVNING</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HL blå:</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HL Orange:</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>HTTP-port:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (300+ radioer)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>Håndtryk:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>Hardware</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>Høj DPI:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>Høj frekvens (Hz):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>Fremhæv 73:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>Vært:Port:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>Hund</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Hound tilstand:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>IARU-region:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>ITU zonebånd:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>Indiv navn:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>Inputkanal:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>Inputenhed:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>Brugt grænseflade:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>Kursiv</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>NIVEAUER</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>LOGGNING</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>LOTW</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>Større fane:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>Lad serveren være tom for automatisk at bruge pool.ntp.org, Apple, Cloudflare og Google.</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>Venstre</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>Lyt Port:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>Log som RTTY:</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW aktiveret:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>Lav frekvens (Hz):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>Lave sidesløjfer</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>KORT OG AFSTAND</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX indtil 73:</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>Kortlæg alle beskeder:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>Max følsomhed</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>Miles:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>Tilstand:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>Monitor sidste:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>Skærm FRA:</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>Mono</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>Multicast TTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>Kun mit kaldesignal:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>Mit kaldesignal:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>Min locator:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC Sprint:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>NETVÆRKSTJENESTER</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP TID SYNC</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>Native (15 radioer)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>Ny CQ-zone:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>New Cont Band:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>Nyt kontinent:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>Nyt DXCC-bånd:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>Ny DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>Ny locator på bånd:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>Ny locator:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>Ny ITU-zone:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>Ingen Btn farve:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>Ingen besked</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>Ingen</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>Normal</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>Underretningsanmodning:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>OK</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>DRIFTSTILSTAND</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP aktiveret:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP Interval:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP frø:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>OTP URL:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>Fra</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>På</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>Operatørkaldesignal:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Åbn Hamlib-opdatering</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>Orange kaldesignaler:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>Udgangskanal:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>Outputenhed:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>POWER HUKOMMELSE</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT Metode:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>PTT-port:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR og SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>Palette:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>Adgangskode:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>Afstemningsinterval (r):</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>Port:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>Effekt (W):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>Fremskridt rød:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>Spørg om at logge:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY Meddelelse:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>Hurtigt kald:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>Hurtig QSO:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>OPTAGELSE</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>FJERNET WEB-DASHBOARD (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY Exchange:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX Båndbredde:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX Inputniveau:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX via TCI</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;TX efter QSO:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>Bagside/Data</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>Optag RX:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>Optag TX:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>Påkrævet til LAN/WAN</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>Nulstil</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>Gendan Win:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>Rig</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>Rig information:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>Rig:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>Højre</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>SERIEPARAMETRE</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>SIDELOBE KONTROL</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>SPEKTRUM</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>OPDELT DRIFT</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>OPSTART</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>STATIONSDETALJER</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>Gem mappe:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>Anden (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>Sekundær ADIF:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>Sekundær grænseflade:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>Sekundær port:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>Sekundær server:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>Sekundær TTL:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>Sekundær UDP:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>Send ADIF:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>Send RR73:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>Seriel Port:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>Servernavn:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>Serverport:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>Server:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>Vis DXCC:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>Vis OTP:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>Sidelobe-tilstand:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>Enkelt afkodning:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>Spec Op Cmts:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>Split:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>Stations-id:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>Status:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>Stop bits:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>Synkroniser nu</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>TCI lyd</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>TCI lyd:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>TCI Host:Port:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>TCP-port:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>TCP Server:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>TERRITORIUM</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>TONE AFSTAND</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX Audio Src:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX Lyd:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX Forsinkelse (r):</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX Frekvens:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX Besked til RX:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX Udgangsniveau:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>TX Slot:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX Watchdog (min.):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>Område 1:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>Territorium 2:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>Territorium 3:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>Territorium 4:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>Tip: Luk OmniRig fra Windows-ikonet i bakke, og tryk derefter på Tilslut igen.</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>Tune Watchdog (s):</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>To-pas:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>Type 1 præfiks</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>Type 2 Msg Gen:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>Type 2 præfiks</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>UDP SERVER</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>Brugernavn:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>VAGTHUND</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>HVIDLISTE</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>WS bind:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>WS socket port:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR Upload:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>Vent og kast:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>Vent funktioner:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>Hvidliste 10:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>Hvidliste 11:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>Hvidliste 12:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>Hvidliste 1:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>Hvidliste 2:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>Hvidliste 3:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>Hvidliste 4:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>Hvidliste 5:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>Hvidliste 6:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>Hvidliste 7:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>Hvidliste 8:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>Hvidliste 9:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL opdateret fra Hamlib-webstedet. macOS/Linux: officiel dokumentation og udgivelser.</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>Zap:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB i Cmts:</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz nr. k:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  Opdater</translation>
+        </message>
+</context>
 </TS>

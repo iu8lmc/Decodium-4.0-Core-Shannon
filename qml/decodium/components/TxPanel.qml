@@ -17,6 +17,10 @@ Item {
     property string logPreviewRcvd: ""
     property string logPreviewFreq: ""
     property string logPreviewMode: ""
+    property bool logClusterSpotAvailable: false
+    property bool logClusterSpotChecked: false
+    property var logSatelliteChoices: [""]
+    property var logSatModeChoices: [""]
 
     function refreshLogPreview() {
         logPreviewCall = engine && engine.dxCall ? engine.dxCall : ""
@@ -25,6 +29,44 @@ Item {
         logPreviewRcvd = engine && engine.reportReceived ? engine.reportReceived : ""
         logPreviewFreq = engine ? Number(engine.frequency || 0).toFixed(0) : ""
         logPreviewMode = engine && engine.mode ? engine.mode : ""
+    }
+
+    function refreshLogSatelliteChoices() {
+        logSatelliteChoices = engine ? engine.satelliteOptions() : [""]
+        logSatModeChoices = engine ? engine.satModeOptions() : [""]
+    }
+
+    function satelliteCodeFromDisplay(displayText) {
+        var text = String(displayText || "").trim()
+        if (text.length === 0)
+            return ""
+        var separator = text.indexOf(" - ")
+        return separator > 0 ? text.substring(0, separator).trim() : text
+    }
+
+    function satelliteDisplayForCode(code) {
+        var target = String(code || "").trim()
+        if (target.length === 0)
+            return ""
+        for (var i = 0; i < logSatelliteChoices.length; ++i) {
+            var candidate = String(logSatelliteChoices[i] || "")
+            if (satelliteCodeFromDisplay(candidate) === target)
+                return candidate
+        }
+        return ""
+    }
+
+    function setComboText(combo, text) {
+        var idx = combo.find(String(text || ""))
+        combo.currentIndex = idx >= 0 ? idx : 0
+    }
+
+    function syncLogSatelliteFields() {
+        refreshLogSatelliteChoices()
+        if (!engine)
+            return
+        setComboText(satelliteCombo, satelliteDisplayForCode(engine.getSetting("Satellite", "")))
+        setComboText(satModeCombo, engine.getSetting("SatMode", ""))
     }
 
     // Convenience aliases
@@ -1041,11 +1083,17 @@ Item {
         parent: Overlay.overlay
         modal: true
         focus: true
-        width: 420
-        height: 250
+        width: 520
+        height: 405
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.round((parent.height - height) / 2) : 0
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: {
+            txPanel.refreshLogPreview()
+            txPanel.syncLogSatelliteFields()
+            txPanel.logClusterSpotAvailable = !!(engine && engine.dxCluster && engine.dxCluster.connected)
+            txPanel.logClusterSpotChecked = txPanel.logClusterSpotAvailable && !!engine.autoSpotEnabled
+        }
         background: Rectangle {
             radius: 10
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.96)
@@ -1098,6 +1146,48 @@ Item {
 
                 Text { text: "Freq:"; color: textSecondary; font.pixelSize: 13 }
                 Text { text: logPreviewFreq && logPreviewFreq !== "0" ? logPreviewFreq + " Hz" : "-"; color: textPrimary; font.pixelSize: 14 }
+
+                Text { text: "Satellite:"; color: textSecondary; font.pixelSize: 13 }
+                StyledComboBox {
+                    id: satelliteCombo
+                    model: txPanel.logSatelliteChoices
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    font.pixelSize: 12
+                    popupMinWidth: 320
+                }
+
+                Text { text: "Sat Mode:"; color: textSecondary; font.pixelSize: 13 }
+                StyledComboBox {
+                    id: satModeCombo
+                    model: txPanel.logSatModeChoices
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    font.pixelSize: 12
+                    popupMinWidth: 120
+                    enabled: txPanel.satelliteCodeFromDisplay(satelliteCombo.currentText).length > 0
+                }
+
+                Text { text: "DX Cluster:"; color: textSecondary; font.pixelSize: 13 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    CheckBox {
+                        id: logClusterSpotCheck
+                        enabled: txPanel.logClusterSpotAvailable
+                        checked: txPanel.logClusterSpotChecked
+                        onCheckedChanged: txPanel.logClusterSpotChecked = checked
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: txPanel.logClusterSpotAvailable ? "Spot su cluster" : "Cluster non connesso"
+                        color: txPanel.logClusterSpotAvailable ? textPrimary : textSecondary
+                        font.pixelSize: 13
+                        elide: Text.ElideRight
+                    }
+                }
             }
 
             Item { Layout.fillHeight: true }
@@ -1116,6 +1206,15 @@ Item {
                     enabled: logPreviewCall.length > 0
                     onClicked: {
                         if (engine) {
+                            var satCode = txPanel.satelliteCodeFromDisplay(satelliteCombo.currentText)
+                            var satMode = satCode.length > 0 ? String(satModeCombo.currentText || "").trim() : ""
+                            engine.setSetting("Satellite", satCode)
+                            engine.setSetting("SatMode", satMode)
+                            engine.setSetting("PropMode", satCode.length > 0 ? "SAT" : "")
+                            engine.setSetting("SaveSatellite", satCode.length > 0)
+                            engine.setSetting("SaveSatMode", satCode.length > 0 && satMode.length > 0)
+                            engine.setSetting("SavePropMode", satCode.length > 0)
+                            engine.setNextLogClusterSpotEnabled(txPanel.logClusterSpotAvailable && txPanel.logClusterSpotChecked)
                             engine.logQso()
                         }
                         logConfirmPopup.close()

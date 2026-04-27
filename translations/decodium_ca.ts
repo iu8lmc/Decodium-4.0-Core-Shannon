@@ -12948,5 +12948,1357 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
             <source>Choose</source>
             <translation>Tria</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x espaiat entre tons:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>Locators de 4 caràcters:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>Espaiat de to 4x:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>ALINEACIÓ</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>PASAR SEMPRE</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>Descodificació AP:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>Clau API:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>ÀUDIO ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>DISPOSITIUS D'ÀUDIO</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>SEQUÈNCIA AUTOMÀTICA</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>Accepteu UDP:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>Fitxa d'accés:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>Activitat:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>Agressiu:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>Alertes activades:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>Alinea els passos 2:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>Alinea els passos:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>Alinear:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>Totes les interfícies</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>Permet TX QSY:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt Erase Btn:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 Enllaçar:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>Passa sempre 10:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>Passa sempre 11:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>Passa sempre 12:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>Passa sempre 1:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>Passa sempre 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>Passa sempre 3:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>Passa sempre 4:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>Passa sempre 5:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>Passa sempre 6:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>Passa sempre 7:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>Passa sempre 8:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>Passa sempre 9:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>Antena:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>Cal reiniciar l'aplicació. Per a LAN/WAN, utilitzeu un testimoni d'almenys 12 caràcters.</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>Auto Astro:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>Locator automàtic:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>Registre automàtic:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>Seqüència automàtica:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>Decodificació mitjana:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>Directori AzEl:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 Tallat:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>BACKEND CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>COMPORTAMENT</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>LLISTA NEGRA</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>Backend:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>Banda TX Memòria:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>Band Tune Mem:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>Velocitat de transmissió:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>Nivell de negres:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>Llista negra 10:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>Llista negra 11:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>Llista negra 12:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>Llista negra 1:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>Llista negra 2:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>Llista negra 3:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>Llista negra 4:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>Llista negra 5:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>Llista negra 6:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>Llista negra 7:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>Llista negra 8:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>Llista negra 9:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>Indicatius blaus:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>Atrevit</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>Tots dos</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CONTROL CAT</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V Adreça:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>CLOUDLOG</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>CONCURS</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>Només CQ:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ Zona de banda:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>CQ al missatge:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>ID CW</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>Interval d'ID de CW (min):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>ID de CW després del 73:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>Només estacions que criden:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>Comproveu SWR:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>Neteja indicatiu DX:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>Neteja locator DX:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>Feu clic a TX:</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>Color 73:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>Color B4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>Color CQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>Color DX Entitat:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>Guany de color:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>Color del meu indicatiu:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>Connecta't</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>Connectat</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>Nom del concurs:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>Només concurs:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>Contrast:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>Servidor personalitzat:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>DESCÀRREGA DE DADES</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>DESCODIFICAR COLORS</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>DECODIFICAR FILTRES</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>DECODIFICAR PARÀMETRES</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>DECODIFICACIÓ</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>DIAGNÒSTIC</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>DIRECTORI</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>CLUSTER DX</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>Indicatiu/locator DX:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>Bits de dades:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>Dies de càrrega:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>Profunditat de descodificació:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>Descodificar a 52 s:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>Font descodificada:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>Profunda</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>Cerca profunda:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>Per defecte</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>Degrada S/N:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>Detall:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>Registre directe QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>Desactiveu TX després de 73:</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>Desconnecta</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>Desconnectat</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>Descarrega CALL3.TXT</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>Buit = servidors públics automàtics</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>Habilita NTP:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>Activa TCP ADIF:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>Habilitat:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>Erase Band Act:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>Patrons d'esborrat:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD Canvi:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>OPCIONS DE FILTRE</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>FONT</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>FREQÜÈNCIA I TEMPORITZACIÓ</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>Falseja-ho</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>Ràpid</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>Dia de camp</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>Primer (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>Font:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>Força indicatiu primer:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>Força DTR:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>Força RTS:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>Guineu</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Mode Fox:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>Front/Mic</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>Complet</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>Línia grisa:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>DESTACAT</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HL Blau:</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HL Taronja:</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>Port HTTP:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (més de 300 ràdios)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>Encaixada de mans:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>Maquinari</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>DPI alt:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>Freqüència alta (Hz):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>Destacat 73:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>Amfitrió:Port:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>Gos</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Mode Hound:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>Regió IARU:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>Banda de la zona ITU:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>Nom individual:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>Canal d'entrada:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>Dispositiu d'entrada:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>Interfície utilitzada:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>Cursiva</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>NIVELLS</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>REGISTRE</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>LOTW</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>Pestanya més gran:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>Deixeu el servidor buit per utilitzar automàticament pool.ntp.org, Apple, Cloudflare i Google.</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>Esquerra</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>Port d'escolta:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>Inicieu sessió com a RTTY:</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW activat:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>Freqüència baixa (Hz):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>Lòbuls laterals baixos</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>MAPA I DISTANCIA</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX fins al 73:</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>Mapa tots els missatges:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>Sensibilitat màxima</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>Milles:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>Mode:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>Últim monitor:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>Monitor apagat:</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>Mono</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>Multidifusió TTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>Només el meu indicatiu:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>El meu indicatiu:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>El meu locator:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC Sprint:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>SERVEIS DE XARXA</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP SINCRONITZACIÓ HORA</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>Natiu (15 ràdios)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>Nova zona CQ:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>Nova banda de control:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>Nou continent:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>Nova banda DXCC:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>Nou DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>Nou locator per banda:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>Nou locator:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>Nova Zona ITU:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>Sense color Btn:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>Cap missatge</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>Cap</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>Normal</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>Sol·licitud de notificació:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>D'acord</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>MODE DE FUNCIONAMENT</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP activat:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP Interval:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP Llavor:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>URL OTP:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>Apagat</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>Encès</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>Indicatiu operador:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Obriu l'actualització Hamlib</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>Indicatius taronja:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>Canal de sortida:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>Dispositiu de sortida:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>MEMÒRIA DE POTÈNCIA</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT Mètode:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>Port PTT:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR i SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>Paleta:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>Contrasenya:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>Interval (s):</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>Port:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>Potència (W):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>Vermell de progrés:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>Sol·licitud de registre:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>Missatge QSY:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>Crida ràpida:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>Ràpida QSO:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>ENREGISTRAMENT</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>TAULIER WEB REMUT (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY Canvi:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX Ample de banda:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX Nivell d'entrada:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX mitjançant TCI</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;TX després de QSO:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>posterior/Dades</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>Registre RX:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>Registre TX:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>Necessari per a LAN/WAN</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>Restablir</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>Restaura Win:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>Equip</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>Informació de la plataforma:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>Equip:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>Dreta</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>PARÀMETRES DE SÈRIE</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>CONTROL DEL LÒBUL LATERAL</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>ESPECTRE</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>FUNCIONAMENT DIVISIÓ</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>INICIACIÓ</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>DETALLS DE L'ESTACIÓ</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>Desa el directori:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>Segon (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>ADIF secundària:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>Interfície secundària:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>Port secundari:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>Servidor secundari:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>TTL secundari:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>UDP secundària:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>Envia ADIF:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>Envia RR73:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>Port sèrie:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>Nom del servidor:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>Port del servidor:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>Servidor:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>Mostra DXCC:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>Mostra OTP:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>Mode lòbul lateral:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>Descodificació única:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>Cmts d'opcions especificacions:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>Divisió:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>ID de l'estació:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>Estat:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>Bits d'aturada:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>Sincronitza ara</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>Àudio TCI</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>Àudio TCI:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>Amfitrió TCI:Port:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>Port TCP:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>Servidor TCP:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>TERRITORI</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>ESPACIACIÓ DE TONS</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX Audio Sr:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX Àudio:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX Retard (s):</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX Freqüència:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX Missatge a RX:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX Nivell de sortida:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>Ranura TX:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX Watchdog (min):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>Territori 1:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>Territori 2:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>Territori 3:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>Territori 4:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>Consell: tanqueu OmniRig des de la icona de la safata de Windows i torneu a prémer Connecta.</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>Tune Watchdog (s):</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>Dues passades:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>Prefix tipus 1</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>Tipus 2 Msg Gen:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>Prefix tipus 2</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>SERVIDOR UDP</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>Nom d'usuari:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>GOS GUARDIA</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>LLISTA BLANCA</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>Enllaç WS:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>Port de presa WS:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>Càrrega WSPR:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>Espera i salta:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>Funcions d'espera:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>Llista blanca 10:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>Llista blanca 11:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>Llista blanca 12:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>Llista blanca 1:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>Llista blanca 2:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>Llista blanca 3:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>Llista blanca 4:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>Llista blanca 5:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>Llista blanca 6:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>Llista blanca 7:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>Llista blanca 8:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>Llista blanca 9:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL actualitzada des del lloc Hamlib. macOS/Linux: documentació oficial i versions.</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>Zap:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB en cmts:</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz no k:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  Actualitza</translation>
+        </message>
+</context>
 </TS>

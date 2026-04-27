@@ -13811,5 +13811,1357 @@ per valutare la propagazione e le prestazioni del sistema.</translation>
             <source>Choose</source>
             <translation>Scegli</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x Spaziatura toni:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>Locator a 4 caratteri:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>Spaziatura tono 4x:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>ALLINEAMENTO</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>PASSA SEMPRE</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>Decodifica AP:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>API Chiave:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>AUDIO ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>DISPOSITIVI AUDIO</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>SEQUENZA AUTOMATICA</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>Accetta UDP:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>Token di accesso:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>Attività:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>Aggressivo:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>Avvisi abilitati:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>Allinea i passaggi 2:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>Allinea i passaggi:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>Allinea:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>Tutte le interfacce</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>Consenti TX QSY:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt Cancella Btn:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 Rilega:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>Passa sempre 10:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>Passa sempre 11:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>Passa sempre 12:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>Passa sempre 1:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>Passa sempre 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>Passa sempre 3:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>Passa sempre 4:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>Passa sempre 5:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>Passa sempre 6:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>Passa sempre 7:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>Passa sempre 8:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>Passa sempre 9:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>Antenna:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>Richiede riavvio dell'app. Su LAN/WAN usa un token di almeno 12 caratteri.</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>Astro automatico:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>Locator automatico:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>Registro automatico:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>Sequenza automatica:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>Decodifica media:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>Rubrica AzEl:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 Barrato:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>BACKEND CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>COMPORTAMENTO</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>LISTA NERA</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>Backend:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>Banda TX Memoria:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>Mem sintonia banda:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>Velocità in baud:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>Livello del nero:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>Lista nera 10:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>Lista nera 11:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>Lista nera 12:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>Lista nera 1:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>Lista nera 2:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>Lista nera 3:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>Lista nera 4:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>Lista nera 5:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>Lista nera 6:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>Lista nera 7:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>Lista nera 8:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>Lista nera 9:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>Nominativi blu:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>Grassetto</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>Entrambi</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CONTROLLO CAT</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V Indirizzo:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>CLOUDLOG</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>CONCORSO</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>Solo CQ:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ Banda di zona:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>CQ nel messaggio:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>ID CW</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>Intervallo ID CW (min):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>ID CW dopo 73:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>Solo stazioni chiamanti:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>Controlla SWR:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>Cancella nominativo DX:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>Cancella locator DX:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>Fare clic su TX:</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>Colore 73:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>Colore B4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>Colore CQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>Colore DX Entità:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>Guadagno di colore:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>Colore mio nominativo:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>Connetti</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>Connesso</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>Nome del concorso:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>Solo concorso:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>Contrasto:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>Server personalizzato:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>DOWNLOAD DATI</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>COLORI DECODIFICA</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>FILTRI DECODIFICA</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>PARAMETRI DECODIFICA</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>DECODIFICHE</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>DIAGNOSTICA</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>DIRECTORY</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX CLUSTER</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>Nominativo/locator DX:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>Bit di dati:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>Giorni di caricamento:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>Profondità di decodifica:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>Decodifica a 52s:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>Carattere decodificato:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>Profondo</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>Ricerca approfondita:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>Predefinito</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>Degradare S/N:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>Dettaglio:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>Registro diretto QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>Disabilita TX dopo 73:</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>Disconnetti</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>Disconnesso</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>Scarica CALL3.TXT</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>Vuoto = server pubblici automatici</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>Abilita NTP:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>Abilita TCP ADIF:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>Abilitato:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>Legge sulla banda di cancellazione:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>Modelli di cancellazione:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD Scambio:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>OPZIONI FILTRO</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>CARATTERE</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>FREQUENZA E TIMING</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>Simula</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>Veloce</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>Giornata campale</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>Primo (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>Carattere:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>Forza chiamata per primo:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>Forza DTR:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>Forza RTS:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>Volpe</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Modalità Fox:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>Frontale/microfono</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>Pieno</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>Linea grigia:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>IN EVIDENZA</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HL Blu:</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HL Arancione:</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>Porta HTTP:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (oltre 300 radio)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>Stretta di mano:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>Hardware</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>DPI elevati:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>Alta frequenza (Hz):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>Evidenzia 73:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>Ospite:Porto:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>Segugio</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Modalità Hound:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>Regione IARU:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>Banda di zona ITU:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>Nome individuale:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>Canale di ingresso:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>Dispositivo di input:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>Interfaccia utilizzata:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>Corsivo</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>LIVELLI</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>REGISTRAZIONE</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>MOLTO</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>Scheda più grande:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>Lascia il server vuoto per usare automaticamente pool.ntp.org, Apple, Cloudflare e Google.</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>Sinistro</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>Porta di ascolto:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>Accedi come RTTY:</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW Abilitato:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>Bassa frequenza (Hz):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>Lobi laterali bassi</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>MAPPA E DISTANZA</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX fino al 73:</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>Mappa tutti i messaggi:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>Sensibilità massima</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>Miglia:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>Modalità:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>Monitora per ultimo:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>Monitor spento:</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>Mono</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>Multicast.TTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>Solo mio nominativo:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>Mio nominativo:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>Mio locator:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC Sprint:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>SERVIZI DI RETE</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP SINCRONIZZAZIONE ORARIO</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>Nativo (15 radio)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>Nuova zona CQ:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>Nuova banda continua:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>Nuovo continente:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>Nuovo cinturino DXCC:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>Nuovo DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>Nuovo locator per banda:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>Nuovo locator:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>Nuova zona ITU:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>Nessun colore BTN:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>Nessun messaggio</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>Nessuna</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>Normale</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>Richiesta di notifica:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>OK</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>MODO OPERATIVO</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP Abilitato:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP Intervallo:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>Seme OTP:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>URL OTP:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>Spento</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>Su</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>Nominativo operatore:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Apri update Hamlib</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>Nominativi arancioni:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>Canale di uscita:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>Dispositivo di uscita:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>MEMORIA DI POTENZA</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>Metodo PTT:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>Porta PTT:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR e SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>Tavolozza:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>Parola d'ordine:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>Intervallo/i sondaggio:</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>Porta:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>Potenza (W):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>Progresso Rosso:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>Richiedi di accedere:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY Messaggio:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>Chiamata rapida:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>QSO rapido:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>REGISTRAZIONE</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>DASHBOARD WEB REMOTO (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY Scambio:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX Larghezza di banda:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>Livello di ingresso RX:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX tramite TCI</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;TX dopo QSO:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>Posteriore/Dati</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>Registra RX:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>Registra TX:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>Richiesto per LAN/WAN</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>Ripristina</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>Ripristina vittoria:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>Impianto</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>Informazioni sull'impianto:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>Impianto di perforazione:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>Destro</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>PARAMETRI SERIALI</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>CONTROLLO DEL LOBO LATERALE</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>SPETTRO</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>OPERAZIONE SPLIT</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>AVVIO</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>DETTAGLI STAZIONE</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>Salva directory:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>Secondo (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>ADIF secondario:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>Interfaccia secondaria:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>Porta secondaria:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>Server secondario:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>TTL secondario:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>UDP secondario:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>Invia ADIF:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>Invia RR73:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>Porta Seriale:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>Nome del server:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>Porta del server:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>Server:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>Mostra DXCC:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>Mostra OTP:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>Modalità lobo laterale:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>Decodifica singola:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>Cmt operazioni specifiche:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>Diviso:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>Identificativo della stazione:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>Stato:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>Bit di arresto:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>Sincronizza ora</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>Audio TCI</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>Audio TCI:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>Host TCI:Porto:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>Porta TCP:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>Server TCP:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>TERRITORIO</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>SPAZIATURA TONO</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX Origine audio:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX Audio:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX Ritardo/i:</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX Frequenza:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX Messaggio a RX:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>Livello di uscita TX:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>TX Slot:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>Dispositivo di sorveglianza TX (min):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>Territorio 1:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>Territorio 2:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>Territorio 3:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>Territorio 4:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>Suggerimento: chiudi OmniRig dalla tray icon di Windows, poi premi di nuovo Connetti.</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>Ottimizzazione del watchdog:</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>Due passaggi:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>Prefisso di tipo 1</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>Generazione messaggio di tipo 2:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>Prefisso di tipo 2</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>SERVER UDP</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>Nome utente:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>CANE DA GUARDIA</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>LISTA BIANCA</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>WS vincolante:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>Porta presa WS:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR Caricamento:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>Aspetta e salta:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>Caratteristiche di attesa:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>Lista bianca 10:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>Lista bianca 11:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>Lista bianca 12:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>Lista bianca 1:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>Lista bianca 2:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>Lista bianca 3:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>Lista bianca 4:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>Lista bianca 5:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>Lista bianca 6:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>Lista bianca 7:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>Lista bianca 8:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>Lista bianca 9:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL aggiornata dal sito Hamlib. macOS/Linux: documentazione e release ufficiali.</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>Zappa:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB in cm:</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz no k:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  Aggiorna</translation>
+        </message>
+</context>
 </TS>

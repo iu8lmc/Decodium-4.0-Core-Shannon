@@ -193,6 +193,9 @@ public:
   QString legacyAdifLogPath() const;
   QString legacyAllTxtPath() const;
   int legacyTxOutputAttenuation() const;
+  int legacySpecialOperationActivity() const;
+  bool legacySuperFoxEnabled() const;
+  QStringList legacyFoxCallerQueueLines() const;
   void legacyClearBandActivity();
   void legacyClearRxFrequency();
   void legacySetMode(QString const& mode);
@@ -223,6 +226,8 @@ public:
   void legacyStopTransmission();
   void legacyArmCurrentTx();
   void legacyLogQso();
+  void legacySetAutoSpotEnabled(bool enabled);
+  void legacySetNextLogClusterSpotState(bool available, bool checked);
   void legacySetWaterfallPalette(QString const& palette);
   void legacyOpenSettings(int tabIndex = -1);
   void legacyOpenTimeSyncPanel();
@@ -231,6 +236,8 @@ public:
   void legacySetAlt12Enabled(bool enabled);
   bool legacyTxFirst() const;
   void legacySetTxFirst(bool enabled);
+  void legacySetSpecialOperationActivity(int activity);
+  void legacySetSuperFoxEnabled(bool enabled);
   void legacySetRigControlEnabled(bool enabled);
   void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
   void legacySetEmbeddedMode(bool enabled);
@@ -575,7 +582,8 @@ private slots:
                   , QString const& exchange_sent, QString const& exchange_rcvd
                   , QString const& propmode, QString const& satellite
                   , QString const& sat_mode
-                  , QString const& freqRx, QByteArray const& ADIF);
+                  , QString const& freqRx, QByteArray const& ADIF
+                  , bool spotCluster);
   void on_bandComboBox_currentIndexChanged (int index);
   void on_bandComboBox_editTextChanged (QString const& text);
   void on_bandComboBox_activated (int index);
@@ -1086,7 +1094,8 @@ private:
                            Frequency dialFreq,
                            QString const& mode,
                            QString const& rptSent,
-                           QString const& rptRcvd);
+                           QString const& rptRcvd,
+                           bool spotRequested);
 
   // DX-pedition 2-slot
   struct DXpedSlot {
@@ -1138,6 +1147,9 @@ private:
   QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
   QHash<QString, QDateTime> m_recentQsoLogUtcByKey;
   bool    m_autoSpotEnabled {false};
+  bool    m_nextLogClusterSpotOverrideValid {false};
+  bool    m_nextLogClusterSpotAvailable {false};
+  bool    m_nextLogClusterSpotChecked {false};
   bool    m_bCheckedContest;
   bool    m_bWarnedSplit=false;
   bool    m_bTUmsg;
@@ -1296,7 +1308,7 @@ private:
   };
   QHash<QString, DecodeDedupeEntry> m_decodeDedupeCache;
   qint64 m_decodeDedupeLastPruneMs {0};
-  int m_decodeDedupeWindowMs {12000};  // suppress duplicate FT8 rows within one live slot
+  int m_decodeDedupeWindowMs {5000};   // keep strongest duplicate within 5 seconds, matching D3 FT2 cadence
 
   // Manual TX Timing (contest skill mode)
   bool m_bManualTxPending {false};    // decode received, waiting for operator TX

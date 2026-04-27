@@ -229,12 +229,14 @@ class MessageClient::impl
 
 public:
   impl (QString const& id, QString const& version, QString const& revision,
-        port_type server_port, port_type listen_port, int TTL, MessageClient * self)
+        port_type server_port, port_type listen_port, int TTL,
+        MessageClient * self, QString const& reporting_role)
     : self_ {self}
     , enabled_ {false}
     , id_ {id}
     , version_ {version}
     , revision_ {revision}
+    , reporting_role_ {reporting_role.trimmed ()}
     , dns_lookup_id_ {-1}
     , server_port_ {server_port}
     , listen_port_ {listen_port}
@@ -281,6 +283,7 @@ public:
   void set_server (QString const& server_name, QStringList const& network_interface_names);
   Q_SLOT void host_info_results (QHostInfo);
   void start ();
+  QString log_prefix () const;
   void parse_message (QByteArray const&);
   void parse_message (QByteArray const&, QHostAddress const&, port_type);
   void pending_datagrams ();
@@ -312,6 +315,7 @@ public:
   QString id_;
   QString version_;
   QString revision_;
+  QString reporting_role_;
   int dns_lookup_id_;
   QHostAddress server_;
   port_type server_port_;
@@ -385,13 +389,22 @@ void MessageClient::impl::host_info_results (QHostInfo host_info)
   start ();
 }
 
+QString MessageClient::impl::log_prefix () const
+{
+  return reporting_role_.isEmpty ()
+    ? QStringLiteral ("UDP MessageClient")
+    : QStringLiteral ("UDP MessageClient[%1]").arg (reporting_role_);
+}
+
 void MessageClient::impl::start ()
 {
   rebuild_trusted_senders ();
 
-  qInfo () << "UDP MessageClient::start server=" << server_.toString ()
-           << "port=" << server_port_
-           << "listen=" << listen_port_;
+  qInfo ().noquote () << log_prefix () + QStringLiteral ("::start")
+                      << "server=" << server_.toString ()
+                      << "port=" << server_port_
+                      << "listen=" << listen_port_
+                      << "ttl=" << TTL_;
 
   if (server_.isNull ())
     {
@@ -443,8 +456,8 @@ void MessageClient::impl::start ()
         {
           bound = bind (interface_addr);
         }
-      qInfo () << "UDP MessageClient: bound to port" << localPort ()
-               << "on" << localAddress ().toString ();
+      qInfo ().noquote () << log_prefix () + QStringLiteral (": bound")
+                          << "local=" << localAddress ().toString () + QStringLiteral (":") + QString::number (localPort ());
 
       // set multicast TTL to limit scope when sending to multicast
       // group addresses
@@ -452,8 +465,8 @@ void MessageClient::impl::start ()
     }
 
   // send initial heartbeat which allows schema negotiation
-  qInfo () << "UDP MessageClient: sending initial heartbeat to"
-           << server_.toString () << ":" << server_port_;
+  qInfo ().noquote () << log_prefix () + QStringLiteral (": sending initial heartbeat")
+                      << "target=" << server_.toString () + QStringLiteral (":") + QString::number (server_port_);
   heartbeat ();
 
   // clear any backlog
@@ -985,13 +998,39 @@ void MessageClient::impl::send_message (QByteArray const& message, bool queue_if
             {
               if (is_multicast_address (server_))
                 {
-                  // send datagram on each selected network interface
-                  std::for_each (network_interfaces_.begin (), network_interfaces_.end ()
-                                 , [&] (QNetworkInterface const& net_if) {
-                                     setMulticastInterface (net_if);
-                                     // qDebug () << "Multicast UDP datagram sent to:" << server_ << "port:" << server_port_ << "on:" << multicastInterface ().humanReadableName ();
-                                     writeDatagram (wire_message, server_, server_port_);
-                                   });
+                  bool sent {false};
+                  auto send_on_interface = [&] (QNetworkInterface const& net_if) {
+                    if (!is_usable_multicast_interface (net_if))
+                      {
+                        return;
+                      }
+                    setMulticastInterface (net_if);
+                    writeDatagram (wire_message, server_, server_port_);
+                    sent = true;
+                  };
+
+                  if (!network_interfaces_.empty ())
+                    {
+                      std::for_each (network_interfaces_.begin (), network_interfaces_.end (), send_on_interface);
+                    }
+                  else
+                    {
+                      QSet<QString> seen;
+                      for (auto const& net_if : QNetworkInterface::allInterfaces ())
+                        {
+                          if (seen.contains (net_if.name ()))
+                            {
+                              continue;
+                            }
+                          seen.insert (net_if.name ());
+                          send_on_interface (net_if);
+                        }
+                    }
+
+                  if (!sent)
+                    {
+                      writeDatagram (wire_message, server_, server_port_);
+                    }
                 }
               else
                 {
@@ -1037,9 +1076,10 @@ MessageClient::MessageClient (QString const& id, QString const& version, QString
                               QString const& server_name, port_type server_port,
                               port_type listen_port,
                               QStringList const& network_interface_names,
-                              int TTL, QObject * self)
+                              int TTL, QObject * self,
+                              QString const& reporting_role)
   : QObject {self}
-  , m_ {id, version, revision, server_port, listen_port, TTL, this}
+  , m_ {id, version, revision, server_port, listen_port, TTL, this, reporting_role}
 {
   connect (&*m_
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)

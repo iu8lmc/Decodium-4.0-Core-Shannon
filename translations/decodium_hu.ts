@@ -12144,7 +12144,7 @@ Jobb klikk a beillesztési és törlési lehetőségekhez.</translation>
         </message>
         <message>
             <source>STATION INFO</source>
-            <translation>ÁLLOMÁS ADATAI</translation>
+            <translation>ÁLLOMÁS INFO</translation>
         </message>
         <message>
             <source>Station Name:</source>
@@ -12154,5 +12154,1357 @@ Jobb klikk a beillesztési és törlési lehetőségekhez.</translation>
             <source>Choose</source>
             <translation>Válassza</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x hangtávolság:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>4 karakteres lokátorok:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>4x hangtávolság:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>IGAZÍTÁS</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>MINDIG MEGADJA</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>AP dekódolás:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>API kulcs:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>AUDIO ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>AUDIO ESZKÖZÖK</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>AUTOMATIKUS SZEKVENCIA</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>UDP elfogadása:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>Hozzáférési token:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>Tevékenység:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>Agresszív:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>Figyelmeztetések engedélyezve:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>Igazítsa a 2. lépést:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>Igazítás lépései:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>Igazítás:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>Minden interfész</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>TX QSY engedélyezése:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt Erase Btn:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 kötés:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>Mindig át kell adni a 10-et:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>Mindig adja át a 11-et:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>Mindig adja át a 12-t:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>Mindig adja át az 1-et:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>Mindig passz 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>Mindig adja át a 3-at:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>Mindig adja át a 4-et:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>Mindig adja át az 5-öt:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>Mindig adja át a 6-ot:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>Mindig adja át a 7-et:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>Mindig adja át a 8-at:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>Mindig adja át a 9-et:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>Antenna:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>Az alkalmazás újraindítása szükséges. A LAN/WAN esetén használjon legalább 12 karakterből álló tokent.</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>Auto Astro:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>Automatikus lokátor:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>Automatikus napló:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>Automatikus sorrend:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>Átl. dekódolás:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>AzEl címtár:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 Áthúzás:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>HÁTTÉR CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>VISELKEDÉS</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>FEKETELISTA</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>Háttér:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>Sáv TX memória:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>Band Tune Mem:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>Átviteli sebesség:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>Fekete szint:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>10. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>11. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>12. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>1. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>2. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>3. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>4. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>5. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>6. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>7. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>8. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>9. feketelista:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>Kék hívójelek:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>Félkövér</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>Sztereo</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CAT VEZÉRLÉS</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V Cím:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>CLOUDLOG</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>VERSENY</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>Csak CQ:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ zónasáv:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>CQ üzenetben:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>CW azonosító</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>CW ID intervallum (perc):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>CW azonosító 73 után:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>Csak hívó állomások:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>Ellenőrizze a SWR-et:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>DX hívójel törlése:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>DX lokátor törlése:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>Kattintson a TX lehetőségre:</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>73. szín:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>Szín B4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>Szín CQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>Színes DX entitás:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>Színerősítés:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>Saját hívójel színe:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>Csatlakozás</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>Csatlakozva</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>Verseny neve:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>Csak verseny:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>Kontraszt:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>Egyedi szerver:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>ADAT LETÖLTÉS</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>SZÍNEK DEKÓDOLÁSA</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>SZŰRŐK DEKÓDOLÁSA</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>PARAMÉTEREK DEKÓDOLÁSA</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>DEKÓDOL</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>DIAGNOSZTIKA</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>KÖNYVTÁR</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX CLUSTER</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>DX hívójel/lokátor:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>Adatbitek:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>Feltöltés napjai:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>Dekódolási mélység:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>Dekódolás 52 másodperccel:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>Dekódolt betűtípus:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>Mély</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>Mély keresés:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>Alapértelmezett</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>Csökkent S/N:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>Részlet:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>Közvetlen napló QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>TX letiltása 73 után:</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>Leválasztás</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>Lekapcsolva</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>Töltse le a CALL3.TXT-et</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>Üres = automatikus nyilvános szerverek</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>NTP engedélyezése:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>TCP ADIF engedélyezése:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>Engedélyezve:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>Erase Band Act:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>Törlési minták:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD csere:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>SZŰRŐ OPCIÓK</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>FONT</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>FREKVENCIA ÉS IDŐZÍTÉS</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>Szimulál</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>Gyors</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>Mezőnap</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>Első (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>Betűtípus:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>Hívójel először kényszerítése:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>Kényszer DTR:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>Kényszer RTS:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>Fox</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Fox mód:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>Előlap/Mic</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>Tele</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>Szürkevonal:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>KIEMELT</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HL kék:</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HL narancs:</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>HTTP port:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (300+ rádió)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>Kézfogás:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>Hardver</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>Magas DPI:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>Magas frekvencia (Hz):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>73. kiemelés:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>Host:Port:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>Vadász</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Hound mód:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>IARU régió:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>ITU zónasáv:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>Egyéni név:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>Bemeneti csatorna:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>Beviteli eszköz:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>Használt interfész:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>Dőlt</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>SZINTEK</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>NAPLÓZÁS</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>LOTW</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>Nagyobb lap:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>Hagyja üresen a szervert a pool.ntp.org, az Apple, a Cloudflare és a Google automatikus használatához.</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>Balra</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>Hallgató port:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>Bejelentkezés RTTY néven:</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW engedélyezve:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>Alacsony frekvencia (Hz):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>Alacsony oldalsó</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>TÉRKÉP ÉS TÁVOLSÁG</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX 73-ig:</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>Összes üzenet feltérképezése:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>Max érzékenység</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>Mérföldek:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>Mód:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>Monitor utolsó:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>Monitor KI:</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>Mono</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>Multicast (többcímű) TTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>Csak saját hívójel:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>Saját hívójel:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>Saját lokátor:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC Sprint:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>HÁLÓZATI SZOLGÁLTATÁSOK</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP IDŐSZINK</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>Natív (15 rádió)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>Új CQ zóna:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>Új Cont Band:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>Új kontinens:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>Új DXCC szalag:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>Új DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>Új lokátor sávon:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>Új lokátor:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>Új ITU zóna:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>Nincs Btn szín:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>Nincs üzenet</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>Nincs</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>Normál</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>Értesítési kérés:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>OK</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>ÜZEMMÓD</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP engedélyezve:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP intervallum:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP vetőmag:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>OTP URL:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>Le</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>Be</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>Operátor hívójele:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Nyissa meg a Hamlib frissítést</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>Narancs hívójelek:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>Kimeneti csatorna:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>Kimeneti eszköz:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>TELJESÍTMÉNY MEMÓRIA</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT módszer:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>PTT port:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR és SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>Paletta:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>Jelszó:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>Szavazási időköz(ek):</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>Port:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>Teljesítmény (W):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>Haladás piros:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>Naplózás kérése:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY Üzenet:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>Gyors hívás:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>Gyors QSO:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>FELVÉTEL</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>TÁVOLI WEB-IRÁNYÍTÓPULT (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY csere:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX Sávszélesség:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX bemeneti szint:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX TCI-n keresztül</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;TX a QSO után:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>Hátsó/Adat</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>RX rekord:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>TX rekord:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>LAN/WAN-hez szükséges</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>Reset</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>Win visszaállítása:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>Rig</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>A szerelvény adatai:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>Szerszám:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>Jobbra</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>SOROZAT PARAMÉTEREK</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>SIDELOBE CONTROL</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>SPEKTRUM</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>OSZTOTT MŰVELET</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>INDÍTÁS</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>ÁLLOMÁS RÉSZLETEI</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>Könyvtár mentése:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>Második (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>Másodlagos ADIF:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>Másodlagos interfész:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>Másodlagos port:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>Másodlagos szerver:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>Másodlagos TTL:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>Másodlagos UDP:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>ADIF küldése:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>RR73 küldése:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>COM Port:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>Szerver neve:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>Szerver port:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>Szerver:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>DXCC megjelenítése:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>OTP megjelenítése:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>Sidelobe mód:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>Egyszeri dekódolás:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>Spec Op Cmts:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>Felosztás:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>Állomásazonosító:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>Állapot:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>Stop bitek:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>Szinkronizálás most</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>TCI Audio</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>TCI audio:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>TCI gazdagép: Port:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>TCP port:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>TCP szerver:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>TERÜLET</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>TONE SZÁMKÖR</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX Audio Src:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX Hang:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX Késleltetés:</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX Frekvencia:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX üzenet a RX számára:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX kimeneti szint:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>TX Slot:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX Watchdog (perc):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>1. terület:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>2. terület:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>3. terület:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>4. terület:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>Tipp: zárja be a OmniRig-et a Windows tálcaikonjáról, majd nyomja meg újra a Csatlakozás gombot.</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>Tune Watchdog(ok):</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>Két bérlet:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>Írja be az 1-es előtagot</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>Type 2 Msg Gen:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>2. típusú előtag</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>UDP SZERVER</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>Felhasználónév:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>ŐRKUTYA</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>FEHÉRLISTA</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>WS kötés:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>WS aljzat port:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR Feltöltés:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>Várjon és ugorjon:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>Várakozás jellemzői:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>10. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>11. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>12. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>1. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>2. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>3. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>4. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>5. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>6. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>7. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>8. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>9. engedélyezőlista:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL frissítve a Hamlib webhelyről. macOS/Linux: hivatalos dokumentáció és kiadások.</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>Zap:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB cm-ben:</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz no k:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  Frissítés</translation>
+        </message>
+</context>
 </TS>

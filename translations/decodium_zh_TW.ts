@@ -13355,5 +13355,1357 @@ Right click for insert and delete options.</source>
             <source>Choose</source>
             <translation>選擇</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x 音調間距：</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>4位網格：</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>4x 音調間距：</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>對齊</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>總是透過</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>AP解碼：</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>API 金鑰：</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL：</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>音訊 ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>音訊設備</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>自動序列</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>接受UDP：</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>訪問令牌：</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>活動：</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>攻擊性：</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>警報已啟用：</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>對齊步驟 2：</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>對齊步驟：</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>對齊：</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>所有介面</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>允許 TX QSY：</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt 擦除按鈕：</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 綁定：</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>始終通過 10：</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>始終透過 11：</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>始終透過 12：</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>始終透過 1：</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>始終透過 2：</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>始終透過 3：</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>始終透過 4：</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>始終透過 5：</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>始終透過 6：</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>始終透過 7：</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>始終透過 8：</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>始終透過 9：</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>天線：</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>需要重新啟動應用程式。對於 LAN/WAN，請使用至少 12 個字元的令牌。</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>自動天文：</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>自動網格：</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>自動記錄：</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>自動序列：</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>平均解碼：</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>AzEl 目錄：</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 刪除線：</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>後端 ZXProtect00000ZX</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>行為</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>黑名單</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>後端：</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>手環 TX 記憶體：</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>樂團調音記憶：</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>每秒位元數:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>黑色電平：</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>黑名單10：</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>黑名單11：</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>黑名單12：</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>黑名單1：</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>黑名單2：</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>黑名單3：</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>黑名單4：</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>黑名單5：</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>黑名單6：</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>黑名單7：</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>黑名單8：</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>黑名單9：</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>藍色呼號：</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>大膽</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>雙聲道</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CAT控制</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V 位址：</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>雲端日誌</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>競賽</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>僅限 CQ：</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ 防區頻段：</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>訊息中的 CQ：</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>CW ID</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>CW ID 間隔（分鐘）：</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>73之後的CW ID：</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>僅呼叫電台：</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>檢查 SWR：</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>清除DX呼號：</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>清除DX網格：</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>點選TX：</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>顏色 73：</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>顏色 B4：</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>顏色 CQ：</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>顏色 DX 實體：</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>色彩增益：</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>我的呼號顏色：</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>連接</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>已連接</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>比賽名稱：</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>僅比賽：</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>對比：</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>自訂伺服器：</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>資料下載</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>解碼顏色</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>解碼過濾器</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>解碼參數</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>解碼器</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>診斷</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>目錄</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX集群</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>DX呼號/網格：</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>數據位：</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>天上傳：</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>解碼深度：</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>52秒解碼：</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>解碼字體：</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>深度</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>深度搜尋：</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>預設值</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>降級 S/N：</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>詳細資訊：</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>直接記錄QSO：</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>73後停用TX：</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>斷開連接</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>已斷開連接</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>下載CALL3.TXT</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>空=自動公共伺服器</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>啟用 NTP：</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>啟用 TCP ADIF：</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>已啟用：</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>擦除帶行為：</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>擦除模式：</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD 兌換：</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>過濾器選項</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>字體</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>頻率和時序</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>軟體虛擬</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>快速</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>野外日</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>第一場 (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>字體：</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>強制優先呼號：</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>強制 DTR：</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>強制 RTS：</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>狐狸</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Fox 模式：</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>前置/麥克風</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>滿</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>灰線：</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>突出顯示</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HL 藍色：</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HL橙：</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>HTTP 連接埠：</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib（300+ 無線電）</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib：</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>握手：</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>硬體</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>高DPI：</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>高頻 (Hz)：</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>亮點73：</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>主機：連接埠：</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>獵犬</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Hound 模式：</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>IARU 區域:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>國際電聯區域頻段：</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>個人姓名：</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>輸入通道：</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>輸入設備：</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>使用的介面：</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>斜體</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>等級</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>記錄</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>洛特</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>更大的選項卡：</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>將伺服器留空以自動使用 pool.ntp.org、Apple、Cloudflare 和 Google。</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>左邊</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>監聽埠：</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>以 RTTY 登入：</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW 已啟用：</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>低頻 (Hz)：</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>低旁瓣</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>地圖和距離</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX 直到 73：</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>映射所有訊息：</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>最大靈敏度</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>里程：</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>模式：</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>監控最後：</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>顯示器關閉：</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>單聲道</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>組播 TTL :</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>僅我的呼號：</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>我的呼號：</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>我的網格：</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC 衝刺：</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>網路服務</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP 時間同步</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>本機（15 個無線電）</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>新 CQ 區域：</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>新連續帶：</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>新大陸：</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>全新 DXCC 錶帶：</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>全新 DXCC：</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>新波段網格：</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>新網格：</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>國際電聯新區：</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>無按鈕顏色：</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>沒有消息</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd：</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>無</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>正常</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>通知請求：</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>確定</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>操作模式</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP 已啟用：</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP 間隔：</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP 種子：</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>OTP 網址:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>取消</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>開</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>操作員呼號：</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>打開Hamlib更新</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>橙色呼號：</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>輸出通道：</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>輸出設備：</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>電源記憶</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter：</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT 方法：</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>PTT 連接埠：</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR 和 SWR：</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>調色盤：</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>密碼：</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>輪詢間隔：</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>串口:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>功率（瓦）：</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>進度紅色：</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>提示登入：</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY 訊息：</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH：</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>快速呼叫：</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>快速 QSO：</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>錄音</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>遠端網路儀表板 (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY 兌換：</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX 頻寬：</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX 輸入電平：</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX 透過 TCI</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;QSO 之後的 TX：</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>後置/數據</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>記錄RX：</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>記錄TX：</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>LAN/WAN 需要</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>重置</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>恢復勝利：</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>無線電設備控制</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>鑽機資訊：</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>無線電設備型號:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>右邊</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>串口參數</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>旁瓣控制</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>頻譜</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>分離操作</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>啟動</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>電台詳情</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>儲存目錄：</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>第二次（：15/：45）</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>次要 ADIF：</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>輔助接口：</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>輔助連接埠：</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>輔助伺服器：</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>輔助 TTL：</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>次要 UDP：</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>發送ADIF：</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>發送 RR73：</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>串口:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>伺服器名稱：</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>伺服器連接埠：</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>伺服器：</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>顯示 DXCC：</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>顯示 OTP：</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>旁瓣模式：</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>單次解碼：</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>規範操作 CMT：</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>拆分：</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>站號：</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>狀態：</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>停止位：</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox：</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>立即同步</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>TCI音訊</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>TCI 音訊：</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>TCI 主機：連接埠：</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>TCP 連接埠：</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>TCP 伺服器：</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP：</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>領土</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>音調間距</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX 音訊來源：</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX 音訊：</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX 延遲（秒）：</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX 頻率：</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX 傳送至 RX 的訊息：</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX 輸出電平：</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>TX 插槽：</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX 看門狗（分鐘）：</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>領土1：</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>領土2：</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>區域3：</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>區域 4：</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>提示：從 Windows 托盤圖示關閉 OmniRig，然後再按下「連線」。</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>調整看門狗：</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>兩次通過：</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>類型 1 前綴</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>類型 2 訊息產生：</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>類型 2 前綴</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>UDP 伺服器</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>使用者名稱：</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF：</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>看門狗</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>白名單</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>WS 綁定：</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>WS 套接字連接埠：</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR 上傳：</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>等待並猛撲：</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>等待特點：</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>白名單10：</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>白名單11：</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>白名單12：</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>白名單1：</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>白名單2：</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>白名單3：</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>白名單4：</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>白名單5：</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>白名單6：</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>白名單7：</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>白名單8：</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>白名單9：</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows：從 Hamlib 站點更新 DLL。 macOS/Linux：官方文件和版本。</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00：</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>電擊：</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>Cmts 中的 dB：</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz 無 k：</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  重新整理</translation>
+        </message>
+</context>
 </TS>

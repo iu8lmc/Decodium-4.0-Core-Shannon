@@ -13505,5 +13505,1357 @@ Right click for insert and delete options.</source>
             <source>Choose</source>
             <translation>選択</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x トーン間隔:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>4桁グリッド:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>4x トーン間隔:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>アライメント</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>常にパスする</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>AP デコード:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>API キー:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>オーディオ ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>オーディオデバイス</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>オートシーケンス</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>UDP を受け入れる:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>アクセストークン:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>アクティビティ:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>攻撃的:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>有効なアラート:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>調整ステップ 2:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>ステップを揃える:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>整列:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>すべてのインターフェース</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>TX QSY を許可します:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt 消去ボタン:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 バインド:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>常に 10 を渡します:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>常に 11 をパスします:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>常に 12 をパスします:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>常にパス 1:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>常にパス 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>常にパス 3:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>常にパス 4:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>常にパス 5:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>常にパス 6:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>常にパス 7:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>常に 8 をパスします:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>常に 9 をパスします:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>アンテナ:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>アプリの再起動が必要です。 LAN/WAN の場合は、少なくとも 12 文字のトークンを使用します。</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>オートアストロ:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>自動グリッド:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>自動ログ:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>自動シーケンス:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>平均デコード:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>AzEl ディレクトリ:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 取り消し線:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>バックエンド CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>行動</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>ブラックリスト</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>バックエンド:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>バンド TX メモリ:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>バンドチューンメモリー:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>ボーレート:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>黒レベル:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>ブラックリスト 10:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>ブラックリスト 11:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>ブラックリスト 12:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>ブラックリスト 1:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>ブラックリスト 2:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>ブラックリスト 3:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>ブラックリスト 4:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>ブラックリスト 5:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>ブラックリスト 6:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>ブラックリスト 7:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>ブラックリスト 8:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>ブラックリスト 9:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>青表示コール:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>太字</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>両方</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CAT コントロール</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V アドレス:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>クラウドログ</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>コンテスト</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>CQ のみ:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ ゾーンバンド:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>メッセージ内の CQ:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>CWID</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>CW ID 間隔 (分):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>73以降のCW ID:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>呼出局のみ:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>SWR を確認してください:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>DXコールをクリア:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>DXグリッドをクリア:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>「TX」をクリックします。</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>カラー 73:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>カラーB4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>カラーCQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>カラー DX エンティティ:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>カラーゲイン:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>自局コールサイン色:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>接続する</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>接続済み</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>コンテスト名:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>コンテストのみ:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>コントラスト:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>カスタムサーバー:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>データダウンロード</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>カラーをデコードする</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>デコードフィルター</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>パラメータをデコードする</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>デコード</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>診断</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>ディレクトリ</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX クラスター</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>DXコール/グリッド:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>データビット:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>アップロード日数:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>デコード深度:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>52秒でデコード:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>デコードされたフォント:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>ディープ</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>深い検索:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>デフォルト</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>S/N を劣化させる:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>詳細:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>ダイレクトログ QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>73 以降は TX を無効にします。</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>切断する</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>切断されました</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>ダウンロード</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>空 = 自動公開サーバー</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>NTP を有効にする:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>TCP ADIF を有効にする:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>有効:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>バンド消去動作:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>消去パターン:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD 交換:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>フィルターオプション</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>フォント</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>周波数とタイミング</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>擬似スプリット</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>高速</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>フィールドデイ</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>最初 (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>フォント:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>コール優先を強制:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>DTRを強制:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>RTSを強制:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>キツネ</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Fox モード:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>フロント/マイク</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>フル</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>グレーライン:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>ハイライト表示</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HLブルー：</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HLオレンジ：</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>HTTP ポート:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (300 以上の無線)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>握手:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>ハードウェア</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>高 DPI:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>高周波数 (Hz):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>ハイライト 73:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>ホスト:ポート:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>ハウンド</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Hound モード:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>IARU地域：</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>ITUゾーンバンド:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>個体名:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>入力チャンネル:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>入力デバイス:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>使用するインターフェース:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>イタリック体</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>レベル</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>ロギング</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>たくさん</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>大きなタブ:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>pool.ntp.org、Apple、Cloudflare、Google を自動的に使用するには、サーバーを空のままにしておきます。</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>左</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>リッスンポート:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>RTTY としてログに記録します。</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW 有効:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>低周波数 (Hz):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>サイドローブが低い</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>地図と距離</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX 73まで：</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>すべてのメッセージをマップ:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>最大感度</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>マイル:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>モード:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>最後にモニター:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>モニターOFF：</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>モノラル</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>マルチキャストTTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>自局コールのみ:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>自局コールサイン:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>自局グリッド:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC スプリント:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>ネットワークサービス</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP 時間同期</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>ネイティブ (15 ラジオ)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>新しい CQ ゾーン:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>新しいコントバンド:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>新大陸:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>新しい DXCC バンド:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>新しい DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>バンド別新規グリッド:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>新規グリッド:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>新しい ITU ゾーン:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>ボタンの色なし:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>メッセージなし</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>なし</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>標準</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>通知リクエスト:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>OK</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>動作モード</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP 有効:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP 間隔:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP シード:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>OTP URL:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>オフ</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>オン</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>オペレーターコールサイン:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Hamlib アップデートを開く</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>オレンジ表示コール:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>出力チャンネル:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>出力デバイス:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>パワーメモリー</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT 方法:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>PTT ポート:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR および SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>パレット:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>パスワード:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>ポーリング間隔 (秒):</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>ポート:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>電力 (W):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>プログレスレッド:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>ログを求めるプロンプト:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY メッセージ:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>クイックコール:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>クイック QSO:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>録音</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>リモート Web ダッシュボード (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY 交換:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX 帯域幅:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX 入力レベル:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX (TCI 経由)</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;QSO 後の TX:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>リア/データ</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>RX を記録します:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>TX を記録します:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>LAN/WAN に必要</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>リセット</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>勝利を復元:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>無線機</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>リグ情報:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>無線機:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>右</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>シリアルパラメータ</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>サイドローブ制御</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>スペクトル</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>スプリットオペレーション</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>スタートアップ</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>局の詳細</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>保存ディレクトリ:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>2番目 (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>セカンダリ ADIF:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>二次インターフェース:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>セカンダリポート:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>セカンダリサーバー:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>セカンダリTTL:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>セカンダリ UDP:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>ADIF を送信します:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>RR73 を送信します:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>シリアルポート:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>サーバー名:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>サーバーポート:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>サーバー:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>DXCC を表示:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>OTP を表示:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>サイドローブモード:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>単一デコード:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>仕様操作コマンド:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>分割:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>ステーションID:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>ステータス:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>ストップビット:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>今すぐ同期</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>TCIオーディオ</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>TCIオーディオ:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>TCI ホスト:ポート:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>TCP ポート:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>TCP サーバー:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>領土</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>トーン間隔</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX オーディオ ソース:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX オーディオ:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX 遅延 (秒):</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX 周波数:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX RX へのメッセージ:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX 出力レベル:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>TX スロット:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX ウォッチドッグ (分):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>テリトリー 1:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>テリトリー 2:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>テリトリー 3:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>テリトリー 4:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>ヒント: Windows トレイ アイコンから OmniRig を閉じて、もう一度 [接続] を押します。</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>ウォッチドッグを調整します:</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>2パス:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>タイプ 1 プレフィックス</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>タイプ 2 メッセージ生成:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>タイプ 2 プレフィックス</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>UDP サーバー</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>ユーザー名:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>番犬</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>ホワイトリスト</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>WS バインド:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>WS ソケットポート:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR アップロード:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>待ってから飛びかかる:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>待機機能:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>ホワイトリスト 10:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>ホワイトリスト 11:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>ホワイトリスト 12:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>ホワイトリスト 1:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>ホワイトリスト 2:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>ホワイトリスト 3:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>ホワイトリスト 4:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>ホワイトリスト 5:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>ホワイトリスト 6:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>ホワイトリスト 7:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>ホワイトリスト 8:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>ホワイトリスト 9:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL は Hamlib サイトから更新されました。 macOS/Linux: 公式ドキュメントとリリース。</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>ザップ:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB (cmt):</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz いいえ:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  更新</translation>
+        </message>
+</context>
 </TS>

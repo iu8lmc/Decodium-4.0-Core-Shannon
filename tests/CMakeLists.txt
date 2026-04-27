@@ -24,6 +24,7 @@ add_executable (test_qt_helpers
 target_include_directories (test_qt_helpers PRIVATE ${PROJECT_BINARY_DIR})
 target_link_libraries (test_qt_helpers wsjt_qt wsjt_cxx wsjt_fort Qt6::Test)
 add_test (NAME test_qt_helpers COMMAND $<TARGET_FILE:test_qt_helpers>)
+set_tests_properties (test_qt_helpers PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable (ft4_stage_compare ft4_stage_compare.cpp)
 target_link_libraries (ft4_stage_compare wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)

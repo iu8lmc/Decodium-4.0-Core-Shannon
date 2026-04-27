@@ -12435,5 +12435,1357 @@ Right click for insert and delete options.</translation>
             <source>Choose</source>
             <translation>Choose</translation>
         </message>
-    </context>
+            <message>
+            <source>2x Tone Spacing:</source>
+            <translation>2x Tone Spacing:</translation>
+        </message>
+        <message>
+            <source>4-digit Grids:</source>
+            <translation>4-digit Grids:</translation>
+        </message>
+        <message>
+            <source>4x Tone Spacing:</source>
+            <translation>4x Tone Spacing:</translation>
+        </message>
+        <message>
+            <source>ADIF TCP</source>
+            <translation>ADIF TCP</translation>
+        </message>
+        <message>
+            <source>ALIGNMENT</source>
+            <translation>ALIGNMENT</translation>
+        </message>
+        <message>
+            <source>ALWAYS PASS</source>
+            <translation>ALWAYS PASS</translation>
+        </message>
+        <message>
+            <source>AP Decode:</source>
+            <translation>AP Decode:</translation>
+        </message>
+        <message>
+            <source>API Key:</source>
+            <translation>API Key:</translation>
+        </message>
+        <message>
+            <source>API URL:</source>
+            <translation>API URL:</translation>
+        </message>
+        <message>
+            <source>AUDIO ALERTS</source>
+            <translation>AUDIO ALERTS</translation>
+        </message>
+        <message>
+            <source>AUDIO DEVICES</source>
+            <translation>AUDIO DEVICES</translation>
+        </message>
+        <message>
+            <source>AUTO SEQUENCE</source>
+            <translation>AUTO SEQUENCE</translation>
+        </message>
+        <message>
+            <source>Accept UDP:</source>
+            <translation>Accept UDP:</translation>
+        </message>
+        <message>
+            <source>Access token:</source>
+            <translation>Access token:</translation>
+        </message>
+        <message>
+            <source>Activity:</source>
+            <translation>Activity:</translation>
+        </message>
+        <message>
+            <source>Aggressive:</source>
+            <translation>Aggressive:</translation>
+        </message>
+        <message>
+            <source>Alerts Enabled:</source>
+            <translation>Alerts Enabled:</translation>
+        </message>
+        <message>
+            <source>Align Steps 2:</source>
+            <translation>Align Steps 2:</translation>
+        </message>
+        <message>
+            <source>Align Steps:</source>
+            <translation>Align Steps:</translation>
+        </message>
+        <message>
+            <source>Align:</source>
+            <translation>Align:</translation>
+        </message>
+        <message>
+            <source>All interfaces</source>
+            <translation>All interfaces</translation>
+        </message>
+        <message>
+            <source>Allow TX QSY:</source>
+            <translation>Allow TX QSY:</translation>
+        </message>
+        <message>
+            <source>Alt Erase Btn:</source>
+            <translation>Alt Erase Btn:</translation>
+        </message>
+        <message>
+            <source>Alt F1-F6 Bind:</source>
+            <translation>Alt F1-F6 Bind:</translation>
+        </message>
+        <message>
+            <source>Always Pass 10:</source>
+            <translation>Always Pass 10:</translation>
+        </message>
+        <message>
+            <source>Always Pass 11:</source>
+            <translation>Always Pass 11:</translation>
+        </message>
+        <message>
+            <source>Always Pass 12:</source>
+            <translation>Always Pass 12:</translation>
+        </message>
+        <message>
+            <source>Always Pass 1:</source>
+            <translation>Always Pass 1:</translation>
+        </message>
+        <message>
+            <source>Always Pass 2:</source>
+            <translation>Always Pass 2:</translation>
+        </message>
+        <message>
+            <source>Always Pass 3:</source>
+            <translation>Always Pass 3:</translation>
+        </message>
+        <message>
+            <source>Always Pass 4:</source>
+            <translation>Always Pass 4:</translation>
+        </message>
+        <message>
+            <source>Always Pass 5:</source>
+            <translation>Always Pass 5:</translation>
+        </message>
+        <message>
+            <source>Always Pass 6:</source>
+            <translation>Always Pass 6:</translation>
+        </message>
+        <message>
+            <source>Always Pass 7:</source>
+            <translation>Always Pass 7:</translation>
+        </message>
+        <message>
+            <source>Always Pass 8:</source>
+            <translation>Always Pass 8:</translation>
+        </message>
+        <message>
+            <source>Always Pass 9:</source>
+            <translation>Always Pass 9:</translation>
+        </message>
+        <message>
+            <source>Antenna:</source>
+            <translation>Antenna:</translation>
+        </message>
+        <message>
+            <source>App restart required. For LAN/WAN, use a token of at least 12 characters.</source>
+            <translation>App restart required. For LAN/WAN, use a token of at least 12 characters.</translation>
+        </message>
+        <message>
+            <source>Auto Astro:</source>
+            <translation>Auto Astro:</translation>
+        </message>
+        <message>
+            <source>Auto Grid:</source>
+            <translation>Auto Grid:</translation>
+        </message>
+        <message>
+            <source>Auto Log:</source>
+            <translation>Auto Log:</translation>
+        </message>
+        <message>
+            <source>Auto Sequence:</source>
+            <translation>Auto Sequence:</translation>
+        </message>
+        <message>
+            <source>Avg Decode:</source>
+            <translation>Avg Decode:</translation>
+        </message>
+        <message>
+            <source>AzEl Directory:</source>
+            <translation>AzEl Directory:</translation>
+        </message>
+        <message>
+            <source>B4 Strikethrough:</source>
+            <translation>B4 Strikethrough:</translation>
+        </message>
+        <message>
+            <source>BACKEND CAT</source>
+            <translation>BACKEND CAT</translation>
+        </message>
+        <message>
+            <source>BEHAVIOR</source>
+            <translation>BEHAVIOR</translation>
+        </message>
+        <message>
+            <source>BLACKLIST</source>
+            <translation>BLACKLIST</translation>
+        </message>
+        <message>
+            <source>Backend:</source>
+            <translation>Backend:</translation>
+        </message>
+        <message>
+            <source>Band TX Memory:</source>
+            <translation>Band TX Memory:</translation>
+        </message>
+        <message>
+            <source>Band Tune Mem:</source>
+            <translation>Band Tune Mem:</translation>
+        </message>
+        <message>
+            <source>Baud Rate:</source>
+            <translation>Baud Rate:</translation>
+        </message>
+        <message>
+            <source>Black Level:</source>
+            <translation>Black Level:</translation>
+        </message>
+        <message>
+            <source>Blacklist 10:</source>
+            <translation>Blacklist 10:</translation>
+        </message>
+        <message>
+            <source>Blacklist 11:</source>
+            <translation>Blacklist 11:</translation>
+        </message>
+        <message>
+            <source>Blacklist 12:</source>
+            <translation>Blacklist 12:</translation>
+        </message>
+        <message>
+            <source>Blacklist 1:</source>
+            <translation>Blacklist 1:</translation>
+        </message>
+        <message>
+            <source>Blacklist 2:</source>
+            <translation>Blacklist 2:</translation>
+        </message>
+        <message>
+            <source>Blacklist 3:</source>
+            <translation>Blacklist 3:</translation>
+        </message>
+        <message>
+            <source>Blacklist 4:</source>
+            <translation>Blacklist 4:</translation>
+        </message>
+        <message>
+            <source>Blacklist 5:</source>
+            <translation>Blacklist 5:</translation>
+        </message>
+        <message>
+            <source>Blacklist 6:</source>
+            <translation>Blacklist 6:</translation>
+        </message>
+        <message>
+            <source>Blacklist 7:</source>
+            <translation>Blacklist 7:</translation>
+        </message>
+        <message>
+            <source>Blacklist 8:</source>
+            <translation>Blacklist 8:</translation>
+        </message>
+        <message>
+            <source>Blacklist 9:</source>
+            <translation>Blacklist 9:</translation>
+        </message>
+        <message>
+            <source>Blue Calls:</source>
+            <translation>Blue Calls:</translation>
+        </message>
+        <message>
+            <source>Bold</source>
+            <translation>Bold</translation>
+        </message>
+        <message>
+            <source>Both</source>
+            <translation>Both</translation>
+        </message>
+        <message>
+            <source>CAT CONTROL</source>
+            <translation>CAT CONTROL</translation>
+        </message>
+        <message>
+            <source>CI-V Addr:</source>
+            <translation>CI-V Addr:</translation>
+        </message>
+        <message>
+            <source>CLOUDLOG</source>
+            <translation>CLOUDLOG</translation>
+        </message>
+        <message>
+            <source>CONTEST</source>
+            <translation>CONTEST</translation>
+        </message>
+        <message>
+            <source>CQ Only:</source>
+            <translation>CQ Only:</translation>
+        </message>
+        <message>
+            <source>CQ Zone Band:</source>
+            <translation>CQ Zone Band:</translation>
+        </message>
+        <message>
+            <source>CQ in Msg:</source>
+            <translation>CQ in Msg:</translation>
+        </message>
+        <message>
+            <source>CW ID</source>
+            <translation>CW ID</translation>
+        </message>
+        <message>
+            <source>CW ID Interval (min):</source>
+            <translation>CW ID Interval (min):</translation>
+        </message>
+        <message>
+            <source>CW ID after 73:</source>
+            <translation>CW ID after 73:</translation>
+        </message>
+        <message>
+            <source>Calling Only:</source>
+            <translation>Calling Only:</translation>
+        </message>
+        <message>
+            <source>Check SWR:</source>
+            <translation>Check SWR:</translation>
+        </message>
+        <message>
+            <source>Clear DX Call:</source>
+            <translation>Clear DX Call:</translation>
+        </message>
+        <message>
+            <source>Clear DX Grid:</source>
+            <translation>Clear DX Grid:</translation>
+        </message>
+        <message>
+            <source>Click TX:</source>
+            <translation>Click TX:</translation>
+        </message>
+        <message>
+            <source>Color 73:</source>
+            <translation>Color 73:</translation>
+        </message>
+        <message>
+            <source>Color B4:</source>
+            <translation>Color B4:</translation>
+        </message>
+        <message>
+            <source>Color CQ:</source>
+            <translation>Color CQ:</translation>
+        </message>
+        <message>
+            <source>Color DX Entity:</source>
+            <translation>Color DX Entity:</translation>
+        </message>
+        <message>
+            <source>Color Gain:</source>
+            <translation>Color Gain:</translation>
+        </message>
+        <message>
+            <source>Color My Call:</source>
+            <translation>Color My Call:</translation>
+        </message>
+        <message>
+            <source>Connect</source>
+            <translation>Connect</translation>
+        </message>
+        <message>
+            <source>Connected</source>
+            <translation>Connected</translation>
+        </message>
+        <message>
+            <source>Contest Name:</source>
+            <translation>Contest Name:</translation>
+        </message>
+        <message>
+            <source>Contest Only:</source>
+            <translation>Contest Only:</translation>
+        </message>
+        <message>
+            <source>Contrast:</source>
+            <translation>Contrast:</translation>
+        </message>
+        <message>
+            <source>Custom Server:</source>
+            <translation>Custom Server:</translation>
+        </message>
+        <message>
+            <source>DATA DOWNLOAD</source>
+            <translation>DATA DOWNLOAD</translation>
+        </message>
+        <message>
+            <source>DECODE COLORS</source>
+            <translation>DECODE COLORS</translation>
+        </message>
+        <message>
+            <source>DECODE FILTERS</source>
+            <translation>DECODE FILTERS</translation>
+        </message>
+        <message>
+            <source>DECODE PARAMETERS</source>
+            <translation>DECODE PARAMETERS</translation>
+        </message>
+        <message>
+            <source>DECODES</source>
+            <translation>DECODES</translation>
+        </message>
+        <message>
+            <source>DIAGNOSTICS</source>
+            <translation>DIAGNOSTICS</translation>
+        </message>
+        <message>
+            <source>DIRECTORY</source>
+            <translation>DIRECTORY</translation>
+        </message>
+        <message>
+            <source>DX CLUSTER</source>
+            <translation>DX CLUSTER</translation>
+        </message>
+        <message>
+            <source>DX Call/Grid:</source>
+            <translation>DX Call/Grid:</translation>
+        </message>
+        <message>
+            <source>Data Bits:</source>
+            <translation>Data Bits:</translation>
+        </message>
+        <message>
+            <source>Days Upload:</source>
+            <translation>Days Upload:</translation>
+        </message>
+        <message>
+            <source>Decode Depth:</source>
+            <translation>Decode Depth:</translation>
+        </message>
+        <message>
+            <source>Decode at 52s:</source>
+            <translation>Decode at 52s:</translation>
+        </message>
+        <message>
+            <source>Decoded Font:</source>
+            <translation>Decoded Font:</translation>
+        </message>
+        <message>
+            <source>Deep</source>
+            <translation>Deep</translation>
+        </message>
+        <message>
+            <source>Deep Search:</source>
+            <translation>Deep Search:</translation>
+        </message>
+        <message>
+            <source>Default</source>
+            <translation>Default</translation>
+        </message>
+        <message>
+            <source>Degrade S/N:</source>
+            <translation>Degrade S/N:</translation>
+        </message>
+        <message>
+            <source>Detail:</source>
+            <translation>Detail:</translation>
+        </message>
+        <message>
+            <source>Direct Log QSO:</source>
+            <translation>Direct Log QSO:</translation>
+        </message>
+        <message>
+            <source>Disable TX after 73:</source>
+            <translation>Disable TX after 73:</translation>
+        </message>
+        <message>
+            <source>Disconnect</source>
+            <translation>Disconnect</translation>
+        </message>
+        <message>
+            <source>Disconnected</source>
+            <translation>Disconnected</translation>
+        </message>
+        <message>
+            <source>Download CALL3.TXT</source>
+            <translation>Download CALL3.TXT</translation>
+        </message>
+        <message>
+            <source>Empty = automatic public servers</source>
+            <translation>Empty = automatic public servers</translation>
+        </message>
+        <message>
+            <source>Enable NTP:</source>
+            <translation>Enable NTP:</translation>
+        </message>
+        <message>
+            <source>Enable TCP ADIF:</source>
+            <translation>Enable TCP ADIF:</translation>
+        </message>
+        <message>
+            <source>Enabled:</source>
+            <translation>Enabled:</translation>
+        </message>
+        <message>
+            <source>Erase Band Act:</source>
+            <translation>Erase Band Act:</translation>
+        </message>
+        <message>
+            <source>Erasure Patterns:</source>
+            <translation>Erasure Patterns:</translation>
+        </message>
+        <message>
+            <source>FD Exchange:</source>
+            <translation>FD Exchange:</translation>
+        </message>
+        <message>
+            <source>FILTER OPTIONS</source>
+            <translation>FILTER OPTIONS</translation>
+        </message>
+        <message>
+            <source>FONT</source>
+            <translation>FONT</translation>
+        </message>
+        <message>
+            <source>FREQUENCY AND TIMING</source>
+            <translation>FREQUENCY AND TIMING</translation>
+        </message>
+        <message>
+            <source>Fake It</source>
+            <translation>Fake It</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>Fast</translation>
+        </message>
+        <message>
+            <source>Field Day</source>
+            <translation>Field Day</translation>
+        </message>
+        <message>
+            <source>First (:00/:30)</source>
+            <translation>First (:00/:30)</translation>
+        </message>
+        <message>
+            <source>Font:</source>
+            <translation>Font:</translation>
+        </message>
+        <message>
+            <source>Force Call 1st:</source>
+            <translation>Force Call 1st:</translation>
+        </message>
+        <message>
+            <source>Force DTR:</source>
+            <translation>Force DTR:</translation>
+        </message>
+        <message>
+            <source>Force RTS:</source>
+            <translation>Force RTS:</translation>
+        </message>
+        <message>
+            <source>Fox</source>
+            <translation>Fox</translation>
+        </message>
+        <message>
+            <source>Fox Mode:</source>
+            <translation>Fox Mode:</translation>
+        </message>
+        <message>
+            <source>Front/Mic</source>
+            <translation>Front/Mic</translation>
+        </message>
+        <message>
+            <source>Full</source>
+            <translation>Full</translation>
+        </message>
+        <message>
+            <source>Greyline:</source>
+            <translation>Greyline:</translation>
+        </message>
+        <message>
+            <source>HIGHLIGHTING</source>
+            <translation>HIGHLIGHTING</translation>
+        </message>
+        <message>
+            <source>HL Blue:</source>
+            <translation>HL Blue:</translation>
+        </message>
+        <message>
+            <source>HL Orange:</source>
+            <translation>HL Orange:</translation>
+        </message>
+        <message>
+            <source>HTTP port:</source>
+            <translation>HTTP port:</translation>
+        </message>
+        <message>
+            <source>Hamlib (300+ radios)</source>
+            <translation>Hamlib (300+ radios)</translation>
+        </message>
+        <message>
+            <source>Hamlib:</source>
+            <translation>Hamlib:</translation>
+        </message>
+        <message>
+            <source>Handshake:</source>
+            <translation>Handshake:</translation>
+        </message>
+        <message>
+            <source>Hardware</source>
+            <translation>Hardware</translation>
+        </message>
+        <message>
+            <source>High DPI:</source>
+            <translation>High DPI:</translation>
+        </message>
+        <message>
+            <source>High Freq (Hz):</source>
+            <translation>High Freq (Hz):</translation>
+        </message>
+        <message>
+            <source>Highlight 73:</source>
+            <translation>Highlight 73:</translation>
+        </message>
+        <message>
+            <source>Host:Port:</source>
+            <translation>Host:Port:</translation>
+        </message>
+        <message>
+            <source>Hound</source>
+            <translation>Hound</translation>
+        </message>
+        <message>
+            <source>Hound Mode:</source>
+            <translation>Hound Mode:</translation>
+        </message>
+        <message>
+            <source>IARU Region:</source>
+            <translation>IARU Region:</translation>
+        </message>
+        <message>
+            <source>ITU Zone Band:</source>
+            <translation>ITU Zone Band:</translation>
+        </message>
+        <message>
+            <source>Indiv Name:</source>
+            <translation>Indiv Name:</translation>
+        </message>
+        <message>
+            <source>Input Channel:</source>
+            <translation>Input Channel:</translation>
+        </message>
+        <message>
+            <source>Input Device:</source>
+            <translation>Input Device:</translation>
+        </message>
+        <message>
+            <source>Interface Used:</source>
+            <translation>Interface Used:</translation>
+        </message>
+        <message>
+            <source>Italic</source>
+            <translation>Italic</translation>
+        </message>
+        <message>
+            <source>JT65 VHF/UHF</source>
+            <translation>JT65 VHF/UHF</translation>
+        </message>
+        <message>
+            <source>LEVELS</source>
+            <translation>LEVELS</translation>
+        </message>
+        <message>
+            <source>LOGGING</source>
+            <translation>LOGGING</translation>
+        </message>
+        <message>
+            <source>LOTW</source>
+            <translation>LOTW</translation>
+        </message>
+        <message>
+            <source>Larger Tab:</source>
+            <translation>Larger Tab:</translation>
+        </message>
+        <message>
+            <source>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</source>
+            <translation>Leave the server empty to automatically use pool.ntp.org, Apple, Cloudflare, and Google.</translation>
+        </message>
+        <message>
+            <source>Left</source>
+            <translation>Left</translation>
+        </message>
+        <message>
+            <source>Listen Port:</source>
+            <translation>Listen Port:</translation>
+        </message>
+        <message>
+            <source>Log as RTTY:</source>
+            <translation>Log as RTTY:</translation>
+        </message>
+        <message>
+            <source>LotW Enabled:</source>
+            <translation>LotW Enabled:</translation>
+        </message>
+        <message>
+            <source>Low Freq (Hz):</source>
+            <translation>Low Freq (Hz):</translation>
+        </message>
+        <message>
+            <source>Low Sidelobes</source>
+            <translation>Low Sidelobes</translation>
+        </message>
+        <message>
+            <source>MAP AND DISTANCE</source>
+            <translation>MAP AND DISTANCE</translation>
+        </message>
+        <message>
+            <source>MSK/Q65 TX until 73:</source>
+            <translation>MSK/Q65 TX until 73:</translation>
+        </message>
+        <message>
+            <source>Map All Msgs:</source>
+            <translation>Map All Msgs:</translation>
+        </message>
+        <message>
+            <source>Max Sensitivity</source>
+            <translation>Max Sensitivity</translation>
+        </message>
+        <message>
+            <source>Miles:</source>
+            <translation>Miles:</translation>
+        </message>
+        <message>
+            <source>Mode:</source>
+            <translation>Mode:</translation>
+        </message>
+        <message>
+            <source>Monitor Last:</source>
+            <translation>Monitor Last:</translation>
+        </message>
+        <message>
+            <source>Monitor OFF:</source>
+            <translation>Monitor OFF:</translation>
+        </message>
+        <message>
+            <source>Mono</source>
+            <translation>Mono</translation>
+        </message>
+        <message>
+            <source>Multicast TTL:</source>
+            <translation>Multicast TTL:</translation>
+        </message>
+        <message>
+            <source>My Call Only:</source>
+            <translation>My Call Only:</translation>
+        </message>
+        <message>
+            <source>My Call:</source>
+            <translation>My Call:</translation>
+        </message>
+        <message>
+            <source>My Grid:</source>
+            <translation>My Grid:</translation>
+        </message>
+        <message>
+            <source>NCCC Sprint:</source>
+            <translation>NCCC Sprint:</translation>
+        </message>
+        <message>
+            <source>NETWORK SERVICES</source>
+            <translation>NETWORK SERVICES</translation>
+        </message>
+        <message>
+            <source>NTP TIME SYNC</source>
+            <translation>NTP TIME SYNC</translation>
+        </message>
+        <message>
+            <source>Native (15 radios)</source>
+            <translation>Native (15 radios)</translation>
+        </message>
+        <message>
+            <source>New CQ Zone:</source>
+            <translation>New CQ Zone:</translation>
+        </message>
+        <message>
+            <source>New Cont Band:</source>
+            <translation>New Cont Band:</translation>
+        </message>
+        <message>
+            <source>New Continent:</source>
+            <translation>New Continent:</translation>
+        </message>
+        <message>
+            <source>New DXCC Band:</source>
+            <translation>New DXCC Band:</translation>
+        </message>
+        <message>
+            <source>New DXCC:</source>
+            <translation>New DXCC:</translation>
+        </message>
+        <message>
+            <source>New Grid Band:</source>
+            <translation>New Grid Band:</translation>
+        </message>
+        <message>
+            <source>New Grid:</source>
+            <translation>New Grid:</translation>
+        </message>
+        <message>
+            <source>New ITU Zone:</source>
+            <translation>New ITU Zone:</translation>
+        </message>
+        <message>
+            <source>No Btn Color:</source>
+            <translation>No Btn Color:</translation>
+        </message>
+        <message>
+            <source>No message</source>
+            <translation>No message</translation>
+        </message>
+        <message>
+            <source>Non-QSL'd:</source>
+            <translation>Non-QSL'd:</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>None</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>Normal</translation>
+        </message>
+        <message>
+            <source>Notify Request:</source>
+            <translation>Notify Request:</translation>
+        </message>
+        <message>
+            <source>OK</source>
+            <translation>OK</translation>
+        </message>
+        <message>
+            <source>OPERATING MODE</source>
+            <translation>OPERATING MODE</translation>
+        </message>
+        <message>
+            <source>OTP</source>
+            <translation>OTP</translation>
+        </message>
+        <message>
+            <source>OTP Enabled:</source>
+            <translation>OTP Enabled:</translation>
+        </message>
+        <message>
+            <source>OTP Interval:</source>
+            <translation>OTP Interval:</translation>
+        </message>
+        <message>
+            <source>OTP Seed:</source>
+            <translation>OTP Seed:</translation>
+        </message>
+        <message>
+            <source>OTP URL:</source>
+            <translation>OTP URL:</translation>
+        </message>
+        <message>
+            <source>Off</source>
+            <translation>Off</translation>
+        </message>
+        <message>
+            <source>On</source>
+            <translation>On</translation>
+        </message>
+        <message>
+            <source>Op Call:</source>
+            <translation>Op Call:</translation>
+        </message>
+        <message>
+            <source>Open Hamlib update</source>
+            <translation>Open Hamlib update</translation>
+        </message>
+        <message>
+            <source>Orange Calls:</source>
+            <translation>Orange Calls:</translation>
+        </message>
+        <message>
+            <source>Output Channel:</source>
+            <translation>Output Channel:</translation>
+        </message>
+        <message>
+            <source>Output Device:</source>
+            <translation>Output Device:</translation>
+        </message>
+        <message>
+            <source>POWER MEMORY</source>
+            <translation>POWER MEMORY</translation>
+        </message>
+        <message>
+            <source>PSK Reporter:</source>
+            <translation>PSK Reporter:</translation>
+        </message>
+        <message>
+            <source>PTT Method:</source>
+            <translation>PTT Method:</translation>
+        </message>
+        <message>
+            <source>PTT Port:</source>
+            <translation>PTT Port:</translation>
+        </message>
+        <message>
+            <source>PWR and SWR:</source>
+            <translation>PWR and SWR:</translation>
+        </message>
+        <message>
+            <source>Palette:</source>
+            <translation>Palette:</translation>
+        </message>
+        <message>
+            <source>Password:</source>
+            <translation>Password:</translation>
+        </message>
+        <message>
+            <source>Poll Interval (s):</source>
+            <translation>Poll Interval (s):</translation>
+        </message>
+        <message>
+            <source>Port:</source>
+            <translation>Port:</translation>
+        </message>
+        <message>
+            <source>Power (W):</source>
+            <translation>Power (W):</translation>
+        </message>
+        <message>
+            <source>Progress Red:</source>
+            <translation>Progress Red:</translation>
+        </message>
+        <message>
+            <source>Prompt to Log:</source>
+            <translation>Prompt to Log:</translation>
+        </message>
+        <message>
+            <source>QSY Message:</source>
+            <translation>QSY Message:</translation>
+        </message>
+        <message>
+            <source>QTH:</source>
+            <translation>QTH:</translation>
+        </message>
+        <message>
+            <source>Quick Call:</source>
+            <translation>Quick Call:</translation>
+        </message>
+        <message>
+            <source>Quick QSO:</source>
+            <translation>Quick QSO:</translation>
+        </message>
+        <message>
+            <source>RECORDING</source>
+            <translation>RECORDING</translation>
+        </message>
+        <message>
+            <source>REMOTE WEB DASHBOARD (LAN)</source>
+            <translation>REMOTE WEB DASHBOARD (LAN)</translation>
+        </message>
+        <message>
+            <source>RTTY Exchange:</source>
+            <translation>RTTY Exchange:</translation>
+        </message>
+        <message>
+            <source>RX Bandwidth:</source>
+            <translation>RX Bandwidth:</translation>
+        </message>
+        <message>
+            <source>RX Input Level:</source>
+            <translation>RX Input Level:</translation>
+        </message>
+        <message>
+            <source>RX/TX via TCI</source>
+            <translation>RX/TX via TCI</translation>
+        </message>
+        <message>
+            <source>RX&gt;TX after QSO:</source>
+            <translation>RX&gt;TX after QSO:</translation>
+        </message>
+        <message>
+            <source>Rear/Data</source>
+            <translation>Rear/Data</translation>
+        </message>
+        <message>
+            <source>Record RX:</source>
+            <translation>Record RX:</translation>
+        </message>
+        <message>
+            <source>Record TX:</source>
+            <translation>Record TX:</translation>
+        </message>
+        <message>
+            <source>Required for LAN/WAN</source>
+            <translation>Required for LAN/WAN</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>Reset</translation>
+        </message>
+        <message>
+            <source>Restore Win:</source>
+            <translation>Restore Win:</translation>
+        </message>
+        <message>
+            <source>Rig</source>
+            <translation>Rig</translation>
+        </message>
+        <message>
+            <source>Rig Info:</source>
+            <translation>Rig Info:</translation>
+        </message>
+        <message>
+            <source>Rig:</source>
+            <translation>Rig:</translation>
+        </message>
+        <message>
+            <source>Right</source>
+            <translation>Right</translation>
+        </message>
+        <message>
+            <source>SERIAL PARAMETERS</source>
+            <translation>SERIAL PARAMETERS</translation>
+        </message>
+        <message>
+            <source>SIDELOBE CONTROL</source>
+            <translation>SIDELOBE CONTROL</translation>
+        </message>
+        <message>
+            <source>SPECTRUM</source>
+            <translation>SPECTRUM</translation>
+        </message>
+        <message>
+            <source>SPLIT OPERATION</source>
+            <translation>SPLIT OPERATION</translation>
+        </message>
+        <message>
+            <source>STARTUP</source>
+            <translation>STARTUP</translation>
+        </message>
+        <message>
+            <source>STATION DETAILS</source>
+            <translation>STATION DETAILS</translation>
+        </message>
+        <message>
+            <source>Save Directory:</source>
+            <translation>Save Directory:</translation>
+        </message>
+        <message>
+            <source>Second (:15/:45)</source>
+            <translation>Second (:15/:45)</translation>
+        </message>
+        <message>
+            <source>Secondary ADIF:</source>
+            <translation>Secondary ADIF:</translation>
+        </message>
+        <message>
+            <source>Secondary Interface:</source>
+            <translation>Secondary Interface:</translation>
+        </message>
+        <message>
+            <source>Secondary Port:</source>
+            <translation>Secondary Port:</translation>
+        </message>
+        <message>
+            <source>Secondary Server:</source>
+            <translation>Secondary Server:</translation>
+        </message>
+        <message>
+            <source>Secondary TTL:</source>
+            <translation>Secondary TTL:</translation>
+        </message>
+        <message>
+            <source>Secondary UDP:</source>
+            <translation>Secondary UDP:</translation>
+        </message>
+        <message>
+            <source>Send ADIF:</source>
+            <translation>Send ADIF:</translation>
+        </message>
+        <message>
+            <source>Send RR73:</source>
+            <translation>Send RR73:</translation>
+        </message>
+        <message>
+            <source>Serial Port:</source>
+            <translation>Serial Port:</translation>
+        </message>
+        <message>
+            <source>Server Name:</source>
+            <translation>Server Name:</translation>
+        </message>
+        <message>
+            <source>Server Port:</source>
+            <translation>Server Port:</translation>
+        </message>
+        <message>
+            <source>Server:</source>
+            <translation>Server:</translation>
+        </message>
+        <message>
+            <source>Show DXCC:</source>
+            <translation>Show DXCC:</translation>
+        </message>
+        <message>
+            <source>Show OTP:</source>
+            <translation>Show OTP:</translation>
+        </message>
+        <message>
+            <source>Sidelobe Mode:</source>
+            <translation>Sidelobe Mode:</translation>
+        </message>
+        <message>
+            <source>Single Decode:</source>
+            <translation>Single Decode:</translation>
+        </message>
+        <message>
+            <source>Spec Op Cmts:</source>
+            <translation>Spec Op Cmts:</translation>
+        </message>
+        <message>
+            <source>Split:</source>
+            <translation>Split:</translation>
+        </message>
+        <message>
+            <source>Station ID:</source>
+            <translation>Station ID:</translation>
+        </message>
+        <message>
+            <source>Status:</source>
+            <translation>Status:</translation>
+        </message>
+        <message>
+            <source>Stop Bits:</source>
+            <translation>Stop Bits:</translation>
+        </message>
+        <message>
+            <source>SuperFox:</source>
+            <translation>SuperFox:</translation>
+        </message>
+        <message>
+            <source>Sync Now</source>
+            <translation>Sync Now</translation>
+        </message>
+        <message>
+            <source>TCI Audio</source>
+            <translation>TCI Audio</translation>
+        </message>
+        <message>
+            <source>TCI Audio:</source>
+            <translation>TCI Audio:</translation>
+        </message>
+        <message>
+            <source>TCI Host:Port:</source>
+            <translation>TCI Host:Port:</translation>
+        </message>
+        <message>
+            <source>TCP Port:</source>
+            <translation>TCP Port:</translation>
+        </message>
+        <message>
+            <source>TCP Server:</source>
+            <translation>TCP Server:</translation>
+        </message>
+        <message>
+            <source>TCP/IP:</source>
+            <translation>TCP/IP:</translation>
+        </message>
+        <message>
+            <source>TERRITORY</source>
+            <translation>TERRITORY</translation>
+        </message>
+        <message>
+            <source>TONE SPACING</source>
+            <translation>TONE SPACING</translation>
+        </message>
+        <message>
+            <source>TX Audio Src:</source>
+            <translation>TX Audio Src:</translation>
+        </message>
+        <message>
+            <source>TX Audio:</source>
+            <translation>TX Audio:</translation>
+        </message>
+        <message>
+            <source>TX Delay (s):</source>
+            <translation>TX Delay (s):</translation>
+        </message>
+        <message>
+            <source>TX Frequency:</source>
+            <translation>TX Frequency:</translation>
+        </message>
+        <message>
+            <source>TX Msg to RX:</source>
+            <translation>TX Msg to RX:</translation>
+        </message>
+        <message>
+            <source>TX Output Level:</source>
+            <translation>TX Output Level:</translation>
+        </message>
+        <message>
+            <source>TX Slot:</source>
+            <translation>TX Slot:</translation>
+        </message>
+        <message>
+            <source>TX Watchdog (min):</source>
+            <translation>TX Watchdog (min):</translation>
+        </message>
+        <message>
+            <source>Territory 1:</source>
+            <translation>Territory 1:</translation>
+        </message>
+        <message>
+            <source>Territory 2:</source>
+            <translation>Territory 2:</translation>
+        </message>
+        <message>
+            <source>Territory 3:</source>
+            <translation>Territory 3:</translation>
+        </message>
+        <message>
+            <source>Territory 4:</source>
+            <translation>Territory 4:</translation>
+        </message>
+        <message>
+            <source>Tip: close OmniRig from the Windows tray icon, then press Connect again.</source>
+            <translation>Tip: close OmniRig from the Windows tray icon, then press Connect again.</translation>
+        </message>
+        <message>
+            <source>Tune Watchdog (s):</source>
+            <translation>Tune Watchdog (s):</translation>
+        </message>
+        <message>
+            <source>Two-Pass:</source>
+            <translation>Two-Pass:</translation>
+        </message>
+        <message>
+            <source>Type 1 prefix</source>
+            <translation>Type 1 prefix</translation>
+        </message>
+        <message>
+            <source>Type 2 Msg Gen:</source>
+            <translation>Type 2 Msg Gen:</translation>
+        </message>
+        <message>
+            <source>Type 2 prefix</source>
+            <translation>Type 2 prefix</translation>
+        </message>
+        <message>
+            <source>UDP SERVER</source>
+            <translation>UDP SERVER</translation>
+        </message>
+        <message>
+            <source>Username:</source>
+            <translation>Username:</translation>
+        </message>
+        <message>
+            <source>VHF/UHF:</source>
+            <translation>VHF/UHF:</translation>
+        </message>
+        <message>
+            <source>WATCHDOG</source>
+            <translation>WATCHDOG</translation>
+        </message>
+        <message>
+            <source>WHITELIST</source>
+            <translation>WHITELIST</translation>
+        </message>
+        <message>
+            <source>WS bind:</source>
+            <translation>WS bind:</translation>
+        </message>
+        <message>
+            <source>WS socket port:</source>
+            <translation>WS socket port:</translation>
+        </message>
+        <message>
+            <source>WSPR Upload:</source>
+            <translation>WSPR Upload:</translation>
+        </message>
+        <message>
+            <source>Wait &amp; Pounce:</source>
+            <translation>Wait &amp; Pounce:</translation>
+        </message>
+        <message>
+            <source>Wait Features:</source>
+            <translation>Wait Features:</translation>
+        </message>
+        <message>
+            <source>Whitelist 10:</source>
+            <translation>Whitelist 10:</translation>
+        </message>
+        <message>
+            <source>Whitelist 11:</source>
+            <translation>Whitelist 11:</translation>
+        </message>
+        <message>
+            <source>Whitelist 12:</source>
+            <translation>Whitelist 12:</translation>
+        </message>
+        <message>
+            <source>Whitelist 1:</source>
+            <translation>Whitelist 1:</translation>
+        </message>
+        <message>
+            <source>Whitelist 2:</source>
+            <translation>Whitelist 2:</translation>
+        </message>
+        <message>
+            <source>Whitelist 3:</source>
+            <translation>Whitelist 3:</translation>
+        </message>
+        <message>
+            <source>Whitelist 4:</source>
+            <translation>Whitelist 4:</translation>
+        </message>
+        <message>
+            <source>Whitelist 5:</source>
+            <translation>Whitelist 5:</translation>
+        </message>
+        <message>
+            <source>Whitelist 6:</source>
+            <translation>Whitelist 6:</translation>
+        </message>
+        <message>
+            <source>Whitelist 7:</source>
+            <translation>Whitelist 7:</translation>
+        </message>
+        <message>
+            <source>Whitelist 8:</source>
+            <translation>Whitelist 8:</translation>
+        </message>
+        <message>
+            <source>Whitelist 9:</source>
+            <translation>Whitelist 9:</translation>
+        </message>
+        <message>
+            <source>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</source>
+            <translation>Windows: DLL updated from the Hamlib site. macOS/Linux: official documentation and releases.</translation>
+        </message>
+        <message>
+            <source>ZZ00:</source>
+            <translation>ZZ00:</translation>
+        </message>
+        <message>
+            <source>Zap:</source>
+            <translation>Zap:</translation>
+        </message>
+        <message>
+            <source>dB in Cmts:</source>
+            <translation>dB in Cmts:</translation>
+        </message>
+        <message>
+            <source>kHz no k:</source>
+            <translation>kHz no k:</translation>
+        </message>
+        <message>
+            <source>↻  Refresh</source>
+            <translation>↻  Refresh</translation>
+        </message>
+</context>
 </TS>

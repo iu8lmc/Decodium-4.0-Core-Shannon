@@ -286,6 +286,7 @@ public:
   void setSpecial_Q65_Pileup();
   void setSpecial_Hound();
   void setSpecial_Fox();
+  void setSpecial_Activity(int activity);
   void setSpecial_None();
   void setSpecial_On();
   void toggle_SF();

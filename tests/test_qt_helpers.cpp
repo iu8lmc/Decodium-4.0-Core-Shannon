@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QTimeZone>
 #include <QtEndian>
 #include <array>
 #include <algorithm>
@@ -1849,8 +1850,8 @@ private:
                                       .arg (nativeRow)));
             bool refOk = false;
             bool nativeOk = false;
-            int const refSnr = refRow.leftRef (4).toString ().trimmed ().toInt (&refOk);
-            int const nativeSnr = nativeRow.leftRef (4).toString ().trimmed ().toInt (&nativeOk);
+            int const refSnr = refRow.left (4).trimmed ().toInt (&refOk);
+            int const nativeSnr = nativeRow.left (4).trimmed ().toInt (&nativeOk);
             QVERIFY2 (refOk && nativeOk && refRow.mid (4) == nativeRow.mid (4)
                           && std::abs (refSnr - nativeSnr) <= 4,
                       qPrintable (QStringLiteral ("FST4W row mismatch exceeds tolerance at index %1: ref='%2' native='%3'")
@@ -2505,7 +2506,7 @@ private:
     };
 
     for (auto const& vector : vectors) {
-      QDateTime const dt = QDateTime::fromSecsSinceEpoch (vector.seconds, Qt::UTC);
+      QDateTime const dt = QDateTime::fromSecsSinceEpoch (vector.seconds, QTimeZone::UTC);
       QCOMPARE (generator.generateTOTP (secret, dt, 8), QString::fromLatin1 (vector.expected));
     }
   }
@@ -2531,7 +2532,7 @@ private:
     };
 
     for (auto const& vector : vectors) {
-      QDateTime const dt = QDateTime::fromSecsSinceEpoch (vector.seconds, Qt::UTC);
+      QDateTime const dt = QDateTime::fromSecsSinceEpoch (vector.seconds, QTimeZone::UTC);
       QCOMPARE (QString::fromLatin1 (generator.generateTOTP (secret, dt, 8, QCryptographicHash::Sha256)),
                 QString::fromLatin1 (vector.expected));
     }
@@ -2558,7 +2559,7 @@ private:
     };
 
     for (auto const& vector : vectors) {
-      QDateTime const dt = QDateTime::fromSecsSinceEpoch (vector.seconds, Qt::UTC);
+      QDateTime const dt = QDateTime::fromSecsSinceEpoch (vector.seconds, QTimeZone::UTC);
       QCOMPARE (QString::fromLatin1 (generator.generateTOTP (secret, dt, 8, QCryptographicHash::Sha512)),
                 QString::fromLatin1 (vector.expected));
     }
@@ -3248,7 +3249,8 @@ private:
   Q_SLOT void ft2_foxgen_populates_wave ()
   {
     constexpr int kFt2FoxWaveSamples = (103 + 2) * 4 * 288;
-    std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+    foxcom_ensure_wave (&foxcom_);
+    std::fill_n (foxcom_.wave, kFt2FoxWaveSamples, 0.0f);
     std::fill_n (&foxcom_.cmsg[0][0], static_cast<int> (sizeof (foxcom_.cmsg)), ' ');
     foxcom_.nslots = 1;
     foxcom_.nfreq = 1500;
@@ -3294,7 +3296,8 @@ private:
 
     constexpr int kSuperFoxWaveSamples = (151 + 2) * 4 * 1024;
     auto clear_state = [] {
-      std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+      foxcom_ensure_wave (&foxcom_);
+      std::fill_n (foxcom_.wave, kSuperFoxWaveSamples, 0.0f);
       std::fill_n (&foxcom_.cmsg[0][0], static_cast<int> (sizeof (foxcom_.cmsg)), ' ');
       std::fill_n (foxcom_.textMsg, static_cast<int> (sizeof (foxcom_.textMsg)), ' ');
       std::fill_n (foxcom3_.itone3, 151, 0);
@@ -3374,7 +3377,8 @@ private:
   Q_SLOT void superfox_tx_native_supports_sendmsg_and_morecqs ()
   {
     constexpr int kSuperFoxWaveSamples = (151 + 2) * 4 * 1024;
-    std::fill_n (foxcom_.wave, static_cast<int> (sizeof (foxcom_.wave) / sizeof (foxcom_.wave[0])), 0.0f);
+    foxcom_ensure_wave (&foxcom_);
+    std::fill_n (foxcom_.wave, kSuperFoxWaveSamples, 0.0f);
     std::fill_n (&foxcom_.cmsg[0][0], static_cast<int> (sizeof (foxcom_.cmsg)), ' ');
     std::fill_n (foxcom_.textMsg, static_cast<int> (sizeof (foxcom_.textMsg)), ' ');
     foxcom_.nslots = 1;

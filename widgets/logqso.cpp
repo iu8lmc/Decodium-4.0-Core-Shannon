@@ -12,6 +12,8 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QPointer>
+#include <QCheckBox>
+#include <QVBoxLayout>
 
 #include "HelpTextWindow.hpp"
 #include "logbook/logbook.h"
@@ -140,6 +142,13 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
   ui->setupUi(this);
   setAttribute (Qt::WA_QuitOnClose, false);
   setWindowTitle(programTitle + " - Log QSO");
+  m_clusterSpotCheckBox = new QCheckBox {tr ("Spot su DX Cluster"), this};
+  m_clusterSpotCheckBox->setToolTip (tr ("Invia questo QSO al DX Cluster se la connessione cluster era gia' attiva."));
+  if (ui->verticalLayout_5) {
+    int const insertAt = qMax (0, ui->verticalLayout_5->count () - 1);
+    ui->verticalLayout_5->insertWidget (insertAt, m_clusterSpotCheckBox);
+  }
+  setClusterSpotState (false, false);
   ui->comboBoxSatellite->addItem ("", "");
   QString sat_file_location;
   QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
@@ -189,6 +198,15 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
 
 LogQSO::~LogQSO ()
 {
+}
+
+void LogQSO::setClusterSpotState(bool available, bool checked)
+{
+  if (!m_clusterSpotCheckBox) {
+    return;
+  }
+  m_clusterSpotCheckBox->setEnabled (available);
+  m_clusterSpotCheckBox->setChecked (available && checked);
 }
 
 void LogQSO::loadSettings ()
@@ -583,10 +601,13 @@ void LogQSO::accept()
                     , xsent
                     , xrcvd
                     , prop_mode
-                    , satellite
-                    , sat_mode
-                    , m_freqRx
-                    , adif);
+	                    , satellite
+	                    , sat_mode
+	                    , m_freqRx
+	                    , adif
+	                    , m_clusterSpotCheckBox
+	                        && m_clusterSpotCheckBox->isEnabled ()
+	                        && m_clusterSpotCheckBox->isChecked ());
   if (!self) {
     return;
   }

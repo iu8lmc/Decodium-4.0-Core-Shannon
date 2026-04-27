@@ -2292,10 +2292,10 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
       "this may take a few minutes", QString {}, 0, 1, this},
   m_messageClient {new MessageClient {udp_client_id_from_application_name (),
         version (), revision (),
-        m_config.udp_server_name (), m_config.udp_server_port (),
-        m_config.udp_listen_port (),
-        m_config.udp_interface_names (), m_config.udp_TTL (),
-        this}},
+	m_config.udp_server_name (), m_config.udp_server_port (),
+	m_config.udp_listen_port (),
+	m_config.udp_interface_names (), m_config.udp_TTL (),
+	this, QStringLiteral ("legacy primary")}},
   m_psk_Reporter {&m_config, program_title ().simplified ()},
   m_manual {&m_network_manager},
   m_block_udp_status_updates {false},
@@ -2692,6 +2692,23 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     });
 
   // Network message handlers
+  auto const legacyReportingState = [] (bool enabled) {
+    return enabled ? QStringLiteral ("enabled") : QStringLiteral ("disabled");
+  };
+  auto const legacyReportingInterfaces = [] (QStringList const& names) {
+    return names.isEmpty () ? QStringLiteral ("all") : names.join (QStringLiteral (","));
+  };
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP primary server=%1:%2 listen=%3 interface=%4 ttl=%5 acceptRequests=%6")
+                         .arg (m_config.udp_server_name (),
+                               QString::number (m_config.udp_server_port ()),
+                               QString::number (m_config.udp_listen_port ()),
+                               legacyReportingInterfaces (m_config.udp_interface_names ()),
+                               QString::number (m_config.udp_TTL ()),
+                               legacyReportingState (m_config.accept_udp_requests ()));
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: N1MM UDP %1 target=%2:%3")
+                         .arg (legacyReportingState (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ()),
+                               m_config.n1mm_server_name (),
+                               QString::number (m_config.n1mm_server_port ()));
   m_messageClient->enable (m_config.accept_udp_requests ());
   connect (m_messageClient, &MessageClient::clear_decodes, [this] (quint8 window) {
       ++window;
@@ -4449,6 +4466,28 @@ int MainWindow::legacyTxOutputAttenuation() const
   return (ui && ui->outAttenuation) ? ui->outAttenuation->value() : 0;
 }
 
+int MainWindow::legacySpecialOperationActivity() const
+{
+  return static_cast<int> (m_config.special_op_id());
+}
+
+bool MainWindow::legacySuperFoxEnabled() const
+{
+  return m_config.superFox();
+}
+
+QStringList MainWindow::legacyFoxCallerQueueLines() const
+{
+  QStringList lines;
+  for (QString const& entry : m_houndQueue) {
+    QString const trimmed = entry.trimmed();
+    if (!trimmed.isEmpty()) {
+      lines << trimmed;
+    }
+  }
+  return lines;
+}
+
 void MainWindow::legacyClearBandActivity()
 {
   if (ui && ui->decodedTextBrowser) {
@@ -4936,6 +4975,18 @@ void MainWindow::legacyLogQso()
   on_logQSOButton_clicked();
 }
 
+void MainWindow::legacySetAutoSpotEnabled(bool enabled)
+{
+  setAutoSpotEnabled(enabled, false);
+}
+
+void MainWindow::legacySetNextLogClusterSpotState(bool available, bool checked)
+{
+  m_nextLogClusterSpotOverrideValid = true;
+  m_nextLogClusterSpotAvailable = available;
+  m_nextLogClusterSpotChecked = available && checked;
+}
+
 void MainWindow::legacySetWaterfallPalette(QString const& palette)
 {
   if (palette.isEmpty ())
@@ -5016,6 +5067,47 @@ void MainWindow::legacySetTxFirst(bool enabled)
     }
 
   ui->txFirstCheckBox->setChecked(enabled);
+}
+
+void MainWindow::legacySetSpecialOperationActivity(int activity)
+{
+  int const activityId = qBound(0, activity, static_cast<int> (SpecOp::Q65_PILEUP));
+  m_config.setSpecial_Activity(activityId);
+  m_specOp = m_config.special_op_id();
+
+  if ((m_specOp == SpecOp::FOX || m_specOp == SpecOp::HOUND)
+      && m_mode != "FT8" && m_mode != "FT2") {
+    m_mode = "FT8";
+  }
+
+  if (m_mode == "FT2") {
+    on_actionFT2_triggered();
+  } else if (m_mode == "FT8" || m_specOp == SpecOp::FOX || m_specOp == SpecOp::HOUND) {
+    on_actionFT8_triggered();
+  } else if (m_mode == "Q65" && m_specOp == SpecOp::Q65_PILEUP) {
+    on_actionQ65_triggered();
+  } else {
+    set_mode(m_mode);
+  }
+
+  updateQueueTabVisibility();
+  check_button_color();
+  statusChanged();
+}
+
+void MainWindow::legacySetSuperFoxEnabled(bool enabled)
+{
+  if (m_config.superFox() == enabled) return;
+  m_config.toggle_SF();
+  if ((m_specOp == SpecOp::FOX || m_specOp == SpecOp::HOUND)
+      && (m_mode == "FT8" || m_mode == "FT2")) {
+    if (m_mode == "FT2") {
+      on_actionFT2_triggered();
+    } else {
+      on_actionFT8_triggered();
+    }
+  }
+  statusChanged();
 }
 
 void MainWindow::legacySetRigControlEnabled(bool enabled)
@@ -20099,6 +20191,15 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   if (m_worldMapWidget && !loggedBase.isEmpty ()) {
     m_worldMapWidget->downgradeContactToBand (loggedBase);
   }
+  bool const clusterSpotAvailable = m_nextLogClusterSpotOverrideValid
+      ? m_nextLogClusterSpotAvailable
+      : m_autoSpotEnabled;
+  bool const clusterSpotChecked = clusterSpotAvailable
+      && (m_nextLogClusterSpotOverrideValid ? m_nextLogClusterSpotChecked : m_autoSpotEnabled);
+  m_nextLogClusterSpotOverrideValid = false;
+  m_nextLogClusterSpotAvailable = false;
+  m_nextLogClusterSpotChecked = false;
+  m_logDlg->setClusterSpotState (clusterSpotAvailable, clusterSpotChecked);
   m_logDlg->initLogQSO (logHisCall, grid, m_mode, logRptSent, logRptRcvd,
                         logDateTimeQSOOn, dateTimeQSOOff, logDialFreq, m_noSuffix, logXSent, logXRcvd,
                         is_externalCtrlMode() || m_mode == "MSK144" || m_autoCQ);    //avt 11/20/20 and 12/12/21 — Auto CQ forces auto-log
@@ -20183,7 +20284,8 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
                                      Frequency dialFreq,
                                      QString const& mode,
                                      QString const& rptSent,
-                                     QString const& rptRcvd)
+                                     QString const& rptRcvd,
+                                     bool spotRequested)
 {
   Q_UNUSED(grid);
   Q_UNUSED(rptSent);
@@ -20209,7 +20311,7 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
       f.close();
     };
 
-  if (!m_autoSpotEnabled)
+  if (!spotRequested)
     {
       return;
     }
@@ -20295,11 +20397,10 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
       appendAutoSpotTrace(tr("SKIP empty MyCall"));
       return;
     }
-  auto const spotBand = m_config.bands()->find(dialFreq).trimmed().toUpper();
-
   auto const freqKhz = static_cast<double>(dialFreq) / 1000.0;
   auto const spotLine = QStringLiteral("DX %1 %2 %3\r\n")
       .arg(QString::number(freqKhz, 'f', 1), dxCall, comment);
+  auto const verifyCommand = QStringLiteral("show/dx 200 by %1\r\n").arg(myCall);
   appendAutoSpotTrace(tr("SUBMIT %1:%2 | %3")
                       .arg(host, QString::number(port), spotLine.trimmed()));
 
@@ -20344,7 +20445,14 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
       bool const hasError = lower.contains(QStringLiteral("need a callsign"))
           || lower.contains(QStringLiteral("usage:"))
           || lower.contains(QStringLiteral("invalid callsign"))
+          || lower.contains(QStringLiteral("invalid frequency"))
+          || lower.contains(QStringLiteral("bad spot"))
           || lower.contains(QStringLiteral("unknown command"))
+          || lower.contains(QStringLiteral("not allowed"))
+          || lower.contains(QStringLiteral("not permitted"))
+          || lower.contains(QStringLiteral("cannot spot"))
+          || lower.contains(QStringLiteral("self spot"))
+          || lower.contains(QStringLiteral("too many spots"))
           || lower.contains(QStringLiteral("sorry"))
           || lower.contains(QStringLiteral("reconnected as"))
           || lower.contains(QStringLiteral("instance is disconnected"));
@@ -20356,19 +20464,20 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
     };
   auto clusterShowsSubmittedSpot = [myCall, dxCall] (QByteArray const& payload)
     {
-      auto const text = QString::fromUtf8(payload);
-      QRegularExpression const re {
-        QStringLiteral(R"(DX de\s+%1:\s+[0-9.]+\s+%2(?:\s|$))")
-            .arg(QRegularExpression::escape(myCall), QRegularExpression::escape(dxCall)),
-        QRegularExpression::CaseInsensitiveOption
-      };
-      return re.match(text).hasMatch();
+      auto const lines = QString::fromLatin1(payload).split(QRegularExpression(QStringLiteral("[\\r\\n]+")),
+                                                            Qt::SkipEmptyParts);
+      for (auto const& line : lines)
+        {
+          auto const text = line.toUpper();
+          if (text.contains(dxCall)
+              && (text.contains(QStringLiteral("<%1>").arg(myCall))
+                  || text.contains(QStringLiteral("<%1>").arg(Radio::base_callsign(myCall)))))
+            {
+              return true;
+            }
+        }
+      return false;
     };
-  auto const verifyCommand = QStringLiteral("show/dx 20 by %1%2 real\r\n")
-      .arg(myCall,
-           spotBand.isEmpty() || spotBand == QStringLiteral("OOB")
-             ? QString {}
-             : QStringLiteral(" on %1").arg(spotBand.toLower()));
   auto consumeClusterPayload = [appendAutoSpotTrace] (QTcpSocket * socket,
                                                      QByteArray * pending,
                                                      QByteArray * buffer,
@@ -20485,10 +20594,10 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
   socket->setProperty("decodium_autospot", true);
   socket->setProperty("autospot_done", false);
   socket->setProperty("login_sent", false);
-  socket->setProperty("quiet_mode_set", false);
+  socket->setProperty("login_prompt_seen", false);
   socket->setProperty("spot_sent", false);
-  socket->setProperty("verify_sent", false);
   socket->setProperty("spot_response_logged", false);
+  socket->setProperty("verify_sent", false);
   socket->setProperty("verify_response_logged", false);
   socket->setProperty("cluster_buffer", QByteArray {});
   socket->setProperty("cluster_telnet_pending", QByteArray {});
@@ -20516,7 +20625,7 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
       auto const hostText = socket->property("spot_host").toString();
       auto const portValue = socket->property("spot_port").toInt();
       auto message = success
-          ? tr("AutoSpot accepted by cluster node for %1 on %2:%3")
+          ? tr("AutoSpot submitted to cluster node for %1 on %2:%3")
                 .arg(callText, hostText, QString::number(portValue))
           : tr("AutoSpot rejected for %1 on %2:%3")
                 .arg(callText, hostText, QString::number(portValue));
@@ -20579,7 +20688,7 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
   connect(socket, &QTcpSocket::readyRead, socket,
           [socket, timeout, myCall, spotLine, verifyCommand, finishAutoSpot,
            containsClusterLoginPrompt, clusterPromptSeen, clusterResponseHasError,
-           clusterShowsSubmittedSpot, clusterResponseSummary, clusterResponseTrace,
+           clusterResponseTrace, clusterShowsSubmittedSpot,
            appendAutoSpotTrace, consumeClusterPayload] {
       QByteArray buffer = socket->property("cluster_buffer").toByteArray();
       QByteArray pending = socket->property("cluster_telnet_pending").toByteArray();
@@ -20608,30 +20717,17 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
           return;
         }
 
-      if (!socket->property("quiet_mode_set").toBool())
+      if (!socket->property("login_prompt_seen").toBool())
         {
           if (!clusterPromptSeen(buffer))
             {
               return;
             }
           appendAutoSpotTrace(QStringLiteral("LOGIN-OK %1").arg(clusterResponseTrace(buffer)));
-          socket->write(QByteArrayLiteral("unset/dx\r\n"));
-          socket->flush();
-          socket->setProperty("quiet_mode_set", true);
-          socket->setProperty("cluster_buffer", QByteArray {});
-          timeout->start();
-          return;
-        }
-
-      if (!socket->property("spot_sent").toBool())
-        {
-          if (!clusterPromptSeen(buffer))
-            {
-              return;
-            }
-          appendAutoSpotTrace(QStringLiteral("QUIET-OK %1").arg(clusterResponseTrace(buffer)));
           socket->write(spotLine.toUtf8());
           socket->flush();
+          appendAutoSpotTrace(QStringLiteral("SPOT-TX %1").arg(spotLine.trimmed()));
+          socket->setProperty("login_prompt_seen", true);
           socket->setProperty("spot_sent", true);
           socket->setProperty("spot_response_logged", false);
           socket->setProperty("cluster_buffer", QByteArray {});
@@ -20639,42 +20735,66 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
           return;
         }
 
-      if (!socket->property("verify_sent").toBool())
+      if (socket->property("spot_sent").toBool())
         {
-          if (!socket->property("spot_response_logged").toBool())
+          if (!socket->property("verify_sent").toBool())
             {
-              auto const trace = clusterResponseTrace(buffer);
-              if (!trace.isEmpty())
+              if (!socket->property("spot_response_logged").toBool())
                 {
-                  appendAutoSpotTrace(QStringLiteral("SPOT-RX %1").arg(trace));
-                  socket->setProperty("spot_response_logged", true);
+                  auto const trace = clusterResponseTrace(buffer);
+                  if (!trace.isEmpty())
+                    {
+                      appendAutoSpotTrace(QStringLiteral("SPOT-RX %1").arg(trace));
+                      socket->setProperty("spot_response_logged", true);
+                    }
                 }
-            }
-          if (!clusterPromptSeen(buffer))
-            {
-              return;
-            }
-          socket->setProperty("verify_sent", true);
-          socket->setProperty("verify_response_logged", false);
-          socket->setProperty("cluster_buffer", QByteArray {});
-          // Give the node time to distribute the spot before querying it back.
-          QTimer::singleShot(5000, socket, [socket, verifyCommand, timeout] {
-              if (socket->state() != QAbstractSocket::ConnectedState
-                  || !socket->property("verify_sent").toBool()
-                  || socket->property("autospot_done").toBool())
+              if (!clusterPromptSeen(buffer))
                 {
                   return;
                 }
+
               socket->write(verifyCommand.toUtf8());
               socket->flush();
+              appendAutoSpotTrace(QStringLiteral("VERIFY-TX %1").arg(verifyCommand.trimmed()));
+              socket->setProperty("verify_sent", true);
+              socket->setProperty("verify_response_logged", false);
+              socket->setProperty("cluster_buffer", QByteArray {});
               timeout->start();
-            });
-          timeout->start();
-          return;
-        }
 
-      if (!clusterPromptSeen(buffer))
-        {
+              QTimer::singleShot(4500, socket,
+                                  [socket, finishAutoSpot, clusterResponseTrace,
+                                   clusterShowsSubmittedSpot, appendAutoSpotTrace] {
+                  if (socket->property("autospot_done").toBool())
+                    {
+                      return;
+                    }
+                  auto const verifyBuffer = socket->property("cluster_buffer").toByteArray();
+                  if (!socket->property("verify_response_logged").toBool())
+                    {
+                      auto const trace = clusterResponseTrace(verifyBuffer);
+                      if (!trace.isEmpty())
+                        {
+                          appendAutoSpotTrace(QStringLiteral("VERIFY-RX %1").arg(trace));
+                        }
+                      socket->setProperty("verify_response_logged", true);
+                    }
+                  if (clusterShowsSubmittedSpot(verifyBuffer))
+                    {
+                      finishAutoSpot(true, QObject::tr("published in show/dx"), QStringLiteral("VERIFIED"));
+                    }
+                  else
+                    {
+                      auto const detail = clusterResponseTrace(verifyBuffer);
+                      finishAutoSpot(true,
+                                     detail.isEmpty()
+                                       ? QObject::tr("submitted, but not visible in show/dx")
+                                       : QObject::tr("submitted, but not visible in show/dx: %1").arg(detail),
+                                     QStringLiteral("UNVERIFIED"));
+                    }
+                });
+              return;
+            }
+
           if (!socket->property("verify_response_logged").toBool())
             {
               auto const trace = clusterResponseTrace(buffer);
@@ -20686,33 +20806,6 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
             }
           return;
         }
-
-      if (!socket->property("verify_response_logged").toBool())
-        {
-          auto const trace = clusterResponseTrace(buffer);
-          if (!trace.isEmpty())
-            {
-              appendAutoSpotTrace(QStringLiteral("VERIFY-RX %1").arg(trace));
-              socket->setProperty("verify_response_logged", true);
-            }
-        }
-
-      if (!clusterShowsSubmittedSpot(buffer))
-        {
-          auto detail = clusterResponseSummary(buffer);
-          if (detail.isEmpty())
-            {
-              detail = QObject::tr("node accepted the command but the spot is not visible in show/dx");
-            }
-          else
-            {
-              detail = QObject::tr("node accepted the command but the spot is not visible in show/dx: %1").arg(detail);
-            }
-          finishAutoSpot(false, detail, QStringLiteral("MISS"));
-          return;
-        }
-
-      finishAutoSpot(true, QString {}, QStringLiteral("ACCEPT"));
     });
   connect(socket, &QTcpSocket::disconnected, socket, [socket, finishAutoSpot, clusterResponseSummary] {
       if (!socket->property("autospot_done").toBool())
@@ -20731,15 +20824,16 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
 }
 
 void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, QString const& grid
-                            , Frequency dial_freq, QString const& mode
-                            , QString const& rpt_sent, QString const& rpt_received
-                            , QString const& tx_power, QString const& comments
-                            , QString const& name, QDateTime const& QSO_date_on, QString const& operator_call
-                            , QString const& my_call, QString const& my_grid
-                            , QString const& exchange_sent, QString const& exchange_rcvd
-                            , QString const& propmode, QString const& satellite
-                            , QString const& satmode
-                            , QString const& freqRx, QByteArray const& ADIF)
+	                            , Frequency dial_freq, QString const& mode
+	                            , QString const& rpt_sent, QString const& rpt_received
+	                            , QString const& tx_power, QString const& comments
+	                            , QString const& name, QDateTime const& QSO_date_on, QString const& operator_call
+	                            , QString const& my_call, QString const& my_grid
+	                            , QString const& exchange_sent, QString const& exchange_rcvd
+	                            , QString const& propmode, QString const& satellite
+	                            , QString const& satmode
+	                            , QString const& freqRx, QByteArray const& ADIF
+	                            , bool spotCluster)
 {
   clearPendingAutoLogSnapshot ();
   clearAutoCqPartnerLock ();
@@ -20816,7 +20910,7 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
       m_cloudlog.logQso(ADIF);
     }
 
-    sendClusterAutoSpot(call, grid, dial_freq, mode, rpt_sent, rpt_received);
+    sendClusterAutoSpot(call, grid, dial_freq, mode, rpt_sent, rpt_received, spotCluster);
   }
 
   blocked=true;                                      // needed to clear DXgrid only optionally

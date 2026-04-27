@@ -38,7 +38,8 @@ public:
                  QString const& server_name, port_type server_port,
                  port_type listen_port,
                  QStringList const& network_interface_names,
-                 int TTL, QObject * parent = nullptr);
+                 int TTL, QObject * parent = nullptr,
+                 QString const& reporting_role = QString {});
 
   // query server details
   QHostAddress server_address () const;

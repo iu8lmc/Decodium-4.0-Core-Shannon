@@ -142,7 +142,8 @@ namespace
                                     int offset_samples, float gain)
   {
     std::vector<qint16> pcm (static_cast<size_t> (frame_samples), 0);
-    int const end = std::min (frame_samples, offset_samples + wave.size ());
+    int const wave_samples = static_cast<int> (wave.size ());
+    int const end = std::min (frame_samples, offset_samples + wave_samples);
     for (int i = offset_samples; i < end; ++i)
       {
         float const s = gain * wave[i - offset_samples];

@@ -270,6 +270,8 @@ private:
   bool other_band_change;
   QUrl url_;
   quint32 audioSampleRate;
+  quint32 audioStreamSamples_;
+  quint32 audioStreamChannels_;
   FILE * wavptr_;
   QByteArray t_iqData;
   int trxA;
@@ -309,8 +311,11 @@ private:
   bool busy_other_frequency_;
   bool busy_split_;
   bool busy_drive_;
-  bool busy_PTT_; 
-  bool busy_rx2_;  
+  bool busy_PTT_;
+  bool busy_rx2_;
+  quint64 txChronoFrames_;
+  quint64 txAudioFrames_;
+  qint64 lastTxChronoLogMs_;
   QHash<QString,Tci_Cmd> mapCmd_;
   // from Detector
     void clear ();                // discard buffer contents

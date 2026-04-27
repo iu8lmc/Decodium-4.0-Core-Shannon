@@ -19,6 +19,7 @@ class QSettings;
 class Configuration;
 class QByteArray;
 class LogBook;
+class QCheckBox;
 
 class LogQSO : public QDialog
 {
@@ -29,8 +30,9 @@ public:
   ~LogQSO();
   void initLogQSO(QString const& hisCall, QString const& hisGrid, QString mode,
                   QString const& rptSent, QString const& rptRcvd, QDateTime const& dateTimeOn,
-                  QDateTime const& dateTimeOff, Radio::Frequency dialFreq, 
+                  QDateTime const& dateTimeOff, Radio::Frequency dialFreq,
                   bool noSuffix, QString xSent, QString xRcvd, bool externalCtrl);    //avt 11/20/20
+  void setClusterSpotState(bool available, bool checked);
 
 public slots:
   void accept();
@@ -45,7 +47,8 @@ signals:
                   , QString const& exchange_sent, QString const& exchange_rcvd
                   , QString const& propmode, QString const& satellite
                   , QString const& sat_mode
-                  , QString const& freqRx, QByteArray const& ADIF);
+                  , QString const& freqRx, QByteArray const& ADIF
+                  , bool spotCluster);
 
 protected:
   void hideEvent (QHideEvent *);
@@ -69,6 +72,7 @@ private:
   QString m_myCall;
   QString m_myGrid;
   QString m_freqRx;
+  QCheckBox* m_clusterSpotCheckBox {nullptr};
 };
 
 #endif // LogQSO_H

@@ -1938,6 +1938,24 @@ void Configuration::setSpecial_Fox()
   m_->write_settings();
 }
 
+void Configuration::setSpecial_Activity(int activity)
+{
+  int const activityId = qBound(static_cast<int> (SpecialOperatingActivity::NONE),
+                                activity,
+                                static_cast<int> (SpecialOperatingActivity::Q65_PILEUP));
+  bool const enabled = activityId != static_cast<int> (SpecialOperatingActivity::NONE);
+  m_->bSpecialOp_ = enabled;
+  m_->ui_->gbSpecialOpActivity->setChecked(m_->bSpecialOp_);
+  if (enabled) {
+    auto * button = m_->ui_->special_op_activity_button_group->button(activityId);
+    if (button) {
+      button->setChecked(true);
+    }
+    m_->SelectedActivity_ = activityId;
+  }
+  m_->write_settings();
+}
+
 void Configuration::setSpecial_None()
 {
   m_->bSpecialOp_=false;

@@ -1824,6 +1824,26 @@ extern "C" int ftx_q65_ana64_c (short const* iwave, int npts, float* real_out, f
   return 1;
 }
 
+extern "C" void ana64_ (short iwave[], int* npts, std::complex<float> c0[])
+{
+  if (!iwave || !npts || *npts <= 0 || (*npts & 1) != 0 || !c0)
+    {
+      return;
+    }
+
+  std::vector<std::complex<float>> native;
+  if (!ana64_native (iwave, *npts, native))
+    {
+      return;
+    }
+
+  int const count = *npts / 2;
+  for (int i = 0; i < count; ++i)
+    {
+      c0[i] = native[static_cast<size_t> (i)];
+    }
+}
+
 bool decodium::q65::ana64_transform (short const* iwave, int npts,
                                      std::vector<std::complex<float>>& c0)
 {

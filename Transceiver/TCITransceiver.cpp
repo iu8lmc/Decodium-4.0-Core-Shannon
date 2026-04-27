@@ -269,6 +269,78 @@ namespace
     return true;
   }
 
+  quint32 supported_tx_sample_format (quint32 format)
+  {
+    switch (format)
+      {
+      case SampleInt16:
+      case SampleInt24:
+      case SampleInt32:
+      case SampleFloat32:
+        return format;
+      default:
+        return SampleFloat32;
+      }
+  }
+
+  double unit_sample (float sample)
+  {
+    if (!std::isfinite (sample))
+      {
+        return 0.0;
+      }
+    return qBound (-1.0, static_cast<double> (sample), 1.0);
+  }
+
+  qint64 scaled_pcm_sample (float sample, double scale)
+  {
+    return std::llround (unit_sample (sample) * scale);
+  }
+
+  void write_signed_le (char * out, qint64 value, int bytes)
+  {
+    quint64 const raw = static_cast<quint64> (value);
+    for (int i = 0; i < bytes; ++i)
+      {
+        out[i] = static_cast<char> ((raw >> (8 * i)) & 0xffu);
+      }
+  }
+
+  void pack_tci_tx_audio (float const * samples, quint32 sample_count, quint32 format, char * out)
+  {
+    switch (format)
+      {
+      case SampleInt16:
+        for (quint32 i = 0; i < sample_count; ++i)
+          {
+            write_signed_le (out + i * 2,
+                             qBound<qint64> (-32767LL, scaled_pcm_sample (samples[i], 32767.0), 32767LL),
+                             2);
+          }
+        break;
+      case SampleInt24:
+        for (quint32 i = 0; i < sample_count; ++i)
+          {
+            write_signed_le (out + i * 3,
+                             qBound<qint64> (-8388607LL, scaled_pcm_sample (samples[i], 8388607.0), 8388607LL),
+                             3);
+          }
+        break;
+      case SampleInt32:
+        for (quint32 i = 0; i < sample_count; ++i)
+          {
+            write_signed_le (out + i * 4,
+                             qBound<qint64> (-2147483647LL, scaled_pcm_sample (samples[i], 2147483647.0), 2147483647LL),
+                             4);
+          }
+        break;
+      case SampleFloat32:
+      default:
+        std::memcpy (out, samples, static_cast<size_t> (sample_count) * sizeof (float));
+        break;
+      }
+  }
+
   bool parse_decimal_tenths (QString const& value, int * out)
   {
     if (!out)
@@ -488,6 +560,11 @@ TCITransceiver::TCITransceiver (logger_type * logger, std::unique_ptr<Transceive
   bIQ = false;
   inConnected = false;
   audioSampleRate = 48000u;
+  audioStreamSamples_ = 2048u;
+  audioStreamChannels_ = 2u;
+  txChronoFrames_ = 0;
+  txAudioFrames_ = 0;
+  lastTxChronoLogMs_ = 0;
   mapCmd_[CmdDevice]       = Cmd_Device;
   mapCmd_[CmdReceiveOnly]  = Cmd_ReceiveOnly;
   mapCmd_[CmdTrxCount]     = Cmd_TrxCount;
@@ -1119,8 +1196,27 @@ void TCITransceiver::onMessageReceived(const QString &str)
         }
         break;
       case Cmd_AudioStreamSampleType:
+        break;
       case Cmd_AudioStreamChannels:
+        {
+          bool ok = false;
+          quint32 const channels = arg (0).toUInt (&ok);
+          if (ok && channels > 0)
+            {
+              audioStreamChannels_ = qBound<quint32> (1, channels, 2);
+            }
+        }
+        break;
       case Cmd_AudioStreamSamples:
+        {
+          bool ok = false;
+          quint32 const samples = arg (0).toUInt (&ok);
+          if (ok && samples > 0)
+            {
+              audioStreamSamples_ = qBound<quint32> (100, samples, 2048);
+            }
+        }
+        break;
       case Cmd_TxStreamAudioBuffering:
         break;
       case Cmd_Start:
@@ -1189,6 +1285,106 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
 
   auto const * pStream = reinterpret_cast<Data_Stream const *> (data.constData ());
   auto const payload_bytes = data.size () - static_cast<int> (AudioHeaderSize);
+  if (pStream->type != last_type)
+    {
+      last_type = pStream->type;
+    }
+
+  if (pStream->type == TxChrono)
+    {
+      quint32 sample_count = pStream->length;
+      if (sample_count == 0)
+        {
+          sample_count = qMax<quint32> (2, audioStreamSamples_ * qMax<quint32> (1, audioStreamChannels_));
+        }
+      quint32 const tx_format = supported_tx_sample_format (pStream->format);
+      quint32 const tx_channels = qBound<quint32> (1, stream_channels (pStream), 2);
+      if (sample_count & 1u)
+        {
+          ++sample_count;
+        }
+      sample_count = qBound<quint32> (2, sample_count, 8192);
+      quint64 const bytes_per_sample = sample_size_for_format (tx_format);
+
+      quint64 const ssize64 = static_cast<quint64> (AudioHeaderSize)
+          + static_cast<quint64> (sample_count) * bytes_per_sample;
+      if (ssize64 > static_cast<quint64> (std::numeric_limits<int>::max ()))
+        {
+          qWarning () << "TCI: dropping oversized TxChrono response, bytes=" << ssize64;
+          return;
+        }
+
+      std::lock_guard<std::mutex> lock (mtx_);
+      tx_fifo = (tx_fifo + 1) & 7;
+      int const ssize = static_cast<int> (ssize64);
+      if (m_tx1[tx_fifo].size () != ssize)
+        {
+          m_tx1[tx_fifo].resize (ssize);
+        }
+
+      auto * pOStream1 = reinterpret_cast<Data_Stream *> (m_tx1[tx_fifo].data ());
+      std::memset (pOStream1, 0, AudioHeaderSize);
+      pOStream1->receiver = pStream->receiver;
+      pOStream1->sampleRate = pStream->sampleRate ? pStream->sampleRate : audioSampleRate;
+      pOStream1->format = tx_format;
+      pOStream1->codec = 0;
+      pOStream1->crc = 0;
+      pOStream1->length = sample_count;
+      pOStream1->type = TxAudioStream;
+      pOStream1->channels = tx_channels;
+
+      quint32 const generated_count = tx_channels == 1 ? sample_count * 2u : sample_count;
+      QVector<float> generated (static_cast<int> (generated_count));
+      quint16 done = readAudioData (generated.data (), static_cast<qint32> (generated_count), txAtten);
+      if (done && done != generated_count)
+        {
+          quint16 const ready = done;
+          readAudioData (generated.data () + ready, static_cast<qint32> (generated_count - ready), txAtten);
+        }
+      QVector<float> mono;
+      float const * samples = generated.constData ();
+      if (tx_channels == 1)
+        {
+          mono.resize (static_cast<int> (sample_count));
+          for (quint32 i = 0; i < sample_count; ++i)
+            {
+              mono[static_cast<int> (i)] = generated[static_cast<int> (i * 2u)];
+            }
+          samples = mono.constData ();
+        }
+      pack_tci_tx_audio (samples,
+                         sample_count,
+                         tx_format,
+                         reinterpret_cast<char *> (pOStream1->data));
+
+      ++txChronoFrames_;
+      tx_fifo2 = tx_fifo;
+      if (inConnected && socket_worker_)
+        {
+          ++txAudioFrames_;
+          Q_EMIT request_socket_send_binary (m_tx1[tx_fifo2]);
+        }
+
+      qint64 const nowMs = QDateTime::currentMSecsSinceEpoch ();
+      if (nowMs - lastTxChronoLogMs_ > 1000)
+        {
+          lastTxChronoLogMs_ = nowMs;
+          qInfo () << "TCI TX chrono handled:"
+                   << "rx=" << pStream->receiver
+                   << "chronoLen=" << pStream->length
+                   << "payload=" << payload_bytes
+                   << "txLen=" << pOStream1->length
+                   << "format=" << pOStream1->format
+                   << "channels=" << pOStream1->channels
+                   << "state=" << m_state
+                   << "tune=" << m_tuning
+                   << "txAudio=" << tx_audio_
+                   << "frames=" << txChronoFrames_
+                   << "sent=" << txAudioFrames_;
+        }
+      return;
+    }
+
   quint64 required_bytes = 0;
   if (!checked_payload_size (pStream->length, pStream->format, payload_bytes, &required_bytes))
     {
@@ -1204,11 +1400,6 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
       qWarning () << "TCI: unsupported stream sample format" << pStream->format
                   << "type=" << pStream->type;
       return;
-    }
-
-  if (pStream->type != last_type)
-    {
-      last_type = pStream->type;
     }
 
   if (pStream->type == Iq_Stream)
@@ -1240,43 +1431,6 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
           return;
         }
       writeAudioData (const_cast<float *> (pStream->data), static_cast<qint32> (pStream->length));
-    }
-  else if (pStream->type == TxChrono && pStream->receiver == rx_.toUInt ())
-    {
-      quint64 const ssize64 = static_cast<quint64> (AudioHeaderSize) + required_bytes;
-      if (ssize64 > static_cast<quint64> (std::numeric_limits<int>::max ()))
-        {
-          qWarning () << "TCI: dropping oversized TxChrono frame, bytes=" << ssize64;
-          return;
-        }
-      std::lock_guard<std::mutex> lock (mtx_);
-      tx_fifo = (tx_fifo + 1) & 7;
-      int const ssize = static_cast<int> (ssize64);
-      if (m_tx1[tx_fifo].size () != ssize)
-        {
-          m_tx1[tx_fifo].resize (ssize);
-        }
-      auto * pOStream1 = reinterpret_cast<Data_Stream *> (m_tx1[tx_fifo].data ());
-      std::memset (pOStream1, 0, AudioHeaderSize);
-      pOStream1->receiver = pStream->receiver;
-      pOStream1->sampleRate = pStream->sampleRate;
-      pOStream1->format = SampleFloat32;
-      pOStream1->codec = 0;
-      pOStream1->crc = 0;
-      pOStream1->length = pStream->length;
-      pOStream1->type = TxAudioStream;
-      pOStream1->channels = stream_channels (pStream);
-      quint16 done = readAudioData (pOStream1->data, static_cast<qint32> (pOStream1->length), txAtten);
-      if (done && done != pOStream1->length)
-        {
-          quint16 const ready = done;
-          readAudioData (pOStream1->data + ready, static_cast<qint32> (pOStream1->length - ready), txAtten);
-        }
-      tx_fifo2 = tx_fifo;
-      if (inConnected && socket_worker_)
-        {
-          Q_EMIT request_socket_send_binary (m_tx1[tx_fifo2]);
-        }
     }
 }
 
@@ -1465,11 +1619,13 @@ void TCITransceiver::stream_audio (bool on)
   if (on != stream_audio_ && tci_Ready) {
     requested_stream_audio_ = on;
     if (on) {
+      audioStreamChannels_ = 2;
+      audioStreamSamples_ = 2048;
       sendTextMessage (CmdAudioSR + SmDP + QString::number (audioSampleRate) + SmTZ);
       sendTextMessage (CmdAudioStreamSampleType + SmDP + QStringLiteral ("float32") + SmTZ);
       sendTextMessage (CmdAudioStreamChannels + SmDP + QStringLiteral ("2") + SmTZ);
       sendTextMessage (CmdAudioStreamSamples + SmDP + QStringLiteral ("2048") + SmTZ);
-      sendTextMessage (CmdTxStreamAudioBuffering + SmDP + QString::number (HPSDR ? 50 : 100) + SmTZ);
+      sendTextMessage (CmdTxStreamAudioBuffering + SmDP + QStringLiteral ("50") + SmTZ);
       const QString cmd = CmdAudioStart + SmDP + rx_ + SmTZ;
       sendTextMessage(cmd);
     } else {
@@ -1488,7 +1644,10 @@ void TCITransceiver::do_audio (bool on)
     m_bufferPos = 0;
   }
   if (tci_audio_ && tci_Ready && inConnected && _power_) {
-    stream_audio (on);
+    bool const tx_needs_stream = tx_audio_ || m_tuning || PTT_ || requested_PTT_;
+    if (on || !tx_needs_stream) {
+      stream_audio (on);
+    }
   }
 }
 
@@ -1524,13 +1683,15 @@ void TCITransceiver::do_ptt (bool on)
       else if (busy_PTT_ || !tci_Ready || !_power_) return;
       else busy_PTT_ = true;
       requested_PTT_ = on;
-      if (tci_audio_ && on) {
-        const QString cmd = CmdTrx + SmDP + rx_ + SmCM + (on ? "true" : "false") + SmCM + "tci"+ SmTZ;
-        sendTextMessage(cmd);
-      } else {
-        const QString cmd = CmdTrx + SmDP + rx_ + SmCM + (on ? "true" : "false") + SmTZ;
-        sendTextMessage(cmd);
+      if (tci_audio_ && on && !stream_audio_ && inConnected) {
+        stream_audio (true);
       }
+      QString cmd = CmdTrx + SmDP + rx_ + SmCM + (on ? "true" : "false");
+      if (tci_audio_) {
+        cmd += SmCM + QStringLiteral ("tci");
+      }
+      cmd += SmTZ;
+      sendTextMessage(cmd);
       arm_wait_timer (tci_timer3_, 1000, "do_ptt");
     } else update_PTT(on);
   }
@@ -1643,6 +1804,9 @@ void TCITransceiver::do_poll ()
             {
               rx2_enable (true);
             }
+          sendTextMessage (CmdTxEnable + SmDP + rx_ + SmCM + QStringLiteral ("true") + SmTZ);
+          sendTextMessage (CmdRxEnable + SmDP + rx_ + SmCM + QStringLiteral ("true") + SmTZ);
+          sendTextMessage (CmdRxMute + SmDP + rx_ + SmCM + QStringLiteral ("false") + SmTZ);
           if (tci_audio_ && audio_)
             {
               stream_audio (true);
@@ -1676,12 +1840,13 @@ void TCITransceiver::do_poll ()
     }
   if (tci_audio_ && tci_Ready && inConnected && _power_)
     {
-      if (audio_ && !stream_audio_)
+      bool const tx_needs_stream = tx_audio_ || m_tuning || PTT_ || requested_PTT_;
+      if ((audio_ || tx_needs_stream) && !stream_audio_)
         {
           stream_audio (true);
           arm_wait_timer (tci_timer6_, 500, "poll/audio-on");
         }
-      else if (!audio_ && stream_audio_)
+      else if (!audio_ && !tx_needs_stream && stream_audio_)
         {
           stream_audio (false);
           arm_wait_timer (tci_timer6_, 500, "poll/audio-off");
