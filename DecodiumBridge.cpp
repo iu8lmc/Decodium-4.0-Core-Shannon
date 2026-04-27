@@ -4050,6 +4050,8 @@ void DecodiumBridge::resetStartupTransientQsoState()
     m_lastNtx = -1;
     m_nTx73 = 0;
     m_lastTransmittedMessage.clear();
+    m_activeTxNumber = 0;
+    m_activeTxMessage.clear();
     m_qsoCooldown.clear();
     clearPendingAutoLogSnapshot();
     clearLateAutoLogSnapshot();
@@ -4729,6 +4731,8 @@ void DecodiumBridge::clearTxMessages()
     m_txRetryCount = 0;
     m_nTx73 = 0;
     m_lastNtx = -1;
+    m_activeTxNumber = 0;
+    m_activeTxMessage.clear();
 
     if (m_qsoProgress != 0) {
         m_qsoProgress = 0;
@@ -4946,6 +4950,21 @@ void DecodiumBridge::finishModulatorIdlePlayback(const QString& reason)
               " transmitting=" + QString::number(m_transmitting) +
               " tuning=" + QString::number(m_tuning));
 
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_transmitting && m_txPlaybackHoldUntilMs > nowMs) {
+        qint64 const delayMs = qMax<qint64>(1, m_txPlaybackHoldUntilMs - nowMs);
+        if (!m_txPlaybackReleasePending) {
+            m_txPlaybackReleasePending = true;
+            bridgeLog(QStringLiteral("finishModulatorIdlePlayback delayed: reason=%1 hold_ms=%2")
+                          .arg(reason).arg(delayMs));
+            QTimer::singleShot(delayMs, this, [this, reason]() {
+                m_txPlaybackReleasePending = false;
+                finishModulatorIdlePlayback(reason + QStringLiteral("-held"));
+            });
+        }
+        return;
+    }
+
     m_txPlaybackReleasePending = false;
     m_txPlaybackHoldUntilMs = 0;
 
@@ -4956,11 +4975,14 @@ void DecodiumBridge::finishModulatorIdlePlayback(const QString& reason)
     // buffer hardware puo' essere tagliato mentre il messaggio e' ancora in aria.
     if (m_soundOutput) m_soundOutput->stop();
 
+    bool const wasTransmitting = m_transmitting;
+    noteTxPlaybackFinished(reason, false);
+
     if (m_tuning) {
         m_tuning = false;
         emit tuningChanged();
         emit statusMessage("Tune terminato");
-    } else if (m_transmitting) {
+    } else if (wasTransmitting) {
         m_transmitting = false;
         emit transmittingChanged();
         emit statusMessage("TX terminato");
@@ -4987,6 +5009,43 @@ static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceF
 
     if (requestedDeviceFound) *requestedDeviceFound = name.isEmpty();
     return QMediaDevices::defaultAudioOutput();
+}
+
+void DecodiumBridge::noteTxPlaybackFinished(const QString& reason, bool error)
+{
+    int const finishedTx = m_activeTxNumber;
+    QString const finishedMessage = m_activeTxMessage;
+    m_activeTxNumber = 0;
+    m_activeTxMessage.clear();
+
+    if (finishedTx <= 0) {
+        return;
+    }
+
+    if (error) {
+        bridgeLog(QStringLiteral("tx-playback-finished: TX%1 error, not counting signoff (%2)")
+                      .arg(finishedTx)
+                      .arg(reason));
+        return;
+    }
+
+    bool const signoffPayload =
+        (finishedTx == 5) || messageCarries73Payload(finishedMessage);
+    if (!signoffPayload) {
+        return;
+    }
+
+    ++m_nTx73;
+    bridgeLog(QStringLiteral("tx-playback-finished: completed signoff TX%1 count=%2 reason=%3 msg=[%4]")
+                  .arg(finishedTx)
+                  .arg(m_nTx73)
+                  .arg(reason, finishedMessage));
+
+    QTimer::singleShot(0, this, [this]() {
+        if (!m_transmitting && !m_tuning) {
+            checkAndStartPeriodicTx();
+        }
+    });
 }
 
 void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
@@ -5028,6 +5087,7 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     }
 
     bool const wasTransmitting = m_transmitting;
+    noteTxPlaybackFinished(reason, error);
     if (m_transmitting) {
         m_transmitting = false;
         emit transmittingChanged();
@@ -5177,7 +5237,6 @@ void DecodiumBridge::startTx()
             m_txRetryCount = 1;
             m_lastNtx = m_currentTx;
         }
-        if (m_currentTx == 5) ++m_nTx73;
 
         bool const txCarries73Payload =
             (m_currentTx == 5) || messageCarries73Payload(msg);
@@ -5197,15 +5256,9 @@ void DecodiumBridge::startTx()
             m_ft2DeferredLogPending = true;
             capturePendingAutoLogSnapshot();
         }
-        if (m_logAfterOwn73 && txCarries73Payload &&
-            (m_qsoProgress >= 5 || m_currentTx == 5)) {
-            bridgeLog(QStringLiteral("tx73-log-after-own73(mac): %1").arg(msg.trimmed()));
-            m_logAfterOwn73 = false;
-            m_ft2DeferredLogPending = false;
-            capturePendingAutoLogSnapshot();
-            logQso();
-        }
 
+        m_activeTxNumber = m_currentTx;
+        m_activeTxMessage = msg.trimmed();
         syncActiveCatTxSplitFrequency(QStringLiteral("startTx"));
         if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
             activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
@@ -5347,17 +5400,13 @@ void DecodiumBridge::startTx()
     // Traccia quante volte abbiamo inviato lo stesso TX step senza risposta.
     // NOTE: spostato dopo il check su buildTxPcmBuffer/PCM vuoto (sopra) e
     // prima del PTT SU (sotto). Se la generazione del PCM fallisce, NON
-    // vogliamo gonfiare m_nTx73/m_txRetryCount: contatori "fasulli" causano
-    // finishAutoSequenceQso prematuro (m_nTx73>=1 → log di un QSO che non è
-    // mai partito) e retry-limit anticipato.
+    // vogliamo gonfiare m_txRetryCount e anticipare il retry-limit.
     if (m_currentTx == m_lastNtx) {
         ++m_txRetryCount;
     } else {
         m_txRetryCount = 1;
         m_lastNtx = m_currentTx;
     }
-    // TX5 (73): conta le 73 inviate in questo QSO
-    if (m_currentTx == 5) ++m_nTx73;
 
     bool const txCarries73Payload =
         (m_currentTx == 5) || messageCarries73Payload(msg);
@@ -5377,18 +5426,12 @@ void DecodiumBridge::startTx()
         m_ft2DeferredLogPending = true;
         capturePendingAutoLogSnapshot();
     }
-    if (m_logAfterOwn73 && txCarries73Payload &&
-        (m_qsoProgress >= 5 || m_currentTx == 5)) {
-        bridgeLog(QStringLiteral("tx73-log-after-own73: %1").arg(msg.trimmed()));
-        m_logAfterOwn73 = false;
-        m_ft2DeferredLogPending = false;
-        capturePendingAutoLogSnapshot();
-        logQso();
-    }
 
     // PTT SU — prima di avviare l'audio (come GitHub pttAssert()).
     // Con TCI-audio il modulatore deve essere armato prima del PTT, altrimenti
     // ExpertSDR riceve "trx:true" senza suffisso/payload TCI.
+    m_activeTxNumber = m_currentTx;
+    m_activeTxMessage = msg.trimmed();
     syncActiveCatTxSplitFrequency(QStringLiteral("startTx"));
     if (!tciAudioTx && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
         activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
@@ -5472,6 +5515,8 @@ void DecodiumBridge::startTx()
             m_transmitting = false;
             emit transmittingChanged();
             m_txPcmData.clear();
+            m_activeTxNumber = 0;
+            m_activeTxMessage.clear();
             resumeRxAudioAfterTx(QStringLiteral("tci-tx-audio-start-failed"));
             emit errorMessage(QStringLiteral("Impossibile avviare audio TX TCI"));
             return;
@@ -5660,6 +5705,8 @@ void DecodiumBridge::stopTx()
 
     m_txPlaybackHoldUntilMs = 0;
     m_txPlaybackReleasePending = false;
+    m_activeTxNumber = 0;
+    m_activeTxMessage.clear();
 
 #if defined(Q_OS_MAC)
     if (m_modulator && m_modulator->isActive())
@@ -8317,6 +8364,38 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         }
     };
 
+    auto completeFinishedTx5IfReady = [&]() -> bool {
+        if (!(m_txEnabled && !m_tx1.isEmpty() && m_currentTx == 5 && m_nTx73 >= 1)) {
+            return false;
+        }
+
+        if (m_logAfterOwn73) {
+            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: completed own 73 → QSO complete"), true);
+            return true;
+        }
+
+        if (m_ft2DeferredLogPending) {
+            if (m_currentTx == m_lastNtx && m_txRetryCount >= kAutoCqSignoffRetryCount) {
+                bridgeLog(QStringLiteral("checkAndStartPeriodicTx: deferred signoff retry limit %1 on TX5 → halt without auto-log")
+                              .arg(kAutoCqSignoffRetryCount));
+                if (m_autoCqRepeat && m_qsoProgress > 1) {
+                    armLateAutoLogSnapshot();
+                }
+                finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff exhausted"), false);
+                return true;
+            }
+            return false;
+        }
+
+        finishAutoSequenceQso("checkAndStartPeriodicTx: completed signoff count=" + QString::number(m_nTx73) +
+                              " → QSO completo (TX5 sent)", true);
+        return true;
+    };
+
+    if (completeFinishedTx5IfReady()) {
+        return;
+    }
+
     // FT2 async mode:
     // - Per risposte QSO (m_txEnabled, stazione DX nota): salta il controllo di periodo
     //   → risposta immediata alla stazione partner senza aspettare il boundary
@@ -8385,28 +8464,9 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             return;
         }
 
-        // TX5 (73) inviato >=1 volta → QSO completo (una 73 basta, non serve ripetere)
-        if (m_currentTx == 5 && m_nTx73 >= 1) {
-            if (m_logAfterOwn73) {
-                finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: own 73 sent → QSO complete"), true);
-                return;
-            }
-
-            if (m_ft2DeferredLogPending) {
-                if (m_currentTx == m_lastNtx && m_txRetryCount >= kAutoCqSignoffRetryCount) {
-                    bridgeLog(QStringLiteral("checkAndStartPeriodicTx: deferred signoff retry limit %1 on TX5 → halt without auto-log")
-                                  .arg(kAutoCqSignoffRetryCount));
-                    if (m_autoCqRepeat && m_qsoProgress > 1) {
-                        armLateAutoLogSnapshot();
-                    }
-                    finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff exhausted"), false);
-                    return;
-                }
-            } else {
-                finishAutoSequenceQso("checkAndStartPeriodicTx: nTx73=" + QString::number(m_nTx73) +
-                                      " >= 1 → QSO completo (TX5 sent)", true);
-                return;
-            }
+        // TX5 (73) completato >=1 volta → QSO completo (una 73 basta, non serve ripetere)
+        if (completeFinishedTx5IfReady()) {
+            return;
         }
 
         // Retry limit: vale sia per AutoCQ sia per i QSO manuali avviati con doppio click.
@@ -8703,8 +8763,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         }
     };
 
-    bool const localSignoffAlreadySent =
-        (m_nTx73 > 0) || messageCarries73Payload(m_lastTransmittedMessage);
+    bool const localSignoffAlreadySent = (m_nTx73 > 0);
     bool const partnerSignoff73 =
         (last.compare(QStringLiteral("73"), Qt::CaseInsensitive) == 0
          && m_qsoProgress >= 4);

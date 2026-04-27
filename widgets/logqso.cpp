@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
+#include <QPointer>
 
 #include "HelpTextWindow.hpp"
 #include "logbook/logbook.h"
@@ -137,6 +138,7 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
   , m_log {log}
 {
   ui->setupUi(this);
+  setAttribute (Qt::WA_QuitOnClose, false);
   setWindowTitle(programTitle + " - Log QSO");
   ui->comboBoxSatellite->addItem ("", "");
   QString sat_file_location;
@@ -431,6 +433,11 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
 
 void LogQSO::accept()
 {
+  if (m_accepting) {
+    return;
+  }
+  m_accepting = true;
+
   auto hisCall = ui->call->text ();
   auto hisGrid = ui->grid->text ();
   auto mode = ui->mode->text ();
@@ -445,6 +452,14 @@ void LogQSO::accept()
   auto operator_call = normalized_operator_call (ui->loggedOperator->text (), m_myCall);
   auto xsent = ui->exchSent->text ();
   auto xrcvd = ui->exchRcvd->text ();
+
+  if (!m_log) {
+    m_accepting = false;
+    show ();
+    MessageBox::warning_message (this, tr ("Log file error"),
+                                 tr ("Log backend is not available"));
+    return;
+  }
 
   using SpOp = Configuration::SpecialOperatingActivity;
   auto special_op = m_config->special_op_id ();
@@ -475,14 +490,17 @@ void LogQSO::accept()
     {
       if (xsent.isEmpty () || xrcvd.isEmpty ())
         {
+          m_accepting = false;
           show ();
           MessageBox::warning_message (this, tr ("Invalid QSO Data"),
                                        tr ("Check exchange sent and received"));
           return;               // without accepting
         }
 
-      if (!m_log->contest_log ()->add_QSO (m_dialFreq, mode, dateTimeOff, hisCall, xsent, xrcvd))
+      auto * contestLog = m_log->contest_log ();
+      if (!contestLog || !contestLog->add_QSO (m_dialFreq, mode, dateTimeOff, hisCall, xsent, xrcvd))
         {
+          m_accepting = false;
           show ();
           MessageBox::warning_message (this, tr ("Invalid QSO Data"),
                                        tr ("Check all fields"));
@@ -526,6 +544,28 @@ void LogQSO::accept()
   }
 
   //Clean up and finish logging
+  QByteArray const adif = m_log->QSOToADIF (hisCall
+                                            , hisGrid
+                                            , mode
+                                            , rptSent
+                                            , rptRcvd
+                                            , dateTimeOn
+                                            , dateTimeOff
+                                            , band
+                                            , m_comments
+                                            , name
+                                            , strDialFreq
+                                            , m_myCall
+                                            , m_myGrid
+                                            , m_txPower
+                                            , operator_call
+                                            , xsent
+                                            , xrcvd
+                                            , prop_mode
+                                            , satellite
+                                            , sat_mode
+                                            , m_freqRx);
+  QPointer<LogQSO> self {this};
   Q_EMIT acceptQSO (dateTimeOff
                     , hisCall
                     , hisGrid
@@ -546,27 +586,11 @@ void LogQSO::accept()
                     , satellite
                     , sat_mode
                     , m_freqRx
-                    , m_log->QSOToADIF (hisCall
-                                        , hisGrid
-                                        , mode
-                                        , rptSent
-                                        , rptRcvd
-                                        , dateTimeOn
-                                        , dateTimeOff
-                                        , band
-                                        , m_comments
-                                        , name
-                                        , strDialFreq
-                                        , m_myCall
-                                        , m_myGrid
-                                        , m_txPower
-                                        , operator_call
-                                        , xsent
-                                        , xrcvd
-                                        , prop_mode
-                                        , satellite
-                                        , sat_mode
-                                        , m_freqRx));
+                    , adif);
+  if (!self) {
+    return;
+  }
+  m_accepting = false;
   QDialog::accept();
 }
 

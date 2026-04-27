@@ -4075,6 +4075,17 @@ MainWindow::~MainWindow()
 {
   m_valid = false;
   m_dataSinkShuttingDown = true;
+  for (auto * socket : findChildren<QTcpSocket *>())
+    {
+      if (!socket->property ("decodium_autospot").toBool ())
+        {
+          continue;
+        }
+      socket->setProperty ("autospot_done", true);
+      socket->disconnect ();
+      socket->abort ();
+      delete socket;
+    }
   if (m_ft2DecodeWorker) {
     m_ft2DecodeWorker->beginShutdown ();
   }
@@ -7406,7 +7417,12 @@ void MainWindow::showSoundOutError(const QString& errorMsg)
 
 void MainWindow::showStatusMessage(const QString& statusMsg)
 {
-  statusBar()->showMessage(statusMsg, 5000);
+  if (!m_valid || !ui || QCoreApplication::closingDown ()) {
+    return;
+  }
+  if (auto * bar = statusBar ()) {
+    bar->showMessage(statusMsg, 5000);
+  }
 }
 
 void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
@@ -15707,6 +15723,12 @@ void MainWindow::guiUpdate()
             || m_mode=="FST4" || m_mode=="Q65" || m_mode=="MSK144")
         && !m_logAfterOwn73;
     bool const deferredSignoffPending = ft2DeferredSignoff || autoCqDeferredSignoff;
+    bool const own73ShouldWaitEot =
+        !m_bDXpedMode && is_73
+        && (m_QSOProgress > CALLING)
+        && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2")
+        && !deferredSignoffPending;
+    bool const holdOwn73UntilEot = logAfterOwn73 || own73ShouldWaitEot;
     m_sentFirst73 = is_73
       && !message_is_73 (m_lastMessageType,
                          m_lastMessageSent.split (' ', SkipEmptyParts));
@@ -15715,8 +15737,13 @@ void MainWindow::guiUpdate()
       if(m_config.id_after_73 ()) {
         icw[0] = m_ncw;
       }
-      if (logAfterOwn73) {
-        m_logAfterOwn73 = false;
+      if (holdOwn73UntilEot) {
+        m_logAfterOwn73 = true;
+        debugToFile (QString {"tx73-log-deferred-until-eot current:%1 type:%2 ntx:%3 qso:%4"}
+                         .arg (m_currentMessage.trimmed ())
+                         .arg (m_currentMessageType)
+                         .arg (m_ntx)
+                         .arg (m_QSOProgress));
       }
       if (is_73 && deferredSignoffPending) {
         // In FT2 and AutoCQ signoff, keep RR73/73 on-air for a few cycles
@@ -15729,13 +15756,13 @@ void MainWindow::guiUpdate()
         //avt 10/2/25 possibly stop Tx after sending 73
         if (!is_externalCtrlMode() && m_config.repeat_Tx() && (m_mode=="MSK144" or m_mode=="Q65") && m_ntx != 4) cease_auto_Tx_after_QSO ();    //avt 10/2/25
         if (!is_externalCtrlMode() && !(m_mode=="FT4" && SpecOp::NA_VHF==m_specOp && m_config.NCCC_Sprint())) {
-	          if (!deferredSignoffPending) {
+	          if (!deferredSignoffPending && !holdOwn73UntilEot) {
 	            if (m_mode == "FT2" || m_autoCQ) capturePendingAutoLogSnapshot ();
 	            logQSOTimer.start(0);    //avt 9/30/25
 	          }
         }
         }
-      else
+      else if (!holdOwn73UntilEot)
         {
           cease_auto_Tx_after_QSO ();
         }
@@ -15743,7 +15770,7 @@ void MainWindow::guiUpdate()
 
     bool b=("FT8"==m_mode or "FT4"==m_mode or "FT2"==m_mode or "Q65"==m_mode or "JT65"==m_mode or "JT9"==m_mode or m_mode == "FST4" or m_mode == "MSK144" or m_mode == "JT65" or m_mode == "JT9")  //avt 9/30/25
         &&  (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ());   //avt 9/30/25
-    if(is_73 and (m_config.disable_TX_on_73() or b) && !deferredSignoffPending) {
+    if(is_73 and (m_config.disable_TX_on_73() or b) && !deferredSignoffPending && !holdOwn73UntilEot) {
       m_nextCall="";  //### Temporary: disable use of "TU;" messages;
       if(m_nextCall!="") {
         useNextCall();
@@ -16351,6 +16378,35 @@ void MainWindow::stopTx2()
   //keep_last_tx_label = true;   //avt 10/4/25
   //last_tx_label.setText(tr ("Last Tx: %1").arg (m_currentMessage.trimmed()));   //avt 10/4/25
   last_tx_label.setText(QString{"QSOs to upload: %1"}.arg(m_incrLogCount));   //avt 10/4/25
+
+  auto const msgParts = m_currentMessage.split (' ', SkipEmptyParts);
+  bool const txFinishedCarries73 =
+      message_is_73 (m_currentMessageType, msgParts) || payload_is_73 (msgParts);
+  if (!m_bDXpedMode
+      && m_logAfterOwn73
+      && txFinishedCarries73
+      && (m_QSOProgress >= SIGNOFF || m_ntx == 5)) {
+    m_logAfterOwn73 = false;
+    m_ft2DeferredLogPending = false;
+    if (!is_externalCtrlMode()
+        && (m_config.prompt_to_log() || m_config.autoLog() || m_autoCQ)
+        && !m_tune
+        && !logQSOTimer.isActive()) {
+      if (m_mode == "FT2" || m_autoCQ) capturePendingAutoLogSnapshot ();
+      debugToFile (QString {"tx73-log-after-eot current:%1 type:%2 ntx:%3 qso:%4"}
+                       .arg (m_currentMessage.trimmed ())
+                       .arg (m_currentMessageType)
+                       .arg (m_ntx)
+                       .arg (m_QSOProgress));
+      logQSOTimer.start (0);
+    }
+    if (!m_autoCQ) {
+      m_QSOProgress = SIGNOFF;
+      QTimer::singleShot (0, this, [this] {
+        auto_tx_mode (false);
+      });
+    }
+  }
 }
 
 void MainWindow::ba2msg(QByteArray ba, char message[])             //ba2msg()
@@ -17471,8 +17527,11 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
       } else {  // no grid on end of msg
         auto const& word_3 = message_words.at (4);
         auto word_3_as_number = word_3.toInt ();
+        auto const currentMessageParts = m_currentMessage.split (' ', SkipEmptyParts);
         bool const localSignoffAlreadySent =
             (m_nTx73 > 0)
+            || payload_is_73 (currentMessageParts)
+            || message_is_73 (m_currentMessageType, currentMessageParts)
             || message_is_73 (m_lastMessageType,
                               m_lastMessageSent.split (' ', SkipEmptyParts));
         bool const partnerSignoff73 =
@@ -20130,9 +20189,10 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
   Q_UNUSED(rptSent);
   Q_UNUSED(rptRcvd);
 
-  auto appendAutoSpotTrace = [this] (QString const& text)
+  auto const autoSpotTracePath = m_config.writeable_data_dir().absoluteFilePath(QStringLiteral("autospot.log"));
+  auto appendAutoSpotTrace = [autoSpotTracePath] (QString const& text)
     {
-      QFile f {m_config.writeable_data_dir().absoluteFilePath(QStringLiteral("autospot.log"))};
+      QFile f {autoSpotTracePath};
       if (!f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
         {
           return;
@@ -20422,6 +20482,7 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
   auto * timeout = new QTimer {socket};
   timeout->setSingleShot(true);
   timeout->setInterval(12000);
+  socket->setProperty("decodium_autospot", true);
   socket->setProperty("autospot_done", false);
   socket->setProperty("login_sent", false);
   socket->setProperty("quiet_mode_set", false);
@@ -20440,7 +20501,8 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
       m_dxClusterWindow->suspendRefresh(12000);
     }
 
-  auto finishAutoSpot = [this, socket, timeout, appendAutoSpotTrace] (bool success, QString const& detail, QString const& traceTag)
+  QPointer<MainWindow> windowGuard {this};
+  auto finishAutoSpot = [windowGuard, socket, timeout, appendAutoSpotTrace] (bool success, QString const& detail, QString const& traceTag)
     {
       if (socket->property("autospot_done").toBool())
         {
@@ -20463,13 +20525,22 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
           message += QStringLiteral(" (%1)").arg(detail);
         }
 
-      showStatusMessage(message);
+      bool const uiAlive =
+          windowGuard
+          && windowGuard->m_valid
+          && !QCoreApplication::closingDown ();
+      if (uiAlive)
+        {
+          windowGuard->showStatusMessage(message);
+        }
       appendAutoSpotTrace(QStringLiteral("%1 ").arg(traceTag) + message);
 
-      if (success && m_dxClusterWindow && m_dxClusterWindow->isVisible())
+      if (success && uiAlive
+          && windowGuard->m_dxClusterWindow
+          && windowGuard->m_dxClusterWindow->isVisible())
         {
-          QPointer<DXClusterWindow> dxWindow {m_dxClusterWindow.data()};
-          QTimer::singleShot(2500, this, [dxWindow] {
+          QPointer<DXClusterWindow> dxWindow {windowGuard->m_dxClusterWindow.data()};
+          QTimer::singleShot(2500, windowGuard.data(), [dxWindow] {
               if (dxWindow)
                 {
                   QMetaObject::invokeMethod(dxWindow.data(), "refreshNow", Qt::QueuedConnection);
@@ -20707,12 +20778,14 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
                                      tr ("Cannot open \"%1\"").arg (m_logBook.path ()));
       }
 
-    m_messageClient->qso_logged (QSO_date_off, call, grid, dial_freq, mode, rpt_sent, rpt_received
-                                 , tx_power, comments, name, QSO_date_on, operator_call, my_call, my_grid
-                                 , exchange_sent, exchange_rcvd, propmode, satellite, satmode, freqRx);
+    if (m_messageClient) {
+      m_messageClient->qso_logged (QSO_date_off, call, grid, dial_freq, mode, rpt_sent, rpt_received
+                                   , tx_power, comments, name, QSO_date_on, operator_call, my_call, my_grid
+                                   , exchange_sent, exchange_rcvd, propmode, satellite, satmode, freqRx);
 
-    //avt 11/20/20 external controller needs UI feedback
-    m_messageClient->logged_ADIF (ADIF);
+      //avt 11/20/20 external controller needs UI feedback
+      m_messageClient->logged_ADIF (ADIF);
+    }
 
     logIncremental(call, QString::fromUtf8(ADIF));    //avt 10/2/25
 
@@ -23606,7 +23679,7 @@ void MainWindow::transmit (double snr)
       message_is_73 (m_currentMessageType,
                      m_currentMessage.split (' ', SkipEmptyParts));
 // In auto-sequencing mode, track repeated "73"/"RR73" transmissions.
-  if (m_bFastMode || m_bFast9 || m_mode=="FT2" || m_autoCQ) {
+  if (m_bFastMode || m_bFast9 || m_mode=="FT2" || m_mode=="FT4" || m_mode=="FT8" || m_autoCQ) {
     if (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ()) {    //avt 9/30/25
       if (m_ntx == 5 || txIs73) {
         m_nTx73 += 1;
@@ -23622,26 +23695,11 @@ void MainWindow::transmit (double snr)
       && m_logAfterOwn73
       && txCarries73Payload
       && (m_QSOProgress >= SIGNOFF || m_ntx == 5)) {
-    m_logAfterOwn73 = false;
-    m_ft2DeferredLogPending = false;
-    if (!is_externalCtrlMode()
-        && (m_config.prompt_to_log() || m_config.autoLog() || m_autoCQ)
-        && !m_tune
-        && !logQSOTimer.isActive()) {
-      if (m_mode == "FT2" || m_autoCQ) capturePendingAutoLogSnapshot ();
-      debugToFile (QString {"tx73-log-fallback current:%1 type:%2 ntx:%3 qso:%4"}
-                       .arg (m_currentMessage.trimmed ())
-                       .arg (m_currentMessageType)
-                       .arg (m_ntx)
-                       .arg (m_QSOProgress));
-      logQSOTimer.start (0);
-    }
-    if (!m_autoCQ) {
-      m_QSOProgress = SIGNOFF;
-      QTimer::singleShot (0, this, [this] {
-        auto_tx_mode (false);
-      });
-    }
+    debugToFile (QString {"tx73-log-wait-eot current:%1 type:%2 ntx:%3 qso:%4"}
+                     .arg (m_currentMessage.trimmed ())
+                     .arg (m_currentMessageType)
+                     .arg (m_ntx)
+                     .arg (m_QSOProgress));
   }
 
   // FT2 deferred signoff: after a few RR73/73 repeats without partner signoff,

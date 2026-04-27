@@ -64,6 +64,7 @@ private:
   QString m_txPower;
   QString m_comments;
   QString m_comments_temp = "";
+  bool m_accepting {false};
   Radio::Frequency m_dialFreq;
   QString m_myCall;
   QString m_myGrid;

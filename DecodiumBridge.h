@@ -1316,13 +1316,15 @@ private:
     QSet<QString> m_legacyClearedRxMirrorKeys;
 
     // === GitHub TxController clone ===
-    int  m_nTx73            {0};   // TX5 (73) repeat counter: >=2 → QSO completo, ferma
+    int  m_nTx73            {0};   // completed 73/RR73 transmissions in current QSO
     int  m_txRetryCount     {0};   // quante volte abbiamo inviato m_lastNtx senza risposta
     int  m_lastNtx          {-1};  // ultimo TX number inviato
     int  m_lastCqPidx       {-1};  // period index dell'ultimo CQ inviato (evita CQ consecutivi)
     QString m_lastAutoSeqKey;      // deduplicazione autoSequenceStep
     qint64  m_lastAutoSeqMs {0};   // timestamp ultima deduplicazione
     QString m_lastTransmittedMessage;
+    int     m_activeTxNumber {0};
+    QString m_activeTxMessage;
     QDateTime m_lastTxActivityUtc;
     QDateTime m_qsoStartedOn;
     bool    m_logAfterOwn73 {false};
@@ -1530,6 +1532,7 @@ private:
     QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
     void initTxDevices();
     void resumeRxAudioAfterTx(const QString& reason);
+    void noteTxPlaybackFinished(const QString& reason, bool error);
     void completeTxPlayback(const QString& reason, bool error = false);
     void finishModulatorIdlePlayback(const QString& reason);
     QString buildCurrentTxMessage() const;
