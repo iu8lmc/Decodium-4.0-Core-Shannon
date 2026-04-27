@@ -68,6 +68,8 @@ private:
   int m_channelSelector {static_cast<int>(AudioDevice::Mono)};
   QString m_lastStatusMessage;
   QAudio::State m_lastReportedState {QAudio::StoppedState};
+  qint64 m_lastDebugStateLogMs {-1};
+  int m_suppressedDebugStateLogs {0};
   bool m_haveReportedState_ {false};
   bool m_expectedSuspend_ {false};
 };

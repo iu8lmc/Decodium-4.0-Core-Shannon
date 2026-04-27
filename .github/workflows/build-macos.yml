@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  RELEASE_VERSION: "1.0.52"
+  RELEASE_VERSION: "1.0.53"
   HAMLIB_TAG: "4.7.0"
   HAMLIB_VERSION: "4.7.0"
 

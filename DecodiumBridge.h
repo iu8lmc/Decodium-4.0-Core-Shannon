@@ -677,6 +677,7 @@ public slots:
     Q_INVOKABLE void syncNtpNow();
     Q_INVOKABLE void openCatSettings();
     Q_INVOKABLE void retryRigConnection();
+    Q_INVOKABLE void openHamlibUpdatePage() const;
 
     // PSK Reporter
     Q_INVOKABLE void searchPskReporter(const QString& callsign);
@@ -690,6 +691,7 @@ public slots:
     Q_INVOKABLE QString diagnosticLogPath() const;
     Q_INVOKABLE void openDiagnosticLog() const;
     Q_INVOKABLE void requestSafeGraphicsNextLaunch(const QString& reason = QString());
+    Q_INVOKABLE void notifyMainQmlReady();
 
     // Font scale
     Q_INVOKABLE void increaseFontScale();
@@ -1059,6 +1061,7 @@ private:
     QString autoCqBandKeyForFrequency(double freqHz) const;
     QString startupModeForFrequency(double dialFrequency) const;
     void maybeApplyStartupModeFromRigFrequency(double dialFrequency, bool authoritativeRigFrequency = false);
+    void runPostQmlStartupServices();
     QString effectiveAdifLogPath() const;
     QString ensureAdifLogPath();
     int effectiveDecodeDepth() const;
@@ -1134,6 +1137,8 @@ private:
     qint64 m_legacyStartupModeGuardUntilMs {0};
     bool m_preserveFrequencyOnModeChange {false};
     bool m_shuttingDown {false};
+    bool m_mainQmlReady {false};
+    bool m_startupServicesStarted {false};
     bool m_lastSuccessfulCatConnected {false};
     QString m_lastSuccessfulCatBackend;
     // Limita i retry di startup quando la porta è occupata (es. OmniRig.exe

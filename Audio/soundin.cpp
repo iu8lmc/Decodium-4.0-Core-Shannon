@@ -136,6 +136,8 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   m_expectedSuspend_ = false;
   m_haveReportedState_ = false;
   m_lastStatusMessage.clear ();
+  m_lastDebugStateLogMs = -1;
+  m_suppressedDebugStateLogs = 0;
 
   connect (m_stream.data(), &QAudioSource::stateChanged, this, &SoundInput::handleStateChanged);
   // Note: QAudioSource::notify() was removed in Qt6; no periodic notification needed.
@@ -207,8 +209,29 @@ void SoundInput::handleStateChanged (QAudio::State newState)
     }
 
   QAudio::Error const streamError = m_stream ? m_stream->error () : QAudio::NoError;
-  qDebug() << "SoundInput: handleStateChanged state=" << (int)newState
-           << (m_stream ? " err=" + QString::number((int)streamError) : " no_stream");
+  bool const benignActiveIdle =
+      streamError == QAudio::NoError
+      && (newState == QAudio::ActiveState || newState == QAudio::IdleState);
+  qint64 const now_ms = QDateTime::currentMSecsSinceEpoch ();
+  bool const shouldLogState =
+      !benignActiveIdle
+      || m_lastDebugStateLogMs < 0
+      || now_ms - m_lastDebugStateLogMs >= 30000;
+  if (shouldLogState)
+    {
+      QString suffix = m_stream ? " err=" + QString::number((int)streamError) : " no_stream";
+      if (m_suppressedDebugStateLogs > 0)
+        {
+          suffix += " suppressed=" + QString::number (m_suppressedDebugStateLogs);
+        }
+      qDebug() << "SoundInput: handleStateChanged state=" << (int)newState << suffix;
+      m_lastDebugStateLogMs = now_ms;
+      m_suppressedDebugStateLogs = 0;
+    }
+  else
+    {
+      ++m_suppressedDebugStateLogs;
+    }
   switch (newState)
     {
     case QAudio::IdleState:
@@ -218,7 +241,6 @@ void SoundInput::handleStateChanged (QAudio::State newState)
           // even while capture is healthy. Treat that as a benign transient
           // and keep the stream logically "Receiving" to avoid false alarms.
           reset (false);
-          qDebug () << "SoundInput: benign idle transition ignored";
           return;
         }
       emitStatusIfChanged (tr ("Idle"), newState);
@@ -323,6 +345,8 @@ void SoundInput::stop()
   m_lastStatusMessage.clear ();
   m_lastReportedState = QAudio::StoppedState;
   m_haveReportedState_ = false;
+  m_lastDebugStateLogMs = -1;
+  m_suppressedDebugStateLogs = 0;
 }
 
 SoundInput::~SoundInput ()

@@ -199,6 +199,7 @@ ApplicationWindow {
         raise()
         requestActivate()
         Qt.callLater(restoreDecodePanelWidths)
+        bridge.notifyMainQmlReady()
         console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 

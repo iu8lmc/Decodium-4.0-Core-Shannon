@@ -1796,22 +1796,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         bridgeLog(QStringLiteral("NTP error: ") + msg);
     });
 
-    // DX Cluster: auto-connect all'avvio se abilitato
-    QTimer::singleShot(4000, this, [this]() {
-        if (!m_dxCluster || m_callsign.isEmpty()) return;
-        m_dxCluster->setCallsign(m_callsign);
-        QSettings s("Decodium", "Decodium3");
-        beginConfiguredBridgeSettingsGroup(s);
-        bool autoConnect = s.value("DXCluster/autoConnect", false).toBool();
-        if (!autoConnect) {
-            autoConnect = s.value("DXClusterAutoConnect", false).toBool();
-        }
-        if (autoConnect) {
-            bridgeLog("DX Cluster auto-connect: " + m_dxCluster->host() + ":"
-                      + QString::number(m_dxCluster->port()));
-            m_dxCluster->connectCluster();
-        }
-    });
+    bridgeLog(QStringLiteral("DX Cluster auto-connect: waiting for Main.qml ready"));
 
 #if defined(Q_OS_MAC)
     if (qEnvironmentVariableIsSet("DECODIUM_FORCE_STANDALONE_UDP")) {
@@ -1830,18 +1815,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // Su Windows/Linux NON creare il legacy backend all'avvio — viene creato lazy
     // quando l'utente apre Settings/Setup (ensureLegacyBackendAvailable)
 
-    // Standalone UDP MessageClient — usato solo come fallback quando il
-    // backend legacy (compatibile Decodium3/WSJT-X) non è disponibile.
-    QTimer::singleShot(2000, this, [this]() {
-#if defined(Q_OS_MAC)
-        if (m_useLegacyTxBackend && ensureLegacyBackendAvailable()) {
-            bridgeLog(QStringLiteral("UDP WSJT-X delegated to legacy backend"));
-            shutdownUdpMessageClient();
-            return;
-        }
-#endif
-        initUdpMessageClient();
-    });
+    bridgeLog(QStringLiteral("UDP WSJT-X startup: waiting for Main.qml ready"));
 
     // PSK Reporter
     m_pskReporter = new DecodiumPskReporterLite(this);
@@ -2407,77 +2381,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     maybeApplyStartupModeFromRigFrequency(m_frequency);
     m_legacyStartupModeGuard = m_mode.trimmed();
     m_legacyStartupModeGuardUntilMs = QDateTime::currentMSecsSinceEpoch() + 10000;
-    // Enumerazione audio differita per non bloccare l'avvio della UI
-    QTimer::singleShot(500, this, [this]() { enumerateAudioDevices(); });
+    bridgeLog(QStringLiteral("Audio device enumeration deferred until Main.qml ready"));
 
-    // Auto-connect CAT all'avvio se abilitato
-    {
-        auto* activeCat = (m_catBackend == "native") ? (QObject*)m_nativeCat : (QObject*)m_hamlibCat;
-        bool autoConn = (m_catBackend == "native")   ? m_nativeCat->catAutoConnect()
-                      : (m_catBackend == "omnirig") ? m_omniRigCat->catAutoConnect()
-                                                    : m_hamlibCat->catAutoConnect();
-        bool const retryLastSuccessfulCat = (!autoConn
-                                             && m_lastSuccessfulCatConnected
-                                             && m_lastSuccessfulCatBackend == m_catBackend);
-        bridgeLog("CAT[" + m_catBackend + "] autoConnect=" + QString::number(autoConn)
-                  + " retryLastSuccessful=" + QString::number(retryLastSuccessfulCat));
-        if (legacyOwnsRigControl(m_legacyBackend) || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
-            bridgeLog("CAT auto-connect delegated to legacy backend");
-            QTimer::singleShot(250, this, [this]() {
-                if (!m_legacyBackend || !m_legacyBackend->available()) {
-                    return;
-                }
-                m_legacyBackend->retryRigConnection();
-                syncLegacyBackendTxState();
-                scheduleLegacyStateRefreshBurst();
-            });
-        } else if (autoConn || retryLastSuccessfulCat) {
-            m_startupCatRetryCount = 0;
-            QTimer::singleShot(1500, this, [this]() {
-                bridgeLog("CAT startup reconnect: retry active backend " + m_catBackend);
-                m_startupCatRetryCount = 1;
-                retryRigConnection();
-                // Se dopo 2500 ms non risulta connesso, proviamo UN solo
-                // retry aggiuntivo con delay più ampio: copre il caso in
-                // cui OmniRig.exe sta ancora rilasciando la porta o ha
-                // bisogno di tempo per inizializzarsi all'avvio di Windows.
-                QTimer::singleShot(2500, this, [this]() {
-                    if (m_shuttingDown) return;
-                    if (m_catConnected) return;
-                    if (m_startupCatRetryCount >= 2) return;
-                    m_startupCatRetryCount = 2;
-                    bridgeLog("CAT startup reconnect: second attempt on " + m_catBackend);
-                    retryRigConnection();
-                });
-            });
-        }
-        Q_UNUSED(activeCat);
-    }
+    bridgeLog("startup services: waiting for Main.qml ready signal");
 
     syncLegacyBackendState();
     if ((usingLegacyBackendForTx() || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) && m_legacyStateTimer) {
         m_legacyStateTimer->start();
-    }
-
-    if (m_autoStartMonitorOnStartup && m_mode != "Echo") {
-        const int startupMonitorDelayMs = usingLegacyBackendForTx() ? 2800 : 900;
-        QTimer::singleShot(startupMonitorDelayMs, this, [this]() {
-            if (!m_autoStartMonitorOnStartup || m_mode == "Echo" || m_monitoring || m_transmitting || m_tuning) {
-                bridgeLog(QStringLiteral("startup auto-monitor: skipped autoStart=%1 mode=%2 monitoring=%3 tx=%4 tune=%5")
-                              .arg(m_autoStartMonitorOnStartup ? 1 : 0)
-                              .arg(m_mode)
-                              .arg(m_monitoring ? 1 : 0)
-                              .arg(m_transmitting ? 1 : 0)
-                              .arg(m_tuning ? 1 : 0));
-                return;
-            }
-            bridgeLog("startup auto-monitor: enabling monitor from bridge");
-            setMonitoring(true);
-        });
-    } else {
-        bridgeLog(QStringLiteral("startup auto-monitor: disabled autoStart=%1 mode=%2")
-                      .arg(m_autoStartMonitorOnStartup ? 1 : 0)
-                      .arg(m_mode));
     }
 }
 
@@ -2520,6 +2430,130 @@ QObject * DecodiumBridge::propagationManager() const
 bool DecodiumBridge::usingLegacyBackendForTx() const
 {
     return legacyTxBackendRequested() && legacyBackendAvailable();
+}
+
+void DecodiumBridge::notifyMainQmlReady()
+{
+    if (m_mainQmlReady) {
+        return;
+    }
+
+    m_mainQmlReady = true;
+    bridgeLog(QStringLiteral("Main.qml ready: releasing deferred startup services"));
+    QTimer::singleShot(500, this, [this]() {
+        if (m_shuttingDown) {
+            return;
+        }
+        runPostQmlStartupServices();
+    });
+}
+
+void DecodiumBridge::runPostQmlStartupServices()
+{
+    if (m_startupServicesStarted) {
+        return;
+    }
+    m_startupServicesStarted = true;
+    bridgeLog(QStringLiteral("startup services: starting after Main.qml ready"));
+
+    QTimer::singleShot(100, this, [this]() {
+        if (!m_shuttingDown) {
+            enumerateAudioDevices();
+        }
+    });
+
+    QTimer::singleShot(300, this, [this]() {
+        if (m_shuttingDown) {
+            return;
+        }
+#if defined(Q_OS_MAC)
+        if (m_useLegacyTxBackend && ensureLegacyBackendAvailable()) {
+            bridgeLog(QStringLiteral("UDP WSJT-X delegated to legacy backend"));
+            shutdownUdpMessageClient();
+            return;
+        }
+#endif
+        initUdpMessageClient();
+    });
+
+    QTimer::singleShot(700, this, [this]() {
+        if (m_shuttingDown || !m_dxCluster || m_callsign.isEmpty()) {
+            return;
+        }
+        m_dxCluster->setCallsign(m_callsign);
+        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        beginConfiguredBridgeSettingsGroup(s);
+        bool autoConnect = s.value(QStringLiteral("DXCluster/autoConnect"), false).toBool();
+        if (!autoConnect) {
+            autoConnect = s.value(QStringLiteral("DXClusterAutoConnect"), false).toBool();
+        }
+        if (autoConnect) {
+            bridgeLog(QStringLiteral("DX Cluster auto-connect: %1:%2")
+                          .arg(m_dxCluster->host())
+                          .arg(m_dxCluster->port()));
+            m_dxCluster->connectCluster();
+        }
+    });
+
+    bool const autoConn = (m_catBackend == QStringLiteral("native")) ? m_nativeCat->catAutoConnect()
+                        : (m_catBackend == QStringLiteral("omnirig")) ? m_omniRigCat->catAutoConnect()
+                                                                      : m_hamlibCat->catAutoConnect();
+    bool const retryLastSuccessfulCat = (!autoConn
+                                         && m_lastSuccessfulCatConnected
+                                         && m_lastSuccessfulCatBackend == m_catBackend);
+    bridgeLog(QStringLiteral("CAT[%1] autoConnect=%2 retryLastSuccessful=%3")
+                  .arg(m_catBackend)
+                  .arg(autoConn ? 1 : 0)
+                  .arg(retryLastSuccessfulCat ? 1 : 0));
+
+    if (legacyOwnsRigControl(m_legacyBackend) || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)) {
+        bridgeLog(QStringLiteral("CAT auto-connect delegated to legacy backend"));
+        QTimer::singleShot(250, this, [this]() {
+            if (!m_legacyBackend || !m_legacyBackend->available()) {
+                return;
+            }
+            m_legacyBackend->retryRigConnection();
+            syncLegacyBackendTxState();
+            scheduleLegacyStateRefreshBurst();
+        });
+    } else if (autoConn || retryLastSuccessfulCat) {
+        m_startupCatRetryCount = 0;
+        QTimer::singleShot(1000, this, [this]() {
+            bridgeLog(QStringLiteral("CAT startup reconnect: retry active backend ") + m_catBackend);
+            m_startupCatRetryCount = 1;
+            retryRigConnection();
+            QTimer::singleShot(2500, this, [this]() {
+                if (m_shuttingDown) return;
+                if (m_catConnected) return;
+                if (m_startupCatRetryCount >= 2) return;
+                m_startupCatRetryCount = 2;
+                bridgeLog(QStringLiteral("CAT startup reconnect: second attempt on ") + m_catBackend);
+                retryRigConnection();
+            });
+        });
+    }
+
+    if (m_autoStartMonitorOnStartup && m_mode != QStringLiteral("Echo")) {
+        int const startupMonitorDelayMs = usingLegacyBackendForTx() ? 2800 : 1200;
+        QTimer::singleShot(startupMonitorDelayMs, this, [this]() {
+            if (!m_autoStartMonitorOnStartup || m_mode == QStringLiteral("Echo")
+                || m_monitoring || m_transmitting || m_tuning) {
+                bridgeLog(QStringLiteral("startup auto-monitor: skipped autoStart=%1 mode=%2 monitoring=%3 tx=%4 tune=%5")
+                              .arg(m_autoStartMonitorOnStartup ? 1 : 0)
+                              .arg(m_mode)
+                              .arg(m_monitoring ? 1 : 0)
+                              .arg(m_transmitting ? 1 : 0)
+                              .arg(m_tuning ? 1 : 0));
+                return;
+            }
+            bridgeLog(QStringLiteral("startup auto-monitor: enabling monitor after Main.qml ready"));
+            setMonitoring(true);
+        });
+    } else {
+        bridgeLog(QStringLiteral("startup auto-monitor: disabled autoStart=%1 mode=%2")
+                      .arg(m_autoStartMonitorOnStartup ? 1 : 0)
+                      .arg(m_mode));
+    }
 }
 
 bool DecodiumBridge::useModernSpectrumFeedWithLegacy() const
@@ -9593,6 +9627,11 @@ QString DecodiumBridge::diagnosticLogPath() const
 void DecodiumBridge::openDiagnosticLog() const
 {
     QDesktopServices::openUrl(QUrl::fromLocalFile(DecodiumLogging::diagnosticLogPath()));
+}
+
+void DecodiumBridge::openHamlibUpdatePage() const
+{
+    QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/Hamlib/Hamlib/releases")));
 }
 
 void DecodiumBridge::increaseFontScale()

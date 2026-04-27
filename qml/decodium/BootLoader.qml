@@ -21,6 +21,7 @@ ApplicationWindow {
     title: "Decodium 4.0 — Loading..."
     color: "#1a1a2e"
     property int mainLoadElapsedSeconds: 0
+    property double mainLoadStartedMs: 0
     property bool startupTimedOut: false
 
     Component.onCompleted: {
@@ -97,7 +98,11 @@ ApplicationWindow {
         }
 
         onLoaded: {
-            console.log("BootLoader: Main.qml loaded OK, transferring to main window")
+            var elapsedMs = bootWindow.mainLoadStartedMs > 0
+                    ? Math.round(Date.now() - bootWindow.mainLoadStartedMs)
+                    : -1
+            console.log("BootLoader: Main.qml loaded OK in " + elapsedMs
+                        + " ms, transferring to main window")
             // Main.qml creates its own ApplicationWindow, so hide boot window
             bootWindow.visible = false
             bootWindow.close()
@@ -139,6 +144,7 @@ ApplicationWindow {
         onTriggered: {
             console.log("BootLoader: starting Main.qml load")
             bootWindow.mainLoadElapsedSeconds = 0
+            bootWindow.mainLoadStartedMs = Date.now()
             mainLoader.source = "Main.qml"
         }
     }
