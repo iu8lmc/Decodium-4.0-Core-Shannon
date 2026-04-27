@@ -6450,6 +6450,26 @@ void DecodiumBridge::clearNextLogClusterSpotOverride()
     m_nextLogClusterSpotEnabled = false;
 }
 
+void DecodiumBridge::requestSafeGraphicsNextLaunch(const QString& reason)
+{
+#ifdef Q_OS_WIN
+    QString const flagPath = QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+        .absoluteFilePath(QStringLiteral("decodium-slow-qml-startup.flag"));
+    QFile flagFile {flagPath};
+    if (flagFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream out {&flagFile};
+        QString const cleanReason = reason.trimmed().isEmpty()
+            ? QStringLiteral("QML startup timed out; use safe graphics on next launch")
+            : reason.trimmed();
+        out << cleanReason << '\n';
+        out << QDateTime::currentDateTimeUtc().toString(Qt::ISODate) << '\n';
+    }
+    bridgeLog(QStringLiteral("Safe graphics marker requested for next launch: %1").arg(flagPath));
+#else
+    Q_UNUSED(reason)
+#endif
+}
+
 QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultValue) const
 {
     QVariant effectiveDefault = defaultValue;

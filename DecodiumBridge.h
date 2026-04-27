@@ -689,6 +689,7 @@ public slots:
     // Diagnostic log
     Q_INVOKABLE QString diagnosticLogPath() const;
     Q_INVOKABLE void openDiagnosticLog() const;
+    Q_INVOKABLE void requestSafeGraphicsNextLaunch(const QString& reason = QString());
 
     // Font scale
     Q_INVOKABLE void increaseFontScale();

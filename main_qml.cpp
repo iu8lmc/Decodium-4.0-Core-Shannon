@@ -211,7 +211,10 @@ int main(int argc, char* argv[])
 #ifdef Q_OS_WIN
     QString const slowQmlStartupFlag = slowQmlStartupFlagPath();
     bool const envSafeGraphics = qEnvironmentVariableIsSet("DECODIUM_SAFE_GRAPHICS");
-    bool const commandLineSafeGraphics = hasCommandLineSwitch(argc, argv, "--safe-graphics");
+    bool const commandLineSafeGraphics =
+        hasCommandLineSwitch(argc, argv, "--safe-graphics")
+        || hasCommandLineSwitch(argc, argv, "--disable-gpu")
+        || hasCommandLineSwitch(argc, argv, "--software-renderer");
     bool const autoSafeGraphics = QFile::exists(slowQmlStartupFlag);
     bool const safeGraphicsRequested =
         envSafeGraphics || commandLineSafeGraphics || autoSafeGraphics;
@@ -229,8 +232,8 @@ int main(int argc, char* argv[])
         backendMessage += qgetenv("QSG_RHI_BACKEND");
         L(backendMessage.constData());
     } else {
-        qputenv("QSG_RHI_BACKEND", "opengl");
-        L("RHI backend forced to OpenGL for compatibility");
+        qputenv("QSG_RHI_BACKEND", "d3d11");
+        L("Qt Quick graphics backend defaulted to D3D11");
     }
     setWindowsAppUserModelId();
 #endif
@@ -283,8 +286,9 @@ int main(int argc, char* argv[])
                                             QStringLiteral("language"));
     QCommandLineOption const testOption(QStringList {} << "test-mode",
                                         QStringLiteral("Writable files in test location. Use with caution, for testing only."));
-    QCommandLineOption const safeGraphicsOption(QStringList {} << "safe-graphics",
-                                                QStringLiteral("Use the Windows software graphics renderer for Qt Quick startup troubleshooting."));
+    QCommandLineOption const safeGraphicsOption(
+        QStringList {} << "safe-graphics" << "disable-gpu" << "software-renderer",
+        QStringLiteral("Use the Windows software graphics renderer for Qt Quick startup troubleshooting."));
     parser.addOption(rigOption);
     parser.addOption(configOption);
     parser.addOption(languageOption);
@@ -404,24 +408,18 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty("bridge", &bridge);
     engine.rootContext()->setContextProperty("appEngine", &bridge);
 
-    // On Windows, load Main.qml directly so Explorer tracks one stable
-    // taskbar window. Other platforms keep the asynchronous BootLoader.
-    // Main.qml still shows the in-app splash overlay after it is loaded.
+    // Load BootLoader first so the process shows a real window before the
+    // heavy QML tree is compiled. This also lets Windows users recover from
+    // driver-specific Qt Quick stalls instead of waiting on a silent startup.
     QDir const qmlDir {QDir(QCoreApplication::applicationDirPath())
                            .absoluteFilePath(QStringLiteral("qml/decodium"))};
 
-#ifdef Q_OS_WIN
-    QString qmlPath = qmlDir.absoluteFilePath(QStringLiteral("Main.qml"));
-    if (!QFile::exists(qmlPath))
-        qmlPath = qmlDir.absoluteFilePath(QStringLiteral("BootLoader.qml"));
-#else
     QString qmlPath = qmlDir.absoluteFilePath(QStringLiteral("BootLoader.qml"));
 
     // Fallback to Main.qml if BootLoader doesn't exist (portable/dev builds)
     if (!QFile::exists(qmlPath)) {
         qmlPath = qmlDir.absoluteFilePath(QStringLiteral("Main.qml"));
     }
-#endif
 
     if (!QFile::exists(qmlPath)) {
         L("QML file NOT FOUND");

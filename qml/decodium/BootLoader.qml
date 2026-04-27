@@ -20,6 +20,8 @@ ApplicationWindow {
     y: Math.round((Screen.desktopAvailableHeight - height) / 2)
     title: "Decodium 4.0 — Loading..."
     color: "#1a1a2e"
+    property int mainLoadElapsedSeconds: 0
+    property bool startupTimedOut: false
 
     Component.onCompleted: {
         console.log("BootLoader: window visible, starting async load of Main.qml")
@@ -50,27 +52,31 @@ ApplicationWindow {
         }
         BusyIndicator {
             anchors.horizontalCenter: parent.horizontalCenter
-            running: mainLoader.status === Loader.Loading
+            running: mainLoader.status === Loader.Loading && !bootWindow.startupTimedOut
             Material.accent: "#ff7814"
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: {
+                if (bootWindow.startupTimedOut)
+                    return "Startup is taking too long. Safe graphics will be used on the next launch."
                 switch (mainLoader.status) {
                 case Loader.Loading: return "Loading UI components..."
                 case Loader.Error:   return "Error loading UI: " + mainLoader.sourceComponent
                 default:             return ""
                 }
             }
-            color: mainLoader.status === Loader.Error ? "#ff4444" : "#888899"
+            color: bootWindow.startupTimedOut || mainLoader.status === Loader.Error ? "#ff8844" : "#888899"
             font.pixelSize: 13
         }
 
         // Error details
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: mainLoader.status === Loader.Error
-            text: "Try reinstalling Decodium or report this bug."
+            visible: mainLoader.status === Loader.Error || bootWindow.startupTimedOut
+            text: bootWindow.startupTimedOut
+                  ? "Decodium will close now. Open it again to retry with the software renderer."
+                  : "Try reinstalling Decodium or report this bug."
             color: "#ff8844"
             font.pixelSize: 12
         }
@@ -99,11 +105,40 @@ ApplicationWindow {
     }
 
     Timer {
+        id: mainLoadWatchdog
+        interval: 10000
+        repeat: true
+        running: mainLoader.status === Loader.Loading && !bootWindow.startupTimedOut
+        onTriggered: {
+            bootWindow.mainLoadElapsedSeconds += 10
+            console.log("BootLoader watchdog: Main.qml still loading after "
+                        + bootWindow.mainLoadElapsedSeconds + " s")
+            if (bootWindow.mainLoadElapsedSeconds >= 90) {
+                bootWindow.startupTimedOut = true
+                console.log("BootLoader watchdog: enabling safe graphics for next launch")
+                bridge.requestSafeGraphicsNextLaunch("BootLoader Main.qml load exceeded "
+                                                     + bootWindow.mainLoadElapsedSeconds
+                                                     + " seconds")
+                mainLoader.active = false
+                delayedQuitTimer.restart()
+            }
+        }
+    }
+
+    Timer {
+        id: delayedQuitTimer
+        interval: 3500
+        repeat: false
+        onTriggered: Qt.quit()
+    }
+
+    Timer {
         interval: 100  // let the boot window paint first
         running: true
         repeat: false
         onTriggered: {
             console.log("BootLoader: starting Main.qml load")
+            bootWindow.mainLoadElapsedSeconds = 0
             mainLoader.source = "Main.qml"
         }
     }
