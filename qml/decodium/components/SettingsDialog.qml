@@ -13,8 +13,8 @@ Dialog {
     id: settingsDialog
     title: qsTr("Settings")
     modal: true
-    width: parent ? Math.min(Math.round(parent.width * 0.94), 1520) : 1360
-    height: parent ? Math.min(Math.round(parent.height * 0.94), 980) : 900
+    width: Math.min(Math.round(((parent && parent.width > 0) ? parent.width : 1440) * 0.94), 1520)
+    height: Math.min(Math.round(((parent && parent.height > 0) ? parent.height : 960) * 0.94), 980)
     closePolicy: Popup.CloseOnEscape
     property bool positionInitialized: false
     property int currentTab: 0
@@ -493,14 +493,18 @@ Dialog {
 
     function clampToParent() {
         if (!parent) return
-        x = Math.max(0, Math.min(x, parent.width - width))
-        y = Math.max(0, Math.min(y, parent.height - height))
+        var parentWidth = parent.width > 0 ? parent.width : width
+        var parentHeight = parent.height > 0 ? parent.height : height
+        x = Math.max(0, Math.min(x, parentWidth - width))
+        y = Math.max(0, Math.min(y, parentHeight - height))
     }
 
     function ensureInitialPosition() {
         if (positionInitialized || !parent) return
-        x = Math.max(0, Math.round((parent.width - width) / 2))
-        y = Math.max(0, Math.round((parent.height - height) / 2))
+        var parentWidth = parent.width > 0 ? parent.width : width
+        var parentHeight = parent.height > 0 ? parent.height : height
+        x = Math.max(0, Math.round((parentWidth - width) / 2))
+        y = Math.max(0, Math.round((parentHeight - height) / 2))
         positionInitialized = true
     }
 

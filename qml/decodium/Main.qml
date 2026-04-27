@@ -5251,6 +5251,7 @@ ApplicationWindow {
 
     Loader {
         id: settingsDialogLoader
+        anchors.fill: parent
         active: false
         asynchronous: true
         source: "components/SettingsDialog.qml"
@@ -5261,6 +5262,14 @@ ApplicationWindow {
                 var action = pendingAction
                 pendingAction = null
                 action(item)
+            }
+        }
+        onStatusChanged: {
+            if (status === Loader.Error) {
+                console.error("Lazy component load failed: SettingsDialog")
+                pendingAction = null
+                active = false
+                showStatusToast(qsTr("Setup could not be opened. Check the startup log."), "#ff5252")
             }
         }
     }
