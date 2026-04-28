@@ -4987,6 +4987,11 @@ void MainWindow::legacySetNextLogClusterSpotState(bool available, bool checked)
   m_nextLogClusterSpotChecked = available && checked;
 }
 
+void MainWindow::legacySetNextLogPromptAlreadyAccepted()
+{
+  m_nextLogPromptAlreadyAccepted = true;
+}
+
 void MainWindow::legacySetWaterfallPalette(QString const& palette)
 {
   if (palette.isEmpty ())
@@ -20224,12 +20229,16 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     Q_UNUSED (autoLog);
     return promptToLog;
   };
+  bool const promptAlreadyAccepted = m_nextLogPromptAlreadyAccepted;
+  m_nextLogPromptAlreadyAccepted = false;
+  bool const promptToLog = livePromptToLog ();
   bool const forceLogWithoutPrompt =
-      !livePromptToLog ()
-      && (is_externalCtrlMode () || m_mode == "MSK144" || m_autoCQ);
+      promptAlreadyAccepted
+      || (!promptToLog
+          && (is_externalCtrlMode () || m_mode == "MSK144" || m_autoCQ));
   m_logDlg->initLogQSO (logHisCall, grid, m_mode, logRptSent, logRptRcvd,
                         logDateTimeQSOOn, dateTimeQSOOff, logDialFreq, m_noSuffix, logXSent, logXRcvd,
-                        forceLogWithoutPrompt);    // Auto CQ/external control must not bypass Prompt to Log.
+                        forceLogWithoutPrompt, promptAlreadyAccepted);    // Auto CQ/external control must not bypass Prompt to Log.
   clearPendingAutoLogSnapshot ();
   m_inQSOwith="";
   if (legacyRespondSelectionEnabled () && ui->respondComboBox->currentText() != "CQ: None") {

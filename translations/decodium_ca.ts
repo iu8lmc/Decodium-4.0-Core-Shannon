@@ -14301,4 +14301,79 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
             <translation>↻  Actualitza</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>Quant a Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Enllaços útils...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Dreceres de teclat</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>Mode SWL (només RX)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Mode multiresposta</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>Finestra MAM...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>Obre la carpeta ALL.TXT</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>Vigilància TX</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Mode Split</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Mode concurs</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>Només CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Només el meu indicatiu</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>Mode ZAP</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Cerca profunda</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Decodificació mitjana</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>Funcions VHF/UHF</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>Enregistra RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>Enregistra TX</translation>
+    </message>
+</context>
 </TS>

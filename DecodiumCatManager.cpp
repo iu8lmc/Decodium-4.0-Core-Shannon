@@ -4,8 +4,11 @@
 #include <cmath>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QRegularExpression>
 #include <QSerialPortInfo>
 #include <QSettings>
+
+#include <algorithm>
 
 namespace
 {
@@ -49,6 +52,78 @@ bool supportsYaesuDataPtt(QString const& rigName)
     return normalized.contains(QStringLiteral("FT991"))
         || normalized.contains(QStringLiteral("FTDX10"))
         || normalized.contains(QStringLiteral("FTDX101"));
+}
+
+QString normalizedSerialPortName(QString value)
+{
+    value = value.trimmed();
+    if (value.isEmpty()
+        || 0 == value.compare(QStringLiteral("CAT"), Qt::CaseInsensitive)
+        || 0 == value.compare(QStringLiteral("None"), Qt::CaseInsensitive)) {
+        return {};
+    }
+
+    if (value.startsWith(QStringLiteral("\\\\.\\")))
+        value.remove(0, 4);
+
+#if defined(Q_OS_WIN)
+    static QRegularExpression const rx(QStringLiteral(R"(^COM(\d+)$)"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    auto const match = rx.match(value);
+    if (match.hasMatch())
+        return QStringLiteral("COM") + match.captured(1);
+#endif
+
+    return value;
+}
+
+void appendUniqueSerialPort(QStringList& ports, QString const& rawPort)
+{
+    QString const port = normalizedSerialPortName(rawPort);
+    if (!port.isEmpty() && !ports.contains(port, Qt::CaseInsensitive))
+        ports << port;
+}
+
+int serialPortNumber(QString const& port)
+{
+    static QRegularExpression const rx(QStringLiteral(R"(^COM(\d+)$)"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    auto const match = rx.match(port.trimmed());
+    return match.hasMatch() ? match.captured(1).toInt() : -1;
+}
+
+void sortSerialPorts(QStringList& ports)
+{
+    std::sort(ports.begin(), ports.end(), [](QString const& a, QString const& b) {
+        int const an = serialPortNumber(a);
+        int const bn = serialPortNumber(b);
+        if (an >= 0 && bn >= 0)
+            return an < bn;
+        if (an >= 0 || bn >= 0)
+            return an >= 0;
+        return QString::localeAwareCompare(a, b) < 0;
+    });
+}
+
+QStringList enumerateSerialPorts(QString const& savedSerialPort, QString const& savedPttPort)
+{
+    QStringList ports;
+    for (QSerialPortInfo const& info : QSerialPortInfo::availablePorts()) {
+        appendUniqueSerialPort(ports, info.portName());
+        appendUniqueSerialPort(ports, info.systemLocation());
+    }
+
+#if defined(Q_OS_WIN)
+    QSettings serialMap(QStringLiteral("HKEY_LOCAL_MACHINE\\HARDWARE\\DEVICEMAP\\SERIALCOMM"),
+                        QSettings::NativeFormat);
+    for (QString const& key : serialMap.allKeys())
+        appendUniqueSerialPort(ports, serialMap.value(key).toString());
+#endif
+
+    appendUniqueSerialPort(ports, savedSerialPort);
+    appendUniqueSerialPort(ports, savedPttPort);
+    sortSerialPorts(ports);
+    return ports;
 }
 
 bool isLikelyDataMode(QString const& mode)
@@ -751,14 +826,15 @@ void DecodiumCatManager::refreshPorts()
 {
     QElapsedTimer timer;
     timer.start();
-    m_portList.clear();
-    for (const QSerialPortInfo& info : QSerialPortInfo::availablePorts())
-        m_portList.append(info.portName());
+    QStringList const ports = enumerateSerialPorts(m_serialPort, m_pttPort);
+    if (ports != m_portList) {
+        m_portList = ports;
+        emit portListChanged();
+    }
     if (timer.elapsed() > 1000) {
         qWarning("CAT serial port enumeration took %lld ms (%lld ports)",
                  timer.elapsed(), static_cast<long long>(m_portList.size()));
     }
-    emit portListChanged();
 }
 
 // --- settings ---

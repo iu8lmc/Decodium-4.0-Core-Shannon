@@ -14,11 +14,27 @@ namespace
 {
   unsigned const polls_to_stabilize {3};
   unsigned const transient_poll_failures_to_tolerate {3};
+
+  int base_poll_interval_ms (int poll_interval)
+  {
+    // TransceiverFactory packs feature flags in the high bits of
+    // poll_interval. The low 16 bits are the user-visible seconds.
+    int seconds = poll_interval & 0xffff;
+    if (seconds <= 0 && poll_interval > 0 && poll_interval < 0x10000)
+      {
+        seconds = poll_interval;
+      }
+    if (seconds <= 0)
+      {
+        seconds = 1;
+      }
+    return seconds * 1000;
+  }
 }
 
 PollingTransceiver::PollingTransceiver (logger_type * logger, int poll_interval, QObject * parent)
   : TransceiverBase {logger, parent}
-  , interval_ {poll_interval * 1000}
+  , interval_ {base_poll_interval_ms (poll_interval)}
   , poll_timer_ {nullptr}
   , retries_ {0}
   , poll_failures_ {0}
@@ -56,7 +72,6 @@ void PollingTransceiver::stop_timer ()
 
 void PollingTransceiver::do_post_start ()
 {
-  interval_ = 500;  // needed for displaying PWR and SWR
   start_timer ();
   if (!next_state_.online ())
     {

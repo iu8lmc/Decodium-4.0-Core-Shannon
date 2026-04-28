@@ -87,6 +87,7 @@ public:
     void logQso();
     void setAutoSpotEnabled(bool enabled);
     void setNextLogClusterSpotState(bool available, bool checked);
+    void setNextLogPromptAlreadyAccepted();
     void clearBandActivity();
     void clearRxFrequency();
     void setWaterfallPalette(const QString& palette);

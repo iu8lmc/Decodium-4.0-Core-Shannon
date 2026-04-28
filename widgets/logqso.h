@@ -31,7 +31,8 @@ public:
   void initLogQSO(QString const& hisCall, QString const& hisGrid, QString mode,
                   QString const& rptSent, QString const& rptRcvd, QDateTime const& dateTimeOn,
                   QDateTime const& dateTimeOff, Radio::Frequency dialFreq,
-                  bool noSuffix, QString xSent, QString xRcvd, bool externalCtrl);    //avt 11/20/20
+                  bool noSuffix, QString xSent, QString xRcvd, bool externalCtrl,
+                  bool promptAlreadyAccepted = false);    //avt 11/20/20
   void setClusterSpotState(bool available, bool checked);
 
 public slots:

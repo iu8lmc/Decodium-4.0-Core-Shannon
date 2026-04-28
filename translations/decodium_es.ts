@@ -15402,4 +15402,79 @@ Clic derecho para insertar y eliminar opciones.</translation>
             <translation>↻  Actualizar</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>Acerca de Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Enlaces útiles...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Atajos de teclado</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>Modo SWL (solo RX)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Modo multi-respuesta</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>Ventana MAM...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>Abrir carpeta ALL.TXT</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>Watchdog TX</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Modo Split</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Modo concurso</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>Solo CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Solo mi indicativo</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>Modo ZAP</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Búsqueda profunda</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Decodificación media</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>Funciones VHF/UHF</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>Grabar RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>Grabar TX</translation>
+    </message>
+</context>
 </TS>

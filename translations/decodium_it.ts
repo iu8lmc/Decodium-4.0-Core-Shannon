@@ -15164,4 +15164,79 @@ per valutare la propagazione e le prestazioni del sistema.</translation>
             <translation>↻  Aggiorna</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>Informazioni su Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Link utili...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Scorciatoie da tastiera</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>Modalità SWL (solo RX)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Modalità Multi-Risposta</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>Finestra MAM...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>Apri cartella ALL.TXT</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>Watchdog TX</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Modalità Split</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Modalità Contest</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>Solo CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Solo mio nominativo</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>Modalità ZAP</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Ricerca profonda</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Decodifica media</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>Funzioni VHF/UHF</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>Registra RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>Registra TX</translation>
+    </message>
+</context>
 </TS>

@@ -5655,7 +5655,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "About Decodium"
+            text: qsTr("About Decodium")
             icon.source: ""
             onTriggered: { infoDialog.currentTab = 0; infoDialog.open() }
 
@@ -5672,7 +5672,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "Link Utili..."
+            text: qsTr("Useful Links...")
             onTriggered: { infoDialog.currentTab = 4; infoDialog.open() }
 
             background: Rectangle {
@@ -5696,7 +5696,7 @@ ApplicationWindow {
 
         // ===== DECODIUM FEATURES SUBMENU =====
         MenuItem {
-            text: "⌨ Scorciatoie Tastiera"
+            text: "\u2328 " + qsTr("Keyboard Shortcuts")
             onTriggered: keyboardShortcutsDialog.open()
 
             background: Rectangle {
@@ -5712,7 +5712,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.swlMode ? "✓ SWL Mode (Solo RX)" : "☐ SWL Mode (Solo RX)"
+            text: (bridge.swlMode ? "✓ " : "☐ ") + qsTr("SWL Mode (RX Only)")
             onTriggered: bridge.swlMode = !bridge.swlMode
 
             background: Rectangle {
@@ -5728,7 +5728,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.multiAnswerMode ? "✓ Multi-Answer Mode" : "☐ Multi-Answer Mode"
+            text: (bridge.multiAnswerMode ? "✓ " : "☐ ") + qsTr("Multi-Answer Mode")
             onTriggered: bridge.multiAnswerMode = !bridge.multiAnswerMode
 
             background: Rectangle {
@@ -5744,7 +5744,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "MAM Window..."
+            text: qsTr("MAM Window...")
             onTriggered: mamWindow.open()
 
             background: Rectangle {
@@ -5760,7 +5760,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "📂 Apri Cartella ALL.TXT"
+            text: "📂 " + qsTr("Open ALL.TXT Folder")
             onTriggered: bridge.openAllTxtFolder()
 
             background: Rectangle {
@@ -5784,7 +5784,7 @@ ApplicationWindow {
 
         // ===== TX OPTIONS =====
         MenuItem {
-            text: bridge.txWatchdogMode > 0 ? "✓ TX Watchdog" : "☐ TX Watchdog"
+            text: (bridge.txWatchdogMode > 0 ? "✓ " : "☐ ") + qsTr("TX Watchdog")
             onTriggered: txWatchdogDialog.open()
 
             background: Rectangle {
@@ -5800,7 +5800,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.splitMode ? "✓ Split Mode" : "☐ Split Mode"
+            text: (bridge.splitMode ? "✓ " : "☐ ") + qsTr("Split Mode")
             onTriggered: bridge.splitMode = !bridge.splitMode
 
             background: Rectangle {
@@ -5816,7 +5816,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.contestType > 0 ? "✓ Contest Mode" : "☐ Contest Mode"
+            text: (bridge.contestType > 0 ? "✓ " : "☐ ") + qsTr("Contest Mode")
             onTriggered: contestDialog.open()
 
             background: Rectangle {
@@ -5840,7 +5840,7 @@ ApplicationWindow {
 
         // ===== DECODE FILTERS =====
         MenuItem {
-            text: bridge.filterCqOnly ? "✓ Solo CQ" : "☐ Solo CQ"
+            text: (bridge.filterCqOnly ? "✓ " : "☐ ") + qsTr("CQ Only")
             onTriggered: bridge.filterCqOnly = !bridge.filterCqOnly
 
             background: Rectangle {
@@ -5856,7 +5856,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.filterMyCallOnly ? "✓ Solo My Call" : "☐ Solo My Call"
+            text: (bridge.filterMyCallOnly ? "✓ " : "☐ ") + qsTr("My Call Only")
             onTriggered: bridge.filterMyCallOnly = !bridge.filterMyCallOnly
 
             background: Rectangle {
@@ -5872,7 +5872,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.zapEnabled ? "✓ ZAP Mode" : "☐ ZAP Mode"
+            text: (bridge.zapEnabled ? "✓ " : "☐ ") + qsTr("ZAP Mode")
             onTriggered: bridge.zapEnabled = !bridge.zapEnabled
 
             background: Rectangle {
@@ -5896,7 +5896,7 @@ ApplicationWindow {
 
         // ===== DECODER OPTIONS =====
         MenuItem {
-            text: bridge.deepSearchEnabled ? "✓ Deep Search" : "☐ Deep Search"
+            text: (bridge.deepSearchEnabled ? "✓ " : "☐ ") + qsTr("Deep Search")
             onTriggered: bridge.deepSearchEnabled = !bridge.deepSearchEnabled
 
             background: Rectangle {
@@ -5912,7 +5912,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.avgDecodeEnabled ? "✓ Avg Decode" : "☐ Avg Decode"
+            text: (bridge.avgDecodeEnabled ? "✓ " : "☐ ") + qsTr("Avg Decode")
             onTriggered: bridge.avgDecodeEnabled = !bridge.avgDecodeEnabled
 
             background: Rectangle {
@@ -5928,7 +5928,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.vhfUhfFeatures ? "✓ VHF/UHF Features" : "☐ VHF/UHF Features"
+            text: (bridge.vhfUhfFeatures ? "✓ " : "☐ ") + qsTr("VHF/UHF Features")
             onTriggered: bridge.vhfUhfFeatures = !bridge.vhfUhfFeatures
 
             background: Rectangle {
@@ -5952,7 +5952,7 @@ ApplicationWindow {
 
         // ===== RECORDING =====
         MenuItem {
-            text: bridge.recordRxEnabled ? "✓ Registra RX" : "☐ Registra RX"
+            text: (bridge.recordRxEnabled ? "✓ " : "☐ ") + qsTr("Record RX")
             onTriggered: bridge.recordRxEnabled = !bridge.recordRxEnabled
 
             background: Rectangle {
@@ -5968,7 +5968,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.recordTxEnabled ? "✓ Registra TX" : "☐ Registra TX"
+            text: (bridge.recordTxEnabled ? "✓ " : "☐ ") + qsTr("Record TX")
             onTriggered: bridge.recordTxEnabled = !bridge.recordTxEnabled
 
             background: Rectangle {
@@ -6417,7 +6417,7 @@ ApplicationWindow {
     // ===== TX WATCHDOG DIALOG =====
     Dialog {
         id: txWatchdogDialog
-        title: "TX Watchdog"
+        title: qsTr("TX Watchdog")
         anchors.centerIn: parent
         width: 350
         height: 280
@@ -6494,7 +6494,7 @@ ApplicationWindow {
     // ===== CONTEST MODE DIALOG =====
     Dialog {
         id: contestDialog
-        title: "Contest Mode"
+        title: qsTr("Contest Mode")
         anchors.centerIn: parent
         width: 400
         height: 320
@@ -6562,7 +6562,7 @@ ApplicationWindow {
     // ===== KEYBOARD SHORTCUTS DIALOG =====
     Dialog {
         id: keyboardShortcutsDialog
-        title: "Scorciatoie Tastiera"
+        title: qsTr("Keyboard Shortcuts")
         anchors.centerIn: parent
         width: 400
         height: 450

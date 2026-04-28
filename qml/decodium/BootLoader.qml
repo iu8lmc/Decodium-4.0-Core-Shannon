@@ -174,6 +174,8 @@ ApplicationWindow {
         repeat: false
         onTriggered: {
             console.log("BootLoader: starting Main.qml load at +" + bootWindow.bootElapsedMs() + " ms")
+            if (bridge && bridge.notifyMainQmlLoadStarted)
+                bridge.notifyMainQmlLoadStarted()
             bootWindow.mainLoadElapsedSeconds = 0
             bootWindow.mainLoadStartedMs = Date.now()
             bootWindow.mainComponent = Qt.createComponent("Main.qml", Component.Asynchronous)

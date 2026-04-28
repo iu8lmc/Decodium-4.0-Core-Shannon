@@ -388,7 +388,8 @@ void LogQSO::storeSettings () const
 void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString mode,
                         QString const& rptSent, QString const& rptRcvd,
                         QDateTime const& dateTimeOn, QDateTime const& dateTimeOff,
-                        Radio::Frequency dialFreq, bool noSuffix, QString xSent, QString xRcvd, bool externalCtrl)    //avt 11/20/20
+                        Radio::Frequency dialFreq, bool noSuffix, QString xSent, QString xRcvd,
+                        bool externalCtrl, bool promptAlreadyAccepted)    //avt 11/20/20
 {
   if(!isHidden()) return;
 
@@ -529,7 +530,7 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
   }
 
   auto const logging_mode = current_logging_mode (m_settings, m_config->prompt_to_log (), m_config->autoLog ());
-  bool const force_log_without_prompt = externalCtrl && !logging_mode.prompt_to_log;
+  bool const force_log_without_prompt = promptAlreadyAccepted || (externalCtrl && !logging_mode.prompt_to_log);
   if (SpOp::FOX == special_op
       || force_log_without_prompt                                      //avt 11/19/20 UDP listener requires auto logging
       || (logging_mode.auto_log && ((SpOp::NONE < special_op && special_op < SpOp::FOX)

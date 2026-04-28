@@ -13507,4 +13507,79 @@ Jobb klikk a beillesztési és törlési lehetőségekhez.</translation>
             <translation>↻  Frissítés</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>A Decodium névjegye</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Hasznos linkek...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Billentyűparancsok</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>SWL mód (csak RX)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Többválaszos mód</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>MAM ablak...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>ALL.TXT mappa megnyitása</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>TX watchdog</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Split mód</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Verseny mód</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>Csak CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Csak saját hívójel</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>ZAP mód</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Mély keresés</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Átlag dekódolás</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>VHF/UHF funkciók</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>RX rögzítése</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>TX rögzítése</translation>
+    </message>
+</context>
 </TS>

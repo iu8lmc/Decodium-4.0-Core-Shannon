@@ -1010,6 +1010,13 @@ void DecodiumLegacyBackend::setNextLogClusterSpotState(bool available, bool chec
     }
 }
 
+void DecodiumLegacyBackend::setNextLogPromptAlreadyAccepted()
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetNextLogPromptAlreadyAccepted();
+    }
+}
+
 void DecodiumLegacyBackend::clearBandActivity()
 {
     if (m_mainWindow) {

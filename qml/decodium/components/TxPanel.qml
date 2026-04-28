@@ -1016,10 +1016,10 @@ Item {
                         if (!engine) {
                             return
                         }
-                        txPanel.logPromptRequestedByBridge = false
-                        txPanel.logPromptAccepted = false
-                        txPanel.refreshLogPreview()
-                        logConfirmPopup.open()
+                        if (engine.promptLogQso)
+                            engine.promptLogQso()
+                        else
+                            engine.logQso()
                     }
                 }
             }

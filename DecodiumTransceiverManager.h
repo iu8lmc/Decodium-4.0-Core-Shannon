@@ -193,6 +193,7 @@ private:
     void enforceForceLineAvailability();
     void updateTelemetry(double powerWatts, double swr);
     void reconnectRigForParameterChange(const QString& reason);
+    void scheduleTransientReconnect(const QString& reason);
     bool pttSharesCatPort() const;
     bool forceDtrAvailable() const;
     bool forceRtsAvailable() const;
@@ -229,4 +230,6 @@ private:
     bool    m_catAutoConnect {false};
     bool    m_audioAutoStart {false};
     bool    m_tciAudioEnabled {true};
+    int     m_transientCatRetryCount {0};
+    bool    m_transientCatReconnectPending {false};
 };

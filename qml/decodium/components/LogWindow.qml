@@ -64,7 +64,35 @@ Popup {
                 searchField.text,
                 bandFilter.currentText === "All" ? "" : bandFilter.currentText,
                 modeFilter.currentText === "All" ? "" : modeFilter.currentText, "", "")
-            stats = appEngine.logManager.getQsoStats()
+            stats = statsFromRows(qsoList)
+        }
+    }
+
+    function statsFromRows(rows) {
+        var calls = ({})
+        var grids = ({})
+        var maxDistance = 0
+        var farthestCall = ""
+        for (var i = 0; i < rows.length; ++i) {
+            var row = rows[i] || ({})
+            var call = String(row.call || "").toUpperCase()
+            var grid = String(row.grid || "").toUpperCase()
+            var distance = Number(row.distanceKm || 0)
+            if (call.length > 0)
+                calls[call] = true
+            if (grid.length > 0)
+                grids[grid] = true
+            if (distance > maxDistance) {
+                maxDistance = distance
+                farthestCall = call
+            }
+        }
+        return {
+            totalQsos: rows.length,
+            uniqueCalls: Object.keys(calls).length,
+            uniqueGrids: Object.keys(grids).length,
+            maxDistance: maxDistance,
+            farthestCall: farthestCall
         }
     }
 

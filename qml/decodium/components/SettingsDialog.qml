@@ -38,6 +38,10 @@ Dialog {
     property var fontPickerFamilies: []
     property bool loggingChecksUpdating: false
 
+    onOpened: {
+        Qt.callLater(refreshCatPorts)
+    }
+
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
         decodedFontLabel = bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)

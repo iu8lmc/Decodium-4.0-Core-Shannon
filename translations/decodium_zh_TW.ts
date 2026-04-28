@@ -14708,4 +14708,79 @@ Right click for insert and delete options.</source>
             <translation>↻  重新整理</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>關於 Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>實用連結...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>鍵盤快捷鍵</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>SWL 模式（僅 RX）</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>多重回應模式</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>MAM 視窗...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>開啟 ALL.TXT 資料夾</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>TX 看門狗</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Split 模式</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Contest 模式</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>僅 CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>僅我的呼號</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>ZAP 模式</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>深度搜尋</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>平均解碼</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>VHF/UHF 功能</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>錄製 RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>錄製 TX</translation>
+    </message>
+</context>
 </TS>

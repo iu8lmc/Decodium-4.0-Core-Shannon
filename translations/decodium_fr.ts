@@ -13777,4 +13777,79 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
             <translation>↻  Actualiser</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>À propos de Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Liens utiles...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Raccourcis clavier</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>Mode SWL (RX uniquement)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Mode multi-réponse</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>Fenêtre MAM...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>Ouvrir le dossier ALL.TXT</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>Watchdog TX</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Mode Split</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Mode concours</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>CQ uniquement</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Mon indicatif uniquement</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>Mode ZAP</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Recherche approfondie</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Décodage moyen</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>Fonctions VHF/UHF</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>Enregistrer RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>Enregistrer TX</translation>
+    </message>
+</context>
 </TS>

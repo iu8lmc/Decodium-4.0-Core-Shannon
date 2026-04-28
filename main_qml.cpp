@@ -4,6 +4,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QMetaType>
 #include <QStyleFactory>
 #include <QFont>
@@ -115,6 +116,88 @@ static QString slowQmlStartupFlagPath()
 {
     return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
         .absoluteFilePath(QStringLiteral("decodium-slow-qml-startup.flag"));
+}
+
+static QString startupLogPath()
+{
+    return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+        .absoluteFilePath(QStringLiteral("decodium-start.log"));
+}
+
+static QDateTime startupLogTimestamp(const QString& line)
+{
+    static QRegularExpression const timestampPattern {
+        QStringLiteral(R"(^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\])")
+    };
+    auto const match = timestampPattern.match(line);
+    if (!match.hasMatch()) {
+        return {};
+    }
+    QDateTime ts = QDateTime::fromString(match.captured(1),
+                                         QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"));
+    if (ts.isValid()) {
+        ts.setTimeSpec(Qt::LocalTime);
+    }
+    return ts;
+}
+
+static bool previousStartupLogShowsSlowQml()
+{
+    QFile file {startupLogPath()};
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    qint64 constexpr maxBytesToInspect = 2LL * 1024LL * 1024LL;
+    if (file.size() > maxBytesToInspect) {
+        file.seek(file.size() - maxBytesToInspect);
+    }
+    QString const recent = QString::fromLocal8Bit(file.readAll());
+    if (recent.contains(QRegularExpression(QStringLiteral(
+            R"(QML LOAD WATCHDOG: .* still running after ([6-9]\d|[1-9]\d{2,}) s)")))) {
+        return true;
+    }
+    if (recent.contains(QRegularExpression(QStringLiteral(
+            R"(BootLoader watchdog: Main\.qml still loading after ([1-9]\d+) s)")))) {
+        return true;
+    }
+
+    QRegularExpression const qmlLoadedMs {
+        QStringLiteral(R"(Main\.qml (?:loaded OK|created as top-level window).* in ([1-9]\d{4,}) ms)")
+    };
+    auto it = qmlLoadedMs.globalMatch(recent);
+    while (it.hasNext()) {
+        auto const match = it.next();
+        if (match.captured(1).toLongLong() >= 30000) {
+            return true;
+        }
+    }
+
+    QDateTime mainLoadStarted;
+    for (QString const& line : recent.split(QLatin1Char('\n'))) {
+        QDateTime const ts = startupLogTimestamp(line);
+        if (!ts.isValid()) {
+            continue;
+        }
+        if (line.contains(QStringLiteral("BootLoader: starting Main.qml load"))) {
+            mainLoadStarted = ts;
+            continue;
+        }
+        if (!mainLoadStarted.isValid()) {
+            continue;
+        }
+        bool const mainReady =
+            line.contains(QStringLiteral("Main.qml startup +0 ms"))
+            || line.contains(QStringLiteral("Main.qml Component.onCompleted"))
+            || line.contains(QStringLiteral("BootLoader: Loader status = 1 ready"))
+            || line.contains(QStringLiteral("BootLoader: Main.qml loaded OK"))
+            || line.contains(QStringLiteral("BootLoader: Main.qml created as top-level window"));
+        if (mainReady && mainLoadStarted.msecsTo(ts) >= 30000) {
+            return true;
+        }
+    }
+
+    return recent.contains(QStringLiteral("Main.qml async load watchdog wrote safe graphics marker"));
 }
 
 static void writeSlowQmlStartupFlag(const QByteArray& flagPath, const QByteArray& reason)
@@ -362,17 +445,25 @@ int main(int argc, char* argv[])
 
 #ifdef Q_OS_WIN
     QString const slowQmlStartupFlag = slowQmlStartupFlagPath();
+    bool const commandLineResetSafeGraphics =
+        hasCommandLineSwitch(argc, argv, "--reset-safe-graphics");
+    if (commandLineResetSafeGraphics && QFile::exists(slowQmlStartupFlag)) {
+        QFile::remove(slowQmlStartupFlag);
+    }
     bool const envSafeGraphics = qEnvironmentVariableIsSet("DECODIUM_SAFE_GRAPHICS");
     bool const commandLineSafeGraphics =
         hasCommandLineSwitch(argc, argv, "--safe-graphics")
         || hasCommandLineSwitch(argc, argv, "--disable-gpu")
         || hasCommandLineSwitch(argc, argv, "--software-renderer");
-    bool const autoSafeGraphics = QFile::exists(slowQmlStartupFlag);
+    bool const autoSafeGraphics =
+        !commandLineResetSafeGraphics
+        && (QFile::exists(slowQmlStartupFlag) || previousStartupLogShowsSlowQml());
     bool const safeGraphicsRequested =
         envSafeGraphics || commandLineSafeGraphics || autoSafeGraphics;
     if (safeGraphicsRequested) {
         qputenv("QSG_RHI_BACKEND", "d3d11");
         qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "1");
+        qputenv("QT_OPENGL", "software");
         if (autoSafeGraphics && !envSafeGraphics && !commandLineSafeGraphics) {
             L(("Qt Quick safe graphics auto-enabled after previous slow QML startup: "
                + slowQmlStartupFlag.toLocal8Bit()).constData());
@@ -452,11 +543,15 @@ int main(int argc, char* argv[])
     QCommandLineOption const safeGraphicsOption(
         QStringList {} << "safe-graphics" << "disable-gpu" << "software-renderer",
         QStringLiteral("Use the Windows software graphics renderer for Qt Quick startup troubleshooting."));
+    QCommandLineOption const resetSafeGraphicsOption(
+        QStringList {} << "reset-safe-graphics",
+        QStringLiteral("Clear the automatic Windows safe graphics startup marker."));
     parser.addOption(rigOption);
     parser.addOption(configOption);
     parser.addOption(languageOption);
     parser.addOption(testOption);
     parser.addOption(safeGraphicsOption);
+    parser.addOption(resetSafeGraphicsOption);
 
     if (!parser.parse(app.arguments())) {
         L(("Command line error: " + parser.errorText()).toLocal8Bit().constData());

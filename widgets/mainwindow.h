@@ -228,6 +228,7 @@ public:
   void legacyLogQso();
   void legacySetAutoSpotEnabled(bool enabled);
   void legacySetNextLogClusterSpotState(bool available, bool checked);
+  void legacySetNextLogPromptAlreadyAccepted();
   void legacySetWaterfallPalette(QString const& palette);
   void legacyOpenSettings(int tabIndex = -1);
   void legacyOpenTimeSyncPanel();
@@ -1150,6 +1151,7 @@ private:
   bool    m_nextLogClusterSpotOverrideValid {false};
   bool    m_nextLogClusterSpotAvailable {false};
   bool    m_nextLogClusterSpotChecked {false};
+  bool    m_nextLogPromptAlreadyAccepted {false};
   bool    m_bCheckedContest;
   bool    m_bWarnedSplit=false;
   bool    m_bTUmsg;

@@ -14881,4 +14881,79 @@ Højre klik for at indsætte eller slette elementer.</translation>
             <translation>↻  Opdater</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>Om Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Nyttige links...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Tastaturgenveje</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>SWL-tilstand (kun RX)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Multi-svar-tilstand</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>MAM-vindue...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>Åbn ALL.TXT-mappe</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>TX-watchdog</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Split-tilstand</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Contest-tilstand</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>Kun CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Kun mit kaldesignal</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>ZAP-tilstand</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Dyb søgning</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Gennemsnitlig dekodning</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>VHF/UHF-funktioner</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>Optag RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>Optag TX</translation>
+    </message>
+</context>
 </TS>

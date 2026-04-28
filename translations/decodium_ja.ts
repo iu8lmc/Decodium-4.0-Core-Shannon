@@ -14858,4 +14858,79 @@ Right click for insert and delete options.</source>
             <translation>↻  更新</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>Decodium について</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>便利なリンク...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>キーボードショートカット</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>SWL モード（RX のみ）</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>マルチアンサーモード</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>MAM ウィンドウ...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>ALL.TXT フォルダーを開く</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>TX ウォッチドッグ</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Split モード</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Contest モード</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>CQ のみ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>自局コールのみ</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>ZAP モード</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>ディープサーチ</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>平均デコード</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>VHF/UHF 機能</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>RX を録音</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>TX を録音</translation>
+    </message>
+</context>
 </TS>

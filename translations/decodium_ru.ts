@@ -14301,4 +14301,79 @@ Right click for insert and delete options.</source>
             <translation>↻  Обновить</translation>
         </message>
 </context>
+<context>
+    <name>Main</name>
+    <message>
+        <source>About Decodium</source>
+        <translation>О Decodium</translation>
+    </message>
+    <message>
+        <source>Useful Links...</source>
+        <translation>Полезные ссылки...</translation>
+    </message>
+    <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>Сочетания клавиш</translation>
+    </message>
+    <message>
+        <source>SWL Mode (RX Only)</source>
+        <translation>Режим SWL (только RX)</translation>
+    </message>
+    <message>
+        <source>Multi-Answer Mode</source>
+        <translation>Режим нескольких ответов</translation>
+    </message>
+    <message>
+        <source>MAM Window...</source>
+        <translation>Окно MAM...</translation>
+    </message>
+    <message>
+        <source>Open ALL.TXT Folder</source>
+        <translation>Открыть папку ALL.TXT</translation>
+    </message>
+    <message>
+        <source>TX Watchdog</source>
+        <translation>TX Watchdog</translation>
+    </message>
+    <message>
+        <source>Split Mode</source>
+        <translation>Режим Split</translation>
+    </message>
+    <message>
+        <source>Contest Mode</source>
+        <translation>Режим Contest</translation>
+    </message>
+    <message>
+        <source>CQ Only</source>
+        <translation>Только CQ</translation>
+    </message>
+    <message>
+        <source>My Call Only</source>
+        <translation>Только мой позывной</translation>
+    </message>
+    <message>
+        <source>ZAP Mode</source>
+        <translation>Режим ZAP</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Глубокий поиск</translation>
+    </message>
+    <message>
+        <source>Avg Decode</source>
+        <translation>Усреднённое декодирование</translation>
+    </message>
+    <message>
+        <source>VHF/UHF Features</source>
+        <translation>Функции VHF/UHF</translation>
+    </message>
+    <message>
+        <source>Record RX</source>
+        <translation>Запись RX</translation>
+    </message>
+    <message>
+        <source>Record TX</source>
+        <translation>Запись TX</translation>
+    </message>
+</context>
 </TS>

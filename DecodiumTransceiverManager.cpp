@@ -15,6 +15,7 @@
 #include <QMetaType>
 #include <QDebug>
 #include <QRegularExpression>
+#include <algorithm>
 #include <atomic>
 #include <stdexcept>
 
@@ -130,6 +131,33 @@ bool pttPortSharesCatPort(QString const& serialPort, QString const& pttPort)
     return comparablePortName(trimmedPttPort) == comparablePortName(serialPort);
 }
 
+bool isTransientCatIoFailure(QString const& reason)
+{
+    QString const lower = reason.toLower();
+    static QStringList const markers = {
+        QStringLiteral("io error"),
+        QStringLiteral("input/output error"),
+        QStringLiteral("device not configured"),
+        QStringLiteral("no such device"),
+        QStringLiteral("device unavailable"),
+        QStringLiteral("resource temporarily unavailable"),
+        QStringLiteral("temporarily unavailable"),
+        QStringLiteral("timed out"),
+        QStringLiteral("timeout"),
+        QStringLiteral("rig_get_ptt"),
+        QStringLiteral("write_block"),
+        QStringLiteral("read_block"),
+        QStringLiteral("returning(-6)"),
+        QStringLiteral("returning (-6)"),
+    };
+    for (QString const& marker : markers) {
+        if (lower.contains(marker)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool d3ForceDtrAvailable(QString const& portType, QString const& pttMethod,
                          QString const& serialPort, QString const& pttPort)
 {
@@ -149,6 +177,83 @@ bool d3ForceRtsAvailable(QString const& portType, QString const& handshake,
         && !hardwareHandshake
         && !(0 == pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive)
              && pttPortSharesCatPort(serialPort, pttPort));
+}
+
+QString normalizedSerialPortName(QString value)
+{
+    value = value.trimmed();
+    if (value.isEmpty()
+        || 0 == value.compare(QStringLiteral("CAT"), Qt::CaseInsensitive)
+        || 0 == value.compare(QStringLiteral("None"), Qt::CaseInsensitive)) {
+        return {};
+    }
+    if (value.startsWith(QStringLiteral("\\\\.\\"))) {
+        value.remove(0, 4);
+    }
+#if defined(Q_OS_WIN)
+    static QRegularExpression const rx(QStringLiteral(R"(^COM(\d+)$)"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    auto const match = rx.match(value);
+    if (match.hasMatch()) {
+        return QStringLiteral("COM") + match.captured(1);
+    }
+#endif
+    return value;
+}
+
+void appendUniqueSerialPort(QStringList& ports, QString const& rawPort)
+{
+    QString const port = normalizedSerialPortName(rawPort);
+    if (!port.isEmpty() && !ports.contains(port, Qt::CaseInsensitive)) {
+        ports << port;
+    }
+}
+
+int serialPortNumber(QString const& port)
+{
+    static QRegularExpression const rx(QStringLiteral(R"(^COM(\d+)$)"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    auto const match = rx.match(port.trimmed());
+    return match.hasMatch() ? match.captured(1).toInt() : -1;
+}
+
+void sortSerialPorts(QStringList& ports)
+{
+    std::sort(ports.begin(), ports.end(), [](QString const& a, QString const& b) {
+        int const an = serialPortNumber(a);
+        int const bn = serialPortNumber(b);
+        if (an >= 0 && bn >= 0) {
+            return an < bn;
+        }
+        if (an >= 0 || bn >= 0) {
+            return an >= 0;
+        }
+        return QString::localeAwareCompare(a, b) < 0;
+    });
+}
+
+QStringList enumerateSerialPorts(QString const& savedSerialPort, QString const& savedPttPort)
+{
+    QStringList ports;
+    for (QSerialPortInfo const& info : QSerialPortInfo::availablePorts()) {
+        appendUniqueSerialPort(ports, info.portName());
+        appendUniqueSerialPort(ports, info.systemLocation());
+    }
+
+#if defined(Q_OS_WIN)
+    // Qt occasionally misses virtual/driver-created ports on Windows. The
+    // canonical Windows COM mapping is also exposed in this registry key.
+    QSettings serialMap(QStringLiteral("HKEY_LOCAL_MACHINE\\HARDWARE\\DEVICEMAP\\SERIALCOMM"),
+                        QSettings::NativeFormat);
+    for (QString const& key : serialMap.allKeys()) {
+        appendUniqueSerialPort(ports, serialMap.value(key).toString());
+    }
+#endif
+
+    appendUniqueSerialPort(ports, savedSerialPort);
+    appendUniqueSerialPort(ports, savedPttPort);
+    sortSerialPorts(ports);
+    return ports;
 }
 }
 
@@ -547,6 +652,10 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     TransceiverFactory::ParameterPack p;
     bool const canForceDtr = d3ForceDtrAvailable(m->portType(), m->pttMethod(), m->serialPort(), m->pttPort());
     bool const canForceRts = d3ForceRtsAvailable(m->portType(), m->handshake(), m->pttMethod(), m->serialPort(), m->pttPort());
+    bool const serialCat = 0 == m->portType().compare(QStringLiteral("serial"), Qt::CaseInsensitive);
+    bool const pwrAndSwrEnabled = configuredPwrAndSwrEnabled();
+    int const basePollInterval = qMax(serialCat ? (pwrAndSwrEnabled ? 3 : 2) : 1,
+                                      qBound(1, m->pollInterval(), 99));
     p.rig_name      = m->rigName();
     p.serial_port   = normalizeDevicePath(m->serialPort());
     p.network_port  = m->networkPort();
@@ -567,8 +676,8 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.split_mode    = parseSplit(m->splitMode());
     // "CAT" in PTT Port means "use the same serial port as CAT", as in WSJT-X.
     p.ptt_port      = resolvedPttPort(m);
-    p.poll_interval = m->pollInterval();
-    if (configuredPwrAndSwrEnabled())
+    p.poll_interval = basePollInterval;
+    if (pwrAndSwrEnabled)
         p.poll_interval |= do__pwr;
     if (m->tciAudioEnabled()
         && 0 == m->portType().compare(QStringLiteral("tci"), Qt::CaseInsensitive)) {
@@ -699,6 +808,10 @@ void DecodiumTransceiverManager::connectRig()
                     m_connected = onl;
                     emit connectedChanged();
                     emit statusUpdate(onl ? ("Connesso: " + m_rigName) : "Disconnesso");
+                    if (onl) {
+                        m_transientCatRetryCount = 0;
+                        m_transientCatReconnectPending = false;
+                    }
                     if (onl && m_audioAutoStart)
                         emit audioAutoStartChanged();
                 }
@@ -716,8 +829,15 @@ void DecodiumTransceiverManager::connectRig()
     connect(xcv, &Transceiver::failure,
             this,
             [this](QString const& reason) {
+                bool const wasConnected = m_connected;
                 d->desired.online(false);
-                emit errorOccurred("CAT failure: " + sanitizeHamlibFailure(reason));
+                bool const recovering = m_transientCatRetryCount > 0;
+                if ((wasConnected || recovering) && isTransientCatIoFailure(reason)) {
+                    qWarning().noquote() << "Transient CAT failure:" << reason;
+                    scheduleTransientReconnect(reason);
+                } else {
+                    emit errorOccurred("CAT failure: " + sanitizeHamlibFailure(reason));
+                }
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
                 updateTelemetry(0.0, 0.0);
             },
@@ -741,6 +861,7 @@ void DecodiumTransceiverManager::connectRig()
 // ── disconnectRig ─────────────────────────────────────────────────────────
 void DecodiumTransceiverManager::disconnectRig()
 {
+    m_transientCatReconnectPending = false;
     if (!d->transceiver) return;
 
     auto* xcv    = d->transceiver;
@@ -776,6 +897,36 @@ void DecodiumTransceiverManager::disconnectRig()
     }
     updateTelemetry(0.0, 0.0);
     emit statusUpdate("Disconnesso dal transceiver");
+}
+
+void DecodiumTransceiverManager::scheduleTransientReconnect(const QString& reason)
+{
+    if (m_transientCatReconnectPending) {
+        return;
+    }
+
+    static constexpr int maxRetries = 5;
+    if (m_transientCatRetryCount >= maxRetries) {
+        m_transientCatRetryCount = 0;
+        emit errorOccurred(QStringLiteral("CAT failure: ") + sanitizeHamlibFailure(reason));
+        return;
+    }
+
+    ++m_transientCatRetryCount;
+    m_transientCatReconnectPending = true;
+    int const delayMs = qMin(10000, 1200 * m_transientCatRetryCount);
+    emit statusUpdate(tr("CAT interrotto, riconnessione automatica (%1/%2)...")
+                          .arg(m_transientCatRetryCount)
+                          .arg(maxRetries));
+
+    QTimer::singleShot(delayMs, this, [this]() {
+        if (!m_transientCatReconnectPending) {
+            return;
+        }
+        m_transientCatReconnectPending = false;
+        disconnectRig();
+        connectRig();
+    });
 }
 
 void DecodiumTransceiverManager::updateTelemetry(double powerWatts, double swr)
@@ -902,16 +1053,7 @@ void DecodiumTransceiverManager::refreshPorts()
 {
     QElapsedTimer timer;
     timer.start();
-    QStringList ports;
-    for (const auto& info : QSerialPortInfo::availablePorts()) {
-#if defined(Q_OS_WIN)
-        const QString port = info.portName();
-#else
-        const QString port = info.systemLocation().isEmpty() ? info.portName() : info.systemLocation();
-#endif
-        if (!port.isEmpty())
-            ports << port;
-    }
+    QStringList ports = enumerateSerialPorts(m_serialPort, m_pttPort);
     if (ports != m_portList) {
         m_portList = ports;
         emit portListChanged();

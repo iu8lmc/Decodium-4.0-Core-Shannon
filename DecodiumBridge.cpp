@@ -43,7 +43,15 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QFontDatabase>
+#include <QLabel>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QDateTime>
 #include <QSet>
 #include <QSettings>
@@ -82,7 +90,9 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <chrono>
 #include <limits>
+#include <thread>
 #ifdef FFTW3_SINGLE_FOUND
 #include <fftw3.h>
 #endif
@@ -91,6 +101,44 @@
 static void bridgeLog(const QString& msg) {
     DIAG_INFO(msg);
 }
+
+#ifdef Q_OS_WIN
+static QString decodiumSlowQmlStartupFlagPath()
+{
+    return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+        .absoluteFilePath(QStringLiteral("decodium-slow-qml-startup.flag"));
+}
+
+static QString decodiumStartupLogPath()
+{
+    return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+        .absoluteFilePath(QStringLiteral("decodium-start.log"));
+}
+
+static void appendStartupLogLine(const QString& line)
+{
+    QFile file {decodiumStartupLogPath()};
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+        QTextStream out {&file};
+        out << line << '\n';
+    }
+}
+
+static void writeSlowQmlStartupMarker(const QString& reason)
+{
+    QFile flagFile {decodiumSlowQmlStartupFlagPath()};
+    if (flagFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream out {&flagFile};
+        out << (reason.trimmed().isEmpty()
+                    ? QStringLiteral("QML startup exceeded watchdog threshold")
+                    : reason.trimmed())
+            << '\n'
+            << QDateTime::currentDateTimeUtc().toString(Qt::ISODate)
+            << '\n';
+    }
+}
+#endif
+
 static constexpr int kSpecialOpNone = 0;
 static constexpr int kSpecialOpFox = 6;
 static constexpr int kSpecialOpHound = 7;
@@ -661,6 +709,31 @@ static void rebuildWorkedCallsFromDocument(QSet<QString>& workedCalls, QList<Par
             workedCalls.insert(call);
         }
     }
+}
+
+static int countAdifRecordsLightweight(QString const& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return 0;
+    }
+
+    int count = 0;
+    QByteArray carry;
+    while (!file.atEnd()) {
+        QByteArray chunk = carry + file.read(64 * 1024).toUpper();
+        int cursor = 0;
+        while (true) {
+            int const pos = chunk.indexOf("<EOR", cursor);
+            if (pos < 0) {
+                break;
+            }
+            ++count;
+            cursor = pos + 4;
+        }
+        carry = chunk.right(3);
+    }
+    return count;
 }
 
 static void setAdifModeFields(QMap<QString, QString>& fields, QString const& modeValue)
@@ -2513,6 +2586,9 @@ bool DecodiumBridge::usingLegacyBackendForTx() const
 
 void DecodiumBridge::notifyMainQmlReady()
 {
+    if (m_mainQmlAsyncLoadDone) {
+        m_mainQmlAsyncLoadDone->store(true, std::memory_order_relaxed);
+    }
     if (m_mainQmlReady) {
         return;
     }
@@ -4766,17 +4842,24 @@ void DecodiumBridge::setTxEnabled(bool v)
         clearManualTxHold(QStringLiteral("tx-enabled"));
     }
 
-    if (m_txEnabled != v) {
+    bool const changed = (m_txEnabled != v);
+    if (changed) {
         m_txEnabled = v;
         emit txEnabledChanged();
-        if (usingLegacyBackendForTx()) {
-            syncLegacyBackendTxState();
-            m_legacyBackend->setTxEnabled(v);
-            scheduleLegacyStateRefreshBurst();
-        }
-        if (v) {
-            scheduleTxAudioPrecompute(25);
-        }
+    }
+
+    // The legacy backend can clear its own TX-enable state after completing a
+    // QSO while the QML bridge still shows TX enabled. A subsequent double-click
+    // must therefore re-assert the command even when the bridge boolean did not
+    // change, otherwise the new message is prepared but never transmitted.
+    if (usingLegacyBackendForTx()) {
+        syncLegacyBackendTxState();
+        m_legacyBackend->setTxEnabled(v);
+        scheduleLegacyStateRefreshBurst();
+    }
+
+    if (v) {
+        scheduleTxAudioPrecompute(25);
     }
 }
 
@@ -6894,20 +6977,38 @@ void DecodiumBridge::clearNextLogClusterSpotOverride()
 void DecodiumBridge::requestSafeGraphicsNextLaunch(const QString& reason)
 {
 #ifdef Q_OS_WIN
-    QString const flagPath = QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
-        .absoluteFilePath(QStringLiteral("decodium-slow-qml-startup.flag"));
-    QFile flagFile {flagPath};
-    if (flagFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-        QTextStream out {&flagFile};
-        QString const cleanReason = reason.trimmed().isEmpty()
-            ? QStringLiteral("QML startup timed out; use safe graphics on next launch")
-            : reason.trimmed();
-        out << cleanReason << '\n';
-        out << QDateTime::currentDateTimeUtc().toString(Qt::ISODate) << '\n';
-    }
+    writeSlowQmlStartupMarker(reason.trimmed().isEmpty()
+                                  ? QStringLiteral("QML startup timed out; use safe graphics on next launch")
+                                  : reason.trimmed());
+    QString const flagPath = decodiumSlowQmlStartupFlagPath();
     bridgeLog(QStringLiteral("Safe graphics marker requested for next launch: %1").arg(flagPath));
 #else
     Q_UNUSED(reason)
+#endif
+}
+
+void DecodiumBridge::notifyMainQmlLoadStarted()
+{
+#ifdef Q_OS_WIN
+    auto done = std::make_shared<std::atomic_bool>(false);
+    m_mainQmlAsyncLoadDone = done;
+    appendStartupLogLine(QStringLiteral("Main.qml async load watchdog armed"));
+    std::thread([done]() {
+        for (int elapsedSeconds = 30; elapsedSeconds <= 300; elapsedSeconds += 30) {
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+            if (done->load(std::memory_order_relaxed)) {
+                return;
+            }
+            QString const msg = QStringLiteral("Main.qml async load still running after %1 s")
+                                    .arg(elapsedSeconds);
+            appendStartupLogLine(msg);
+            if (elapsedSeconds == 30) {
+                writeSlowQmlStartupMarker(
+                    QStringLiteral("Main.qml async load exceeded 30 seconds; use safe graphics on next launch"));
+                appendStartupLogLine(QStringLiteral("Main.qml async load watchdog wrote safe graphics marker"));
+            }
+        }
+    }).detach();
 #endif
 }
 
@@ -11020,20 +11121,41 @@ bool DecodiumBridge::promptToLogEnabled() const
     return getSetting(QStringLiteral("PromptToLog"), false).toBool();
 }
 
+void DecodiumBridge::promptLogQso()
+{
+    if (m_qsoLogged) {
+        bridgeLog(QStringLiteral("promptLogQso: skipped (already logged this QSO)"));
+        return;
+    }
+
+    QVariantMap const preview = pendingLogQsoPreview();
+    if (preview.value(QStringLiteral("call")).toString().trimmed().isEmpty()) {
+        emit statusMessage(QStringLiteral("No QSO to log"));
+        return;
+    }
+
+    if (!m_promptLogSnapshotValid) {
+        capturePromptLogSnapshot(preview);
+    }
+    if (!m_logPromptOpen) {
+        m_logPromptOpen = true;
+        bridgeLog(QStringLiteral("logQso: native prompt requested for %1").arg(m_promptLogCall));
+        QTimer::singleShot(0, this, [this]() {
+            showLogQsoPromptDialog();
+        });
+    } else {
+        QTimer::singleShot(0, this, [this]() {
+            showLogQsoPromptDialog();
+        });
+    }
+}
+
 void DecodiumBridge::logQso()
 {
-    if (!usingLegacyBackendForTx() && promptToLogEnabled() && !m_qsoLogged) {
+    if (promptToLogEnabled() && !m_qsoLogged) {
         QVariantMap const preview = pendingLogQsoPreview();
         if (!preview.value(QStringLiteral("call")).toString().trimmed().isEmpty()) {
-            if (!m_promptLogSnapshotValid) {
-                capturePromptLogSnapshot(preview);
-            }
-            if (!m_logPromptOpen) {
-                m_logPromptOpen = true;
-                bridgeLog(QStringLiteral("logQso: prompt requested for %1")
-                              .arg(m_promptLogCall));
-                emit logQsoPromptRequested();
-            }
+            promptLogQso();
             return;
         }
     }
@@ -11046,7 +11168,9 @@ void DecodiumBridge::confirmLogQso()
     bridgeLog(QStringLiteral("logQso: prompt accepted for %1")
                   .arg(m_promptLogSnapshotValid ? m_promptLogCall : m_dxCall));
     m_logPromptOpen = false;
-    logQsoNow();
+    QTimer::singleShot(0, this, [this]() {
+        logQsoNow();
+    });
 }
 
 void DecodiumBridge::rejectPromptedLogQso()
@@ -11094,8 +11218,146 @@ void DecodiumBridge::clearPromptLogSnapshot()
     m_promptLogDialFreq = 0.0;
 }
 
+static QString satelliteCodeFromDisplayText(const QString& displayText)
+{
+    QString const text = displayText.trimmed();
+    int const separator = text.indexOf(QStringLiteral(" - "));
+    return separator > 0 ? text.left(separator).trimmed() : text;
+}
+
+void DecodiumBridge::showLogQsoPromptDialog()
+{
+    if (m_logQsoPromptDialog) {
+        m_logQsoPromptDialog->show();
+        m_logQsoPromptDialog->raise();
+        m_logQsoPromptDialog->activateWindow();
+        return;
+    }
+
+    QVariantMap const preview = pendingLogQsoPreview();
+    QString const call = preview.value(QStringLiteral("call")).toString().trimmed();
+    if (call.isEmpty()) {
+        rejectPromptedLogQso();
+        return;
+    }
+
+    auto* dialog = new QDialog(QApplication::activeWindow());
+    m_logQsoPromptDialog = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle(QStringLiteral("Confirm Log QSO"));
+    dialog->setModal(false);
+    dialog->setMinimumWidth(420);
+    dialog->setProperty("decodiumAccepted", false);
+
+    auto* layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(18, 16, 18, 16);
+    layout->setSpacing(12);
+
+    auto* form = new QFormLayout();
+    form->setLabelAlignment(Qt::AlignRight);
+    form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    form->addRow(QStringLiteral("Call:"), new QLabel(call, dialog));
+    form->addRow(QStringLiteral("Grid:"), new QLabel(preview.value(QStringLiteral("grid")).toString().trimmed(), dialog));
+    form->addRow(QStringLiteral("Report:"), new QLabel(QStringLiteral("%1 / %2")
+                                                           .arg(preview.value(QStringLiteral("sent")).toString().trimmed(),
+                                                                preview.value(QStringLiteral("rcvd")).toString().trimmed()), dialog));
+    form->addRow(QStringLiteral("Mode:"), new QLabel(preview.value(QStringLiteral("mode")).toString().trimmed(), dialog));
+    double const freqHz = preview.value(QStringLiteral("freq")).toDouble();
+    form->addRow(QStringLiteral("Freq:"), new QLabel(freqHz > 0.0
+                                                        ? QStringLiteral("%1 Hz").arg(freqHz, 0, 'f', 0)
+                                                        : QStringLiteral("-"), dialog));
+
+    auto* satelliteCombo = new QComboBox(dialog);
+    satelliteCombo->addItems(satelliteOptions());
+    QString const savedSatellite = getSetting(QStringLiteral("Satellite"), QString()).toString().trimmed();
+    if (!savedSatellite.isEmpty()) {
+        for (int i = 0; i < satelliteCombo->count(); ++i) {
+            if (satelliteCodeFromDisplayText(satelliteCombo->itemText(i)) == savedSatellite) {
+                satelliteCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    form->addRow(QStringLiteral("Satellite:"), satelliteCombo);
+
+    auto* satModeCombo = new QComboBox(dialog);
+    satModeCombo->addItems(satModeOptions());
+    QString const savedSatMode = getSetting(QStringLiteral("SatMode"), QString()).toString().trimmed();
+    int const satModeIndex = satModeCombo->findText(savedSatMode);
+    if (satModeIndex >= 0) {
+        satModeCombo->setCurrentIndex(satModeIndex);
+    }
+    satModeCombo->setEnabled(!satelliteCodeFromDisplayText(satelliteCombo->currentText()).isEmpty());
+    connect(satelliteCombo, &QComboBox::currentTextChanged, dialog,
+            [satModeCombo](const QString& text) {
+        satModeCombo->setEnabled(!satelliteCodeFromDisplayText(text).isEmpty());
+    });
+    form->addRow(QStringLiteral("Sat Mode:"), satModeCombo);
+
+    bool const clusterAvailable = dxClusterConnected();
+    auto* spotCheck = new QCheckBox(clusterAvailable
+                                        ? QStringLiteral("Spot on DX Cluster")
+                                        : QStringLiteral("DX Cluster not connected"), dialog);
+    spotCheck->setEnabled(clusterAvailable);
+    spotCheck->setChecked(clusterAvailable && m_autoSpotEnabled);
+    form->addRow(QStringLiteral("DX Cluster:"), spotCheck);
+
+    layout->addLayout(form);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    if (auto* okButton = buttons->button(QDialogButtonBox::Ok)) {
+        okButton->setText(QStringLiteral("Add"));
+    }
+    if (auto* cancelButton = buttons->button(QDialogButtonBox::Cancel)) {
+        cancelButton->setText(QStringLiteral("Skip"));
+    }
+    layout->addWidget(buttons);
+
+    connect(buttons, &QDialogButtonBox::accepted, this,
+            [this, dialog, satelliteCombo, satModeCombo, spotCheck]() {
+        dialog->setProperty("decodiumAccepted", true);
+        QString const satellite = satelliteCodeFromDisplayText(satelliteCombo->currentText());
+        QString const satMode = satellite.isEmpty() ? QString() : satModeCombo->currentText().trimmed();
+        if (!satellite.isEmpty()) {
+            setSetting(QStringLiteral("Satellite"), satellite);
+            setSetting(QStringLiteral("SatMode"), satMode);
+            setSetting(QStringLiteral("PropMode"), QStringLiteral("SAT"));
+            setSetting(QStringLiteral("SaveSatellite"), true);
+            setSetting(QStringLiteral("SaveSatMode"), !satMode.isEmpty());
+            setSetting(QStringLiteral("SavePropMode"), true);
+        }
+        setNextLogClusterSpotEnabled(spotCheck->isEnabled() && spotCheck->isChecked());
+        dialog->accept();
+        confirmLogQso();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    connect(dialog, &QDialog::finished, this, [this, dialog](int) {
+        bool const accepted = dialog->property("decodiumAccepted").toBool();
+        m_logQsoPromptDialog.clear();
+        if (!accepted && m_logPromptOpen) {
+            rejectPromptedLogQso();
+        }
+    });
+
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
+}
+
 void DecodiumBridge::logQsoNow()
 {
+    QElapsedTimer logTimer;
+    logTimer.start();
+    qint64 lastTraceMs = 0;
+    auto traceLogStep = [&logTimer, &lastTraceMs](const QString& step) {
+        qint64 const now = logTimer.elapsed();
+        bridgeLog(QStringLiteral("logQsoNow timing: %1 delta=%2ms total=%3ms")
+                      .arg(step)
+                      .arg(now - lastTraceMs)
+                      .arg(now));
+        lastTraceMs = now;
+    };
+
     m_logPromptOpen = false;
     bool const clusterSpotOverrideValid = m_nextLogClusterSpotOverrideValid;
     bool const clusterSpotRequested = clusterSpotOverrideValid
@@ -11116,6 +11378,9 @@ void DecodiumBridge::logQsoNow()
         syncLegacyBackendTxState();
         m_legacyBackend->setNextLogClusterSpotState(dxClusterConnected(),
                                                     clusterSpotRequested && dxClusterConnected());
+        if (m_promptLogSnapshotValid) {
+            m_legacyBackend->setNextLogPromptAlreadyAccepted();
+        }
         m_legacyBackend->logQso();
         syncLegacyBackendState();
         QTimer::singleShot(250, this, [this]() {
@@ -11165,8 +11430,10 @@ void DecodiumBridge::logQsoNow()
 
     if (logDxCall.isEmpty()) {
         clearPromptLogSnapshot();
+        traceLogStep(QStringLiteral("empty-call"));
         return;
     }
+    traceLogStep(QStringLiteral("snapshot-ready"));
 
     QString const dedupeCall = Radio::base_callsign(logDxCall).trimmed().toUpper();
     QString const dedupeBand = autoCqBandKeyForFrequency(logFreqHz).trimmed().toUpper();
@@ -11189,6 +11456,7 @@ void DecodiumBridge::logQsoNow()
         emit statusMessage(QStringLiteral("Duplicate log suppressed for %1").arg(logDxCall));
         clearPromptLogSnapshot();
         clearPendingAutoLogSnapshot();
+        traceLogStep(QStringLiteral("duplicate-suppressed"));
         return;
     }
 
@@ -11222,21 +11490,27 @@ void DecodiumBridge::logQsoNow()
           << " " << logMode
           << "\n";
     }
+    traceLogStep(QStringLiteral("alltxt-written"));
 
     // 2) Log ADIF (decodium_log.adi) — per import/export e B4 check
     QByteArray const adifRecord = bridgeAdifRecordText(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                                                        logRptSent, logRptRcvd, m_callsign, m_grid,
                                                        logPropMode, logSatellite, logSatMode, logFreqRx).toUtf8();
+    traceLogStep(QStringLiteral("adif-record-built"));
     appendAdifRecord(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                      logRptSent, logRptRcvd,
                      logPropMode, logSatellite, logSatMode, logFreqRx);
+    traceLogStep(QStringLiteral("adif-appended"));
 
     // 3) Inoltro ai log esterni compatibili WSJT-X UDP / N1MM.
     udpSendLoggedQso(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                      logRptSent, logRptRcvd, adifRecord,
                      logPropMode, logSatellite, logSatMode, logFreqRx);
+    traceLogStep(QStringLiteral("udp-sent"));
     udpSendN1mmLoggedQso(logDxCall, adifRecord);
+    traceLogStep(QStringLiteral("n1mm-sent"));
     tcpSendLoggedAdifQso(logDxCall, adifRecord);
+    traceLogStep(QStringLiteral("adif-tcp-started"));
 
     // 4) Cloudlog upload
     bool snrOk = false;
@@ -11246,6 +11520,7 @@ void DecodiumBridge::logQsoNow()
                            snrOk ? snr : 0, logRptSent, logRptRcvd,
                            m_callsign, m_grid);
     }
+    traceLogStep(QStringLiteral("cloudlog-started"));
 
     if (clusterSpotRequested) {
         if (m_dxCluster && m_dxCluster->connected()) {
@@ -11268,6 +11543,7 @@ void DecodiumBridge::logQsoNow()
             emit statusMessage(QStringLiteral("DX Cluster spot non inviato: cluster non connesso"));
         }
     }
+    traceLogStep(QStringLiteral("cluster-handled"));
 
     rememberRecentAutoCqWorked(logDxCall, logFreqHz, logMode);
     removeCallerFromQueue(dedupeCall);
@@ -11279,6 +11555,7 @@ void DecodiumBridge::logQsoNow()
     clearPendingAutoLogSnapshot();
     m_qsoLogged = true;  // impedisce doppio log per questo QSO
     emit statusMessage("QSO loggato: " + logDxCall);
+    traceLogStep(QStringLiteral("done"));
 }
 
 QString DecodiumBridge::logAllTxtPath() const
@@ -15145,6 +15422,9 @@ void DecodiumBridge::appendAdifRecord(const QString& dxCall, const QString& dxGr
        << "<EOR>\n";
 
     m_workedCalls.insert(dxCall.toUpper());
+    if (m_qsoCountCache >= 0) {
+        ++m_qsoCountCache;
+    }
     emit qsoCountChanged();
     emit workedCountChanged();
 }
@@ -15303,7 +15583,20 @@ void DecodiumBridge::updateLotwUsers()
 
 QStringList DecodiumBridge::workedCallsigns() const { return QStringList(m_workedCalls.values()); }
 int         DecodiumBridge::workedCount()      const { return m_workedCalls.size(); }
-int         DecodiumBridge::qsoCount()         const { return searchQsos(QString {}, QString {}, QString {}, QString {}, QString {}).size(); }
+int         DecodiumBridge::qsoCount()         const
+{
+    if (m_qsoCountCache < 0) {
+        QElapsedTimer timer;
+        timer.start();
+        m_qsoCountCache = countAdifRecordsLightweight(effectiveAdifLogPath());
+        if (timer.elapsed() > 100) {
+            bridgeLog(QStringLiteral("qsoCount lightweight count: qsos=%1 elapsed=%2ms")
+                          .arg(m_qsoCountCache)
+                          .arg(timer.elapsed()));
+        }
+    }
+    return m_qsoCountCache;
+}
 
 QVariantList DecodiumBridge::searchQsos(const QString& search,
                                         const QString& band,
@@ -15311,6 +15604,8 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
                                         const QString& fromDate,
                                         const QString& toDate) const
 {
+    QElapsedTimer timer;
+    timer.start();
     QVariantList results;
     ParsedAdifDocument const doc = loadAdifDocument(effectiveAdifLogPath());
     QString const needle = search.trimmed().toUpper();
@@ -15372,6 +15667,12 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
     for (QVariantMap const& row : rows) {
         results.append(row);
     }
+    if (timer.elapsed() > 250) {
+        bridgeLog(QStringLiteral("searchQsos: records=%1 results=%2 elapsed=%3ms")
+                      .arg(doc.records.size())
+                      .arg(results.size())
+                      .arg(timer.elapsed()));
+    }
     return results;
 }
 
@@ -15411,6 +15712,8 @@ QVariantMap DecodiumBridge::getQsoStats() const
 
 int DecodiumBridge::importFromAdif(const QString& filename)
 {
+    QElapsedTimer timer;
+    timer.start();
     ParsedAdifDocument source = loadAdifDocument(filename);
     if (!source.loaded && source.records.isEmpty()) {
         emit errorMessage(QStringLiteral("Impossibile importare ADIF: %1").arg(filename));
@@ -15444,9 +15747,15 @@ int DecodiumBridge::importFromAdif(const QString& filename)
     }
 
     rebuildWorkedCallsFromDocument(m_workedCalls, dest.records);
+    m_qsoCountCache = dest.records.size();
     emit qsoCountChanged();
     emit workedCountChanged();
     emit statusMessage(QStringLiteral("ADIF importato: %1 QSO").arg(imported));
+    bridgeLog(QStringLiteral("importFromAdif: source=%1 imported=%2 total=%3 elapsed=%4ms")
+                  .arg(filename)
+                  .arg(imported)
+                  .arg(m_qsoCountCache)
+                  .arg(timer.elapsed()));
     return imported;
 }
 
@@ -15485,6 +15794,7 @@ bool DecodiumBridge::deleteQso(const QString& call, const QString& dateTime)
     }
 
     rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
+    m_qsoCountCache = doc.records.size();
     emit qsoCountChanged();
     emit workedCountChanged();
     return true;
@@ -15537,6 +15847,7 @@ bool DecodiumBridge::editQso(const QString& call, const QString& dateTime, const
     }
 
     rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
+    m_qsoCountCache = doc.records.size();
     emit qsoCountChanged();
     emit workedCountChanged();
     return true;

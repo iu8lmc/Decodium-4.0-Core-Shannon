@@ -49,6 +49,7 @@ class Modulator;
 class QAudioSink;
 class QBuffer;
 class NtpClient;
+class QDialog;
 namespace decodium {
   namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
   namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; }
@@ -640,6 +641,7 @@ public slots:
     Q_INVOKABLE void logQso();
     Q_INVOKABLE void confirmLogQso();
     Q_INVOKABLE void rejectPromptedLogQso();
+    Q_INVOKABLE void promptLogQso();
     Q_INVOKABLE void shutdown();
     Q_INVOKABLE void copyToClipboard(const QString &text);
     Q_INVOKABLE void advanceQsoState(int txNum); // GitHub TxController clone
@@ -695,6 +697,7 @@ public slots:
     Q_INVOKABLE QString diagnosticLogPath() const;
     Q_INVOKABLE void openDiagnosticLog() const;
     Q_INVOKABLE void requestSafeGraphicsNextLaunch(const QString& reason = QString());
+    Q_INVOKABLE void notifyMainQmlLoadStarted();
     Q_INVOKABLE void notifyMainQmlReady();
 
     // Font scale
@@ -1092,6 +1095,7 @@ private:
     QString pskReporterProgramInfo() const;
     bool promptToLogEnabled() const;
     void logQsoNow();
+    void showLogQsoPromptDialog();
     void capturePromptLogSnapshot(const QVariantMap& preview);
     void clearPromptLogSnapshot();
     void capturePendingAutoLogSnapshot();
@@ -1157,6 +1161,7 @@ private:
     bool m_preserveFrequencyOnModeChange {false};
     bool m_shuttingDown {false};
     bool m_mainQmlReady {false};
+    std::shared_ptr<std::atomic_bool> m_mainQmlAsyncLoadDone;
     bool m_startupServicesStarted {false};
     bool m_lastSuccessfulCatConnected {false};
     QString m_lastSuccessfulCatBackend;
@@ -1436,6 +1441,7 @@ private:
     int     m_contestNumber {1};
     bool    m_pendingAutoLogValid {false};
     bool    m_logPromptOpen {false};
+    QPointer<QDialog> m_logQsoPromptDialog;
     bool    m_promptLogSnapshotValid {false};
     QString m_promptLogCall;
     QString m_promptLogGrid;
@@ -1523,6 +1529,7 @@ private:
     // ADIF — log lavorato + import
     QSet<QString>    m_workedCalls;   // callsign già lavorati (B4 check)
     QString          m_adifLogPath;   // path file .adi
+    mutable int      m_qsoCountCache {-1};
     void appendAdifRecord(const QString& dxCall, const QString& dxGrid,
                           double freqHz, const QString& mode, const QDateTime& utc,
                           const QString& rstSent, const QString& rstRcvd,
