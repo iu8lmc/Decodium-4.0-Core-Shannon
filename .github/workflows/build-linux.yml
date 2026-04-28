@@ -104,7 +104,7 @@ jobs:
           strip "$DIST_DIR/bin/"*
 
           # Data files
-          cp cty.dat "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
+          cp cty.dat sat.dat "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
           cp -r sounds "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
           cp -r Palettes "$DIST_DIR/share/wsjtx/" 2>/dev/null || true
 

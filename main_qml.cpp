@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QCryptographicHash>
 #include <QMetaType>
 #include <QStyleFactory>
 #include <QFont>
@@ -15,6 +16,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QLibraryInfo>
 #include <QMessageBox>
 #include <QRegularExpression>
@@ -120,6 +122,64 @@ static void writeSlowQmlStartupFlag(const QByteArray& flagPath, const QByteArray
 
     flagFile.write(reason);
     flagFile.write("\n");
+}
+
+static QString sanitizedCacheComponent(QString value)
+{
+    value.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9._-]+")), QStringLiteral("_"));
+    value = value.trimmed();
+    return value.isEmpty() ? QStringLiteral("default") : value;
+}
+
+static QString windowsQmlDiskCachePath(const QString& configName)
+{
+    QString basePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (basePath.isEmpty()) {
+        basePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+
+    QByteArray cacheSeed;
+    cacheSeed += QDir::cleanPath(QCoreApplication::applicationDirPath()).toUtf8();
+    cacheSeed += '\n';
+    cacheSeed += QByteArray(FORK_RELEASE_VERSION);
+    cacheSeed += '\n';
+    cacheSeed += qVersion();
+    cacheSeed += '\n';
+    cacheSeed += QSysInfo::buildAbi().toUtf8();
+    if (!configName.isEmpty()) {
+        cacheSeed += '\n';
+        cacheSeed += configName.toUtf8();
+    }
+
+    QString const installHash = QString::fromLatin1(
+        QCryptographicHash::hash(cacheSeed, QCryptographicHash::Sha256).toHex().left(16));
+    QString const versionComponent = sanitizedCacheComponent(QStringLiteral(FORK_RELEASE_VERSION));
+    return QDir {basePath}.absoluteFilePath(
+        QStringLiteral("qmlcache/%1/%2").arg(versionComponent, installHash));
+}
+
+static void configureWindowsQmlDiskCache(const QString& configName)
+{
+    if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_QML_CACHE")
+        || qEnvironmentVariableIsSet("QML_DISABLE_DISK_CACHE")) {
+        return;
+    }
+
+    if (qEnvironmentVariableIsSet("QML_DISK_CACHE_PATH")) {
+        QByteArray msg("QML disk cache path from environment: ");
+        msg += qgetenv("QML_DISK_CACHE_PATH");
+        L(msg.constData());
+        return;
+    }
+
+    QString const cachePath = windowsQmlDiskCachePath(configName);
+    if (!QDir().mkpath(cachePath)) {
+        L(("QML disk cache path could not be created: " + cachePath.toLocal8Bit()).constData());
+        return;
+    }
+
+    qputenv("QML_DISK_CACHE_PATH", QDir::toNativeSeparators(cachePath).toLocal8Bit());
+    L(("QML disk cache path isolated: " + cachePath.toLocal8Bit()).constData());
 }
 #endif
 
@@ -250,6 +310,7 @@ int main(int argc, char* argv[])
     logEnvVar("QT_OPENGL");
     logEnvVar("QT_QUICK_BACKEND");
     logEnvVar("QML_DISABLE_DISK_CACHE");
+    logEnvVar("QML_DISK_CACHE_PATH");
     logEnvVar("DECODIUM_SAFE_GRAPHICS");
     logEnvVar("DECODIUM_DISABLE_QML_CACHE");
     app.setWindowIcon(QIcon(QStringLiteral(":/icon_128x128.png")));
@@ -333,6 +394,9 @@ int main(int argc, char* argv[])
         rootSettings.setValue(QStringLiteral("CurrentMultiSettingsConfiguration"), configName);
         rootSettings.sync();
     }
+#ifdef Q_OS_WIN
+    configureWindowsQmlDiskCache(configName);
+#endif
     QString languageOverride = parser.value(languageOption).trimmed();
     if (languageOverride.isEmpty()) {
         languageOverride = rootSettings.value(QStringLiteral("UILanguage")).toString().trimmed();
@@ -385,6 +449,12 @@ int main(int argc, char* argv[])
     } else {
         L("QML disk cache enabled");
     }
+    logEnvVar("QML_DISK_CACHE_PATH");
+    L(("Qt CacheLocation: " + QStandardPaths::writableLocation(QStandardPaths::CacheLocation).toLocal8Bit()).constData());
+    L(("Qt GenericCacheLocation: " + QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation).toLocal8Bit()).constData());
+    L(("Qt AppDataLocation: " + QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toLocal8Bit()).constData());
+    L(("Qt AppLocalDataLocation: " + QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation).toLocal8Bit()).constData());
+    L(("Qt TempLocation: " + QStandardPaths::writableLocation(QStandardPaths::TempLocation).toLocal8Bit()).constData());
 
     QQmlApplicationEngine engine;
     L("engine OK");
@@ -426,6 +496,21 @@ int main(int argc, char* argv[])
         return -1;
     }
     L(("qmlPath=" + qmlPath.toLocal8Bit()).constData());
+    auto logQmlFileInfo = [] (const QString& label, const QString& path) {
+        QFileInfo const info(path);
+        QByteArray line("QML file ");
+        line += label.toLocal8Bit();
+        line += ": exists=";
+        line += info.exists() ? "1" : "0";
+        line += " size=";
+        line += QByteArray::number(info.exists() ? info.size() : -1);
+        line += " path=";
+        line += QDir::toNativeSeparators(path).toLocal8Bit();
+        L(line.constData());
+    };
+    logQmlFileInfo(QStringLiteral("BootLoader"), qmlDir.absoluteFilePath(QStringLiteral("BootLoader.qml")));
+    logQmlFileInfo(QStringLiteral("Main"), qmlDir.absoluteFilePath(QStringLiteral("Main.qml")));
+    logQmlFileInfo(QStringLiteral("SettingsDialog"), qmlDir.absoluteFilePath(QStringLiteral("components/SettingsDialog.qml")));
 
     qmlRegisterType<WaterfallItem>("Decodium", 1, 0, "WaterfallItem");
     qmlRegisterType<PanadapterItem>("Decodium", 1, 0, "PanadapterItem");

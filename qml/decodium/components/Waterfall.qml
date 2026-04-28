@@ -502,10 +502,12 @@ Item {
 
         // Alta risoluzione FFTW 4096 bin — include range frequenze esatto
         function onPanadapterDataReady(dbValues, minDb, maxDb, freqMinHz, freqMaxHz) {
+            if (!waterfallPanel.visible) return
             waterfallDisplay.addSpectrumData(dbValues, minDb, maxDb, freqMinHz, freqMaxHz)
         }
         // Fallback: valori normalizzati 0-1 dal legacy timer
         function onSpectrumDataReady(data) {
+            if (!waterfallPanel.visible) return
             if (!bridge.monitoring) return
             waterfallDisplay.addSpectrumDataNorm(data)
         }
@@ -537,6 +539,7 @@ Item {
 
         // Aggiorna i callsign decodificati sul grafico spettro
         function onDecodeListChanged() {
+            if (!waterfallPanel.visible) return
             var labels = []
             var seen = {}
             var list = bridge.decodeList

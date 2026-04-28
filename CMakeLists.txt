@@ -662,6 +662,7 @@ set (all_C_and_CXXSRCS
   )
 
 set (TOP_LEVEL_RESOURCES
+  sat.dat
   artwork/ft2logo.png
   contrib/gpl-v3-logo.svg
   artwork/splash.png
@@ -1625,6 +1626,9 @@ add_custom_command (TARGET decodium_qml POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/qml"
     "${CMAKE_BINARY_DIR}/qml"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/sat.dat"
+    "$<TARGET_FILE_DIR:decodium_qml>/sat.dat"
   COMMENT "Syncing QML files after decodium_qml build"
 )
 
@@ -1635,6 +1639,9 @@ if (APPLE)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${CMAKE_CURRENT_SOURCE_DIR}/cty.dat"
       "$<TARGET_FILE_DIR:wsjtx>/../Resources/cty.dat"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/sat.dat"
+      "$<TARGET_FILE_DIR:wsjtx>/../Resources/sat.dat"
     COMMENT "Refreshing macOS bundle data files"
     )
 endif ()

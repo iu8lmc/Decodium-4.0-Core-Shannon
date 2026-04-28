@@ -20200,9 +20200,12 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   m_nextLogClusterSpotAvailable = false;
   m_nextLogClusterSpotChecked = false;
   m_logDlg->setClusterSpotState (clusterSpotAvailable, clusterSpotChecked);
+  bool const forceLogWithoutPrompt =
+      !m_config.prompt_to_log ()
+      && (is_externalCtrlMode () || m_mode == "MSK144" || m_autoCQ);
   m_logDlg->initLogQSO (logHisCall, grid, m_mode, logRptSent, logRptRcvd,
                         logDateTimeQSOOn, dateTimeQSOOff, logDialFreq, m_noSuffix, logXSent, logXRcvd,
-                        is_externalCtrlMode() || m_mode == "MSK144" || m_autoCQ);    //avt 11/20/20 and 12/12/21 — Auto CQ forces auto-log
+                        forceLogWithoutPrompt);    // Auto CQ/external control must not bypass Prompt to Log.
   clearPendingAutoLogSnapshot ();
   m_inQSOwith="";
   if (legacyRespondSelectionEnabled () && ui->respondComboBox->currentText() != "CQ: None") {
@@ -20590,13 +20593,14 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
   auto * socket = new QTcpSocket {this};
   auto * timeout = new QTimer {socket};
   timeout->setSingleShot(true);
-  timeout->setInterval(12000);
+  timeout->setInterval(22000);
   socket->setProperty("decodium_autospot", true);
   socket->setProperty("autospot_done", false);
   socket->setProperty("login_sent", false);
   socket->setProperty("login_prompt_seen", false);
   socket->setProperty("spot_sent", false);
   socket->setProperty("spot_response_logged", false);
+  socket->setProperty("verify_pending", false);
   socket->setProperty("verify_sent", false);
   socket->setProperty("verify_response_logged", false);
   socket->setProperty("cluster_buffer", QByteArray {});
@@ -20739,6 +20743,10 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
         {
           if (!socket->property("verify_sent").toBool())
             {
+              if (socket->property("verify_pending").toBool())
+                {
+                  return;
+                }
               if (!socket->property("spot_response_logged").toBool())
                 {
                   auto const trace = clusterResponseTrace(buffer);
@@ -20753,44 +20761,56 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
                   return;
                 }
 
-              socket->write(verifyCommand.toUtf8());
-              socket->flush();
-              appendAutoSpotTrace(QStringLiteral("VERIFY-TX %1").arg(verifyCommand.trimmed()));
-              socket->setProperty("verify_sent", true);
-              socket->setProperty("verify_response_logged", false);
-              socket->setProperty("cluster_buffer", QByteArray {});
               timeout->start();
+              socket->setProperty("verify_pending", true);
 
-              QTimer::singleShot(4500, socket,
-                                  [socket, finishAutoSpot, clusterResponseTrace,
+              QTimer::singleShot(5000, socket,
+                                  [socket, timeout, verifyCommand, finishAutoSpot, clusterResponseTrace,
                                    clusterShowsSubmittedSpot, appendAutoSpotTrace] {
                   if (socket->property("autospot_done").toBool())
                     {
                       return;
                     }
-                  auto const verifyBuffer = socket->property("cluster_buffer").toByteArray();
-                  if (!socket->property("verify_response_logged").toBool())
-                    {
-                      auto const trace = clusterResponseTrace(verifyBuffer);
-                      if (!trace.isEmpty())
+                  socket->write(verifyCommand.toUtf8());
+                  socket->flush();
+                  appendAutoSpotTrace(QStringLiteral("VERIFY-TX %1").arg(verifyCommand.trimmed()));
+                  socket->setProperty("verify_pending", false);
+                  socket->setProperty("verify_sent", true);
+                  socket->setProperty("verify_response_logged", false);
+                  socket->setProperty("cluster_buffer", QByteArray {});
+                  timeout->start();
+
+                  QTimer::singleShot(6000, socket,
+                                      [socket, finishAutoSpot, clusterResponseTrace,
+                                       clusterShowsSubmittedSpot, appendAutoSpotTrace] {
+                      if (socket->property("autospot_done").toBool())
                         {
-                          appendAutoSpotTrace(QStringLiteral("VERIFY-RX %1").arg(trace));
+                          return;
                         }
-                      socket->setProperty("verify_response_logged", true);
-                    }
-                  if (clusterShowsSubmittedSpot(verifyBuffer))
-                    {
-                      finishAutoSpot(true, QObject::tr("published in show/dx"), QStringLiteral("VERIFIED"));
-                    }
-                  else
-                    {
-                      auto const detail = clusterResponseTrace(verifyBuffer);
-                      finishAutoSpot(true,
-                                     detail.isEmpty()
-                                       ? QObject::tr("submitted, but not visible in show/dx")
-                                       : QObject::tr("submitted, but not visible in show/dx: %1").arg(detail),
-                                     QStringLiteral("UNVERIFIED"));
-                    }
+                      auto const verifyBuffer = socket->property("cluster_buffer").toByteArray();
+                      if (!socket->property("verify_response_logged").toBool())
+                        {
+                          auto const trace = clusterResponseTrace(verifyBuffer);
+                          if (!trace.isEmpty())
+                            {
+                              appendAutoSpotTrace(QStringLiteral("VERIFY-RX %1").arg(trace));
+                            }
+                          socket->setProperty("verify_response_logged", true);
+                        }
+                      if (clusterShowsSubmittedSpot(verifyBuffer))
+                        {
+                          finishAutoSpot(true, QObject::tr("published in show/dx"), QStringLiteral("VERIFIED"));
+                        }
+                      else
+                        {
+                          auto const detail = clusterResponseTrace(verifyBuffer);
+                          finishAutoSpot(false,
+                                         detail.isEmpty()
+                                           ? QObject::tr("node accepted the command, but the spot is not visible in show/dx")
+                                           : QObject::tr("node accepted the command, but the spot is not visible in show/dx: %1").arg(detail),
+                                         QStringLiteral("UNVERIFIED"));
+                        }
+                    });
                 });
               return;
             }

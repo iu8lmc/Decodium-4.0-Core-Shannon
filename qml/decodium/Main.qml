@@ -31,10 +31,19 @@ ApplicationWindow {
     title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
     readonly property bool txVisualActive: !!(bridge && (bridge.transmitting || bridge.tuning))
-    property bool decodePanelLayoutSaved: !!bridge.getSetting("uiDecodePanelsLayoutSaved", false)
-    property int savedPeriod1PanelWidth: safeStoredPanelWidth(bridge.getSetting("uiFullSpectrumPanelWidth", 400), 400, 360)
-    property int savedRxFreqPanelWidth: safeStoredPanelWidth(bridge.getSetting("uiSignalRxPanelWidth", 400), 400, 260)
-    property int savedLiveMapPanelWidth: safeStoredPanelWidth(bridge.getSetting("uiLiveMapPanelWidth", 360), 360, 280)
+    property bool decodePanelLayoutSaved: false
+    property int savedPeriod1PanelWidth: 400
+    property int savedRxFreqPanelWidth: 400
+    property int savedLiveMapPanelWidth: 360
+    property double startupCompletedStartedMs: 0
+
+    function startupElapsedMs() {
+        return startupCompletedStartedMs > 0 ? Math.round(Date.now() - startupCompletedStartedMs) : -1
+    }
+
+    function startupLog(phase) {
+        console.log("Main.qml startup +" + startupElapsedMs() + " ms: " + phase)
+    }
 
     function availableScreenGeometries() {
         var geometries = []
@@ -42,14 +51,9 @@ ApplicationWindow {
             for (var i = 0; i < Qt.application.screens.length; ++i) {
                 var screen = Qt.application.screens[i]
                 if (!screen) continue
-                // Qt 6.x: availableGeometry may not exist on all backends;
-                // fall back to virtualGeometry, then to width/height properties.
-                var g = screen.availableGeometry || screen.virtualGeometry
-                if (g && g.width > 0) {
-                    geometries.push({ x: g.x, y: g.y, width: g.width, height: g.height })
-                } else if (screen.width > 0 && screen.height > 0) {
-                    geometries.push({ x: screen.virtualX || 0, y: screen.virtualY || 0,
-                                      width: screen.width, height: screen.height })
+                var geom = normalizedScreenGeometry(screen)
+                if (geom) {
+                    geometries.push(geom)
                 }
             }
         }
@@ -57,11 +61,67 @@ ApplicationWindow {
             geometries.push({
                 x: 0,
                 y: 0,
-                width: Screen.desktopAvailableWidth || 1920,
-                height: Screen.desktopAvailableHeight || 1080
+                width: safeNumber(Screen.desktopAvailableWidth, safeNumber(Screen.width, 1920)),
+                height: safeNumber(Screen.desktopAvailableHeight, safeNumber(Screen.height, 1080))
             })
         }
         return geometries
+    }
+
+    function safeNumber(value, fallback) {
+        var numeric = Number(value)
+        return isFinite(numeric) ? numeric : fallback
+    }
+
+    function normalizedScreenGeometry(screen) {
+        var g = null
+        try { g = screen.availableGeometry } catch(e) { g = null }
+        if (!g || !(safeNumber(g.width, 0) > 0) || !(safeNumber(g.height, 0) > 0)) {
+            try { g = screen.virtualGeometry } catch(e2) { g = null }
+        }
+        if (g && safeNumber(g.width, 0) > 0 && safeNumber(g.height, 0) > 0) {
+            return {
+                x: Math.round(safeNumber(g.x, 0)),
+                y: Math.round(safeNumber(g.y, 0)),
+                width: Math.round(safeNumber(g.width, preferredMinimumWidth)),
+                height: Math.round(safeNumber(g.height, preferredMinimumHeight))
+            }
+        }
+
+        var widthValue = safeNumber(screen.width, 0)
+        var heightValue = safeNumber(screen.height, 0)
+        if (widthValue > 0 && heightValue > 0) {
+            return {
+                x: Math.round(safeNumber(screen.virtualX, 0)),
+                y: Math.round(safeNumber(screen.virtualY, 0)),
+                width: Math.round(widthValue),
+                height: Math.round(heightValue)
+            }
+        }
+        return null
+    }
+
+    function safeBridgeSetting(key, fallback) {
+        try {
+            if (bridge && typeof bridge.getSetting === "function") {
+                var value = bridge.getSetting(key, fallback)
+                if (value !== undefined && value !== null)
+                    return value
+            }
+        } catch(e) {
+            console.log("getSetting error for " + key + ": " + e)
+        }
+        return fallback
+    }
+
+    function safeWindowState(key) {
+        try {
+            if (bridge && typeof bridge.loadWindowState === "function")
+                return bridge.loadWindowState(key) || {}
+        } catch(e) {
+            console.log("loadWindowState error for " + key + ": " + e)
+        }
+        return {}
     }
 
     function clampWindowPosition(savedX, savedY, winW, winH) {
@@ -173,15 +233,27 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("Main.qml Component.onCompleted — restoring window state")
-        callerQueuePanelVisible = bridge.foxMode
-        var state = {}
-        try { state = bridge.loadWindowState("mainWindow") || {} } catch(e) { console.log("loadWindowState error: " + e) }
-        if (state.width !== undefined && state.width > 0) width = state.width
-        if (state.height !== undefined && state.height > 0) height = state.height
+        startupCompletedStartedMs = Date.now()
+        startupLog("Component.onCompleted begin")
+        callerQueuePanelVisible = !!(bridge && bridge.foxMode)
+        startupLog("fox/caller queue state restored")
+        decodePanelLayoutSaved = !!safeBridgeSetting("uiDecodePanelsLayoutSaved", false)
+        savedPeriod1PanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiFullSpectrumPanelWidth", 400), 400, 360)
+        savedRxFreqPanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiSignalRxPanelWidth", 400), 400, 260)
+        savedLiveMapPanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiLiveMapPanelWidth", 360), 360, 280)
+        startupLog("decode panel settings restored")
+
+        var state = safeWindowState("mainWindow")
+        startupLog("main window state read")
+        var restoredWidth = safeNumber(state.width, width)
+        var restoredHeight = safeNumber(state.height, height)
+        if (restoredWidth > 0) width = restoredWidth
+        if (restoredHeight > 0) height = restoredHeight
         var pos
-        if (state.x !== undefined && state.y !== undefined) {
-            pos = clampWindowPosition(state.x, state.y, width, height)
+        var restoredX = safeNumber(state.x, NaN)
+        var restoredY = safeNumber(state.y, NaN)
+        if (isFinite(restoredX) && isFinite(restoredY)) {
+            pos = clampWindowPosition(restoredX, restoredY, width, height)
         } else {
             var fallback = availableScreenGeometries()[0]
             pos = {
@@ -191,6 +263,7 @@ ApplicationWindow {
         }
         x = pos.x
         y = pos.y
+        startupLog("main window geometry applied x=" + x + " y=" + y + " w=" + width + " h=" + height)
         windowStateRestoreInProgress = false
 
         // Force window visible on Windows — some WM/GPU combos need explicit calls
@@ -198,8 +271,10 @@ ApplicationWindow {
         show()
         raise()
         requestActivate()
+        startupLog("main window show/raise/requestActivate done")
         Qt.callLater(restoreDecodePanelWidths)
         bridge.notifyMainQmlReady()
+        startupLog("bridge notified ready")
         console.log("Main.qml window shown at " + x + "," + y + " size " + width + "x" + height)
     }
 
@@ -229,11 +304,17 @@ ApplicationWindow {
     }
 
     function restoreFloatingWindowState(windowRef, key, detachedPropName, minimizedPropName) {
-        var state = bridge.loadWindowState(key)
-        if (state.width !== undefined && state.width > 0) windowRef.width = state.width
-        if (state.height !== undefined && state.height > 0) windowRef.height = state.height
-        if (state.x !== undefined && state.y !== undefined) {
-            var pos = clampWindowPosition(state.x, state.y, windowRef.width, windowRef.height)
+        if (!windowRef)
+            return
+        var state = safeWindowState(key)
+        var restoredWidth = safeNumber(state.width, windowRef.width)
+        var restoredHeight = safeNumber(state.height, windowRef.height)
+        if (restoredWidth > 0) windowRef.width = restoredWidth
+        if (restoredHeight > 0) windowRef.height = restoredHeight
+        var restoredX = safeNumber(state.x, NaN)
+        var restoredY = safeNumber(state.y, NaN)
+        if (isFinite(restoredX) && isFinite(restoredY)) {
+            var pos = clampWindowPosition(restoredX, restoredY, windowRef.width, windowRef.height)
             windowRef.x = pos.x
             windowRef.y = pos.y
         }
@@ -3871,8 +3952,9 @@ ApplicationWindow {
                             SplitView.minimumWidth: 360
                             readonly property bool compactColumns: width < 540
                             readonly property int utcColumnWidth: compactColumns ? 66 : 86
-                            readonly property int dbColumnWidth: compactColumns ? 26 : 30
-                            readonly property int dtColumnWidth: compactColumns ? 32 : 35
+                            readonly property int dbColumnWidth: compactColumns ? 34 : 38
+                            readonly property int dbDtGapWidth: compactColumns ? 4 : 6
+                            readonly property int dtColumnWidth: compactColumns ? 42 : 48
                             readonly property int freqColumnWidth: compactColumns ? 42 : 45
                             readonly property int gapColumnWidth: compactColumns ? 4 : 6
                             readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 96 : 132) : 0
@@ -4106,6 +4188,7 @@ ApplicationWindow {
 
                                         Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
                                         Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                        Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
                                         Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                         Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
@@ -4250,6 +4333,7 @@ ApplicationWindow {
 
                                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
                                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                                Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
@@ -4309,8 +4393,9 @@ ApplicationWindow {
                             readonly property bool compactColumns: width < 450
                             readonly property bool compactHeader: width < 350
                             readonly property int utcColumnWidth: compactColumns ? 62 : 78
-                            readonly property int dbColumnWidth: compactColumns ? 24 : 28
-                            readonly property int dtColumnWidth: compactColumns ? 28 : 32
+                            readonly property int dbColumnWidth: compactColumns ? 34 : 38
+                            readonly property int dbDtGapWidth: compactColumns ? 4 : 6
+                            readonly property int dtColumnWidth: compactColumns ? 42 : 48
                             readonly property int gapColumnWidth: compactColumns ? 3 : 4
                             readonly property int headerBadgeWidth: compactHeader ? 62 : 70
                             color: "transparent"
@@ -4494,6 +4579,7 @@ ApplicationWindow {
 
                                         Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
                                         Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                        Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
                                         Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                         Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
                                         Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
@@ -4623,6 +4709,7 @@ ApplicationWindow {
 
                                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
                                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+                                                Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
                                                 Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
@@ -5892,29 +5979,6 @@ ApplicationWindow {
                 text: parent.text
                 font.pixelSize: 12
                 color: bridge.recordTxEnabled ? "#f44336" : textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: glassBorder
-            }
-        }
-
-        MenuItem {
-            text: bridge.directLogQso ? "✓ Log QSO Diretto" : "☐ Log QSO Diretto"
-            onTriggered: bridge.directLogQso = !bridge.directLogQso
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: bridge.directLogQso ? successGreen : textSecondary
                 leftPadding: 10
             }
         }

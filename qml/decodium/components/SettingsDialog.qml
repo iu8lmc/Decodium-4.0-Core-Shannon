@@ -36,6 +36,7 @@ Dialog {
     property bool fontPickerFixedOnly: false
     property string fontPickerSearch: ""
     property var fontPickerFamilies: []
+    property bool loggingChecksUpdating: false
 
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
@@ -60,6 +61,33 @@ Dialog {
     function setBoolSettingIfChanged(key, value, fallback) {
         if (boolSetting(key, fallback) !== value)
             bridge.setSetting(key, value)
+    }
+
+    function setLoggingMode(promptMode) {
+        if (loggingChecksUpdating)
+            return
+
+        loggingChecksUpdating = true
+        promptToLogCheck.checked = promptMode
+        autoLogCheck.checked = !promptMode
+        bridge.setSetting("PromptToLog", promptMode)
+        bridge.setSetting("AutoLog", !promptMode)
+        loggingChecksUpdating = false
+    }
+
+    function normalizeLoggingModeChecks() {
+        loggingChecksUpdating = true
+        var promptMode = boolSetting("PromptToLog", false)
+        var autoMode = boolSetting("AutoLog", true)
+        if (promptMode === autoMode) {
+            promptMode = false
+            autoMode = true
+            bridge.setSetting("PromptToLog", false)
+            bridge.setSetting("AutoLog", true)
+        }
+        promptToLogCheck.checked = promptMode
+        autoLogCheck.checked = autoMode
+        loggingChecksUpdating = false
     }
 
     function setAlertEnabled(value) {
@@ -2759,13 +2787,10 @@ Dialog {
                         Text { text: qsTr("Prompt to Log:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             id: promptToLogCheck
-                            checked: bridge.getSetting("PromptToLog", false)
+                            checked: boolSetting("PromptToLog", false)
                             onToggled: {
-                                if (checked) {
-                                    autoLogCheck.checked = false
-                                    bridge.setSetting("AutoLog", false)
-                                }
-                                bridge.setSetting("PromptToLog", checked)
+                                if (!settingsDialog.loggingChecksUpdating)
+                                    settingsDialog.setLoggingMode(checked)
                             }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -2773,32 +2798,16 @@ Dialog {
                         Text { text: qsTr("Auto Log:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             id: autoLogCheck
-                            checked: bridge.getSetting("AutoLog", true)
+                            checked: boolSetting("AutoLog", true)
                             onToggled: {
-                                if (checked) {
-                                    promptToLogCheck.checked = false
-                                    bridge.setSetting("PromptToLog", false)
-                                }
-                                bridge.setSetting("AutoLog", checked)
+                                if (!settingsDialog.loggingChecksUpdating)
+                                    settingsDialog.setLoggingMode(!checked)
                             }
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
-                            Component.onCompleted: {
-                                if (checked) {
-                                    if (promptToLogCheck.checked)
-                                        promptToLogCheck.checked = false
-                                    bridge.setSetting("AutoLog", true)
-                                }
-                            }
+                            Component.onCompleted: Qt.callLater(function() { settingsDialog.normalizeLoggingModeChecks() })
                         }
 
-                        Text { text: qsTr("Direct Log QSO:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.directLogQso
-                            onCheckedChanged: bridge.directLogQso = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
                         Text { text: qsTr("Log as RTTY:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: bridge.getSetting("LogAsRTTY", false)
@@ -2945,6 +2954,47 @@ Dialog {
                         // ── UDP Server ──
                         Text { text: qsTr("UDP SERVER"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Client ID:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        TextField {
+                            id: udpClientIdField
+                            text: bridge.getSetting("UDPClientId", "WSJTX")
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: fieldMinWidth
+                            implicitHeight: controlHeight
+                            leftPadding: 8
+                            maximumLength: 64
+                            color: textPrimary
+                            font.pixelSize: controlFontSize
+                            inputMethodHints: Qt.ImhNoPredictiveText
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onEditingFinished: {
+                                var cleaned = String(text).trim()
+                                if (!cleaned.length)
+                                    cleaned = "WSJTX"
+                                if (cleaned !== text)
+                                    text = cleaned
+                                bridge.setSetting("UDPClientId", cleaned)
+                            }
+                        }
+                        Text { text: qsTr("Preset:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        ComboBox {
+                            id: udpClientIdPreset
+                            model: ["WSJTX", "Decodium"]
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: fieldMinWidth
+                            implicitHeight: controlHeight
+                            Component.onCompleted: currentIndex = Math.max(0, find(String(bridge.getSetting("UDPClientId", "WSJTX"))))
+                            onActivated: {
+                                udpClientIdField.text = currentText
+                                bridge.setSetting("UDPClientId", currentText)
+                            }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            contentItem: Text { text: udpClientIdPreset.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
+                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
+                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
 
                         Text { text: qsTr("Server Name:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {

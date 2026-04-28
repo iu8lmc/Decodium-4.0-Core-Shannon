@@ -48,8 +48,9 @@ Window {
     readonly property real leftPanelWidth: width * 0.5
     readonly property bool compactBandColumns: leftPanelWidth < 460
     readonly property int bandUtcWidth: compactBandColumns ? 66 : 86
-    readonly property int bandDbWidth: compactBandColumns ? 28 : 35
-    readonly property int bandDtWidth: compactBandColumns ? 34 : 45
+    readonly property int bandDbWidth: compactBandColumns ? 34 : 40
+    readonly property int bandDbDtGapWidth: compactBandColumns ? 4 : 6
+    readonly property int bandDtWidth: compactBandColumns ? 42 : 50
     readonly property int bandFreqWidth: compactBandColumns ? 42 : 50
     readonly property int bandGapWidth: compactBandColumns ? 6 : 10
     readonly property int bandDxccWidth: showDxccInfo ? (compactBandColumns ? 92 : 132) : 0
@@ -59,8 +60,9 @@ Window {
     readonly property bool compactRxColumns: rightPanelWidth < 450
     readonly property bool compactRxHeader: rightPanelWidth < 340
     readonly property int rxUtcWidth: compactRxColumns ? 62 : 78
-    readonly property int rxDbWidth: compactRxColumns ? 24 : 28
-    readonly property int rxDtWidth: compactRxColumns ? 30 : 36
+    readonly property int rxDbWidth: compactRxColumns ? 34 : 40
+    readonly property int rxDbDtGapWidth: compactRxColumns ? 4 : 6
+    readonly property int rxDtWidth: compactRxColumns ? 42 : 50
     readonly property int rxGapWidth: compactRxColumns ? 4 : 6
     readonly property int rxDistanceWidth: compactRxColumns ? 0 : 50
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
@@ -386,6 +388,7 @@ Window {
                                 horizontalAlignment: Text.AlignRight
                                 Layout.preferredWidth: decodeWindow.bandDbWidth
                             }
+                            Item { Layout.preferredWidth: decodeWindow.bandDbDtGapWidth }
                             Text {
                                 text: "DT"
                                 font.family: "Monospace"
@@ -588,6 +591,8 @@ Window {
                                         Layout.preferredWidth: decodeWindow.bandDbWidth
                                     }
 
+                                    Item { Layout.preferredWidth: decodeWindow.bandDbDtGapWidth }
+
                                     Text {
                                         text: modelData.dt
                                         font.family: "Monospace"
@@ -785,6 +790,7 @@ Window {
                                 horizontalAlignment: Text.AlignRight
                                 Layout.preferredWidth: decodeWindow.rxDbWidth
                             }
+                            Item { Layout.preferredWidth: decodeWindow.rxDbDtGapWidth }
                             Text {
                                 text: "DT"
                                 font.family: "Monospace"
@@ -945,6 +951,8 @@ Window {
                                         horizontalAlignment: Text.AlignRight
                                         Layout.preferredWidth: decodeWindow.rxDbWidth
                                     }
+
+                                    Item { Layout.preferredWidth: decodeWindow.rxDbDtGapWidth }
 
                                     Text {
                                         text: modelData.dt

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import re
 import select
 import socket
 import struct
@@ -62,6 +63,9 @@ MSG_TYPES = {
     17: "SetupTx",
     18: "EnqueueDecode",
 }
+
+
+ADIF_FIELD_RE = re.compile(r"<([A-Za-z0-9_]+):(\d+)(?::[^>]*)?>([^<]*)")
 
 
 class DecodeError(Exception):
@@ -179,6 +183,21 @@ def pack_qtime_from_hhmmss(value: str | None = None) -> bytes:
     return struct.pack(">I", ((hour * 60 + minute) * 60 + second) * 1000)
 
 
+def gregorian_to_julian(year: int, month: int, day: int) -> int:
+    a_val = (14 - month) // 12
+    y_val = year + 4800 - a_val
+    m_val = month + 12 * a_val - 3
+    return day + ((153 * m_val + 2) // 5) + 365 * y_val + y_val // 4 - y_val // 100 + y_val // 400 - 32045
+
+
+def pack_qdatetime_utc(value: _dt.datetime) -> bytes:
+    if value.tzinfo is not None:
+        value = value.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+    julian_day = gregorian_to_julian(value.year, value.month, value.day)
+    ms = ((value.hour * 60 + value.minute) * 60 + value.second) * 1000 + value.microsecond // 1000
+    return struct.pack(">qIB", julian_day, ms, 1)
+
+
 def build_message(msg_type: int, target_id: str, payload: bytes = b"", schema: int = SCHEMA) -> bytes:
     return (
         struct.pack(">III", MAGIC, schema, msg_type)
@@ -229,6 +248,48 @@ def build_replay(target_id: str) -> bytes:
 
 def build_clear(target_id: str, window: int) -> bytes:
     return build_message(3, target_id, struct.pack(">B", window & 0xFF))
+
+
+def build_qso_logged(
+    target_id: str,
+    call: str,
+    grid: str,
+    dial_hz: int,
+    mode: str,
+    report_sent: str,
+    report_received: str,
+    my_call: str,
+    my_grid: str,
+    when: _dt.datetime,
+) -> bytes:
+    payload = (
+        pack_qdatetime_utc(when)
+        + pack_ba(call)
+        + pack_ba(grid)
+        + struct.pack(">Q", dial_hz)
+        + pack_ba(mode)
+        + pack_ba(report_sent)
+        + pack_ba(report_received)
+        + pack_ba("")
+        + pack_ba("")
+        + pack_ba("")
+        + pack_qdatetime_utc(when)
+        + pack_ba("")
+        + pack_ba(my_call)
+        + pack_ba(my_grid)
+        + pack_ba("")
+        + pack_ba("")
+        + pack_ba("")
+        + pack_ba("")
+        + pack_ba("")
+        + pack_ba("")
+    )
+    return build_message(5, target_id, payload)
+
+
+def build_logged_adif(target_id: str, adif_record: bytes, program_id: str = "Decodium Mock") -> bytes:
+    header = f"\n<adif_ver:5>3.1.0\n<programid:{len(program_id)}>{program_id}\n<EOH>\n".encode("utf-8")
+    return build_message(12, target_id, pack_ba(header + adif_record + b" <EOR>"))
 
 
 def build_setup_tx(target_id: str, tx_index: int, message: str, offset: int) -> bytes:
@@ -347,6 +408,33 @@ def parse_packet(data: bytes) -> dict[str, object]:
     return parsed
 
 
+def parse_raw_adif(data: bytes) -> dict[str, str] | None:
+    text = data.decode("utf-8", errors="replace").strip()
+    if "<" not in text or ">" not in text:
+        return None
+    fields: dict[str, str] = {}
+    for match in ADIF_FIELD_RE.finditer(text):
+        name = match.group(1).upper()
+        try:
+            declared = int(match.group(2))
+        except ValueError:
+            continue
+        value = match.group(3)[:declared].strip()
+        fields[name] = value
+    if "CALL" not in fields:
+        return None
+    return fields
+
+
+def raw_adif_summary(fields: dict[str, str], byte_count: int) -> str:
+    mode = fields.get("SUBMODE") or fields.get("MODE", "")
+    return (
+        f"RawADIF call={fields.get('CALL', '')} grid={fields.get('GRIDSQUARE', '')} "
+        f"mode={mode} band={fields.get('BAND', '')} freq={fields.get('FREQ', '')} "
+        f"bytes={byte_count}"
+    )
+
+
 def compact_summary(parsed: dict[str, object]) -> str:
     msg = f"{parsed['type_name']} id={parsed['id']} schema={parsed['schema']}"
     msg_type = parsed["type"]
@@ -436,12 +524,18 @@ def udp_loop(runtime: Runtime) -> None:
                 continue
             local_port = sock.getsockname()[1]
             try:
-                parsed = parse_packet(data)
-                print(f"[udp:{local_port} <- {addr[0]}:{addr[1]}] {compact_summary(parsed)}", flush=True)
-                if parsed["type"] == 0 and runtime.args.reply_heartbeat:
-                    response = build_heartbeat(str(parsed["id"]))
-                    sock.sendto(response, addr)
-                    print(f"[udp:{local_port} -> {addr[0]}:{addr[1]}] Heartbeat id={parsed['id']}", flush=True)
+                if len(data) >= 4 and struct.unpack(">I", data[:4])[0] == MAGIC:
+                    parsed = parse_packet(data)
+                    print(f"[udp:{local_port} <- {addr[0]}:{addr[1]}] {compact_summary(parsed)}", flush=True)
+                    if parsed["type"] == 0 and runtime.args.reply_heartbeat:
+                        response = build_heartbeat(str(parsed["id"]))
+                        sock.sendto(response, addr)
+                        print(f"[udp:{local_port} -> {addr[0]}:{addr[1]}] Heartbeat id={parsed['id']}", flush=True)
+                else:
+                    raw_adif = parse_raw_adif(data)
+                    if raw_adif is None:
+                        raise DecodeError("not a WSJT-X frame and not raw ADIF")
+                    print(f"[udp:{local_port} <- {addr[0]}:{addr[1]}] {raw_adif_summary(raw_adif, len(data))}", flush=True)
             except Exception as exc:
                 print(f"[udp:{local_port} <- {addr[0]}:{addr[1]}] decode error: {exc} bytes={len(data)}", flush=True)
                 if runtime.args.verbose_hex:
@@ -541,6 +635,7 @@ def handle_command(runtime: Runtime, line: str) -> None:
 
 
 def run_self_test() -> None:
+    sample_when = _dt.datetime(2026, 4, 28, 12, 0, 0)
     hb = build_heartbeat("WSJTX")
     parsed_hb = parse_packet(hb)
     assert parsed_hb["type"] == 0
@@ -569,7 +664,83 @@ def run_self_test() -> None:
     parsed_decode = parse_packet(decode)
     assert parsed_decode["type"] == 2
     assert parsed_decode["message"] == "CQ DX TEST2 JM76"
+    raw = b"<CALL:5>TEST1 <MODE:4>MFSK <SUBMODE:3>FT2 <BAND:3>20M <FREQ:9>14.074000 <EOR>"
+    parsed_raw = parse_raw_adif(raw)
+    assert parsed_raw is not None
+    assert parsed_raw["CALL"] == "TEST1"
+    assert parsed_raw["SUBMODE"] == "FT2"
+    qso_logged = build_qso_logged("WSJTX", "TEST1", "JM75", 14074000, "FT2", "-10", "-12", "9H1SR", "JM75", sample_when)
+    parsed_qso = parse_packet(qso_logged)
+    assert parsed_qso["type"] == 5
+    assert parsed_qso["dx_call"] == "TEST1"
+    logged_adif = build_logged_adif("WSJTX", raw.rstrip(b" <EOR>"))
+    parsed_adif = parse_packet(logged_adif)
+    assert parsed_adif["type"] == 12
+    assert "TEST1" in str(parsed_adif["adif"])
     print("self-test ok")
+
+
+def sample_adif_record(call: str, grid: str, mode: str, my_call: str, my_grid: str, when: _dt.datetime) -> bytes:
+    submode = mode.upper()
+    fields = [
+        ("CALL", call),
+        ("GRIDSQUARE", grid),
+        ("MODE", "MFSK" if submode in {"FT2", "FT4", "FST4", "Q65"} else submode),
+    ]
+    if submode in {"FT2", "FT4", "FST4", "Q65"}:
+        fields.append(("SUBMODE", submode))
+    fields.extend(
+        [
+            ("RST_SENT", "-10"),
+            ("RST_RCVD", "-12"),
+            ("QSO_DATE", when.strftime("%Y%m%d")),
+            ("TIME_ON", when.strftime("%H%M%S")),
+            ("QSO_DATE_OFF", when.strftime("%Y%m%d")),
+            ("TIME_OFF", when.strftime("%H%M%S")),
+            ("BAND", "20M"),
+            ("FREQ", "14.074000"),
+            ("STATION_CALLSIGN", my_call),
+            ("MY_GRIDSQUARE", my_grid),
+        ]
+    )
+    return "".join(f"<{name}:{len(value.encode('utf-8'))}>{value} " for name, value in fields).encode("utf-8")
+
+
+def send_sample_log_packets(args: argparse.Namespace) -> None:
+    if not args.udp_ports:
+        return
+    primary_port = args.udp_ports[0]
+    secondary_port = args.secondary_raw_port or (args.udp_ports[-1] if len(args.udp_ports) > 1 else primary_port)
+    when = _dt.datetime.utcnow().replace(microsecond=0)
+    adif_record = sample_adif_record(args.sample_call, args.sample_grid, args.sample_mode, args.sample_my_call, args.sample_my_grid, when)
+    qso = build_qso_logged(
+        args.target_id,
+        args.sample_call,
+        args.sample_grid,
+        args.sample_dial_hz,
+        args.sample_mode,
+        "-10",
+        "-12",
+        args.sample_my_call,
+        args.sample_my_grid,
+        when,
+    )
+    logged_adif = build_logged_adif(args.target_id, adif_record, "Decodium Mock")
+    raw_adif = adif_record + b" <eor>"
+
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sender.sendto(qso, (args.sample_target_host, primary_port))
+        sender.sendto(logged_adif, (args.sample_target_host, primary_port))
+        sender.sendto(qso, (args.sample_target_host, secondary_port))
+        sender.sendto(raw_adif, (args.sample_target_host, secondary_port))
+        print(
+            f"[sample] sent primary QSOLogged+LoggedADIF to {args.sample_target_host}:{primary_port}; "
+            f"secondary QSOLogged+RawADIF to {args.sample_target_host}:{secondary_port}",
+            flush=True,
+        )
+    finally:
+        sender.close()
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -590,6 +761,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reply-df", type=int, default=1500)
     parser.add_argument("--reply-time", default=None, help="Reply time HHMM or HHMMSS; default: current UTC")
     parser.add_argument("--send-reply", action="store_true", help="Send one Reply packet shortly after startup")
+    parser.add_argument("--send-sample-log", action="store_true", help="Send one D4/D3-compatible logged-QSO sample into the mock listeners")
+    parser.add_argument("--run-seconds", type=float, default=0.0, help="Stop automatically after N seconds; 0 means run until quit/Ctrl-C")
+    parser.add_argument("--sample-target-host", default="127.0.0.1", help="Host used by --send-sample-log")
+    parser.add_argument("--secondary-raw-port", type=int, default=0, help="Raw ADIF UDP port for --send-sample-log; default: last --udp-ports value")
+    parser.add_argument("--sample-call", default="TEST1")
+    parser.add_argument("--sample-grid", default="JM75")
+    parser.add_argument("--sample-mode", default="FT2")
+    parser.add_argument("--sample-my-call", default="9H1SR")
+    parser.add_argument("--sample-my-grid", default="JM75")
+    parser.add_argument("--sample-dial-hz", type=int, default=14074000)
     parser.add_argument("--no-stdin", action="store_true", help="Do not read interactive commands from stdin")
     parser.add_argument("--no-heartbeat-reply", dest="reply_heartbeat", action="store_false", help="Do not answer incoming heartbeats")
     parser.add_argument("--verbose-hex", action="store_true", help="Print hex for packets that cannot be decoded")
@@ -629,9 +810,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.send_reply:
         time.sleep(0.5)
         handle_command(runtime, "reply")
+    if args.send_sample_log:
+        time.sleep(0.5)
+        send_sample_log_packets(args)
 
     try:
-        if args.no_stdin:
+        if args.run_seconds > 0:
+            deadline = time.monotonic() + args.run_seconds
+            while not stop.is_set() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            stop.set()
+        elif args.no_stdin:
             while not stop.is_set():
                 time.sleep(0.5)
         else:

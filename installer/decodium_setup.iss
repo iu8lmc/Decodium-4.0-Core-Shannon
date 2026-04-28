@@ -5,7 +5,7 @@
   #define AppName "Decodium"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.53"
+  #define AppVersion "1.0.54"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "IU8LMC"
@@ -68,6 +68,12 @@ Type: filesandordirs; Name: "{app}\qml\decodium\*.qmlc"
 Type: filesandordirs; Name: "{app}\qml\decodium\components\*.qmlc"
 Type: filesandordirs; Name: "{app}\qml\decodium\qmlcache"
 Type: filesandordirs; Name: "{app}\qmlcache"
+; Pulisci anche le vecchie cache Qt/QML utente condivise da installazioni
+; precedenti. Decodium usa una cache isolata per versione+path.
+Type: filesandordirs; Name: "{localappdata}\IU8LMC\Decodium\cache\qmlcache"
+Type: filesandordirs; Name: "{localappdata}\IU8LMC\Decodium\qmlcache"
+Type: filesandordirs; Name: "{localappdata}\Decodium\cache\qmlcache"
+Type: filesandordirs; Name: "{localappdata}\decodium4\cache\qmlcache"
 
 [Files]
 ; Copia l'intero bundle portabile già preparato da windeployqt.

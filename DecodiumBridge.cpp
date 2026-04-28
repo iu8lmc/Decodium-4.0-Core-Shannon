@@ -1443,6 +1443,60 @@ static QByteArray buildTxPcmBuffer(const QVector<float>& wave48kMono, const QAud
     return pcm;
 }
 
+static qsizetype txAudioBufferBytesForMode(const QAudioFormat& format, const QString& mode, bool tune)
+{
+    if (!format.isValid()) {
+        return 0;
+    }
+
+    int frames = tune ? 16384 : (mode == QStringLiteral("FT2") ? 8192 : 16384);
+#if defined(Q_OS_WIN)
+    // Older Windows machines are more likely to underrun the output callback
+    // while FT8/FT4 decode/UI work is still settling. Keep FT2 lower to avoid
+    // pushing a short 3.75 s payload too far into the slot.
+    frames = tune ? 32768 : (mode == QStringLiteral("FT2") ? 12288 : 32768);
+#endif
+    return static_cast<qsizetype>(format.bytesForFrames(frames));
+}
+
+static int txAudioPrecomputeRetryDelayMs(const QString& mode, bool monitoring)
+{
+    if (!monitoring) {
+        return 0;
+    }
+
+    QString const normalized = mode.trimmed().toUpper();
+    int periodMs = 0;
+    int quietAfterSlotStartMs = 0;
+    int quietBeforeSlotEndMs = 0;
+    if (normalized == QStringLiteral("FT8")) {
+        periodMs = 15000;
+        quietAfterSlotStartMs = 8500;
+        quietBeforeSlotEndMs = 1200;
+    } else if (normalized == QStringLiteral("FT4")) {
+        periodMs = 7500;
+        quietAfterSlotStartMs = 3500;
+        quietBeforeSlotEndMs = 800;
+    } else if (normalized == QStringLiteral("FT2")) {
+        periodMs = 3750;
+        quietAfterSlotStartMs = 900;
+        quietBeforeSlotEndMs = 450;
+    } else {
+        return 0;
+    }
+
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    int const msInSlot = static_cast<int>(nowMs % periodMs);
+    if (msInSlot < quietAfterSlotStartMs) {
+        return qMax(50, quietAfterSlotStartMs - msInSlot);
+    }
+    int const latestSafeMs = periodMs - quietBeforeSlotEndMs;
+    if (msInSlot > latestSafeMs) {
+        return qMax(50, periodMs - msInSlot + quietAfterSlotStartMs);
+    }
+    return 0;
+}
+
 static QString expandedLocalFilePath(QString path)
 {
     path = QDir::fromNativeSeparators(path.trimmed());
@@ -1762,6 +1816,12 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             syncLegacyBackendDecodeList();
         }
     });
+    connect(this, &DecodiumBridge::decodeListChanged, this, [this]() {
+        publishRemoteActivityEntries(m_decodeList);
+    });
+    connect(this, &DecodiumBridge::rxDecodeListChanged, this, [this]() {
+        publishRemoteActivityEntries(m_rxDecodeList);
+    });
     connect(m_dxCluster, &DecodiumDxCluster::connectedChanged, this, [this]() {
         qDebug() << "[DxCluster] connected =" << m_dxCluster->connected();
         emit dxClusterConnectedChanged();
@@ -2012,6 +2072,9 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                         bridgeLog("Remote Web Console running: ws://" + bindAddress.toString() + ":" + QString::number(m_remoteServer->wsPort())
                                   + "  http://" + bindAddress.toString() + ":" + QString::number(m_remoteServer->httpPort()));
                         webSettings.setValue(QStringLiteral("WebAppActive"), true);
+                        clearRemoteActivityCache(false);
+                        publishRemoteActivityEntries(m_decodeList);
+                        publishRemoteActivityEntries(m_rxDecodeList);
                     }
                 }
             }
@@ -2224,6 +2287,22 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             this, syncHamlibTelemetry);
     connect(m_hamlibCat, &DecodiumTransceiverManager::tciPcmSamplesReady,
             this, &DecodiumBridge::onTciPcmSamplesReady, Qt::QueuedConnection);
+    connect(m_hamlibCat, &DecodiumTransceiverManager::tciModActiveChanged,
+            this,
+            [this](bool active) {
+                if (active || !usingTciAudioInput() || !m_transmitting || m_tuning) {
+                    return;
+                }
+                bridgeLog(QStringLiteral("TCI modulator inactive: finishing TX playback"));
+                m_txPlaybackHoldUntilMs = 0;
+                m_txPlaybackReleasePending = false;
+                QTimer::singleShot(0, this, [this]() {
+                    if (m_transmitting && usingTciAudioInput() && !m_tuning) {
+                        completeTxPlayback(QStringLiteral("tci-modulator-idle"));
+                    }
+                });
+            },
+            Qt::QueuedConnection);
 
     // Worker thread for FT8 decoder
     m_workerThread = new QThread(this);
@@ -3671,6 +3750,7 @@ void DecodiumBridge::setFrequency(double v) {
         if (std::abs(v - oldFreq) > 100000.0) {
             m_decodeList.clear();
             m_rxDecodeList.clear();
+            clearRemoteActivityCache(true);
             emit decodeListChanged();
             emit rxDecodeListChanged();
         }
@@ -4275,6 +4355,7 @@ void DecodiumBridge::setMode(const QString& v) {
         }
 
         m_mode = v;
+        invalidateTxAudioCache();
         updatePeriodTicksMax();
         resetTimeSyncDecodeMetrics();
         configureNtpClientForMode(m_mode);
@@ -4330,6 +4411,7 @@ void DecodiumBridge::setMode(const QString& v) {
         // Pulisci le finestre decode quando cambia modo
         m_decodeList.clear();
         m_rxDecodeList.clear();
+        clearRemoteActivityCache(true);
         emit decodeListChanged();
         emit rxDecodeListChanged();
 
@@ -4350,6 +4432,7 @@ void DecodiumBridge::setMode(const QString& v) {
         }
         syncActiveCatTxSplitFrequency(QStringLiteral("mode-change"));
         scheduleModeChangeMonitorRecovery(previousMode, m_mode, monitorSessionId, monitorWasActive);
+        scheduleTxAudioPrecompute();
     }
 }
 
@@ -4386,10 +4469,12 @@ void DecodiumBridge::setTxFrequency(int f)
     if (m_txFrequency != f) {
         m_txFrequency = f;
         emit txFrequencyChanged();
+        invalidateTxAudioCache();
         if (legacyBackendAvailable()) {
             m_legacyBackend->setTxFrequency(f);
         }
         syncActiveCatTxSplitFrequency(QStringLiteral("tx-audio-change"));
+        scheduleTxAudioPrecompute();
     }
 }
 
@@ -4455,10 +4540,13 @@ void DecodiumBridge::setAudioOutputDevice(const QString& v) {
     if (m_audioOutputDevice != v) {
         m_audioOutputDevice = v;
         bridgeLog("audioOutputDevice set to: " + m_audioOutputDevice);
+        m_cachedTxOutputDeviceValid = false;
+        invalidateTxAudioCache();
         if (legacyBackendAvailable()) {
             m_legacyBackend->setAudioOutputDeviceName(v);
         }
         emit audioOutputDeviceChanged();
+        scheduleTxAudioPrecompute();
     }
 }
 int DecodiumBridge::audioInputChannel() const { return m_audioInputChannel; }
@@ -4477,10 +4565,12 @@ void DecodiumBridge::setAudioOutputChannel(int v) {
     v = qBound(0, v, 3);
     if (m_audioOutputChannel != v) {
         m_audioOutputChannel = v;
+        invalidateTxAudioCache();
         if (legacyBackendAvailable()) {
             m_legacyBackend->setAudioOutputChannel(v);
         }
         emit audioOutputChannelChanged();
+        scheduleTxAudioPrecompute();
     }
 }
 
@@ -4513,6 +4603,8 @@ void DecodiumBridge::setTx1(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(1, v);
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 QString DecodiumBridge::tx2() const { return m_tx2; }
@@ -4523,6 +4615,8 @@ void DecodiumBridge::setTx2(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(2, v);
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 QString DecodiumBridge::tx3() const { return m_tx3; }
@@ -4533,6 +4627,8 @@ void DecodiumBridge::setTx3(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(3, v);
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 QString DecodiumBridge::tx4() const { return m_tx4; }
@@ -4543,6 +4639,8 @@ void DecodiumBridge::setTx4(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(4, v);
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 QString DecodiumBridge::tx5() const { return m_tx5; }
@@ -4553,6 +4651,8 @@ void DecodiumBridge::setTx5(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(5, v);
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 QString DecodiumBridge::tx6() const { return m_tx6; }
@@ -4563,6 +4663,8 @@ void DecodiumBridge::setTx6(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(6, v);
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 int DecodiumBridge::currentTx() const { return m_currentTx; }
@@ -4572,6 +4674,8 @@ void DecodiumBridge::setCurrentTx(int v) {
         emit currentTxChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->selectTxMessage(qBound(1, v, 6));
+        invalidateTxAudioCache();
+        scheduleTxAudioPrecompute();
     }
 }
 QString DecodiumBridge::dxCall() const { return m_dxCall; }
@@ -4669,6 +4773,9 @@ void DecodiumBridge::setTxEnabled(bool v)
             m_legacyBackend->setTxEnabled(v);
             scheduleLegacyStateRefreshBurst();
         }
+        if (v) {
+            scheduleTxAudioPrecompute(25);
+        }
     }
 }
 
@@ -4696,6 +4803,9 @@ void DecodiumBridge::setAutoCqRepeat(bool v)
         if (usingLegacyBackendForTx()) {
             syncLegacyBackendTxState();
             m_legacyBackend->setAutoCq(v);
+        }
+        if (m_autoCqRepeat) {
+            scheduleTxAudioPrecompute(25);
         }
     }
 }
@@ -5105,7 +5215,8 @@ void DecodiumBridge::stopRx()
 void DecodiumBridge::updateSoundOutputDevice()
 {
     bool requestedDeviceFound = false;
-    QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
+    QAudioDevice outDev = resolveTxOutputDevice(&requestedDeviceFound);
+
     const QAudioFormat fmt = chooseTxAudioFormat(outDev);
     m_soundOutput->setFormat(outDev, static_cast<unsigned>(qMax(1, fmt.channelCount())), 16384);
     bridgeLog("updateSoundOutputDevice: " + outDev.description() +
@@ -5209,6 +5320,7 @@ void DecodiumBridge::finishModulatorIdlePlayback(const QString& reason)
     }
 
     resumeRxAudioAfterTx(reason);
+    resumeNonAudioTxWork(reason);
 }
 
 // ===========================================================================
@@ -5229,6 +5341,235 @@ static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceF
 
     if (requestedDeviceFound) *requestedDeviceFound = name.isEmpty();
     return QMediaDevices::defaultAudioOutput();
+}
+
+void DecodiumBridge::invalidateTxAudioCache()
+{
+    m_txAudioCache = TxAudioCache {};
+}
+
+QAudioDevice DecodiumBridge::resolveTxOutputDevice(bool* requestedDeviceFound)
+{
+    if (m_cachedTxOutputDeviceValid && m_cachedTxOutputDeviceName == m_audioOutputDevice) {
+        if (requestedDeviceFound) {
+            *requestedDeviceFound = m_cachedTxOutputDeviceFound;
+        }
+        return m_cachedTxOutputDevice;
+    }
+
+    bool found = false;
+    QAudioDevice device = findOutputDevice(m_audioOutputDevice, &found);
+    m_cachedTxOutputDeviceName = m_audioOutputDevice;
+    m_cachedTxOutputDeviceFound = found;
+    m_cachedTxOutputDevice = device;
+    m_cachedTxOutputDeviceValid = true;
+    if (requestedDeviceFound) {
+        *requestedDeviceFound = found;
+    }
+    return device;
+}
+
+void DecodiumBridge::scheduleTxAudioPrecompute(int delayMs)
+{
+    if (m_txAudioPrecomputeScheduled || m_shuttingDown || QCoreApplication::closingDown()) {
+        return;
+    }
+
+    m_txAudioPrecomputeScheduled = true;
+    QTimer::singleShot(qMax(0, delayMs), this, [this]() {
+        m_txAudioPrecomputeScheduled = false;
+        precomputeTxAudioForCurrentMessage(QStringLiteral("scheduled"));
+    });
+}
+
+void DecodiumBridge::precomputeTxAudioForCurrentMessage(const QString& reason)
+{
+    if (m_shuttingDown || QCoreApplication::closingDown() || m_transmitting || m_tuning) {
+        return;
+    }
+    if (m_decoding) {
+        // Do not compete with the current decode pass; the startTx() path still
+        // has a synchronous fallback if an immediate FT2 reply is required.
+        scheduleTxAudioPrecompute(250);
+        return;
+    }
+    if (!m_decodeStartMsBySerial.isEmpty() || m_asyncDecodePending) {
+        scheduleTxAudioPrecompute(250);
+        return;
+    }
+    int const slotDelayMs = txAudioPrecomputeRetryDelayMs(m_mode, m_monitoring);
+    if (slotDelayMs > 0) {
+        scheduleTxAudioPrecompute(slotDelayMs);
+        return;
+    }
+    if (!m_txEnabled && !m_autoCqRepeat && !m_deferredManualSyncTx) {
+        return;
+    }
+
+    QString const msg = buildCurrentTxMessage();
+    if (msg.trimmed().isEmpty()) {
+        return;
+    }
+
+    bool needPcm = !usingTciAudioInput();
+#if defined(Q_OS_MAC)
+    needPcm = false;
+#endif
+
+    QVector<float> wave;
+    QByteArray pcm;
+    QAudioFormat format;
+    QAudioDevice device;
+    QString error;
+    if (ensureTxAudioPrepared(msg, effectiveTxAudioFrequencyHz(), needPcm,
+                              &wave, &pcm, &format, &device, &error)) {
+        bridgeLog(QStringLiteral("TX audio precomputed (%1): mode=%2 msg=[%3] samples=%4 pcm=%5")
+                      .arg(reason, m_mode, msg.trimmed())
+                      .arg(wave.size())
+                      .arg(pcm.size()));
+    } else if (!error.isEmpty()) {
+        bridgeLog(QStringLiteral("TX audio precompute skipped (%1): %2").arg(reason, error));
+    }
+}
+
+bool DecodiumBridge::ensureTxAudioPrepared(const QString& msg, int txAudioFrequency, bool needPcm,
+                                           QVector<float>* waveOut, QByteArray* pcmOut,
+                                           QAudioFormat* formatOut, QAudioDevice* deviceOut,
+                                           QString* errorOut)
+{
+    QString const mode = m_mode.trimmed().toUpper();
+    QString const message = msg.trimmed();
+    bool const tciAudio = usingTciAudioInput();
+
+    auto cacheMatchesBase = [&]() {
+        return !m_txAudioCache.wave.isEmpty()
+            && m_txAudioCache.mode == mode
+            && m_txAudioCache.message == message
+            && m_txAudioCache.txAudioFrequency == txAudioFrequency
+            && m_txAudioCache.tciAudio == tciAudio;
+    };
+
+    if (cacheMatchesBase() && (!needPcm || !m_txAudioCache.pcm.isEmpty())) {
+        if (needPcm) {
+            if (m_cachedTxOutputDeviceValid
+                && m_cachedTxOutputDeviceName == m_audioOutputDevice
+                && m_txAudioCache.outputDeviceName == m_audioOutputDevice
+                && m_txAudioCache.outputDeviceDescription == m_cachedTxOutputDevice.description()
+                && m_txAudioCache.outputFormat.isValid()) {
+                if (waveOut) *waveOut = m_txAudioCache.wave;
+                if (pcmOut) *pcmOut = m_txAudioCache.pcm;
+                if (formatOut) *formatOut = m_txAudioCache.outputFormat;
+                if (deviceOut) *deviceOut = m_cachedTxOutputDevice;
+                return true;
+            }
+            bool found = false;
+            QAudioDevice const device = resolveTxOutputDevice(&found);
+            QAudioFormat const format = chooseTxAudioFormat(device);
+            if (m_txAudioCache.outputDeviceName == m_audioOutputDevice
+                && m_txAudioCache.outputDeviceDescription == device.description()
+                && sameAudioFormat(m_txAudioCache.outputFormat, format)) {
+                if (waveOut) *waveOut = m_txAudioCache.wave;
+                if (pcmOut) *pcmOut = m_txAudioCache.pcm;
+                if (formatOut) *formatOut = m_txAudioCache.outputFormat;
+                if (deviceOut) *deviceOut = device;
+                Q_UNUSED(found)
+                return true;
+            }
+        } else {
+            if (waveOut) *waveOut = m_txAudioCache.wave;
+            if (pcmOut) pcmOut->clear();
+            if (formatOut) *formatOut = QAudioFormat {};
+            if (deviceOut) *deviceOut = QAudioDevice {};
+            return true;
+        }
+    }
+
+    QString buildError;
+    QVector<float> wave = buildTxWaveformForMessage(mode, message, txAudioFrequency, &buildError);
+    if (wave.isEmpty()) {
+        if (errorOut) {
+            *errorOut = buildError.isEmpty() ? QStringLiteral("Generazione onda TX fallita") : buildError;
+        }
+        invalidateTxAudioCache();
+        return false;
+    }
+
+    QByteArray pcm;
+    QAudioFormat format;
+    QAudioDevice device;
+    if (needPcm) {
+        bool found = false;
+        device = resolveTxOutputDevice(&found);
+        if (!found && !m_audioOutputDevice.trimmed().isEmpty()) {
+            bridgeLog("TX audio cache: requested output device not found, fallback to default: " +
+                      device.description() + " requested=[" + m_audioOutputDevice + "]");
+        }
+        format = chooseTxAudioFormat(device);
+        pcm = buildTxPcmBuffer(wave, format);
+        if (pcm.isEmpty()) {
+            if (errorOut) {
+                *errorOut = QStringLiteral("Formato audio TX non supportato dal device selezionato");
+            }
+            invalidateTxAudioCache();
+            return false;
+        }
+    }
+
+    m_txAudioCache.mode = mode;
+    m_txAudioCache.message = message;
+    m_txAudioCache.txAudioFrequency = txAudioFrequency;
+    m_txAudioCache.tciAudio = tciAudio;
+    m_txAudioCache.outputDeviceName = needPcm ? m_audioOutputDevice : QString {};
+    m_txAudioCache.outputDeviceDescription = needPcm ? device.description() : QString {};
+    m_txAudioCache.outputFormat = needPcm ? format : QAudioFormat {};
+    m_txAudioCache.wave = wave;
+    m_txAudioCache.pcm = pcm;
+
+    if (waveOut) *waveOut = m_txAudioCache.wave;
+    if (pcmOut) *pcmOut = m_txAudioCache.pcm;
+    if (formatOut) *formatOut = m_txAudioCache.outputFormat;
+    if (deviceOut) *deviceOut = device;
+    return true;
+}
+
+void DecodiumBridge::saveTxRecordingAsync(const QString& path, QVector<float> wave, int sampleRate,
+                                          const QString& logLabel)
+{
+    if (path.trimmed().isEmpty() || wave.isEmpty() || sampleRate <= 0) {
+        return;
+    }
+
+    QThread* writer = QThread::create([path, wave, sampleRate, logLabel]() {
+        bool const ok = writeMono16WavFile(path, wave, sampleRate);
+        bridgeLog(QStringLiteral("%1 recording %2: %3")
+                      .arg(logLabel,
+                           ok ? QStringLiteral("saved") : QStringLiteral("failed"),
+                           path));
+    });
+    writer->setObjectName(QStringLiteral("DecodiumTxWavWriter"));
+    connect(writer, &QThread::finished, writer, &QObject::deleteLater);
+    writer->start(QThread::LowPriority);
+}
+
+void DecodiumBridge::suspendNonAudioTxWork(const QString& reason)
+{
+    if (m_spectrumTimer && m_spectrumTimer->isActive()) {
+        m_spectrumTimer->stop();
+        m_spectrumTimerPausedForTx = true;
+        bridgeLog(QStringLiteral("TX workload: spectrum timer paused (%1)").arg(reason));
+    }
+}
+
+void DecodiumBridge::resumeNonAudioTxWork(const QString& reason)
+{
+    if (!m_spectrumTimerPausedForTx) {
+        return;
+    }
+    m_spectrumTimerPausedForTx = false;
+    if (m_spectrumTimer && m_monitoring && !m_transmitting && !m_tuning) {
+        m_spectrumTimer->start();
+        bridgeLog(QStringLiteral("TX workload: spectrum timer resumed (%1)").arg(reason));
+    }
 }
 
 void DecodiumBridge::noteTxPlaybackFinished(const QString& reason, bool error)
@@ -5314,6 +5655,7 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     }
 
     resumeRxAudioAfterTx(reason);
+    resumeNonAudioTxWork(reason);
 
     if (wasTransmitting) {
         if (error) {
@@ -5387,14 +5729,10 @@ void DecodiumBridge::startTx()
         bridgeLog("startTx: delegating to legacy backend");
         if (m_recordTxEnabled) {
             QString recordingError;
-            QVector<float> const wave = buildTxWaveformForMessage(m_mode, msg, m_txFrequency, &recordingError);
+            QVector<float> const wave = buildTxWaveformForMessage(m_mode, msg, effectiveTxAudioFrequencyHz(), &recordingError);
             if (!wave.isEmpty()) {
                 QString const txRecordPath = buildTxRecordingPath(m_mode, false);
-                if (writeMono16WavFile(txRecordPath, wave, 48000)) {
-                    bridgeLog("TX recording saved (legacy): " + txRecordPath);
-                } else {
-                    emit errorMessage("Impossibile salvare la registrazione TX");
-                }
+                saveTxRecordingAsync(txRecordPath, wave, 48000, QStringLiteral("TX legacy"));
             } else {
                 bridgeLog("TX recording skipped (legacy): " + recordingError + " msg=[" + msg + "]");
             }
@@ -5407,11 +5745,15 @@ void DecodiumBridge::startTx()
         return;
     }
 
-    // Codifica → wave float a 48kHz, campioni in [-1.0, +1.0]
+    // Usa la cache preparata quando TX è stato armato. Se non è pronta
+    // (es. risposta FT2 immediata), cade al build sincrono minimo qui.
     QVector<float> wave;
+    QByteArray preparedPcm;
+    QAudioFormat preparedFmt;
+    QAudioDevice preparedDev;
+    bool const tciAudioTx = usingTciAudioInput();
     const int txAudioFrequency = effectiveTxAudioFrequencyHz();
     const int xitHz = catSplitXitHzForTxFrequency(m_txFrequency);
-    const float freq = static_cast<float>(txAudioFrequency);
     if (xitHz != 0 || catSplitTxDialFrequencyHz() > 0.0) {
         bridgeLog(QStringLiteral("startTx split audio: ui_tx=%1 audio_tx=%2 xit=%3 tx_dial=%4")
                       .arg(QString::number(m_txFrequency),
@@ -5419,27 +5761,29 @@ void DecodiumBridge::startTx()
                            QString::number(xitHz),
                            QString::number(catSplitTxDialFrequencyHz(), 'f', 0)));
     }
-
-    if (m_mode == "FT2") {
-        auto enc = decodium::txmsg::encodeFt2(msg);
-        if (!enc.ok) { emit errorMessage("Codifica FT2 fallita: " + msg); return; }
-        wave = decodium::txwave::generateFt2Wave(enc.tones.constData(), 103, 4*288, 48000.0f, freq);
-    } else if (m_mode == "FT4") {
-        auto enc = decodium::txmsg::encodeFt4(msg);
-        if (!enc.ok) { emit errorMessage("Codifica FT4 fallita: " + msg); return; }
-        wave = decodium::txwave::generateFt4Wave(enc.tones.constData(), 105, 4*576, 48000.0f, freq);
-    } else { // FT8
-        auto enc = decodium::txmsg::encodeFt8(msg);
-        if (!enc.ok) { emit errorMessage("Codifica FT8 fallita: " + msg); return; }
-        wave = decodium::txwave::generateFt8Wave(enc.tones.constData(), 79, 7680, 2.0f, 48000.0f, freq);
+    bool needPcm = !tciAudioTx;
+#if defined(Q_OS_MAC)
+    needPcm = false;
+#endif
+    QString prepareError;
+    if (!ensureTxAudioPrepared(msg, txAudioFrequency, needPcm,
+                               &wave, &preparedPcm, &preparedFmt, &preparedDev,
+                               &prepareError)) {
+        QString const errorText = prepareError.isEmpty()
+            ? QStringLiteral("Generazione audio TX fallita")
+            : prepareError;
+        emit errorMessage(errorText);
+        bridgeLog("startTx: TX audio prepare failed: " + errorText + " msg=[" + msg + "]");
+        return;
     }
-    bridgeLog("startTx: wave.size()=" + QString::number(wave.size()));
-    if (wave.isEmpty()) { emit errorMessage("Generazione onda TX fallita"); bridgeLog("startTx: wave empty abort"); return; }
+    bridgeLog("startTx: wave.size()=" + QString::number(wave.size()) +
+              " cache=" + QString::number((m_txAudioCache.message == msg.trimmed()) ? 1 : 0));
 
 #if defined(Q_OS_MAC)
     {
         bool requestedDeviceFound = false;
-        QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
+        QAudioDevice outDev = resolveTxOutputDevice(&requestedDeviceFound);
+
         if (!requestedDeviceFound) {
             bridgeLog("startTx(mac): requested output device not found, fallback to default: " +
                       outDev.description() + " requested=[" + m_audioOutputDevice + "]");
@@ -5489,6 +5833,7 @@ void DecodiumBridge::startTx()
 
         m_transmitting = true;
         emit transmittingChanged();
+        suspendNonAudioTxWork(QStringLiteral("tx-mac"));
 
         // Anti-collisione: ferma l'ingresso audio durante TX per evitare
         // che il decoder processi il nostro stesso tono come segnale ricevuto.
@@ -5534,11 +5879,7 @@ void DecodiumBridge::startTx()
 
         if (m_recordTxEnabled) {
             QString const txRecordPath = buildTxRecordingPath(m_mode, false);
-            if (writeMono16WavFile(txRecordPath, wave, 48000)) {
-                bridgeLog("TX recording saved: " + txRecordPath);
-            } else {
-                emit errorMessage("Impossibile salvare la registrazione TX");
-            }
+            saveTxRecordingAsync(txRecordPath, wave, 48000, QStringLiteral("TX"));
         }
 
         unsigned symbolsLength = 79;
@@ -5580,30 +5921,19 @@ void DecodiumBridge::startTx()
     }
 #endif
 
-    bool const tciAudioTx = usingTciAudioInput();
     QAudioDevice outDev;
     QAudioFormat outFmt;
     if (!tciAudioTx) {
-        bool requestedDeviceFound = false;
-        outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
-        bridgeLog("startTx: outputDevice=[" + m_audioOutputDevice + "] found=" +
-                  QString::number(requestedDeviceFound) + " using=[" + outDev.description() + "]");
-        // Log tutti i device di output disponibili
-        {
-            auto outputs = QMediaDevices::audioOutputs();
-            bridgeLog("startTx: available outputs (" + QString::number(outputs.size()) + "):");
-            for (const QAudioDevice& d : outputs)
-                bridgeLog("  - " + d.description());
-        }
-        if (!requestedDeviceFound) {
+        outDev = preparedDev;
+        outFmt = preparedFmt;
+        m_txPcmData = preparedPcm;
+        if (!m_cachedTxOutputDeviceFound && !m_audioOutputDevice.trimmed().isEmpty()) {
             bridgeLog("startTx: requested output device not found, fallback to default: " +
                       outDev.description() + " requested=[" + m_audioOutputDevice + "]");
             emit statusMessage("Audio TX non trovato, uso default: " + outDev.description());
         }
-        outFmt = chooseTxAudioFormat(outDev);
-        m_txPcmData = buildTxPcmBuffer(wave, outFmt);
-        if (m_txPcmData.isEmpty()) {
-            bridgeLog("startTx: unable to build PCM buffer for " + audioFormatToString(outFmt));
+        if (!outFmt.isValid() || m_txPcmData.isEmpty()) {
+            bridgeLog("startTx: prepared PCM buffer invalid for " + audioFormatToString(outFmt));
             emit errorMessage("Formato audio TX non supportato dal device selezionato");
             return;
         }
@@ -5613,11 +5943,7 @@ void DecodiumBridge::startTx()
     }
     if (m_recordTxEnabled) {
         QString const txRecordPath = buildTxRecordingPath(m_mode, false);
-        if (writeMono16WavFile(txRecordPath, wave, 48000)) {
-            bridgeLog("TX recording saved: " + txRecordPath);
-        } else {
-            emit errorMessage("Impossibile salvare la registrazione TX");
-        }
+        saveTxRecordingAsync(txRecordPath, wave, 48000, QStringLiteral("TX"));
     }
 
     // === GitHub TxController: aggiorna contatori retry ===
@@ -5669,6 +5995,7 @@ void DecodiumBridge::startTx()
 
     m_transmitting = true;
     emit transmittingChanged();
+    suspendNonAudioTxWork(QStringLiteral("tx"));
 
     // Anti-collisione: durante TX sync non dobbiamo ricatturare il nostro
     // stesso audio sul device RX. FT2 async resta full-duplex.
@@ -5742,6 +6069,7 @@ void DecodiumBridge::startTx()
             m_activeTxNumber = 0;
             m_activeTxMessage.clear();
             resumeRxAudioAfterTx(QStringLiteral("tci-tx-audio-start-failed"));
+            resumeNonAudioTxWork(QStringLiteral("tci-tx-audio-start-failed"));
             emit errorMessage(QStringLiteral("Impossibile avviare audio TX TCI"));
             return;
         }
@@ -5806,6 +6134,10 @@ void DecodiumBridge::startTx()
 
         m_txAudioSink = new QAudioSink(outDev, outFmt, this);
         m_txAudioSink->setVolume(static_cast<float>(txGainFromSlider(m_txOutputLevel)));
+        qsizetype const txBufferBytes = txAudioBufferBytesForMode(outFmt, m_mode, false);
+        if (txBufferBytes > 0) {
+            m_txAudioSink->setBufferSize(txBufferBytes);
+        }
         qint64 const expectedUs = qMax<qint64>(
             1, qRound64(static_cast<double>(wave.size()) * 1000000.0 / 48000.0));
         qint64 const txPlaybackMs = (expectedUs + 999) / 1000;
@@ -5874,6 +6206,7 @@ void DecodiumBridge::startTx()
                   " pcm_bytes=" + QString::number(m_txPcmData.size()) +
                   " dev=" + outDev.description() +
                   " fmt=" + audioFormatToString(outFmt) +
+                  " buf=" + QString::number(m_txAudioSink->bufferSize()) +
                   " TX=" + QString::number(m_currentTx) +
                   " retry=" + QString::number(m_txRetryCount) +
                   " nTx73=" + QString::number(m_nTx73) +
@@ -5950,6 +6283,7 @@ void DecodiumBridge::stopTx()
         emit statusMessage("TX fermato");
     }
     resumeRxAudioAfterTx(QStringLiteral("stopTx"));
+    resumeNonAudioTxWork(QStringLiteral("stopTx"));
     return;
 #endif
 
@@ -5973,6 +6307,7 @@ void DecodiumBridge::stopTx()
         emit statusMessage("TX fermato");
     }
     resumeRxAudioAfterTx(QStringLiteral("stopTx"));
+    resumeNonAudioTxWork(QStringLiteral("stopTx"));
 }
 
 void DecodiumBridge::startTune()
@@ -6001,11 +6336,7 @@ void DecodiumBridge::startTune()
             double const freq = m_txFrequency > 0 ? m_txFrequency : 1500.0;
             QVector<float> const wave = buildTuneWaveform(freq, 48000, 10);
             QString const txRecordPath = buildTxRecordingPath(QStringLiteral("TUNE"), true);
-            if (writeMono16WavFile(txRecordPath, wave, 48000)) {
-                bridgeLog("TUNE recording saved (legacy): " + txRecordPath);
-            } else {
-                emit errorMessage("Impossibile salvare la registrazione TUNE");
-            }
+            saveTxRecordingAsync(txRecordPath, wave, 48000, QStringLiteral("TUNE legacy"));
         }
         syncLegacyBackendState();
         syncLegacyBackendTxState();
@@ -6022,6 +6353,7 @@ void DecodiumBridge::startTune()
     if (usingTciAudioInput()) {
         m_tuning = true;
         emit tuningChanged();
+        suspendNonAudioTxWork(QStringLiteral("tune-tci"));
 
         bridgeLog("startTune(TCI): canPtt=" + QString::number(activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
                   " catConnected=" + QString::number(m_catConnected));
@@ -6030,6 +6362,7 @@ void DecodiumBridge::startTune()
         if (!startTciTuneAudioStream(freq)) {
             m_tuning = false;
             emit tuningChanged();
+            resumeNonAudioTxWork(QStringLiteral("tune-tci-start-failed"));
             emit errorMessage(QStringLiteral("Impossibile avviare audio TUNE TCI"));
             return;
         }
@@ -6044,7 +6377,8 @@ void DecodiumBridge::startTune()
 #if defined(Q_OS_MAC)
     {
         bool requestedDeviceFound = false;
-        QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
+        QAudioDevice outDev = resolveTxOutputDevice(&requestedDeviceFound);
+
         if (!requestedDeviceFound) {
             bridgeLog("startTune(mac): requested output device not found, fallback to default: " +
                       outDev.description() + " requested=[" + m_audioOutputDevice + "]");
@@ -6062,6 +6396,7 @@ void DecodiumBridge::startTune()
 
         m_tuning = true;
         emit tuningChanged();
+        suspendNonAudioTxWork(QStringLiteral("tune-mac"));
 
         bridgeLog("startTune(mac): canPtt=" + QString::number(activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
                   " catConnected=" + QString::number(m_catConnected));
@@ -6073,11 +6408,7 @@ void DecodiumBridge::startTune()
         if (m_recordTxEnabled) {
             QVector<float> const wave = buildTuneWaveform(freq, 48000, 10);
             QString const txRecordPath = buildTxRecordingPath(QStringLiteral("TUNE"), true);
-            if (writeMono16WavFile(txRecordPath, wave, 48000)) {
-                bridgeLog("TUNE recording saved: " + txRecordPath);
-            } else {
-                emit errorMessage("Impossibile salvare la registrazione TUNE");
-            }
+            saveTxRecordingAsync(txRecordPath, wave, 48000, QStringLiteral("TUNE"));
         }
         m_modulator->start(QStringLiteral("FT8"), 79, 1920.0, freq, 0.0,
                            m_soundOutput, outChannel, false, false,
@@ -6095,6 +6426,7 @@ void DecodiumBridge::startTune()
 
     m_tuning = true;
     emit tuningChanged();
+    suspendNonAudioTxWork(QStringLiteral("tune"));
 
     bridgeLog("startTune: canPtt=" + QString::number(activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) +
               " catConnected=" + QString::number(m_catConnected));
@@ -6121,6 +6453,7 @@ void DecodiumBridge::startTune()
             activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
         m_tuning = false;
         emit tuningChanged();
+        resumeNonAudioTxWork(QStringLiteral("tune-start-failed"));
         emit errorMessage("Impossibile avviare l'audio TUNE");
         return;
     }
@@ -6147,7 +6480,8 @@ bool DecodiumBridge::launchTuneAudio()
     if (m_txPcmBuffer) { delete m_txPcmBuffer; m_txPcmBuffer = nullptr; }
 
     bool requestedDeviceFound = false;
-    QAudioDevice outDev = findOutputDevice(m_audioOutputDevice, &requestedDeviceFound);
+    QAudioDevice outDev = resolveTxOutputDevice(&requestedDeviceFound);
+
     if (!requestedDeviceFound) {
         bridgeLog("launchTuneAudio: requested output device not found, fallback to default: " +
                   outDev.description() + " requested=[" + m_audioOutputDevice + "]");
@@ -6160,11 +6494,7 @@ bool DecodiumBridge::launchTuneAudio()
     }
     if (m_recordTxEnabled) {
         QString const txRecordPath = buildTxRecordingPath(QStringLiteral("TUNE"), true);
-        if (writeMono16WavFile(txRecordPath, wave, 48000)) {
-            bridgeLog("TUNE recording saved: " + txRecordPath);
-        } else {
-            emit errorMessage("Impossibile salvare la registrazione TUNE");
-        }
+        saveTxRecordingAsync(txRecordPath, wave, 48000, QStringLiteral("TUNE"));
     }
 
     m_txPcmBuffer = new QBuffer(this);
@@ -6174,6 +6504,10 @@ bool DecodiumBridge::launchTuneAudio()
 
     m_txAudioSink = new QAudioSink(outDev, outFmt, this);
     m_txAudioSink->setVolume(static_cast<float>(txGainFromSlider(m_txOutputLevel)));
+    qsizetype const tuneBufferBytes = txAudioBufferBytesForMode(outFmt, QStringLiteral("TUNE"), true);
+    if (tuneBufferBytes > 0) {
+        m_txAudioSink->setBufferSize(tuneBufferBytes);
+    }
     connect(m_txAudioSink, &QAudioSink::stateChanged, this, [this](QAudio::State st) {
         if (st == QAudio::StoppedState && m_txAudioSink &&
             m_txAudioSink->error() != QAudio::NoError && m_tuning) {
@@ -6187,6 +6521,7 @@ bool DecodiumBridge::launchTuneAudio()
               " err=" + QString::number((int)m_txAudioSink->error()) +
               " dev=" + outDev.description() +
               " fmt=" + audioFormatToString(outFmt) +
+              " buf=" + QString::number(m_txAudioSink->bufferSize()) +
               " pcm_bytes=" + QString::number(m_txPcmData.size()));
     // Verifica dopo 2s se processedUSecs avanza (conferma audio fluisce)
     QTimer::singleShot(2000, this, [this]() {
@@ -6228,6 +6563,7 @@ void DecodiumBridge::stopTune()
         emit tuningChanged();
         emit statusMessage("Tune terminato");
     }
+    resumeNonAudioTxWork(QStringLiteral("stopTune"));
     return;
 #endif
 
@@ -6251,6 +6587,7 @@ void DecodiumBridge::stopTune()
     m_tuning = false;
     emit tuningChanged();
     emit statusMessage("Tune terminato");
+    resumeNonAudioTxWork(QStringLiteral("stopTune"));
 }
 
 void DecodiumBridge::halt()
@@ -6300,6 +6637,7 @@ void DecodiumBridge::clearDecodeList()
         m_legacyAllTxtConsumedSize = info.exists() ? info.size() : -1;
     }
     m_decodeList.clear();
+    clearRemoteActivityCache(true);
     emit decodeListChanged();
     if (m_activeStations) {
         m_activeStations->clear();
@@ -6323,6 +6661,74 @@ void DecodiumBridge::clearRxDecodes()
     }
     m_rxDecodeList.clear();
     emit rxDecodeListChanged();
+}
+
+void DecodiumBridge::clearRemoteActivityCache(bool notifyRemote)
+{
+    m_remoteActivityKeys.clear();
+    m_remoteActivityKeyOrder.clear();
+    if (notifyRemote && m_remoteServer && m_remoteServer->isRunning()) {
+        m_remoteServer->clearBandActivity();
+    }
+}
+
+void DecodiumBridge::publishRemoteActivityEntries(QVariantList const& entries)
+{
+    if (!m_remoteServer || !m_remoteServer->isRunning()) {
+        return;
+    }
+
+    for (QVariant const& value : entries) {
+        publishRemoteActivityEntry(value.toMap());
+    }
+}
+
+void DecodiumBridge::publishRemoteActivityEntry(QVariantMap const& entry)
+{
+    if (!m_remoteServer || !m_remoteServer->isRunning()) {
+        return;
+    }
+
+    QString const message = entry.value(QStringLiteral("message")).toString().trimmed();
+    if (message.isEmpty()) {
+        return;
+    }
+
+    QString time = normalizeUtcDisplayToken(entry.value(QStringLiteral("time")).toString());
+    if (time.isEmpty()) {
+        time = QDateTime::currentDateTimeUtc().toString(QStringLiteral("HHmmss"));
+    }
+
+    QString db = entry.value(QStringLiteral("db")).toString().trimmed();
+    if (db.isEmpty()) {
+        db = entry.value(QStringLiteral("isTx")).toBool() ? QStringLiteral("TX") : QStringLiteral("0");
+    }
+
+    QString dt = entry.value(QStringLiteral("dt")).toString().trimmed();
+    if (dt.isEmpty()) {
+        dt = QStringLiteral("0.0");
+    }
+
+    QString freq = entry.value(QStringLiteral("freq")).toString().trimmed();
+    if (freq.isEmpty()) {
+        freq = QString::number(entry.value(QStringLiteral("isTx")).toBool() ? m_txFrequency : m_rxFrequency);
+    }
+
+    QString const line = QStringLiteral("%1 %2 %3 %4 %5")
+                             .arg(time, db, dt, freq, message)
+                             .simplified();
+    QString const key = line + QStringLiteral("|") + entry.value(QStringLiteral("mode"), m_mode).toString();
+    if (m_remoteActivityKeys.contains(key)) {
+        return;
+    }
+
+    m_remoteActivityKeys.insert(key);
+    m_remoteActivityKeyOrder.append(key);
+    while (m_remoteActivityKeyOrder.size() > 4096) {
+        m_remoteActivityKeys.remove(m_remoteActivityKeyOrder.takeFirst());
+    }
+
+    m_remoteServer->publishBandActivityLine(line);
 }
 
 QVariantMap DecodiumBridge::worldClockSnapshot(const QString& timeZoneId) const
@@ -6541,13 +6947,13 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
 
         QVariant const promptToLog = readCanonicalSetting(QStringLiteral("PromptToLog"));
         QVariant const autoLog = readCanonicalSetting(QStringLiteral("AutoLog"));
-        if (promptToLog.isValid() && promptToLog.toBool() && !autoLog.isValid()) {
-            return key == QStringLiteral("PromptToLog");
+        bool promptEnabled = promptToLog.isValid() ? promptToLog.toBool() : false;
+        bool autoLogEnabled = autoLog.isValid() ? autoLog.toBool() : !promptEnabled;
+        if (promptEnabled == autoLogEnabled) {
+            promptEnabled = false;
+            autoLogEnabled = true;
         }
-        if (promptToLog.isValid() && autoLog.isValid()
-            && promptToLog.toBool() && autoLog.toBool()) {
-            return key == QStringLiteral("AutoLog");
-        }
+        return key == QStringLiteral("PromptToLog") ? promptEnabled : autoLogEnabled;
     }
 
     // For settings owned by the legacy Configuration dialog, read the legacy
@@ -6583,6 +6989,27 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
 void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
 {
     QSettings s("Decodium", "Decodium3");
+    if (key == QStringLiteral("PromptToLog") || key == QStringLiteral("AutoLog")) {
+        bool promptMode = false;
+        if (key == QStringLiteral("PromptToLog")) {
+            promptMode = value.toBool();
+        } else {
+            promptMode = !value.toBool();
+        }
+
+        bool const autoLogMode = !promptMode;
+        s.setValue(QStringLiteral("PromptToLog"), promptMode);
+        s.setValue(QStringLiteral("AutoLog"), autoLogMode);
+        s.sync();
+
+        syncSettingToLegacyIni(QStringLiteral("PromptToLog"), promptMode);
+        syncSettingToLegacyIni(QStringLiteral("AutoLog"), autoLogMode);
+
+        emit settingValueChanged(QStringLiteral("PromptToLog"), promptMode);
+        emit settingValueChanged(QStringLiteral("AutoLog"), autoLogMode);
+        return;
+    }
+
     QString exclusiveLoggingKey;
     if (value.toBool()) {
         if (key == QStringLiteral("PromptToLog")) {
@@ -6737,6 +7164,7 @@ void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
         QStringLiteral("UDPServer"),
         QStringLiteral("UDPServerPort"),
         QStringLiteral("UDPListenPort"),
+        QStringLiteral("UDPClientId"),
         QStringLiteral("UDPTTL"),
         QStringLiteral("AcceptUDPRequests"),
         QStringLiteral("UDPSecondaryEnabled"),
@@ -6802,7 +7230,7 @@ QStringList DecodiumBridge::satelliteOptions() const
     }
 
     if (satFilePath.isEmpty()) {
-        return options;
+        satFilePath = QStringLiteral(":/sat.dat");
     }
 
     QFile file {satFilePath};
@@ -7041,6 +7469,7 @@ bool DecodiumBridge::isLegacySyncKey(const QString& key) const
         QStringLiteral("UDPServer"),
         QStringLiteral("UDPServerPort"),
         QStringLiteral("UDPListenPort"),
+        QStringLiteral("UDPClientId"),
         QStringLiteral("UDPInterface"),
         QStringLiteral("UDPTTL"),
         QStringLiteral("UDPPrimaryLoggedAdifEnabled"),
@@ -7265,6 +7694,23 @@ static quint16 udpPortFromSettingValue(const QVariant& value, quint16 fallback, 
     return static_cast<quint16>(raw);
 }
 
+static QHostAddress resolveUdpHostAddress(QString const& serverName)
+{
+    QHostAddress target;
+    QString const cleanServer = serverName.trimmed();
+    if (target.setAddress(cleanServer)) {
+        return target;
+    }
+
+    QHostInfo const hostInfo = QHostInfo::fromName(cleanServer);
+    for (QHostAddress const& address : hostInfo.addresses()) {
+        if (!address.isNull()) {
+            return address;
+        }
+    }
+    return {};
+}
+
 void DecodiumBridge::initUdpMessageClient()
 {
     // Read UDP settings from the legacy INI (canonical source)
@@ -7302,10 +7748,17 @@ void DecodiumBridge::initUdpMessageClient()
     bool const n1mmEnabled = getSetting(QStringLiteral("BroadcastToN1MM"), false).toBool();
     QString const n1mmServer = getSetting(QStringLiteral("N1MMServer"), QStringLiteral("127.0.0.1")).toString().trimmed();
     quint16 const n1mmPort = udpPortFromSettingValue(getSetting(QStringLiteral("N1MMServerPort"), 2333), 2333);
+    QString clientId = getSetting(QStringLiteral("UDPClientId"), QStringLiteral("WSJTX")).toString().simplified();
+    if (clientId.isEmpty()) {
+        clientId = QStringLiteral("WSJTX");
+    }
+    if (clientId.size() > 64) {
+        clientId = clientId.left(64).trimmed();
+    }
 
-    bridgeLog(QStringLiteral("Reporting config: UDP primary server=%1:%2 listen=%3 interface=%4 ttl=%5 acceptRequests=%6 loggedADIF=%7")
+    bridgeLog(QStringLiteral("Reporting config: UDP primary server=%1:%2 listen=%3 clientId=%4 interface=%5 ttl=%6 acceptRequests=%7 loggedADIF=%8")
                   .arg(serverName.trimmed(), QString::number(serverPort), QString::number(listenPort),
-                       interfaceText(interfaces), QString::number(ttl),
+                       clientId, interfaceText(interfaces), QString::number(ttl),
                        boolText(acceptUdpRequests), boolText(primaryAdifEnabled)));
     bridgeLog(QStringLiteral("Reporting config: UDP secondary %1 server=%2:%3 listen=ephemeral interface=%4 ttl=%5 loggedADIF=%6")
                   .arg(boolText(secondaryEnabled), secondaryServerName, QString::number(secondaryPort),
@@ -7322,7 +7775,6 @@ void DecodiumBridge::initUdpMessageClient()
         return;
     }
 
-    QString const clientId = QStringLiteral("WSJTX");
     QString const ver = version();
     QString const rev = revision();
 
@@ -7656,7 +8108,8 @@ void DecodiumBridge::udpSendLoggedQso(const QString& dxCall, const QString& dxGr
     QString const cleanFreqRx = freqRx.trimmed();
 
     int targets = 0;
-    int adifTargets = 0;
+    int wsjtxAdifTargets = 0;
+    int rawAdifTargets = 0;
     auto sendLoggedQso = [&](MessageClient* client, bool sendAdif) {
         if (!client) return;
         client->qso_logged(
@@ -7682,21 +8135,75 @@ void DecodiumBridge::udpSendLoggedQso(const QString& dxCall, const QString& dxGr
             cleanFreqRx);
         if (sendAdif) {
             client->logged_ADIF(adifRecord);
-            ++adifTargets;
+            ++wsjtxAdifTargets;
         }
         ++targets;
     };
 
     sendLoggedQso(m_udpMessageClient,
                   getSetting(QStringLiteral("UDPPrimaryLoggedAdifEnabled"), true).toBool());
-    sendLoggedQso(m_udpSecondaryMessageClient,
-                  getSetting(QStringLiteral("UDPSecondaryLoggedAdifEnabled"), true).toBool());
+    // D3 used the "secondary UDP / N1MM" path as raw ADIF broadcast, not as
+    // a second WSJT-X LoggedADIF frame. Keep QSOLogged on the secondary mirror
+    // for UI feedback in listeners, but send the commit payload as plain ADIF
+    // for BBLogger/N1MM-style loggers.
+    sendLoggedQso(m_udpSecondaryMessageClient, false);
 
-    bridgeLog(QStringLiteral("UDP logged QSO sent: call=%1 targets=%2 adifTargets=%3 bytes=%4")
+    bool const secondaryAdifEnabled = getSetting(QStringLiteral("UDPSecondaryLoggedAdifEnabled"), true).toBool();
+    bool const secondaryEnabled = getSetting(QStringLiteral("UDPSecondaryEnabled"), true).toBool();
+    if (secondaryAdifEnabled && secondaryEnabled) {
+        QString const secondaryServerName =
+            getSetting(QStringLiteral("UDPSecondaryServer"),
+                       getSetting(QStringLiteral("UDPServer"), QStringLiteral("127.0.0.1"))).toString().trimmed();
+        quint16 const secondaryPort = udpPortFromSettingValue(
+            getSetting(QStringLiteral("UDPSecondaryServerPort"), 2239), 2239);
+        if (udpSendRawAdifDatagram(QStringLiteral("UDP secondary raw ADIF"),
+                                   secondaryServerName, secondaryPort, dxCall, adifRecord)) {
+            ++rawAdifTargets;
+        }
+    }
+
+    bridgeLog(QStringLiteral("UDP logged QSO sent: call=%1 targets=%2 wsjtxAdifTargets=%3 rawAdifTargets=%4 bytes=%5")
                   .arg(dxCall)
                   .arg(targets)
-                  .arg(adifTargets)
+                  .arg(wsjtxAdifTargets)
+                  .arg(rawAdifTargets)
                   .arg(adifRecord.size()));
+}
+
+bool DecodiumBridge::udpSendRawAdifDatagram(const QString& label,
+                                            const QString& serverName,
+                                            quint16 port,
+                                            const QString& dxCall,
+                                            const QByteArray& adifRecord)
+{
+    QString const cleanServer = serverName.trimmed();
+    if (cleanServer.isEmpty() || port == 0 || adifRecord.trimmed().isEmpty()) {
+        bridgeLog(QStringLiteral("%1 skipped: missing target or ADIF payload").arg(label));
+        return false;
+    }
+
+    QHostAddress const target = resolveUdpHostAddress(cleanServer);
+    if (target.isNull()) {
+        bridgeLog(QStringLiteral("%1 skipped: cannot resolve %2").arg(label, cleanServer));
+        return false;
+    }
+
+    QUdpSocket socket;
+    QByteArray const payload = adifRecord + " <eor>";
+    qint64 const written = socket.writeDatagram(payload, target, port);
+    if (written < 0) {
+        bridgeLog(QStringLiteral("%1 send failed for %2: %3")
+                      .arg(label, dxCall, socket.errorString()));
+        return false;
+    }
+
+    bridgeLog(QStringLiteral("%1 sent: call=%2 target=%3:%4 bytes=%5")
+                  .arg(label)
+                  .arg(dxCall)
+                  .arg(target.toString())
+                  .arg(port)
+                  .arg(written));
+    return true;
 }
 
 void DecodiumBridge::udpSendN1mmLoggedQso(const QString& dxCall, const QByteArray& adifRecord)
@@ -7706,36 +8213,8 @@ void DecodiumBridge::udpSendN1mmLoggedQso(const QString& dxCall, const QByteArra
     }
 
     QString const serverName = getSetting(QStringLiteral("N1MMServer"), QStringLiteral("127.0.0.1")).toString().trimmed();
-    uint const rawPort = getSetting(QStringLiteral("N1MMServerPort"), 2333).toUInt();
-    quint16 const port = (rawPort >= 1 && rawPort <= 65535) ? static_cast<quint16>(rawPort) : 2333;
-
-    QHostAddress target;
-    if (!target.setAddress(serverName)) {
-        QHostInfo const hostInfo = QHostInfo::fromName(serverName);
-        for (QHostAddress const& address : hostInfo.addresses()) {
-            if (!address.isNull()) {
-                target = address;
-                break;
-            }
-        }
-    }
-
-    if (target.isNull()) {
-        bridgeLog(QStringLiteral("N1MM log skipped: cannot resolve %1").arg(serverName));
-        return;
-    }
-
-    QUdpSocket socket;
-    QByteArray const payload = adifRecord + " <eor>";
-    qint64 const written = socket.writeDatagram(payload, target, port);
-    if (written < 0) {
-        bridgeLog(QStringLiteral("N1MM log send failed for %1: %2")
-                      .arg(dxCall, socket.errorString()));
-        return;
-    }
-
-    bridgeLog(QStringLiteral("N1MM log sent: call=%1 target=%2:%3 bytes=%4")
-                  .arg(dxCall, target.toString(), QString::number(port), QString::number(written)));
+    quint16 const port = udpPortFromSettingValue(getSetting(QStringLiteral("N1MMServerPort"), 2333), 2333);
+    udpSendRawAdifDatagram(QStringLiteral("N1MM raw ADIF"), serverName, port, dxCall, adifRecord);
 }
 
 void DecodiumBridge::tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord)
@@ -9098,7 +9577,8 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         }
     }
 
-    if (m_txEnabled && !m_tx1.isEmpty()) {
+    QString const selectedTxPayload = buildCurrentTxMessage().trimmed();
+    if (m_txEnabled && !selectedTxPayload.isEmpty()) {
         if (m_logAfterOwn73 && m_currentTx != 5 && !m_tx5.isEmpty()) {
             bridgeLog(QStringLiteral("checkAndStartPeriodicTx: own 73 pending -> force TX5 (current TX%1)")
                           .arg(m_currentTx));
@@ -10637,7 +11117,9 @@ void DecodiumBridge::logQso()
                 commentParts << logDxGrid.trimmed().toUpper();
             }
             commentParts << QStringLiteral("Decodium");
-            m_dxCluster->sendSpot(spotCall, logFreqHz / 1000.0, commentParts.join(QLatin1Char(' ')));
+            m_dxCluster->submitSpotVerified(spotCall,
+                                             logFreqHz / 1000.0,
+                                             commentParts.join(QLatin1Char(' ')));
         } else {
             emit statusMessage(QStringLiteral("DX Cluster spot non inviato: cluster non connesso"));
         }
@@ -11800,7 +12282,8 @@ void DecodiumBridge::onAsyncDecodeTimer()
     req.nfqso = nfqso;
     req.nfa   = m_nfa;
     req.nfb   = m_nfb;
-    req.ndepth   = effectiveDecodeDepth();
+    int const asyncDepth = effectiveDecodeDepth();
+    req.ndepth   = (m_transmitting || m_tuning) ? qMin(asyncDepth, 2) : asyncDepth;
     req.ncontest = m_ncontest;
     req.mycall   = m_callsign.toLocal8Bit();
     req.hiscall  = m_dxCall.toLocal8Bit();
@@ -12067,6 +12550,7 @@ void DecodiumBridge::onSpectrumTimer()
 {
     if (usingLegacyBackendForTx() && !useModernSpectrumFeedWithLegacy() && !m_legacyPcmSpectrumFeed) return;
     if (!m_monitoring) return;
+    if (m_transmitting || m_tuning) return;
 
     // Copia i campioni recenti nel ring buffer waterfall (non viene consumato dal decoder).
     // Lock perché il callback del sink può appendere a m_audioBuffer in parallelo.
@@ -12940,11 +13424,12 @@ void DecodiumBridge::queueFt8DecodeRequest(const QVector<short>& audioSnapshot, 
     req.nfa = m_nfa;
     req.nfb = m_nfb;
     req.nzhsym = qBound(41, nzhsym, 50);
-    req.ndepth = decodeDepth;
+    bool const txAudioActive = m_transmitting || m_tuning;
+    req.ndepth = txAudioActive ? qMin(decodeDepth, 2) : decodeDepth;
     req.ncontest = m_ncontest;
     req.emedelay = 0.0f;
     req.nagain = 0;
-    req.lft8apon = ft8ApEnabled ? 1 : 0;
+    req.lft8apon = (ft8ApEnabled && !txAudioActive) ? 1 : 0;
     req.lmultift8 = 1;
     req.lapcqonly = cqHint;
     if (m_frequency < 30000000.0) {
@@ -12965,8 +13450,8 @@ void DecodiumBridge::queueFt8DecodeRequest(const QVector<short>& audioSnapshot, 
                   " nzhsym=" + QString::number(req.nzhsym) +
                   " samples=" + QString::number(audioSnapshot.size()) +
                   " slot=" + QString::number(slotIndexForUtc) +
-                  " depth=" + QString::number(decodeDepth) +
-                  " ft8ap=" + QString::number(ft8ApEnabled ? 1 : 0));
+                  " depth=" + QString::number(req.ndepth) +
+                  " ft8ap=" + QString::number(req.lft8apon));
     }
 
     QMetaObject::invokeMethod(m_ft8Worker, [this, req]() {
@@ -13070,7 +13555,7 @@ void DecodiumBridge::queueFt4DecodeRequest(const QVector<short>& audioSnapshot, 
     req.nfqso = qBound(m_nfa, m_rxFrequency, m_nfb);
     req.nfa = m_nfa;
     req.nfb = m_nfb;
-    req.ndepth = decodeDepth;
+    req.ndepth = (m_transmitting || m_tuning) ? qMin(decodeDepth, 2) : decodeDepth;
     req.ncontest = m_ncontest;
     req.lapcqonly = cqHint;
     req.mycall = m_callsign.toLocal8Bit();
@@ -13286,7 +13771,8 @@ void DecodiumBridge::feedAudioToDecoder(qint64 completedUtcSlot)
 
     if (modeSnapshot == "FT8") {
         int const fastDepth = qMin(decodeDepth, 2);
-        bool const runDeepFollowup = decodeDepth > fastDepth || m_ft8ApEnabled;
+        bool const txAudioActive = m_transmitting || m_tuning;
+        bool const runDeepFollowup = !txAudioActive && (decodeDepth > fastDepth || m_ft8ApEnabled);
         bridgeLog("FT8 final fast pass: serial=" + QString::number(serial) +
                   " depth=" + QString::number(fastDepth) +
                   " ft8ap=0" +
@@ -14425,6 +14911,15 @@ static QString bridgeAdifField(const QString& tag, const QString& value)
         .arg(value);
 }
 
+static bool bridgeAdifModeUsesMfskSubmode(QString const& mode)
+{
+    QString const normalized = mode.trimmed().toUpper();
+    return normalized == QStringLiteral("FT2")
+        || normalized == QStringLiteral("FT4")
+        || normalized == QStringLiteral("FST4")
+        || normalized == QStringLiteral("Q65");
+}
+
 static QString bridgeAdifRecordText(const QString& dxCall, const QString& dxGrid,
                                     double freqHz, const QString& mode,
                                     const QDateTime& utc,
@@ -14436,17 +14931,30 @@ static QString bridgeAdifRecordText(const QString& dxCall, const QString& dxGrid
                                     const QString& freqRx)
 {
     double const freqMhz = freqHz / 1e6;
+    QString const normalizedMode = mode.trimmed().toUpper();
+    QString const qsoDate = utc.toString(QStringLiteral("yyyyMMdd"));
+    QString const qsoTime = utc.toString(QStringLiteral("HHmmss"));
+
     QString record = bridgeAdifField(QStringLiteral("CALL"), dxCall)
-                   + bridgeAdifField(QStringLiteral("BAND"), bandFromFreqHz(freqHz))
-                   + bridgeAdifField(QStringLiteral("FREQ"), QString::number(freqMhz, 'f', 6))
-                   + bridgeAdifField(QStringLiteral("MODE"), mode)
-                   + bridgeAdifField(QStringLiteral("QSO_DATE"), utc.toString(QStringLiteral("yyyyMMdd")))
-                   + bridgeAdifField(QStringLiteral("TIME_ON"), utc.toString(QStringLiteral("HHmmss")))
-                   + bridgeAdifField(QStringLiteral("RST_SENT"), rstSent.isEmpty() ? QStringLiteral("-10") : rstSent)
-                   + bridgeAdifField(QStringLiteral("RST_RCVD"), rstRcvd.isEmpty() ? QStringLiteral("-10") : rstRcvd)
-                   + bridgeAdifField(QStringLiteral("GRIDSQUARE"), dxGrid)
-                   + bridgeAdifField(QStringLiteral("MY_CALL"), myCall)
-                   + bridgeAdifField(QStringLiteral("MY_GRIDSQUARE"), myGrid);
+                   + bridgeAdifField(QStringLiteral("GRIDSQUARE"), dxGrid);
+    if (bridgeAdifModeUsesMfskSubmode(normalizedMode)) {
+        record += bridgeAdifField(QStringLiteral("MODE"), QStringLiteral("MFSK"))
+                + bridgeAdifField(QStringLiteral("SUBMODE"), normalizedMode);
+    } else {
+        record += bridgeAdifField(QStringLiteral("MODE"), normalizedMode);
+    }
+    record += bridgeAdifField(QStringLiteral("RST_SENT"), rstSent.isEmpty() ? QStringLiteral("-10") : rstSent)
+            + bridgeAdifField(QStringLiteral("RST_RCVD"), rstRcvd.isEmpty() ? QStringLiteral("-10") : rstRcvd)
+            + bridgeAdifField(QStringLiteral("QSO_DATE"), qsoDate)
+            + bridgeAdifField(QStringLiteral("TIME_ON"), qsoTime)
+            + bridgeAdifField(QStringLiteral("QSO_DATE_OFF"), qsoDate)
+            + bridgeAdifField(QStringLiteral("TIME_OFF"), qsoTime)
+            + bridgeAdifField(QStringLiteral("BAND"), bandFromFreqHz(freqHz))
+            + bridgeAdifField(QStringLiteral("FREQ"), QString::number(freqMhz, 'f', 6))
+            + bridgeAdifField(QStringLiteral("STATION_CALLSIGN"), myCall);
+    if (!myGrid.trimmed().isEmpty()) {
+        record += bridgeAdifField(QStringLiteral("MY_GRIDSQUARE"), myGrid);
+    }
 
     QString const cleanPropMode = propMode.trimmed();
     QString const cleanSatellite = satellite.trimmed();

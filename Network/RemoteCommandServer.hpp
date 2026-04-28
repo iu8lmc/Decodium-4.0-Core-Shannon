@@ -70,6 +70,7 @@ public:
   void setMaxCommandAgeMs(int ms);
   void setAuthUser(QString const& user);
   void setAuthToken(QString const& token);
+  void clearBandActivity();
   void publishBandActivityLine(QString const& line);
   void publishWaterfallRow(QByteArray const& rowLevels,
                            int startFrequencyHz,

@@ -16,16 +16,22 @@ ApplicationWindow {
     height: 700
     minimumWidth: 800
     minimumHeight: 500
-    x: Math.round((Screen.desktopAvailableWidth - width) / 2)
-    y: Math.round((Screen.desktopAvailableHeight - height) / 2)
+    x: Math.round(Math.max(0, ((Screen.desktopAvailableWidth || Screen.width || width) - width) / 2))
+    y: Math.round(Math.max(0, ((Screen.desktopAvailableHeight || Screen.height || height) - height) / 2))
     title: "Decodium 4.0 — Loading..."
     color: "#1a1a2e"
     property int mainLoadElapsedSeconds: 0
     property double mainLoadStartedMs: 0
+    property double bootStartedMs: Date.now()
     property bool startupTimedOut: false
 
+    function bootElapsedMs() {
+        return Math.round(Date.now() - bootStartedMs)
+    }
+
     Component.onCompleted: {
-        console.log("BootLoader: window visible, starting async load of Main.qml")
+        console.log("BootLoader: window visible at +" + bootElapsedMs()
+                    + " ms, starting async load of Main.qml")
         show()
         raise()
         requestActivate()
@@ -92,9 +98,13 @@ ApplicationWindow {
         source: ""
 
         onStatusChanged: {
+            var elapsedMs = bootWindow.mainLoadStartedMs > 0
+                    ? Math.round(Date.now() - bootWindow.mainLoadStartedMs)
+                    : -1
             console.log("BootLoader: Loader status = " + status +
                         (status === Loader.Error ? " error" :
-                         status === Loader.Ready ? " ready" : " loading"))
+                         status === Loader.Ready ? " ready" : " loading")
+                        + " elapsed=" + elapsedMs + " ms")
         }
 
         onLoaded: {
@@ -142,7 +152,7 @@ ApplicationWindow {
         running: true
         repeat: false
         onTriggered: {
-            console.log("BootLoader: starting Main.qml load")
+            console.log("BootLoader: starting Main.qml load at +" + bootWindow.bootElapsedMs() + " ms")
             bootWindow.mainLoadElapsedSeconds = 0
             bootWindow.mainLoadStartedMs = Date.now()
             mainLoader.source = "Main.qml"

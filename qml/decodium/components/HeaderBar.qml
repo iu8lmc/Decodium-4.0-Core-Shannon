@@ -321,7 +321,7 @@ Rectangle {
                 visible: bridge.dxCluster && bridge.dxCluster.enabled && bridge.dxCluster.connected
                 onClicked: {
                     if (bridge.dxCluster && bridge.dxCall.length > 0) {
-                        bridge.dxCluster.sendSpot(bridge.dxCall, bridge.frequency / 1000.0)
+                        bridge.dxCluster.submitSpotVerified(bridge.dxCall, bridge.frequency / 1000.0, bridge.mode + " Decodium")
                     }
                 }
                 background: Rectangle {

@@ -499,7 +499,7 @@ Item {
                                     if (!engine) {
                                         return
                                     }
-                                    if (checked) {
+                                    if (!engine.txEnabled) {
                                         engine.txEnabled = true
                                     } else {
                                         engine.halt()

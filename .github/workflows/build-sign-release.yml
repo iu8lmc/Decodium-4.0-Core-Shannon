@@ -170,7 +170,7 @@ jobs:
           done
 
           # Data files
-          cp cty.dat "$DIST/" 2>/dev/null || true
+          cp cty.dat sat.dat "$DIST/" 2>/dev/null || true
 
           echo "=== Distribution contents ==="
           find "$DIST" -name "*.exe" | sort

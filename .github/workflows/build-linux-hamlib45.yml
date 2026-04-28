@@ -92,7 +92,7 @@ jobs:
           mkdir -p "${APPDIR}/usr/share/wsjtx"
 
           cp build-appimage/ft2 build-appimage/jt9 build-appimage/wsprd build-appimage/message_aggregator "${APPDIR}/usr/bin/"
-          cp cty.dat "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
+          cp cty.dat sat.dat "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp contrib/Ephemeris/JPLEPH "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp -r sounds "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
           cp -r Palettes "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true

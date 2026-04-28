@@ -61,6 +61,7 @@ public slots:
     // Send a raw command string (e.g. "SH/DX 30", "BYE").
     Q_INVOKABLE void sendCommand(const QString& cmd);
     Q_INVOKABLE bool sendSpot(const QString& dxCall, double freqKhz, const QString& comment = QString());
+    Q_INVOKABLE bool submitSpotVerified(const QString& dxCall, double freqKhz, const QString& comment = QString());
     Q_INVOKABLE void clearSpots();
 
 signals:

@@ -2979,6 +2979,12 @@ R"FT2JS((() => {
         if (!requiresAuth || wsAuthed) renderState(m);
       } else if (m.event === 'band_activity') {
         if (!requiresAuth || wsAuthed) pushActivity(m.line);
+      } else if (m.event === 'band_activity_reset') {
+        if (!requiresAuth || wsAuthed) {
+          activityRows.length = 0;
+          txPeerFromRows = '';
+          renderActivity();
+        }
       } else if (m.event === 'waterfall_state') {
         if (!requiresAuth || wsAuthed) updateWaterfallState(m.enabled);
       } else if (m.event === 'waterfall_row') {
@@ -3667,6 +3673,16 @@ void RemoteCommandServer::setAuthUser(QString const& user)
 void RemoteCommandServer::setAuthToken(QString const& token)
 {
   authToken_ = token.trimmed();
+}
+
+void RemoteCommandServer::clearBandActivity()
+{
+  recentBandActivity_.clear();
+  QJsonObject event {
+    {"event", QStringLiteral("band_activity_reset")},
+    {"server_now_ms", currentUtcMs()},
+  };
+  broadcastJson(event);
 }
 
 void RemoteCommandServer::publishBandActivityLine(QString const& line)

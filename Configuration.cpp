@@ -3421,14 +3421,15 @@ void Configuration::impl::read_settings ()
     settings_->value ("Lotw_pwd", QString {}).toString ());    //avt 9/23/25
   nonQsl_ = settings_->value ("NonQsl", false).toBool ();    //avt 9/23/25
   autoLog_ = settings_->value ("AutoLog", true).toBool ();
-  if (prompt_to_log_ && autoLog_) {
-    if (has_prompt_to_log_setting && !has_auto_log_setting) {
+  if (prompt_to_log_ == autoLog_) {
+    if (prompt_to_log_ && has_prompt_to_log_setting && !has_auto_log_setting) {
       autoLog_ = false;
-      settings_->setValue ("AutoLog", false);
     } else {
       prompt_to_log_ = false;
-      settings_->setValue ("PromptToLog", false);
+      autoLog_ = true;
     }
+    settings_->setValue ("PromptToLog", prompt_to_log_);
+    settings_->setValue ("AutoLog", autoLog_);
   }
   contestingOnly_ = settings_->value ("ContestingOnly", true).toBool ();
   ZZ00_ = settings_->value("ZZ00",false).toBool ();
@@ -3773,8 +3774,12 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("CATHandshake", QVariant::fromValue (rig_params_.handshake));
   settings_->setValue ("DataMode", QVariant::fromValue (data_mode_));
   settings_->setValue ("LowSidelobes",bLowSidelobes_);
-  if (prompt_to_log_ && autoLog_) {
-    prompt_to_log_ = false;
+  if (prompt_to_log_ == autoLog_) {
+    if (prompt_to_log_) {
+      prompt_to_log_ = false;
+    } else {
+      autoLog_ = true;
+    }
   }
   settings_->setValue ("PromptToLog", prompt_to_log_);
   settings_->setValue (
@@ -5790,14 +5795,22 @@ void Configuration::impl::on_calibration_slope_ppm_spin_box_valueChanged (double
 
 void Configuration::impl::on_prompt_to_log_check_box_clicked(bool checked)
 {
-  if(checked) ui_->cbAutoLog->setChecked(false);
-  ui_->cbContestingOnly->setEnabled(false);
+  if(checked) {
+    ui_->cbAutoLog->setChecked(false);
+  } else if (!ui_->cbAutoLog->isChecked ()) {
+    ui_->cbAutoLog->setChecked(true);
+  }
+  ui_->cbContestingOnly->setEnabled(ui_->cbAutoLog->isChecked ());
 }
 
 void Configuration::impl::on_cbAutoLog_clicked(bool checked)
 {
-  ui_->cbContestingOnly->setEnabled(true);
-  if(checked) ui_->prompt_to_log_check_box->setChecked(false);
+  if(checked) {
+    ui_->prompt_to_log_check_box->setChecked(false);
+  } else if (!ui_->prompt_to_log_check_box->isChecked ()) {
+    ui_->prompt_to_log_check_box->setChecked(true);
+  }
+  ui_->cbContestingOnly->setEnabled(ui_->cbAutoLog->isChecked ());
 }
 
 void Configuration::impl::on_cbx2ToneSpacing_clicked(bool b)

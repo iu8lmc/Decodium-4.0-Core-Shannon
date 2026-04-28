@@ -57,7 +57,7 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: scheduleRebuild()
+    Component.onCompleted: if (visible) scheduleRebuild()
     onVisibleChanged: if (visible) scheduleRebuild()
 
     ColumnLayout {
@@ -205,15 +205,23 @@ Rectangle {
             }
         }
         function onWorldMapResetRequested() {
+            if (!root.visible)
+                return
             worldMap.clearContacts()
         }
         function onWorldMapContactAdded(call, sourceGrid, destinationGrid, role) {
+            if (!root.visible)
+                return
             worldMap.addContact(call, sourceGrid, destinationGrid, role)
         }
         function onWorldMapContactAddedByLonLat(call, sourceLon, sourceLat, destinationGrid, role) {
+            if (!root.visible)
+                return
             worldMap.addContactByLonLat(call, sourceLon, sourceLat, destinationGrid, role)
         }
         function onWorldMapContactDowngraded(call) {
+            if (!root.visible)
+                return
             worldMap.downgradeContactToBand(call)
         }
     }

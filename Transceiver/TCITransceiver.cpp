@@ -1678,10 +1678,22 @@ void TCITransceiver::do_ptt (bool on)
 {
   TRACE_CAT ("TCITransceiver", on << state ());
   if (use_for_ptt_) {
-    if (on != PTT_) {
+    bool const force_off = !on && (PTT_ || requested_PTT_ || busy_PTT_);
+    if (on != PTT_ || force_off) {
       if (!inConnected && !error_.isEmpty()) throw error {error_};
-      else if (busy_PTT_ || !tci_Ready || !_power_) return;
-      else busy_PTT_ = true;
+      if (!tci_Ready || !_power_) {
+        if (!on) {
+          busy_PTT_ = false;
+          requested_PTT_ = false;
+          PTT_ = false;
+          update_PTT(false);
+          power_ = 0; if (do_pwr_) update_power (0);
+          swr_ = 0; if (do_pwr_) update_swr (0);
+        }
+        return;
+      }
+      if (busy_PTT_ && on) return;
+      busy_PTT_ = true;
       requested_PTT_ = on;
       if (tci_audio_ && on && !stream_audio_ && inConnected) {
         stream_audio (true);
@@ -1692,6 +1704,12 @@ void TCITransceiver::do_ptt (bool on)
       }
       cmd += SmTZ;
       sendTextMessage(cmd);
+      PTT_ = on;
+      update_PTT(on);
+      if (!on) {
+        power_ = 0; if (do_pwr_) update_power (0);
+        swr_ = 0; if (do_pwr_) update_swr (0);
+      }
       arm_wait_timer (tci_timer3_, 1000, "do_ptt");
     } else update_PTT(on);
   }
@@ -2168,6 +2186,7 @@ quint16 TCITransceiver::readAudioData (float * data, qint32 maxSize, qreal txAtt
             ++m_ic;
           } else {
             m_state = Idle;
+            tx_audio_ = false;
             Q_EMIT tci_mod_active(m_state != Idle);
             return framesGenerated * bytesPerFrame;
           }
@@ -2263,6 +2282,7 @@ quint16 TCITransceiver::readAudioData (float * data, qint32 maxSize, qreal txAtt
       // Precomputed wave finished (FT2/Fox) Ã¢â‚¬â€ clean exit after ramp-down
       if (!m_tuning && m_toneSpacing < 0 && m_ic > i1) {
         m_state = Idle;
+        tx_audio_ = false;
         Q_EMIT tci_mod_active(m_state != Idle);
         return framesGenerated * bytesPerFrame;
       }
@@ -2271,6 +2291,7 @@ quint16 TCITransceiver::readAudioData (float * data, qint32 maxSize, qreal txAtt
         if (icw[0] == 0) {
           // no CW ID to send
           m_state = Idle;
+          tx_audio_ = false;
           Q_EMIT tci_mod_active(m_state != Idle);
           return framesGenerated * bytesPerFrame;
         }

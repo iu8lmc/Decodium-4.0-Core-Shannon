@@ -16,6 +16,8 @@
 #include <QDateTime>
 #include <QMutex>
 #include <QFont>
+#include <QAudioDevice>
+#include <QAudioFormat>
 #include <atomic>
 #include <memory>
 
@@ -1046,6 +1048,9 @@ private:
     void enforceSwrTransmissionLimit(const QString& reason);
     void applyRemoteDialFrequency(double hz, const QString& reason);
     void applyRemoteBandChange(const QString& band);
+    void publishRemoteActivityEntries(QVariantList const& entries);
+    void publishRemoteActivityEntry(QVariantMap const& entry);
+    void clearRemoteActivityCache(bool notifyRemote);
     QString configuredCatRigMode() const;
     void applyConfiguredCatRigMode(const QString& reason);
     void updateRigTelemetry(double powerWatts, double swr);
@@ -1123,6 +1128,11 @@ private:
                           const QString& satellite = QString(),
                           const QString& satMode = QString(),
                           const QString& freqRx = QString());
+    bool udpSendRawAdifDatagram(const QString& label,
+                                const QString& serverName,
+                                quint16 port,
+                                const QString& dxCall,
+                                const QByteArray& adifRecord);
     void udpSendN1mmLoggedQso(const QString& dxCall, const QByteArray& adifRecord);
     void tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord);
 
@@ -1163,6 +1173,8 @@ private:
     int m_audioOutputChannel {0};
     QVariantList m_decodeList;
     QVariantList m_rxDecodeList;
+    QSet<QString> m_remoteActivityKeys;
+    QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
     bool m_worldMapCall3Loaded {false};
     QString m_mapLastClickCall;
@@ -1320,6 +1332,7 @@ private:
     DecodiumAudioSink* m_audioSink   {nullptr};
     QAudioSink*        m_txAudioSink  {nullptr};
     bool               m_rxAudioSuspendedForTx {false};
+    bool               m_spectrumTimerPausedForTx {false};
     qint64             m_txPlaybackHoldUntilMs {0};
     bool               m_txPlaybackReleasePending {false};
     qint64             m_audioUnhealthyStartMs {0};
@@ -1328,6 +1341,23 @@ private:
     qint64             m_audioWatchdogIgnoreUntilMs {0};
     QBuffer*           m_txPcmBuffer  {nullptr};
     QByteArray         m_txPcmData;
+    struct TxAudioCache {
+        QString mode;
+        QString message;
+        int txAudioFrequency {0};
+        bool tciAudio {false};
+        QString outputDeviceName;
+        QString outputDeviceDescription;
+        QAudioFormat outputFormat;
+        QVector<float> wave;
+        QByteArray pcm;
+    };
+    TxAudioCache       m_txAudioCache;
+    bool               m_txAudioPrecomputeScheduled {false};
+    bool               m_cachedTxOutputDeviceValid {false};
+    QString            m_cachedTxOutputDeviceName;
+    bool               m_cachedTxOutputDeviceFound {false};
+    QAudioDevice       m_cachedTxOutputDevice;
     bool               m_tciAudioCaptureActive {false};
     qint64             m_lastTciAudioLogMs {0};
     QTimer*            m_tuneTimer    {nullptr};
@@ -1567,6 +1597,18 @@ private:
     QVector<float> computeSpectrum() const;
     QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
     void initTxDevices();
+    void invalidateTxAudioCache();
+    void scheduleTxAudioPrecompute(int delayMs = 75);
+    void precomputeTxAudioForCurrentMessage(const QString& reason);
+    bool ensureTxAudioPrepared(const QString& msg, int txAudioFrequency, bool needPcm,
+                               QVector<float>* waveOut, QByteArray* pcmOut,
+                               QAudioFormat* formatOut, QAudioDevice* deviceOut,
+                               QString* errorOut);
+    QAudioDevice resolveTxOutputDevice(bool* requestedDeviceFound);
+    void saveTxRecordingAsync(const QString& path, QVector<float> wave, int sampleRate,
+                              const QString& logLabel);
+    void suspendNonAudioTxWork(const QString& reason);
+    void resumeNonAudioTxWork(const QString& reason);
     void resumeRxAudioAfterTx(const QString& reason);
     void noteTxPlaybackFinished(const QString& reason, bool error);
     void completeTxPlayback(const QString& reason, bool error = false);

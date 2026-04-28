@@ -170,7 +170,7 @@ jobs:
           cp build-windows/decodium.exe "${DIST}/"
           cp -R build-windows/qml "${DIST}/"
           cp build-windows/*.qm "${DIST}/" 2>/dev/null || true
-          cp cty.dat ALLCALL7.TXT "${DIST}/" 2>/dev/null || true
+          cp cty.dat sat.dat ALLCALL7.TXT "${DIST}/" 2>/dev/null || true
           cp -R sounds "${DIST}/sounds"
           cp -R Palettes "${DIST}/Palettes"
 
