@@ -10,6 +10,7 @@ Item {
 
     // Required property - reference to the app engine
     required property var engine
+    property bool handleLogPrompt: true
     readonly property bool txVisualActive: !!(engine && (engine.transmitting || engine.tuning))
     property string logPreviewCall: ""
     property string logPreviewGrid: ""
@@ -19,16 +20,20 @@ Item {
     property string logPreviewMode: ""
     property bool logClusterSpotAvailable: false
     property bool logClusterSpotChecked: false
+    property bool logPromptRequestedByBridge: false
+    property bool logPromptAccepted: false
     property var logSatelliteChoices: [""]
     property var logSatModeChoices: [""]
 
     function refreshLogPreview() {
-        logPreviewCall = engine && engine.dxCall ? engine.dxCall : ""
-        logPreviewGrid = engine && engine.dxGrid ? engine.dxGrid : ""
-        logPreviewSent = engine && engine.reportSent ? engine.reportSent : ""
-        logPreviewRcvd = engine && engine.reportReceived ? engine.reportReceived : ""
-        logPreviewFreq = engine ? Number(engine.frequency || 0).toFixed(0) : ""
-        logPreviewMode = engine && engine.mode ? engine.mode : ""
+        var preview = engine && engine.pendingLogQsoPreview ? engine.pendingLogQsoPreview() : ({})
+        logPreviewCall = preview.call ? String(preview.call) : (engine && engine.dxCall ? engine.dxCall : "")
+        logPreviewGrid = preview.grid ? String(preview.grid) : (engine && engine.dxGrid ? engine.dxGrid : "")
+        logPreviewSent = preview.sent ? String(preview.sent) : (engine && engine.reportSent ? engine.reportSent : "")
+        logPreviewRcvd = preview.rcvd ? String(preview.rcvd) : (engine && engine.reportReceived ? engine.reportReceived : "")
+        logPreviewFreq = preview.freq !== undefined ? Number(preview.freq || 0).toFixed(0)
+                                                    : (engine ? Number(engine.frequency || 0).toFixed(0) : "")
+        logPreviewMode = preview.mode ? String(preview.mode) : (engine && engine.mode ? engine.mode : "")
     }
 
     function refreshLogSatelliteChoices() {
@@ -69,8 +74,37 @@ Item {
         setComboText(satModeCombo, engine.getSetting("SatMode", ""))
     }
 
+    function openLogPromptFromBridge() {
+        if (!engine || !handleLogPrompt)
+            return
+        var hostWindow = txPanel.Window.window
+        if (hostWindow) {
+            if (!hostWindow.visible)
+                return
+            if (hostWindow.show)
+                hostWindow.show()
+            if (hostWindow.raise)
+                hostWindow.raise()
+            if (hostWindow.requestActivate)
+                hostWindow.requestActivate()
+        }
+        logPromptRequestedByBridge = true
+        logPromptAccepted = false
+        refreshLogPreview()
+        syncLogSatelliteFields()
+        logConfirmPopup.open()
+    }
+
     // Convenience aliases
     property var log: engine ? engine.logManager : null
+
+    Connections {
+        target: engine
+        ignoreUnknownSignals: true
+        function onLogQsoPromptRequested() {
+            txPanel.openLogPromptFromBridge()
+        }
+    }
 
     // Signal for MAM window request
     signal mamWindowRequested()
@@ -982,6 +1016,8 @@ Item {
                         if (!engine) {
                             return
                         }
+                        txPanel.logPromptRequestedByBridge = false
+                        txPanel.logPromptAccepted = false
                         txPanel.refreshLogPreview()
                         logConfirmPopup.open()
                     }
@@ -1093,6 +1129,14 @@ Item {
             txPanel.syncLogSatelliteFields()
             txPanel.logClusterSpotAvailable = !!(engine && engine.dxCluster && engine.dxCluster.connected)
             txPanel.logClusterSpotChecked = txPanel.logClusterSpotAvailable && !!engine.autoSpotEnabled
+        }
+        onClosed: {
+            if (txPanel.logPromptRequestedByBridge && !txPanel.logPromptAccepted
+                    && engine && engine.rejectPromptedLogQso) {
+                engine.rejectPromptedLogQso()
+            }
+            txPanel.logPromptRequestedByBridge = false
+            txPanel.logPromptAccepted = false
         }
         background: Rectangle {
             radius: 10
@@ -1215,7 +1259,11 @@ Item {
                             engine.setSetting("SaveSatMode", satCode.length > 0 && satMode.length > 0)
                             engine.setSetting("SavePropMode", satCode.length > 0)
                             engine.setNextLogClusterSpotEnabled(txPanel.logClusterSpotAvailable && txPanel.logClusterSpotChecked)
-                            engine.logQso()
+                            txPanel.logPromptAccepted = true
+                            if (engine.confirmLogQso)
+                                engine.confirmLogQso()
+                            else
+                                engine.logQso()
                         }
                         logConfirmPopup.close()
                     }

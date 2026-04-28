@@ -10,8 +10,7 @@ ApplicationWindow {
     id: bootWindow
     visible: true
     visibility: Window.Windowed
-    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
-         | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+    flags: Qt.SplashScreen | Qt.WindowStaysOnTopHint
     width: 1200
     height: 700
     minimumWidth: 800
@@ -24,9 +23,52 @@ ApplicationWindow {
     property double mainLoadStartedMs: 0
     property double bootStartedMs: Date.now()
     property bool startupTimedOut: false
+    property var mainComponent: null
+    property var mainWindowObject: null
+    property int mainLoadStatus: Component.Null
 
     function bootElapsedMs() {
         return Math.round(Date.now() - bootStartedMs)
+    }
+
+    function updateMainComponentStatus() {
+        if (!mainComponent)
+            return
+
+        mainLoadStatus = mainComponent.status
+        var elapsedMs = mainLoadStartedMs > 0
+                ? Math.round(Date.now() - mainLoadStartedMs)
+                : -1
+
+        if (mainLoadStatus === Component.Ready) {
+            componentStatusPoller.stop()
+            if (!mainWindowObject) {
+                mainWindowObject = mainComponent.createObject(null)
+                if (!mainWindowObject) {
+                    mainLoadStatus = Component.Error
+                    console.log("BootLoader: Main.qml createObject(null) failed")
+                    return
+                }
+                if (mainWindowObject.closing) {
+                    mainWindowObject.closing.connect(function() { Qt.quit() })
+                }
+                if (mainWindowObject.show)
+                    mainWindowObject.show()
+                if (mainWindowObject.raise)
+                    mainWindowObject.raise()
+                if (mainWindowObject.requestActivate)
+                    mainWindowObject.requestActivate()
+            }
+            console.log("BootLoader: Main.qml created as top-level window in "
+                        + elapsedMs + " ms")
+            // Keep this hidden root object alive so the top-level main window
+            // is not garbage-collected. The splash type has no taskbar button.
+            bootWindow.visible = false
+        } else if (mainLoadStatus === Component.Error) {
+            componentStatusPoller.stop()
+            console.log("BootLoader: Main.qml load error: "
+                        + (mainComponent ? mainComponent.errorString() : "unknown"))
+        }
     }
 
     Component.onCompleted: {
@@ -42,7 +84,7 @@ ApplicationWindow {
         id: splashContent
         anchors.centerIn: parent
         spacing: 20
-        visible: mainLoader.status !== Loader.Ready
+        visible: bootWindow.mainLoadStatus !== Component.Ready || !bootWindow.mainWindowObject
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -59,7 +101,7 @@ ApplicationWindow {
         }
         BusyIndicator {
             anchors.horizontalCenter: parent.horizontalCenter
-            running: mainLoader.status === Loader.Loading && !bootWindow.startupTimedOut
+            running: bootWindow.mainLoadStatus === Component.Loading && !bootWindow.startupTimedOut
             Material.accent: "#ff7814"
         }
         Text {
@@ -67,73 +109,40 @@ ApplicationWindow {
             text: {
                 if (bootWindow.startupTimedOut)
                     return "Startup is taking too long. Safe graphics will be used on the next launch."
-                switch (mainLoader.status) {
-                case Loader.Loading: return "Loading UI components..."
-                case Loader.Error:   return "Error loading UI: " + mainLoader.sourceComponent
+                switch (bootWindow.mainLoadStatus) {
+                case Component.Loading: return "Loading UI components..."
+                case Component.Error:   return "Error loading UI."
                 default:             return ""
                 }
             }
-            color: bootWindow.startupTimedOut || mainLoader.status === Loader.Error ? "#ff8844" : "#888899"
+            color: bootWindow.startupTimedOut || bootWindow.mainLoadStatus === Component.Error ? "#ff8844" : "#888899"
             font.pixelSize: 13
         }
 
         // Error details
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: mainLoader.status === Loader.Error || bootWindow.startupTimedOut
+            visible: bootWindow.mainLoadStatus === Component.Error || bootWindow.startupTimedOut
             text: bootWindow.startupTimedOut
                   ? "Decodium will close now. Open it again to retry with the software renderer."
-                  : "Try reinstalling Decodium or report this bug."
+                  : (bootWindow.mainComponent ? bootWindow.mainComponent.errorString() : "Try reinstalling Decodium or report this bug.")
             color: "#ff8844"
             font.pixelSize: 12
         }
     }
 
-    // Async loader for the real Main.qml content
-    Loader {
-        id: mainLoader
-        asynchronous: true
-        active: true
-        // Use Timer to delay load by 100ms — ensures boot window is painted first
-        source: ""
-
-        onStatusChanged: {
-            var elapsedMs = bootWindow.mainLoadStartedMs > 0
-                    ? Math.round(Date.now() - bootWindow.mainLoadStartedMs)
-                    : -1
-            console.log("BootLoader: Loader status = " + status +
-                        (status === Loader.Error ? " error" :
-                         status === Loader.Ready ? " ready" : " loading")
-                        + " elapsed=" + elapsedMs + " ms")
-        }
-
-        onLoaded: {
-            var elapsedMs = bootWindow.mainLoadStartedMs > 0
-                    ? Math.round(Date.now() - bootWindow.mainLoadStartedMs)
-                    : -1
-            console.log("BootLoader: Main.qml loaded OK in " + elapsedMs
-                        + " ms, transferring to main window")
-            // Main.qml creates its own ApplicationWindow, so hide boot window
-            // first and close it after Windows has registered the new taskbar
-            // window. Closing immediately can briefly remove the taskbar icon
-            // on some Windows/GPU combinations until Alt+Tab refreshes it.
-            bootWindow.visible = false
-            bootWindowCloseTimer.restart()
-        }
-    }
-
     Timer {
-        id: bootWindowCloseTimer
-        interval: 2500
-        repeat: false
-        onTriggered: bootWindow.close()
+        id: componentStatusPoller
+        interval: 50
+        repeat: true
+        onTriggered: bootWindow.updateMainComponentStatus()
     }
 
     Timer {
         id: mainLoadWatchdog
         interval: 10000
         repeat: true
-        running: mainLoader.status === Loader.Loading && !bootWindow.startupTimedOut
+        running: bootWindow.mainLoadStatus === Component.Loading && !bootWindow.startupTimedOut
         onTriggered: {
             bootWindow.mainLoadElapsedSeconds += 10
             console.log("BootLoader watchdog: Main.qml still loading after "
@@ -144,7 +153,9 @@ ApplicationWindow {
                 bridge.requestSafeGraphicsNextLaunch("BootLoader Main.qml load exceeded "
                                                      + bootWindow.mainLoadElapsedSeconds
                                                      + " seconds")
-                mainLoader.active = false
+                componentStatusPoller.stop()
+                bootWindow.mainComponent = null
+                bootWindow.mainLoadStatus = Component.Error
                 delayedQuitTimer.restart()
             }
         }
@@ -165,7 +176,10 @@ ApplicationWindow {
             console.log("BootLoader: starting Main.qml load at +" + bootWindow.bootElapsedMs() + " ms")
             bootWindow.mainLoadElapsedSeconds = 0
             bootWindow.mainLoadStartedMs = Date.now()
-            mainLoader.source = "Main.qml"
+            bootWindow.mainComponent = Qt.createComponent("Main.qml", Component.Asynchronous)
+            bootWindow.updateMainComponentStatus()
+            if (bootWindow.mainLoadStatus === Component.Loading)
+                componentStatusPoller.start()
         }
     }
 }

@@ -168,6 +168,7 @@ jobs:
           mkdir -p "${DIST}"
 
           cp build-windows/decodium.exe "${DIST}/"
+          cp icons/windows-icons/decodium.ico "${DIST}/decodium.ico"
           cp -R build-windows/qml "${DIST}/"
           cp build-windows/*.qm "${DIST}/" 2>/dev/null || true
           cp cty.dat sat.dat ALLCALL7.TXT "${DIST}/" 2>/dev/null || true

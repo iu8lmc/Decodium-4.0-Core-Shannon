@@ -638,6 +638,8 @@ public slots:
     Q_INVOKABLE bool openAllTxtFolder() const;
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
     Q_INVOKABLE void logQso();
+    Q_INVOKABLE void confirmLogQso();
+    Q_INVOKABLE void rejectPromptedLogQso();
     Q_INVOKABLE void shutdown();
     Q_INVOKABLE void copyToClipboard(const QString &text);
     Q_INVOKABLE void advanceQsoState(int txNum); // GitHub TxController clone
@@ -739,6 +741,7 @@ public slots:
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE QVariantMap pendingLogQsoPreview() const;
     Q_INVOKABLE QStringList satelliteOptions() const;
     Q_INVOKABLE QStringList satModeOptions() const;
     Q_INVOKABLE QString fontSettingLabel(const QString& key,
@@ -919,6 +922,8 @@ signals:
     void setupSettingsRequested(int tabIndex);
     void timeSyncSettingsRequested();
     void catSettingsRequested();
+    void logQsoPromptRequested();
+    void mainQmlReadyForNativeWindowing();
     void quitRequested();
     void rigErrorRaised(const QString& title, const QString& summary, const QString& details);
     // B6 — cty.dat
@@ -1085,6 +1090,8 @@ private:
     void clearNextLogClusterSpotOverride();
     QString inferredPartnerForAutolog() const;
     QString pskReporterProgramInfo() const;
+    bool promptToLogEnabled() const;
+    void logQsoNow();
     void capturePendingAutoLogSnapshot();
     void clearPendingAutoLogSnapshot();
     void armLateAutoLogSnapshot();
@@ -1426,6 +1433,7 @@ private:
     QString m_contestExchange;
     int     m_contestNumber {1};
     bool    m_pendingAutoLogValid {false};
+    bool    m_logPromptOpen {false};
     QString m_pendingAutoLogCall;
     QString m_pendingAutoLogGrid;
     QString m_pendingAutoLogRptSent;

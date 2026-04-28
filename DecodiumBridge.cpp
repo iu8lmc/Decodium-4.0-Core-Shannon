@@ -2518,6 +2518,7 @@ void DecodiumBridge::notifyMainQmlReady()
     }
 
     m_mainQmlReady = true;
+    emit mainQmlReadyForNativeWindowing();
     bridgeLog(QStringLiteral("Main.qml ready: releasing deferred startup services"));
     QTimer::singleShot(500, this, [this]() {
         if (m_shuttingDown) {
@@ -6949,8 +6950,11 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
         QVariant const autoLog = readCanonicalSetting(QStringLiteral("AutoLog"));
         bool promptEnabled = promptToLog.isValid() ? promptToLog.toBool() : false;
         bool autoLogEnabled = autoLog.isValid() ? autoLog.toBool() : !promptEnabled;
-        if (promptEnabled == autoLogEnabled) {
-            promptEnabled = false;
+        if (promptEnabled && autoLogEnabled) {
+            // If older or corrupted settings left both modes enabled, prefer
+            // the explicit user-facing prompt instead of silently auto-logging.
+            autoLogEnabled = false;
+        } else if (!promptEnabled && !autoLogEnabled) {
             autoLogEnabled = true;
         }
         return key == QStringLiteral("PromptToLog") ? promptEnabled : autoLogEnabled;
@@ -10964,8 +10968,85 @@ static QString bridgeAdifRecordText(const QString& dxCall, const QString& dxGrid
                                     const QString& satMode = QString(),
                                     const QString& freqRx = QString());
 
+QVariantMap DecodiumBridge::pendingLogQsoPreview() const
+{
+    QString logDxCall = m_dxCall.trimmed();
+    QString logDxGrid = m_dxGrid.trimmed();
+    QString logRptSent = m_reportSent.trimmed();
+    QString logRptRcvd = m_reportReceived.trimmed();
+    double logFreqHz = m_frequency;
+
+    if (m_pendingAutoLogValid) {
+        if (!m_pendingAutoLogCall.isEmpty()) logDxCall = m_pendingAutoLogCall;
+        if (!m_pendingAutoLogGrid.isEmpty()) logDxGrid = m_pendingAutoLogGrid;
+        if (!m_pendingAutoLogRptSent.isEmpty()) logRptSent = m_pendingAutoLogRptSent;
+        if (!m_pendingAutoLogRptRcvd.isEmpty()) logRptRcvd = m_pendingAutoLogRptRcvd;
+        if (m_pendingAutoLogDialFreq > 0.0) logFreqHz = m_pendingAutoLogDialFreq;
+    }
+
+    if (logDxCall.isEmpty() && m_lateAutoLogValid
+        && m_lateAutoLogExpires >= QDateTime::currentDateTimeUtc()) {
+        logDxCall = m_lateAutoLogCall;
+        logDxGrid = m_lateAutoLogGrid;
+        logRptSent = m_lateAutoLogRptSent;
+        logRptRcvd = m_lateAutoLogRptRcvd;
+        if (m_lateAutoLogDialFreq > 0.0) logFreqHz = m_lateAutoLogDialFreq;
+    }
+
+    QVariantMap preview;
+    preview.insert(QStringLiteral("call"), logDxCall);
+    preview.insert(QStringLiteral("grid"), logDxGrid);
+    preview.insert(QStringLiteral("sent"), logRptSent);
+    preview.insert(QStringLiteral("rcvd"), logRptRcvd);
+    preview.insert(QStringLiteral("freq"), logFreqHz);
+    preview.insert(QStringLiteral("mode"), m_mode);
+    return preview;
+}
+
+bool DecodiumBridge::promptToLogEnabled() const
+{
+    return getSetting(QStringLiteral("PromptToLog"), false).toBool();
+}
+
 void DecodiumBridge::logQso()
 {
+    if (!usingLegacyBackendForTx() && promptToLogEnabled() && !m_qsoLogged) {
+        QVariantMap const preview = pendingLogQsoPreview();
+        if (!preview.value(QStringLiteral("call")).toString().trimmed().isEmpty()) {
+            if (!m_logPromptOpen) {
+                m_logPromptOpen = true;
+                emit logQsoPromptRequested();
+            }
+            return;
+        }
+    }
+
+    logQsoNow();
+}
+
+void DecodiumBridge::confirmLogQso()
+{
+    m_logPromptOpen = false;
+    logQsoNow();
+}
+
+void DecodiumBridge::rejectPromptedLogQso()
+{
+    if (!m_logPromptOpen) {
+        return;
+    }
+
+    m_logPromptOpen = false;
+    clearNextLogClusterSpotOverride();
+    clearPendingAutoLogSnapshot();
+    clearLateAutoLogSnapshot();
+    m_qsoLogged = true;
+    emit statusMessage(QStringLiteral("Log QSO skipped"));
+}
+
+void DecodiumBridge::logQsoNow()
+{
+    m_logPromptOpen = false;
     bool const clusterSpotOverrideValid = m_nextLogClusterSpotOverrideValid;
     bool const clusterSpotRequested = clusterSpotOverrideValid
         ? m_nextLogClusterSpotEnabled

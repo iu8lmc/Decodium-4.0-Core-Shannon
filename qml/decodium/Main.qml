@@ -8528,6 +8528,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     engine: bridge
+                    handleLogPrompt: false
                     onMamWindowRequested: mamWindow.open()
                 }
             }

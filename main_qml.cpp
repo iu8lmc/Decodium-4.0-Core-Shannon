@@ -186,38 +186,76 @@ static void configureWindowsQmlDiskCache(const QString& configName)
 }
 #endif
 
+#ifdef Q_OS_WIN
+static QString g_windowsIconFilePath;
+static HICON g_windowsIconSmall {nullptr};
+static HICON g_windowsIconBig {nullptr};
+#endif
+
 static QIcon loadDecodiumApplicationIcon()
 {
-    QIcon icon(QStringLiteral(":/icon_128x128.png"));
-
 #ifdef Q_OS_WIN
-    if (icon.isNull()) {
-        QStringList const candidates {
-            QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("decodium.ico")),
-            QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("icons/windows-icons/decodium.ico"))
-        };
-        for (QString const& candidate : candidates) {
-            if (!QFileInfo::exists(candidate))
-                continue;
-            icon = QIcon(candidate);
-            if (!icon.isNull())
-                break;
+    QStringList const candidates {
+        QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("decodium.ico")),
+        QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("icons/windows-icons/decodium.ico"))
+    };
+    for (QString const& candidate : candidates) {
+        if (!QFileInfo::exists(candidate))
+            continue;
+        QIcon icon(candidate);
+        if (!icon.isNull()) {
+            g_windowsIconFilePath = candidate;
+            return icon;
         }
     }
 #endif
 
-    return icon;
+    return QIcon(QStringLiteral(":/icon_128x128.png"));
 }
 
 #ifdef Q_OS_WIN
+static HICON loadWindowsIconFromFile(int width, int height)
+{
+    if (g_windowsIconFilePath.isEmpty())
+        return nullptr;
+
+    return static_cast<HICON>(LoadImageW(nullptr,
+                                         reinterpret_cast<LPCWSTR>(g_windowsIconFilePath.utf16()),
+                                         IMAGE_ICON,
+                                         width,
+                                         height,
+                                         LR_LOADFROMFILE));
+}
+
 static void applyApplicationIconToTopLevelWindows(QIcon const& icon)
 {
     if (icon.isNull())
         return;
 
     for (QWindow *window : QGuiApplication::topLevelWindows()) {
-        if (window)
-            window->setIcon(icon);
+        if (!window)
+            continue;
+
+        window->setIcon(icon);
+
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+        if (!hwnd)
+            continue;
+
+        if (!g_windowsIconSmall) {
+            g_windowsIconSmall = loadWindowsIconFromFile(GetSystemMetrics(SM_CXSMICON),
+                                                         GetSystemMetrics(SM_CYSMICON));
+        }
+        if (!g_windowsIconBig) {
+            g_windowsIconBig = loadWindowsIconFromFile(GetSystemMetrics(SM_CXICON),
+                                                       GetSystemMetrics(SM_CYICON));
+        }
+        if (g_windowsIconSmall) {
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(g_windowsIconSmall));
+        }
+        if (g_windowsIconBig) {
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(g_windowsIconBig));
+        }
     }
 }
 
@@ -250,7 +288,7 @@ static void scheduleWindowsTaskbarIconRefresh(QObject *context, QIcon const& ico
                          applyApplicationIconToTopLevelWindows(icon);
                      });
 
-    for (int delayMs : {0, 250, 750, 1500, 3000}) {
+    for (int delayMs : {0, 250, 750, 1500, 3000, 5000, 10000, 30000, 60000}) {
         QTimer::singleShot(delayMs, context, [icon] {
             applyApplicationIconToTopLevelWindows(icon);
         });
@@ -494,6 +532,17 @@ int main(int argc, char* argv[])
     });
 
     DecodiumBridge bridge;
+#ifdef Q_OS_WIN
+    QObject::connect(&bridge, &DecodiumBridge::mainQmlReadyForNativeWindowing, &app,
+                     [&app, appIcon] {
+                         applyApplicationIconToTopLevelWindows(appIcon);
+                         for (int delayMs : {100, 500, 1500, 3000, 7000}) {
+                             QTimer::singleShot(delayMs, &app, [appIcon] {
+                                 applyApplicationIconToTopLevelWindows(appIcon);
+                             });
+                         }
+                     });
+#endif
     if (DecodiumLogging::instance())
         DecodiumLogging::instance()->logStartupDiagnostics();
     L("bridge OK");
