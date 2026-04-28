@@ -716,11 +716,17 @@ bool DecodiumDxCluster::submitSpotVerified(const QString& dxCall, double freqKhz
         QString const callText = socket->property("spot_call").toString();
         QString const hostText = socket->property("spot_host").toString();
         int const portValue = socket->property("spot_port").toInt();
-        QString message = success
-            ? QObject::tr("AutoSpot verified for %1 on %2:%3")
-                  .arg(callText, hostText, QString::number(portValue))
-            : QObject::tr("AutoSpot rejected for %1 on %2:%3")
-                  .arg(callText, hostText, QString::number(portValue));
+        QString message;
+        if (success && traceTag == QStringLiteral("UNCONFIRMED")) {
+            message = QObject::tr("AutoSpot submitted for %1 on %2:%3")
+                          .arg(callText, hostText, QString::number(portValue));
+        } else if (success) {
+            message = QObject::tr("AutoSpot verified for %1 on %2:%3")
+                          .arg(callText, hostText, QString::number(portValue));
+        } else {
+            message = QObject::tr("AutoSpot rejected for %1 on %2:%3")
+                          .arg(callText, hostText, QString::number(portValue));
+        }
         if (!detail.isEmpty()) {
             message += QStringLiteral(" (%1)").arg(detail);
         }
@@ -871,12 +877,9 @@ bool DecodiumDxCluster::submitSpotVerified(const QString& dxCall, double freqKhz
                     if (clusterPayloadShowsSubmittedSpot(myCall, call, verifyBuffer)) {
                         finishSpot(true, QObject::tr("published in show/dx"), QStringLiteral("VERIFIED"));
                     } else {
-                        QString const detail = clusterPayloadTrace(verifyBuffer);
-                        finishSpot(false,
-                                   detail.isEmpty()
-                                       ? QObject::tr("node accepted the command, but the spot is not visible in show/dx")
-                                       : QObject::tr("node accepted the command, but the spot is not visible in show/dx: %1").arg(detail),
-                                   QStringLiteral("UNVERIFIED"));
+                        finishSpot(true,
+                                   QObject::tr("node accepted the command; show/dx did not echo it yet"),
+                                   QStringLiteral("UNCONFIRMED"));
                     }
                 });
             });

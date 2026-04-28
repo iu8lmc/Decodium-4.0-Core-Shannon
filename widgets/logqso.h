@@ -56,6 +56,7 @@ protected:
 private:
   void loadSettings ();
   void storeSettings () const;
+  void ensureSatellitePropMode ();
   void propModeChanged ();
   void commentsChanged(const QString& text);
   void on_addButton_clicked ();

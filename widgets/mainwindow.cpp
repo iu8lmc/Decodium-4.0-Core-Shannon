@@ -20200,8 +20200,32 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   m_nextLogClusterSpotAvailable = false;
   m_nextLogClusterSpotChecked = false;
   m_logDlg->setClusterSpotState (clusterSpotAvailable, clusterSpotChecked);
+  auto const livePromptToLog = [this] {
+    if (!m_settings)
+      {
+        return m_config.prompt_to_log ();
+      }
+    m_settings->sync ();
+    bool const hasPromptToLog = m_settings->contains ("PromptToLog");
+    bool promptToLog = m_settings->value ("PromptToLog", m_config.prompt_to_log ()).toBool ();
+    bool autoLog = m_settings->value ("AutoLog", m_config.autoLog ()).toBool ();
+    if (promptToLog == autoLog)
+      {
+        if (promptToLog && hasPromptToLog)
+          {
+            autoLog = false;
+          }
+        else
+          {
+            promptToLog = false;
+            autoLog = true;
+          }
+      }
+    Q_UNUSED (autoLog);
+    return promptToLog;
+  };
   bool const forceLogWithoutPrompt =
-      !m_config.prompt_to_log ()
+      !livePromptToLog ()
       && (is_externalCtrlMode () || m_mode == "MSK144" || m_autoCQ);
   m_logDlg->initLogQSO (logHisCall, grid, m_mode, logRptSent, logRptRcvd,
                         logDateTimeQSOOn, dateTimeQSOOff, logDialFreq, m_noSuffix, logXSent, logXRcvd,
@@ -20803,12 +20827,9 @@ void MainWindow::sendClusterAutoSpot(QString const& call,
                         }
                       else
                         {
-                          auto const detail = clusterResponseTrace(verifyBuffer);
-                          finishAutoSpot(false,
-                                         detail.isEmpty()
-                                           ? QObject::tr("node accepted the command, but the spot is not visible in show/dx")
-                                           : QObject::tr("node accepted the command, but the spot is not visible in show/dx: %1").arg(detail),
-                                         QStringLiteral("UNVERIFIED"));
+                          finishAutoSpot(true,
+                                         QObject::tr("node accepted the command; show/dx did not echo it yet"),
+                                         QStringLiteral("UNCONFIRMED"));
                         }
                     });
                 });

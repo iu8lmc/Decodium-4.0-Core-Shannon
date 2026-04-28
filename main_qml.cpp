@@ -10,9 +10,11 @@
 #include <QFontDatabase>
 #include <QIcon>
 #include <QIODevice>
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QTimer>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -26,6 +28,7 @@
 #include <QLockFile>
 #include <QList>
 #include <QLocale>
+#include <QWindow>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -183,7 +186,41 @@ static void configureWindowsQmlDiskCache(const QString& configName)
 }
 #endif
 
+static QIcon loadDecodiumApplicationIcon()
+{
+    QIcon icon(QStringLiteral(":/icon_128x128.png"));
+
 #ifdef Q_OS_WIN
+    if (icon.isNull()) {
+        QStringList const candidates {
+            QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("decodium.ico")),
+            QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("icons/windows-icons/decodium.ico"))
+        };
+        for (QString const& candidate : candidates) {
+            if (!QFileInfo::exists(candidate))
+                continue;
+            icon = QIcon(candidate);
+            if (!icon.isNull())
+                break;
+        }
+    }
+#endif
+
+    return icon;
+}
+
+#ifdef Q_OS_WIN
+static void applyApplicationIconToTopLevelWindows(QIcon const& icon)
+{
+    if (icon.isNull())
+        return;
+
+    for (QWindow *window : QGuiApplication::topLevelWindows()) {
+        if (window)
+            window->setIcon(icon);
+    }
+}
+
 static void setWindowsAppUserModelId()
 {
     using SetAppIdFn = HRESULT (WINAPI *)(PCWSTR);
@@ -201,6 +238,23 @@ static void setWindowsAppUserModelId()
     }
 
     FreeLibrary(shell32);
+}
+
+static void scheduleWindowsTaskbarIconRefresh(QObject *context, QIcon const& icon)
+{
+    if (!context || icon.isNull())
+        return;
+
+    QObject::connect(qGuiApp, &QGuiApplication::focusWindowChanged, context,
+                     [icon] (QWindow *) {
+                         applyApplicationIconToTopLevelWindows(icon);
+                     });
+
+    for (int delayMs : {0, 250, 750, 1500, 3000}) {
+        QTimer::singleShot(delayMs, context, [icon] {
+            applyApplicationIconToTopLevelWindows(icon);
+        });
+    }
 }
 #endif
 
@@ -313,7 +367,13 @@ int main(int argc, char* argv[])
     logEnvVar("QML_DISK_CACHE_PATH");
     logEnvVar("DECODIUM_SAFE_GRAPHICS");
     logEnvVar("DECODIUM_DISABLE_QML_CACHE");
-    app.setWindowIcon(QIcon(QStringLiteral(":/icon_128x128.png")));
+    QIcon const appIcon = loadDecodiumApplicationIcon();
+    if (!appIcon.isNull()) {
+        app.setWindowIcon(appIcon);
+        L("application icon OK");
+    } else {
+        L("WARNING: application icon is null");
+    }
 
     QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     if (!fixedFontFamily.isEmpty()) {
@@ -330,6 +390,10 @@ int main(int argc, char* argv[])
     app.setApplicationVersion(QStringLiteral(FORK_RELEASE_VERSION));
     app.setOrganizationName("IU8LMC");
     app.setOrganizationDomain("decodium.iu8lmc.it");
+#ifdef Q_OS_WIN
+    QGuiApplication::setDesktopFileName(QStringLiteral("IU8LMC.Decodium4"));
+    scheduleWindowsTaskbarIconRefresh(&app, appIcon);
+#endif
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("\nDecodium 4.0 Core Shannon: Digital Modes for Weak Signal Communications in Amateur Radio"));
@@ -576,6 +640,9 @@ int main(int argc, char* argv[])
     });
 
     engine.load(QUrl::fromLocalFile(qmlPath));
+#ifdef Q_OS_WIN
+    applyApplicationIconToTopLevelWindows(appIcon);
+#endif
 
     {
         std::lock_guard<std::mutex> lock(qmlLoadWatchdogMutex);

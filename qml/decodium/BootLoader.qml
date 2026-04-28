@@ -114,9 +114,19 @@ ApplicationWindow {
             console.log("BootLoader: Main.qml loaded OK in " + elapsedMs
                         + " ms, transferring to main window")
             // Main.qml creates its own ApplicationWindow, so hide boot window
+            // first and close it after Windows has registered the new taskbar
+            // window. Closing immediately can briefly remove the taskbar icon
+            // on some Windows/GPU combinations until Alt+Tab refreshes it.
             bootWindow.visible = false
-            bootWindow.close()
+            bootWindowCloseTimer.restart()
         }
+    }
+
+    Timer {
+        id: bootWindowCloseTimer
+        interval: 2500
+        repeat: false
+        onTriggered: bootWindow.close()
     }
 
     Timer {

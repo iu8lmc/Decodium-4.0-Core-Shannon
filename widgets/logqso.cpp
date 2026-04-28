@@ -6,6 +6,7 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QDir>
+#include <QCoreApplication>
 #include <QTimer>
 #include <QPushButton>
 #include <QFile>
@@ -13,6 +14,7 @@
 #include <QTextStream>
 #include <QPointer>
 #include <QCheckBox>
+#include <QSet>
 #include <QVBoxLayout>
 
 #include "HelpTextWindow.hpp"
@@ -73,7 +75,71 @@ namespace
     return safeOperator;
   }
 
+  struct LoggingMode
+  {
+    bool prompt_to_log;
+    bool auto_log;
+  };
+
+  LoggingMode current_logging_mode (QSettings * settings, bool fallback_prompt_to_log, bool fallback_auto_log)
+  {
+    bool prompt_to_log = fallback_prompt_to_log;
+    bool auto_log = fallback_auto_log;
+    bool has_prompt_to_log = false;
+
+    if (settings)
+      {
+        settings->sync ();
+        has_prompt_to_log = settings->contains ("PromptToLog");
+        prompt_to_log = settings->value ("PromptToLog", prompt_to_log).toBool ();
+        auto_log = settings->value ("AutoLog", auto_log).toBool ();
+      }
+
+    if (prompt_to_log == auto_log)
+      {
+        if (prompt_to_log && has_prompt_to_log)
+          {
+            auto_log = false;
+          }
+        else
+          {
+            prompt_to_log = false;
+            auto_log = true;
+          }
+      }
+
+    return {prompt_to_log, auto_log};
+  }
+
   auto const sat_file_name = "sat.dat";
+
+  QStringList satellite_data_candidates (Configuration const * config)
+  {
+    QStringList candidates {
+      QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath (sat_file_name),
+      QDir {QStandardPaths::writableLocation (QStandardPaths::AppDataLocation)}.absoluteFilePath (sat_file_name)
+    };
+
+    if (config)
+      {
+        candidates << config->writeable_data_dir ().absoluteFilePath (sat_file_name)
+                   << config->data_dir ().absoluteFilePath (sat_file_name);
+      }
+
+    auto const appDir = QCoreApplication::applicationDirPath ();
+    candidates << QDir {appDir}.absoluteFilePath (sat_file_name)
+               << QDir {appDir}.absoluteFilePath ("../sat.dat")
+               << QDir {appDir}.absoluteFilePath ("../Resources/sat.dat")
+               << QDir {appDir}.absoluteFilePath ("../share/Decodium/sat.dat")
+               << QDir {appDir}.absoluteFilePath ("../share/wsjtx/sat.dat")
+               << QDir::current ().absoluteFilePath (sat_file_name);
+#ifdef CMAKE_SOURCE_DIR
+    candidates << QDir {QStringLiteral (CMAKE_SOURCE_DIR)}.absoluteFilePath (sat_file_name);
+#endif
+    candidates << QStringLiteral (":/sat.dat");
+    return candidates;
+  }
+
   struct PropMode
   {
     char const * id_;
@@ -150,14 +216,27 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
   }
   setClusterSpotState (false, false);
   ui->comboBoxSatellite->addItem ("", "");
-  QString sat_file_location;
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
-  sat_file_location = dataPath.exists(sat_file_name) ? dataPath.absoluteFilePath(sat_file_name) : m_config->data_dir ().absoluteFilePath (sat_file_name);
-  QFile file {sat_file_location};
-  QFileInfo sat_info {sat_file_location};
-  if (sat_info.exists () && sat_info.isFile () && sat_info.size () <= 4LL * 1024LL * 1024LL
-      && file.open (QIODevice::ReadOnly | QIODevice::Text))
+  QSet<QString> seen_sat_paths;
+  QSet<QString> seen_sat_codes;
+  for (auto const& candidate : satellite_data_candidates (m_config))
     {
+      auto const clean = candidate.startsWith (":/") ? candidate : QDir::cleanPath (candidate);
+      if (clean.isEmpty () || seen_sat_paths.contains (clean))
+        {
+          continue;
+        }
+      seen_sat_paths.insert (clean);
+      QFileInfo const sat_info {clean};
+      if (sat_info.exists () && sat_info.size () > 4LL * 1024LL * 1024LL)
+        {
+          LOG_WARN (QString {"Skipping sat.dat load, file too large: %1 bytes"}.arg (sat_info.size ()).toStdString ());
+          continue;
+        }
+      QFile file {clean};
+      if (!file.open (QIODevice::ReadOnly | QIODevice::Text))
+        {
+          continue;
+        }
       QTextStream stream {&file};
       while (!stream.atEnd ())
         {
@@ -167,16 +246,24 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
               continue;
             }
           auto const parts = line.split ('|');
-          if (parts.size () >= 2)
+          if (parts.size () < 2)
             {
-              ui->comboBoxSatellite->addItem (parts.at (1), parts.at (0));
+              continue;
             }
+          auto const code = parts.at (0).trimmed ();
+          auto const name = parts.at (1).trimmed ();
+          if (code.isEmpty () || seen_sat_codes.contains (code))
+            {
+              continue;
+            }
+          seen_sat_codes.insert (code);
+          ui->comboBoxSatellite->addItem (QStringLiteral ("%1 - %2").arg (code, name.isEmpty () ? code : name), code);
         }
       file.close ();
-    }
-  else if (sat_info.exists () && sat_info.size () > 4LL * 1024LL * 1024LL)
-    {
-      LOG_WARN (QString {"Skipping sat.dat load, file too large: %1 bytes"}.arg (sat_info.size ()).toStdString ());
+      if (!seen_sat_codes.isEmpty ())
+        {
+          break;
+        }
     }
   for (auto const& prop_mode : prop_modes)
     {
@@ -186,10 +273,16 @@ LogQSO::LogQSO(QString const& programTitle, QSettings * settings
     {
       ui->comboBoxSatMode->addItem (sat_mode.name_, sat_mode.id_);
     }
-  loadSettings ();
   connect (ui->comboBoxPropMode, &QComboBox::currentTextChanged, this, &LogQSO::propModeChanged);
+  connect (ui->comboBoxSatellite, QOverload<int>::of (&QComboBox::currentIndexChanged), this, [this] (int) {
+    ensureSatellitePropMode ();
+  });
+  connect (ui->comboBoxSatMode, QOverload<int>::of (&QComboBox::currentIndexChanged), this, [this] (int) {
+    ensureSatellitePropMode ();
+  });
   connect (ui->comments, &QComboBox::currentTextChanged, this, &LogQSO::commentsChanged);
   connect (ui->addButton, &QPushButton::clicked, this, &LogQSO::on_addButton_clicked);
+  loadSettings ();
   auto date_time_format = QLocale {}.dateFormat (QLocale::ShortFormat) + " hh:mm:ss";
   ui->start_date_time->setDisplayFormat (date_time_format);
   ui->end_date_time->setDisplayFormat (date_time_format);
@@ -239,13 +332,8 @@ void LogQSO::loadSettings ()
       satellite = ui->comboBoxSatellite->findData (m_settings->value ("Satellite", "").toString());
     }
   ui->comboBoxSatellite->setCurrentIndex (satellite);
-  if (m_settings->value ("PropMode", "") != "SAT")
-  {
-      ui->cbSatellite->setDisabled(true);
-      ui->comboBoxSatellite->setDisabled(true);
-      ui->cbSatMode->setDisabled(true);
-      ui->comboBoxSatMode->setDisabled(true);
-  }
+  ensureSatellitePropMode ();
+  propModeChanged ();
   m_freqRx = m_settings->value ("FreqRx", "").toString ();
   ui->cbFreqRx->setChecked (m_settings->value ("SaveFreqRx", false).toBool ());
 
@@ -373,8 +461,13 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
   if (!ui->cbSatellite->isChecked ())
     {
       ui->comboBoxSatellite->setCurrentIndex (-1);
+    }
+  if (!ui->cbSatMode->isChecked ())
+    {
       ui->comboBoxSatMode->setCurrentIndex (-1);
     }
+  ensureSatellitePropMode ();
+  propModeChanged ();
 
   using SpOp = Configuration::SpecialOperatingActivity;
   auto special_op = m_config->special_op_id ();
@@ -435,9 +528,11 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
     m_comments = "";
   }
 
+  auto const logging_mode = current_logging_mode (m_settings, m_config->prompt_to_log (), m_config->autoLog ());
+  bool const force_log_without_prompt = externalCtrl && !logging_mode.prompt_to_log;
   if (SpOp::FOX == special_op
-      || externalCtrl                                                   //avt 11/19/20 UDP listener requires auto logging
-      || (m_config->autoLog () && ((SpOp::NONE < special_op && special_op < SpOp::FOX)
+      || force_log_without_prompt                                      //avt 11/19/20 UDP listener requires auto logging
+      || (logging_mode.auto_log && ((SpOp::NONE < special_op && special_op < SpOp::FOX)
           || SpOp::ARRL_DIGI == special_op || !m_config->contestingOnly ())))
     {
       // allow auto logging in Fox mode and contests
@@ -526,10 +621,13 @@ void LogQSO::accept()
         }
     }
 
-  auto const& prop_mode = ui->comboBoxPropMode->currentData ().toString ();
+  auto prop_mode = ui->comboBoxPropMode->currentData ().toString ();
   auto satellite = ui->comboBoxSatellite->currentData ().toString ();
   auto sat_mode = ui->comboBoxSatMode->currentData ().toString ();
-  // Add sat name and sat mode tags only if "Satellite" is selected as prop mode
+  if (prop_mode != "SAT" && (!satellite.isEmpty () || !sat_mode.isEmpty ())) {
+    prop_mode = "SAT";
+  }
+  // Add sat name and sat mode tags only if "Satellite" is selected as prop mode.
   if (prop_mode != "SAT") {
     satellite = "";
     sat_mode = "";
@@ -615,21 +713,32 @@ void LogQSO::accept()
   QDialog::accept();
 }
 
+void LogQSO::ensureSatellitePropMode ()
+{
+  bool const has_satellite = !ui->comboBoxSatellite->currentData ().toString ().trimmed ().isEmpty ()
+                             || !ui->comboBoxSatMode->currentData ().toString ().trimmed ().isEmpty ();
+  if (!has_satellite)
+    {
+      return;
+    }
+
+  int const sat_index = ui->comboBoxPropMode->findData (QStringLiteral ("SAT"));
+  if (sat_index >= 0 && ui->comboBoxPropMode->currentIndex () != sat_index)
+    {
+      ui->comboBoxPropMode->setCurrentIndex (sat_index);
+    }
+}
+
 void LogQSO::propModeChanged()
 {
   if (ui->comboBoxPropMode->currentData() != "SAT") {
       ui->comboBoxSatellite->setCurrentIndex(0);
-      ui->comboBoxSatellite->setDisabled(true);
-      ui->cbSatellite->setDisabled(true);
       ui->comboBoxSatMode->setCurrentIndex(0);
-      ui->comboBoxSatMode->setDisabled(true);
-      ui->cbSatMode->setDisabled(true);
-  } else {
-      ui->comboBoxSatellite->setDisabled(false);
-      ui->cbSatellite->setDisabled(false);
-      ui->comboBoxSatMode->setDisabled(false);
-      ui->cbSatMode->setDisabled(false);
   }
+  ui->comboBoxSatellite->setEnabled(true);
+  ui->cbSatellite->setEnabled(true);
+  ui->comboBoxSatMode->setEnabled(true);
+  ui->cbSatMode->setEnabled(true);
 }
 
 void LogQSO::commentsChanged(const QString& text)
