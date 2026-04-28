@@ -1092,6 +1092,8 @@ private:
     QString pskReporterProgramInfo() const;
     bool promptToLogEnabled() const;
     void logQsoNow();
+    void capturePromptLogSnapshot(const QVariantMap& preview);
+    void clearPromptLogSnapshot();
     void capturePendingAutoLogSnapshot();
     void clearPendingAutoLogSnapshot();
     void armLateAutoLogSnapshot();
@@ -1434,6 +1436,14 @@ private:
     int     m_contestNumber {1};
     bool    m_pendingAutoLogValid {false};
     bool    m_logPromptOpen {false};
+    bool    m_promptLogSnapshotValid {false};
+    QString m_promptLogCall;
+    QString m_promptLogGrid;
+    QString m_promptLogRptSent;
+    QString m_promptLogRptRcvd;
+    QString m_promptLogMode;
+    QDateTime m_promptLogOn;
+    double    m_promptLogDialFreq {0.0};
     QString m_pendingAutoLogCall;
     QString m_pendingAutoLogGrid;
     QString m_pendingAutoLogRptSent;

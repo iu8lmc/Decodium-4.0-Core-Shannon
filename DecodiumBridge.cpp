@@ -8093,9 +8093,9 @@ void DecodiumBridge::udpSendLoggedQso(const QString& dxCall, const QString& dxGr
     if (!m_udpMessageClient && !m_udpSecondaryMessageClient) {
         initUdpMessageClient();
     }
-    if (!m_udpMessageClient && !m_udpSecondaryMessageClient) {
-        bridgeLog(QStringLiteral("UDP logged QSO skipped: MessageClient unavailable"));
-        return;
+    bool const wsjtxUdpAvailable = m_udpMessageClient || m_udpSecondaryMessageClient;
+    if (!wsjtxUdpAvailable) {
+        bridgeLog(QStringLiteral("UDP logged QSO: WSJT-X MessageClient unavailable; trying raw ADIF targets"));
     }
 
     QDateTime timeOffUtc = QDateTime::currentDateTimeUtc();
@@ -8144,17 +8144,18 @@ void DecodiumBridge::udpSendLoggedQso(const QString& dxCall, const QString& dxGr
         ++targets;
     };
 
-    sendLoggedQso(m_udpMessageClient,
-                  getSetting(QStringLiteral("UDPPrimaryLoggedAdifEnabled"), true).toBool());
-    // D3 used the "secondary UDP / N1MM" path as raw ADIF broadcast, not as
-    // a second WSJT-X LoggedADIF frame. Keep QSOLogged on the secondary mirror
-    // for UI feedback in listeners, but send the commit payload as plain ADIF
-    // for BBLogger/N1MM-style loggers.
-    sendLoggedQso(m_udpSecondaryMessageClient, false);
+    if (wsjtxUdpAvailable) {
+        sendLoggedQso(m_udpMessageClient,
+                      getSetting(QStringLiteral("UDPPrimaryLoggedAdifEnabled"), true).toBool());
+        // D3 used the "secondary UDP / N1MM" path as raw ADIF broadcast, not as
+        // a second WSJT-X LoggedADIF frame. Keep QSOLogged on the secondary mirror
+        // for UI feedback in listeners, but send the commit payload as plain ADIF
+        // for BBLogger/N1MM-style loggers.
+        sendLoggedQso(m_udpSecondaryMessageClient, false);
+    }
 
     bool const secondaryAdifEnabled = getSetting(QStringLiteral("UDPSecondaryLoggedAdifEnabled"), true).toBool();
-    bool const secondaryEnabled = getSetting(QStringLiteral("UDPSecondaryEnabled"), true).toBool();
-    if (secondaryAdifEnabled && secondaryEnabled) {
+    if (secondaryAdifEnabled) {
         QString const secondaryServerName =
             getSetting(QStringLiteral("UDPSecondaryServer"),
                        getSetting(QStringLiteral("UDPServer"), QStringLiteral("127.0.0.1"))).toString().trimmed();
@@ -10970,6 +10971,17 @@ static QString bridgeAdifRecordText(const QString& dxCall, const QString& dxGrid
 
 QVariantMap DecodiumBridge::pendingLogQsoPreview() const
 {
+    if (m_promptLogSnapshotValid) {
+        QVariantMap preview;
+        preview.insert(QStringLiteral("call"), m_promptLogCall);
+        preview.insert(QStringLiteral("grid"), m_promptLogGrid);
+        preview.insert(QStringLiteral("sent"), m_promptLogRptSent);
+        preview.insert(QStringLiteral("rcvd"), m_promptLogRptRcvd);
+        preview.insert(QStringLiteral("freq"), m_promptLogDialFreq);
+        preview.insert(QStringLiteral("mode"), m_promptLogMode.isEmpty() ? m_mode : m_promptLogMode);
+        return preview;
+    }
+
     QString logDxCall = m_dxCall.trimmed();
     QString logDxGrid = m_dxGrid.trimmed();
     QString logRptSent = m_reportSent.trimmed();
@@ -11013,8 +11025,13 @@ void DecodiumBridge::logQso()
     if (!usingLegacyBackendForTx() && promptToLogEnabled() && !m_qsoLogged) {
         QVariantMap const preview = pendingLogQsoPreview();
         if (!preview.value(QStringLiteral("call")).toString().trimmed().isEmpty()) {
+            if (!m_promptLogSnapshotValid) {
+                capturePromptLogSnapshot(preview);
+            }
             if (!m_logPromptOpen) {
                 m_logPromptOpen = true;
+                bridgeLog(QStringLiteral("logQso: prompt requested for %1")
+                              .arg(m_promptLogCall));
                 emit logQsoPromptRequested();
             }
             return;
@@ -11026,6 +11043,8 @@ void DecodiumBridge::logQso()
 
 void DecodiumBridge::confirmLogQso()
 {
+    bridgeLog(QStringLiteral("logQso: prompt accepted for %1")
+                  .arg(m_promptLogSnapshotValid ? m_promptLogCall : m_dxCall));
     m_logPromptOpen = false;
     logQsoNow();
 }
@@ -11038,10 +11057,41 @@ void DecodiumBridge::rejectPromptedLogQso()
 
     m_logPromptOpen = false;
     clearNextLogClusterSpotOverride();
+    clearPromptLogSnapshot();
     clearPendingAutoLogSnapshot();
     clearLateAutoLogSnapshot();
     m_qsoLogged = true;
     emit statusMessage(QStringLiteral("Log QSO skipped"));
+}
+
+void DecodiumBridge::capturePromptLogSnapshot(const QVariantMap& preview)
+{
+    m_promptLogSnapshotValid = true;
+    m_promptLogCall = preview.value(QStringLiteral("call")).toString().trimmed();
+    m_promptLogGrid = preview.value(QStringLiteral("grid")).toString().trimmed();
+    m_promptLogRptSent = preview.value(QStringLiteral("sent")).toString().trimmed();
+    m_promptLogRptRcvd = preview.value(QStringLiteral("rcvd")).toString().trimmed();
+    m_promptLogMode = preview.value(QStringLiteral("mode"), m_mode).toString().trimmed();
+    m_promptLogDialFreq = preview.value(QStringLiteral("freq"), m_frequency).toDouble();
+    if (m_pendingAutoLogValid && m_pendingAutoLogOn.isValid()) {
+        m_promptLogOn = m_pendingAutoLogOn;
+    } else if (m_lateAutoLogValid && m_lateAutoLogOn.isValid()) {
+        m_promptLogOn = m_lateAutoLogOn;
+    } else {
+        m_promptLogOn = QDateTime::currentDateTimeUtc();
+    }
+}
+
+void DecodiumBridge::clearPromptLogSnapshot()
+{
+    m_promptLogSnapshotValid = false;
+    m_promptLogCall.clear();
+    m_promptLogGrid.clear();
+    m_promptLogRptSent.clear();
+    m_promptLogRptRcvd.clear();
+    m_promptLogMode.clear();
+    m_promptLogOn = QDateTime {};
+    m_promptLogDialFreq = 0.0;
 }
 
 void DecodiumBridge::logQsoNow()
@@ -11056,6 +11106,7 @@ void DecodiumBridge::logQsoNow()
     // Anti-doppio log: previeni log multipli dello stesso QSO
     if (m_qsoLogged) {
         bridgeLog("logQso: skipped (already logged this QSO)");
+        clearPromptLogSnapshot();
         return;
     }
 
@@ -11071,6 +11122,7 @@ void DecodiumBridge::logQsoNow()
             emit qsoCountChanged();
             emit workedCountChanged();
         });
+        clearPromptLogSnapshot();
         clearPendingAutoLogSnapshot();
         m_qsoLogged = true;
         emit statusMessage("Log QSO via backend legacy");
@@ -11081,10 +11133,19 @@ void DecodiumBridge::logQsoNow()
     QString logDxGrid = m_dxGrid.trimmed();
     QString logRptSent = m_reportSent.trimmed();
     QString logRptRcvd = m_reportReceived.trimmed();
+    QString logMode = m_mode.trimmed();
     double  logFreqHz = m_frequency;
     QDateTime utcNow = QDateTime::currentDateTimeUtc();
 
-    if (m_pendingAutoLogValid) {
+    if (m_promptLogSnapshotValid) {
+        logDxCall = m_promptLogCall;
+        logDxGrid = m_promptLogGrid;
+        logRptSent = m_promptLogRptSent;
+        logRptRcvd = m_promptLogRptRcvd;
+        if (!m_promptLogMode.isEmpty()) logMode = m_promptLogMode;
+        if (m_promptLogDialFreq > 0.0) logFreqHz = m_promptLogDialFreq;
+        if (m_promptLogOn.isValid()) utcNow = m_promptLogOn;
+    } else if (m_pendingAutoLogValid) {
         if (!m_pendingAutoLogCall.isEmpty()) logDxCall = m_pendingAutoLogCall;
         if (!m_pendingAutoLogGrid.isEmpty()) logDxGrid = m_pendingAutoLogGrid;
         if (!m_pendingAutoLogRptSent.isEmpty()) logRptSent = m_pendingAutoLogRptSent;
@@ -11103,12 +11164,13 @@ void DecodiumBridge::logQsoNow()
     }
 
     if (logDxCall.isEmpty()) {
+        clearPromptLogSnapshot();
         return;
     }
 
     QString const dedupeCall = Radio::base_callsign(logDxCall).trimmed().toUpper();
     QString const dedupeBand = autoCqBandKeyForFrequency(logFreqHz).trimmed().toUpper();
-    QString const dedupeMode = m_mode.trimmed().toUpper();
+    QString const dedupeMode = logMode.trimmed().toUpper();
     QString const dedupeKey = QStringLiteral("%1|%2|%3").arg(dedupeCall, dedupeBand, dedupeMode);
     QDateTime const nowUtc = QDateTime::currentDateTimeUtc();
     bool suppressDuplicateLog = false;
@@ -11125,6 +11187,7 @@ void DecodiumBridge::logQsoNow()
 
     if (suppressDuplicateLog) {
         emit statusMessage(QStringLiteral("Duplicate log suppressed for %1").arg(logDxCall));
+        clearPromptLogSnapshot();
         clearPendingAutoLogSnapshot();
         return;
     }
@@ -11156,20 +11219,20 @@ void DecodiumBridge::logQsoNow()
           << " " << logDxCall
           << " " << logDxGrid
           << " " << QString::number(logFreqHz / 1e6, 'f', 6) << "MHz"
-          << " " << m_mode
+          << " " << logMode
           << "\n";
     }
 
     // 2) Log ADIF (decodium_log.adi) — per import/export e B4 check
-    QByteArray const adifRecord = bridgeAdifRecordText(logDxCall, logDxGrid, logFreqHz, m_mode, utcNow,
+    QByteArray const adifRecord = bridgeAdifRecordText(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                                                        logRptSent, logRptRcvd, m_callsign, m_grid,
                                                        logPropMode, logSatellite, logSatMode, logFreqRx).toUtf8();
-    appendAdifRecord(logDxCall, logDxGrid, logFreqHz, m_mode, utcNow,
+    appendAdifRecord(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                      logRptSent, logRptRcvd,
                      logPropMode, logSatellite, logSatMode, logFreqRx);
 
     // 3) Inoltro ai log esterni compatibili WSJT-X UDP / N1MM.
-    udpSendLoggedQso(logDxCall, logDxGrid, logFreqHz, m_mode, utcNow,
+    udpSendLoggedQso(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                      logRptSent, logRptRcvd, adifRecord,
                      logPropMode, logSatellite, logSatMode, logFreqRx);
     udpSendN1mmLoggedQso(logDxCall, adifRecord);
@@ -11179,7 +11242,7 @@ void DecodiumBridge::logQsoNow()
     bool snrOk = false;
     int const snr = logRptSent.toInt(&snrOk);
     if (m_cloudlogEnabled && m_cloudlog) {
-        m_cloudlog->logQso(logDxCall, logDxGrid, logFreqHz, m_mode, utcNow,
+        m_cloudlog->logQso(logDxCall, logDxGrid, logFreqHz, logMode, utcNow,
                            snrOk ? snr : 0, logRptSent, logRptRcvd,
                            m_callsign, m_grid);
     }
@@ -11190,7 +11253,7 @@ void DecodiumBridge::logQsoNow()
                 ? dedupeCall
                 : Radio::base_callsign(logDxCall).trimmed().toUpper();
             QStringList commentParts;
-            QString const cleanMode = m_mode.trimmed().toUpper();
+            QString const cleanMode = logMode.trimmed().toUpper();
             if (!cleanMode.isEmpty()) {
                 commentParts << cleanMode;
             }
@@ -11206,12 +11269,13 @@ void DecodiumBridge::logQsoNow()
         }
     }
 
-    rememberRecentAutoCqWorked(logDxCall, logFreqHz, m_mode);
+    rememberRecentAutoCqWorked(logDxCall, logFreqHz, logMode);
     removeCallerFromQueue(dedupeCall);
     if (m_lateAutoLogValid &&
         dedupeCall == Radio::base_callsign(m_lateAutoLogCall).trimmed().toUpper()) {
         clearLateAutoLogSnapshot();
     }
+    clearPromptLogSnapshot();
     clearPendingAutoLogSnapshot();
     m_qsoLogged = true;  // impedisce doppio log per questo QSO
     emit statusMessage("QSO loggato: " + logDxCall);

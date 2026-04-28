@@ -90,6 +90,53 @@ Dialog {
         loggingChecksUpdating = false
     }
 
+    component SettingsComboPopup: Popup {
+        id: comboPopup
+        property var combo: null
+        property int minPopupWidth: 220
+        property int maxPopupHeight: 360
+        readonly property var comboOrigin: combo && parent ? combo.mapToItem(parent, 0, 0) : Qt.point(0, 0)
+        readonly property real wantedHeight: Math.min(maxPopupHeight, comboPopupList.contentHeight + padding * 2)
+        readonly property real spaceBelow: parent && combo ? parent.height - comboOrigin.y - combo.height - 8 : maxPopupHeight
+        readonly property real spaceAbove: parent && combo ? comboOrigin.y - 8 : 0
+        readonly property bool openAbove: wantedHeight > spaceBelow && spaceAbove > spaceBelow
+
+        parent: Overlay.overlay
+        modal: false
+        focus: true
+        padding: 6
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: parent ? Math.min(Math.max(combo ? combo.width : 0, minPopupWidth), Math.max(80, parent.width - 16))
+                      : Math.max(combo ? combo.width : 0, minPopupWidth)
+        height: Math.max(44, Math.min(wantedHeight, Math.max(44, openAbove ? spaceAbove : spaceBelow)))
+        x: parent ? Math.max(8, Math.min(comboOrigin.x, parent.width - width - 8)) : 0
+        y: parent
+           ? (openAbove
+              ? Math.max(8, comboOrigin.y - height - 2)
+              : Math.min(comboOrigin.y + (combo ? combo.height : 0) + 2, parent.height - height - 8))
+           : 0
+        onOpened: comboPopupList.forceActiveFocus()
+
+        background: Rectangle {
+            color: bgDeep
+            border.color: glassBorder
+            radius: 4
+        }
+
+        contentItem: ListView {
+            id: comboPopupList
+            anchors.fill: parent
+            clip: true
+            model: comboPopup.visible && combo ? combo.delegateModel : null
+            currentIndex: combo ? combo.highlightedIndex : -1
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+            interactive: true
+            focus: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        }
+    }
+
     function setAlertEnabled(value) {
         bridge.alertSoundsEnabled = value
         bridge.setSetting("alertSoundsEnabled", value)
@@ -974,7 +1021,6 @@ Dialog {
                             contentItem: Text { text: parent.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
 
                         Text { text: qsTr("Type 2 Msg Gen:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -986,7 +1032,6 @@ Dialog {
                             contentItem: Text { text: parent.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
                         }
                         Text { text: qsTr("Op Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
@@ -1199,8 +1244,23 @@ Dialog {
                             }
                             popup: Popup {
                                 id: rigComboPopup
-                                y: rigCombo.height
-                                width: Math.max(rigCombo.width, 560)
+                                parent: Overlay.overlay
+                                readonly property var comboOrigin: rigCombo && parent ? rigCombo.mapToItem(parent, 0, 0) : Qt.point(0, 0)
+                                readonly property real wantedHeight: Math.min(420,
+                                                 Math.max(180,
+                                                          Math.min(settingsDialog.height - 160,
+                                                                   54 + Math.max(34, rigComboPopupList.contentHeight))))
+                                readonly property real spaceBelow: parent ? parent.height - comboOrigin.y - rigCombo.height - 8 : wantedHeight
+                                readonly property real spaceAbove: parent ? comboOrigin.y - 8 : 0
+                                readonly property bool openAbove: wantedHeight > spaceBelow && spaceAbove > spaceBelow
+                                x: parent ? Math.max(8, Math.min(comboOrigin.x, parent.width - width - 8)) : 0
+                                y: parent
+                                   ? (openAbove
+                                      ? Math.max(8, comboOrigin.y - height - 2)
+                                      : Math.min(comboOrigin.y + rigCombo.height + 2, parent.height - height - 8))
+                                   : 0
+                                width: parent ? Math.min(Math.max(rigCombo.width, 560), Math.max(80, parent.width - 16))
+                                              : Math.max(rigCombo.width, 560)
                                 height: Math.min(420,
                                                  Math.max(180,
                                                           Math.min(settingsDialog.height - 160,
@@ -1306,7 +1366,7 @@ Dialog {
                             }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: serialPortCombo }
                         }
                         Text {
                             visible: settingsDialog.usesSerialControls()
@@ -1338,7 +1398,7 @@ Dialog {
                             }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: baudCombo }
                         }
 
                         // ── CI-V Address (solo rig ICOM) ──
@@ -1501,7 +1561,7 @@ Dialog {
                             }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: pttCombo }
                         }
                         Text {
                             visible: settingsDialog.usesSeparatePttPort()
@@ -1533,7 +1593,7 @@ Dialog {
                             contentItem: Text { text: pttPortCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: pttPortCombo }
                         }
                         Item { visible: settingsDialog.usesSeparatePttPort(); Layout.fillWidth: true; Layout.columnSpan: 2 }
                         Text { text: qsTr("Poll Interval (s):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -1585,7 +1645,7 @@ Dialog {
                             contentItem: Text { text: dataBitsCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: dataBitsCombo }
                         }
                         Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Stop Bits:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
@@ -1603,7 +1663,7 @@ Dialog {
                             contentItem: Text { text: stopBitsCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: stopBitsCombo }
                         }
 
                         Text { visible: settingsDialog.usesSerialControls(); text: qsTr("Handshake:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -1627,7 +1687,7 @@ Dialog {
                             contentItem: Text { text: handshakeCombo.displayText === "none" ? qsTr("None") : (handshakeCombo.displayText === "xonxoff" ? "XON/XOFF" : qsTr("Hardware")); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData === "none" ? qsTr("None") : (modelData === "xonxoff" ? "XON/XOFF" : qsTr("Hardware")); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: handshakeCombo }
                         }
                         Item { visible: settingsDialog.usesSerialControls(); Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -1644,7 +1704,7 @@ Dialog {
                             contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: forceDtrCombo }
                         }
                         Text { visible: settingsDialog.usesSerialControls(); enabled: settingsDialog.forceRtsControlEnabled(); text: qsTr("Force RTS:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
@@ -1659,7 +1719,7 @@ Dialog {
                             contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: forceRtsCombo }
                         }
 
                         // ── Operazione Split ──
@@ -1688,7 +1748,7 @@ Dialog {
                             contentItem: Text { text: splitCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: modelData.label; color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: splitCombo }
                         }
                         Text { text: qsTr("Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         ComboBox {
@@ -1700,7 +1760,7 @@ Dialog {
                             contentItem: Text { text: settingsDialog.setupChoiceLabel(modeCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: modeCombo }
                         }
 
                         Text { visible: !settingsDialog.usesTciControls(); text: qsTr("TX Audio Src:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -1714,7 +1774,7 @@ Dialog {
                             contentItem: Text { text: settingsDialog.setupChoiceLabel(txAudioSrcCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                            popup: SettingsComboPopup { combo: txAudioSrcCombo }
                         }
                         Text { visible: settingsDialog.usesTciControls(); text: qsTr("TX Audio:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         TextField {
@@ -3070,8 +3130,6 @@ Dialog {
                         Text { text: qsTr("Secondary Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             text: bridge.getSetting("UDPSecondaryServer", bridge.getSetting("UDPServer", "127.0.0.1")); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
-                            enabled: udpSecondaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
                             color: textPrimary; font.pixelSize: controlFontSize
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("UDPSecondaryServer", text)
@@ -3081,22 +3139,18 @@ Dialog {
                         SpinBox {
                             id: udpSecondaryPortSpin
                             from: 1; to: 65535; value: Number(bridge.getSetting("UDPSecondaryServerPort", 2239)); editable: true
-                            enabled: udpSecondaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
                             implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
                             onValueChanged: bridge.setSetting("UDPSecondaryServerPort", value)
-                            contentItem: TextInput { text: udpSecondaryPortSpin.textFromValue(udpSecondaryPortSpin.value, udpSecondaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryPortSpin.editable; validator: udpSecondaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpSecondaryPortSpin.enabled }
+                            contentItem: TextInput { text: udpSecondaryPortSpin.textFromValue(udpSecondaryPortSpin.value, udpSecondaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryPortSpin.editable; validator: udpSecondaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
                         Text { text: qsTr("Secondary TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: udpSecondaryTtlSpin
                             from: 0; to: 255; value: Number(bridge.getSetting("UDPSecondaryTTL", bridge.getSetting("UDPTTL", 1))); editable: true
-                            enabled: udpSecondaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
                             implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
                             onValueChanged: bridge.setSetting("UDPSecondaryTTL", value)
-                            contentItem: TextInput { text: udpSecondaryTtlSpin.textFromValue(udpSecondaryTtlSpin.value, udpSecondaryTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryTtlSpin.editable; validator: udpSecondaryTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpSecondaryTtlSpin.enabled }
+                            contentItem: TextInput { text: udpSecondaryTtlSpin.textFromValue(udpSecondaryTtlSpin.value, udpSecondaryTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpSecondaryTtlSpin.editable; validator: udpSecondaryTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                         }
 
@@ -3104,8 +3158,6 @@ Dialog {
                         ComboBox {
                             id: udpSecondaryInterfaceCombo
                             model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
-                            enabled: udpSecondaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
                             Layout.fillWidth: true
                             Layout.minimumWidth: fieldMinWidth
                             implicitHeight: controlHeight
@@ -3124,8 +3176,6 @@ Dialog {
                         CheckBox {
                             id: udpSecondaryAdifCheck
                             checked: boolSetting("UDPSecondaryLoggedAdifEnabled", true)
-                            enabled: udpSecondaryCheck.checked
-                            opacity: enabled ? 1.0 : 0.5
                             onToggled: setBoolSettingIfChanged("UDPSecondaryLoggedAdifEnabled", checked, true)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
