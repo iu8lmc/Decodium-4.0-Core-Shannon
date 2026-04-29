@@ -3525,8 +3525,8 @@ ApplicationWindow {
                 // Vertical drag handle with magnetic snap indicator
                 handle: Rectangle {
                     id: splitHandle
-                    implicitWidth: 10
-                    implicitHeight: 10
+                    implicitWidth: 4
+                    implicitHeight: 4
                     color: SplitHandle.hovered || SplitHandle.pressed ? "#00e6e6" : "#505070"
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -3543,19 +3543,19 @@ ApplicationWindow {
 
                     Rectangle {
                         anchors.centerIn: parent
-                        width: 80
-                        height: 6
-                        radius: 3
+                        width: 40
+                        height: 2
+                        radius: 1
                         color: parent.nearSnapPoint ? "#00ffff" : parent.color
 
                         // Glow effect when near snap
                         Rectangle {
                             anchors.fill: parent
-                            anchors.margins: -3
-                            radius: 6
+                            anchors.margins: -2
+                            radius: 3
                             color: "transparent"
                             border.color: parent.parent.nearSnapPoint ? "#00ffff" : "transparent"
-                            border.width: 2
+                            border.width: 1
                             opacity: 0.5
                         }
                     }
@@ -3601,7 +3601,7 @@ ApplicationWindow {
                 Rectangle {
                     id: waterfallPanel
                     SplitView.preferredHeight: waterfallDetached ? 40 : mainWindow.waterfallPanelHeight
-                    SplitView.minimumHeight: waterfallDetached ? 40 : 260
+                    SplitView.minimumHeight: waterfallDetached ? 40 : 120
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                     radius: 8
                     border.color: isDockHighlighted ? secondaryCyan : glassBorder
@@ -3691,7 +3691,7 @@ ApplicationWindow {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            height: 28
+                            height: 16
 	                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
                             radius: 8
 
@@ -3707,24 +3707,20 @@ ApplicationWindow {
 
 	                            RowLayout {
 	                                anchors.fill: parent
-	                                anchors.margins: 6
-	                                spacing: 8
+	                                anchors.leftMargin: 6
+	                                anchors.rightMargin: 4
+	                                anchors.topMargin: 1
+	                                anchors.bottomMargin: 1
+	                                spacing: 6
 
-	                                Rectangle { Layout.preferredWidth: 8; Layout.preferredHeight: 8; radius: 4; color: secondaryCyan }
-
-                                Text {
-                                    text: "Waterfall"
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    color: secondaryCyan
-                                }
+	                                Rectangle { Layout.preferredWidth: 6; Layout.preferredHeight: 6; radius: 3; color: secondaryCyan }
 
 	                                Item { Layout.fillWidth: true }
 
 	                                Rectangle {
-	                                    Layout.preferredWidth: 38
-	                                    Layout.preferredHeight: 20
-	                                    radius: 4
+	                                    Layout.preferredWidth: 30
+	                                    Layout.preferredHeight: 12
+	                                    radius: 3
 	                                    color: waterfallPopMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
 	                                    border.color: waterfallPopMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
 	                                    border.width: 1
@@ -3732,7 +3728,7 @@ ApplicationWindow {
 	                                    Text {
 	                                        anchors.centerIn: parent
 	                                        text: "Pop"
-	                                        font.pixelSize: 10
+	                                        font.pixelSize: 9
 	                                        font.bold: true
 	                                        color: waterfallPopMA.containsMouse ? secondaryCyan : textSecondary
 	                                    }
@@ -3779,7 +3775,7 @@ ApplicationWindow {
                 Rectangle {
                     id: decodePanel
                     SplitView.fillHeight: true
-                    SplitView.minimumHeight: 80
+                    SplitView.minimumHeight: 50
                     color: "transparent"
 
                     // Current active period tracking
