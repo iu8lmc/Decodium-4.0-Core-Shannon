@@ -16152,8 +16152,12 @@ void DecodiumBridge::invalidateQsoSearchCache()
 
 void DecodiumBridge::warmLogCacheAsync()
 {
-    if (m_qsoSearchWarmupInProgress.exchange(true, std::memory_order_acq_rel)) {
-        return;
+    {
+        QMutexLocker locker(&m_qsoSearchCacheMutex);
+        if (m_qsoSearchWarmupInProgress) {
+            return;
+        }
+        m_qsoSearchWarmupInProgress = true;
     }
 
     QString const path = effectiveAdifLogPath();
@@ -16173,19 +16177,21 @@ void DecodiumBridge::warmLogCacheAsync()
             }
 
             bool restartNeeded = false;
-            if (generation == guard->m_qsoSearchCacheGeneration.load(std::memory_order_relaxed)) {
+            {
                 QMutexLocker locker(&guard->m_qsoSearchCacheMutex);
-                guard->m_qsoSearchCachePath = snapshot.path;
-                guard->m_qsoSearchCacheModified = snapshot.modified;
-                guard->m_qsoSearchCacheSize = snapshot.size;
-                guard->m_qsoSearchCacheRows = snapshot.rows;
-                guard->m_qsoSearchCacheStats = snapshot.stats;
-                guard->m_qsoSearchCacheReady = true;
-            } else {
-                restartNeeded = true;
+                if (generation == guard->m_qsoSearchCacheGeneration.load(std::memory_order_relaxed)) {
+                    guard->m_qsoSearchCachePath = snapshot.path;
+                    guard->m_qsoSearchCacheModified = snapshot.modified;
+                    guard->m_qsoSearchCacheSize = snapshot.size;
+                    guard->m_qsoSearchCacheRows = snapshot.rows;
+                    guard->m_qsoSearchCacheStats = snapshot.stats;
+                    guard->m_qsoSearchCacheReady = true;
+                } else {
+                    restartNeeded = true;
+                }
+                guard->m_qsoSearchWarmupInProgress = false;
             }
 
-            guard->m_qsoSearchWarmupInProgress.store(false, std::memory_order_release);
             if (restartNeeded) {
                 QTimer::singleShot(0, guard.data(), [guard]() {
                     if (guard) {
@@ -16228,8 +16234,11 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
     }
 
     if (!cacheHit) {
-        if (m_qsoSearchWarmupInProgress.load(std::memory_order_acquire)) {
-            return {};
+        {
+            QMutexLocker locker(&m_qsoSearchCacheMutex);
+            if (m_qsoSearchWarmupInProgress) {
+                return {};
+            }
         }
 
         QsoLogSnapshot const snapshot = buildQsoLogSnapshot(path, m_grid);
@@ -16327,8 +16336,11 @@ QVariantMap DecodiumBridge::getQsoStats() const
         }
     }
 
-    if (m_qsoSearchWarmupInProgress.load(std::memory_order_acquire)) {
-        return {};
+    {
+        QMutexLocker locker(&m_qsoSearchCacheMutex);
+        if (m_qsoSearchWarmupInProgress) {
+            return {};
+        }
     }
 
     QVariantList const rows = searchQsos(QString {}, QString {}, QString {}, QString {}, QString {});

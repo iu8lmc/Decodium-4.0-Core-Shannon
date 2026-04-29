@@ -1549,7 +1549,7 @@ private:
     mutable QVariantList m_qsoSearchCacheRows;
     mutable QVariantMap  m_qsoSearchCacheStats;
     mutable bool     m_qsoSearchCacheReady {false};
-    std::atomic_bool m_qsoSearchWarmupInProgress {false};
+    bool             m_qsoSearchWarmupInProgress {false};
     std::atomic<quint64> m_qsoSearchCacheGeneration {0};
     void invalidateQsoSearchCache();
     void appendAdifRecord(const QString& dxCall, const QString& dxGrid,
