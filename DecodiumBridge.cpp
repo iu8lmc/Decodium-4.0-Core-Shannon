@@ -746,6 +746,86 @@ static int countAdifRecordsLightweight(QString const& path)
     return count;
 }
 
+struct QsoLogSnapshot
+{
+    QString path;
+    QDateTime modified;
+    qint64 size {-1};
+    QVariantList rows;
+    QVariantMap stats;
+};
+
+static QVariantMap qsoStatsFromRows(QVariantList const& rows)
+{
+    QSet<QString> uniqueCalls;
+    QSet<QString> uniqueGrids;
+    int maxDistance = 0;
+    QString farthestCall;
+
+    for (QVariant const& rowValue : rows) {
+        QVariantMap const row = rowValue.toMap();
+        QString const call = row.value(QStringLiteral("call")).toString().trimmed().toUpper();
+        QString const grid = row.value(QStringLiteral("grid")).toString().trimmed().toUpper();
+        int const distanceKm = row.value(QStringLiteral("distanceKm")).toInt();
+        if (!call.isEmpty()) {
+            uniqueCalls.insert(call);
+        }
+        if (!grid.isEmpty()) {
+            uniqueGrids.insert(grid);
+        }
+        if (distanceKm > maxDistance) {
+            maxDistance = distanceKm;
+            farthestCall = call;
+        }
+    }
+
+    QVariantMap stats;
+    stats.insert(QStringLiteral("totalQsos"), rows.size());
+    stats.insert(QStringLiteral("uniqueCalls"), uniqueCalls.size());
+    stats.insert(QStringLiteral("uniqueGrids"), uniqueGrids.size());
+    stats.insert(QStringLiteral("maxDistance"), maxDistance);
+    stats.insert(QStringLiteral("farthestCall"), farthestCall);
+    return stats;
+}
+
+static QsoLogSnapshot buildQsoLogSnapshot(QString const& path, QString const& myGrid)
+{
+    QElapsedTimer timer;
+    timer.start();
+
+    QFileInfo const info(path);
+    QsoLogSnapshot snapshot;
+    snapshot.path = path;
+    snapshot.modified = info.exists() ? info.lastModified() : QDateTime();
+    snapshot.size = info.exists() ? info.size() : 0;
+
+    ParsedAdifDocument const doc = loadAdifDocument(path);
+    QList<QVariantMap> sortedRows;
+    sortedRows.reserve(doc.records.size());
+    for (ParsedAdifRecord const& record : doc.records) {
+        sortedRows.append(qsoMapFromAdifRecord(record.fields, myGrid));
+    }
+
+    std::sort(sortedRows.begin(), sortedRows.end(), [] (QVariantMap const& lhs, QVariantMap const& rhs) {
+        return lhs.value(QStringLiteral("dateTime")).toString()
+             > rhs.value(QStringLiteral("dateTime")).toString();
+    });
+
+    snapshot.rows.reserve(sortedRows.size());
+    for (QVariantMap const& row : sortedRows) {
+        snapshot.rows.append(row);
+    }
+    snapshot.stats = qsoStatsFromRows(snapshot.rows);
+
+    if (timer.elapsed() > 250) {
+        DIAG_INFO(QStringLiteral("QSO log cache built: records=%1 elapsed=%2ms path=%3")
+                      .arg(snapshot.rows.size())
+                      .arg(timer.elapsed())
+                      .arg(path));
+    }
+    return snapshot;
+}
+
 static void setAdifModeFields(QMap<QString, QString>& fields, QString const& modeValue)
 {
     QString const normalized = modeValue.trimmed().toUpper();
@@ -15882,6 +15962,8 @@ void DecodiumBridge::appendAdifRecord(const QString& dxCall, const QString& dxGr
     if (m_qsoCountCache >= 0) {
         ++m_qsoCountCache;
     }
+    invalidateQsoSearchCache();
+    warmLogCacheAsync();
     emit qsoCountChanged();
     emit workedCountChanged();
 }
@@ -15977,6 +16059,7 @@ bool DecodiumBridge::importAdif(const QString& filename)
         m_workedCalls.insert(m.captured(1).toUpper());
         ++imported;
     }
+    invalidateQsoSearchCache();
     emit qsoCountChanged();
     emit workedCountChanged();
     emit statusMessage(QString("ADIF importato: %1 callsign caricati").arg(imported));
@@ -16055,6 +16138,69 @@ int         DecodiumBridge::qsoCount()         const
     return m_qsoCountCache;
 }
 
+void DecodiumBridge::invalidateQsoSearchCache()
+{
+    m_qsoSearchCacheGeneration.fetch_add(1, std::memory_order_relaxed);
+    QMutexLocker locker(&m_qsoSearchCacheMutex);
+    m_qsoSearchCacheReady = false;
+    m_qsoSearchCachePath.clear();
+    m_qsoSearchCacheModified = QDateTime();
+    m_qsoSearchCacheSize = -1;
+    m_qsoSearchCacheRows.clear();
+    m_qsoSearchCacheStats.clear();
+}
+
+void DecodiumBridge::warmLogCacheAsync()
+{
+    if (m_qsoSearchWarmupInProgress.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+
+    QString const path = effectiveAdifLogPath();
+    QString const grid = m_grid;
+    quint64 const generation = m_qsoSearchCacheGeneration.load(std::memory_order_relaxed);
+    QPointer<DecodiumBridge> guard(this);
+
+    QThread* worker = QThread::create([guard, path, grid, generation]() {
+        QsoLogSnapshot const snapshot = buildQsoLogSnapshot(path, grid);
+        if (!guard) {
+            return;
+        }
+
+        QMetaObject::invokeMethod(guard.data(), [guard, snapshot, generation]() {
+            if (!guard) {
+                return;
+            }
+
+            bool restartNeeded = false;
+            if (generation == guard->m_qsoSearchCacheGeneration.load(std::memory_order_relaxed)) {
+                QMutexLocker locker(&guard->m_qsoSearchCacheMutex);
+                guard->m_qsoSearchCachePath = snapshot.path;
+                guard->m_qsoSearchCacheModified = snapshot.modified;
+                guard->m_qsoSearchCacheSize = snapshot.size;
+                guard->m_qsoSearchCacheRows = snapshot.rows;
+                guard->m_qsoSearchCacheStats = snapshot.stats;
+                guard->m_qsoSearchCacheReady = true;
+            } else {
+                restartNeeded = true;
+            }
+
+            guard->m_qsoSearchWarmupInProgress.store(false, std::memory_order_release);
+            if (restartNeeded) {
+                QTimer::singleShot(0, guard.data(), [guard]() {
+                    if (guard) {
+                        guard->warmLogCacheAsync();
+                    }
+                });
+                return;
+            }
+            emit guard->qsoLogCacheChanged();
+        }, Qt::QueuedConnection);
+    });
+    connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+    worker->start(QThread::LowestPriority);
+}
+
 QVariantList DecodiumBridge::searchQsos(const QString& search,
                                         const QString& band,
                                         const QString& mode,
@@ -16063,14 +16209,47 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
 {
     QElapsedTimer timer;
     timer.start();
-    QVariantList results;
-    ParsedAdifDocument const doc = loadAdifDocument(effectiveAdifLogPath());
+    QString const path = effectiveAdifLogPath();
+    QFileInfo const info(path);
+    QDateTime const modified = info.exists() ? info.lastModified() : QDateTime();
+    qint64 const size = info.exists() ? info.size() : 0;
+    QVariantList sourceRows;
+    bool cacheHit = false;
+
+    {
+        QMutexLocker locker(&m_qsoSearchCacheMutex);
+        cacheHit = m_qsoSearchCacheReady
+            && m_qsoSearchCachePath == path
+            && m_qsoSearchCacheModified == modified
+            && m_qsoSearchCacheSize == size;
+        if (cacheHit) {
+            sourceRows = m_qsoSearchCacheRows;
+        }
+    }
+
+    if (!cacheHit) {
+        if (m_qsoSearchWarmupInProgress.load(std::memory_order_acquire)) {
+            return {};
+        }
+
+        QsoLogSnapshot const snapshot = buildQsoLogSnapshot(path, m_grid);
+        {
+            QMutexLocker locker(&m_qsoSearchCacheMutex);
+            m_qsoSearchCachePath = snapshot.path;
+            m_qsoSearchCacheModified = snapshot.modified;
+            m_qsoSearchCacheSize = snapshot.size;
+            m_qsoSearchCacheRows = snapshot.rows;
+            m_qsoSearchCacheStats = snapshot.stats;
+            m_qsoSearchCacheReady = true;
+            sourceRows = m_qsoSearchCacheRows;
+        }
+    }
+
     QString const needle = search.trimmed().toUpper();
     QString const bandFilter = band.trimmed().toUpper();
     QString const modeFilter = mode.trimmed().toUpper();
     QString const fromFilter = fromDate.trimmed();
     QString const toFilter = toDate.trimmed();
-    QList<QVariantMap> rows;
 
     auto matchesDate = [] (QString const& dateTime, QString const& fromValue, QString const& toValue) {
         QString const compact = dateTime.left(10).remove(QLatin1Char('-'));
@@ -16085,8 +16264,14 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
         return true;
     };
 
-    for (ParsedAdifRecord const& record : doc.records) {
-        QVariantMap const row = qsoMapFromAdifRecord(record.fields, m_grid);
+    if (needle.isEmpty() && bandFilter.isEmpty() && modeFilter.isEmpty()
+        && fromFilter.isEmpty() && toFilter.isEmpty()) {
+        return sourceRows;
+    }
+
+    QVariantList results;
+    for (QVariant const& rowValue : sourceRows) {
+        QVariantMap const row = rowValue.toMap();
         QString const rowBand = row.value(QStringLiteral("band")).toString().trimmed().toUpper();
         QString const rowMode = row.value(QStringLiteral("mode")).toString().trimmed().toUpper();
         QString const rowCall = row.value(QStringLiteral("call")).toString().trimmed().toUpper();
@@ -16113,20 +16298,12 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
             continue;
         }
 
-        rows.append(row);
-    }
-
-    std::sort(rows.begin(), rows.end(), [] (QVariantMap const& lhs, QVariantMap const& rhs) {
-        return lhs.value(QStringLiteral("dateTime")).toString()
-             > rhs.value(QStringLiteral("dateTime")).toString();
-    });
-
-    for (QVariantMap const& row : rows) {
         results.append(row);
     }
     if (timer.elapsed() > 250) {
-        bridgeLog(QStringLiteral("searchQsos: records=%1 results=%2 elapsed=%3ms")
-                      .arg(doc.records.size())
+        bridgeLog(QStringLiteral("searchQsos: cacheHit=%1 rows=%2 results=%3 elapsed=%4ms")
+                      .arg(cacheHit)
+                      .arg(sourceRows.size())
                       .arg(results.size())
                       .arg(timer.elapsed()));
     }
@@ -16135,36 +16312,27 @@ QVariantList DecodiumBridge::searchQsos(const QString& search,
 
 QVariantMap DecodiumBridge::getQsoStats() const
 {
-    QVariantMap stats;
-    QVariantList const rows = searchQsos(QString {}, QString {}, QString {}, QString {}, QString {});
-    QSet<QString> uniqueCalls;
-    QSet<QString> uniqueGrids;
-    int maxDistance = 0;
-    QString farthestCall;
+    QString const path = effectiveAdifLogPath();
+    QFileInfo const info(path);
+    QDateTime const modified = info.exists() ? info.lastModified() : QDateTime();
+    qint64 const size = info.exists() ? info.size() : 0;
 
-    for (QVariant const& rowValue : rows) {
-        QVariantMap const row = rowValue.toMap();
-        QString const call = row.value(QStringLiteral("call")).toString().trimmed().toUpper();
-        QString const grid = row.value(QStringLiteral("grid")).toString().trimmed().toUpper();
-        int const distanceKm = row.value(QStringLiteral("distanceKm")).toInt();
-        if (!call.isEmpty()) {
-            uniqueCalls.insert(call);
-        }
-        if (!grid.isEmpty()) {
-            uniqueGrids.insert(grid);
-        }
-        if (distanceKm > maxDistance) {
-            maxDistance = distanceKm;
-            farthestCall = call;
+    {
+        QMutexLocker locker(&m_qsoSearchCacheMutex);
+        if (m_qsoSearchCacheReady
+            && m_qsoSearchCachePath == path
+            && m_qsoSearchCacheModified == modified
+            && m_qsoSearchCacheSize == size) {
+            return m_qsoSearchCacheStats;
         }
     }
 
-    stats.insert(QStringLiteral("totalQsos"), rows.size());
-    stats.insert(QStringLiteral("uniqueCalls"), uniqueCalls.size());
-    stats.insert(QStringLiteral("uniqueGrids"), uniqueGrids.size());
-    stats.insert(QStringLiteral("maxDistance"), maxDistance);
-    stats.insert(QStringLiteral("farthestCall"), farthestCall);
-    return stats;
+    if (m_qsoSearchWarmupInProgress.load(std::memory_order_acquire)) {
+        return {};
+    }
+
+    QVariantList const rows = searchQsos(QString {}, QString {}, QString {}, QString {}, QString {});
+    return qsoStatsFromRows(rows);
 }
 
 int DecodiumBridge::importFromAdif(const QString& filename)
@@ -16205,6 +16373,8 @@ int DecodiumBridge::importFromAdif(const QString& filename)
 
     rebuildWorkedCallsFromDocument(m_workedCalls, dest.records);
     m_qsoCountCache = dest.records.size();
+    invalidateQsoSearchCache();
+    warmLogCacheAsync();
     emit qsoCountChanged();
     emit workedCountChanged();
     emit statusMessage(QStringLiteral("ADIF importato: %1 QSO").arg(imported));
@@ -16252,6 +16422,8 @@ bool DecodiumBridge::deleteQso(const QString& call, const QString& dateTime)
 
     rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
     m_qsoCountCache = doc.records.size();
+    invalidateQsoSearchCache();
+    warmLogCacheAsync();
     emit qsoCountChanged();
     emit workedCountChanged();
     return true;
@@ -16305,6 +16477,8 @@ bool DecodiumBridge::editQso(const QString& call, const QString& dateTime, const
 
     rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
     m_qsoCountCache = doc.records.size();
+    invalidateQsoSearchCache();
+    warmLogCacheAsync();
     emit qsoCountChanged();
     emit workedCountChanged();
     return true;

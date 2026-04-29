@@ -12,11 +12,13 @@ import QtQuick.Layouts
 Dialog {
     id: settingsDialog
     title: qsTr("Settings")
-    modal: true
+    modal: !warmupInProgress
+    opacity: warmupInProgress ? 0 : 1
     width: Math.min(Math.round(((parent && parent.width > 0) ? parent.width : 1440) * 0.94), 1520)
     height: Math.min(Math.round(((parent && parent.height > 0) ? parent.height : 960) * 0.94), 980)
     closePolicy: Popup.CloseOnEscape
     property bool positionInitialized: false
+    property bool warmupInProgress: false
     property int currentTab: 0
     readonly property int labelWidth: 140
     readonly property int fieldMinWidth: 300
@@ -503,6 +505,17 @@ Dialog {
         open()
     }
 
+    function warmUpPopup() {
+        if (visible || warmupInProgress)
+            return
+        warmupInProgress = true
+        positionInitialized = true
+        x = -width - 10000
+        y = -height - 10000
+        open()
+        warmupCloseTimer.restart()
+    }
+
     function toggleCatConnection() {
         var controller = activeCatController()
         if (!controller) return
@@ -583,7 +596,21 @@ Dialog {
         positionInitialized = true
     }
 
-    onAboutToShow: ensureInitialPosition()
+    onAboutToShow: {
+        if (!warmupInProgress)
+            ensureInitialPosition()
+    }
+
+    Timer {
+        id: warmupCloseTimer
+        interval: 1
+        repeat: false
+        onTriggered: {
+            settingsDialog.close()
+            settingsDialog.warmupInProgress = false
+            settingsDialog.positionInitialized = false
+        }
+    }
 
     Timer {
         id: catPersistTimer

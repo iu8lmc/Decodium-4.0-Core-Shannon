@@ -24,6 +24,9 @@
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QSysInfo>
 #include <QLockFile>
@@ -429,10 +432,59 @@ static void registerLegacySettingsStreamTypes()
     qRegisterMetaType<DecodeHighlightingModel::HighlightItems>("HighlightItems");
 }
 
+static bool ensureLegacySqliteDatabase()
+{
+    QDir writeableDataDir {QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)};
+    if (!writeableDataDir.mkpath(QStringLiteral("."))) {
+        L(("SQLite setup failed: cannot create data directory "
+           + writeableDataDir.absolutePath().toLocal8Bit()).constData());
+        return false;
+    }
+
+    if (!QSqlDatabase::drivers().contains(QStringLiteral("QSQLITE"))) {
+        L("SQLite setup failed: QSQLITE driver missing");
+        return false;
+    }
+
+    QSqlDatabase db;
+    if (QSqlDatabase::contains(QSqlDatabase::defaultConnection)) {
+        db = QSqlDatabase::database(QSqlDatabase::defaultConnection);
+    } else {
+        db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"));
+    }
+
+    QString const dbPath = writeableDataDir.absoluteFilePath(QStringLiteral("db.sqlite"));
+    if (db.databaseName().isEmpty() || db.databaseName() != dbPath) {
+        if (db.isOpen()) {
+            db.close();
+        }
+        db.setDatabaseName(dbPath);
+    }
+
+    if (!db.isOpen() && !db.open()) {
+        L(("SQLite setup failed: " + db.lastError().text().toLocal8Bit()).constData());
+        return false;
+    }
+
+    auto applyPragma = [&db](char const* pragma) {
+        QSqlQuery query = db.exec(QString::fromLatin1(pragma));
+        if (query.lastError().isValid()) {
+            L(("SQLite pragma failed: " + query.lastError().text().toLocal8Bit()).constData());
+        }
+    };
+    applyPragma("PRAGMA journal_mode=WAL");
+    applyPragma("PRAGMA synchronous=NORMAL");
+    applyPragma("PRAGMA busy_timeout=5000");
+
+    L(("SQLite database OK: " + dbPath.toLocal8Bit()).constData());
+    return true;
+}
+
 int main(int argc, char* argv[])
 {
     qInstallMessageHandler(qtMsgHandler);
     L("main() START");
+    L((QByteArray("Decodium version: ") + FORK_RELEASE_VERSION).constData());
 
     init_random_seed();
     Radio::register_types();
@@ -484,6 +536,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
+    ensureLegacySqliteDatabase();
     L((QByteArray("Qt version: ") + qVersion()).constData());
     L((QByteArray("OS: ") + QSysInfo::prettyProductName().toLocal8Bit()
        + " ABI=" + QSysInfo::buildAbi().toLocal8Bit()

@@ -288,6 +288,7 @@ DecodiumLogging::~DecodiumLogging ()
 #include <QScreen>
 #include <QMediaDevices>
 #include <QAudioDevice>
+#include <QCoreApplication>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -351,6 +352,11 @@ QStringList DecodiumLogging::readLastLines(int n) {
 
 void DecodiumLogging::logStartupDiagnostics() {
     diagInfo("========== DECODIUM STARTUP ==========");
+    QString appVersion = QCoreApplication::applicationVersion().trimmed();
+    if (appVersion.isEmpty()) {
+        appVersion = QStringLiteral(FORK_RELEASE_VERSION);
+    }
+    diagInfo(QString("Decodium version: %1").arg(appVersion));
     diagInfo(QString("Qt: %1 | OS: %2 | CPU: %3").arg(qVersion(), QSysInfo::prettyProductName(), QSysInfo::currentCpuArchitecture()));
     diagInfo(QString("Locale: %1 | TZ: %2").arg(QLocale::system().name(), QString(QTimeZone::systemTimeZone().id())));
     if (auto* s = QGuiApplication::primaryScreen())

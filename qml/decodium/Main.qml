@@ -295,6 +295,18 @@ ApplicationWindow {
         repeat: false
         onTriggered: persistWindowLayouts()
     }
+    Timer {
+        id: firstUseWarmupTimer
+        interval: 2500
+        repeat: false
+        running: true
+        onTriggered: {
+            if (bridge && bridge.warmLogCacheAsync)
+                bridge.warmLogCacheAsync()
+            if (settingsDialog && settingsDialog.warmUpPopup)
+                settingsDialog.warmUpPopup()
+        }
+    }
     // Funzione helper chiamabile da qualsiasi parte del QML
     function scheduleSave() { saveTimer.restart() }
     function scheduleWindowStateSave() {
@@ -7482,8 +7494,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: true
-                    asynchronous: false
+                    active: logFloatingWindow.visible
+                    asynchronous: true
                     sourceComponent: logContentComponent
                 }
             }
@@ -7797,8 +7809,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: true
-                    asynchronous: false
+                    active: rigFloatingWindow.visible
+                    asynchronous: true
                     sourceComponent: rigContentComponent
                 }
             }

@@ -803,6 +803,7 @@ public slots:
                                         const QString& fromDate,
                                         const QString& toDate) const;
     Q_INVOKABLE QVariantMap getQsoStats() const;
+    Q_INVOKABLE void warmLogCacheAsync();
     Q_INVOKABLE int importFromAdif(const QString& filename);
     Q_INVOKABLE bool exportToAdif(const QString& filename);
     Q_INVOKABLE bool deleteQso(const QString& call, const QString& dateTime);
@@ -996,6 +997,7 @@ signals:
     void pskReporterConnectedChanged();
     // ADIF / LotW / Cloudlog
     void qsoCountChanged();
+    void qsoLogCacheChanged();
     void workedCountChanged();
     void lotwEnabledChanged();
     void lotwUpdatingChanged();
@@ -1540,6 +1542,16 @@ private:
     QSet<QString>    m_workedCalls;   // callsign già lavorati (B4 check)
     QString          m_adifLogPath;   // path file .adi
     mutable int      m_qsoCountCache {-1};
+    mutable QMutex   m_qsoSearchCacheMutex;
+    mutable QString  m_qsoSearchCachePath;
+    mutable QDateTime m_qsoSearchCacheModified;
+    mutable qint64   m_qsoSearchCacheSize {-1};
+    mutable QVariantList m_qsoSearchCacheRows;
+    mutable QVariantMap  m_qsoSearchCacheStats;
+    mutable bool     m_qsoSearchCacheReady {false};
+    std::atomic_bool m_qsoSearchWarmupInProgress {false};
+    std::atomic<quint64> m_qsoSearchCacheGeneration {0};
+    void invalidateQsoSearchCache();
     void appendAdifRecord(const QString& dxCall, const QString& dxGrid,
                           double freqHz, const QString& mode,
                           const QDateTime& timeOnUtc,

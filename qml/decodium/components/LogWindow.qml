@@ -55,14 +55,24 @@ Popup {
 
     onAboutToShow: {
         ensureInitialPosition()
+        if (appEngine && appEngine.logManager && appEngine.logManager.warmLogCacheAsync)
+            appEngine.logManager.warmLogCacheAsync()
         delayedInitialRefresh.restart()
     }
 
     Timer {
         id: delayedInitialRefresh
-        interval: 80
+        interval: 180
         repeat: false
         onTriggered: if (logWindow.visible) refreshLog()
+    }
+
+    Connections {
+        target: appEngine && appEngine.logManager ? appEngine.logManager : null
+        function onQsoLogCacheChanged() {
+            if (logWindow.visible)
+                refreshLog()
+        }
     }
 
     function refreshLog() {

@@ -29,14 +29,30 @@ Rectangle {
     property var selectedQso: null
     property bool refreshActive: true
 
-    Component.onCompleted: if (refreshActive) delayedInitialRefresh.restart()
-    onRefreshActiveChanged: if (refreshActive) delayedInitialRefresh.restart()
+    Component.onCompleted: if (refreshActive) {
+        if (appEngine && appEngine.logManager && appEngine.logManager.warmLogCacheAsync)
+            appEngine.logManager.warmLogCacheAsync()
+        delayedInitialRefresh.restart()
+    }
+    onRefreshActiveChanged: if (refreshActive) {
+        if (appEngine && appEngine.logManager && appEngine.logManager.warmLogCacheAsync)
+            appEngine.logManager.warmLogCacheAsync()
+        delayedInitialRefresh.restart()
+    }
 
     Timer {
         id: delayedInitialRefresh
-        interval: 80
+        interval: 180
         repeat: false
         onTriggered: if (logContent.refreshActive) refreshLog()
+    }
+
+    Connections {
+        target: appEngine && appEngine.logManager ? appEngine.logManager : null
+        function onQsoLogCacheChanged() {
+            if (logContent.refreshActive)
+                refreshLog()
+        }
     }
 
     function refreshLog() {
