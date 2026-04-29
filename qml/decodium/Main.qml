@@ -356,10 +356,9 @@ ApplicationWindow {
         console.log("Main window closing - shutting down application")
         // Close all floating windows
         if (waterfallWindow) waterfallWindow.close()
-        closeLoaded(logWindowLoader)
+        if (logWindow) logWindow.close()
         closeLoaded(astroWindowLoader)
         closeLoaded(macroDialogLoader)
-        closeLoaded(rigControlDialogLoader)
         if (txPanelFloatingWindow) txPanelFloatingWindow.close()
         if (period1FloatingWindow) period1FloatingWindow.close()
         if (period2FloatingWindow) period2FloatingWindow.close()
@@ -376,6 +375,177 @@ ApplicationWindow {
     onYChanged: scheduleWindowStateSave()
     onWidthChanged: scheduleWindowStateSave()
     onHeightChanged: scheduleWindowStateSave()
+
+    component FloatingResizeHandles: Item {
+        id: resizeRoot
+        property var targetWindow
+        property int edgeSize: 7
+        property int cornerSize: 16
+        property int maxWidth: 10000
+        property int maxHeight: 6000
+
+        anchors.fill: parent
+        enabled: !!targetWindow
+        z: 1000
+
+        function boundedWidth(value) {
+            if (!targetWindow)
+                return 0
+            return Math.max(targetWindow.minimumWidth,
+                            Math.min(value, maxWidth))
+        }
+
+        function boundedHeight(value) {
+            if (!targetWindow)
+                return 0
+            return Math.max(targetWindow.minimumHeight,
+                            Math.min(value, maxHeight))
+        }
+
+        function resizeRight(delta) {
+            targetWindow.width = boundedWidth(targetWindow.width + delta)
+        }
+
+        function resizeBottom(delta) {
+            targetWindow.height = boundedHeight(targetWindow.height + delta)
+        }
+
+        function resizeLeft(delta) {
+            var oldWidth = targetWindow.width
+            var newWidth = boundedWidth(oldWidth - delta)
+            var applied = oldWidth - newWidth
+            targetWindow.x += applied
+            targetWindow.width = newWidth
+        }
+
+        function resizeTop(delta) {
+            var oldHeight = targetWindow.height
+            var newHeight = boundedHeight(oldHeight - delta)
+            var applied = oldHeight - newHeight
+            targetWindow.y += applied
+            targetWindow.height = newHeight
+        }
+
+        MouseArea {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.topMargin: resizeRoot.cornerSize
+            anchors.bottomMargin: resizeRoot.cornerSize
+            width: resizeRoot.edgeSize
+            cursorShape: Qt.SizeHorCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.resizeRight(mouse.x - width / 2)
+            }
+        }
+
+        MouseArea {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.topMargin: resizeRoot.cornerSize
+            anchors.bottomMargin: resizeRoot.cornerSize
+            width: resizeRoot.edgeSize
+            cursorShape: Qt.SizeHorCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.resizeLeft(mouse.x)
+            }
+        }
+
+        MouseArea {
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: resizeRoot.cornerSize
+            anchors.rightMargin: resizeRoot.cornerSize
+            height: resizeRoot.edgeSize
+            cursorShape: Qt.SizeVerCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.resizeBottom(mouse.y - height / 2)
+            }
+        }
+
+        MouseArea {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: resizeRoot.cornerSize
+            anchors.rightMargin: resizeRoot.cornerSize
+            height: resizeRoot.edgeSize
+            cursorShape: Qt.SizeVerCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    resizeRoot.resizeTop(mouse.y)
+            }
+        }
+
+        MouseArea {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeFDiagCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    resizeRoot.resizeRight(mouse.x - width / 2)
+                    resizeRoot.resizeBottom(mouse.y - height / 2)
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeBDiagCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    resizeRoot.resizeLeft(mouse.x)
+                    resizeRoot.resizeBottom(mouse.y - height / 2)
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeBDiagCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    resizeRoot.resizeRight(mouse.x - width / 2)
+                    resizeRoot.resizeTop(mouse.y)
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: resizeRoot.cornerSize
+            height: resizeRoot.cornerSize
+            cursorShape: Qt.SizeFDiagCursor
+            acceptedButtons: Qt.LeftButton
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    resizeRoot.resizeLeft(mouse.x)
+                    resizeRoot.resizeTop(mouse.y)
+                }
+            }
+        }
+    }
 
     // Decodium: Keyboard shortcut handler
     Item {
@@ -581,7 +751,7 @@ ApplicationWindow {
             period1Panel.applyCenterSplit()
     })
 
-    // === Dialoghi lazy-loaded ===
+    // === Dialoghi ===
     Loader { id: colorDialogLoader; source: "../dialogs/ColorHighlightingDialog.qml"; active: false }
     Loader { id: qsyDialogLoader;   source: "../dialogs/QSYDialog.qml";              active: false }
 
@@ -608,12 +778,12 @@ ApplicationWindow {
             loader.item.close()
     }
 
-    function openLogWindow() { runWhenLoaded(logWindowLoader, function(item) { item.open() }) }
+    function openLogWindow() { logWindow.open() }
     function openMacroDialog() { runWhenLoaded(macroDialogLoader, function(item) { item.open() }) }
     function openAstroWindow() { runWhenLoaded(astroWindowLoader, function(item) { item.open() }) }
-    function openSettingsDialog() { runWhenLoaded(settingsDialogLoader, function(item) { item.open() }) }
+    function openSettingsDialog() { settingsDialog.open() }
     function openSettingsTab(tabIndex) {
-        runWhenLoaded(settingsDialogLoader, function(item) { item.openTab(tabIndex) })
+        settingsDialog.openTab(tabIndex)
     }
 
     property string rigErrorDialogTitle: ""
@@ -3611,6 +3781,40 @@ ApplicationWindow {
                     property var rxDecodes: currentRxDecodes()
                     property int decodeListVersion: 0
                     property int lastSyncCount: 0
+                    property real currentPeriodIndex: -1
+                    property int currentPeriodDecodeCount: 0
+
+                    function currentPeriodMs() {
+                        return Math.max(1, Math.round(decodePanel.periodLength * 1000))
+                    }
+
+                    function updatePeriodState() {
+                        var nowMs = Date.now()
+                        var periodMs = currentPeriodMs()
+                        var periodIndex = Math.floor(nowMs / periodMs)
+                        decodePanel.currentSecond = Math.floor((nowMs % 60000) / 1000)
+                        decodePanel.isCurrentPeriodEven = (periodIndex % 2) === 0
+                        if (decodePanel.currentPeriodIndex !== periodIndex) {
+                            decodePanel.currentPeriodIndex = periodIndex
+                            decodePanel.currentPeriodDecodeCount = 0
+                            decodePanel.decodeListVersion++
+                        }
+                    }
+
+                    function updateCurrentPeriodDecodeCount(src) {
+                        var newCount = src ? src.length : 0
+                        if (newCount >= decodePanel.lastSyncCount) {
+                            decodePanel.currentPeriodDecodeCount += newCount - decodePanel.lastSyncCount
+                        } else {
+                            decodePanel.currentPeriodDecodeCount = 0
+                        }
+                        decodePanel.lastSyncCount = newCount
+                    }
+
+                    Component.onCompleted: {
+                        updatePeriodState()
+                        lastSyncCount = bridge.decodeList ? bridge.decodeList.length : 0
+                    }
 
                     // Update decode list incrementalmente (solo nuovi elementi)
                     Connections {
@@ -3622,9 +3826,9 @@ ApplicationWindow {
                             var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             var src = bridge.decodeList
+                            decodePanel.updateCurrentPeriodDecodeCount(src)
                             decodePanel.allDecodes = src
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            decodePanel.lastSyncCount = src.length
                             if (stickBandTail && evenPeriodList)
                                 evenPeriodList.forceTailFollow()
                             if (stickFloatingTail && period1FloatingList)
@@ -3657,13 +3861,7 @@ ApplicationWindow {
                         running: true
                         repeat: true
                         onTriggered: {
-                            var now = new Date()
-                            decodePanel.currentSecond = now.getSeconds()
-                            var pLen = decodePanel.periodLength
-                            // Calculate period index (0-based)
-                            var periodIndex = Math.floor(decodePanel.currentSecond / pLen)
-                            // Even period: period index 0, 2, 4, 6...
-                            decodePanel.isCurrentPeriodEven = (periodIndex % 2) === 0
+                            decodePanel.updatePeriodState()
                         }
                     }
 
@@ -4125,7 +4323,7 @@ ApplicationWindow {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: decodePanel.allDecodes.length + " decodes"
+                                            text: decodePanel.currentPeriodDecodeCount + " decodes"
                                             font.pixelSize: 10
                                             color: textSecondary
                                         }
@@ -4269,9 +4467,11 @@ ApplicationWindow {
                                         onContentYChanged: updateFollowTail()
                                         onHeightChanged: updateFollowTail()
                                         onCountChanged: {
-                                            if (followTail) {
-                                                forceTailFollow()
-                                            }
+                                            forceTailFollow()
+                                        }
+                                        property int _ver: decodePanel.decodeListVersion
+                                        on_VerChanged: {
+                                            forceTailFollow()
                                         }
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
@@ -4294,7 +4494,8 @@ ApplicationWindow {
                                                     if (modelData.isTx) return
                                                     if (mouse.button === Qt.LeftButton) {
                                                         // Sinistro = imposta TX freq
-                                                        bridge.txFrequency = parseInt(modelData.freq || "0")
+                                                        if (!bridge.holdTxFreq)
+                                                            bridge.txFrequency = parseInt(modelData.freq || "0")
                                                     } else if (mouse.button === Qt.RightButton) {
                                                         // Destro = imposta RX freq
                                                         bridge.rxFrequency = parseInt(modelData.freq || "0")
@@ -4670,7 +4871,8 @@ ApplicationWindow {
                                                     if (modelData.isTx) return
                                                     if (mouse.button === Qt.LeftButton) {
                                                         // Sinistro = imposta TX freq
-                                                        bridge.txFrequency = parseInt(modelData.freq || "0")
+                                                        if (!bridge.holdTxFreq)
+                                                            bridge.txFrequency = parseInt(modelData.freq || "0")
                                                     } else if (mouse.button === Qt.RightButton) {
                                                         // Destro = imposta RX freq
                                                         bridge.rxFrequency = parseInt(modelData.freq || "0")
@@ -5273,20 +5475,8 @@ ApplicationWindow {
         }
     }
 
-    Loader {
-        id: logWindowLoader
-        active: false
-        asynchronous: true
-        source: "components/LogWindow.qml"
-        property var pendingAction: null
-        onLoaded: {
-            console.log("Lazy component loaded: LogWindow")
-            if (pendingAction) {
-                var action = pendingAction
-                pendingAction = null
-                action(item)
-            }
-        }
+    LogWindow {
+        id: logWindow
     }
 
     Loader {
@@ -5321,45 +5511,8 @@ ApplicationWindow {
         }
     }
 
-    Loader {
-        id: rigControlDialogLoader
-        active: false
-        asynchronous: true
-        source: "components/RigControlDialog.qml"
-        property var pendingAction: null
-        onLoaded: {
-            console.log("Lazy component loaded: RigControlDialog")
-            if (pendingAction) {
-                var action = pendingAction
-                pendingAction = null
-                action(item)
-            }
-        }
-    }
-
-    Loader {
-        id: settingsDialogLoader
-        anchors.fill: parent
-        active: false
-        asynchronous: true
-        source: "components/SettingsDialog.qml"
-        property var pendingAction: null
-        onLoaded: {
-            console.log("Lazy component loaded: SettingsDialog")
-            if (pendingAction) {
-                var action = pendingAction
-                pendingAction = null
-                action(item)
-            }
-        }
-        onStatusChanged: {
-            if (status === Loader.Error) {
-                console.error("Lazy component load failed: SettingsDialog")
-                pendingAction = null
-                active = false
-                showStatusToast(qsTr("Setup could not be opened. Check the startup log."), "#ff5252")
-            }
-        }
+    SettingsDialog {
+        id: settingsDialog
     }
 
     Loader {
@@ -7329,8 +7482,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: logFloatingWindow.visible
-                    asynchronous: true
+                    active: true
+                    asynchronous: false
                     sourceComponent: logContentComponent
                 }
             }
@@ -7340,7 +7493,9 @@ ApplicationWindow {
     // Log content component (shared)
     Component {
         id: logContentComponent
-        LogWindowContent { }
+        LogWindowContent {
+            refreshActive: logFloatingWindow.visible
+        }
     }
 
     // ========== DETACHABLE ASTRO WINDOW ==========
@@ -7642,8 +7797,8 @@ ApplicationWindow {
                 Loader {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    active: rigFloatingWindow.visible
-                    asynchronous: true
+                    active: true
+                    asynchronous: false
                     sourceComponent: rigContentComponent
                 }
             }
@@ -7744,6 +7899,10 @@ ApplicationWindow {
             radius: 10
             border.color: "#4CAF50"
             border.width: 2
+
+            FloatingResizeHandles {
+                targetWindow: period1FloatingWindow
+            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -7909,9 +8068,11 @@ ApplicationWindow {
                         onContentYChanged: updateFollowTail()
                         onHeightChanged: updateFollowTail()
                         onCountChanged: {
-                            if (followTail) {
-                                forceTailFollow()
-                            }
+                            forceTailFollow()
+                        }
+                        property int _ver: decodePanel.decodeListVersion
+                        on_VerChanged: {
+                            forceTailFollow()
                         }
                         ScrollBar.vertical: ScrollBar { active: true }
 
@@ -8007,6 +8168,10 @@ ApplicationWindow {
             radius: 10
             border.color: primaryBlue
             border.width: 2
+
+            FloatingResizeHandles {
+                targetWindow: rxFreqFloatingWindow
+            }
 
             ColumnLayout {
                 anchors.fill: parent

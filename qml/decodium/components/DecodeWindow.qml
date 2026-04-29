@@ -523,7 +523,8 @@ Window {
                                     }
                                     onDoubleClicked: {
                                         // Set TX and RX frequency to decode frequency
-                                        appEngine.txFrequency = parseInt(modelData.freq)
+                                        if (!appEngine.holdTxFreq)
+                                            appEngine.txFrequency = parseInt(modelData.freq)
                                         appEngine.rxFrequency = parseInt(modelData.freq)
                                         console.log("Double-click: calling " + extractCall(modelData.message) + " at " + modelData.freq + " Hz")
                                         // Process decode via HvTxW::DecListTextAll (Decodium path)
@@ -886,7 +887,8 @@ Window {
                                     hoverEnabled: true
                                     onDoubleClicked: {
                                         // Set TX and RX frequency to decode frequency
-                                        appEngine.txFrequency = parseInt(modelData.freq)
+                                        if (!appEngine.holdTxFreq)
+                                            appEngine.txFrequency = parseInt(modelData.freq)
                                         appEngine.rxFrequency = parseInt(modelData.freq)
                                         console.log("Double-click RX: calling " + extractCall(modelData.message) + " at " + modelData.freq + " Hz")
                                         // Process decode via HvTxW::DecListTextAll (Decodium path)

@@ -524,7 +524,7 @@ public:
     int     stationPowerWatts() const { return m_stationPowerWatts; }
     void    setStationPowerWatts(int v){ v = qBound(0, v, 9999); if (m_stationPowerWatts!=v){m_stationPowerWatts=v;emit stationPowerWattsChanged();} }
     bool    autoStartMonitorOnStartup() const { return m_autoStartMonitorOnStartup; }
-    void    setAutoStartMonitorOnStartup(bool v){ if (m_autoStartMonitorOnStartup!=v){m_autoStartMonitorOnStartup=v;emit autoStartMonitorOnStartupChanged();} }
+    void    setAutoStartMonitorOnStartup(bool){ if (!m_autoStartMonitorOnStartup){m_autoStartMonitorOnStartup=true;emit autoStartMonitorOnStartupChanged();} }
     bool    startFromTx2()   const { return m_startFromTx2; }
     void    setStartFromTx2(bool v) { if (m_startFromTx2!=v){m_startFromTx2=v;emit startFromTx2Changed();} }
     bool    vhfUhfFeatures() const { return m_vhfUhfFeatures; }
@@ -791,6 +791,7 @@ public slots:
                                      int height,
                                      bool detached,
                                      bool minimized);
+    Q_INVOKABLE QVariantMap primaryScreenAvailableGeometry() const;
     Q_INVOKABLE QString version() const;
 
     // ADIF import/export
@@ -1083,6 +1084,8 @@ private:
     int legacyDecodeCqHint() const;
     QString legacyAllTxtPath() const;
     void appendLegacyAllTxtDecodeLine(const QVariantMap& entry) const;
+    bool contestDecodeExchangesEnabled() const;
+    bool shouldAcceptDecodedMessage(const QString& message, QString* reason = nullptr) const;
     bool isRecentAutoCqDuplicate(const QString& call,
                                  double freqHz = -1.0,
                                  const QString& mode = QString()) const;
@@ -1135,8 +1138,10 @@ private:
     void udpSendLoggedQso(const QString& dxCall, const QString& dxGrid,
                           double freqHz, const QString& mode,
                           const QDateTime& timeOnUtc,
+                          const QDateTime& timeOffUtc,
                           const QString& rstSent, const QString& rstRcvd,
                           const QByteArray& adifRecord,
+                          const QString& comments = QString(),
                           const QString& propMode = QString(),
                           const QString& satellite = QString(),
                           const QString& satMode = QString(),
@@ -1170,6 +1175,7 @@ private:
     // schedulato con delay maggiore. Nessun retry infinito.
     int m_startupCatRetryCount {0};
     bool m_monitoring {false};
+    bool m_monitorRequested {false};
     bool m_transmitting {false};
     bool m_tuning {false};
     bool m_decoding {false};
@@ -1448,13 +1454,16 @@ private:
     QString m_promptLogRptSent;
     QString m_promptLogRptRcvd;
     QString m_promptLogMode;
+    QString m_promptLogComment;
     QDateTime m_promptLogOn;
+    QDateTime m_promptLogOff;
     double    m_promptLogDialFreq {0.0};
     QString m_pendingAutoLogCall;
     QString m_pendingAutoLogGrid;
     QString m_pendingAutoLogRptSent;
     QString m_pendingAutoLogRptRcvd;
     QDateTime m_pendingAutoLogOn;
+    QDateTime m_pendingAutoLogOff;
     double    m_pendingAutoLogDialFreq {0.0};
     bool    m_lateAutoLogValid {false};
     QString m_lateAutoLogCall;
@@ -1462,6 +1471,7 @@ private:
     QString m_lateAutoLogRptSent;
     QString m_lateAutoLogRptRcvd;
     QDateTime m_lateAutoLogOn;
+    QDateTime m_lateAutoLogOff;
     double    m_lateAutoLogDialFreq {0.0};
     QDateTime m_lateAutoLogExpires;
     QString m_autoCqLockedCall;
@@ -1531,8 +1541,11 @@ private:
     QString          m_adifLogPath;   // path file .adi
     mutable int      m_qsoCountCache {-1};
     void appendAdifRecord(const QString& dxCall, const QString& dxGrid,
-                          double freqHz, const QString& mode, const QDateTime& utc,
+                          double freqHz, const QString& mode,
+                          const QDateTime& timeOnUtc,
+                          const QDateTime& timeOffUtc,
                           const QString& rstSent, const QString& rstRcvd,
+                          const QString& comments = QString(),
                           const QString& propMode = QString(),
                           const QString& satellite = QString(),
                           const QString& satMode = QString(),
@@ -1570,6 +1583,7 @@ private:
     static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // visual panadapter (~2.93 Hz/bin @ 12kHz)
     QVector<float> m_lastPanadapterData;   // ultimo spettro valido (evita fasce nere)
     qint64 m_lastPanadapterFrameMs {0};     // throttle visual FFT so decode keeps priority
+    qint64 m_lastSpectrumRecoveryMs {0};
     float m_lastPanMinDb {0.f};
     float m_lastPanMaxDb {0.f};
     float m_lastPanFreqMin {0.f};
@@ -1598,6 +1612,9 @@ private:
     void onTciPcmSamplesReady(const QVector<short>& samples);
     void handleAudioHealth(double rms, double peak, int dynamicRange, int clippedSamples, int samples);
     void restartAudioCaptureForModeChange(const QString& previousMode);
+    void scheduleMonitorRecovery(const QString& reason,
+                                 quint64 sessionId,
+                                 bool monitorShouldStayActive);
     void scheduleModeChangeMonitorRecovery(const QString& previousMode,
                                            const QString& requestedMode,
                                            quint64 sessionId,
@@ -1639,6 +1656,9 @@ private:
     void completeTxPlayback(const QString& reason, bool error = false);
     void finishModulatorIdlePlayback(const QString& reason);
     QString buildCurrentTxMessage() const;
+    QString defaultLogCommentForQso(const QString& mode,
+                                    const QString& rstSent,
+                                    const QString& rstRcvd) const;
     bool legacyBackendAvailable() const;
     bool ensureLegacyBackendAvailable();
     bool legacyTxBackendRequested() const;

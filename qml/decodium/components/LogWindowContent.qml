@@ -27,8 +27,17 @@ Rectangle {
     property var stats: ({})
     property int selectedIndex: -1
     property var selectedQso: null
+    property bool refreshActive: true
 
-    Component.onCompleted: refreshLog()
+    Component.onCompleted: if (refreshActive) delayedInitialRefresh.restart()
+    onRefreshActiveChanged: if (refreshActive) delayedInitialRefresh.restart()
+
+    Timer {
+        id: delayedInitialRefresh
+        interval: 80
+        repeat: false
+        onTriggered: if (logContent.refreshActive) refreshLog()
+    }
 
     function refreshLog() {
         if (appEngine && appEngine.logManager) {
@@ -76,7 +85,7 @@ Rectangle {
     // Fallback auto-refresh
     Timer {
         interval: 3000
-        running: true
+        running: logContent.refreshActive
         repeat: true
         onTriggered: refreshLog()
     }

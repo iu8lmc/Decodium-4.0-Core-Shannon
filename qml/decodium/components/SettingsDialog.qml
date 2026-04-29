@@ -38,10 +38,6 @@ Dialog {
     property var fontPickerFamilies: []
     property bool loggingChecksUpdating: false
 
-    onOpened: {
-        Qt.callLater(refreshCatPorts)
-    }
-
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
         decodedFontLabel = bridge.fontSettingLabel("DecodedTextFont", "Courier", 10)
@@ -1342,35 +1338,72 @@ Dialog {
                             font.pixelSize: 12
                             Layout.preferredWidth: 100
                         }
-                        ComboBox {
-                            id: serialPortCombo
+                        RowLayout {
                             visible: settingsDialog.usesSerialControls()
-                            model: bridge.catManager ? bridge.catManager.portList : []; Layout.fillWidth: true; implicitHeight: controlHeight
+                            Layout.fillWidth: true
                             Layout.minimumWidth: wideFieldMinWidth
-                            currentIndex: {
-                                if (!bridge.catManager)
-                                    return -1
-                                return find(bridge.catManager.serialPort)
-                            }
-                            onActivated: {
-                                if (bridge.catManager) {
-                                    bridge.catManager.serialPort = currentText
-                                    settingsDialog.enforceForceLineAvailability()
+                            spacing: 8
+
+                            ComboBox {
+                                id: serialPortCombo
+                                visible: settingsDialog.usesSerialControls()
+                                model: bridge.catManager ? bridge.catManager.portList : []
+                                Layout.fillWidth: true
+                                implicitHeight: controlHeight
+                                currentIndex: {
+                                    if (!bridge.catManager)
+                                        return -1
+                                    return find(bridge.catManager.serialPort)
                                 }
-                                settingsDialog.scheduleCatPersist()
+                                onActivated: {
+                                    if (bridge.catManager) {
+                                        bridge.catManager.serialPort = currentText
+                                        settingsDialog.enforceForceLineAvailability()
+                                    }
+                                    settingsDialog.scheduleCatPersist()
+                                }
+                                background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                                contentItem: Text {
+                                    text: serialPortCombo.currentIndex >= 0 ? serialPortCombo.displayText : (bridge.catManager ? bridge.catManager.serialPort : "")
+                                    color: textPrimary
+                                    font.pixelSize: controlFontSize
+                                    leftPadding: 8
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                                delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                                    background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
+                                popup: SettingsComboPopup { combo: serialPortCombo }
                             }
-                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text {
-                                text: serialPortCombo.currentIndex >= 0 ? serialPortCombo.displayText : (bridge.catManager ? bridge.catManager.serialPort : "")
-                                color: textPrimary
-                                font.pixelSize: controlFontSize
-                                leftPadding: 8
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
+
+                            Rectangle {
+                                id: serialPortRefreshButton
+                                Layout.preferredWidth: controlHeight
+                                Layout.preferredHeight: controlHeight
+                                radius: 4
+                                color: serialPortRefreshMA.containsMouse ? bgMedium : "transparent"
+                                border.color: secondaryCyan
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "↻"
+                                    color: secondaryCyan
+                                    font.pixelSize: 17
+                                    font.bold: true
+                                }
+
+                                MouseArea {
+                                    id: serialPortRefreshMA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: settingsDialog.refreshCatPorts()
+                                }
+
+                                ToolTip.visible: serialPortRefreshMA.containsMouse
+                                ToolTip.text: qsTr("Refresh serial ports")
                             }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
-                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
-                            popup: SettingsComboPopup { combo: serialPortCombo }
                         }
                         Text {
                             visible: settingsDialog.usesSerialControls()
@@ -2891,7 +2924,7 @@ Dialog {
                         CheckBox {
                             enabled: !promptToLogCheck.checked
                             opacity: enabled ? 1.0 : 0.45
-                            checked: bridge.getSetting("ContestingOnly", true)
+                            checked: bridge.getSetting("ContestingOnly", false)
                             onCheckedChanged: bridge.setSetting("ContestingOnly", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
@@ -3502,9 +3535,10 @@ Dialog {
 
                         Text { text: qsTr("Monitor OFF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: settingsDialog.boolSetting("MonitorOFF", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("MonitorOFF", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            enabled: false
+                            checked: false
+                            Component.onCompleted: settingsDialog.setBoolSettingIfChanged("MonitorOFF", false, false)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; opacity: parent.enabled ? 1.0 : 0.55; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text { text: qsTr("Monitor Last:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }

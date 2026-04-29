@@ -1268,7 +1268,7 @@ bool Configuration::spot_to_psk_reporter () const
   return is_transceiver_online () && (m_->spot_to_psk_reporter_);
 }
 bool Configuration::psk_reporter_tcpip () const {return m_->psk_reporter_tcpip_;}
-bool Configuration::monitor_off_at_startup () const {return !m_externalCtrlMode and m_->monitor_off_at_startup_;}   //avt 1/25/26
+bool Configuration::monitor_off_at_startup () const {return false;}
 bool Configuration::monitor_last_used () const {return m_->rig_is_dummy_ || m_->monitor_last_used_;}
 bool Configuration::log_as_RTTY () const {return m_->log_as_RTTY_;}
 bool Configuration::report_in_comments () const {return m_->report_in_comments_;}
@@ -3280,7 +3280,8 @@ void Configuration::impl::read_settings ()
 
   type_2_msg_gen_ = settings_->value ("Type2MsgGen", QVariant::fromValue (Configuration::type_2_msg_3_full)).value<Configuration::Type2MsgGen> ();
 
-  monitor_off_at_startup_ = settings_->value ("MonitorOFF", false).toBool ();
+  monitor_off_at_startup_ = false;
+  settings_->setValue ("MonitorOFF", false);
   monitor_last_used_ = settings_->value ("MonitorLastUsed", false).toBool ();
   spot_to_psk_reporter_ = settings_->value ("PSKReporter", false).toBool ();
   psk_reporter_tcpip_ = settings_->value ("PSKReporterTCPIP", false).toBool ();
@@ -3431,7 +3432,7 @@ void Configuration::impl::read_settings ()
     settings_->setValue ("PromptToLog", prompt_to_log_);
     settings_->setValue ("AutoLog", autoLog_);
   }
-  contestingOnly_ = settings_->value ("ContestingOnly", true).toBool ();
+  contestingOnly_ = settings_->value ("ContestingOnly", false).toBool ();
   ZZ00_ = settings_->value("ZZ00",false).toBool ();
   log4digitGrids_ = settings_->value ("Log4digitGrids", false).toBool ();
   decodes_from_top_ = settings_->value ("DecodesFromTop", false).toBool ();
@@ -3741,7 +3742,7 @@ void Configuration::impl::write_settings ()
     settings_->setValue ("AudioOutputChannel", "TCI audio");
   }
   settings_->setValue ("Type2MsgGen", QVariant::fromValue (type_2_msg_gen_));
-  settings_->setValue ("MonitorOFF", monitor_off_at_startup_);
+  settings_->setValue ("MonitorOFF", false);
   settings_->setValue ("MonitorLastUsed", monitor_last_used_);
   settings_->setValue ("PSKReporter", spot_to_psk_reporter_);
   settings_->setValue ("PSKReporterTCPIP", psk_reporter_tcpip_);
@@ -4549,7 +4550,9 @@ void Configuration::impl::accept ()
   id_after_73_ = ui_->CW_id_after_73_check_box->isChecked ();
   tx_QSY_allowed_ = ui_->tx_QSY_check_box->isChecked ();
   progressBar_red_ = ui_->progress_bar_check_box->isChecked ();
-  monitor_off_at_startup_ = ui_->monitor_off_check_box->isChecked ();
+  monitor_off_at_startup_ = false;
+  if (ui_->monitor_off_check_box)
+    ui_->monitor_off_check_box->setChecked (false);
   monitor_last_used_ = ui_->monitor_last_used_check_box->isChecked ();
   type_2_msg_gen_ = static_cast<Type2MsgGen> (ui_->type_2_msg_gen_combo_box->currentIndex ());
   log_as_RTTY_ = ui_->log_as_RTTY_check_box->isChecked ();

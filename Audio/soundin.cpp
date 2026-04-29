@@ -277,17 +277,35 @@ void SoundInput::retireCurrentStream ()
     }
 
   QObject::disconnect (stream, nullptr, this, nullptr);
+#if defined(Q_OS_MACOS)
+  // Qt 6.11's CoreAudio backend can still have a device-disconnect future
+  // queued when the app asks QAudioSource to stop. Calling stop() in the same
+  // turn can make Qt run stopAudioUnit() twice and crash inside
+  // QFutureInterfaceBase::cancel(). Suspend immediately, then stop/delete after
+  // CoreAudio's pending listener work has had time to settle.
+  if (stream->state () != QAudio::StoppedState)
+    {
+      stream->suspend ();
+    }
+
+  QPointer<QAudioSource> guard {stream};
+  QTimer::singleShot (750, stream, [guard] {
+    if (!guard)
+      {
+        return;
+      }
+    if (guard->state () != QAudio::StoppedState)
+      {
+        guard->stop ();
+      }
+  });
+  QTimer::singleShot (5000, stream, &QObject::deleteLater);
+#else
   if (stream->state () != QAudio::StoppedState)
     {
       stream->stop ();
     }
 
-#if defined(Q_OS_MACOS)
-  // QtMultimedia/CoreAudio can still have queued disconnect-listener work after
-  // stop(). Keep the QAudioSource alive briefly so those callbacks cannot outlive
-  // the object they belong to.
-  QTimer::singleShot (1500, stream, &QObject::deleteLater);
-#else
   stream->deleteLater ();
 #endif
 }

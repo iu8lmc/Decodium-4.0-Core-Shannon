@@ -15,8 +15,8 @@ ApplicationWindow {
     height: 700
     minimumWidth: 800
     minimumHeight: 500
-    x: Math.round(Math.max(0, ((Screen.desktopAvailableWidth || Screen.width || width) - width) / 2))
-    y: Math.round(Math.max(0, ((Screen.desktopAvailableHeight || Screen.height || height) - height) / 2))
+    x: centeredBootX()
+    y: centeredBootY()
     title: "Decodium 4.0 — Loading..."
     color: "#1a1a2e"
     property int mainLoadElapsedSeconds: 0
@@ -29,6 +29,54 @@ ApplicationWindow {
 
     function bootElapsedMs() {
         return Math.round(Date.now() - bootStartedMs)
+    }
+
+    function safeNumber(value, fallback) {
+        var numeric = Number(value)
+        return isFinite(numeric) ? numeric : fallback
+    }
+
+    function primaryBootScreenGeometry() {
+        var g = null
+        try {
+            if (bridge && typeof bridge.primaryScreenAvailableGeometry === "function")
+                g = bridge.primaryScreenAvailableGeometry()
+        } catch (e) {
+            console.log("BootLoader: primary screen geometry unavailable: " + e)
+        }
+
+        var gx = safeNumber(g ? g.x : 0, 0)
+        var gy = safeNumber(g ? g.y : 0, 0)
+        var gw = safeNumber(g ? g.width : 0, 0)
+        var gh = safeNumber(g ? g.height : 0, 0)
+        if (gw > 0 && gh > 0)
+            return { x: gx, y: gy, width: gw, height: gh }
+
+        return {
+            x: safeNumber(Screen.virtualX, 0),
+            y: safeNumber(Screen.virtualY, 0),
+            width: safeNumber(Screen.desktopAvailableWidth,
+                              safeNumber(Screen.width, width)),
+            height: safeNumber(Screen.desktopAvailableHeight,
+                               safeNumber(Screen.height, height))
+        }
+    }
+
+    function centeredBootX() {
+        var g = primaryBootScreenGeometry()
+        return Math.round(g.x + Math.max(0, (g.width - width) / 2))
+    }
+
+    function centeredBootY() {
+        var g = primaryBootScreenGeometry()
+        return Math.round(g.y + Math.max(0, (g.height - height) / 2))
+    }
+
+    function centerOnPrimaryBootScreen() {
+        x = centeredBootX()
+        y = centeredBootY()
+        console.log("BootLoader: centered on primary screen at "
+                    + x + "," + y + " size " + width + "x" + height)
     }
 
     function updateMainComponentStatus() {
@@ -72,6 +120,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        centerOnPrimaryBootScreen()
         console.log("BootLoader: window visible at +" + bootElapsedMs()
                     + " ms, starting async load of Main.qml")
         show()

@@ -55,7 +55,14 @@ Popup {
 
     onAboutToShow: {
         ensureInitialPosition()
-        refreshLog()
+        delayedInitialRefresh.restart()
+    }
+
+    Timer {
+        id: delayedInitialRefresh
+        interval: 80
+        repeat: false
+        onTriggered: if (logWindow.visible) refreshLog()
     }
 
     function refreshLog() {
