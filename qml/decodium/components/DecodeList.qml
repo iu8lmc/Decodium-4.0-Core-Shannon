@@ -61,6 +61,21 @@ Item {
         return ""
     }
 
+    // Background color from the WSJT-X-style cascade in C++ (bridge.decodeHighlightBg).
+    // Returned hex is converted to a translucent fill so message text stays readable on dark theme.
+    function wsjtxBgColor(modelData) {
+        var hex = bridge.decodeHighlightBg(modelData)
+        if (!hex || hex.length === 0) return null
+        var c = Qt.color(hex)
+        return Qt.rgba(c.r, c.g, c.b, 0.32)
+    }
+    function wsjtxBorderColor(modelData) {
+        var hex = bridge.decodeHighlightBg(modelData)
+        if (!hex || hex.length === 0) return null
+        var c = Qt.color(hex)
+        return Qt.rgba(c.r, c.g, c.b, 0.85)
+    }
+
     function decodeTextColor(modelData) {
         var customColor = customHighlightColor(modelData)
         if (modelData.isTx)
@@ -115,14 +130,19 @@ Item {
         delegate: Rectangle {
             width: listView.width
             height: 32
-            // TX messages in red, CQ with grid in green-tinted, others neutral
+            // WSJT-X palette first (TX > MyCall > NewDxccBand > … > CQ via bridge.decodeHighlightBg),
+            // fallback ai tinte storiche se la cascata non assegna nulla.
             color: {
+                var wsx = decodeListComponent.wsjtxBgColor(modelData)
+                if (wsx) return wsx
                 if (modelData.isTx)  return Qt.rgba(244/255, 67/255, 54/255, 0.2)
                 if (modelData.isCQ)  return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
                 if (modelData.isMyCall) return Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.1)
                 return Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.04)
             }
             border.color: {
+                var wsx = decodeListComponent.wsjtxBorderColor(modelData)
+                if (wsx) return wsx
                 if (modelData.isTx)     return errorRed
                 if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.3)
                 if (modelData.isMyCall) return Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.4)

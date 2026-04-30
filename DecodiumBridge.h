@@ -42,6 +42,7 @@ class MessageClient;
 Q_DECLARE_OPAQUE_POINTER(DecodiumDxCluster*)
 
 // Forward declarations
+struct ParsedAdifRecord;
 class SoundInput;
 class SoundOutput;
 class DecodiumAudioSink;
@@ -269,6 +270,22 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString colorDXEntity  READ colorDXEntity  WRITE setColorDXEntity  NOTIFY colorDXEntityChanged)
     Q_PROPERTY(QString color73        READ color73        WRITE setColor73        NOTIFY color73Changed)
     Q_PROPERTY(QString colorB4        READ colorB4        WRITE setColorB4        NOTIFY colorB4Changed)
+
+    // === WSJT-X background highlight colors ===
+    Q_PROPERTY(QString colorTxMessage         READ colorTxMessage         WRITE setColorTxMessage         NOTIFY colorTxMessageChanged)
+    Q_PROPERTY(QString colorNewDxcc           READ colorNewDxcc           WRITE setColorNewDxcc           NOTIFY colorNewDxccChanged)
+    Q_PROPERTY(QString colorNewDxccBand       READ colorNewDxccBand       WRITE setColorNewDxccBand       NOTIFY colorNewDxccBandChanged)
+    Q_PROPERTY(QString colorNewContinent      READ colorNewContinent      WRITE setColorNewContinent      NOTIFY colorNewContinentChanged)
+    Q_PROPERTY(QString colorNewContinentBand  READ colorNewContinentBand  WRITE setColorNewContinentBand  NOTIFY colorNewContinentBandChanged)
+    Q_PROPERTY(QString colorNewCqZone         READ colorNewCqZone         WRITE setColorNewCqZone         NOTIFY colorNewCqZoneChanged)
+    Q_PROPERTY(QString colorNewCqZoneBand     READ colorNewCqZoneBand     WRITE setColorNewCqZoneBand     NOTIFY colorNewCqZoneBandChanged)
+    Q_PROPERTY(QString colorNewItuZone        READ colorNewItuZone        WRITE setColorNewItuZone        NOTIFY colorNewItuZoneChanged)
+    Q_PROPERTY(QString colorNewItuZoneBand    READ colorNewItuZoneBand    WRITE setColorNewItuZoneBand    NOTIFY colorNewItuZoneBandChanged)
+    Q_PROPERTY(QString colorNewGrid           READ colorNewGrid           WRITE setColorNewGrid           NOTIFY colorNewGridChanged)
+    Q_PROPERTY(QString colorNewGridBand       READ colorNewGridBand       WRITE setColorNewGridBand       NOTIFY colorNewGridBandChanged)
+    Q_PROPERTY(QString colorNewCall           READ colorNewCall           WRITE setColorNewCall           NOTIFY colorNewCallChanged)
+    Q_PROPERTY(QString colorNewCallBand       READ colorNewCallBand       WRITE setColorNewCallBand       NOTIFY colorNewCallBandChanged)
+    Q_PROPERTY(QString colorLotwUser          READ colorLotwUser          WRITE setColorLotwUser          NOTIFY colorLotwUserChanged)
     Q_PROPERTY(bool    b4Strikethrough READ b4Strikethrough WRITE setB4Strikethrough NOTIFY b4StrikethroughChanged)
     // Alias usato da DecodeList.qml
     Q_PROPERTY(bool    showB4Strikethrough READ b4Strikethrough NOTIFY b4StrikethroughChanged)
@@ -576,6 +593,40 @@ public:
     void setColor73(const QString& v)       { if (m_color73!=v){m_color73=v;emit color73Changed();} }
     QString colorB4()       const { return m_colorB4; }
     void setColorB4(const QString& v)       { if (m_colorB4!=v){m_colorB4=v;emit colorB4Changed();} }
+
+    // WSJT-X color getters/setters (inline, trivial)
+    QString colorTxMessage() const { return m_colorTxMessage; }
+    void setColorTxMessage(const QString& v) { if (m_colorTxMessage!=v){m_colorTxMessage=v;emit colorTxMessageChanged();} }
+    QString colorNewDxcc() const { return m_colorNewDxcc; }
+    void setColorNewDxcc(const QString& v) { if (m_colorNewDxcc!=v){m_colorNewDxcc=v;emit colorNewDxccChanged();} }
+    QString colorNewDxccBand() const { return m_colorNewDxccBand; }
+    void setColorNewDxccBand(const QString& v) { if (m_colorNewDxccBand!=v){m_colorNewDxccBand=v;emit colorNewDxccBandChanged();} }
+    QString colorNewContinent() const { return m_colorNewContinent; }
+    void setColorNewContinent(const QString& v) { if (m_colorNewContinent!=v){m_colorNewContinent=v;emit colorNewContinentChanged();} }
+    QString colorNewContinentBand() const { return m_colorNewContinentBand; }
+    void setColorNewContinentBand(const QString& v) { if (m_colorNewContinentBand!=v){m_colorNewContinentBand=v;emit colorNewContinentBandChanged();} }
+    QString colorNewCqZone() const { return m_colorNewCqZone; }
+    void setColorNewCqZone(const QString& v) { if (m_colorNewCqZone!=v){m_colorNewCqZone=v;emit colorNewCqZoneChanged();} }
+    QString colorNewCqZoneBand() const { return m_colorNewCqZoneBand; }
+    void setColorNewCqZoneBand(const QString& v) { if (m_colorNewCqZoneBand!=v){m_colorNewCqZoneBand=v;emit colorNewCqZoneBandChanged();} }
+    QString colorNewItuZone() const { return m_colorNewItuZone; }
+    void setColorNewItuZone(const QString& v) { if (m_colorNewItuZone!=v){m_colorNewItuZone=v;emit colorNewItuZoneChanged();} }
+    QString colorNewItuZoneBand() const { return m_colorNewItuZoneBand; }
+    void setColorNewItuZoneBand(const QString& v) { if (m_colorNewItuZoneBand!=v){m_colorNewItuZoneBand=v;emit colorNewItuZoneBandChanged();} }
+    QString colorNewGrid() const { return m_colorNewGrid; }
+    void setColorNewGrid(const QString& v) { if (m_colorNewGrid!=v){m_colorNewGrid=v;emit colorNewGridChanged();} }
+    QString colorNewGridBand() const { return m_colorNewGridBand; }
+    void setColorNewGridBand(const QString& v) { if (m_colorNewGridBand!=v){m_colorNewGridBand=v;emit colorNewGridBandChanged();} }
+    QString colorNewCall() const { return m_colorNewCall; }
+    void setColorNewCall(const QString& v) { if (m_colorNewCall!=v){m_colorNewCall=v;emit colorNewCallChanged();} }
+    QString colorNewCallBand() const { return m_colorNewCallBand; }
+    void setColorNewCallBand(const QString& v) { if (m_colorNewCallBand!=v){m_colorNewCallBand=v;emit colorNewCallBandChanged();} }
+    QString colorLotwUser() const { return m_colorLotwUser; }
+    void setColorLotwUser(const QString& v) { if (m_colorLotwUser!=v){m_colorLotwUser=v;emit colorLotwUserChanged();} }
+
+    // Returns the priority-ranked WSJT-X background color for a decode entry,
+    // or empty string when no highlight applies.
+    Q_INVOKABLE QString decodeHighlightBg(const QVariantMap& entry) const;
     bool b4Strikethrough()  const { return m_b4Strikethrough; }
     void setB4Strikethrough(bool v) { if (m_b4Strikethrough!=v){m_b4Strikethrough=v;emit b4StrikethroughChanged();} }
 
@@ -942,6 +993,20 @@ signals:
     void colorDXEntityChanged();
     void color73Changed();
     void colorB4Changed();
+    void colorTxMessageChanged();
+    void colorNewDxccChanged();
+    void colorNewDxccBandChanged();
+    void colorNewContinentChanged();
+    void colorNewContinentBandChanged();
+    void colorNewCqZoneChanged();
+    void colorNewCqZoneBandChanged();
+    void colorNewItuZoneChanged();
+    void colorNewItuZoneBandChanged();
+    void colorNewGridChanged();
+    void colorNewGridBandChanged();
+    void colorNewCallChanged();
+    void colorNewCallBandChanged();
+    void colorLotwUserChanged();
     void b4StrikethroughChanged();
     // B8 — Alert sounds
     void alertSoundsEnabledChanged();
@@ -1507,6 +1572,55 @@ private:
     QString m_color73       {"#5599FF"};
     QString m_colorB4       {"#888888"};
     bool    m_b4Strikethrough {true};
+
+    // === WSJT-X background highlight palette (full 14-color set) ===
+    QString m_colorTxMessage         {"#FFFF00"}; // yellow
+    QString m_colorNewDxcc           {"#FF00FF"}; // magenta
+    QString m_colorNewDxccBand       {"#F8AAD0"}; // pink
+    QString m_colorNewContinent      {"#E91E63"}; // hot pink
+    QString m_colorNewContinentBand  {"#F5B7C7"}; // light pink
+    QString m_colorNewCqZone         {"#F0A030"}; // orange
+    QString m_colorNewCqZoneBand     {"#F5DDA0"}; // cream
+    QString m_colorNewItuZone        {"#9ACD32"}; // lime
+    QString m_colorNewItuZoneBand    {"#D4E89F"}; // pale green
+    QString m_colorNewGrid           {"#FF8C00"}; // orange
+    QString m_colorNewGridBand       {"#FFCAA0"}; // peach
+    QString m_colorNewCall           {"#00E0E0"}; // cyan
+    QString m_colorNewCallBand       {"#B5E8E8"}; // light cyan
+    QString m_colorLotwUser          {"#FFFFFF"}; // white bg, dark red text
+
+    // Worked-before tracking (per-band/DXCC/zone/grid). Populated from ADIF
+    // import + each logged TX. Keys for *byBand sets are "BAND|VALUE", e.g.
+    // "20m|Italy" or "20m|JN61".
+    struct WorkedSets {
+        QSet<QString> dxccEver;          // DXCC entity name
+        QSet<QString> dxccByBand;
+        QSet<QString> continentEver;     // 2-letter continent code
+        QSet<QString> continentByBand;
+        QSet<int>     cqZoneEver;
+        QSet<QString> cqZoneByBand;
+        QSet<int>     ituZoneEver;
+        QSet<QString> ituZoneByBand;
+        QSet<QString> gridEver;          // 4-char Maidenhead grid
+        QSet<QString> gridByBand;
+        QSet<QString> callByBand;        // call already in m_workedCalls (ever)
+        void clear() {
+            dxccEver.clear(); dxccByBand.clear();
+            continentEver.clear(); continentByBand.clear();
+            cqZoneEver.clear(); cqZoneByBand.clear();
+            ituZoneEver.clear(); ituZoneByBand.clear();
+            gridEver.clear(); gridByBand.clear();
+            callByBand.clear();
+        }
+    };
+    WorkedSets m_worked;
+
+    // Populate m_worked from the parsed ADIF log, using m_dxccLookup to derive
+    // DXCC entity / continent / CQ + ITU zone for each callsign. Cheap enough
+    // to call after each import (a few hundred lookups for typical logbooks).
+    void rebuildWorkedSetsFromAdifRecords(QList<ParsedAdifRecord> const& records);
+    // Append a single QSO to m_worked. Called from logQsoNow().
+    void appendWorkedQso(const QString& call, const QString& grid, quint64 freqHz);
 
     // B8 — Alert sounds
     bool                 m_alertSoundsEnabled {false};

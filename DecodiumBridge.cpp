@@ -833,6 +833,28 @@ static bool writeAdifDocument(QString const& path, ParsedAdifDocument const& doc
     return true;
 }
 
+// Map a frequency in Hz to the standard band token used by ADIF / WSJT-X
+// (e.g. "20m"). Returns empty string for invalid/out-of-range frequencies.
+static QString freqHzToBandToken(quint64 freqHz)
+{
+    const double mhz = freqHz / 1'000'000.0;
+    if      (mhz <  1.8)   return QString();
+    else if (mhz <  2.0)   return QStringLiteral("160m");
+    else if (mhz <  4.0)   return QStringLiteral("80m");
+    else if (mhz <  6.0)   return QStringLiteral("60m");
+    else if (mhz <  8.0)   return QStringLiteral("40m");
+    else if (mhz < 11.0)   return QStringLiteral("30m");
+    else if (mhz < 15.0)   return QStringLiteral("20m");
+    else if (mhz < 19.0)   return QStringLiteral("17m");
+    else if (mhz < 22.0)   return QStringLiteral("15m");
+    else if (mhz < 25.0)   return QStringLiteral("12m");
+    else if (mhz < 30.0)   return QStringLiteral("10m");
+    else if (mhz < 52.0)   return QStringLiteral("6m");
+    else if (mhz < 150.0)  return QStringLiteral("2m");
+    else if (mhz < 440.0)  return QStringLiteral("70cm");
+    else                    return QString();
+}
+
 static void rebuildWorkedCallsFromDocument(QSet<QString>& workedCalls, QList<ParsedAdifRecord> const& records)
 {
     workedCalls.clear();
@@ -4200,6 +4222,115 @@ void DecodiumBridge::setFtThreads(int v)
 void DecodiumBridge::cycleFtThreads()
 {
     setFtThreads(m_ftThreads >= 8 ? 1 : m_ftThreads + 1);
+}
+
+// ---------------------------------------------------------------------------
+// Worked-before tracking (per band / DXCC / zone / grid)
+// ---------------------------------------------------------------------------
+
+void DecodiumBridge::appendWorkedQso(const QString& call, const QString& grid, quint64 freqHz)
+{
+    const QString upCall = call.trimmed().toUpper();
+    if (upCall.isEmpty()) return;
+
+    const QString band = freqHzToBandToken(freqHz);
+    if (!band.isEmpty()) {
+        m_worked.callByBand.insert(band + QLatin1Char('|') + upCall);
+    }
+
+    if (m_dxccLookup && m_dxccLookup->isLoaded()) {
+        const DxccEntity ent = m_dxccLookup->lookup(upCall);
+        if (ent.isValid()) {
+            m_worked.dxccEver.insert(ent.name);
+            m_worked.continentEver.insert(ent.continent);
+            if (ent.cqZone  > 0) m_worked.cqZoneEver.insert(ent.cqZone);
+            if (ent.ituZone > 0) m_worked.ituZoneEver.insert(ent.ituZone);
+            if (!band.isEmpty()) {
+                m_worked.dxccByBand.insert(band + QLatin1Char('|') + ent.name);
+                m_worked.continentByBand.insert(band + QLatin1Char('|') + ent.continent);
+                if (ent.cqZone  > 0) m_worked.cqZoneByBand.insert(band + QLatin1Char('|') + QString::number(ent.cqZone));
+                if (ent.ituZone > 0) m_worked.ituZoneByBand.insert(band + QLatin1Char('|') + QString::number(ent.ituZone));
+            }
+        }
+    }
+
+    const QString grid4 = grid.trimmed().left(4).toUpper();
+    if (!grid4.isEmpty()) {
+        m_worked.gridEver.insert(grid4);
+        if (!band.isEmpty()) {
+            m_worked.gridByBand.insert(band + QLatin1Char('|') + grid4);
+        }
+    }
+}
+
+void DecodiumBridge::rebuildWorkedSetsFromAdifRecords(QList<ParsedAdifRecord> const& records)
+{
+    m_worked.clear();
+    for (ParsedAdifRecord const& record : records) {
+        const QString call = record.fields.value(QStringLiteral("CALL")).trimmed().toUpper();
+        if (call.isEmpty()) continue;
+
+        // Band: prefer explicit BAND field (already a token like "20m"); fall
+        // back to FREQ in MHz when missing or malformed.
+        QString band = record.fields.value(QStringLiteral("BAND")).trimmed().toLower();
+        if (band.isEmpty()) {
+            const double freqMhz = record.fields.value(QStringLiteral("FREQ")).trimmed().toDouble();
+            if (freqMhz > 0.0) {
+                band = freqHzToBandToken(static_cast<quint64>(freqMhz * 1'000'000.0));
+            }
+        }
+
+        const QString grid4 = record.fields.value(QStringLiteral("GRIDSQUARE")).trimmed().left(4).toUpper();
+
+        if (!band.isEmpty()) {
+            m_worked.callByBand.insert(band + QLatin1Char('|') + call);
+        }
+
+        if (m_dxccLookup && m_dxccLookup->isLoaded()) {
+            const DxccEntity ent = m_dxccLookup->lookup(call);
+            if (ent.isValid()) {
+                m_worked.dxccEver.insert(ent.name);
+                m_worked.continentEver.insert(ent.continent);
+                if (ent.cqZone  > 0) m_worked.cqZoneEver.insert(ent.cqZone);
+                if (ent.ituZone > 0) m_worked.ituZoneEver.insert(ent.ituZone);
+                if (!band.isEmpty()) {
+                    m_worked.dxccByBand.insert(band + QLatin1Char('|') + ent.name);
+                    m_worked.continentByBand.insert(band + QLatin1Char('|') + ent.continent);
+                    if (ent.cqZone  > 0) m_worked.cqZoneByBand.insert(band + QLatin1Char('|') + QString::number(ent.cqZone));
+                    if (ent.ituZone > 0) m_worked.ituZoneByBand.insert(band + QLatin1Char('|') + QString::number(ent.ituZone));
+                }
+            }
+        }
+
+        if (!grid4.isEmpty()) {
+            m_worked.gridEver.insert(grid4);
+            if (!band.isEmpty()) {
+                m_worked.gridByBand.insert(band + QLatin1Char('|') + grid4);
+            }
+        }
+    }
+}
+
+QString DecodiumBridge::decodeHighlightBg(const QVariantMap& entry) const
+{
+    if (entry.value(QStringLiteral("isTx")).toBool())                return m_colorTxMessage;
+    if (entry.value(QStringLiteral("isMyCall")).toBool())            return m_colorMyCall;
+
+    if (entry.value(QStringLiteral("dxIsNewDxccBand")).toBool())     return m_colorNewDxccBand;
+    if (entry.value(QStringLiteral("dxIsNewDxcc")).toBool())         return m_colorNewDxcc;
+    if (entry.value(QStringLiteral("dxIsNewContinentBand")).toBool())return m_colorNewContinentBand;
+    if (entry.value(QStringLiteral("dxIsNewContinent")).toBool())    return m_colorNewContinent;
+    if (entry.value(QStringLiteral("dxIsNewCqZoneBand")).toBool())   return m_colorNewCqZoneBand;
+    if (entry.value(QStringLiteral("dxIsNewCqZone")).toBool())       return m_colorNewCqZone;
+    if (entry.value(QStringLiteral("dxIsNewItuZoneBand")).toBool())  return m_colorNewItuZoneBand;
+    if (entry.value(QStringLiteral("dxIsNewItuZone")).toBool())      return m_colorNewItuZone;
+    if (entry.value(QStringLiteral("dxIsNewGridBand")).toBool())     return m_colorNewGridBand;
+    if (entry.value(QStringLiteral("dxIsNewGrid")).toBool())         return m_colorNewGrid;
+    if (entry.value(QStringLiteral("dxIsNewCallBand")).toBool())     return m_colorNewCallBand;
+
+    if (entry.value(QStringLiteral("isLotw")).toBool())              return m_colorLotwUser;
+    if (entry.value(QStringLiteral("isCQ")).toBool())                return m_colorCQ;
+    return QString();
 }
 
 QString DecodiumBridge::pskReporterProgramInfo() const
@@ -9302,6 +9433,21 @@ void DecodiumBridge::saveSettings()
     s.setValue("color73",        m_color73);
     s.setValue("colorB4",        m_colorB4);
     s.setValue("b4Strikethrough",m_b4Strikethrough);
+    // WSJT-X-style highlighting palette
+    s.setValue("colorTxMessage",        m_colorTxMessage);
+    s.setValue("colorNewDxcc",          m_colorNewDxcc);
+    s.setValue("colorNewDxccBand",      m_colorNewDxccBand);
+    s.setValue("colorNewContinent",     m_colorNewContinent);
+    s.setValue("colorNewContinentBand", m_colorNewContinentBand);
+    s.setValue("colorNewCqZone",        m_colorNewCqZone);
+    s.setValue("colorNewCqZoneBand",    m_colorNewCqZoneBand);
+    s.setValue("colorNewItuZone",       m_colorNewItuZone);
+    s.setValue("colorNewItuZoneBand",   m_colorNewItuZoneBand);
+    s.setValue("colorNewGrid",          m_colorNewGrid);
+    s.setValue("colorNewGridBand",      m_colorNewGridBand);
+    s.setValue("colorNewCall",          m_colorNewCall);
+    s.setValue("colorNewCallBand",      m_colorNewCallBand);
+    s.setValue("colorLotwUser",         m_colorLotwUser);
     // B8 — Alerts
     s.setValue("alertSoundsEnabled", m_alertSoundsEnabled);
     s.setValue("alert_Enabled",      m_alertSoundsEnabled);
@@ -11280,6 +11426,21 @@ void DecodiumBridge::loadSettings()
     m_color73       = s.value("color73",         "#5599FF").toString();
     m_colorB4       = s.value("colorB4",         "#888888").toString();
     m_b4Strikethrough= s.value("b4Strikethrough",  true).toBool();
+    // WSJT-X-style highlighting palette
+    m_colorTxMessage        = s.value("colorTxMessage",        m_colorTxMessage       ).toString();
+    m_colorNewDxcc          = s.value("colorNewDxcc",          m_colorNewDxcc         ).toString();
+    m_colorNewDxccBand      = s.value("colorNewDxccBand",      m_colorNewDxccBand     ).toString();
+    m_colorNewContinent     = s.value("colorNewContinent",     m_colorNewContinent    ).toString();
+    m_colorNewContinentBand = s.value("colorNewContinentBand", m_colorNewContinentBand).toString();
+    m_colorNewCqZone        = s.value("colorNewCqZone",        m_colorNewCqZone       ).toString();
+    m_colorNewCqZoneBand    = s.value("colorNewCqZoneBand",    m_colorNewCqZoneBand   ).toString();
+    m_colorNewItuZone       = s.value("colorNewItuZone",       m_colorNewItuZone      ).toString();
+    m_colorNewItuZoneBand   = s.value("colorNewItuZoneBand",   m_colorNewItuZoneBand  ).toString();
+    m_colorNewGrid          = s.value("colorNewGrid",          m_colorNewGrid         ).toString();
+    m_colorNewGridBand      = s.value("colorNewGridBand",      m_colorNewGridBand     ).toString();
+    m_colorNewCall          = s.value("colorNewCall",          m_colorNewCall         ).toString();
+    m_colorNewCallBand      = s.value("colorNewCallBand",      m_colorNewCallBand     ).toString();
+    m_colorLotwUser         = s.value("colorLotwUser",         m_colorLotwUser        ).toString();
     // B8 — Alerts
     m_alertSoundsEnabled = s.value("alertSoundsEnabled", s.value("alert_Enabled", false)).toBool();
     // Cloudlog
@@ -11506,6 +11667,20 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
     emit colorDXEntityChanged();
     emit color73Changed();
     emit colorB4Changed();
+    emit colorTxMessageChanged();
+    emit colorNewDxccChanged();
+    emit colorNewDxccBandChanged();
+    emit colorNewContinentChanged();
+    emit colorNewContinentBandChanged();
+    emit colorNewCqZoneChanged();
+    emit colorNewCqZoneBandChanged();
+    emit colorNewItuZoneChanged();
+    emit colorNewItuZoneBandChanged();
+    emit colorNewGridChanged();
+    emit colorNewGridBandChanged();
+    emit colorNewCallChanged();
+    emit colorNewCallBandChanged();
+    emit colorLotwUserChanged();
     emit b4StrikethroughChanged();
     emit alertSoundsEnabledChanged();
 }
@@ -13462,13 +13637,42 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     QString dxCountry;
     QString dxContinent;
     QString dxPrefix;
-    bool dxIsNewCountry = false;
+    int     dxCqZone = 0;
+    int     dxItuZone = 0;
+    bool dxIsNewCountry      = false;
+    bool dxIsNewDxcc         = false;
+    bool dxIsNewDxccBand     = false;
+    bool dxIsNewContinent    = false;
+    bool dxIsNewContinentBand= false;
+    bool dxIsNewCqZone       = false;
+    bool dxIsNewCqZoneBand   = false;
+    bool dxIsNewItuZone      = false;
+    bool dxIsNewItuZoneBand  = false;
+    bool dxIsNewCallBand     = false;
+    QString const curBand = freqHzToBandToken(m_frequency);
     if (m_dxccLookup && m_dxccLookup->isLoaded() && !rightCall.isEmpty()) {
         DxccEntity ent = m_dxccLookup->lookup(rightCall);
         if (ent.isValid()) {
-            dxCountry = ent.name;
+            dxCountry   = ent.name;
             dxContinent = ent.continent;
-            dxPrefix = ent.prefix;
+            dxPrefix    = ent.prefix;
+            dxCqZone    = ent.cqZone;
+            dxItuZone   = ent.ituZone;
+            if (!selfEntry) {
+                dxIsNewDxcc      = !m_worked.dxccEver.contains(ent.name);
+                dxIsNewContinent = !m_worked.continentEver.contains(ent.continent);
+                if (ent.cqZone  > 0) dxIsNewCqZone  = !m_worked.cqZoneEver.contains(ent.cqZone);
+                if (ent.ituZone > 0) dxIsNewItuZone = !m_worked.ituZoneEver.contains(ent.ituZone);
+                if (!curBand.isEmpty()) {
+                    dxIsNewDxccBand      = !m_worked.dxccByBand.contains(curBand + QLatin1Char('|') + ent.name);
+                    dxIsNewContinentBand = !m_worked.continentByBand.contains(curBand + QLatin1Char('|') + ent.continent);
+                    if (ent.cqZone  > 0) dxIsNewCqZoneBand  = !m_worked.cqZoneByBand.contains(curBand + QLatin1Char('|') + QString::number(ent.cqZone));
+                    if (ent.ituZone > 0) dxIsNewItuZoneBand = !m_worked.ituZoneByBand.contains(curBand + QLatin1Char('|') + QString::number(ent.ituZone));
+                    if (!rightCall.isEmpty()) {
+                        dxIsNewCallBand = !m_worked.callByBand.contains(curBand + QLatin1Char('|') + rightCall.toUpper());
+                    }
+                }
+            }
         }
     }
 
@@ -13480,6 +13684,16 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
         distKm = calcDistance(m_grid, dxGridExtracted);
     }
 
+    bool dxIsNewGrid     = false;
+    bool dxIsNewGridBand = false;
+    if (!selfEntry && !dxGridExtracted.isEmpty()) {
+        QString const grid4 = dxGridExtracted.left(4).toUpper();
+        dxIsNewGrid = !m_worked.gridEver.contains(grid4);
+        if (!curBand.isEmpty()) {
+            dxIsNewGridBand = !m_worked.gridByBand.contains(curBand + QLatin1Char('|') + grid4);
+        }
+    }
+
     entry["fromCall"] = fromCall;
     entry["isB4"] = isB4;
     entry["isLotw"] = isLotw;
@@ -13487,9 +13701,23 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     entry["dxCallsign"] = rightCall;
     entry["dxContinent"] = dxContinent;
     entry["dxPrefix"] = dxPrefix;
+    entry["dxCqZone"]  = dxCqZone;
+    entry["dxItuZone"] = dxItuZone;
     entry["dxIsWorked"] = isB4;
     entry["dxIsNewBand"] = entry.value("dxIsNewBand", false);
     entry["dxIsNewCountry"] = dxIsNewCountry;
+    entry["dxIsNewDxcc"]          = dxIsNewDxcc;
+    entry["dxIsNewDxccBand"]      = dxIsNewDxccBand;
+    entry["dxIsNewContinent"]     = dxIsNewContinent;
+    entry["dxIsNewContinentBand"] = dxIsNewContinentBand;
+    entry["dxIsNewCqZone"]        = dxIsNewCqZone;
+    entry["dxIsNewCqZoneBand"]    = dxIsNewCqZoneBand;
+    entry["dxIsNewItuZone"]       = dxIsNewItuZone;
+    entry["dxIsNewItuZoneBand"]   = dxIsNewItuZoneBand;
+    entry["dxIsNewGrid"]          = dxIsNewGrid;
+    entry["dxIsNewGridBand"]      = dxIsNewGridBand;
+    entry["dxIsNewCall"]          = !isB4 && !selfEntry && !rightCall.isEmpty();
+    entry["dxIsNewCallBand"]      = dxIsNewCallBand;
     entry["dxIsMostWanted"] = entry.value("dxIsMostWanted", false);
     entry["dxBearing"] = bearing;
     entry["dxDistance"] = distKm;
@@ -16766,6 +16994,7 @@ void DecodiumBridge::appendAdifRecord(const QString& dxCall, const QString& dxGr
        << "<EOR>\n";
 
     m_workedCalls.insert(dxCall.toUpper());
+    appendWorkedQso(dxCall, dxGrid, freqHz);
     if (m_qsoCountCache >= 0) {
         ++m_qsoCountCache;
     }
@@ -17191,6 +17420,7 @@ int DecodiumBridge::importFromAdif(const QString& filename)
     }
 
     rebuildWorkedCallsFromDocument(m_workedCalls, dest.records);
+    rebuildWorkedSetsFromAdifRecords(dest.records);
     m_qsoCountCache = dest.records.size();
     invalidateQsoSearchCache();
     warmLogCacheAsync();
@@ -17240,6 +17470,7 @@ bool DecodiumBridge::deleteQso(const QString& call, const QString& dateTime)
     }
 
     rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
+    rebuildWorkedSetsFromAdifRecords(doc.records);
     m_qsoCountCache = doc.records.size();
     invalidateQsoSearchCache();
     warmLogCacheAsync();
@@ -17295,6 +17526,7 @@ bool DecodiumBridge::editQso(const QString& call, const QString& dateTime, const
     }
 
     rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
+    rebuildWorkedSetsFromAdifRecords(doc.records);
     m_qsoCountCache = doc.records.size();
     invalidateQsoSearchCache();
     warmLogCacheAsync();
