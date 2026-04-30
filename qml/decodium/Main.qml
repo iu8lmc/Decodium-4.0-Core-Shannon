@@ -3525,8 +3525,8 @@ ApplicationWindow {
                 // Vertical drag handle with magnetic snap indicator
                 handle: Rectangle {
                     id: splitHandle
-                    implicitWidth: 4
-                    implicitHeight: 4
+                    implicitWidth: 6
+                    implicitHeight: 6
                     color: SplitHandle.hovered || SplitHandle.pressed ? "#00e6e6" : "#505070"
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -3543,8 +3543,8 @@ ApplicationWindow {
 
                     Rectangle {
                         anchors.centerIn: parent
-                        width: 40
-                        height: 2
+                        width: 50
+                        height: 3
                         radius: 1
                         color: parent.nearSnapPoint ? "#00ffff" : parent.color
 
@@ -3601,7 +3601,7 @@ ApplicationWindow {
                 Rectangle {
                     id: waterfallPanel
                     SplitView.preferredHeight: waterfallDetached ? 40 : mainWindow.waterfallPanelHeight
-                    SplitView.minimumHeight: waterfallDetached ? 40 : 120
+                    SplitView.minimumHeight: waterfallDetached ? 40 : 180
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                     radius: 8
                     border.color: isDockHighlighted ? secondaryCyan : glassBorder
@@ -3768,6 +3768,20 @@ ApplicationWindow {
                                 bridge.txFrequency = freq      // tasto sinistro = TX
                             }
                         }
+
+                        // Etichetta "Waterfall" integrata come overlay (non occupa spazio)
+                        Text {
+                            anchors.top: waterfallHeader.bottom
+                            anchors.left: parent.left
+                            anchors.topMargin: 6
+                            anchors.leftMargin: 10
+                            text: "Waterfall"
+                            font.pixelSize: 10
+                            font.bold: true
+                            color: secondaryCyan
+                            opacity: 0.55
+                            z: 5
+                        }
                     }
                 }
 
@@ -3775,7 +3789,7 @@ ApplicationWindow {
                 Rectangle {
                     id: decodePanel
                     SplitView.fillHeight: true
-                    SplitView.minimumHeight: 50
+                    SplitView.minimumHeight: 60
                     color: "transparent"
 
                     // Current active period tracking
