@@ -39,6 +39,7 @@ class DecodiumTransceiverManager : public QObject
     Q_PROPERTY(QString pttMethod  READ pttMethod   WRITE setPttMethod  NOTIFY pttMethodChanged)
     Q_PROPERTY(QString pttPort    READ pttPort     WRITE setPttPort    NOTIFY pttPortChanged)
     Q_PROPERTY(QString splitMode  READ splitMode   WRITE setSplitMode  NOTIFY splitModeChanged)
+    Q_PROPERTY(int civAddress     READ civAddress  NOTIFY civAddressChanged)
     Q_PROPERTY(int pollInterval   READ pollInterval WRITE setPollInterval NOTIFY pollIntervalChanged)
 
     // ── Tipo porta (derivato dal rig selezionato) ─────────────────────────
@@ -86,6 +87,7 @@ public:
     QString pttMethod()    const { return m_pttMethod; }
     QString pttPort()      const { return m_pttPort; }
     QString splitMode()    const { return m_splitMode; }
+    int     civAddress()   const { return m_civAddress; }
     int     pollInterval() const { return m_pollInterval; }
     QString portType()     const { return m_portType; }
 
@@ -123,6 +125,7 @@ public:
     void setPttMethod(const QString& v);
     void setPttPort(const QString& v);
     void setSplitMode(const QString& v);
+    void setCivAddress(int v);
     void setPollInterval(int v)           { if (m_pollInterval != v){ m_pollInterval = v; emit pollIntervalChanged(); } }
     void setCatAutoConnect(bool v)        { if (m_catAutoConnect != v){ m_catAutoConnect = v; emit catAutoConnectChanged(); } }
     void setAudioAutoStart(bool v)        { if (m_audioAutoStart != v){ m_audioAutoStart = v; emit audioAutoStartChanged(); } }
@@ -170,6 +173,7 @@ signals:
     void pttMethodChanged();
     void pttPortChanged();
     void splitModeChanged();
+    void civAddressChanged();
     void pollIntervalChanged();
     void portTypeChanged();
     void portListChanged();
@@ -215,6 +219,7 @@ private:
     QString m_pttMethod    {"CAT"};
     QString m_pttPort      {"CAT"};
     QString m_splitMode    {"none"};
+    int     m_civAddress   {0};
     int     m_pollInterval {1};
     QString m_portType     {"serial"};
 

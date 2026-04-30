@@ -88,6 +88,12 @@ public:
     void setAutoSpotEnabled(bool enabled);
     void setNextLogClusterSpotState(bool available, bool checked);
     void setNextLogPromptAlreadyAccepted();
+    void setNextLogPromptFields(const QString& comment,
+                                bool commentValid,
+                                const QString& propMode,
+                                const QString& satellite,
+                                const QString& satMode,
+                                bool satelliteValid);
     void clearBandActivity();
     void clearRxFrequency();
     void setWaterfallPalette(const QString& palette);

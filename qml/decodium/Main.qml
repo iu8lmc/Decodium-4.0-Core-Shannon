@@ -635,6 +635,7 @@ ApplicationWindow {
     property bool dxClusterPanelVisible:      false
     property bool dxClusterToolbarVisible:    !!bridge.getSetting("uiDxClusterToolbarVisible", true)
     property bool pskReporterToolbarVisible: !!bridge.getSetting("uiPskReporterToolbarVisible", true)
+    property bool asyncIconVisible:          !!bridge.getSetting("uiAsyncIconVisible", true)
     property bool liveMapPanelVisible:        bridge.getSetting("WorldMapDisplayed", true)
     property string uiLanguage: normalizeUiLanguage(String(bridge.getSetting("UILanguage", "en") || "en"))
     readonly property var uiLanguageOptions: [
@@ -663,6 +664,22 @@ ApplicationWindow {
         }
         return "English"
     }
+    function uiLanguageLabel(code) {
+        switch (normalizeUiLanguage(code)) {
+        case "ca": return "Llengua"
+        case "da": return "Sprog"
+        case "de": return "Sprache"
+        case "es": return "Idioma"
+        case "fr": return "Langue"
+        case "hu": return "Nyelv"
+        case "it": return "Lingua"
+        case "ja": return "言語"
+        case "ru": return "Язык"
+        case "zh": return "语言"
+        case "zh_TW": return "語言"
+        default: return "Language"
+        }
+    }
     function setUiLanguage(code) {
         code = normalizeUiLanguage(code)
         if (!code || code === uiLanguage)
@@ -682,6 +699,10 @@ ApplicationWindow {
         bridge.setSetting("uiPskReporterToolbarVisible", visible)
         if (!visible && typeof pskSearchPopup !== "undefined")
             pskSearchPopup.close()
+    }
+    function setAsyncIconVisible(visible) {
+        asyncIconVisible = visible
+        bridge.setSetting("uiAsyncIconVisible", visible)
     }
     function syncLiveMapFloatingVisibility(activate) {
         if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
@@ -964,6 +985,73 @@ ApplicationWindow {
         return value !== undefined && value >= 0 ? Math.round(value) + "°" : ""
     }
 
+    function normalizedCallToken(token) {
+        return String(token || "").toUpperCase().replace(/[<>;,]/g, "").trim()
+    }
+
+    function looksLikeCallsignTokenValue(token) {
+        var text = normalizedCallToken(token)
+        if (text.length === 0)
+            return false
+        if (text === "CQ" || text === "DX" || text === "QRZ" || text === "DE" || text === "TEST")
+            return false
+        var hasLetter = /[A-Z]/.test(text)
+        var hasDigit = /[0-9]/.test(text)
+        return hasLetter && hasDigit && /^[A-Z0-9/-]+$/.test(text)
+    }
+
+    function callsignBase(call) {
+        var text = normalizedCallToken(call)
+        if (text.length === 0)
+            return ""
+        var parts = text.split("/")
+        var best = ""
+        for (var i = 0; i < parts.length; ++i) {
+            var part = normalizedCallToken(parts[i])
+            if (looksLikeCallsignTokenValue(part) && part.length > best.length)
+                best = part
+        }
+        return best.length > 0 ? best : text
+    }
+
+    function isOwnCallValue(call) {
+        var myCall = normalizedCallToken((bridge && bridge.callsign) || "")
+        var value = normalizedCallToken(call)
+        if (myCall.length === 0 || value.length === 0)
+            return false
+        return value === myCall || callsignBase(value) === callsignBase(myCall)
+    }
+
+    function firstMessageCallsign(message) {
+        var parts = String(message || "").split(/\s+/)
+        for (var i = 0; i < parts.length; ++i) {
+            var token = normalizedCallToken(parts[i])
+            if (looksLikeCallsignTokenValue(token))
+                return token
+        }
+        return ""
+    }
+
+    function isLocalDistanceEntry(modelData) {
+        if (!modelData)
+            return true
+        if (modelData.isTx === true)
+            return true
+        if (String(modelData.db || "").trim().toUpperCase() === "TX")
+            return true
+        if (isOwnCallValue(modelData.fromCall))
+            return true
+        return isOwnCallValue(firstMessageCallsign(modelData.message))
+    }
+
+    function distanceText(modelData) {
+        if (isLocalDistanceEntry(modelData))
+            return ""
+        if (modelData && modelData.dxDistance !== undefined && modelData.dxDistance > 0)
+            return Math.round(modelData.dxDistance) + "km"
+        return ""
+    }
+
     // IU8LMC: Function to build tooltip text
     function getDxccTooltipText(modelData) {
         if (!modelData.dxCountry) return ""
@@ -972,7 +1060,7 @@ ApplicationWindow {
         if (modelData.dxContinent) header += " (" + modelData.dxContinent + ")"
         lines.push(header)
         // Bearing and distance to DX station
-        if (modelData.dxBearing !== undefined && modelData.dxBearing >= 0) {
+        if (!isLocalDistanceEntry(modelData) && modelData.dxBearing !== undefined && modelData.dxBearing >= 0) {
             var bearingDist = "Az: " + Math.round(modelData.dxBearing) + "°"
             if (modelData.dxDistance !== undefined && modelData.dxDistance > 0) {
                 bearingDist += "  Dist: " + Math.round(modelData.dxDistance) + " km"
@@ -1947,52 +2035,9 @@ ApplicationWindow {
                             }
                         }
 
-                        // Row 2: LVL + Monitor (bottom)
+                        // Row 2: Mode selector
                         RowLayout {
                             spacing: 2
-
-                            // Audio Level Meter
-                            Rectangle {
-                                Layout.preferredWidth: 60
-                                Layout.preferredHeight: 16
-                                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                                border.color: glassBorder
-                                radius: 2
-
-                                Row {
-                                    anchors.centerIn: parent
-                                    spacing: 2
-
-                                    Text {
-                                        text: "LVL"
-                                        font.pixelSize: 7
-                                        font.bold: true
-                                        color: textSecondary
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-
-                                    Rectangle {
-                                        width: 30
-                                        height: 10
-                                        color: bgDeep
-                                        border.color: glassBorder
-                                        radius: 1
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        Rectangle {
-                                            x: 1
-                                            y: 1
-                                            // Gain x5 per rendere visibile il segnale tipico da radio USB (~0.05-0.15)
-                                            property real displayLevel: Math.min(1.0, bridge.audioLevel * 5.0)
-                                            width: Math.max(2, (parent.width - 2) * displayLevel)
-                                            height: parent.height - 2
-                                            radius: 1
-                                            color: displayLevel > 0.8 ? "#f44336" : displayLevel > 0.5 ? accentGreen : secondaryCyan
-                                            Behavior on width { NumberAnimation { duration: 50 } }
-                                        }
-                                    }
-                                }
-                            }
 
                             // Mode selector
                             Rectangle {
@@ -3851,9 +3896,9 @@ ApplicationWindow {
                                 evenPeriodList.forceTailFollow()
                             if (stickFloatingTail && period1FloatingList)
                                 period1FloatingList.forceTailFollow()
-                            if (stickRxTail && rxFrequencyList)
+                            if (rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-                            if (stickFloatingRxTail && rxFrequencyFloatingList)
+                            if (rxFrequencyFloatingList)
                                 rxFrequencyFloatingList.forceTailFollow()
                         }
                         function onRxDecodeListChanged() {
@@ -3861,9 +3906,9 @@ ApplicationWindow {
                             var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            if (stickRxTail && rxFrequencyList)
+                            if (rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-                            if (stickFloatingRxTail && rxFrequencyFloatingList)
+                            if (rxFrequencyFloatingList)
                                 rxFrequencyFloatingList.forceTailFollow()
                         }
                     }
@@ -3937,6 +3982,10 @@ ApplicationWindow {
                         if (digits.length === 4)
                             return digits.substring(0, 2) + ":" + digits.substring(2, 4)
                         return timeStr || ""
+                    }
+
+                    function distanceText(modelData) {
+                        return mainWindow.distanceText(modelData)
                     }
 
                     // Period filtering function - adapts to mode (FT4=7.5s, FT8=15s)
@@ -4616,6 +4665,7 @@ ApplicationWindow {
                             readonly property int dbDtGapWidth: compactColumns ? 4 : 6
                             readonly property int dtColumnWidth: compactColumns ? 42 : 48
                             readonly property int gapColumnWidth: compactColumns ? 3 : 4
+                            readonly property int distanceColumnWidth: compactColumns ? 0 : 56
                             readonly property int headerBadgeWidth: compactHeader ? 62 : 70
                             color: "transparent"
                             onWidthChanged: {
@@ -4802,6 +4852,7 @@ ApplicationWindow {
                                         Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                         Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
                                         Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
+                                        Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
                                     }
                                 }
 
@@ -4855,19 +4906,11 @@ ApplicationWindow {
                                         })
                                         onContentYChanged: updateFollowTail()
                                         onHeightChanged: updateFollowTail()
-                                        onCountChanged: {
-                                            if (followTail) {
-                                                forceTailFollow()
-                                            }
-                                        }
+                                        onCountChanged: forceTailFollow()
 
                                         // Reattivo: si aggiorna quando la decodeList cambia
                                         property int _ver: decodePanel.decodeListVersion
-                                        on_VerChanged: {
-                                            if (followTail || isNearTail()) {
-                                                forceTailFollow()
-                                            }
-                                        }
+                                        on_VerChanged: forceTailFollow()
                                         model: decodePanel.rxDecodes
 
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
@@ -4933,6 +4976,7 @@ ApplicationWindow {
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
                                                 Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+                                                Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
                                             }
                                         }
 
@@ -5093,6 +5137,7 @@ ApplicationWindow {
                     id: txPanelComponent
                     anchors.fill: parent
                     engine: bridge
+                    showAsyncIcon: mainWindow.asyncIconVisible
                     visible: !txPanelDetached
                     onMamWindowRequested: mamWindow.open()
 
@@ -5100,19 +5145,22 @@ ApplicationWindow {
                     Rectangle {
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.margins: 8
-                        width: 24
-                        height: 24
+                        anchors.topMargin: 5
+                        anchors.rightMargin: 8
+                        width: 34
+                        height: 18
                         radius: 4
                         z: 200
-                        color: txDetachMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                        border.color: txDetachMA.containsMouse ? "#f44336" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.2)
+                        color: txDetachMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
+                        border.color: txDetachMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                        border.width: 1
 
                         Text {
                             anchors.centerIn: parent
-                            text: "⇗"
-                            font.pixelSize: 12
-                            color: txDetachMA.containsMouse ? "#f44336" : textSecondary
+                            text: "Pop"
+                            font.pixelSize: 10
+                            font.bold: true
+                            color: txDetachMA.containsMouse ? secondaryCyan : textSecondary
                         }
 
                         MouseArea {
@@ -6100,6 +6148,24 @@ ApplicationWindow {
         }
 
         MenuItem {
+            text: mainWindow.asyncIconVisible
+                  ? "✓ " + qsTr("Hide ASYNC icon")
+                  : "☐ " + qsTr("Show ASYNC icon")
+            onTriggered: mainWindow.setAsyncIconVisible(!mainWindow.asyncIconVisible)
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: mainWindow.asyncIconVisible ? successGreen : textSecondary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
             text: (bridge.vhfUhfFeatures ? "✓ " : "☐ ") + qsTr("VHF/UHF Features")
             onTriggered: bridge.vhfUhfFeatures = !bridge.vhfUhfFeatures
 
@@ -6164,7 +6230,7 @@ ApplicationWindow {
 
         // ===== ALERTS =====
         MenuItem {
-            text: bridge.alertOnCq ? "✓ Alert su CQ" : "☐ Alert su CQ"
+            text: (bridge.alertOnCq ? "✓ " : "☐ ") + qsTr("Alert on CQ")
             onTriggered: bridge.alertOnCq = !bridge.alertOnCq
 
             background: Rectangle {
@@ -6185,7 +6251,7 @@ ApplicationWindow {
 
         // ===== PANNELLI FLOATING (GAP 3) =====
         MenuItem {
-            text: "🎨 Color Highlighting..."
+            text: "🎨 " + qsTr("Color Highlighting...")
             onTriggered: openColorDialog()
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6197,7 +6263,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "📡 QSY..."
+            text: "📡 " + qsTr("QSY...")
             onTriggered: openQsyDialog()
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6209,7 +6275,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.updateAvailable ? "🆕 Aggiorna Decodium v" + bridge.latestVersion : "☁ Controlla Aggiornamenti"
+            text: bridge.updateAvailable ? "🆕 " + qsTr("Update Decodium v%1").arg(bridge.latestVersion) : "☁ " + qsTr("Check for Updates")
             onTriggered: {
                 if (bridge.updateAvailable)
                     Qt.openUrlExternally("https://github.com/IU8LMC/decodium/releases/latest")
@@ -6227,7 +6293,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: "📂 Esporta Cabrillo..."
+            text: "📂 " + qsTr("Export Cabrillo...")
             onTriggered: cabrilloDlg.open()
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6239,7 +6305,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.ctyDatUpdating ? "⏳ cty.dat download..." : "🌍 Aggiorna cty.dat"
+            text: bridge.ctyDatUpdating ? "⏳ " + qsTr("cty.dat downloading...") : "🌍 " + qsTr("Update cty.dat")
             enabled: !bridge.ctyDatUpdating
             onTriggered: bridge.checkCtyDatUpdate()
             background: Rectangle {
@@ -6255,7 +6321,7 @@ ApplicationWindow {
 	        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
 
 		        MenuItem {
-		            text: worldClock.showWorldClock ? "✓ Mostra orologio" : "☐ Mostra orologio"
+		            text: (worldClock.showWorldClock ? "✓ " : "☐ ") + qsTr("Show Clock")
 		            onTriggered: worldClock.setClockVisible(!worldClock.showWorldClock)
 		            background: Rectangle {
 	                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6270,7 +6336,7 @@ ApplicationWindow {
 		        }
 
 		        MenuItem {
-		            text: dxClusterToolbarVisible ? "✓ Mostra DX Cluster" : "☐ Mostra DX Cluster"
+		            text: (dxClusterToolbarVisible ? "✓ " : "☐ ") + qsTr("Show DX Cluster")
 		            onTriggered: mainWindow.setDxClusterToolbarVisible(!dxClusterToolbarVisible)
 		            background: Rectangle {
 		                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6285,7 +6351,7 @@ ApplicationWindow {
 		        }
 
 		        MenuItem {
-		            text: pskReporterToolbarVisible ? "✓ Mostra PSK Reporter" : "☐ Mostra PSK Reporter"
+		            text: (pskReporterToolbarVisible ? "✓ " : "☐ ") + qsTr("Show PSK Reporter")
 		            onTriggered: mainWindow.setPskReporterToolbarVisible(!pskReporterToolbarVisible)
 		            background: Rectangle {
 		                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6301,107 +6367,108 @@ ApplicationWindow {
 
 		        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
 
-		        MenuItem {
-		            enabled: false
-		            text: "Lingua: " + mainWindow.uiLanguageName(uiLanguage)
-		            background: Rectangle { color: "transparent"; radius: 6 }
-		            contentItem: Text {
-		                text: parent.text
-		                font.pixelSize: 12
-		                font.bold: true
-		                color: secondaryCyan
-		                leftPadding: 10
+		        Menu {
+		            id: languageSubMenu
+		            title: mainWindow.uiLanguageLabel(mainWindow.uiLanguage) + ": " + mainWindow.uiLanguageName(mainWindow.uiLanguage)
+		            padding: 6
+		            width: 205
+		            background: Rectangle {
+		                implicitWidth: 205
+		                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+		                border.color: secondaryCyan
+		                border.width: 1
+		                radius: 10
 		            }
-		        }
 
-		        MenuItem {
-		            text: uiLanguage === "en" ? "✓ English" : "☐ English"
-		            onTriggered: mainWindow.setUiLanguage("en")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "en" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "en" ? "✓ English" : "☐ English"
+		                onTriggered: mainWindow.setUiLanguage("en")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "en" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "ca" ? "✓ Català" : "☐ Català"
-		            onTriggered: mainWindow.setUiLanguage("ca")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ca" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "ca" ? "✓ Català" : "☐ Català"
+		                onTriggered: mainWindow.setUiLanguage("ca")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ca" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "da" ? "✓ Dansk" : "☐ Dansk"
-		            onTriggered: mainWindow.setUiLanguage("da")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "da" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "da" ? "✓ Dansk" : "☐ Dansk"
+		                onTriggered: mainWindow.setUiLanguage("da")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "da" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "de" ? "✓ Deutsch" : "☐ Deutsch"
-		            onTriggered: mainWindow.setUiLanguage("de")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "de" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "de" ? "✓ Deutsch" : "☐ Deutsch"
+		                onTriggered: mainWindow.setUiLanguage("de")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "de" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "es" ? "✓ Español" : "☐ Español"
-		            onTriggered: mainWindow.setUiLanguage("es")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "es" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "es" ? "✓ Español" : "☐ Español"
+		                onTriggered: mainWindow.setUiLanguage("es")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "es" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "fr" ? "✓ Français" : "☐ Français"
-		            onTriggered: mainWindow.setUiLanguage("fr")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "fr" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "fr" ? "✓ Français" : "☐ Français"
+		                onTriggered: mainWindow.setUiLanguage("fr")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "fr" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "hu" ? "✓ Magyar" : "☐ Magyar"
-		            onTriggered: mainWindow.setUiLanguage("hu")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "hu" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "hu" ? "✓ Magyar" : "☐ Magyar"
+		                onTriggered: mainWindow.setUiLanguage("hu")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "hu" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "it" ? "✓ Italiano" : "☐ Italiano"
-		            onTriggered: mainWindow.setUiLanguage("it")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "it" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "it" ? "✓ Italiano" : "☐ Italiano"
+		                onTriggered: mainWindow.setUiLanguage("it")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "it" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "ja" ? "✓ 日本語" : "☐ 日本語"
-		            onTriggered: mainWindow.setUiLanguage("ja")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ja" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "ja" ? "✓ 日本語" : "☐ 日本語"
+		                onTriggered: mainWindow.setUiLanguage("ja")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ja" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "ru" ? "✓ Русский" : "☐ Русский"
-		            onTriggered: mainWindow.setUiLanguage("ru")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ru" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "ru" ? "✓ Русский" : "☐ Русский"
+		                onTriggered: mainWindow.setUiLanguage("ru")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "ru" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "zh" ? "✓ 简体中文" : "☐ 简体中文"
-		            onTriggered: mainWindow.setUiLanguage("zh")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "zh" ? successGreen : textSecondary; leftPadding: 10 }
-		        }
+		            MenuItem {
+		                text: uiLanguage === "zh" ? "✓ 简体中文" : "☐ 简体中文"
+		                onTriggered: mainWindow.setUiLanguage("zh")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "zh" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 
-		        MenuItem {
-		            text: uiLanguage === "zh_TW" ? "✓ 繁體中文" : "☐ 繁體中文"
-		            onTriggered: mainWindow.setUiLanguage("zh_TW")
-		            background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
-		            contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "zh_TW" ? successGreen : textSecondary; leftPadding: 10 }
+		            MenuItem {
+		                text: uiLanguage === "zh_TW" ? "✓ 繁體中文" : "☐ 繁體中文"
+		                onTriggered: mainWindow.setUiLanguage("zh_TW")
+		                background: Rectangle { color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"; radius: 6 }
+		                contentItem: Text { text: parent.text; font.pixelSize: 12; color: uiLanguage === "zh_TW" ? successGreen : textSecondary; leftPadding: 10 }
+		            }
 		        }
 
 		        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: glassBorder } }
 
 		        MenuItem {
-		            text: timeSyncPanelVisible ? "✓ Time Sync Panel" : "☐ Time Sync Panel"
+		            text: (timeSyncPanelVisible ? "✓ " : "☐ ") + qsTr("Time Sync Panel")
 		            onTriggered: timeSyncPanelVisible = !timeSyncPanelVisible
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6415,7 +6482,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: activeStationsPanelVisible ? "✓ Active Stations" : "☐ Active Stations"
+            text: (activeStationsPanelVisible ? "✓ " : "☐ ") + qsTr("Active Stations")
             onTriggered: activeStationsPanelVisible = !activeStationsPanelVisible
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6429,7 +6496,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: liveMapPanelVisible ? "✓ Live Map" : "☐ Live Map"
+            text: (liveMapPanelVisible ? "✓ " : "☐ ") + qsTr("Live Map")
             onTriggered: {
                 liveMapPanelVisible = !liveMapPanelVisible
                 bridge.setSetting("WorldMapDisplayed", liveMapPanelVisible)
@@ -6446,30 +6513,9 @@ ApplicationWindow {
             }
         }
 
-        MenuItem {
-            enabled: liveMapPanelVisible
-            text: liveMapDetached ? "↙ Riaggancia Live Map" : "⇱ Stacca Live Map"
-            onTriggered: {
-                if (liveMapDetached)
-                    mainWindow.dockLiveMapPanel()
-                else
-                    mainWindow.detachLiveMapPanel()
-            }
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: liveMapPanelVisible ? (liveMapDetached ? successGreen : textSecondary) : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.45)
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: bridge.foxMode ? "✓ Fox Mode (Caller Queue)" : "☐ Fox Mode (Caller Queue)"
-            onTriggered: { bridge.foxMode = !bridge.foxMode; callerQueuePanelVisible = bridge.foxMode }
+	        MenuItem {
+	            text: (bridge.foxMode ? "✓ " : "☐ ") + qsTr("Fox Mode (Caller Queue)")
+	            onTriggered: { bridge.foxMode = !bridge.foxMode; callerQueuePanelVisible = bridge.foxMode }
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
                 radius: 6
@@ -6482,7 +6528,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.houndMode ? "✓ Hound Mode" : "☐ Hound Mode"
+            text: (bridge.houndMode ? "✓ " : "☐ ") + qsTr("Hound Mode")
             onTriggered: { bridge.houndMode = !bridge.houndMode; callerQueuePanelVisible = bridge.foxMode }
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6496,7 +6542,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: astroPanelVisible ? "✓ Astro / EME" : "☐ Astro / EME"
+            text: (astroPanelVisible ? "✓ " : "☐ ") + qsTr("Astro / EME")
             onTriggered: astroPanelVisible = !astroPanelVisible
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6510,7 +6556,7 @@ ApplicationWindow {
 	        }
 
 	        MenuItem {
-	            text: dxClusterPanelVisible ? "✓ Pannello DX Cluster" : "☐ Pannello DX Cluster"
+	            text: (dxClusterPanelVisible ? "✓ " : "☐ ") + qsTr("DX Cluster Panel")
 	            onTriggered: dxClusterPanelVisible = !dxClusterPanelVisible
 	            background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6524,7 +6570,7 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.alertOnMyCall ? "✓ Alert su My Call" : "☐ Alert su My Call"
+            text: (bridge.alertOnMyCall ? "✓ " : "☐ ") + qsTr("Alert on My Call")
             onTriggered: bridge.alertOnMyCall = !bridge.alertOnMyCall
 
             background: Rectangle {
@@ -7238,7 +7284,7 @@ ApplicationWindow {
 
 	                            Text {
 	                                anchors.centerIn: parent
-	                                text: "Dock"
+		                                text: qsTr("Dock")
 	                                font.pixelSize: 10
 	                                font.bold: true
 	                                color: waterfallDockMA.containsMouse ? secondaryCyan : textPrimary
@@ -7895,11 +7941,21 @@ ApplicationWindow {
         minimumWidth: 350
         minimumHeight: 250
         visible: false
-        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-	        title: "Full Spectrum - Decodium"
-        color: "transparent"
+	        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+		        title: "Full Spectrum - Decodium"
+	        color: "transparent"
+	        readonly property bool compactColumns: width < 650
+	        readonly property int utcColumnWidth: compactColumns ? 66 : 84
+	        readonly property int dbColumnWidth: compactColumns ? 34 : 38
+	        readonly property int dbDtGapWidth: compactColumns ? 4 : 6
+	        readonly property int dtColumnWidth: compactColumns ? 42 : 48
+	        readonly property int freqColumnWidth: compactColumns ? 42 : 46
+	        readonly property int gapColumnWidth: compactColumns ? 4 : 6
+	        readonly property int distanceColumnWidth: compactColumns ? 0 : 56
+	        readonly property int dxccColumnWidth: compactColumns ? 90 : 130
+	        readonly property int azColumnWidth: compactColumns ? 38 : 48
 
-        x: mainWindow.x + 100
+	        x: mainWindow.x + 100
         y: mainWindow.y + 150
         Component.onCompleted: mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
         onXChanged: mainWindow.scheduleWindowStateSave()
@@ -7992,11 +8048,40 @@ ApplicationWindow {
                         spacing: 8
 
                         Text { text: "⋮⋮"; font.pixelSize: 12; color: "#4CAF50" }
-	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: "#4CAF50" }
-	                        Text { text: "Full Spectrum"; font.pixelSize: 14; font.bold: true; color: "#4CAF50" }
-	                        Item { Layout.fillWidth: true }
+		                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: "#4CAF50" }
+		                        Text { text: "Full Spectrum"; font.pixelSize: 14; font.bold: true; color: "#4CAF50" }
+		                        Item { Layout.fillWidth: true }
 
-	                        Rectangle {
+	                            Text {
+	                                visible: period1FloatingWindow.width >= 470
+	                                text: decodePanel.currentPeriodDecodeCount + " " + qsTr("decodes")
+	                                font.pixelSize: 10
+	                                color: textSecondary
+	                            }
+
+	                            Rectangle {
+	                                Layout.preferredWidth: 42
+	                                Layout.preferredHeight: 22
+	                                radius: 4
+	                                color: p1FloatClearMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.25) : "transparent"
+	                                border.color: p1FloatClearMA.containsMouse ? "#f44336" : Qt.rgba(1, 1, 1, 0.16)
+	                                border.width: 1
+	                                Text {
+	                                    anchors.centerIn: parent
+	                                    text: qsTr("Clear")
+	                                    font.pixelSize: 10
+	                                    color: p1FloatClearMA.containsMouse ? "#f44336" : textSecondary
+	                                }
+	                                MouseArea {
+	                                    id: p1FloatClearMA
+	                                    anchors.fill: parent
+	                                    hoverEnabled: true
+	                                    cursorShape: Qt.PointingHandCursor
+	                                    onClicked: bridge.clearDecodes()
+	                                }
+	                            }
+
+		                        Rectangle {
 	                            Layout.preferredWidth: 42
 	                            Layout.preferredHeight: 22
 	                            radius: 4
@@ -8018,7 +8103,7 @@ ApplicationWindow {
 	                                onClicked: mainWindow.dockFullSpectrumPanel()
 	                            }
 	                            ToolTip.visible: p1FloatDockMA.containsMouse
-	                            ToolTip.text: "Riaggancia Full Spectrum"
+		                            ToolTip.text: qsTr("Dock")
 	                        }
 
 		                        Rectangle {
@@ -8043,10 +8128,35 @@ ApplicationWindow {
 	                            }
 	                        }
                     }
-                }
+	                }
 
-                // Content - Decode List
-                Rectangle {
+	                Rectangle {
+	                    Layout.fillWidth: true
+	                    Layout.preferredHeight: 20
+	                    color: Qt.rgba(76/255, 175/255, 80/255, 0.2)
+	                    radius: 2
+
+	                    RowLayout {
+	                        anchors.fill: parent
+	                        anchors.leftMargin: 6
+	                        anchors.rightMargin: 6
+	                        spacing: 0
+
+	                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
+	                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
+	                        Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
+	                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
+	                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
+	                        Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
+	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
+	                        Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
+	                        Text { visible: mainWindow.showDxccInfo; text: "DXCC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                        Text { visible: mainWindow.showDxccInfo; text: "Az"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
+	                    }
+	                }
+
+	                // Content - Decode List
+	                Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
@@ -8104,10 +8214,17 @@ ApplicationWindow {
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.margins: 4
-                                spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; Layout.preferredWidth: 80 }
-                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+	                                spacing: 0
+	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
+	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
+	                                Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
+	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
+	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
+	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
+	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
+	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
                             }
 
                             MouseArea {
@@ -8164,11 +8281,18 @@ ApplicationWindow {
         minimumWidth: 300
         minimumHeight: 200
         visible: false
-        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        title: "Signal RX - Decodium"
-        color: "transparent"
+	        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+	        title: "Signal RX - Decodium"
+	        color: "transparent"
+	        readonly property bool compactColumns: width < 520
+	        readonly property int utcColumnWidth: compactColumns ? 66 : 84
+	        readonly property int dbColumnWidth: compactColumns ? 34 : 38
+	        readonly property int dbDtGapWidth: compactColumns ? 4 : 6
+	        readonly property int dtColumnWidth: compactColumns ? 42 : 48
+	        readonly property int gapColumnWidth: compactColumns ? 4 : 6
+	        readonly property int distanceColumnWidth: compactColumns ? 0 : 56
 
-        x: mainWindow.x + 300
+	        x: mainWindow.x + 300
         y: mainWindow.y + 250
         Component.onCompleted: mainWindow.restoreFloatingWindowState(rxFreqFloatingWindow, "rxFreqFloatingWindow", "rxFreqDetached", "rxFreqMinimized")
         onXChanged: mainWindow.scheduleWindowStateSave()
@@ -8279,11 +8403,43 @@ ApplicationWindow {
                                 font.bold: true
                                 color: primaryBlue
                             }
-                        }
+	                        }
 
-	                        Item { Layout.fillWidth: true }
+		                        Item { Layout.fillWidth: true }
 
-	                        Rectangle {
+	                            Text {
+	                                visible: rxFreqFloatingWindow.width >= 500
+	                                text: {
+	                                    void(decodePanel.decodeListVersion)
+	                                    return decodePanel.currentRxDecodes().length + " " + qsTr("msgs")
+	                                }
+	                                font.pixelSize: 10
+	                                color: textSecondary
+	                            }
+
+	                            Rectangle {
+	                                Layout.preferredWidth: 42
+	                                Layout.preferredHeight: 22
+	                                radius: 4
+	                                color: rxFloatClearMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.25) : "transparent"
+	                                border.color: rxFloatClearMA.containsMouse ? "#f44336" : Qt.rgba(1, 1, 1, 0.16)
+	                                border.width: 1
+	                                Text {
+	                                    anchors.centerIn: parent
+	                                    text: qsTr("Clear")
+	                                    font.pixelSize: 10
+	                                    color: rxFloatClearMA.containsMouse ? "#f44336" : textSecondary
+	                                }
+	                                MouseArea {
+	                                    id: rxFloatClearMA
+	                                    anchors.fill: parent
+	                                    hoverEnabled: true
+	                                    cursorShape: Qt.PointingHandCursor
+	                                    onClicked: bridge.clearRxDecodes()
+	                                }
+	                            }
+
+		                        Rectangle {
 	                            Layout.preferredWidth: 42
 	                            Layout.preferredHeight: 22
 	                            radius: 4
@@ -8292,7 +8448,7 @@ ApplicationWindow {
 	                            border.width: 1
 	                            Text {
 	                                anchors.centerIn: parent
-	                                text: "Dock"
+		                                text: qsTr("Dock")
 	                                font.pixelSize: 10
 	                                font.bold: true
 	                                color: rxFloatDockMA.containsMouse ? primaryBlue : textPrimary
@@ -8305,12 +8461,12 @@ ApplicationWindow {
 	                                onClicked: mainWindow.dockSignalRxPanel()
 	                            }
 	                            ToolTip.visible: rxFloatDockMA.containsMouse
-	                            ToolTip.text: "Riaggancia Signal RX"
-	                        }
+		                            ToolTip.text: qsTr("Dock")
+		                }
 
-		                        Rectangle {
-		                            Layout.preferredWidth: 24
-		                            Layout.preferredHeight: 24
+		                Rectangle {
+			                            Layout.preferredWidth: 24
+			                            Layout.preferredHeight: 24
 		                            radius: 4
                             color: rxFloatMinMA.containsMouse ? Qt.rgba(255/255, 193/255, 7/255, 0.3) : "transparent"
                             Text { anchors.centerIn: parent; text: "−"; font.pixelSize: 16; font.bold: true; color: rxFloatMinMA.containsMouse ? "#ffc107" : textPrimary }
@@ -8328,11 +8484,33 @@ ApplicationWindow {
 	                            MouseArea { id: rxFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
 	                                onClicked: mainWindow.dockSignalRxPanel()
 	                            }
-	                        }
-                    }
-                }
+		                        }
+	                    }
+	                }
 
-                Rectangle {
+	                Rectangle {
+	                    Layout.fillWidth: true
+	                    Layout.preferredHeight: 20
+	                    color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2)
+	                    radius: 2
+
+	                    RowLayout {
+	                        anchors.fill: parent
+	                        anchors.leftMargin: 6
+	                        anchors.rightMargin: 6
+	                        spacing: 0
+
+	                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
+	                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
+	                        Item { Layout.preferredWidth: rxFreqFloatingWindow.dbDtGapWidth }
+	                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
+	                        Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
+	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; Layout.fillWidth: true }
+	                        Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: primaryBlue; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
+	                    }
+	                }
+
+	                Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.5)
@@ -8380,17 +8558,9 @@ ApplicationWindow {
                         })
                         onContentYChanged: updateFollowTail()
                         onHeightChanged: updateFollowTail()
-                        onCountChanged: {
-                            if (followTail) {
-                                forceTailFollow()
-                            }
-                        }
+	                        onCountChanged: forceTailFollow()
                         property int _ver: decodePanel.decodeListVersion
-                        on_VerChanged: {
-                            if (followTail || isNearTail()) {
-                                forceTailFollow()
-                            }
-                        }
+	                        on_VerChanged: forceTailFollow()
                         model: decodePanel.rxDecodes
                         ScrollBar.vertical: ScrollBar { active: true }
 
@@ -8403,10 +8573,14 @@ ApplicationWindow {
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.margins: 4
-                                spacing: 6
-                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; Layout.preferredWidth: 80 }
-                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: parseInt(modelData.db || "0") > -10 ? accentGreen : textSecondary; Layout.preferredWidth: 28 }
-                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+	                                spacing: 0
+	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
+	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
+	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.dbDtGapWidth }
+	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
+	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
+	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+	                                Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
                             }
 
                             MouseArea {
@@ -8682,22 +8856,45 @@ ApplicationWindow {
                         anchors.margins: 8
                         spacing: 8
 
-                        Text { text: "⋮⋮"; font.pixelSize: 12; color: "#f44336" }
-                        Rectangle { width: 10; height: 10; radius: 5; color: "#f44336" }
-                        Text { text: "TX Panel"; font.pixelSize: 14; font.bold: true; color: "#f44336" }
-                        Item { Layout.fillWidth: true }
+	                        Text { text: "⋮⋮"; font.pixelSize: 12; color: "#f44336" }
+	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: "#f44336" }
+	                        Text { text: "TX Panel"; font.pixelSize: 14; font.bold: true; color: "#f44336" }
+	                        Item { Layout.fillWidth: true }
 
-                        Rectangle {
-                            width: 24; height: 24; radius: 4
+	                        Rectangle {
+	                            Layout.preferredWidth: 42
+	                            Layout.preferredHeight: 22
+	                            radius: 4
+	                            color: txFloatDockMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
+	                            border.color: txFloatDockMA.containsMouse ? "#f44336" : Qt.rgba(244/255, 67/255, 54/255, 0.45)
+	                            border.width: 1
+	                            Text { anchors.centerIn: parent; text: qsTr("Dock"); font.pixelSize: 10; font.bold: true; color: txFloatDockMA.containsMouse ? "#f44336" : textPrimary }
+	                            MouseArea {
+	                                id: txFloatDockMA
+	                                anchors.fill: parent
+	                                hoverEnabled: true
+	                                cursorShape: Qt.PointingHandCursor
+	                                onClicked: { txPanelDockHighlighted = false; txPanelDetached = false; txPanelMinimized = false; txPanelFloatingWindow.close() }
+	                            }
+	                            ToolTip.visible: txFloatDockMA.containsMouse
+	                            ToolTip.text: qsTr("Dock TX Panel")
+	                        }
+
+	                        Rectangle {
+	                            Layout.preferredWidth: 24
+	                            Layout.preferredHeight: 24
+	                            radius: 4
                             color: txFloatMinMA.containsMouse ? Qt.rgba(255/255, 193/255, 7/255, 0.3) : "transparent"
                             Text { anchors.centerIn: parent; text: "−"; font.pixelSize: 16; font.bold: true; color: txFloatMinMA.containsMouse ? "#ffc107" : textPrimary }
                             MouseArea { id: txFloatMinMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { txPanelMinimized = true; txPanelFloatingWindow.hide() }
                             }
-                        }
+	                        }
 
-                        Rectangle {
-                            width: 24; height: 24; radius: 4
+	                        Rectangle {
+	                            Layout.preferredWidth: 24
+	                            Layout.preferredHeight: 24
+	                            radius: 4
                             color: txFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
                             Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: txFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
                             MouseArea { id: txFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -8712,6 +8909,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     engine: bridge
+                    showAsyncIcon: mainWindow.asyncIconVisible
                     handleLogPrompt: false
                     onMamWindowRequested: mamWindow.open()
                 }

@@ -13793,7 +13793,7 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
     </message>
     <message>
         <source>SWL Mode (RX Only)</source>
-        <translation>Mode SWL (RX uniquement)</translation>
+        <translation>Mode SWL (RX seulement)</translation>
     </message>
     <message>
         <source>Multi-Answer Mode</source>
@@ -13809,7 +13809,7 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
     </message>
     <message>
         <source>TX Watchdog</source>
-        <translation>Watchdog TX</translation>
+        <translation>Surveillance TX</translation>
     </message>
     <message>
         <source>Split Mode</source>
@@ -13817,7 +13817,7 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
     </message>
     <message>
         <source>Contest Mode</source>
-        <translation>Mode concours</translation>
+        <translation>Mode contest</translation>
     </message>
     <message>
         <source>CQ Only</source>
@@ -13850,6 +13850,197 @@ Cliquez avec le bouton droit pour les options d&apos;insertion et de suppression
     <message>
         <source>Record TX</source>
         <translation>Enregistrer TX</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>decodages</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>msg</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Effacer</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>Ancrer</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>Ancrer panneau TX</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>Masquer l'icône ASYNC</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>Afficher l'icône ASYNC</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>Alerte sur CQ</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>Surlignage couleur...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Mettre à jour Decodium v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Rechercher les mises à jour</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Exporter Cabrillo...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>Téléchargement de cty.dat...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>Mettre à jour cty.dat</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>Afficher l'horloge</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>Afficher DX Cluster</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>Afficher PSK Reporter</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>Panneau de synchronisation horaire</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>Stations actives</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>Carte en direct</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Mode Fox (file d'appel)</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Mode Hound</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>Panneau DX Cluster</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>Alerte sur mon indicatif</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>Mode multi-reponse (clic droit=fenetre)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Recherche profonde</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>Decodage a priori</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>Mode SWL (ecoute seule)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>Sequence automatique</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - saute TX1 et demarre a TX2 (rapport direct)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>Activer TX</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>Verrouiller frequence TX&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Repetition Auto CQ&#xa;Appelle CQ automatiquement jusqu a une reponse</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>Creneau TX&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: alterne les phases TX/RX apres des CQ repetes sans reponse</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>Accorder</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>Effacer DX, rapports et TX1-TX5</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>Arreter TX</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>Mode FT2 asynchrone - onde sinusoidale: vert=RX, rouge=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>Mode sat:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>Cluster DX:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>Spot vers le cluster</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>Cluster non connecte</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Ajouter</translation>
     </message>
 </context>
 </TS>

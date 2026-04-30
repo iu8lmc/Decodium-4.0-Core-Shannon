@@ -261,8 +261,120 @@ namespace
     if (address)
       {
         *address = select_preferred_udp_address (requested, info.addresses ());
+	    }
+	    return address ? !address->isNull () : true;
+	  }
+
+  QVariant legacy_runtime_setting (QSettings const * settings,
+                                   QString const& key,
+                                   QVariant const& fallback = QVariant {})
+  {
+    if (settings)
+      {
+        QVariant const value = settings->value (key);
+        if (value.isValid ())
+          {
+            return value;
+          }
       }
-    return address ? !address->isNull () : true;
+    return fallback;
+  }
+
+  bool legacy_runtime_bool (QSettings const * settings, QString const& key, bool fallback)
+  {
+    return legacy_runtime_setting (settings, key, fallback).toBool ();
+  }
+
+  QString legacy_runtime_string (QSettings const * settings,
+                                 QString const& key,
+                                 QString const& fallback = QString {})
+  {
+    return legacy_runtime_setting (settings, key, fallback).toString ().trimmed ();
+  }
+
+  quint16 legacy_runtime_udp_port (QSettings const * settings,
+                                   QString const& key,
+                                   quint16 fallback)
+  {
+    bool ok = false;
+    uint const value = legacy_runtime_setting (settings, key, fallback).toUInt (&ok);
+    if (ok && value > 0 && value <= 65535u)
+      {
+        return static_cast<quint16> (value);
+      }
+    return fallback;
+  }
+
+  int legacy_runtime_ttl (QSettings const * settings, QString const& key, int fallback)
+  {
+    return qBound (0, legacy_runtime_setting (settings, key, fallback).toInt (), 255);
+  }
+
+  QStringList legacy_runtime_interfaces (QSettings const * settings, QString const& key)
+  {
+    QVariant const value = legacy_runtime_setting (settings, key);
+    QStringList interfaces = value.toStringList ();
+    if (interfaces.isEmpty ())
+      {
+        QString const single = value.toString ().trimmed ();
+        if (!single.isEmpty ())
+          {
+            interfaces << single;
+          }
+      }
+    interfaces.removeAll (QString {});
+    return interfaces;
+  }
+
+  QString legacy_reporting_state (bool enabled)
+  {
+    return enabled ? QStringLiteral ("enabled") : QStringLiteral ("disabled");
+  }
+
+  QString legacy_reporting_interfaces (QStringList const& names)
+  {
+    return names.isEmpty () ? QStringLiteral ("all") : names.join (QStringLiteral (","));
+  }
+
+  bool send_legacy_raw_adif_datagram (QString const& label,
+                                      QString const& server_name,
+                                      quint16 port,
+                                      QString const& call,
+                                      QByteArray const& ADIF)
+  {
+    QString const clean_server = server_name.trimmed ();
+    if (clean_server.isEmpty () || 0 == port || ADIF.trimmed ().isEmpty ())
+      {
+        qInfo ().noquote () << QStringLiteral ("%1 skipped: missing target or ADIF payload").arg (label);
+        return false;
+      }
+
+    QUdpSocket sock;
+    QHostAddress target;
+    QString resolve_error;
+    if (!resolve_udp_target (clean_server, &target, &resolve_error))
+      {
+        qWarning ().noquote () << QStringLiteral ("%1 skipped: unable to resolve %2: %3")
+                                  .arg (label, clean_server, resolve_error);
+        return false;
+      }
+
+    QByteArray const payload = ADIF + " <eor>";
+    qint64 const written = sock.writeDatagram (payload, target, port);
+    if (written < 0)
+      {
+        qWarning ().noquote () << QStringLiteral ("%1 send failed for %2: %3")
+                                  .arg (label, call, sock.errorString ());
+        return false;
+      }
+
+    qInfo ().noquote () << QStringLiteral ("%1 sent: call=%2 target=%3:%4 bytes=%5")
+                           .arg (label)
+                           .arg (call)
+                           .arg (target.toString ())
+                           .arg (port)
+                           .arg (written);
+    return true;
   }
 }
 #include "PlotLegacyHelpers.hpp"
@@ -1213,8 +1325,8 @@ namespace
 #endif
   constexpr bool kEnableAutoCqCallerQueue {true};
   constexpr int kRecentDuplicateLogWindowSeconds {90};
-  // In AutoCQ, keep RR73/73 on air up to 5 cycles before forced close.
-  constexpr int kAutoCqSignoffRetryCount {5};
+  // In AutoCQ, keep RR73/73 on air up to 10 cycles before forced close.
+  constexpr int kAutoCqSignoffRetryCount {10};
   constexpr int kLateAutoLogGraceWindowSeconds {45};
   constexpr int kDecDataSampleCount {static_cast<int> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0]))};
   constexpr int kMaxCwSymbols {static_cast<int> (sizeof (icw) / sizeof (icw[0]))};
@@ -2692,24 +2804,40 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     });
 
   // Network message handlers
-  auto const legacyReportingState = [] (bool enabled) {
-    return enabled ? QStringLiteral ("enabled") : QStringLiteral ("disabled");
-  };
-  auto const legacyReportingInterfaces = [] (QStringList const& names) {
-    return names.isEmpty () ? QStringLiteral ("all") : names.join (QStringLiteral (","));
-  };
+  bool const secondary_udp_enabled = legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryEnabled"), true);
+  QStringList const secondary_udp_interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPSecondaryInterface"));
+  bool const secondary_udp_adif_enabled =
+    legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryLoggedAdifEnabled"), true);
+  bool const tertiary_udp_enabled = legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryEnabled"), false);
+  QStringList const tertiary_udp_interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPTertiaryInterface"));
+  bool const tertiary_udp_adif_enabled =
+    legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryLoggedAdifEnabled"), true);
   qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP primary server=%1:%2 listen=%3 interface=%4 ttl=%5 acceptRequests=%6")
-                         .arg (m_config.udp_server_name (),
-                               QString::number (m_config.udp_server_port ()),
-                               QString::number (m_config.udp_listen_port ()),
-                               legacyReportingInterfaces (m_config.udp_interface_names ()),
-                               QString::number (m_config.udp_TTL ()),
-                               legacyReportingState (m_config.accept_udp_requests ()));
+	                         .arg (m_config.udp_server_name (),
+	                               QString::number (m_config.udp_server_port ()),
+	                               QString::number (m_config.udp_listen_port ()),
+	                               legacy_reporting_interfaces (m_config.udp_interface_names ()),
+	                               QString::number (m_config.udp_TTL ()),
+	                               legacy_reporting_state (m_config.accept_udp_requests ()));
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP secondary %1 server=%2:%3 listen=ephemeral interface=%4 loggedADIF=%5")
+                         .arg (legacy_reporting_state (secondary_udp_enabled),
+                               legacy_runtime_string (m_settings, QStringLiteral ("UDPSecondaryServer"), m_config.udp_server_name ()),
+                               QString::number (legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPSecondaryServerPort"), 2239)),
+                               legacy_reporting_interfaces (secondary_udp_interfaces),
+                               legacy_reporting_state (secondary_udp_adif_enabled));
+  qInfo ().noquote () << QStringLiteral ("Reporting config legacy: UDP tertiary %1 server=%2:%3 listen=ephemeral interface=%4 ttl=%5 loggedADIF=%6")
+                         .arg (legacy_reporting_state (tertiary_udp_enabled),
+                               legacy_runtime_string (m_settings, QStringLiteral ("UDPTertiaryServer"), QStringLiteral ("127.0.0.1")),
+                               QString::number (legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPTertiaryServerPort"), 2237)),
+                               legacy_reporting_interfaces (tertiary_udp_interfaces),
+                               QString::number (legacy_runtime_ttl (m_settings, QStringLiteral ("UDPTertiaryTTL"), m_config.udp_TTL ())),
+                               legacy_reporting_state (tertiary_udp_adif_enabled));
   qInfo ().noquote () << QStringLiteral ("Reporting config legacy: N1MM UDP %1 target=%2:%3")
-                         .arg (legacyReportingState (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ()),
-                               m_config.n1mm_server_name (),
-                               QString::number (m_config.n1mm_server_port ()));
+	                         .arg (legacy_reporting_state (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ()),
+	                               m_config.n1mm_server_name (),
+	                               QString::number (m_config.n1mm_server_port ()));
   m_messageClient->enable (m_config.accept_udp_requests ());
+  ensureTertiaryUdpMessageClient ();
   connect (m_messageClient, &MessageClient::clear_decodes, [this] (quint8 window) {
       ++window;
       if (window & 1)
@@ -4169,6 +4297,64 @@ MainWindow::~MainWindow()
   memset(ipc_qmap,0,4096);         //Zero all of QMAP shared memory
 }
 
+MessageClient * MainWindow::ensureTertiaryUdpMessageClient() const
+{
+  bool const enabled = legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryEnabled"), false);
+  if (!enabled)
+    {
+      if (m_udpTertiaryMessageClient)
+        {
+          qInfo ().noquote () << QStringLiteral ("Stopping legacy tertiary UDP MessageClient");
+          m_udpTertiaryMessageClient->disconnect (this);
+          m_udpTertiaryMessageClient->deleteLater ();
+          m_udpTertiaryMessageClient = nullptr;
+          m_udpTertiaryRuntimeKey.clear ();
+        }
+      return nullptr;
+    }
+
+  QString const server_name =
+    legacy_runtime_string (m_settings, QStringLiteral ("UDPTertiaryServer"), QStringLiteral ("127.0.0.1"));
+  quint16 const server_port =
+    legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPTertiaryServerPort"), 2237);
+  int const ttl = legacy_runtime_ttl (m_settings, QStringLiteral ("UDPTertiaryTTL"), m_config.udp_TTL ());
+  QStringList const interfaces = legacy_runtime_interfaces (m_settings, QStringLiteral ("UDPTertiaryInterface"));
+  QString const runtime_key = QStringLiteral ("%1|%2|%3|%4")
+                                .arg (server_name,
+                                      QString::number (server_port),
+                                      QString::number (ttl),
+                                      legacy_reporting_interfaces (interfaces));
+
+  if (m_udpTertiaryMessageClient && m_udpTertiaryRuntimeKey == runtime_key)
+    {
+      return m_udpTertiaryMessageClient;
+    }
+
+  if (m_udpTertiaryMessageClient)
+    {
+      qInfo ().noquote () << QStringLiteral ("Restarting legacy tertiary UDP MessageClient");
+      m_udpTertiaryMessageClient->disconnect (this);
+      m_udpTertiaryMessageClient->deleteLater ();
+      m_udpTertiaryMessageClient = nullptr;
+      m_udpTertiaryRuntimeKey.clear ();
+    }
+
+  m_udpTertiaryMessageClient = new MessageClient {udp_client_id_from_application_name (),
+      version (), revision (), server_name, server_port, 0, interfaces, ttl,
+      const_cast<MainWindow *> (this), QStringLiteral ("legacy tertiary")};
+  m_udpTertiaryMessageClient->enable (false);
+  connect (m_udpTertiaryMessageClient, &MessageClient::error, const_cast<MainWindow *> (this), [] (QString const& msg) {
+    qWarning ().noquote () << QStringLiteral ("Legacy tertiary UDP MessageClient error: %1").arg (msg);
+  });
+  m_udpTertiaryRuntimeKey = runtime_key;
+  qInfo ().noquote () << QStringLiteral ("Legacy tertiary UDP MessageClient started: server=%1:%2 listen=0 interface=%3 ttl=%4")
+                         .arg (server_name,
+                               QString::number (server_port),
+                               legacy_reporting_interfaces (interfaces),
+                               QString::number (ttl));
+  return m_udpTertiaryMessageClient;
+}
+
 QString MainWindow::legacyCallsign() const
 {
   return m_config.my_callsign();
@@ -4990,6 +5176,23 @@ void MainWindow::legacySetNextLogClusterSpotState(bool available, bool checked)
 void MainWindow::legacySetNextLogPromptAlreadyAccepted()
 {
   m_nextLogPromptAlreadyAccepted = true;
+}
+
+void MainWindow::legacySetNextLogPromptFields(QString const& comment,
+                                              bool commentValid,
+                                              QString const& propMode,
+                                              QString const& satellite,
+                                              QString const& satMode,
+                                              bool satelliteValid)
+{
+  if (m_logDlg) {
+    m_logDlg->setNextPromptOverrides(comment,
+                                     commentValid,
+                                     propMode,
+                                     satellite,
+                                     satMode,
+                                     satelliteValid);
+  }
 }
 
 void MainWindow::legacySetWaterfallPalette(QString const& palette)
@@ -15959,7 +16162,7 @@ void MainWindow::guiUpdate()
     // Auto CQ retry logic (only when Auto CQ mode is active)
     if (m_autoCQ && !m_tune) {
       if (m_ntx >= 2 && m_ntx <= 4) {
-        // Rule 1: Tx2/Tx3/Tx4 repeated 5 times without response → return to CQ (Tx6)
+        // Rule 1: Tx2/Tx3/Tx4 repeated 10 times without response -> return to CQ (Tx6)
         if (m_ntx == m_lastNtx) {
           ++m_txRetryCount;
           debugAutoCq ("retry-progress",
@@ -17560,6 +17763,50 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
            or bEU_VHF_w2 or (m_QSOProgress==CALLING))) {
       if (m_mode == "FT2" && ft2QuickTu) {
         m_ft2QuickPeerSignaled = true;
+      }
+      QString const terminalToken = message_words.at (4).trimmed ().toUpper ();
+      bool terminalTokenNumberOk = false;
+      int const terminalTokenNumber = terminalToken.toInt (&terminalTokenNumberOk);
+      auto const currentMessagePartsForGuard = m_currentMessage.split (' ', SkipEmptyParts);
+      bool const localSignoffStageActive =
+          m_QSOProgress >= SIGNOFF
+          || m_ntx == 4
+          || m_ntx == 5
+          || m_nTx73 > 0
+          || m_sentFirst73
+          || m_ft2DeferredLogPending
+          || m_logAfterOwn73
+          || payload_is_73 (currentMessagePartsForGuard)
+          || message_is_73 (m_currentMessageType, currentMessagePartsForGuard);
+      bool const terminalTokenIsSignoff =
+          terminalToken == "73" || terminalToken == "RR73" || terminalToken == "RRR";
+      bool const terminalTokenLooksPreSignoff =
+          !terminalTokenIsSignoff
+          && (terminalToken.contains (grid_regexp)
+              || terminalToken == "R"
+              || terminalToken == "TU"
+              || terminalToken.startsWith ("R+")
+              || terminalToken.startsWith ("R-")
+              || terminalToken.startsWith ('+')
+              || terminalToken.startsWith ('-')
+              || (terminalTokenNumberOk
+                  && terminalTokenNumber >= -50
+                  && terminalTokenNumber <= 599));
+      if (!m_bDoubleClicked
+          && qso_partner_matched
+          && localSignoffStageActive
+          && terminalTokenLooksPreSignoff) {
+        if (m_logAfterOwn73 || m_ntx == 5) {
+          m_ntx = 5;
+          ui->txrb5->setChecked (true);
+        } else {
+          m_ntx = 4;
+          ui->txrb4->setChecked (true);
+        }
+        m_QSOProgress = SIGNOFF;
+        debugAutoCq ("signoff-monotonic-guard",
+                     QString {"tx:%1 msg:%2"}.arg (m_ntx).arg (message.string ().trimmed ()));
+        return;
       }
       if(message_words.at(4).contains(grid_regexp) and SpecOp::EU_VHF!=m_specOp) {
         if((SpecOp::NA_VHF==m_specOp or SpecOp::WW_DIGI==m_specOp or
@@ -20922,19 +21169,39 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
                                      tr ("Cannot open \"%1\"").arg (m_logBook.path ()));
       }
 
-    if (m_messageClient) {
-      m_messageClient->qso_logged (QSO_date_off, call, grid, dial_freq, mode, rpt_sent, rpt_received
-                                   , tx_power, comments, name, QSO_date_on, operator_call, my_call, my_grid
-                                   , exchange_sent, exchange_rcvd, propmode, satellite, satmode, freqRx);
+	    auto send_qso_logged = [&] (MessageClient * client, bool send_adif) {
+	      if (!client) return;
+	      client->qso_logged (QSO_date_off, call, grid, dial_freq, mode, rpt_sent, rpt_received
+	                          , tx_power, comments, name, QSO_date_on, operator_call, my_call, my_grid
+	                          , exchange_sent, exchange_rcvd, propmode, satellite, satmode, freqRx);
+	
+	      if (send_adif) {
+	        //avt 11/20/20 external controller needs UI feedback
+	        client->logged_ADIF (ADIF);
+	      }
+	    };
+	    send_qso_logged (m_messageClient, true);
+	    send_qso_logged (ensureTertiaryUdpMessageClient (),
+	                     legacy_runtime_bool (m_settings, QStringLiteral ("UDPTertiaryLoggedAdifEnabled"), true));
+	
+	    logIncremental(call, QString::fromUtf8(ADIF));    //avt 10/2/25
 
-      //avt 11/20/20 external controller needs UI feedback
-      m_messageClient->logged_ADIF (ADIF);
-    }
-
-    logIncremental(call, QString::fromUtf8(ADIF));    //avt 10/2/25
-
-    // Log to N1MM Logger
-    if (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ())
+	    bool const secondary_udp_enabled =
+	      legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryEnabled"), true);
+	    bool const secondary_udp_adif_enabled =
+	      legacy_runtime_bool (m_settings, QStringLiteral ("UDPSecondaryLoggedAdifEnabled"), true);
+	    if (secondary_udp_enabled && secondary_udp_adif_enabled)
+	      {
+	        send_legacy_raw_adif_datagram (
+	          QStringLiteral ("UDP secondary raw ADIF"),
+	          legacy_runtime_string (m_settings, QStringLiteral ("UDPSecondaryServer"), m_config.udp_server_name ()),
+	          legacy_runtime_udp_port (m_settings, QStringLiteral ("UDPSecondaryServerPort"), 2239),
+	          call,
+	          ADIF);
+	      }
+	
+	    // Log to N1MM Logger
+	    if (m_config.broadcast_to_n1mm () && m_config.valid_n1mm_info ())
       {
         QUdpSocket sock;
         QHostAddress target;
@@ -24788,18 +25055,23 @@ void MainWindow::postDecode (bool is_new, DecodedText decoded_text)      //avt 1
   auto const& decode = message.trimmed ();
   auto const message_text = udp_decode_message_text (decode);
   auto const& parts = decode.left (22).split (' ', SkipEmptyParts);
-  if (parts.size () >= 5 && (!is_externalCtrlMode() || decoded_text.isStandardMessage()))    //avt
-    {
-      //QApplication::beep();    //avt
-      auto has_seconds = parts[0].size () > 4;
-      m_messageClient->decode (is_new
-                               , QTime::fromString (parts[0], has_seconds ? "hhmmss" : "hhmm")
-                               , parts[1].toInt ()
-                               , parts[2].toFloat (), parts[3].toUInt (), parts[4]
-                               , message_text
-                               , QChar {'?'} == decode.mid (has_seconds ? 24 + 36 : 22 + 36, 1)
-                               , m_diskData);
-    }
+	  if (parts.size () >= 5 && (!is_externalCtrlMode() || decoded_text.isStandardMessage()))    //avt
+	    {
+	      //QApplication::beep();    //avt
+	      auto has_seconds = parts[0].size () > 4;
+	      auto send_decode = [&] (MessageClient * client) {
+	        if (!client) return;
+	        client->decode (is_new
+	                        , QTime::fromString (parts[0], has_seconds ? "hhmmss" : "hhmm")
+	                        , parts[1].toInt ()
+	                        , parts[2].toFloat (), parts[3].toUInt (), parts[4]
+	                        , message_text
+	                        , QChar {'?'} == decode.mid (has_seconds ? 24 + 36 : 22 + 36, 1)
+	                        , m_diskData);
+	      };
+	      send_decode (m_messageClient);
+	      send_decode (ensureTertiaryUdpMessageClient ());
+	    }
 
   if (is_new && m_remoteCommandServer)
     {
@@ -24871,25 +25143,30 @@ void MainWindow::enqueueDecode (DecodedText decoded_text, bool modifier, bool au
   auto const& decode = message.trimmed ();
   auto const message_text = udp_decode_message_text (decode);
   auto const& parts = decode.left (22).split (' ', SkipEmptyParts);
-  if (parts.size () >= 5 && (!is_externalCtrlMode() || decoded_text.isStandardMessage()))   //avt 1/1/21
-    {
-      auto has_seconds = parts[0].size () > 4;
-      m_messageClient->enqueue_decode (autoGen        //avt 1/3/21
-                               , QTime::fromString (parts[0], has_seconds ? "hhmmss" : "hhmm")
-                               , parts[1].toInt ()
-                               , parts[2].toFloat (), parts[3].toUInt (), parts[4]
-                               , message_text
-                               , isDx                 //avt 1/3/21
-                               , modifier
-                               , isNewCallOnBand
-                               , isNewCall            //avt 5/6/24
-                               , isNewCountryOnBand
-                               , isNewCountry
-                               , country              //avt 5/4/24
-                               , continent            //avt 5/6/24
-                               , az
-                               , dist);
-    }
+	  if (parts.size () >= 5 && (!is_externalCtrlMode() || decoded_text.isStandardMessage()))   //avt 1/1/21
+	    {
+	      auto has_seconds = parts[0].size () > 4;
+	      auto send_enqueue_decode = [&] (MessageClient * client) {
+	        if (!client) return;
+	        client->enqueue_decode (autoGen        //avt 1/3/21
+	                                , QTime::fromString (parts[0], has_seconds ? "hhmmss" : "hhmm")
+	                                , parts[1].toInt ()
+	                                , parts[2].toFloat (), parts[3].toUInt (), parts[4]
+	                                , message_text
+	                                , isDx                 //avt 1/3/21
+	                                , modifier
+	                                , isNewCallOnBand
+	                                , isNewCall            //avt 5/6/24
+	                                , isNewCountryOnBand
+	                                , isNewCountry
+	                                , country              //avt 5/4/24
+	                                , continent            //avt 5/6/24
+	                                , az
+	                                , dist);
+	      };
+	      send_enqueue_decode (m_messageClient);
+	      send_enqueue_decode (ensureTertiaryUdpMessageClient ());
+	    }
 }
 
 void MainWindow::postWSPRDecode (bool is_new, QStringList parts)
@@ -24898,10 +25175,15 @@ void MainWindow::postWSPRDecode (bool is_new, QStringList parts)
     {
       parts.insert (6, "");
     }
-  m_messageClient->WSPR_decode (is_new, QTime::fromString (parts[0], "hhmm"), parts[1].toInt ()
-                                , parts[2].toFloat (), Radio::frequency (parts[3].toFloat (), 6)
-                                , parts[4].toInt (), parts[5], parts[6], parts[7].toInt ()
-                                , m_diskData);
+	  auto send_wspr_decode = [&] (MessageClient * client) {
+	    if (!client) return;
+	    client->WSPR_decode (is_new, QTime::fromString (parts[0], "hhmm"), parts[1].toInt ()
+	                         , parts[2].toFloat (), Radio::frequency (parts[3].toFloat (), 6)
+	                         , parts[4].toInt (), parts[5], parts[6], parts[7].toInt ()
+	                         , m_diskData);
+	  };
+	  send_wspr_decode (m_messageClient);
+	  send_wspr_decode (ensureTertiaryUdpMessageClient ());
 }
 
 void MainWindow::networkError (QString const& e)
@@ -25444,25 +25726,30 @@ void MainWindow::statusUpdate () const
     }
   // Keep UDP status aligned with the real on-air mode. External loggers
   // such as CQRLOG expect FT2 sessions to remain FT2 from status through log.
-  m_messageClient->status_update (m_freqNominal, m_mode, (m_externalCtrl ? m_dxCall : m_hisCall),   //avt 11/12/21
-                                  QString::number (ui->rptSpinBox->value ()),
-                                  m_mode, m_auto,
-                                  m_transmitting, m_decoderBusy,
-                                  rx_frequency, ui->TxFreqSpinBox->value (),
-                                  m_config.my_callsign (), m_config.my_grid (),
-                                  m_hisGrid, m_tx_watchdog,
-                                  submode != QChar::Null ? QString {submode} : QString {}, m_bFastMode,
-                                  static_cast<quint8> (m_specOp),
-                                  ftol, tr_period, m_multi_settings->configuration_name (), 
-                                  m_currentMessage.trimmed(), m_QSOProgress, ui->txFirstCheckBox->isChecked(),     //avt 11/16/20 external controller needs extra info
-                                  m_dblClk,     //avt 1/1/21
-                                  m_checkCmd,   //avt 12/15/20
-                                  m_txHaltClk,  //avt 12/18/21
-                                  m_autoButtonState, //avt 10/2/25
-                                  m_txEnableClk, //avt 1/28/24 
-                                  m_myContinent, //avt 5/6/24
-                                  m_config.miles());  //avt 5/7/24
-}
+	  auto send_status = [&] (MessageClient * client) {
+	    if (!client) return;
+	    client->status_update (m_freqNominal, m_mode, (m_externalCtrl ? m_dxCall : m_hisCall),   //avt 11/12/21
+	                           QString::number (ui->rptSpinBox->value ()),
+	                           m_mode, m_auto,
+	                           m_transmitting, m_decoderBusy,
+	                           rx_frequency, ui->TxFreqSpinBox->value (),
+	                           m_config.my_callsign (), m_config.my_grid (),
+	                           m_hisGrid, m_tx_watchdog,
+	                           submode != QChar::Null ? QString {submode} : QString {}, m_bFastMode,
+	                           static_cast<quint8> (m_specOp),
+	                           ftol, tr_period, m_multi_settings->configuration_name (),
+	                           m_currentMessage.trimmed(), m_QSOProgress, ui->txFirstCheckBox->isChecked(),     //avt 11/16/20 external controller needs extra info
+	                           m_dblClk,     //avt 1/1/21
+	                           m_checkCmd,   //avt 12/15/20
+	                           m_txHaltClk,  //avt 12/18/21
+	                           m_autoButtonState, //avt 10/2/25
+	                           m_txEnableClk, //avt 1/28/24
+	                           m_myContinent, //avt 5/6/24
+	                           m_config.miles());  //avt 5/7/24
+	  };
+	  send_status (m_messageClient);
+	  send_status (ensureTertiaryUdpMessageClient ());
+	}
 
 void MainWindow::childEvent (QChildEvent * e)
 {

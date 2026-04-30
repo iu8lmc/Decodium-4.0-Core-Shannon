@@ -291,6 +291,25 @@ Dialog {
                 || rig.indexOf("IC9") !== -1 || rig.indexOf("IC705") !== -1
     }
 
+    function civAddressText() {
+        var controller = activeCatController()
+        if (!controller || controller.civAddress === undefined || controller.civAddress === null)
+            return ""
+        var v = parseInt(controller.civAddress)
+        if (!v)
+            return ""
+        return "0x" + v.toString(16).toUpperCase().padStart(2, "0")
+    }
+
+    function civAddressPlaceholderText() {
+        var rig = normalizedRigName(activeRigName()).replace(/-/g, "")
+        if (rig.indexOf("IC7300MK2") !== -1)
+            return "0xB6 (IC-7300MK2)"
+        if (rig.indexOf("IC7300") !== -1)
+            return "0x94 (IC-7300)"
+        return qsTr("Auto")
+    }
+
     function usesSerialControls() {
         var portType = activeCatPortType()
         return portType === "serial" || portType === "usb"
@@ -1483,25 +1502,11 @@ Dialog {
                             leftPadding: 8
                             color: textPrimary
                             font.pixelSize: controlFontSize
-                            placeholderText: "0x94 (IC-7300)"
+                            placeholderText: settingsDialog.civAddressPlaceholderText()
+                            readOnly: true
                             selectByMouse: true
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            text: {
-                                if (!bridge.catManager || bridge.catManager.civAddress === undefined)
-                                    return ""
-                                var v = parseInt(bridge.catManager.civAddress)
-                                if (!v) return ""
-                                return "0x" + v.toString(16).toUpperCase().padStart(2, "0")
-                            }
-                            onEditingFinished: {
-                                if (!bridge.catManager) return
-                                var t = text.trim().replace(/^0x/i, "")
-                                var v = parseInt(t, 16)
-                                if (!isNaN(v) && v >= 0 && v <= 0xFF) {
-                                    bridge.catManager.civAddress = v
-                                    settingsDialog.scheduleCatPersist()
-                                }
-                            }
+                            text: settingsDialog.civAddressText()
                         }
 
                         Text {
@@ -3140,7 +3145,7 @@ Dialog {
                         Text { text: qsTr("Listen Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         SpinBox {
                             id: udpListenSpin
-                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPListenPort", 2238)); editable: true
+                            from: 0; to: 65535; value: Number(bridge.getSetting("UDPListenPort", 0)); editable: true
                             implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
                             onValueChanged: bridge.setSetting("UDPListenPort", value)
                             contentItem: TextInput { text: udpListenSpin.textFromValue(udpListenSpin.value, udpListenSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpListenSpin.editable; validator: udpListenSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
@@ -3244,6 +3249,80 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
+
+                        Text { text: qsTr("Tertiary UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        CheckBox {
+                            id: udpTertiaryCheck
+                            checked: boolSetting("UDPTertiaryEnabled", false)
+                            onToggled: setBoolSettingIfChanged("UDPTertiaryEnabled", checked, false)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("Tertiary Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        TextField {
+                            text: bridge.getSetting("UDPTertiaryServer", "127.0.0.1"); Layout.fillWidth: true; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
+                            enabled: udpTertiaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            color: textPrimary; font.pixelSize: controlFontSize
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("UDPTertiaryServer", text)
+                        }
+
+                        Text { text: qsTr("Tertiary Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: udpTertiaryPortSpin
+                            from: 1; to: 65535; value: Number(bridge.getSetting("UDPTertiaryServerPort", 2237)); editable: true
+                            enabled: udpTertiaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("UDPTertiaryServerPort", value)
+                            contentItem: TextInput { text: udpTertiaryPortSpin.textFromValue(udpTertiaryPortSpin.value, udpTertiaryPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpTertiaryPortSpin.editable; validator: udpTertiaryPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpTertiaryPortSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+                        Text { text: qsTr("Tertiary TTL:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: udpTertiaryTtlSpin
+                            from: 0; to: 255; value: Number(bridge.getSetting("UDPTertiaryTTL", bridge.getSetting("UDPTTL", 1))); editable: true
+                            enabled: udpTertiaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("UDPTertiaryTTL", value)
+                            contentItem: TextInput { text: udpTertiaryTtlSpin.textFromValue(udpTertiaryTtlSpin.value, udpTertiaryTtlSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !udpTertiaryTtlSpin.editable; validator: udpTertiaryTtlSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: udpTertiaryTtlSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        Text { text: qsTr("Tertiary Interface:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        ComboBox {
+                            id: udpTertiaryInterfaceCombo
+                            model: [qsTr("All interfaces")].concat(bridge.networkInterfaceNames())
+                            enabled: udpTertiaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: fieldMinWidth
+                            implicitHeight: controlHeight
+                            Component.onCompleted: {
+                                var saved = String(bridge.getSetting("UDPTertiaryInterface", ""))
+                                currentIndex = saved && saved.length ? Math.max(0, find(saved)) : 0
+                            }
+                            onActivated: bridge.setSetting("UDPTertiaryInterface", currentIndex <= 0 ? "" : currentText)
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            contentItem: Text { text: udpTertiaryInterfaceCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                            delegate: ItemDelegate { contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12; elide: Text.ElideRight }
+                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
+                            popup.background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 4 }
+                        }
+
+                        Text { text: qsTr("Tertiary ADIF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            id: udpTertiaryAdifCheck
+                            checked: boolSetting("UDPTertiaryLoggedAdifEnabled", true)
+                            enabled: udpTertiaryCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            onToggled: setBoolSettingIfChanged("UDPTertiaryLoggedAdifEnabled", checked, true)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         Text { text: qsTr("Accept UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {

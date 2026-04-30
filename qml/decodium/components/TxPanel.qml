@@ -11,6 +11,7 @@ Item {
     // Required property - reference to the app engine
     required property var engine
     property bool handleLogPrompt: true
+    property bool showAsyncIcon: true
     readonly property bool txVisualActive: !!(engine && (engine.transmitting || engine.tuning))
     property string logPreviewCall: ""
     property string logPreviewGrid: ""
@@ -18,6 +19,7 @@ Item {
     property string logPreviewRcvd: ""
     property string logPreviewFreq: ""
     property string logPreviewMode: ""
+    property string logPreviewComment: ""
     property bool logClusterSpotAvailable: false
     property bool logClusterSpotChecked: false
     property bool logPromptRequestedByBridge: false
@@ -34,6 +36,7 @@ Item {
         logPreviewFreq = preview.freq !== undefined ? Number(preview.freq || 0).toFixed(0)
                                                     : (engine ? Number(engine.frequency || 0).toFixed(0) : "")
         logPreviewMode = preview.mode ? String(preview.mode) : (engine && engine.mode ? engine.mode : "")
+        logPreviewComment = preview.comment !== undefined ? String(preview.comment || "") : ""
     }
 
     function refreshLogSatelliteChoices() {
@@ -92,6 +95,7 @@ Item {
         logPromptAccepted = false
         refreshLogPreview()
         syncLogSatelliteFields()
+        logCommentField.text = logPreviewComment
         logConfirmPopup.open()
     }
 
@@ -354,7 +358,7 @@ Item {
                                     boldLabel: mamBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Multi-Answer Mode (right-click=window)"
+                                ToolTip.text: qsTr("Multi-Answer Mode (right-click=window)")
                                 ToolTip.delay: 500
                             }
 
@@ -390,7 +394,7 @@ Item {
                                     boldLabel: deepBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Deep Search"
+                                ToolTip.text: qsTr("Deep Search")
                                 ToolTip.delay: 500
                             }
                         }
@@ -420,7 +424,7 @@ Item {
                                     boldLabel: apBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "A-Priori Decoding"
+                                ToolTip.text: qsTr("A-Priori Decoding")
                                 ToolTip.delay: 500
                             }
                         }
@@ -450,7 +454,7 @@ Item {
                                     boldLabel: swlBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "SWL Mode (Listen Only)"
+                                ToolTip.text: qsTr("SWL Mode (Listen Only)")
                                 ToolTip.delay: 500
                             }
                         }
@@ -480,7 +484,7 @@ Item {
                                     boldLabel: autoSeqBtn2.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Auto Sequence"
+                                ToolTip.text: qsTr("Auto Sequence")
                                 ToolTip.delay: 500
                             }
                         }
@@ -510,7 +514,7 @@ Item {
                                     boldLabel: qqBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Quick QSO — salta TX1, parte da TX2 (report diretto)"
+                                ToolTip.text: qsTr("Quick QSO - skip TX1 and start from TX2 (direct report)")
                                 ToolTip.delay: 500
                             }
                         }
@@ -549,7 +553,7 @@ Item {
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Enable TX"
+                                ToolTip.text: qsTr("Enable TX")
                                 ToolTip.delay: 500
                             }
                         }
@@ -583,7 +587,7 @@ Item {
                                     boldLabel: holdTxFreqBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Blocca Frequenza TX\n(Hold Tx Freq)"
+                                ToolTip.text: qsTr("Lock TX frequency\n(Hold Tx Freq)")
                                 ToolTip.delay: 500
                             }
                         }
@@ -610,7 +614,7 @@ Item {
                                     boldLabel: engine && engine.autoCqRepeat
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Auto CQ Repeat\n(Chiama CQ automaticamente fino a risposta)"
+                                ToolTip.text: qsTr("Auto CQ Repeat\nCall CQ automatically until a reply is received")
                                 ToolTip.delay: 500
 
                                 onClicked: {
@@ -647,7 +651,7 @@ Item {
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "TX slot\n1st: :00/:30\n2nd: :15/:45"
+                                ToolTip.text: qsTr("TX slot\n1st: :00/:30\n2nd: :15/:45")
                                 ToolTip.delay: 500
                                 onClicked: if (engine) engine.txPeriod = engine.txPeriod === 1 ? 0 : 1
                             }
@@ -677,7 +681,7 @@ Item {
                                     boldLabel: engine && engine.alt12Enabled
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Auto CQ: alterna le fasi Tx/Rx dopo CQ ripetuti senza risposta"
+                                ToolTip.text: qsTr("Auto CQ: alternate TX/RX phases after repeated CQ without reply")
                                 ToolTip.delay: 500
                                 onClicked: if (engine) engine.alt12Enabled = !engine.alt12Enabled
                             }
@@ -712,7 +716,7 @@ Item {
                                     }
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Tune"
+                                ToolTip.text: qsTr("Tune")
                                 ToolTip.delay: 500
                             }
                         }
@@ -740,7 +744,7 @@ Item {
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Svuota DX, report e TX1-TX5"
+                                ToolTip.text: qsTr("Clear DX, reports and TX1-TX5")
                                 ToolTip.delay: 500
                             }
                         }
@@ -770,7 +774,7 @@ Item {
                                 }
                                 onClicked: if (engine) engine.halt()
                                 ToolTip.visible: hovered
-                                ToolTip.text: "Halt TX"
+                                ToolTip.text: qsTr("Halt TX")
                                 ToolTip.delay: 500
                             }
                         }
@@ -779,12 +783,12 @@ Item {
                             id: asyncModeVis
                             width: 90
                             height: 50
-                            visible: engine && engine.mode === "FT2"
+                            visible: txPanel.showAsyncIcon && engine && engine.mode === "FT2"
                             running: engine ? (engine.asyncTxEnabled || engine.asyncDecodeEnabled) : false
                             transmitting: engine ? engine.transmitting : false
                             snr: engine ? engine.asyncSnrDb : -99
                             ToolTip.visible: hovered
-                            ToolTip.text: "FT2 Async Mode — onda sinusoidale: verde=RX, rosso=TX"
+                            ToolTip.text: qsTr("FT2 Async Mode - sine wave: green=RX, red=TX")
                             ToolTip.delay: 400
                         }
 
@@ -1120,13 +1124,14 @@ Item {
         modal: true
         focus: true
         width: 520
-        height: 405
+        height: 450
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.round((parent.height - height) / 2) : 0
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onOpened: {
             txPanel.refreshLogPreview()
             txPanel.syncLogSatelliteFields()
+            logCommentField.text = txPanel.logPreviewComment
             txPanel.logClusterSpotAvailable = !!(engine && engine.dxCluster && engine.dxCluster.connected)
             txPanel.logClusterSpotChecked = txPanel.logClusterSpotAvailable && !!engine.autoSpotEnabled
         }
@@ -1191,6 +1196,24 @@ Item {
                 Text { text: "Freq:"; color: textSecondary; font.pixelSize: 13 }
                 Text { text: logPreviewFreq && logPreviewFreq !== "0" ? logPreviewFreq + " Hz" : "-"; color: textPrimary; font.pixelSize: 14 }
 
+                Text { text: "Comment:"; color: textSecondary; font.pixelSize: 13 }
+                TextField {
+                    id: logCommentField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    color: textPrimary
+                    selectedTextColor: bgDeep
+                    selectionColor: accentGreen
+                    font.pixelSize: 13
+                    selectByMouse: true
+                    background: Rectangle {
+                        radius: 4
+                        color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
+                        border.color: logCommentField.activeFocus ? accentGreen : glassBorder
+                        border.width: 1
+                    }
+                }
+
                 Text { text: "Satellite:"; color: textSecondary; font.pixelSize: 13 }
                 StyledComboBox {
                     id: satelliteCombo
@@ -1201,7 +1224,7 @@ Item {
                     popupMinWidth: 320
                 }
 
-                Text { text: "Sat Mode:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: qsTr("Sat Mode:"); color: textSecondary; font.pixelSize: 13 }
                 StyledComboBox {
                     id: satModeCombo
                     model: txPanel.logSatModeChoices
@@ -1212,7 +1235,7 @@ Item {
                     enabled: txPanel.satelliteCodeFromDisplay(satelliteCombo.currentText).length > 0
                 }
 
-                Text { text: "DX Cluster:"; color: textSecondary; font.pixelSize: 13 }
+                Text { text: qsTr("DX Cluster:"); color: textSecondary; font.pixelSize: 13 }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -1226,7 +1249,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: txPanel.logClusterSpotAvailable ? "Spot su cluster" : "Cluster non connesso"
+                        text: txPanel.logClusterSpotAvailable ? qsTr("Spot to cluster") : qsTr("Cluster not connected")
                         color: txPanel.logClusterSpotAvailable ? textPrimary : textSecondary
                         font.pixelSize: 13
                         elide: Text.ElideRight
@@ -1241,12 +1264,12 @@ Item {
                 spacing: 10
 
                 Button {
-                    text: "Close"
+                    text: qsTr("Close")
                     onClicked: logConfirmPopup.close()
                 }
 
                 Button {
-                    text: "Add"
+                    text: qsTr("Add")
                     enabled: logPreviewCall.length > 0
                     onClicked: {
                         if (engine) {
@@ -1258,6 +1281,10 @@ Item {
                             engine.setSetting("SaveSatellite", satCode.length > 0)
                             engine.setSetting("SaveSatMode", satCode.length > 0 && satMode.length > 0)
                             engine.setSetting("SavePropMode", satCode.length > 0)
+                            if (engine.setNextLogComment)
+                                engine.setNextLogComment(logCommentField.text)
+                            else
+                                engine.setSetting("LogComments", logCommentField.text)
                             engine.setNextLogClusterSpotEnabled(txPanel.logClusterSpotAvailable && txPanel.logClusterSpotChecked)
                             txPanel.logPromptAccepted = true
                             if (engine.confirmLogQso)

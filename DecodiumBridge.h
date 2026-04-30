@@ -659,6 +659,7 @@ public slots:
     Q_INVOKABLE void connectDxCluster(const QString& host, int port);
     Q_INVOKABLE void disconnectDxCluster();
     Q_INVOKABLE void setNextLogClusterSpotEnabled(bool enabled);
+    Q_INVOKABLE void setNextLogComment(const QString& comment);
     bool dxClusterConnected() const { return m_dxCluster && m_dxCluster->connected(); }
     QVariantList dxClusterSpots() const { return m_dxCluster ? m_dxCluster->spots() : QVariantList{}; }
     QString dxClusterHost() const { return m_dxCluster ? m_dxCluster->host() : QString{}; }
@@ -1096,13 +1097,18 @@ private:
                                  const QString& mode = QString()) const;
     void rememberRecentAutoCqAbandoned(const QString& call, double freqHz, const QString& mode);
     void rememberRecentAutoCqWorked(const QString& call, double freqHz, const QString& mode);
+    void rememberCompletedAutoCqPartner(const QString& call, bool logged, const QString& reason);
     void removeCallerFromQueue(const QString& call);
+    QString activeMamCallerBase() const;
+    void removeActiveMamCallerFromQueue(const QString& reason);
+    void maybeEnqueueMamCallerFromMessage(const QString& message, int freq = -1, int snr = -99);
     void maybeEnqueueMamCallerFromDecode(const QStringList& fields);
     void clearNextLogClusterSpotOverride();
     QString inferredPartnerForAutolog() const;
     QString pskReporterProgramInfo() const;
     bool promptToLogEnabled() const;
     void logQsoNow();
+    void clearTxArmedAfterCompletedQso(const QString& completedCall, const QString& reason);
     void showLogQsoPromptDialog();
     void capturePromptLogSnapshot(const QVariantMap& preview);
     void clearPromptLogSnapshot();
@@ -1391,12 +1397,14 @@ private:
     bool m_useLegacyTxBackend {false};
     MessageClient* m_udpMessageClient {nullptr};
     MessageClient* m_udpSecondaryMessageClient {nullptr};
+    MessageClient* m_udpTertiaryMessageClient {nullptr};
     bool m_udpMessageClientRestartPending {false};
     int  m_legacyBandActivityRevision {-1};
     int  m_legacyRxFrequencyRevision {-1};
     QString m_legacyAllTxtRevisionKey;
     mutable QString m_legacyAllTxtConsumedPath;
     mutable qint64 m_legacyAllTxtConsumedSize {-1};
+    QSet<QString> m_legacyModeChangeClearedDecodeKeys;
     QSet<QString> m_legacyClearedRxMirrorKeys;
 
     // === GitHub TxController clone ===
@@ -1415,7 +1423,7 @@ private:
     bool    m_ft2DeferredLogPending {false};
     bool    m_quickPeerSignaled {false};
     bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
-    int  m_maxCallerRetries {5};   // invii totali per step prima di fermarsi
+    int  m_maxCallerRetries {10};  // invii totali per step prima di fermarsi
     int  m_autoCqMaxCycles  {0};   // 0 = infinito, >0 = max cicli CQ
     int  m_autoCqPauseSec   {0};   // pausa (s) tra cicli CQ (0 = nessuna pausa)
     int  m_autoCqCycleCount {0};   // contatore cicli CQ corrente
@@ -1461,6 +1469,7 @@ private:
     QString m_promptLogRptRcvd;
     QString m_promptLogMode;
     QString m_promptLogComment;
+    bool    m_promptLogCommentOverrideValid {false};
     QDateTime m_promptLogOn;
     QDateTime m_promptLogOff;
     double    m_promptLogDialFreq {0.0};
@@ -1651,6 +1660,9 @@ private:
     void resetEarlyDecodeSchedule();
     int targetDecodeSamplesForMode(const QString& mode) const;
     void enumerateAudioDevices();
+    void applyAudioInputRuntimeChange(const QString& reason);
+    void applyAudioOutputRuntimeChange(const QString& reason);
+    void syncAudioDeviceSettingsToLegacyIni();
     void updatePeriodTicksMax();
     QVector<float> computeSpectrum() const;
     QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
@@ -1689,6 +1701,8 @@ private:
     void scheduleLegacyStateRefreshBurst();
     void migrateActiveMonitoringToLegacyBackend();
     void teardownAudioCapture();
+    void primeLegacyAllTxtCursor();
+    void clearDecodeWindowsForModeChange(const QString& previousMode, const QString& nextMode);
     void reloadBridgeSettingsFromPersistentStore();
     void syncLegacyBackendDecodeList();
     QVariantList mirrorLegacyDecodeLines(QStringList const& lines,

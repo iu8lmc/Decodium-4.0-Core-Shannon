@@ -544,6 +544,11 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
             default: break;
             }
 
+          if (params.civ_address > 0)
+            {
+              m_->set_conf ("civaddr", QByteArray::number (params.civ_address).data ());
+            }
+
           if (params.force_dtr)
             {
               m_->set_conf ("dtr_state", params.dtr_high ? "ON" : "OFF");
@@ -932,6 +937,8 @@ int HamlibTransceiver::do_start ()
 
 void HamlibTransceiver::do_stop ()
 {
+  stop_polling ();
+
   if (m_->is_dummy_ && !m_->ptt_only_)
     {
       auto rc = rig_get_freq (m_->rig_.data (), RIG_VFO_CURR, &impl::dummy_frequency_);
@@ -1175,6 +1182,12 @@ void HamlibTransceiver::do_mode (MODE mode)
 
 void HamlibTransceiver::do_poll ()
 {
+  auto * rig = m_->rig_.data ();
+  if (!rig || !rig->caps)
+    {
+      return;
+    }
+
   freq_t f {0};
   rmode_t m {RIG_MODE_USB};
   pbwidth_t w {RIG_PASSBAND_NORMAL};

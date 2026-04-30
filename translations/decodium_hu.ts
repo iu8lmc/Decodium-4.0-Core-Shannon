@@ -13539,7 +13539,7 @@ Jobb klikk a beillesztési és törlési lehetőségekhez.</translation>
     </message>
     <message>
         <source>TX Watchdog</source>
-        <translation>TX watchdog</translation>
+        <translation>TX őr</translation>
     </message>
     <message>
         <source>Split Mode</source>
@@ -13580,6 +13580,197 @@ Jobb klikk a beillesztési és törlési lehetőségekhez.</translation>
     <message>
         <source>Record TX</source>
         <translation>TX rögzítése</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>dekodolas</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>uzenet</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Torles</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>Dokkolas</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>TX panel dokkolasa</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>ASYNC ikon elrejtése</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>ASYNC ikon megjelenítése</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>Riasztás CQ-ra</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>Színes kiemelés...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Decodium frissítése v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Frissítések keresése</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Cabrillo exportálása...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>cty.dat letöltése...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>cty.dat frissítése</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>Óra megjelenítése</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>DX Cluster megjelenítése</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>PSK Reporter megjelenítése</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>Időszinkron panel</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>Aktív állomások</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>Élő térkép</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Fox mód (hívólista)</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Hound mód</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>DX Cluster panel</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>Riasztás saját hívójelre</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>Tobbvalaszos mod (jobb kattintas=ablak)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Mely kereses</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>A-priori dekodolas</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>SWL mod (csak vetel)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>Automatikus szekvencia</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - TX1 kihagyasa, inditas TX2-tol (kozvetlen riport)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>TX engedelyezese</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>TX frekvencia zarolasa&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Auto CQ ismetles&#xa;CQ automatikus hivasa valaszig</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: TX/RX fazisok valtasa valasz nelkuli ismelt CQ utan</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>Hangolas</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>DX, riportok es TX1-TX5 torlese</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>TX leallitasa</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>FT2 aszinkron mod - szinuszhullam: zold=RX, piros=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>Muhu. mod:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>DX cluster:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>Spot a clusterre</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>Cluster nincs csatlakoztatva</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Bezaras</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Hozzaadas</translation>
     </message>
 </context>
 </TS>

@@ -43,6 +43,8 @@ protected:
   // in a non-intrusive manner.
   virtual void do_poll () = 0;
 
+  void stop_polling ();
+
   void do_post_start () override final;
   void do_post_stop () override final;
   void do_post_frequency (Frequency, MODE) override final;
@@ -59,6 +61,7 @@ private:
 
   int interval_;    // polling interval in milliseconds
   QTimer * poll_timer_;
+  bool polling_stopped_ {true};
 
   // keep a record of the last state signalled so we can elide
   // duplicate updates

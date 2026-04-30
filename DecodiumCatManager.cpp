@@ -190,7 +190,8 @@ static const RigDefaults kRigDefaultsTable[] = {
     {"FT-991A",    38400,  "8", "1", "none", "CAT", 0x00},
     {"FT-991",     38400,  "8", "1", "none", "CAT", 0x00},
     {"FT991",      38400,  "8", "1", "none", "CAT", 0x00},
-    // Icom (CI-V) - richiede hamlib per protocollo binario
+    // Icom (CI-V). I match piu' specifici devono precedere quelli generici.
+    {"IC-7300MK2", 19200,  "8", "1", "none", "CAT", 0xB6},
     {"IC-7300",    19200,  "8", "1", "none", "CAT", 0x94},
     {"IC-7600",    19200,  "8", "1", "none", "CAT", 0x7A},
     {"IC-7610",    19200,  "8", "1", "none", "CAT", 0x98},
@@ -241,7 +242,7 @@ QStringList DecodiumCatManager::rigList() const
     return {
         "Kenwood TS-590S", "Kenwood TS-590SG", "Kenwood TS-480",
         "Kenwood TS-2000", "Kenwood TS-890S",
-        "Icom IC-7300", "Icom IC-7600", "Icom IC-7610", "Icom IC-9700", "Icom IC-705",
+        "Icom IC-7300", "Icom IC-7300MK2", "Icom IC-7600", "Icom IC-7610", "Icom IC-9700", "Icom IC-705",
         "Yaesu FT-991", "Yaesu FT-991A", "Yaesu FT-DX10", "Yaesu FT-DX101D",
         "Elecraft K3", "Elecraft KX3",
     };
@@ -867,7 +868,7 @@ void DecodiumCatManager::loadSettings()
     QSettings s("Decodium", "Decodium3");
     s.beginGroup("CAT_Native");
     m_rigName        = s.value("rigName",        "Kenwood TS-590S").toString();
-    m_serialPort     = s.value("serialPort",     "COM3").toString();
+    m_serialPort     = s.value("serialPort",     QString{}).toString();
     m_baudRate       = s.value("baudRate",        57600).toInt();
     m_dataBits       = s.value("dataBits",        m_dataBits).toString();
     m_stopBits       = s.value("stopBits",        m_stopBits).toString();
@@ -877,6 +878,9 @@ void DecodiumCatManager::loadSettings()
         m_pttMethod = QStringLiteral("CAT");
     m_pttPort        = s.value("pttPort",         "CAT").toString();
     m_civAddress     = s.value("civAddress",      0).toInt();
+    if (auto const* defaults = findRigDefaults(m_rigName)) {
+        m_civAddress = defaults->civAddress;
+    }
     m_pollInterval   = s.value("pollInterval",    2).toInt();
     m_forceDtr       = s.value("forceDtr",        false).toBool();
     m_dtrHigh        = s.value("dtrHigh",         false).toBool();

@@ -281,7 +281,7 @@ void SoundInput::retireCurrentStream ()
   // Qt 6.11's CoreAudio backend can still have a device-disconnect future
   // queued when the app asks QAudioSource to stop. Calling stop() in the same
   // turn can make Qt run stopAudioUnit() twice and crash inside
-  // QFutureInterfaceBase::cancel(). Suspend immediately, then stop/delete after
+  // QFutureInterfaceBase::cancel(). Suspend immediately, then reset/delete after
   // CoreAudio's pending listener work has had time to settle.
   if (stream->state () != QAudio::StoppedState)
     {
@@ -296,7 +296,10 @@ void SoundInput::retireCurrentStream ()
       }
     if (guard->state () != QAudio::StoppedState)
       {
-        guard->stop ();
+        // stop() drains QtMultimedia's source ringbuffer into the QIODevice.
+        // During shutdown/restart the sink can already be closing, so discard
+        // buffered input instead of writing stale samples into a retiring sink.
+        guard->reset ();
       }
   });
   QTimer::singleShot (5000, stream, &QObject::deleteLater);

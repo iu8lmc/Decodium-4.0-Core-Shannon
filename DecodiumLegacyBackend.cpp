@@ -588,7 +588,6 @@ DecodiumLegacyBackend::~DecodiumLegacyBackend()
 {
     if (m_mainWindow) {
         m_mainWindow->legacyShutdownForEmbedding();
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 200);
     }
     restoreEmbeddedWidgetTheme();
     delete m_mainWindow;
@@ -1014,6 +1013,23 @@ void DecodiumLegacyBackend::setNextLogPromptAlreadyAccepted()
 {
     if (m_mainWindow) {
         m_mainWindow->legacySetNextLogPromptAlreadyAccepted();
+    }
+}
+
+void DecodiumLegacyBackend::setNextLogPromptFields(const QString& comment,
+                                                   bool commentValid,
+                                                   const QString& propMode,
+                                                   const QString& satellite,
+                                                   const QString& satMode,
+                                                   bool satelliteValid)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetNextLogPromptFields(comment,
+                                                   commentValid,
+                                                   propMode,
+                                                   satellite,
+                                                   satMode,
+                                                   satelliteValid);
     }
 }
 

@@ -14333,11 +14333,11 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
     </message>
     <message>
         <source>TX Watchdog</source>
-        <translation>Vigilància TX</translation>
+        <translation>Vigilant TX</translation>
     </message>
     <message>
         <source>Split Mode</source>
-        <translation>Mode Split</translation>
+        <translation>Mode dividit</translation>
     </message>
     <message>
         <source>Contest Mode</source>
@@ -14374,6 +14374,197 @@ Fes clic amb el botó dret per a les opcions d&apos;inserció i eliminació.</tr
     <message>
         <source>Record TX</source>
         <translation>Enregistra TX</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>descodificacions</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>msg</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Neteja</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>Acobla</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>Acobla panell TX</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>Amaga la icona ASYNC</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>Mostra la icona ASYNC</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>Alerta en CQ</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>Ressaltat de colors...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Actualitza Decodium v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Cerca actualitzacions</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Exporta Cabrillo...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>Baixant cty.dat...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>Actualitza cty.dat</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>Mostra el rellotge</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>Mostra DX Cluster</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>Mostra PSK Reporter</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>Panell de sincronització horària</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>Estacions actives</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>Mapa en directe</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Mode Fox (cua de trucades)</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Mode Hound</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>Panell DX Cluster</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>Alerta en el meu indicatiu</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>Mode multi-resposta (clic dret=finestra)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Cerca profunda</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>Decodificacio a priori</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>Mode SWL (nomes escolta)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>Sequencia automatica</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - salta TX1 i comenca per TX2 (informe directe)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>Activa TX</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>Bloqueja frequencia TX&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Repeticio Auto CQ&#xa;Crida CQ automaticament fins rebre resposta</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>Slot TX&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: alterna fases TX/RX despres de CQ repetits sense resposta</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>Sintonitza</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>Neteja DX, informes i TX1-TX5</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>Atura TX</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>Mode FT2 asincron - ona sinusoïdal: verd=RX, vermell=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>Mode sat:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>Cluster DX:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>Spot al cluster</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>Cluster no connectat</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Tanca</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Afegeix</translation>
     </message>
 </context>
 </TS>

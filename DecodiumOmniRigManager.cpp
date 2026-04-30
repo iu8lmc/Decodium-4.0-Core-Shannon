@@ -25,6 +25,7 @@
 #  define DECODIUM_HAS_QAXOBJECT 0
 #endif
 #include <QFileInfo>
+#include <QCoreApplication>
 #include <QProcess>
 #include <QSettings>
 #include <QThread>
@@ -142,6 +143,13 @@ QString omniRigMockMode()
     const QString mode = qEnvironmentVariable("DECODIUM_OMNIRIG_MOCK_MODE").trimmed().toUpper();
     return mode.isEmpty() ? QStringLiteral("DATA-U") : mode;
 }
+
+[[maybe_unused]] void settleComServer()
+{
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    QThread::msleep(50);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+}
 }
 
 #if defined(Q_OS_WIN) && DECODIUM_HAS_QAXOBJECT
@@ -243,6 +251,12 @@ void DecodiumOmniRigManager::connectRig()
 {
     if (m_connected) return;
 
+    delete m_portBits; m_portBits = nullptr;
+    delete m_rig;      m_rig      = nullptr;
+    delete m_omniRig;  m_omniRig  = nullptr;
+    m_readableParams = 0;
+    m_writableParams = 0;
+
     m_mockEnabled = omniRigMockRequested();
     if (m_mockEnabled) {
         m_frequency = omniRigMockFrequency();
@@ -293,9 +307,16 @@ void DecodiumOmniRigManager::connectRig()
     }
 
     int status = m_rig->property("Status").toInt();
-    for (int i = 0; i < 5 && status != OMNI_ST_ONLINE; ++i) {
-        // Decodium3 lasciava tempo a OmniRig per completare il primo poll.
-        QThread::msleep(300);
+    for (int i = 0; i < 24 && status != OMNI_ST_ONLINE; ++i) {
+        // OmniRig can be slow to settle when another COM client (Log4OM,
+        // OmniRig settings window, etc.) is already attached. Treat the
+        // intermediate states as handshake progress, not as a fatal error.
+        if (i == 3) {
+            emit statusUpdate(QStringLiteral("OmniRig: attesa rig (%1)...")
+                              .arg(omniRigStatusName(status)));
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 80);
+        QThread::msleep(250);
         status = m_rig->property("Status").toInt();
     }
 
@@ -305,6 +326,7 @@ void DecodiumOmniRigManager::connectRig()
                            ". Verifica configurazione OmniRig, radio accesa e porta libera.");
         delete m_rig; m_rig = nullptr;
         delete m_omniRig; m_omniRig = nullptr;
+        settleComServer();
         return;
     }
 

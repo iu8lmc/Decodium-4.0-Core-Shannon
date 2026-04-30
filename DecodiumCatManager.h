@@ -26,7 +26,7 @@ class DecodiumCatManager : public QObject
     Q_PROPERTY(QString tciPort      READ tciPort         WRITE setTciPort       NOTIFY tciPortChanged)
     Q_PROPERTY(QString pttMethod    READ pttMethod       WRITE setPttMethod     NOTIFY pttMethodChanged)
     Q_PROPERTY(QString pttPort      READ pttPort         WRITE setPttPort       NOTIFY pttPortChanged)
-    Q_PROPERTY(int civAddress       READ civAddress      WRITE setCivAddress    NOTIFY civAddressChanged)
+    Q_PROPERTY(int civAddress       READ civAddress      NOTIFY civAddressChanged)
     Q_PROPERTY(QString splitMode    READ splitMode       WRITE setSplitMode     NOTIFY splitModeChanged)
     Q_PROPERTY(int pollInterval     READ pollInterval    WRITE setPollInterval  NOTIFY pollIntervalChanged)
     Q_PROPERTY(QString portType     READ portType        CONSTANT)
@@ -169,7 +169,7 @@ private:
 
     bool    m_connected   {false};
     QString m_rigName     {"Kenwood TS-590S"};
-    QString m_serialPort  {"COM3"};
+    QString m_serialPort;
     int     m_baudRate    {57600};
     QString m_dataBits    {"8"};
     QString m_stopBits    {"1"};

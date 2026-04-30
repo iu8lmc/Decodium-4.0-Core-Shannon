@@ -14321,7 +14321,7 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>Multi-Answer Mode</source>
-        <translation>Режим нескольких ответов</translation>
+        <translation>Режим многоответа</translation>
     </message>
     <message>
         <source>MAM Window...</source>
@@ -14333,15 +14333,15 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>TX Watchdog</source>
-        <translation>TX Watchdog</translation>
+        <translation>Сторож TX</translation>
     </message>
     <message>
         <source>Split Mode</source>
-        <translation>Режим Split</translation>
+        <translation>Раздельный режим</translation>
     </message>
     <message>
         <source>Contest Mode</source>
-        <translation>Режим Contest</translation>
+        <translation>Контест-режим</translation>
     </message>
     <message>
         <source>CQ Only</source>
@@ -14361,7 +14361,7 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>Avg Decode</source>
-        <translation>Усреднённое декодирование</translation>
+        <translation>Усредненное декодирование</translation>
     </message>
     <message>
         <source>VHF/UHF Features</source>
@@ -14369,11 +14369,202 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>Record RX</source>
-        <translation>Запись RX</translation>
+        <translation>Записывать RX</translation>
     </message>
     <message>
         <source>Record TX</source>
-        <translation>Запись TX</translation>
+        <translation>Записывать TX</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>декодов</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>сообщ.</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Очистить</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>Закрепить</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>Закрепить панель TX</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>Скрыть значок ASYNC</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>Показать значок ASYNC</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>Оповещение на CQ</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>Цветовая подсветка...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Обновить Decodium до v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Проверить обновления</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Экспорт Cabrillo...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>Загрузка cty.dat...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>Обновить cty.dat</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>Показать часы</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>Показать DX Cluster</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>Показать PSK Reporter</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>Панель синхронизации времени</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>Активные станции</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>Живая карта</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Режим Fox (очередь вызывающих)</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Режим Hound</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>Панель DX Cluster</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>Оповещение на мой позывной</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>Режим нескольких ответов (правый щелчок=окно)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Глубокий поиск</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>Априорное декодирование</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>Режим SWL (только прием)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>Автопоследовательность</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - пропустить TX1 и начать с TX2 (прямой рапорт)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>Включить TX</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>Зафиксировать частоту TX&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Повтор Auto CQ&#xa;Автоматически звать CQ до получения ответа</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>Слот TX&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: чередовать TX/RX после повторных CQ без ответа</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>Настройка</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>Очистить DX, рапорты и TX1-TX5</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>Остановить TX</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>Асинхронный FT2 - синусоида: зеленый=RX, красный=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>Спутн. режим:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>DX-кластер:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>Спот в кластер</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>Кластер не подключен</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Закрыть</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Добавить</translation>
     </message>
 </context>
 </TS>

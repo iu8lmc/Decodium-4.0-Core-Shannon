@@ -14913,7 +14913,7 @@ Højre klik for at indsætte eller slette elementer.</translation>
     </message>
     <message>
         <source>TX Watchdog</source>
-        <translation>TX-watchdog</translation>
+        <translation>TX Watchdog</translation>
     </message>
     <message>
         <source>Split Mode</source>
@@ -14954,6 +14954,197 @@ Højre klik for at indsætte eller slette elementer.</translation>
     <message>
         <source>Record TX</source>
         <translation>Optag TX</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>dekodninger</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>msg</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Ryd</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>Dock</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>Dock TX-panel</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>Skjul ASYNC-ikon</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>Vis ASYNC-ikon</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>Alarm ved CQ</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>Farvefremhævning...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Opdater Decodium v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Søg efter opdateringer</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Eksporter Cabrillo...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>cty.dat hentes...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>Opdater cty.dat</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>Vis ur</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>Vis DX Cluster</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>Vis PSK Reporter</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>Tidssynkroniseringspanel</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>Aktive stationer</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>Live-kort</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Fox-tilstand (opkaldskø)</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Hound-tilstand</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>DX Cluster-panel</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>Alarm ved mit kaldesignal</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>Multi-svar-tilstand (hojreklik=vindue)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Dyb sogning</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>A-priori-dekodning</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>SWL-tilstand (kun lyt)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>Automatisk sekvens</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - spring TX1 over og start fra TX2 (direkte rapport)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>Aktiver TX</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>Las TX-frekvens&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Auto CQ-gentagelse&#xa;Kalder CQ automatisk indtil svar modtages</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>TX-slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: skift TX/RX-faser efter gentagne CQ uden svar</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>Tune</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>Ryd DX, rapporter og TX1-TX5</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>Stop TX</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>FT2 async-tilstand - sinusbolge: gron=RX, rod=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>Sat-tilstand:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>DX-klynge:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>Spot til klynge</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>Klynge ikke forbundet</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Luk</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Tilfoj</translation>
     </message>
 </context>
 </TS>

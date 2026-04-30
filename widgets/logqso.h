@@ -34,6 +34,12 @@ public:
                   bool noSuffix, QString xSent, QString xRcvd, bool externalCtrl,
                   bool promptAlreadyAccepted = false);    //avt 11/20/20
   void setClusterSpotState(bool available, bool checked);
+  void setNextPromptOverrides(QString const& comment,
+                              bool commentValid,
+                              QString const& propMode,
+                              QString const& satellite,
+                              QString const& satMode,
+                              bool satelliteValid);
 
 public slots:
   void accept();
@@ -69,6 +75,12 @@ private:
   QString m_txPower;
   QString m_comments;
   QString m_comments_temp = "";
+  bool m_nextPromptCommentValid {false};
+  QString m_nextPromptComment;
+  bool m_nextPromptSatelliteValid {false};
+  QString m_nextPromptPropMode;
+  QString m_nextPromptSatellite;
+  QString m_nextPromptSatMode;
   bool m_accepting {false};
   Radio::Frequency m_dialFreq;
   QString m_myCall;

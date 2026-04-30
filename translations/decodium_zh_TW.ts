@@ -14728,7 +14728,7 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>Multi-Answer Mode</source>
-        <translation>多重回應模式</translation>
+        <translation>多重回覆模式</translation>
     </message>
     <message>
         <source>MAM Window...</source>
@@ -14748,7 +14748,7 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>Contest Mode</source>
-        <translation>Contest 模式</translation>
+        <translation>競賽模式</translation>
     </message>
     <message>
         <source>CQ Only</source>
@@ -14781,6 +14781,197 @@ Right click for insert and delete options.</source>
     <message>
         <source>Record TX</source>
         <translation>錄製 TX</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>解碼</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>訊息</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>停靠</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>停靠TX面板</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>隱藏 ASYNC 圖示</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>顯示 ASYNC 圖示</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>CQ 警示</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>色彩高亮...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>更新 Decodium v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>檢查更新</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>匯出 Cabrillo...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>正在下載 cty.dat...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>更新 cty.dat</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>顯示時鐘</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>顯示 DX Cluster</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>顯示 PSK Reporter</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>時間同步面板</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>活躍電台</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>即時地圖</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Fox 模式（呼叫佇列）</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Hound 模式</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>DX Cluster 面板</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>我的呼號警示</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>多應答模式（右鍵=視窗）</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>深度搜尋</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>先驗解碼</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>SWL模式（僅接收）</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>自動序列</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - 跳過TX1並從TX2開始（直接報告）</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>啟用TX</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>鎖定TX頻率&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Auto CQ重複&#xa;自動呼叫CQ直到收到回覆</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>TX時槽&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ：多次CQ無回覆後交替TX/RX階段</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>調諧</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>清除DX、報告和TX1-TX5</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>停止TX</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>FT2非同步模式 - 正弦波：綠=RX，紅=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>衛星模式:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>DX集群:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>傳送Spot到集群</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>集群未連線</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>關閉</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>新增</translation>
     </message>
 </context>
 </TS>

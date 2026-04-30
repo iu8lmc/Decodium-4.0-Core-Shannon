@@ -125,6 +125,7 @@ public:
     SplitMode split_mode;       // how to support split TX mode
     QString ptt_port;           // serial port device name or special
                                 // value "CAT"
+    int civ_address {0};        // Icom CI-V address, 0 = Hamlib/model default
     int poll_interval;          // in seconds for interfaces that
                                 // require polling for state changes
 
@@ -147,6 +148,7 @@ public:
         && rhs.audio_source == audio_source
         && rhs.split_mode == split_mode
         && rhs.ptt_port == ptt_port
+        && rhs.civ_address == civ_address
         && rhs.poll_interval == poll_interval
         ;
     }

@@ -185,7 +185,7 @@ Dialog {
                 radius: 6
                 border.color: secondaryCyan
 
-                Column {
+                ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 10
                     spacing: 5
@@ -203,10 +203,18 @@ Dialog {
                         color: textSecondary
                     }
 
-                    Repeater {
+                    ListView {
+                        id: queueList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                         model: mamWindow.mamQueueEntries
+                        clip: true
+                        spacing: 10
+                        boundsBehavior: Flickable.StopAtBounds
+                        interactive: contentHeight > height
+
                         delegate: Rectangle {
-                            width: parent ? parent.width : 300
+                            width: queueList.width - (queueScroll.visible ? queueScroll.width + 6 : 0)
                             height: 38
                             radius: 4
                             color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.08)
@@ -247,13 +255,19 @@ Dialog {
                                 }
                             }
                         }
-                    }
 
-                    Text {
-                        visible: mamWindow.mamQueueCount === 0
-                        text: "No queued callers"
-                        font.pixelSize: 12
-                        color: textSecondary
+                        ScrollBar.vertical: ScrollBar {
+                            id: queueScroll
+                            policy: ScrollBar.AsNeeded
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: mamWindow.mamQueueCount === 0
+                            text: "No queued callers"
+                            font.pixelSize: 12
+                            color: textSecondary
+                        }
                     }
                 }
             }

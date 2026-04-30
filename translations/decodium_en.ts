@@ -13862,5 +13862,196 @@ Right click for insert and delete options.</translation>
         <source>Record TX</source>
         <translation>Record TX</translation>
     </message>
+    <message>
+        <source>decodes</source>
+        <translation>decodes</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>msgs</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Clear</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>Dock</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>Dock TX Panel</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>Hide ASYNC icon</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>Show ASYNC icon</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>Alert on CQ</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>Color Highlighting...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Update Decodium v%1</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Check for Updates</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Export Cabrillo...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>cty.dat downloading...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>Update cty.dat</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>Show Clock</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>Show DX Cluster</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>Show PSK Reporter</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>Time Sync Panel</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>Active Stations</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>Live Map</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Fox Mode (Caller Queue)</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Hound Mode</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>DX Cluster Panel</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>Alert on My Call</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>Multi-Answer Mode (right-click=window)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>Deep Search</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>A-Priori Decoding</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>SWL Mode (Listen Only)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>Auto Sequence</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - skip TX1 and start from TX2 (direct report)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>Enable TX</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>Lock TX frequency&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: alternate TX/RX phases after repeated CQ without reply</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>Tune</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>Clear DX, reports and TX1-TX5</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>Halt TX</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>FT2 Async Mode - sine wave: green=RX, red=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>Sat Mode:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>DX Cluster:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>Spot to cluster</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>Cluster not connected</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Close</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Add</translation>
+    </message>
 </context>
 </TS>

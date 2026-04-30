@@ -14,6 +14,8 @@ namespace
 {
   unsigned const polls_to_stabilize {3};
   unsigned const transient_poll_failures_to_tolerate {3};
+  int const ptt_fast_poll_first_ms {300};
+  int const ptt_fast_poll_second_ms {800};
 
   int base_poll_interval_ms (int poll_interval)
   {
@@ -70,8 +72,15 @@ void PollingTransceiver::stop_timer ()
     }
 }
 
+void PollingTransceiver::stop_polling ()
+{
+  polling_stopped_ = true;
+  stop_timer ();
+}
+
 void PollingTransceiver::do_post_start ()
 {
+  polling_stopped_ = false;
   start_timer ();
   if (!next_state_.online ())
     {
@@ -85,7 +94,7 @@ void PollingTransceiver::do_post_stop ()
 {
   // not much point waiting for rig to go offline since we are ceasing
   // polls
-  stop_timer ();
+  stop_polling ();
 }
 
 void PollingTransceiver::do_post_frequency (Frequency f, MODE m)
@@ -130,7 +139,8 @@ void PollingTransceiver::do_post_mode (MODE m)
 
 void PollingTransceiver::do_post_ptt (bool p)
 {
-  if (next_state_.ptt () != p)
+  bool const changed = next_state_.ptt () != p;
+  if (changed)
     {
       // update expected state with new PTT and set poll count
       next_state_.ptt (p);
@@ -140,6 +150,12 @@ void PollingTransceiver::do_post_ptt (bool p)
   else
     {
       next_state_.ptt(p);         // ensure this is initialized
+    }
+
+  if (changed && !polling_stopped_ && poll_timer_ && poll_timer_->isActive ())
+    {
+      QTimer::singleShot (ptt_fast_poll_first_ms, this, &PollingTransceiver::handle_timeout);
+      QTimer::singleShot (ptt_fast_poll_second_ms, this, &PollingTransceiver::handle_timeout);
     }
 }
 
@@ -155,6 +171,11 @@ bool PollingTransceiver::do_pre_update ()
 
 void PollingTransceiver::handle_timeout ()
 {
+  if (polling_stopped_ || !poll_timer_ || !poll_timer_->isActive ())
+    {
+      return;
+    }
+
   QString message;
   bool force_signal {false};
 

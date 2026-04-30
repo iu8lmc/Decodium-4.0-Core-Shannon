@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <qmath.h>
@@ -58,6 +59,9 @@ namespace
   static const QString SmCM(",");
   static const QString SmTrue("true");
   static const QString SmFalse("false");
+  static constexpr bool kVerboseTciConsoleTrace = false;
+
+#define TCI_VERBOSE_PRINTF(...) do { if (kVerboseTciConsoleTrace) std::printf(__VA_ARGS__); } while (false)
 
   QString tci_unescape (QString const& input)
   {
@@ -698,6 +702,9 @@ void TCITransceiver::onConnected()
   error_.clear ();
   CAT_TRACE ("TCITransceiver entered TCI onConnected and inConnected==true\n");
 
+  sendTextMessage (CmdIqStop + SmDP + QStringLiteral ("0") + SmTZ);
+  sendTextMessage (CmdIqStop + SmDP + QStringLiteral ("1") + SmTZ);
+
   if (!busy_split_)
     {
       busy_split_ = true;
@@ -921,12 +928,12 @@ int TCITransceiver::do_start ()
 void TCITransceiver::do_stop ()
 {
   CAT_TRACE ("TCITransceiver TCI close\n");
-  //printf ("TCI close\n");
+  //TCI_VERBOSE_PRINTF("TCI close\n");
   if (stream_audio_ && tci_Ready && inConnected && _power_) {
     stream_audio (false);
     arm_wait_timer (tci_timer1_, 500, "stop/audio-off");
     CAT_TRACE ("TCI audio closed\n");
-    //printf ("TCI audio closed\n");
+    //TCI_VERBOSE_PRINTF("TCI audio closed\n");
   }
   if (tci_Ready && inConnected && _power_) {
     requested_other_frequency_ = "";
@@ -945,7 +952,7 @@ void TCITransceiver::do_stop ()
     rig_power(false);
     arm_wait_timer (tci_timer1_, 500, "stop/power-off");
     CAT_TRACE ("TCI power down\n");
-    //printf ("TCI power down\n");
+    //TCI_VERBOSE_PRINTF("TCI power down\n");
   }
   tci_Ready = false;
   Q_EMIT request_socket_close ();
@@ -997,7 +1004,7 @@ void TCITransceiver::do_stop ()
 
 void TCITransceiver::onMessageReceived(const QString &str)
 {
-  qDebug() << "From WEB" << str;
+  if (kVerboseTciConsoleTrace) qDebug() << "From WEB" << str;
   QStringList const cmd_list = tci_split_escaped (str, QChar {';'}, SkipEmptyParts);
   for (QString const& cmds : cmd_list){
     QString command_name_raw;
@@ -1022,8 +1029,8 @@ void TCITransceiver::onMessageReceived(const QString &str)
       }
     auto const arg = [&args] (int index) -> QString { return args.value (index).trimmed (); };
     Tci_Cmd idCmd = mapCmd_.value (command_name, Cmd_Unknown);
-    if (idCmd != Cmd_Power && idCmd != Cmd_SWR && idCmd != Cmd_Smeter && idCmd != Cmd_AppFocus && idCmd != Cmd_RxSensors && idCmd != Cmd_RxChannelSensors && idCmd != Cmd_TxSensors) { printf("%s TCI message received:|%s| ",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),str.toStdString().c_str()); printf("idCmd : %d args : %s\n",idCmd,args.join("|").toStdString().c_str());}
-    qDebug() << cmds << idCmd;
+    if (idCmd != Cmd_Power && idCmd != Cmd_SWR && idCmd != Cmd_Smeter && idCmd != Cmd_AppFocus && idCmd != Cmd_RxSensors && idCmd != Cmd_RxChannelSensors && idCmd != Cmd_TxSensors) { TCI_VERBOSE_PRINTF("%s TCI message received:|%s| ",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),str.toStdString().c_str()); TCI_VERBOSE_PRINTF("idCmd : %d args : %s\n",idCmd,args.join("|").toStdString().c_str());}
+    if (kVerboseTciConsoleTrace) qDebug() << cmds << idCmd;
     if (idCmd <=0) continue;
 
     switch (idCmd) {
@@ -1032,11 +1039,11 @@ void TCITransceiver::onMessageReceived(const QString &str)
         break;
       case Cmd_RxSensors:
         if(arg (0) == rx_) level_ = arg (1).split ('.', Qt::KeepEmptyParts).value (0).toInt () + 73;
-        printf("Smeter=%d\n",level_);
+        TCI_VERBOSE_PRINTF("Smeter=%d\n",level_);
         break;
       case Cmd_RxChannelSensors:
         if(arg (0) == rx_ && arg (1) == "0") level_ = arg (2).split ('.', Qt::KeepEmptyParts).value (0).toInt () + 73;
-        printf("Smeter=%d\n",level_);
+        TCI_VERBOSE_PRINTF("Smeter=%d\n",level_);
         break;
       case Cmd_TxSensors:
         if(arg (0) == rx_) {
@@ -1049,11 +1056,11 @@ void TCITransceiver::onMessageReceived(const QString &str)
             {
               swr_ = parsed;
             }
-          printf("Power=%d SWR=%d\n",power_,swr_);
+          TCI_VERBOSE_PRINTF("Power=%d SWR=%d\n",power_,swr_);
         }
         break;
       case Cmd_SWR:
-        printf("%s Cmd_SWR : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_SWR : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         {
           int parsed = 0;
           if (parse_decimal_tenths (arg (0), &parsed))
@@ -1070,21 +1077,21 @@ void TCITransceiver::onMessageReceived(const QString &str)
               power_ = parsed;
             }
         }
-        printf("%s Cmd_Power : %s %d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str(),power_);
+        TCI_VERBOSE_PRINTF("%s Cmd_Power : %s %d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str(),power_);
         break;
       case Cmd_VFO:
-        printf("%s Cmd_VFO : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
-        printf("band_change:%d busy_other_frequency_:%d timer1_remaining:%d timer2_remaining:%d",band_change,busy_other_frequency_,tci_timer7_ ? tci_timer7_->remainingTime() : -1,tci_timer2_ ? tci_timer2_->remainingTime() : -1); //was timer1 and timer2
+        TCI_VERBOSE_PRINTF("%s Cmd_VFO : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("band_change:%d busy_other_frequency_:%d timer1_remaining:%d timer2_remaining:%d",band_change,busy_other_frequency_,tci_timer7_ ? tci_timer7_->remainingTime() : -1,tci_timer2_ ? tci_timer2_->remainingTime() : -1); //was timer1 and timer2
         if(arg (0) == rx_ && arg (1) == "0") {
           if (arg (2).left(1) != "-") rx_frequency_ = arg (2);
           CAT_TRACE("Rx VFO Frequency from SDR is :");
           CAT_TRACE(rx_frequency_);
           if (!tci_Ready && requested_rx_frequency_.isEmpty()) requested_rx_frequency_ = rx_frequency_;
           if (busy_rx_frequency_ && !band_change) {
-            printf (" cmdvfo0 done1");
+            TCI_VERBOSE_PRINTF(" cmdvfo0 done1");
             tci_done7(); //was tci_done1 (do_frequency)
           } else if (tci_timer2_ && !tci_timer2_->isActive() && split_) {
-            printf (" cmdvfo0 timer2 start 210");
+            TCI_VERBOSE_PRINTF(" cmdvfo0 timer2 start 210");
             tci_timer2_->start(210);
           }
         }
@@ -1094,24 +1101,24 @@ void TCITransceiver::onMessageReceived(const QString &str)
           CAT_TRACE(other_frequency_);
           if (!tci_Ready && requested_other_frequency_.isEmpty()) requested_other_frequency_ = other_frequency_;
           if (band_change && tci_timer7_ && tci_timer7_->isActive()) { //was tci_timer1
-            printf (" cmdvfo1 done1");
+            TCI_VERBOSE_PRINTF(" cmdvfo1 done1");
             band_change = false;
             if (tci_timer2_) tci_timer2_->start(210);
             tci_done7(); //was tci_done1 (do_frequency)
           } else if (busy_other_frequency_) {
-            printf (" cmdvfo1 done2");
+            TCI_VERBOSE_PRINTF(" cmdvfo1 done2");
             tci_done2();
           } else if (tci_timer2_ && tci_timer2_->isActive()) {
-            printf (" cmdvfo1 timer2 reset 210");
+            TCI_VERBOSE_PRINTF(" cmdvfo1 timer2 reset 210");
             tci_timer2_->start(210);
           } else if (tci_timer2_ && other_frequency_ != requested_other_frequency_ && tci_Ready && split_ && !tci_timer2_->isActive()) {
-            printf (" cmdvfo1 timer2 start 210");
+            TCI_VERBOSE_PRINTF(" cmdvfo1 timer2 start 210");
             tci_timer2_->start(210);
           }
         }
         break;
       case Cmd_Mode:
-        printf("%s Cmd_Mode : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_Mode : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
           if (ESDR3 || HPSDR) {
             if (arg (1) == "0" ) mode_ = arg (2).toLower(); else mode_ = arg (1).toLower();
@@ -1127,7 +1134,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
         }
         break;
       case Cmd_SplitEnable:
-        printf("%s Cmd_SplitEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_SplitEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
           if (arg (1).compare (QStringLiteral ("false"), Qt::CaseInsensitive) == 0) split_ = false;
           else if (arg (1).compare (QStringLiteral ("true"), Qt::CaseInsensitive) == 0) split_ = true;
@@ -1141,7 +1148,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
         }
         break;
       case Cmd_Drive:
-        printf("%s Cmd_Drive : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_Drive : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if((!ESDR3 && !HPSDR) || arg (0) == rx_) {
           if (ESDR3 || HPSDR) drive_ = arg (1); else drive_ = arg (0);
           if (requested_drive_.isEmpty()) requested_drive_ = drive_;
@@ -1151,7 +1158,7 @@ void TCITransceiver::onMessageReceived(const QString &str)
       case Cmd_Volume:
         break;
       case Cmd_Trx:
-        printf("%s Cmd_Trx : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_Trx : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
           if (arg (1).compare (QStringLiteral ("false"), Qt::CaseInsensitive) == 0) PTT_ = false;
           else if (arg (1).compare (QStringLiteral ("true"), Qt::CaseInsensitive) == 0) PTT_ = true;
@@ -1165,17 +1172,17 @@ void TCITransceiver::onMessageReceived(const QString &str)
         }
         break;
       case Cmd_AudioStart:
-        printf("%s Cmd_AudioStart : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_AudioStart : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
           stream_audio_ = true;
           if (tci_Ready) {
-            printf ("cmdaudiostart done1\n");
+            TCI_VERBOSE_PRINTF("cmdaudiostart done1\n");
             tci_done7(); //was tci_done1 (do_frequency)
           }
         }
         break;
       case Cmd_RxEnable:
-        printf("%s Cmd_RxEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s Cmd_RxEnable : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == "1") {
           if (arg (1).compare (QStringLiteral ("false"), Qt::CaseInsensitive) == 0) rx2_ = false;
           else if (arg (1).compare (QStringLiteral ("true"), Qt::CaseInsensitive) == 0) rx2_ = true;
@@ -1186,11 +1193,11 @@ void TCITransceiver::onMessageReceived(const QString &str)
         }
         break;
       case Cmd_AudioStop:
-        printf("%s CmdAudioStop : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s CmdAudioStop : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0) == rx_) {
           stream_audio_ = false;
           if (tci_Ready) {
-            printf ("cmdaudiostop done1\n");
+            TCI_VERBOSE_PRINTF("cmdaudiostop done1\n");
             tci_done7(); //was tci_done1 (do_frequency)
           }
         }
@@ -1220,15 +1227,15 @@ void TCITransceiver::onMessageReceived(const QString &str)
       case Cmd_TxStreamAudioBuffering:
         break;
       case Cmd_Start:
-        printf("%s CmdStart : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s CmdStart : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         _power_ = true;
-        printf ("cmdstart done1\n");
+        TCI_VERBOSE_PRINTF("cmdstart done1\n");
         if (tci_Ready) {
           tci_done7(); //was tci_done1 (do_frequency)
         }
         break;
       case Cmd_Stop:
-        printf("%s CmdStop : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s CmdStop : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if (tci_Ready && PTT_) {
           PTT_ = false;
           requested_PTT_ = PTT_;
@@ -1240,24 +1247,24 @@ void TCITransceiver::onMessageReceived(const QString &str)
         }
         _power_ = false;
         if (tci_timer1_ && tci_timer1_->isActive()) {  //was tci_timer1
-          printf ("cmdstop done1\n");
+          TCI_VERBOSE_PRINTF("cmdstop done1\n");
           tci_done1();
         } else {
           tci_Ready = false;
         }
         break;
       case Cmd_Version:
-        printf("%s CmdVersion : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s CmdVersion : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if(arg (0).compare (QStringLiteral ("ExpertSDR3"), Qt::CaseInsensitive) == 0) ESDR3 = true;
         else if (arg (0).compare (QStringLiteral ("Thetis"), Qt::CaseInsensitive) == 0) HPSDR = true;
         break;
       case Cmd_Device:
-        printf("%s CmdDevice : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s CmdDevice : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         if((arg (0) == "SunSDR2DX" || arg (0) == "SunSDR2PRO") && !ESDR3) tx_top_ = false;
-        printf ("tx_top_:%d\n",tx_top_);
+        TCI_VERBOSE_PRINTF("tx_top_:%d\n",tx_top_);
         break;
       case Cmd_Ready:
-        printf("%s CmdReady : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s CmdReady : %s\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),args.join("|").toStdString().c_str());
         tci_done7(); //was tci_done1 (do_frequency)
         break;
 
@@ -1404,20 +1411,7 @@ void TCITransceiver::onBinaryReceived(const QByteArray &data)
 
   if (pStream->type == Iq_Stream)
     {
-      bool tx = false;
-      if (pStream->receiver == 0)
-        {
-          tx = trxA == 0;
-          trxA = 1;
-        }
-      if (pStream->receiver == 1)
-        {
-          tx = trxB == 0;
-          trxB = 1;
-        }
-      printf ("sendIqData\n");
-      emit sendIqData (pStream->receiver, pStream->length, const_cast<float *> (pStream->data), tx);
-      qDebug () << "IQ" << data.size () << pStream->length;
+      return;
     }
   else if (pStream->type == RxAudioStream && pStream->receiver == rx_.toUInt ())
     {
@@ -1577,7 +1571,7 @@ quint32 TCITransceiver::writeAudioData (float * data, qint32 maxSize)
 
 void TCITransceiver::rx2_enable (bool on)
 {
-  printf("%s TCI rx2_enable:%d->%d busy:%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),rx2_,on,busy_rx2_);
+  TCI_VERBOSE_PRINTF("%s TCI rx2_enable:%d->%d busy:%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),rx2_,on,busy_rx2_);
   if (busy_rx2_) return;
   requested_rx2_ = on;
   busy_rx2_ = true;
@@ -1588,7 +1582,7 @@ void TCITransceiver::rx2_enable (bool on)
 
 void TCITransceiver::rig_split ()
 {
-  printf("%s TCI rig_split:%d->%d busy:%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),split_,requested_split_,busy_split_);
+  TCI_VERBOSE_PRINTF("%s TCI rig_split:%d->%d busy:%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),split_,requested_split_,busy_split_);
   if (busy_split_) return;
   if (tci_timer5_ && tci_timer5_->isActive()) return;
   busy_split_ = true;
@@ -1601,7 +1595,7 @@ void TCITransceiver::rig_split ()
 void TCITransceiver::rig_power (bool on)
 {
   TRACE_CAT ("TCITransceiver", on << state ());
-  printf("%s TCI rig_power:%d _power_:%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),on,_power_);
+  TCI_VERBOSE_PRINTF("%s TCI rig_power:%d _power_:%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),on,_power_);
   if (on != _power_) {
     if (on) {
       const QString cmd = CmdStart + SmTZ;
@@ -1722,7 +1716,7 @@ void TCITransceiver::do_ptt (bool on)
 
 void TCITransceiver::do_frequency (Frequency f, MODE m, bool no_ignore)
 {
-  qDebug() << no_ignore;
+  if (kVerboseTciConsoleTrace) qDebug() << no_ignore;
   TRACE_CAT ("TCITransceiver", f << state ());
   auto f_string = frequency_to_string (f);
   if (busy_rx_frequency_) {
@@ -1757,7 +1751,7 @@ void TCITransceiver::do_tx_frequency (Frequency tx, MODE mode, bool no_ignore)
   auto f_string = frequency_to_string (tx);
   if (tci_Ready && busy_other_frequency_ && no_ignore) {
       CAT_TRACE("TCI do_txfrequency critical no_ignore set tx vfo will be missed\n");
-    printf("%s TCI do_txfrequency critical no_ignore set tx vfo will be missed\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str());
+    TCI_VERBOSE_PRINTF("%s TCI do_txfrequency critical no_ignore set tx vfo will be missed\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str());
   }
   if (busy_other_frequency_) return;
   requested_other_frequency_ = f_string;
@@ -1769,7 +1763,7 @@ void TCITransceiver::do_tx_frequency (Frequency tx, MODE mode, bool no_ignore)
       else update_split (split_);
       if (other_frequency_ != requested_other_frequency_) {
         busy_other_frequency_ = true;
-        printf("%s TCI VFO1 command sent\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str());
+        TCI_VERBOSE_PRINTF("%s TCI VFO1 command sent\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str());
         const QString cmd = CmdVFO + SmDP + rx_ + SmCM + "1" + SmCM + requested_other_frequency_ + SmTZ;
         if(tx > 100000 && tx < 250000000000) sendTextMessage(cmd);
         arm_wait_timer (tci_timer2_, 1000, "do_tx_frequency/vfo1");
@@ -1994,7 +1988,7 @@ QString TCITransceiver::frequency_to_string (Frequency f) const
   // number is localized and in kHz, avoid floating point translation
   // errors by adding a small number (0.1Hz)
   auto f_string = QString {}.setNum(f);
-  printf ("frequency_to_string3 |%s|\n",f_string.toStdString().c_str());
+  TCI_VERBOSE_PRINTF("frequency_to_string3 |%s|\n",f_string.toStdString().c_str());
   return f_string;
 }
 
@@ -2009,7 +2003,7 @@ auto TCITransceiver::string_to_frequency (QString s) const -> Frequency
 
   if (!ok)
   {
-    printf("Frequency rejected is ***%s***\n",s.toStdString().c_str());
+    TCI_VERBOSE_PRINTF("Frequency rejected is ***%s***\n",s.toStdString().c_str());
     // throw error {tr ("TCI sent an unrecognized frequency") + " |" + s + "|"};
   }
   return f;
@@ -2031,7 +2025,7 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
 {
   // Time according to this computer which becomes our base time
   qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
-  qDebug() << "ModStart" << QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.sss");
+  if (kVerboseTciConsoleTrace) qDebug() << "ModStart" << QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.sss");
   unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
   if (m_state != Idle) {
     //    stop ();
@@ -2094,7 +2088,7 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
   m_state = (synchronize && m_silentFrames) ?
                 Synchronizing : Active;
   tx_audio_ = true;
-  printf("%s TCI modulator startdelay_ms=%d ASR=%d mstr=%d m_ic=%d s_Frames=%lld synchronize=%d m_tuning=%d State=%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),delay_ms,audioSampleRate,mstr,m_ic,m_silentFrames,synchronize,m_tuning,m_state);
+  TCI_VERBOSE_PRINTF("%s TCI modulator startdelay_ms=%d ASR=%d mstr=%d m_ic=%d s_Frames=%lld synchronize=%d m_tuning=%d State=%d\n",QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.zzz").toStdString().c_str(),delay_ms,audioSampleRate,mstr,m_ic,m_silentFrames,synchronize,m_tuning,m_state);
   Q_EMIT tci_mod_active(m_state != Idle);
 }
 
@@ -2126,7 +2120,7 @@ quint16 TCITransceiver::readAudioData (float * data, qint32 maxSize, qreal txAtt
   if(maxSize==0) return 0;
 
   qreal newVolume = pow(2.22222 * (45 - txAtten) * 0.01,2);
-  //printf("txAtten is %f and newVolume is %f\n",txAtten, newVolume);
+  //TCI_VERBOSE_PRINTF("txAtten is %f and newVolume is %f\n",txAtten, newVolume);
 
   qint64 numFrames (maxSize/bytesPerFrame);
   float * samples (reinterpret_cast<float *> (data));

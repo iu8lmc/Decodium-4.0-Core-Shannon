@@ -14,6 +14,7 @@
 #include <QTextStream>
 #include <QPointer>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QSet>
 #include <QVBoxLayout>
 
@@ -302,6 +303,21 @@ void LogQSO::setClusterSpotState(bool available, bool checked)
   m_clusterSpotCheckBox->setChecked (available && checked);
 }
 
+void LogQSO::setNextPromptOverrides(QString const& comment,
+                                    bool commentValid,
+                                    QString const& propMode,
+                                    QString const& satellite,
+                                    QString const& satMode,
+                                    bool satelliteValid)
+{
+  m_nextPromptCommentValid = commentValid;
+  m_nextPromptComment = comment;
+  m_nextPromptSatelliteValid = satelliteValid;
+  m_nextPromptPropMode = propMode;
+  m_nextPromptSatellite = satellite;
+  m_nextPromptSatMode = satMode;
+}
+
 void LogQSO::loadSettings ()
 {
   m_settings->beginGroup ("LogQSO");
@@ -528,6 +544,45 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
       && !ui->cbComments->isChecked() && m_config->specOp_in_comments()) {
     m_comments = "";
   }
+
+  if (m_nextPromptCommentValid)
+    {
+      ui->comments->setCurrentIndex (0);
+      ui->comments->setItemText (ui->comments->currentIndex (), m_nextPromptComment);
+      m_comments = m_nextPromptComment;
+      m_comments_temp = m_nextPromptComment;
+      m_nextPromptCommentValid = false;
+      m_nextPromptComment.clear ();
+    }
+
+  if (m_nextPromptSatelliteValid)
+    {
+      auto setComboData = [] (QComboBox * combo, QString const& value)
+      {
+        if (!combo)
+          {
+            return;
+          }
+        int const index = combo->findData (value.trimmed ());
+        combo->setCurrentIndex (index >= 0 ? index : 0);
+      };
+
+      QString const propMode = m_nextPromptPropMode.trimmed ();
+      QString const satellite = m_nextPromptSatellite.trimmed ();
+      QString const satMode = m_nextPromptSatMode.trimmed ();
+      ui->cbPropMode->setChecked (!propMode.isEmpty ());
+      ui->cbSatellite->setChecked (!satellite.isEmpty ());
+      ui->cbSatMode->setChecked (!satMode.isEmpty ());
+      setComboData (ui->comboBoxPropMode, propMode);
+      setComboData (ui->comboBoxSatellite, satellite);
+      setComboData (ui->comboBoxSatMode, satMode);
+      ensureSatellitePropMode ();
+      propModeChanged ();
+      m_nextPromptSatelliteValid = false;
+      m_nextPromptPropMode.clear ();
+      m_nextPromptSatellite.clear ();
+      m_nextPromptSatMode.clear ();
+    }
 
   auto const logging_mode = current_logging_mode (m_settings, m_config->prompt_to_log (), m_config->autoLog ());
   bool const force_log_without_prompt = promptAlreadyAccepted || (externalCtrl && !logging_mode.prompt_to_log);

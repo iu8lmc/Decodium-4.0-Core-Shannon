@@ -7,6 +7,7 @@
 #include "Transceiver/Transceiver.hpp"
 #include "Transceiver/TransceiverBase.hpp"
 
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QThread>
 #include <QSerialPortInfo>
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <atomic>
 #include <stdexcept>
+#include <hamlib/rig.h>
 
 namespace
 {
@@ -129,6 +131,102 @@ bool pttPortSharesCatPort(QString const& serialPort, QString const& pttPort)
     }
 
     return comparablePortName(trimmedPttPort) == comparablePortName(serialPort);
+}
+
+QString normalizedRigIdentity(QString value)
+{
+    value = value.toUpper();
+    value.remove(QRegularExpression(QStringLiteral("[\\s_-]+")));
+    return value;
+}
+
+int parseCivAddressText(QByteArray const& raw)
+{
+    QString text = QString::fromLatin1(raw.constData()).trimmed();
+    if (text.isEmpty()) {
+        return 0;
+    }
+
+    bool ok = false;
+    int value = text.toInt(&ok, 0);
+    if (!ok && text.endsWith(QLatin1Char('H'), Qt::CaseInsensitive)) {
+        text.chop(1);
+        value = text.toInt(&ok, 16);
+    }
+    if (!ok) {
+        return 0;
+    }
+    return qBound(0, value, 0xff);
+}
+
+int queryHamlibDefaultCivAddress(unsigned modelNumber)
+{
+    // Non-Hamlib pseudo models live above this range in TransceiverFactory.cpp.
+    if (modelNumber == 0 || modelNumber >= 90000) {
+        return 0;
+    }
+
+    RIG* rig = rig_init(static_cast<rig_model_t>(modelNumber));
+    if (!rig) {
+        return 0;
+    }
+
+    int result = 0;
+    token_t const token = rig_token_lookup(rig, "civaddr");
+    if (token != RIG_CONF_END) {
+        QByteArray value(128, '\0');
+#if HAVE_HAMLIB_GET_CONF2
+        int const rc = rig_get_conf2(rig, token, value.data(), value.size());
+#else
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+        int const rc = rig_get_conf(rig, token, value.data());
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+#endif
+        if (rc == RIG_OK) {
+            result = parseCivAddressText(value);
+        }
+    }
+
+    rig_cleanup(rig);
+    return result;
+}
+
+int fallbackIcomCivAddress(QString const& rigName)
+{
+    QString const normalized = normalizedRigIdentity(rigName);
+    struct Entry { const char* match; int value; };
+    static Entry const table[] = {
+        {"IC7300MK2", 0xB6},
+        {"IC7300",    0x94},
+        {"IC7600",    0x7A},
+        {"IC7610",    0x98},
+        {"IC9700",    0xA2},
+        {"IC705",     0xA4},
+    };
+
+    for (auto const& entry : table) {
+        if (normalized.contains(QLatin1String(entry.match))) {
+            return entry.value;
+        }
+    }
+    return 0;
+}
+
+int defaultCivAddressForRig(QString const& rigName, TransceiverFactory const& factory)
+{
+    auto const it = factory.supported_transceivers().constFind(rigName);
+    if (it != factory.supported_transceivers().cend()) {
+        int const hamlibDefault = queryHamlibDefaultCivAddress(it.value().model_number_);
+        if (hamlibDefault > 0) {
+            return hamlibDefault;
+        }
+    }
+    return fallbackIcomCivAddress(rigName);
 }
 
 bool isTransientCatIoFailure(QString const& reason)
@@ -444,6 +542,24 @@ void DecodiumTransceiverManager::setPttPort(const QString& v)
     enforceForceLineAvailability();
 }
 
+void DecodiumTransceiverManager::setCivAddress(int v)
+{
+    int const effective = qBound(0, v, 0xff);
+    if (m_civAddress == effective) {
+        return;
+    }
+
+    m_civAddress = effective;
+    emit civAddressChanged();
+    if (m_connected && d->transceiver
+        && 0 == m_portType.compare(QStringLiteral("serial"), Qt::CaseInsensitive)) {
+        QString const civText = QString::number(m_civAddress, 16).rightJustified(2, QLatin1Char('0')).toUpper();
+        emit statusUpdate(QStringLiteral("CI-V Address: riconnessione CAT per applicare 0x%1").arg(civText));
+        disconnectRig();
+        connectRig();
+    }
+}
+
 void DecodiumTransceiverManager::setTciAudioEnabled(bool v)
 {
     if (m_tciAudioEnabled == v) {
@@ -516,6 +632,11 @@ void DecodiumTransceiverManager::setRigName(const QString& v)
     default:          m_portType = "none";    break;
     }
     emit portTypeChanged();
+    int const civAddress = defaultCivAddressForRig(v, d->factory);
+    if (m_civAddress != civAddress) {
+        m_civAddress = civAddress;
+        emit civAddressChanged();
+    }
     if (0 == m_portType.compare(QStringLiteral("tci"), Qt::CaseInsensitive)
         && m_pttMethod != QStringLiteral("CAT")) {
         m_pttMethod = QStringLiteral("CAT");
@@ -654,8 +775,10 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     bool const canForceRts = d3ForceRtsAvailable(m->portType(), m->handshake(), m->pttMethod(), m->serialPort(), m->pttPort());
     bool const serialCat = 0 == m->portType().compare(QStringLiteral("serial"), Qt::CaseInsensitive);
     bool const pwrAndSwrEnabled = configuredPwrAndSwrEnabled();
-    int const basePollInterval = qMax(serialCat ? (pwrAndSwrEnabled ? 3 : 2) : 1,
-                                      qBound(1, m->pollInterval(), 99));
+    int const requestedPollInterval = qBound(1, m->pollInterval(), 99);
+    int const serialMinimumPollInterval = pwrAndSwrEnabled ? 1 : 2;
+    int const basePollInterval = qMax(serialCat ? serialMinimumPollInterval : 1,
+                                      requestedPollInterval);
     p.rig_name      = m->rigName();
     p.serial_port   = normalizeDevicePath(m->serialPort());
     p.network_port  = m->networkPort();
@@ -676,6 +799,7 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.split_mode    = parseSplit(m->splitMode());
     // "CAT" in PTT Port means "use the same serial port as CAT", as in WSJT-X.
     p.ptt_port      = resolvedPttPort(m);
+    p.civ_address   = m->civAddress();
     p.poll_interval = basePollInterval;
     if (pwrAndSwrEnabled)
         p.poll_interval |= do__pwr;
@@ -1089,6 +1213,7 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("pttMethod",    m_pttMethod);
     s.setValue("pttPort",      pttPort);
     s.setValue("splitMode",    m_splitMode);
+    s.setValue("civAddress",   m_civAddress);
     s.setValue("pollInterval", m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);

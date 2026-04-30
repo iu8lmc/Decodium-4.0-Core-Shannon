@@ -14874,35 +14874,35 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>SWL Mode (RX Only)</source>
-        <translation>SWL モード（RX のみ）</translation>
+        <translation>SWLモード（RXのみ）</translation>
     </message>
     <message>
         <source>Multi-Answer Mode</source>
-        <translation>マルチアンサーモード</translation>
+        <translation>マルチ応答モード</translation>
     </message>
     <message>
         <source>MAM Window...</source>
-        <translation>MAM ウィンドウ...</translation>
+        <translation>MAMウィンドウ...</translation>
     </message>
     <message>
         <source>Open ALL.TXT Folder</source>
-        <translation>ALL.TXT フォルダーを開く</translation>
+        <translation>ALL.TXTフォルダーを開く</translation>
     </message>
     <message>
         <source>TX Watchdog</source>
-        <translation>TX ウォッチドッグ</translation>
+        <translation>TXウォッチドッグ</translation>
     </message>
     <message>
         <source>Split Mode</source>
-        <translation>Split モード</translation>
+        <translation>スプリットモード</translation>
     </message>
     <message>
         <source>Contest Mode</source>
-        <translation>Contest モード</translation>
+        <translation>コンテストモード</translation>
     </message>
     <message>
         <source>CQ Only</source>
-        <translation>CQ のみ</translation>
+        <translation>CQのみ</translation>
     </message>
     <message>
         <source>My Call Only</source>
@@ -14910,11 +14910,11 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>ZAP Mode</source>
-        <translation>ZAP モード</translation>
+        <translation>ZAPモード</translation>
     </message>
     <message>
         <source>Deep Search</source>
-        <translation>ディープサーチ</translation>
+        <translation>詳細検索</translation>
     </message>
     <message>
         <source>Avg Decode</source>
@@ -14922,15 +14922,206 @@ Right click for insert and delete options.</source>
     </message>
     <message>
         <source>VHF/UHF Features</source>
-        <translation>VHF/UHF 機能</translation>
+        <translation>VHF/UHF機能</translation>
     </message>
     <message>
         <source>Record RX</source>
-        <translation>RX を録音</translation>
+        <translation>RXを録音</translation>
     </message>
     <message>
         <source>Record TX</source>
-        <translation>TX を録音</translation>
+        <translation>TXを録音</translation>
+    </message>
+    <message>
+        <source>decodes</source>
+        <translation>デコード</translation>
+    </message>
+    <message>
+        <source>msgs</source>
+        <translation>件</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>クリア</translation>
+    </message>
+    <message>
+        <source>Dock</source>
+        <translation>ドック</translation>
+    </message>
+    <message>
+        <source>Dock TX Panel</source>
+        <translation>TXパネルをドック</translation>
+    </message>
+    <message>
+        <source>Hide ASYNC icon</source>
+        <translation>ASYNCアイコンを非表示</translation>
+    </message>
+    <message>
+        <source>Show ASYNC icon</source>
+        <translation>ASYNCアイコンを表示</translation>
+    </message>
+    <message>
+        <source>Alert on CQ</source>
+        <translation>CQでアラート</translation>
+    </message>
+    <message>
+        <source>Color Highlighting...</source>
+        <translation>色の強調表示...</translation>
+    </message>
+    <message>
+        <source>QSY...</source>
+        <translation>QSY...</translation>
+    </message>
+    <message>
+        <source>Update Decodium v%1</source>
+        <translation>Decodium v%1 に更新</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>更新を確認</translation>
+    </message>
+    <message>
+        <source>Export Cabrillo...</source>
+        <translation>Cabrilloをエクスポート...</translation>
+    </message>
+    <message>
+        <source>cty.dat downloading...</source>
+        <translation>cty.datをダウンロード中...</translation>
+    </message>
+    <message>
+        <source>Update cty.dat</source>
+        <translation>cty.datを更新</translation>
+    </message>
+    <message>
+        <source>Show Clock</source>
+        <translation>時計を表示</translation>
+    </message>
+    <message>
+        <source>Show DX Cluster</source>
+        <translation>DX Clusterを表示</translation>
+    </message>
+    <message>
+        <source>Show PSK Reporter</source>
+        <translation>PSK Reporterを表示</translation>
+    </message>
+    <message>
+        <source>Time Sync Panel</source>
+        <translation>時刻同期パネル</translation>
+    </message>
+    <message>
+        <source>Active Stations</source>
+        <translation>アクティブ局</translation>
+    </message>
+    <message>
+        <source>Live Map</source>
+        <translation>ライブマップ</translation>
+    </message>
+    <message>
+        <source>Fox Mode (Caller Queue)</source>
+        <translation>Foxモード（呼び出しキュー）</translation>
+    </message>
+    <message>
+        <source>Hound Mode</source>
+        <translation>Houndモード</translation>
+    </message>
+    <message>
+        <source>Astro / EME</source>
+        <translation>Astro / EME</translation>
+    </message>
+    <message>
+        <source>DX Cluster Panel</source>
+        <translation>DX Clusterパネル</translation>
+    </message>
+    <message>
+        <source>Alert on My Call</source>
+        <translation>自局コールでアラート</translation>
+    </message>
+</context>
+<context>
+    <name>TxPanel</name>
+    <message>
+        <source>Multi-Answer Mode (right-click=window)</source>
+        <translation>マルチアンサーモード (右クリック=ウィンドウ)</translation>
+    </message>
+    <message>
+        <source>Deep Search</source>
+        <translation>ディープ検索</translation>
+    </message>
+    <message>
+        <source>A-Priori Decoding</source>
+        <translation>A-priori デコード</translation>
+    </message>
+    <message>
+        <source>SWL Mode (Listen Only)</source>
+        <translation>SWLモード (受信のみ)</translation>
+    </message>
+    <message>
+        <source>Auto Sequence</source>
+        <translation>自動シーケンス</translation>
+    </message>
+    <message>
+        <source>Quick QSO - skip TX1 and start from TX2 (direct report)</source>
+        <translation>Quick QSO - TX1を省略しTX2から開始 (直接レポート)</translation>
+    </message>
+    <message>
+        <source>Enable TX</source>
+        <translation>TXを有効化</translation>
+    </message>
+    <message>
+        <source>Lock TX frequency&#xa;(Hold Tx Freq)</source>
+        <translation>TX周波数をロック&#xa;(Hold Tx Freq)</translation>
+    </message>
+    <message>
+        <source>Auto CQ Repeat&#xa;Call CQ automatically until a reply is received</source>
+        <translation>Auto CQリピート&#xa;応答があるまで自動でCQを送信</translation>
+    </message>
+    <message>
+        <source>TX slot&#xa;1st: :00/:30&#xa;2nd: :15/:45</source>
+        <translation>TXスロット&#xa;1st: :00/:30&#xa;2nd: :15/:45</translation>
+    </message>
+    <message>
+        <source>Auto CQ: alternate TX/RX phases after repeated CQ without reply</source>
+        <translation>Auto CQ: 応答のないCQ後にTX/RXフェーズを交互に切替</translation>
+    </message>
+    <message>
+        <source>Tune</source>
+        <translation>チューン</translation>
+    </message>
+    <message>
+        <source>Clear DX, reports and TX1-TX5</source>
+        <translation>DX、レポート、TX1-TX5をクリア</translation>
+    </message>
+    <message>
+        <source>Halt TX</source>
+        <translation>TX停止</translation>
+    </message>
+    <message>
+        <source>FT2 Async Mode - sine wave: green=RX, red=TX</source>
+        <translation>FT2非同期モード - 正弦波: 緑=RX、赤=TX</translation>
+    </message>
+    <message>
+        <source>Sat Mode:</source>
+        <translation>衛星モード:</translation>
+    </message>
+    <message>
+        <source>DX Cluster:</source>
+        <translation>DXクラスタ:</translation>
+    </message>
+    <message>
+        <source>Spot to cluster</source>
+        <translation>クラスタへスポット</translation>
+    </message>
+    <message>
+        <source>Cluster not connected</source>
+        <translation>クラスタ未接続</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>閉じる</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>追加</translation>
     </message>
 </context>
 </TS>

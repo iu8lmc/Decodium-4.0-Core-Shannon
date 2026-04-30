@@ -229,6 +229,12 @@ public:
   void legacySetAutoSpotEnabled(bool enabled);
   void legacySetNextLogClusterSpotState(bool available, bool checked);
   void legacySetNextLogPromptAlreadyAccepted();
+  void legacySetNextLogPromptFields(QString const& comment,
+                                    bool commentValid,
+                                    QString const& propMode,
+                                    QString const& satellite,
+                                    QString const& satMode,
+                                    bool satelliteValid);
   void legacySetWaterfallPalette(QString const& palette);
   void legacyOpenSettings(int tabIndex = -1);
   void legacyOpenTimeSyncPanel();
@@ -780,6 +786,7 @@ private:
   void readWidebandDecodes();
   void configActiveStations();
   void sfox_tx();
+  MessageClient * ensureTertiaryUdpMessageClient() const;
   bool play_DXcall = false;
   bool inSettings = false;
 
@@ -975,7 +982,7 @@ private:
   qint32  m_txRetryCount {0};  // Consecutive Tx retry counter for auto-sequence timeout
   qint32  m_lastNtx {-1};     // Last Tx number sent (for retry detection)
   qint32  m_cqRetryCount {0}; // CQ (Tx6) retry counter for period toggle
-  static constexpr int MAX_TX_RETRIES = 5;    // Tx2/Tx3/Tx4 retries before returning to CQ
+  static constexpr int MAX_TX_RETRIES = 10;   // Tx2/Tx3/Tx4 retries before returning to CQ
   static constexpr int MAX_CQ_RETRIES = 10;   // CQ retries before toggling Tx Even/1st
   int  m_autoCQPeriodsMissed   {0};           // RX periods senza risposta dal caller corrente
   bool m_receivedReplyThisPeriod {false};     // flag reset ogni periodo RX
@@ -1506,6 +1513,8 @@ private:
   QProgressDialog m_optimizingProgress;
   QTimer m_heartbeat;
   MessageClient * m_messageClient;
+  mutable MessageClient * m_udpTertiaryMessageClient {nullptr};
+  mutable QString m_udpTertiaryRuntimeKey;
   QPointer<RemoteCommandServer> m_remoteCommandServer;
   QCheckBox * m_autoSpotCheckBox {nullptr};
   bool m_remoteWaterfallStreamingEnabled {false};
