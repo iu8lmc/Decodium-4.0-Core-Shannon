@@ -2843,6 +2843,22 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     });
 
     loadSettings();
+    // Popola m_workedCalls + m_worked dal log ADIF esistente all'avvio così che
+    // i decode mostrino subito i colori WSJT-X corretti (NewDxcc/Continent/Zone/...
+    // contro il pregresso) invece di marcare tutto come "nuovo".
+    {
+        ParsedAdifDocument doc = loadAdifDocument(ensureAdifLogPath());
+        if (!doc.records.isEmpty()) {
+            rebuildWorkedCallsFromDocument(m_workedCalls, doc.records);
+            rebuildWorkedSetsFromAdifRecords(doc.records);
+            m_qsoCountCache = doc.records.size();
+            bridgeLog(QStringLiteral("Worked-before preload: %1 QSO, %2 DXCC, %3 zone CQ, %4 grid")
+                          .arg(m_qsoCountCache)
+                          .arg(m_worked.dxccEver.size())
+                          .arg(m_worked.cqZoneEver.size())
+                          .arg(m_worked.gridEver.size()));
+        }
+    }
     resetStartupTransientQsoState();
     purgePersistentTransientQsoState();
     m_startupModeAutoPending = true;
