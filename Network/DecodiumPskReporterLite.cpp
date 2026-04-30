@@ -37,6 +37,19 @@ DecodiumPskReporterLite::~DecodiumPskReporterLite()
 // Public API
 // ---------------------------------------------------------------------------
 
+void DecodiumPskReporterLite::setEnabled(bool v)
+{
+    if (m_enabled == v) return;
+    m_enabled = v;
+    if (v) {
+        // Reset failure state when re-enabling so the LED does not stay
+        // orange indefinitely after a transient outage.
+        m_autoDisabled = false;
+        m_consecutiveFailures = 0;
+    }
+    emit connectedChanged();
+}
+
 void DecodiumPskReporterLite::setLocalStation(const QString& callsign,
                                                const QString& grid,
                                                const QString& programInfo)

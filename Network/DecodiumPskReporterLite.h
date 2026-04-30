@@ -45,10 +45,13 @@ public:
     void sendReport(bool last = false);
 
     bool isEnabled()   const { return m_enabled;    }
-    void setEnabled(bool v)  { m_enabled = v;       }
+    void setEnabled(bool v);
 
-    // True if the last HTTP POST completed successfully.
-    bool isConnected() const { return m_lastSendOk; }
+    // True when the uploader is enabled and not currently in a failure state.
+    // Optimistic-on-enable: the LED turns green as soon as the user activates
+    // PSK Reporter, instead of waiting up to 5 minutes for the first batch
+    // POST. Only flips to false after a real HTTP failure or auto-disable.
+    bool isConnected() const { return m_enabled && !m_autoDisabled && m_consecutiveFailures == 0; }
 
 signals:
     void connectedChanged();

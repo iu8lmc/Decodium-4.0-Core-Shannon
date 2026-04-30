@@ -272,15 +272,26 @@ Rectangle {
                     }
                 }
 
-                // Tooltip on hover
+                // Click cycles 1→8→1; tooltip on hover
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: function(mouse) {
+                        if (!bridge) return
+                        if (mouse.button === Qt.RightButton) {
+                            bridge.ftThreads = 3
+                        } else {
+                            bridge.cycleFtThreads()
+                        }
+                    }
 
                     ToolTip {
                         visible: parent.containsMouse
                         delay: 500
                         text: "FT Decoder Threads: " + ftThreadsLed.threadCount
+                              + "\nClick: cicla 1→8 · Click destro: reset 3"
                     }
                 }
             }
@@ -371,6 +382,7 @@ Rectangle {
 
         // PSK Reporter Status
         RowLayout {
+            id: pskStatusRow
             spacing: 4
             property bool pskEnabled:   bridge ? bridge.pskReporterEnabled : false
             property bool pskConnected: bridge ? bridge.pskReporterConnected : false
@@ -379,15 +391,29 @@ Rectangle {
                 width: 8
                 height: 8
                 radius: 4
-                color: parent.pskConnected ? accentGreen :
-                       parent.pskEnabled ? "#ff9800" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
+                color: pskStatusRow.pskConnected ? accentGreen :
+                       pskStatusRow.pskEnabled ? "#ff9800" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
             }
 
             Text {
                 text: "PSK"
                 font.pixelSize: 10
-                color: parent.pskConnected ? accentGreen :
-                       parent.pskEnabled ? "#ff9800" : textSecondary
+                color: pskStatusRow.pskConnected ? accentGreen :
+                       pskStatusRow.pskEnabled ? "#ff9800" : textSecondary
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    ToolTip {
+                        visible: parent.containsMouse
+                        delay: 500
+                        text: !pskStatusRow.pskEnabled
+                              ? "PSK Reporter: disabilitato"
+                              : (pskStatusRow.pskConnected
+                                 ? "PSK Reporter: connesso a report.pskreporter.info"
+                                 : "PSK Reporter: errori HTTP recenti")
+                    }
+                }
             }
         }
 

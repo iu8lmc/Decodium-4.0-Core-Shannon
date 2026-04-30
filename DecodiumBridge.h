@@ -170,7 +170,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int    coherentCount        READ coherentCount        NOTIFY coherentCountChanged)
     Q_PROPERTY(double neuralScore          READ neuralScore          NOTIFY neuralScoreChanged)
     Q_PROPERTY(int    turboIterations      READ turboIterations      NOTIFY turboIterationsChanged)
-    Q_PROPERTY(int    ftThreads            READ ftThreads            CONSTANT)
+    Q_PROPERTY(int    ftThreads            READ ftThreads            WRITE setFtThreads NOTIFY ftThreadsChanged)
 
     // === PSK REPORTER ===
     Q_PROPERTY(bool       pskSearchFound      READ pskSearchFound      NOTIFY pskSearchFoundChanged)
@@ -453,7 +453,9 @@ public:
     int    coherentCount()        const { return m_coherentCount; }
     double neuralScore()          const { return m_neuralScore; }
     int    turboIterations()      const { return m_turboIterations; }
-    int    ftThreads()            const { return 3; }  // FT8+FT2+FT4 workers
+    int    ftThreads()            const { return m_ftThreads; }
+    Q_INVOKABLE void setFtThreads(int v);
+    Q_INVOKABLE void cycleFtThreads();
 
     // PSK Reporter
     bool        pskSearchFound()       const { return m_pskSearchFound; }
@@ -461,7 +463,7 @@ public:
     bool        pskSearching()         const { return m_pskSearching; }
     QStringList pskSearchBands()       const { return m_pskSearchBands; }
     bool        pskReporterEnabled()   const { return m_pskReporterEnabled; }
-    void setPskReporterEnabled(bool v)       { if (m_pskReporterEnabled!=v){m_pskReporterEnabled=v;emit pskReporterEnabledChanged();} }
+    void setPskReporterEnabled(bool v);
     bool        pskReporterConnected() const;
 
     // Theme
@@ -975,6 +977,7 @@ signals:
     void asyncDecodeEnabledChanged();
     void neuralScoreChanged();
     void turboIterationsChanged();
+    void ftThreadsChanged();
     void alertOnCqChanged();
     void alertOnMyCallChanged();
     void recordRxEnabledChanged();
@@ -1252,6 +1255,7 @@ private:
     bool        m_pskSearching {false};
     QStringList m_pskSearchBands {"160m","80m","40m","20m","15m","10m"};
     bool        m_pskReporterEnabled {false};
+    int         m_ftThreads {3};
     double m_fontScale {1.0};
     int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
     int m_specialOperationActivity {0};

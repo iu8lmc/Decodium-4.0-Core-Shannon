@@ -3932,6 +3932,39 @@ void DecodiumBridge::rebuildRxDecodeList()
 QString DecodiumBridge::callsign() const { return m_callsign; }
 bool DecodiumBridge::pskReporterConnected() const { return m_pskReporter && m_pskReporter->isConnected(); }
 
+void DecodiumBridge::setPskReporterEnabled(bool v)
+{
+    if (m_pskReporterEnabled == v) return;
+    m_pskReporterEnabled = v;
+    if (m_pskReporter) {
+        m_pskReporter->setEnabled(v);
+        if (v) {
+            // Make sure the reporter knows our local station as soon as the
+            // user enables it — otherwise the first batch flush would skip
+            // because m_myCall is empty.
+            m_pskReporter->setLocalStation(m_callsign, m_grid, pskReporterProgramInfo());
+        }
+    }
+    emit pskReporterEnabledChanged();
+    // setEnabled() above already emits connectedChanged() via the reporter,
+    // but emit here too in case m_pskReporter is null at this point.
+    emit pskReporterConnectedChanged();
+}
+
+void DecodiumBridge::setFtThreads(int v)
+{
+    const int clamped = std::clamp(v, 1, 8);
+    if (m_ftThreads == clamped) return;
+    m_ftThreads = clamped;
+    QSettings("Decodium","Decodium3").setValue("ftThreads", m_ftThreads);
+    emit ftThreadsChanged();
+}
+
+void DecodiumBridge::cycleFtThreads()
+{
+    setFtThreads(m_ftThreads >= 8 ? 1 : m_ftThreads + 1);
+}
+
 QString DecodiumBridge::pskReporterProgramInfo() const
 {
     return QStringLiteral("Decodium4 v%1").arg(version()).simplified();
@@ -8798,6 +8831,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("FT8AP",             m_ft8ApEnabled);
     s.setValue("asyncDecodeEnabled",m_asyncDecodeEnabled);
     s.setValue("pskReporterEnabled",m_pskReporterEnabled);
+    s.setValue("ftThreads",         m_ftThreads);
     s.setValue("catBackend",        m_catBackend);
     // TX QSO options
     s.remove("reportReceived");
@@ -10618,6 +10652,7 @@ void DecodiumBridge::loadSettings()
     m_zapEnabled       = s.value("zapEnabled",        false).toBool();
     m_asyncDecodeEnabled=s.value("asyncDecodeEnabled",false).toBool();
     m_pskReporterEnabled=s.value("pskReporterEnabled",false).toBool();
+    m_ftThreads         =std::clamp(s.value("ftThreads",3).toInt(), 1, 8);
     // Default 'hamlib' per nuove installazioni: copre 400+ radio (incluso ICOM
     // CI-V completo) con molti meno problemi di compatibilita' rispetto al path
     // nativo che supporta solo comandi ASCII Kenwood/Yaesu. Gli utenti esistenti
