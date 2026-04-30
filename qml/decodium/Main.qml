@@ -15,7 +15,7 @@ import "components"
 ApplicationWindow {
     id: mainWindow
     readonly property int preferredMinimumWidth: 1200
-    readonly property int preferredMinimumHeight: 700
+    readonly property int preferredMinimumHeight: 480
     readonly property int currentScreenAvailableWidth: (Screen.desktopAvailableWidth > 0
                                                         ? Screen.desktopAvailableWidth
                                                         : (Screen.width > 0 ? Screen.width : preferredMinimumWidth))
@@ -2863,8 +2863,8 @@ ApplicationWindow {
                 // DX Cluster toggle button
                 Rectangle {
                     visible: dxClusterToolbarVisible
-                    width: dxClusterToolbarVisible ? (bridge.dxCluster && bridge.dxCluster.connected ? 104 : 86) : 0
-                    height: bridge.dxCluster && bridge.dxCluster.connected ? 116 : 74
+                    width: dxClusterToolbarVisible ? (bridge.dxCluster && bridge.dxCluster.connected ? 96 : 86) : 0
+                    height: bridge.dxCluster && bridge.dxCluster.connected ? 96 : 74
                     radius: 8
                     clip: true
                     color: dxClusterPanelVisible
@@ -2878,12 +2878,12 @@ ApplicationWindow {
 
                     Column {
                         anchors.centerIn: parent
-                        anchors.verticalCenterOffset: bridge.dxCluster && bridge.dxCluster.connected ? -14 : 0
-                        spacing: 4
+                        anchors.verticalCenterOffset: bridge.dxCluster && bridge.dxCluster.connected ? -8 : 0
+                        spacing: 2
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: "📡"
-                            font.pixelSize: 24
+                            font.pixelSize: 22
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -2907,7 +2907,7 @@ ApplicationWindow {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        height: parent.height - (autoSpotRow.visible ? 34 : 0)
+                        height: parent.height - (autoSpotRow.visible ? 20 : 0)
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -2932,23 +2932,23 @@ ApplicationWindow {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        anchors.bottomMargin: 12
-                        height: 20
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        anchors.bottomMargin: 4
+                        height: 14
 
                         Row {
                             id: autoSpotContent
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 4
+                            spacing: 3
 
                             Rectangle {
                                 id: autoSpotBox
-                                width: 13
-                                height: 13
-                                radius: 3
+                                width: 10
+                                height: 10
+                                radius: 2
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: bridge.autoSpotEnabled ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.9) : "transparent"
                                 border.color: bridge.autoSpotEnabled ? accentGreen : textSecondary
@@ -3501,13 +3501,27 @@ ApplicationWindow {
             } // End headerFlow
         } // End Header Bar Rectangle
 
-        // Content area for dockable panels
-        Item {
-            id: contentArea
+        // Content area for dockable panels (wrapped in Flickable for vertical scroll
+        // when the window is shorter than the minimum usable layout height)
+        Flickable {
+            id: contentScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.margins: 8
             Layout.topMargin: 0
+            contentWidth: width
+            contentHeight: Math.max(height, 540)
+            clip: true
+            flickableDirection: Flickable.VerticalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {
+                policy: contentScroll.contentHeight > contentScroll.height ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
+            }
+
+        Item {
+            id: contentArea
+            width: contentScroll.width
+            height: contentScroll.contentHeight
 
             // Main vertical split: Waterfall on top, Decode panels below
             SplitView {
@@ -3685,74 +3699,12 @@ ApplicationWindow {
                         visible: !waterfallDetached
                         color: "transparent"
 
-	                        // Header
-	                        Rectangle {
-	                            id: waterfallHeader
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 16
-	                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-                            radius: 8
-
-                            Behavior on color { ColorAnimation { duration: 100 } }
-
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: parent.radius
-                                color: parent.color
-                            }
-
-	                            RowLayout {
-	                                anchors.fill: parent
-	                                anchors.leftMargin: 6
-	                                anchors.rightMargin: 4
-	                                anchors.topMargin: 1
-	                                anchors.bottomMargin: 1
-	                                spacing: 6
-
-	                                Rectangle { Layout.preferredWidth: 6; Layout.preferredHeight: 6; radius: 3; color: secondaryCyan }
-
-	                                Item { Layout.fillWidth: true }
-
-	                                Rectangle {
-	                                    Layout.preferredWidth: 30
-	                                    Layout.preferredHeight: 12
-	                                    radius: 3
-	                                    color: waterfallPopMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : "transparent"
-	                                    border.color: waterfallPopMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
-	                                    border.width: 1
-
-	                                    Text {
-	                                        anchors.centerIn: parent
-	                                        text: "Pop"
-	                                        font.pixelSize: 9
-	                                        font.bold: true
-	                                        color: waterfallPopMA.containsMouse ? secondaryCyan : textSecondary
-	                                    }
-
-	                                    MouseArea {
-	                                        id: waterfallPopMA
-	                                        anchors.fill: parent
-	                                        hoverEnabled: true
-	                                        cursorShape: Qt.PointingHandCursor
-	                                        onClicked: mainWindow.detachWaterfallPanel()
-	                                    }
-
-	                                    ToolTip.visible: waterfallPopMA.containsMouse
-	                                    ToolTip.text: "Pop out Waterfall"
-	                                    ToolTip.delay: 500
-	                                }
-	                            }
-	                        }
 
                         Waterfall {
                             id: waterfallDisplayEmbedded
                             anchors.left: parent.left
                             anchors.right: parent.right
-                            anchors.top: waterfallHeader.bottom
+                            anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             anchors.margins: 4
                             visible: !waterfallDetached
@@ -3771,7 +3723,7 @@ ApplicationWindow {
 
                         // Etichetta "Waterfall" integrata come overlay (non occupa spazio)
                         Text {
-                            anchors.top: waterfallHeader.bottom
+                            anchors.top: parent.top
                             anchors.left: parent.left
                             anchors.topMargin: 6
                             anchors.leftMargin: 10
@@ -3781,6 +3733,50 @@ ApplicationWindow {
                             color: secondaryCyan
                             opacity: 0.55
                             z: 5
+                        }
+
+                        // Pallino cyan + bottone Pop come overlay top-right
+                        Row {
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.topMargin: 5
+                            anchors.rightMargin: 8
+                            spacing: 6
+                            z: 5
+
+                            Rectangle {
+                                width: 6; height: 6; radius: 3
+                                color: secondaryCyan
+                                anchors.verticalCenter: parent.verticalCenter
+                                opacity: 0.7
+                            }
+
+                            Rectangle {
+                                width: 30; height: 14; radius: 3
+                                color: waterfallPopMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.55)
+                                border.color: waterfallPopMA.containsMouse ? secondaryCyan : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Pop"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: waterfallPopMA.containsMouse ? secondaryCyan : textSecondary
+                                }
+
+                                MouseArea {
+                                    id: waterfallPopMA
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: mainWindow.detachWaterfallPanel()
+                                }
+
+                                ToolTip.visible: waterfallPopMA.containsMouse
+                                ToolTip.text: "Pop out Waterfall"
+                                ToolTip.delay: 500
+                            }
                         }
                     }
                 }
@@ -5206,6 +5202,7 @@ ApplicationWindow {
                 }
             }
         }
+        } // End contentScroll Flickable
 
         // Status Bar
         StatusBar {
