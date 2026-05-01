@@ -62,19 +62,18 @@ Item {
     }
 
     // Background color from the WSJT-X-style cascade in C++ (bridge.decodeHighlightBg).
-    // Returned hex is converted to a translucent fill so message text stays readable on dark theme.
-    // Higher alpha (0.55) so the WSJT-X palette differences are obvious on the dark theme.
+    // Match WSJT-X/Decodium3: solid background fill (no alpha) so the palette is
+    // immediately visible. Text colour is forced to black in decodeTextColor when
+    // the cascade assigns a colour, keeping legibility on light WSJT-X tones.
     function wsjtxBgColor(modelData) {
         var hex = bridge.decodeHighlightBg(modelData)
         if (!hex || hex.length === 0) return null
-        var c = Qt.color(hex)
-        return Qt.rgba(c.r, c.g, c.b, 0.55)
+        return Qt.color(hex)
     }
     function wsjtxBorderColor(modelData) {
         var hex = bridge.decodeHighlightBg(modelData)
         if (!hex || hex.length === 0) return null
-        var c = Qt.color(hex)
-        return Qt.rgba(c.r, c.g, c.b, 0.95)
+        return Qt.color(hex)
     }
 
     function decodeTextColor(modelData) {
