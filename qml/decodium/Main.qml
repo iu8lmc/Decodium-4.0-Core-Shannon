@@ -5619,8 +5619,16 @@ ApplicationWindow {
                     return
             }
             console.error("[Bridge ERROR]", msg)
-            warningDialogTitle = "Errore"
-            warningDialogSummary = msg
+            // Estrai prefisso "Sorgente: dettaglio" per titolo specifico
+            // (es. "DX Cluster: Cannot send spot..." → title=DX Cluster, summary=Cannot send spot...)
+            var prefixMatch = String(msg).match(/^([^:]{1,40}):\s*(.+)$/s)
+            if (prefixMatch) {
+                warningDialogTitle = prefixMatch[1].trim()
+                warningDialogSummary = prefixMatch[2].trim()
+            } else {
+                warningDialogTitle = "Errore"
+                warningDialogSummary = msg
+            }
             warningDialogDetails = ""
             warningDialogDetailsVisible = false
             warningDialog.open()
@@ -5714,6 +5722,10 @@ ApplicationWindow {
                     }
 
                     Text {
+                        // Sottotitolo generico solo quando il title è il fallback "Errore";
+                        // altrimenti il title è già descrittivo (es. "DX Cluster") e il
+                        // sottotitolo statico aggiunge solo rumore.
+                        visible: warningDialogTitle === "" || warningDialogTitle === "Errore"
                         text: "Decodium ha segnalato un problema non bloccante."
                         font.pixelSize: 11
                         color: textSecondary

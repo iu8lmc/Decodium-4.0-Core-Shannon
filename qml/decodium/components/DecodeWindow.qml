@@ -161,9 +161,29 @@ Window {
         return ""
     }
 
+    // WSJT-X background cascade (TX > MyCall > NewDxccBand > … > CQ).
+    // Restituisce il fill traslucido per il delegate, oppure null per fallback.
+    function wsjtxBgColor(modelData) {
+        var hex = bridge.decodeHighlightBg(modelData)
+        if (!hex || hex.length === 0) return null
+        var c = Qt.color(hex)
+        return Qt.rgba(c.r, c.g, c.b, 0.55)
+    }
+    function wsjtxBorderColor(modelData) {
+        var hex = bridge.decodeHighlightBg(modelData)
+        if (!hex || hex.length === 0) return null
+        var c = Qt.color(hex)
+        return Qt.rgba(c.r, c.g, c.b, 0.95)
+    }
+
     // Shannon-compatible coloring (priorità DecodeHighlightingModel)
     function getDxccColor(modelData) {
         var customColor = customHighlightColor(modelData)
+        // Quando la cascata WSJT-X assegna uno sfondo colorato, il testo va forzato
+        // su nero per leggibilità sui toni chiari (rosa/cream/cyan).
+        var hl = bridge.decodeHighlightBg(modelData)
+        if (hl && hl.length > 0)
+            return "#000000"
         if (modelData.isTx)     return colorTx
         if (modelData.isMyCall) return bridge.colorMyCall
         if (customColor !== "") return customColor
@@ -501,15 +521,23 @@ Window {
                             delegate: Rectangle {
                                 width: bandActivityList.width - 12
                                 height: 26
-                                color: modelData.isMyCall ?
-                                       Qt.rgba(244/255, 67/255, 54/255, 0.25) :
-                                       modelData.isCQ ?
-                                       Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
-                                       isAtRxFrequency(modelData.freq, modelData) ?
-                                       Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) :
-                                       index % 2 === 0 ?
-                                       Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02) :
-                                       Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+                                // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
+                                color: {
+                                    var wsx = decodeWindow.wsjtxBgColor(modelData)
+                                    if (wsx) return wsx
+                                    if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
+                                    if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
+                                    if (isAtRxFrequency(modelData.freq, modelData))
+                                        return Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2)
+                                    return index % 2 === 0
+                                           ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02)
+                                           : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+                                }
+                                border.color: {
+                                    var wsx = decodeWindow.wsjtxBorderColor(modelData)
+                                    return wsx ? wsx : "transparent"
+                                }
+                                border.width: decodeWindow.wsjtxBgColor(modelData) ? 1 : 0
                                 radius: 2
 
                                 MouseArea {
@@ -872,13 +900,20 @@ Window {
                             delegate: Rectangle {
                                 width: rxFrequencyList.width - 12
                                 height: 24
-                                color: modelData.isMyCall ?
-                                       Qt.rgba(244/255, 67/255, 54/255, 0.3) :
-                                       modelData.isCQ ?
-                                       Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
-                                       index % 2 === 0 ?
-                                       Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.05) :
-                                       Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.1)
+                                color: {
+                                    var wsx = decodeWindow.wsjtxBgColor(modelData)
+                                    if (wsx) return wsx
+                                    if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
+                                    if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
+                                    return index % 2 === 0
+                                           ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.05)
+                                           : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.1)
+                                }
+                                border.color: {
+                                    var wsx = decodeWindow.wsjtxBorderColor(modelData)
+                                    return wsx ? wsx : "transparent"
+                                }
+                                border.width: decodeWindow.wsjtxBgColor(modelData) ? 1 : 0
                                 radius: 2
 
                                 MouseArea {
