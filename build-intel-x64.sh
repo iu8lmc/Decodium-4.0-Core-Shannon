@@ -2,7 +2,7 @@
 # Script to build Decodium3/4 for Intel x86_64 using Docker
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-ft2-ubuntu-x64}"
+IMAGE_NAME="${IMAGE_NAME:-ft2-ubuntu-x64-qt6}"
 DOCKERFILE="${DOCKERFILE:-Dockerfile.ubuntu-x64}"
 SOURCE_DIR="${SOURCE_DIR:-$(pwd)}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/build-intel-output}"
@@ -30,7 +30,7 @@ docker volume create ${SOURCE_VOLUME} > /dev/null || true
 docker volume create ${OUTPUT_VOLUME} > /dev/null || true
 
 echo "=== Copying Source to Volume ==="
-tar \
+COPYFILE_DISABLE=1 tar \
   --exclude='.git' \
   --exclude='build' \
   --exclude='build-linux' \
@@ -77,47 +77,91 @@ docker run --rm -i --platform linux/amd64 \
         fi
 
         tar czf /output/decodium4_ubuntu_x86_64.tar.gz -C /tmp wsjtx_dist_intel
-        
+
         echo '>>> Generating DEB package...'
         cpack -G DEB
         cp *.deb /output/ 2>/dev/null || echo "No .deb files found"
 
         echo '>>> Generating AppImage...'
         export ARCH=x86_64
-        
+        export QMAKE="$(command -v qmake6)"
+        export QML_SOURCES_PATHS=/build-src/qml
+
         # Download linuxdeploy and qt plugin if not present
         if [ ! -f linuxdeploy-x86_64.AppImage ]; then
             echo ">>>> Downloading linuxdeploy..."
             wget -q -O linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
             chmod +x linuxdeploy-x86_64.AppImage
         fi
-        
-        
+
+
         echo ">>>> Patching linuxdeploy AppImage for Docker/Rosetta compatibility..."
         dd if=/dev/zero of=linuxdeploy-x86_64.AppImage bs=1 seek=8 count=3 conv=notrunc >/dev/null 2>&1
         export LINUXDEPLOY_BIN="./linuxdeploy-x86_64.AppImage --appimage-extract-and-run"
 
-        if [ ! -f linuxdeploy-plugin-qt-x86_64.AppImage ]; then
+        mkdir -p linuxdeploy-tools
+        if [ ! -f linuxdeploy-tools/linuxdeploy-plugin-qt-x86_64.AppImage ]; then
              echo ">>>> Downloading linuxdeploy-plugin-qt..."
-             wget -q -O linuxdeploy-plugin-qt-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
-             chmod +x linuxdeploy-plugin-qt-x86_64.AppImage
-             dd if=/dev/zero of=linuxdeploy-plugin-qt-x86_64.AppImage bs=1 seek=8 count=3 conv=notrunc >/dev/null 2>&1
+             wget -q -O linuxdeploy-tools/linuxdeploy-plugin-qt-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+             chmod +x linuxdeploy-tools/linuxdeploy-plugin-qt-x86_64.AppImage
+             dd if=/dev/zero of=linuxdeploy-tools/linuxdeploy-plugin-qt-x86_64.AppImage bs=1 seek=8 count=3 conv=notrunc >/dev/null 2>&1
         fi
-        export LINUXDEPLOY_PLUGINS_DIR=.
+        echo ">>>> Extracting linuxdeploy-plugin-qt for Docker/Rosetta compatibility..."
+        rm -rf linuxdeploy-plugin-qt-extracted linuxdeploy-plugin-qt squashfs-root
+        linuxdeploy-tools/linuxdeploy-plugin-qt-x86_64.AppImage --appimage-extract >/dev/null
+        mv squashfs-root linuxdeploy-plugin-qt-extracted
+        cat > linuxdeploy-plugin-qt <<'PLUGIN'
+#!/bin/sh
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$ROOT_DIR/linuxdeploy-plugin-qt-extracted/AppRun" "$@"
+PLUGIN
+        chmod +x linuxdeploy-plugin-qt
+        export PATH="$(pwd):${PATH}"
 
-        sed -i 's/^Exec=wsjtx/Exec=ft2/' /build-src/wsjtx.desktop
-        sed -i 's/^Name=wsjtx/Name=Decodium FT2/' /build-src/wsjtx.desktop
+        cat > /tmp/decodium.desktop <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Decodium 4
+Comment=Amateur Radio Weak Signal Operating
+Exec=decodium
+Icon=decodium
+Terminal=false
+Categories=AudioVideo;Audio;HamRadio;
+StartupNotify=true
+DESKTOP
 
-        # Run with --appimage-extract-and-run for the plugin as well if needed
-        # but linuxdeploy handles plugins. 
-        # We might need to extract the plugin too if it fails.
-        
+        cp /build-src/icons/Unix/decodium_icon.png /tmp/decodium.png
+
+        # First populate the AppDir and let the Qt plugin collect Qt/QML imports.
         $LINUXDEPLOY_BIN --appdir /tmp/AppDir \
-            --executable /tmp/wsjtx_install/bin/ft2 \
-            --desktop-file /build-src/wsjtx.desktop \
-            --icon-file /build-src/icons/Unix/wsjtx_icon.png \
-            --plugin qt \
-            --output appimage
+            --executable /tmp/wsjtx_install/bin/decodium \
+            --desktop-file /tmp/decodium.desktop \
+            --icon-file /tmp/decodium.png \
+            --plugin qt
+
+        # Keep Qt imports available beside the executable. Some linuxdeploy
+        # builds miss Qt 6 QML modules, while Decodium loads QML from
+        # applicationDirPath()/qml.
+        mkdir -p /tmp/AppDir/usr/bin/qml
+        QT_QML_DIR="$(${QMAKE} -query QT_INSTALL_QML 2>/dev/null || true)"
+        if [ -n "${QT_QML_DIR}" ] && [ -d "${QT_QML_DIR}" ]; then
+            cp -a "${QT_QML_DIR}/." /tmp/AppDir/usr/bin/qml/
+        fi
+        cp -a /tmp/wsjtx_install/bin/qml/. /tmp/AppDir/usr/bin/qml/
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Controls/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Controls/Material/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Dialogs/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Layouts/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Templates/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Window/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtCore/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQml/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQml/Models/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQml/WorkerScript/qmldir
+        find /tmp/AppDir -name '._*' -o -name '.DS_Store' | xargs -r rm -f
+
+        $LINUXDEPLOY_BIN --appdir /tmp/AppDir --output appimage
 
         APPIMAGE_NAME="decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
         APPIMAGE_SRC="$(find . -maxdepth 1 -name '*.AppImage' ! -name 'linuxdeploy*.AppImage' ! -name 'appimagetool*.AppImage' | head -n1)"

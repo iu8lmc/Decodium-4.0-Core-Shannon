@@ -410,11 +410,12 @@ namespace
 
 namespace
 {
+bool constexpr update_checker_enabled = false;
 char const * update_settings_group = "MainWindow";
 char const * update_check_enabled_key = "UpdateCheckEnabled";
 char const * update_skip_version_key = "UpdateSkipVersion";
 char const * update_remind_after_key = "UpdateRemindAfterUtc";
-char const * update_api_url = "https://api.github.com/repos/elisir80/decodium3-build-macos/releases/latest";
+char const * update_api_url = "https://api.github.com/repos/elisir80/Decodium-4.0-Core-Shannon/releases/latest";
 int constexpr update_startup_delay_ms = 3500;
 int constexpr update_remind_later_hours = 24;
 
@@ -8524,6 +8525,11 @@ void MainWindow::on_actionAbout_triggered()                  //Display "About"
 
 void MainWindow::ensureUpdateCheckAction ()
 {
+  if (!update_checker_enabled)
+    {
+      return;
+    }
+
   if (!ui->menuHelp || findChild<QAction *> ("actionCheck_for_Updates"))
     {
       return;
@@ -8545,6 +8551,11 @@ void MainWindow::ensureUpdateCheckAction ()
 
 void MainWindow::scheduleStartupUpdateCheck ()
 {
+    if (!update_checker_enabled)
+      {
+        return;
+      }
+
     if (!m_settings)
       {
         return;
@@ -8565,6 +8576,11 @@ void MainWindow::scheduleStartupUpdateCheck ()
 
 bool MainWindow::shouldPromptForUpdate (QString const& latestVersion) const
 {
+  if (!update_checker_enabled)
+    {
+      return false;
+    }
+
   if (!m_settings)
     {
       return true;
@@ -8598,6 +8614,16 @@ bool MainWindow::shouldPromptForUpdate (QString const& latestVersion) const
 
 void MainWindow::startUpdateCheck (bool manual)
 {
+  if (!update_checker_enabled)
+    {
+      m_updateCheckInteractivePending = false;
+      if (manual)
+        {
+          showStatusMessage (tr ("Update checks are disabled in this build."));
+        }
+      return;
+    }
+
   if (!m_settings)
     {
       return;
@@ -8948,7 +8974,7 @@ void MainWindow::handleUpdateCheckReply (QPointer<QNetworkReply> reply, bool man
       return;
     }
 
-  auto const fallback_release_url = QUrl {QStringLiteral ("https://github.com/elisir80/decodium3-build-macos/releases")};
+  auto const fallback_release_url = QUrl {QStringLiteral ("https://github.com/elisir80/Decodium-4.0-Core-Shannon/releases")};
 
   if (reply->error () != QNetworkReply::NoError)
     {
@@ -9032,6 +9058,12 @@ void MainWindow::handleUpdateCheckReply (QPointer<QNetworkReply> reply, bool man
 
 void MainWindow::handleCheckForUpdatesTriggered ()
 {
+  if (!update_checker_enabled)
+    {
+      showStatusMessage (tr ("Update checks are disabled in this build."));
+      return;
+    }
+
   startUpdateCheck (true);
 }
 

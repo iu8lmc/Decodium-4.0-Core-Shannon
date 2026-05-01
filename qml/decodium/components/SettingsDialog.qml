@@ -92,6 +92,28 @@ Dialog {
         loggingChecksUpdating = false
     }
 
+    function normalizedHexColor(value) {
+        var text = String(value || "").trim()
+        if (text.length === 6 && text.charAt(0) !== "#")
+            text = "#" + text
+        return text.toUpperCase()
+    }
+
+    function validHexColor(value) {
+        return /^#[0-9A-Fa-f]{6}$/.test(String(value || "").trim())
+    }
+
+    function setDecodeHighlightColor(prop, value) {
+        var normalized = normalizedHexColor(value)
+        if (!validHexColor(normalized))
+            return false
+
+        bridge[prop] = normalized
+        bridge.setSetting(prop, normalized)
+        bridge.saveSettings()
+        return true
+    }
+
     component SettingsComboPopup: Popup {
         id: comboPopup
         property var combo: null
@@ -671,6 +693,27 @@ Dialog {
     readonly property var presetColors: [
         "#ff0000","#ff6600","#ffcc00","#33cc33","#00ccff","#0066ff",
         "#9933ff","#ff33cc","#ffffff","#cccccc","#666666","#000000"
+    ]
+    readonly property var decodeColorModel: [
+        { label: qsTr("Messaggio Trasmesso"),    prop: "colorTxMessage",        defaultColor: "#FFFF00" },
+        { label: qsTr("Mio Nominativo"),         prop: "colorMyCall",           defaultColor: "#FF5555" },
+        { label: qsTr("Nuovo DXCC in Banda"),    prop: "colorNewDxccBand",      defaultColor: "#F8AAD0" },
+        { label: qsTr("Nuovo DXCC"),             prop: "colorNewDxcc",          defaultColor: "#FF00FF" },
+        { label: qsTr("Nuovo Continente Banda"), prop: "colorNewContinentBand", defaultColor: "#F5B7C7" },
+        { label: qsTr("Nuovo Continente"),       prop: "colorNewContinent",     defaultColor: "#E91E63" },
+        { label: qsTr("Nuova Zona CQ Banda"),    prop: "colorNewCqZoneBand",    defaultColor: "#F5DDA0" },
+        { label: qsTr("Nuova Zona CQ"),          prop: "colorNewCqZone",        defaultColor: "#F0A030" },
+        { label: qsTr("Nuova Zona ITU Banda"),   prop: "colorNewItuZoneBand",   defaultColor: "#D4E89F" },
+        { label: qsTr("Nuova Zona ITU"),         prop: "colorNewItuZone",       defaultColor: "#9ACD32" },
+        { label: qsTr("Nuova Griglia Banda"),    prop: "colorNewGridBand",      defaultColor: "#FFCAA0" },
+        { label: qsTr("Nuova Griglia"),          prop: "colorNewGrid",          defaultColor: "#FF8C00" },
+        { label: qsTr("Nuovo Nominativo Banda"), prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
+        { label: qsTr("Nuovo Nominativo"),       prop: "colorNewCall",          defaultColor: "#00E0E0" },
+        { label: qsTr("Utente LoTW"),            prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
+        { label: qsTr("CQ nel messaggio"),       prop: "colorCQ",               defaultColor: "#33FF33" },
+        { label: qsTr("DX Entity"),              prop: "colorDXEntity",         defaultColor: "#FFAA33" },
+        { label: qsTr("73 / RR73"),              prop: "color73",               defaultColor: "#5599FF" },
+        { label: qsTr("B4 (Worked)"),            prop: "colorB4",               defaultColor: "#888888" }
     ]
 
     Popup {
@@ -2751,7 +2794,7 @@ Dialog {
                         Text { text: qsTr("Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
                         TextField {
                             id: dxClusterHostField
-                            text: bridge.dxCluster ? bridge.dxCluster.host : ""
+                            text: bridge.dxCluster && bridge.dxCluster.host !== undefined ? String(bridge.dxCluster.host) : ""
                             Layout.fillWidth: true
                             Layout.minimumWidth: wideFieldMinWidth
                             implicitHeight: controlHeight
@@ -2766,7 +2809,10 @@ Dialog {
                         SpinBox {
                             id: dxClusterPortSpin
                             from: 1; to: 65535
-                            value: bridge.dxCluster ? bridge.dxCluster.port : 8000
+                            value: {
+                                var port = bridge.dxCluster && bridge.dxCluster.port !== undefined ? Number(bridge.dxCluster.port) : 8000
+                                return isFinite(port) ? port : 8000
+                            }
                             editable: true
                             implicitHeight: controlHeight
                             Layout.fillWidth: true
@@ -3442,81 +3488,114 @@ Dialog {
                         Text { text: qsTr("DECODE COLORS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        // Color CQ
-                        Text { text: qsTr("Color CQ:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Rectangle {
-                            id: colorCqRect
-                            width: 60; height: 24; radius: 4; color: bridge.colorCQ; border.color: glassBorder
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorCqPop.open() }
-                            Popup {
-                                id: colorCqPop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
-                                Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
-                                    Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorCQ = modelData; bridge.setSetting("colorCQ", modelData); colorCqPop.close() } }
-                                    } }
-                                }
-                            }
-                        }
-                        // Color My Call
-                        Text { text: qsTr("Color My Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Rectangle {
-                            id: colorMyCallRect
-                            width: 60; height: 24; radius: 4; color: bridge.colorMyCall; border.color: glassBorder
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorMyCallPop.open() }
-                            Popup {
-                                id: colorMyCallPop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
-                                Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
-                                    Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorMyCall = modelData; bridge.setSetting("colorMyCall", modelData); colorMyCallPop.close() } }
-                                    } }
-                                }
-                            }
-                        }
+                        Repeater {
+                            model: settingsDialog.decodeColorModel
+                            delegate: RowLayout {
+                                id: decodeColorRow
+                                Layout.columnSpan: 4
+                                Layout.fillWidth: true
+                                spacing: 10
+                                property string targetProp: modelData.prop
+                                property string defaultColor: modelData.defaultColor
+                                property string currentColor: bridge[targetProp] || defaultColor
 
-                        // Color DX Entity
-                        Text { text: qsTr("Color DX Entity:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Rectangle {
-                            id: colorDxEntRect
-                            width: 60; height: 24; radius: 4; color: bridge.colorDXEntity; border.color: glassBorder
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorDxEntPop.open() }
-                            Popup {
-                                id: colorDxEntPop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
-                                Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
-                                    Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorDXEntity = modelData; bridge.setSetting("colorDXEntity", modelData); colorDxEntPop.close() } }
-                                    } }
+                                Text {
+                                    text: modelData.label + ":"
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    Layout.preferredWidth: 210
+                                    elide: Text.ElideRight
                                 }
-                            }
-                        }
-                        // Color 73
-                        Text { text: qsTr("Color 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Rectangle {
-                            id: color73Rect
-                            width: 60; height: 24; radius: 4; color: bridge.color73; border.color: glassBorder
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: color73Pop.open() }
-                            Popup {
-                                id: color73Pop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
-                                Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
-                                    Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.color73 = modelData; bridge.setSetting("color73", modelData); color73Pop.close() } }
-                                    } }
-                                }
-                            }
-                        }
 
-                        // Color B4
-                        Text { text: qsTr("Color B4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        Rectangle {
-                            id: colorB4Rect
-                            width: 60; height: 24; radius: 4; color: bridge.colorB4; border.color: glassBorder
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorB4Pop.open() }
-                            Popup {
-                                id: colorB4Pop; width: 200; height: 80; background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
-                                Flow { anchors.fill: parent; anchors.margins: 8; spacing: 4
-                                    Repeater { model: presetColors; delegate: Rectangle { width: 20; height: 20; radius: 3; color: modelData; border.color: glassBorder
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { bridge.colorB4 = modelData; bridge.setSetting("colorB4", modelData); colorB4Pop.close() } }
-                                    } }
+                                Rectangle {
+                                    width: 60
+                                    height: 24
+                                    radius: 4
+                                    color: settingsDialog.validHexColor(decodeColorRow.currentColor) ? decodeColorRow.currentColor : decodeColorRow.defaultColor
+                                    border.color: glassBorder
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: decodeColorPresetPop.open()
+                                    }
+                                    Popup {
+                                        id: decodeColorPresetPop
+                                        width: 232
+                                        height: 88
+                                        background: Rectangle { color: bgDeep; border.color: glassBorder; radius: 6 }
+                                        Flow {
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 4
+                                            Repeater {
+                                                model: settingsDialog.presetColors.concat([decodeColorRow.defaultColor])
+                                                delegate: Rectangle {
+                                                    width: 20
+                                                    height: 20
+                                                    radius: 3
+                                                    color: modelData
+                                                    border.color: glassBorder
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            settingsDialog.setDecodeHighlightColor(decodeColorRow.targetProp, modelData)
+                                                            decodeColorInput.text = settingsDialog.normalizedHexColor(modelData)
+                                                            decodeColorPresetPop.close()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
+
+                                TextField {
+                                    id: decodeColorInput
+                                    text: decodeColorRow.currentColor
+                                    selectByMouse: true
+                                    implicitHeight: controlHeight
+                                    Layout.preferredWidth: 110
+                                    color: settingsDialog.validHexColor(text) ? textPrimary : "#ff5555"
+                                    font.pixelSize: controlFontSize
+                                    onActiveFocusChanged: {
+                                        if (!activeFocus)
+                                            text = decodeColorRow.currentColor
+                                    }
+                                    onAccepted: {
+                                        if (settingsDialog.setDecodeHighlightColor(decodeColorRow.targetProp, text))
+                                            text = settingsDialog.normalizedHexColor(text)
+                                    }
+                                    background: Rectangle {
+                                        color: bgMedium
+                                        border.color: decodeColorInput.activeFocus ? secondaryCyan : glassBorder
+                                        radius: 4
+                                    }
+                                }
+
+                                Button {
+                                    text: qsTr("Reset")
+                                    Layout.preferredWidth: 72
+                                    implicitHeight: controlHeight
+                                    onClicked: {
+                                        settingsDialog.setDecodeHighlightColor(decodeColorRow.targetProp, decodeColorRow.defaultColor)
+                                        decodeColorInput.text = decodeColorRow.defaultColor
+                                    }
+                                    background: Rectangle {
+                                        color: parent.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.24) : bgMedium
+                                        border.color: glassBorder
+                                        radius: 4
+                                    }
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: textPrimary
+                                        font.pixelSize: 11
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+
+                                Item { Layout.fillWidth: true }
                             }
                         }
                         Text { text: qsTr("B4 Strikethrough:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }

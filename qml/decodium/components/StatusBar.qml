@@ -13,7 +13,7 @@ Rectangle {
     property string pttStatus: "Ready"
     property double audioLevel: 0.0  // raw RMS 0.0..1.0 da DecodiumAudioSink
     property double signalLevel: 0.0 // legacy S-meter in dB circa 0..90
-    property double cpuUsage: 0.0    // 0.0 to 1.0
+    property double cpuUsage: bridge ? bridge.processCpuUsage : 0.0    // Decodium process, normalized 0.0..1.0
     property double rigPowerWatts: bridge ? bridge.rigPowerWatts : 0.0
     property double rigSwr: bridge ? bridge.rigSwr : 0.0
     property bool pwrAndSwrEnabled: bridge ? bridge.getSetting("PWRandSWR", false) : false
@@ -291,7 +291,7 @@ Rectangle {
                         visible: parent.containsMouse
                         delay: 500
                         text: "FT Decoder Threads: " + ftThreadsLed.threadCount
-                              + "\nClick: cicla 1→8 · Click destro: reset 3"
+                              + "\nClick: cycle 1-8 · Right-click: reset to 3"
                     }
                 }
             }
@@ -370,8 +370,8 @@ Rectangle {
                         visible: parent.containsMouse
                         delay: 500
                         text: checkSwrEnabled
-                            ? "Check SWR attivo: TX bloccato/interrotto se SWR > 2.5"
-                            : "Telemetria potenza/SWR dal CAT"
+                            ? "Check SWR active: TX is blocked/stopped when SWR > 2.5"
+                            : "Power/SWR telemetry from CAT"
                     }
                 }
             }
@@ -408,10 +408,10 @@ Rectangle {
                         visible: parent.containsMouse
                         delay: 500
                         text: !pskStatusRow.pskEnabled
-                              ? "PSK Reporter: disabilitato"
+                              ? "PSK Reporter: disabled"
                               : (pskStatusRow.pskConnected
-                                 ? "PSK Reporter: connesso a report.pskreporter.info"
-                                 : "PSK Reporter: errori HTTP recenti")
+                                 ? "PSK Reporter: connected to report.pskreporter.info"
+                                 : "PSK Reporter: recent HTTP errors")
                     }
                 }
             }
@@ -469,14 +469,4 @@ Rectangle {
         }
     }
 
-    // CPU usage timer (simulated for now)
-    Timer {
-        interval: 2000
-        running: true
-        repeat: true
-        onTriggered: {
-            // Simulate CPU usage - in real implementation this would come from a C++ backend
-            cpuUsage = 0.1 + Math.random() * 0.3
-        }
-    }
 }

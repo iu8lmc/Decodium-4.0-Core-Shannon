@@ -13,7 +13,7 @@ Rectangle {
     property string pttStatus: "Ready"
     property double audioLevel: 0.0  // raw RMS 0.0..1.0 da DecodiumAudioSink
     property double signalLevel: 0.0 // legacy S-meter in dB circa 0..90
-    property double cpuUsage: 0.0    // 0.0 to 1.0
+    property double cpuUsage: bridge ? bridge.processCpuUsage : 0.0    // Decodium process, normalized 0.0..1.0
     property double rigPowerWatts: bridge ? bridge.rigPowerWatts : 0.0
     property double rigSwr: bridge ? bridge.rigSwr : 0.0
     property bool pwrAndSwrEnabled: bridge ? bridge.getSetting("PWRandSWR", false) : false
@@ -443,14 +443,4 @@ Rectangle {
         }
     }
 
-    // CPU usage timer (simulated for now)
-    Timer {
-        interval: 2000
-        running: true
-        repeat: true
-        onTriggered: {
-            // Simulate CPU usage - in real implementation this would come from a C++ backend
-            cpuUsage = 0.1 + Math.random() * 0.3
-        }
-    }
 }

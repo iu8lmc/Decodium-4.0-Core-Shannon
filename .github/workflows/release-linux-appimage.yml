@@ -58,15 +58,27 @@ jobs:
             pkg-config \
             ca-certificates \
             curl \
-            qtbase5-dev \
-            qtmultimedia5-dev \
-            libqt5multimedia5-plugins \
-            libqt5serialport5-dev \
-            libqt5websockets5-dev \
-            libqt5svg5-dev \
-            libqt5sql5-sqlite \
-            qttools5-dev \
-            qttools5-dev-tools \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            qt6-tools-dev \
+            qt6-tools-dev-tools \
+            qt6-serialport-dev \
+            qt6-multimedia-dev \
+            qt6-websockets-dev \
+            qt6-svg-dev \
+            qt6-declarative-dev \
+            qt6-5compat-dev \
+            qml6-module-qtcore \
+            qml6-module-qtqml \
+            qml6-module-qtqml-models \
+            qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-dialogs \
+            qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates \
+            qml6-module-qtquick-window \
+            libqt6sql6-sqlite \
             libfftw3-dev \
             libusb-1.0-0-dev \
             libudev-dev \
@@ -110,6 +122,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_PREFIX_PATH=/usr/local \
             -DFORK_RELEASE_VERSION="${VERSION}" \
+            -DQT_MAJOR_VERSION=6 \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
@@ -118,54 +131,37 @@ jobs:
         run: make -C build-appimage -j1 wsjt_fort_omp
 
       - name: Build applications
-        run: make -C build-appimage -j"$(nproc)" wsjtx jt9 wsprd message_aggregator
+        run: make -C build-appimage -j"$(nproc)" wsjtx decodium_app wsprd message_aggregator
 
       - name: Assemble AppDir
         run: |
           APPDIR="${PWD}/AppDir"
           rm -rf "${APPDIR}"
-          mkdir -p "${APPDIR}/usr/bin"
           mkdir -p "${APPDIR}/usr/share/applications"
           mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
-          mkdir -p "${APPDIR}/usr/share/wsjtx"
+          cmake --install build-appimage --prefix "${APPDIR}/usr"
 
-          cp build-appimage/ft2 build-appimage/jt9 build-appimage/wsprd build-appimage/message_aggregator "${APPDIR}/usr/bin/"
-          cp cty.dat sat.dat "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
-          cp contrib/Ephemeris/JPLEPH "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
-          cp -r sounds "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
-          cp -r Palettes "${APPDIR}/usr/share/wsjtx/" 2>/dev/null || true
-          cp icons/Unix/decodium_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/ft2.png"
+          cp icons/Unix/decodium_icon.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/decodium.png"
+          find "${APPDIR}" -name '._*' -o -name '.DS_Store' | xargs -r rm -f
 
-          cat > "${APPDIR}/usr/share/applications/ft2.desktop" <<'DESKTOP'
+          cat > "${APPDIR}/usr/share/applications/decodium.desktop" <<'DESKTOP'
           [Desktop Entry]
           Type=Application
-          Name=Decodium FT2
+          Name=Decodium 4
           Comment=Amateur Radio Weak Signal Operating
-          Exec=ft2
-          Icon=ft2
+          Exec=decodium
+          Icon=decodium
           Terminal=false
           Categories=AudioVideo;Audio;HamRadio;
           StartupNotify=true
           DESKTOP
 
-          cat > "${APPDIR}/AppRun" <<'APPRUN'
-          #!/bin/sh
-          HERE="$(dirname "$(readlink -f "$0")")"
-          export PATH="${HERE}/usr/bin:${PATH}"
-          export WSJTX_DATA_DIR="${HERE}/usr/share/wsjtx"
-          exec "${HERE}/usr/bin/ft2" "$@"
-          APPRUN
-          chmod +x "${APPDIR}/AppRun"
-
       - name: Build AppImage
         run: |
           export APPIMAGE_EXTRACT_AND_RUN=1
-          export QMAKE=/usr/lib/qt5/bin/qmake
+          export QMAKE=/usr/bin/qmake6
+          export QML_SOURCES_PATHS="${PWD}/qml"
           export ARCH=x86_64
-
-          # linuxdeploy-plugin-qt expects this directory on some Ubuntu images.
-          # When missing, the plugin aborts with std::filesystem_error.
-          sudo mkdir -p /usr/lib/x86_64-linux-gnu/qt5/plugins/mediaservice
 
           mkdir -p tools
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O tools/linuxdeploy-x86_64.AppImage
@@ -175,13 +171,34 @@ jobs:
 
           ./tools/linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
-            --desktop-file AppDir/usr/share/applications/ft2.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/ft2.png \
-            --executable AppDir/usr/bin/ft2 \
-            --executable AppDir/usr/bin/jt9 \
+            --desktop-file AppDir/usr/share/applications/decodium.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/decodium.png \
+            --executable AppDir/usr/bin/decodium \
             --executable AppDir/usr/bin/wsprd \
             --executable AppDir/usr/bin/message_aggregator \
-            --plugin qt \
+            --plugin qt
+
+          mkdir -p AppDir/usr/bin/qml
+          QT_QML_DIR="$(qmake6 -query QT_INSTALL_QML 2>/dev/null || true)"
+          if [ -n "${QT_QML_DIR}" ] && [ -d "${QT_QML_DIR}" ]; then
+            cp -a "${QT_QML_DIR}/." AppDir/usr/bin/qml/
+          fi
+          cp -a build-appimage/qml/. AppDir/usr/bin/qml/
+          test -f AppDir/usr/bin/qml/QtQuick/qmldir
+          test -f AppDir/usr/bin/qml/QtQuick/Controls/qmldir
+          test -f AppDir/usr/bin/qml/QtQuick/Controls/Material/qmldir
+          test -f AppDir/usr/bin/qml/QtQuick/Dialogs/qmldir
+          test -f AppDir/usr/bin/qml/QtQuick/Layouts/qmldir
+          test -f AppDir/usr/bin/qml/QtQuick/Templates/qmldir
+          test -f AppDir/usr/bin/qml/QtQuick/Window/qmldir
+          test -f AppDir/usr/bin/qml/QtCore/qmldir
+          test -f AppDir/usr/bin/qml/QtQml/qmldir
+          test -f AppDir/usr/bin/qml/QtQml/Models/qmldir
+          test -f AppDir/usr/bin/qml/QtQml/WorkerScript/qmldir
+          find AppDir -name '._*' -o -name '.DS_Store' | xargs -r rm -f
+
+          ./tools/linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
             --output appimage
 
           APPIMAGE_NAME="decodium4-ft2-${VERSION}-linux-x86_64.AppImage"

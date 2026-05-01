@@ -120,7 +120,7 @@ Rectangle {
                     }
 
                     ToolTip.visible: liveMapDetachMA.containsMouse
-                    ToolTip.text: root.detached ? "Riaggancia Live Map" : "Stacca Live Map"
+                    ToolTip.text: root.detached ? qsTr("Reattach Live Map") : qsTr("Detach Live Map")
                     ToolTip.delay: 500
                 }
 

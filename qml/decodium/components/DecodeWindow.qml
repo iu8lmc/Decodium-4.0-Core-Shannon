@@ -78,9 +78,9 @@ Window {
     // (new array reference ad ogni invocazione → contentY azzerato).
     property var rxDecodeModel: []
 
-    Connections {
-        target: appEngine
-        function onDecodeListChanged() {
+	    Connections {
+	        target: appEngine
+	        function onDecodeListChanged() {
             var stickBandTail = bandActivityList ? bandActivityList.isNearTail() : true
             var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
             decodeWindow.bandActivityModel = appEngine.decodeList
@@ -95,10 +95,24 @@ Window {
             var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
             decodeWindow.rxDecodeModel = currentRxDecodes()
             decodeWindow.decodeListVersion++
-            if (stickRxTail && rxFrequencyList)
-                rxFrequencyList.forceTailFollow()
-        }
-    }
+	            if (stickRxTail && rxFrequencyList)
+	                rxFrequencyList.forceTailFollow()
+	        }
+	        function onDxCallChanged() {
+	            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+	            decodeWindow.rxDecodeModel = currentRxDecodes()
+	            decodeWindow.decodeListVersion++
+	            if (stickRxTail && rxFrequencyList)
+	                rxFrequencyList.forceTailFollow()
+	        }
+	        function onRxFrequencyChanged() {
+	            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+	            decodeWindow.rxDecodeModel = currentRxDecodes()
+	            decodeWindow.decodeListVersion++
+	            if (stickRxTail && rxFrequencyList)
+	                rxFrequencyList.forceTailFollow()
+	        }
+	    }
 
     // Refresh rxDecodeModel anche quando cambia il filtro Tx2QSO/TXMessagesToRX
     onShowTxMessagesInRxChanged: {
@@ -161,34 +175,71 @@ Window {
         return ""
     }
 
-    // WSJT-X background cascade (TX > MyCall > NewDxccBand > … > CQ).
+    function wsjtxHighlightHex(modelData) {
+        var hex = bridge.decodeHighlightBg(modelData)
+        if (!hex || hex.length === 0) return ""
+        return hex
+    }
+
+    function wsjtxRowHighlightHex(modelData) {
+        var hex = wsjtxHighlightHex(modelData)
+        if (hex.length === 0 || !modelData)
+            return ""
+
+        // New DXCC/grid/call/zone classes can legitimately match most rows.
+        // Render those as text colors only; reserve row fills for strong events.
+        if (modelData.isTx === true || modelData.isMyCall === true)
+            return hex
+        return ""
+    }
+
+    function wsjtxTextHighlightColor(modelData) {
+        var hex = wsjtxHighlightHex(modelData)
+        if (hex.length === 0 || !modelData)
+            return ""
+        if (modelData.isTx === true || modelData.isMyCall === true)
+            return ""
+        return hex
+    }
+
+    function readableTextOnHighlight(hex) {
+        var c = Qt.color(hex)
+        var luminance = (0.299 * c.r) + (0.587 * c.g) + (0.114 * c.b)
+        return luminance > 0.55 ? "#000000" : "#FFFFFF"
+    }
+
+    // WSJT-X background cascade for strong events only.
     // Restituisce il fill traslucido per il delegate, oppure null per fallback.
     function wsjtxBgColor(modelData) {
-        var hex = bridge.decodeHighlightBg(modelData)
-        if (!hex || hex.length === 0) return null
+        var hex = wsjtxRowHighlightHex(modelData)
+        if (hex.length === 0) return null
         var c = Qt.color(hex)
-        return Qt.rgba(c.r, c.g, c.b, 0.55)
+        return Qt.rgba(c.r, c.g, c.b, 0.35)
     }
     function wsjtxBorderColor(modelData) {
-        var hex = bridge.decodeHighlightBg(modelData)
-        if (!hex || hex.length === 0) return null
+        var hex = wsjtxRowHighlightHex(modelData)
+        if (hex.length === 0) return null
         var c = Qt.color(hex)
-        return Qt.rgba(c.r, c.g, c.b, 0.95)
+        return Qt.rgba(c.r, c.g, c.b, 0.85)
     }
 
     // Shannon-compatible coloring (priorità DecodeHighlightingModel)
     function getDxccColor(modelData) {
+        var rowHex = wsjtxRowHighlightHex(modelData)
+        if (rowHex.length > 0)
+            return readableTextOnHighlight(rowHex)
+
         var customColor = customHighlightColor(modelData)
-        // Quando la cascata WSJT-X assegna uno sfondo colorato, il testo va forzato
-        // su nero per leggibilità sui toni chiari (rosa/cream/cyan).
-        var hl = bridge.decodeHighlightBg(modelData)
-        if (hl && hl.length > 0)
-            return "#000000"
-        if (modelData.isTx)     return colorTx
-        if (modelData.isMyCall) return bridge.colorMyCall
         if (customColor !== "") return customColor
         if (highlight73 && isSignoffMessage(modelData.message)) return bridge.color73
         if (modelData.isB4 || modelData.dxIsWorked) return bridge.colorB4
+
+        var textHighlight = wsjtxTextHighlightColor(modelData)
+        if (textHighlight.length > 0)
+            return textHighlight
+
+        if (modelData.isTx)     return colorTx
+        if (modelData.isMyCall) return bridge.colorMyCall
         if (modelData.isLotw)   return colorLotw
         if ((modelData.dxCountry && String(modelData.dxCountry).length > 0)
             || modelData.dxIsMostWanted || modelData.dxIsNewCountry || modelData.dxIsNewBand)
@@ -226,34 +277,118 @@ Window {
         return lines.join("\n")
     }
 
-    function formatBearingDegrees(value) {
-        return value !== undefined && value >= 0 ? Math.round(value) + "°" : ""
-    }
+	    function formatBearingDegrees(value) {
+	        return value !== undefined && value >= 0 ? Math.round(value) + "°" : ""
+	    }
 
-    // Shannon: RX Frequency window ±200Hz (sbFtol default) + messaggi diretti a noi
-    property int rxBandwidth: 200  // Shannon sbFtol default 200Hz
+	    function normalizedCallToken(token) {
+	        return String(token || "").toUpperCase().replace(/[<>;,]/g, "").trim()
+	    }
+
+	    function isTelemetryHexToken(token) {
+	        var text = normalizedCallToken(token)
+	        return text.length >= 7
+	            && text.length <= 18
+	            && /[A-F]/.test(text)
+	            && /[0-9]/.test(text)
+	            && /^[0-9A-F]+$/.test(text)
+	    }
+
+	    function looksLikeCallsignTokenValue(token) {
+	        var text = normalizedCallToken(token)
+	        if (text.length === 0)
+	            return false
+	        if (text === "CQ" || text === "DX" || text === "QRZ" || text === "DE" || text === "TEST")
+	            return false
+	        if (isTelemetryHexToken(text))
+	            return false
+	        var hasLetter = /[A-Z]/.test(text)
+	        var hasDigit = /[0-9]/.test(text)
+	        return hasLetter && hasDigit && /^[A-Z0-9/-]+$/.test(text)
+	    }
+
+	    function callsignBase(call) {
+	        var text = normalizedCallToken(call)
+	        if (text.length === 0)
+	            return ""
+	        var parts = text.split("/")
+	        var best = ""
+	        for (var i = 0; i < parts.length; ++i) {
+	            var part = normalizedCallToken(parts[i])
+	            if (looksLikeCallsignTokenValue(part) && part.length > best.length)
+	                best = part
+	        }
+	        return best.length > 0 ? best : text
+	    }
+
+	    function messageContainsCallBase(message, base) {
+	        var wanted = String(base || "").trim().toUpperCase()
+	        if (wanted.length === 0)
+	            return false
+	        var parts = String(message || "").split(/\s+/)
+	        for (var i = 0; i < parts.length; ++i) {
+	            if (callsignBase(parts[i]) === wanted)
+	                return true
+	        }
+	        return false
+	    }
+
+	    // Shannon: RX Frequency window ±200Hz (sbFtol default) + messaggi diretti a noi
+	    property int rxBandwidth: 200  // Shannon sbFtol default 200Hz
 
     // Shannon isAtRxFrequency: dentro finestra ±200Hz OR messaggio per noi
     function isAtRxFrequency(freq, md) {
         var f = parseInt(freq)
         var inWindow = Math.abs(f - appEngine.rxFrequency) <= rxBandwidth
-        var relevant = md && (md.isMyCall || md.isTx)
-        return inWindow || relevant
-    }
-    function currentRxDecodes() {
-        var merged = []
-        if (appEngine.rxDecodeList) {
+	        var relevant = md && (md.isMyCall || md.isTx)
+	        return inWindow || relevant
+	    }
+
+	    function currentQsoPartnerBase() {
+	        return callsignBase(appEngine.dxCall || "")
+	    }
+
+	    function rxEntryBelongsToCurrentQso(item) {
+	        if (!item)
+	            return false
+
+	        var activeBase = currentQsoPartnerBase()
+	        if (item.isTx === true) {
+	            if (activeBase.length === 0)
+	                return true
+	            return messageContainsCallBase(item.message || "", activeBase)
+	                || callsignBase(item.dxCallsign || "") === activeBase
+	        }
+
+	        if (activeBase.length === 0)
+	            return isAtRxFrequency(item.freq || "0", item)
+
+	        var myBase = callsignBase(appEngine.callsign || "")
+	        var message = item.message || ""
+	        var activeMatch = messageContainsCallBase(message, activeBase)
+	            || callsignBase(item.fromCall || "") === activeBase
+	            || callsignBase(item.dxCallsign || "") === activeBase
+	        var myMatch = item.isMyCall === true
+	            || messageContainsCallBase(message, myBase)
+	        return activeMatch && myMatch
+	    }
+
+	    function currentRxDecodes() {
+	        var merged = []
+	        if (appEngine.rxDecodeList) {
             for (var j = 0; j < appEngine.rxDecodeList.length; j++) {
                 if (appEngine.rxDecodeList[j]) {
                     var item = {}
                     var src = appEngine.rxDecodeList[j]
-                    for (var key in src)
-                        item[key] = src[key]
-                    if (!decodeWindow.showTxMessagesInRx && item.isTx)
-                        continue
-                    merged.push(item)
-                }
-            }
+	                    for (var key in src)
+	                        item[key] = src[key]
+	                    if (!decodeWindow.showTxMessagesInRx && item.isTx)
+	                        continue
+	                    if (!rxEntryBelongsToCurrentQso(item))
+	                        continue
+	                    merged.push(item)
+	                }
+	            }
         }
         return merged
     }
@@ -671,7 +806,10 @@ Window {
                                             color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
-                                            elide: Text.ElideRight
+                                            elide: Text.ElideNone
+                                            fontSizeMode: Text.HorizontalFit
+                                            minimumPixelSize: 8
+                                            maximumLineCount: 1
                                         }
                                     }
 

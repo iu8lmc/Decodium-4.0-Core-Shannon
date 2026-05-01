@@ -234,6 +234,7 @@ namespace
   struct MsgParts
   {
     QString to, from;
+    QString partner;
     QStringList tokens;
     QString last;
     bool directed {false};
@@ -248,7 +249,11 @@ namespace
     p.from = parts[1].toUpper ();
     p.tokens = parts;
     p.last = parts.last ().toUpper ();
-    p.directed = (p.to == myCallUpper);
+    p.directed = (p.to == myCallUpper || p.from == myCallUpper);
+    if (p.to == myCallUpper)
+      p.partner = p.from;
+    else if (p.from == myCallUpper)
+      p.partner = p.to;
     return p;
   }
 
@@ -285,7 +290,7 @@ namespace
         return 0;
       }
 
-    QString const partner = p.from;
+    QString const partner = p.partner;
 
     // inCqMode on first directed call from unknown partner
     if (st.inCqMode && st.dxCall.isEmpty ())
@@ -557,15 +562,30 @@ int main (int argc, char* argv[])
         QStringLiteral ("IW8XOU K1ABC 73"),      // partner 73 after our 73
       };
 
+      // Scenario 3: same QSO semantics as scenario 2, but the decoder exposes
+      // calls as DX/MY instead of MY/DX. A received RRR must advance to our
+      // signoff, never back to the report.
+      Scenario sc3;
+      sc3.name = "Scenario 3 — partner-first decode ordering";
+      sc3.autoCq = false;
+      sc3.partnerMessages = {
+        QStringLiteral ("K1ABC IW8XOU FN42"),
+        QStringLiteral ("K1ABC IW8XOU -14"),
+        QStringLiteral ("K1ABC IW8XOU RRR"),
+        QStringLiteral ("K1ABC IW8XOU 73"),
+      };
+
       bool const r1 = run_scenario (out, sc1);
       bool const r2 = run_scenario (out, sc2);
+      bool const r3 = run_scenario (out, sc3);
 
       out << "\n====================\n";
       out << "FINAL: "
           << (r1 ? "scenario1=PASS " : "scenario1=FAIL ")
-          << (r2 ? "scenario2=PASS" : "scenario2=FAIL")
+          << (r2 ? "scenario2=PASS " : "scenario2=FAIL ")
+          << (r3 ? "scenario3=PASS" : "scenario3=FAIL")
           << "\n";
-      return (r1 && r2) ? EXIT_SUCCESS : EXIT_FAILURE;
+      return (r1 && r2 && r3) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
   catch (std::exception const& e)
     {

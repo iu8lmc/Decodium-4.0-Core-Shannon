@@ -351,20 +351,13 @@ namespace
       {
         return false;
       }
-    auto const parts = value.split ('.', Qt::KeepEmptyParts);
-    if (parts.size () < 2)
+    bool ok = false;
+    double const parsed = QLocale::c ().toDouble (value.trimmed (), &ok);
+    if (!ok)
       {
         return false;
       }
-    bool ok_whole = false;
-    bool ok_fraction = false;
-    auto const whole = parts.value (0).toInt (&ok_whole);
-    auto const fraction = parts.value (1).toInt (&ok_fraction);
-    if (!ok_whole || !ok_fraction)
-      {
-        return false;
-      }
-    *out = 10 * whole + fraction;
+    *out = qMax (0, qRound (parsed * 10.0));
     return true;
   }
 

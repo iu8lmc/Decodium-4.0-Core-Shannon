@@ -162,6 +162,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString catMode READ catMode NOTIFY catModeChanged)
     Q_PROPERTY(double rigPowerWatts READ rigPowerWatts NOTIFY rigTelemetryChanged)
     Q_PROPERTY(double rigSwr READ rigSwr NOTIFY rigTelemetryChanged)
+    Q_PROPERTY(double processCpuUsage READ processCpuUsage NOTIFY processCpuUsageChanged)
     Q_PROPERTY(QString lastCatError READ lastCatError NOTIFY lastCatErrorChanged)
 
     // === LED STATUS INDICATORS ===
@@ -461,6 +462,7 @@ public:
     QString catMode() const;
     double rigPowerWatts() const { return m_rigPowerWatts; }
     double rigSwr() const { return m_rigSwr; }
+    double processCpuUsage() const { return m_processCpuUsage; }
     QString lastCatError() const { return m_lastCatError; }
 
     // LED status
@@ -953,6 +955,7 @@ signals:
     void catRigNameChanged();
     void catModeChanged();
     void rigTelemetryChanged();
+    void processCpuUsageChanged();
     void lastCatErrorChanged();
     void dxClusterConnectedChanged();
     void dxClusterSpotsChanged();
@@ -1098,6 +1101,7 @@ private slots:
     void onPeriodTimer();
     void onUtcTimer();
     void onSpectrumTimer();
+    void updateProcessCpuUsage();
     void onLegacyWaterfallRow(QByteArray const& rowLevels,
                               int startFrequencyHz,
                               int spanHz,
@@ -1308,6 +1312,11 @@ private:
     QString m_catMode;
     double m_rigPowerWatts {0.0};
     double m_rigSwr {0.0};
+    double m_processCpuUsage {0.0};
+    quint64 m_lastProcessCpuUsec {0};
+    int m_processCpuLogicalCores {1};
+    bool m_processCpuSampleInitialized {false};
+    QElapsedTimer m_processCpuSampleClock;
     double m_localCatFrequencyTargetHz {0.0};
     qint64 m_localCatFrequencyGuardUntilMs {0};
     qint64 m_lastIgnoredCatFrequencyLogMs {0};
@@ -1421,6 +1430,7 @@ private:
     QTimer* m_periodTimer      {nullptr};
     QTimer* m_utcTimer         {nullptr};
     QTimer* m_spectrumTimer    {nullptr};
+    QTimer* m_processCpuTimer  {nullptr};
     QTimer* m_asyncDecodeTimer {nullptr};   // FT2 turbo async 100ms
     QTimer* m_legacyStateTimer {nullptr};
     SoundInput*        m_soundInput  {nullptr};

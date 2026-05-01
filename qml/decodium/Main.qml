@@ -886,10 +886,15 @@ ApplicationWindow {
     property string decodedTextFontFamily: bridge.fontSettingFamily("DecodedTextFont", "Courier", 10)
     property int decodedTextFontPixelSize: bridge.fontSettingPixelSize("DecodedTextFont", "Courier", 10)
     property int decodedTextHeaderPixelSize: Math.max(8, decodedTextFontPixelSize - 1)
+    property int decodeColorRevision: 0
 
     function refreshDecodedTextFont() {
         decodedTextFontFamily = bridge.fontSettingFamily("DecodedTextFont", "Courier", 10)
         decodedTextFontPixelSize = bridge.fontSettingPixelSize("DecodedTextFont", "Courier", 10)
+    }
+
+    function refreshDecodeColors() {
+        decodeColorRevision = (decodeColorRevision + 1) % 1000000
     }
 
     Connections {
@@ -922,6 +927,25 @@ ApplicationWindow {
             else if (key === "uiDecodePanelsLayoutSaved")
                 mainWindow.decodePanelLayoutSaved = !!value
         }
+        function onColorCQChanged() { mainWindow.refreshDecodeColors() }
+        function onColorMyCallChanged() { mainWindow.refreshDecodeColors() }
+        function onColorDXEntityChanged() { mainWindow.refreshDecodeColors() }
+        function onColor73Changed() { mainWindow.refreshDecodeColors() }
+        function onColorB4Changed() { mainWindow.refreshDecodeColors() }
+        function onColorTxMessageChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewDxccChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewDxccBandChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewContinentChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewContinentBandChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewCqZoneChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewCqZoneBandChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewItuZoneChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewItuZoneBandChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewGridChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewGridBandChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewCallChanged() { mainWindow.refreshDecodeColors() }
+        function onColorNewCallBandChanged() { mainWindow.refreshDecodeColors() }
+        function onColorLotwUserChanged() { mainWindow.refreshDecodeColors() }
     }
 
     // IU8LMC: DXCC color scheme (JTDX-style)
@@ -981,6 +1005,78 @@ ApplicationWindow {
         return textPrimary
     }
 
+    function decodeHighlightHex(modelData) {
+        mainWindow.decodeColorRevision
+        var hex = bridge.decodeHighlightBg(modelData)
+        if (!hex || hex.length === 0)
+            return ""
+        return hex
+    }
+
+    function decodeRowHighlightHex(modelData) {
+        var hex = decodeHighlightHex(modelData)
+        if (hex.length === 0 || !modelData)
+            return ""
+
+        // Broad WSJT-X "new ..." classes can match nearly every decode when
+        // the worked history is sparse. Keep them as text colors so they do
+        // not wash the entire table with one background color.
+        if (modelData.isTx === true || modelData.isMyCall === true)
+            return hex
+        return ""
+    }
+
+    function decodePassiveHighlightTextColor(modelData) {
+        var hex = decodeHighlightHex(modelData)
+        if (hex.length === 0 || !modelData)
+            return ""
+        if (modelData.isTx === true || modelData.isMyCall === true)
+            return ""
+        return hex
+    }
+
+    function readableTextOnHighlight(hex) {
+        var c = Qt.color(hex)
+        var luminance = (0.299 * c.r) + (0.587 * c.g) + (0.114 * c.b)
+        return luminance > 0.55 ? "#000000" : "#FFFFFF"
+    }
+
+    function decodeHighlightFill(modelData) {
+        var hex = decodeRowHighlightHex(modelData)
+        if (hex.length === 0)
+            return null
+        var c = Qt.color(hex)
+        return Qt.rgba(c.r, c.g, c.b, 0.35)
+    }
+
+    function decodeHighlightBorder(modelData) {
+        var hex = decodeRowHighlightHex(modelData)
+        if (hex.length === 0)
+            return null
+        var c = Qt.color(hex)
+        return Qt.rgba(c.r, c.g, c.b, 0.85)
+    }
+
+    function fullSpectrumTextColor(modelData) {
+        var rowHex = decodeRowHighlightHex(modelData)
+        if (rowHex.length > 0)
+            return readableTextOnHighlight(rowHex)
+
+        var customColor = customHighlightColor(modelData)
+        if (customColor !== "")
+            return customColor
+        if (highlight73 && isSignoffMessage(modelData.message))
+            return bridge.color73
+        if (modelData.isB4 === true || modelData.dxIsWorked === true)
+            return bridge.colorB4
+
+        var textHex = decodePassiveHighlightTextColor(modelData)
+        if (textHex.length > 0)
+            return textHex
+
+        return getDxccColor(modelData)
+    }
+
     function formatBearingDegrees(value) {
         return value !== undefined && value >= 0 ? Math.round(value) + "°" : ""
     }
@@ -989,11 +1085,22 @@ ApplicationWindow {
         return String(token || "").toUpperCase().replace(/[<>;,]/g, "").trim()
     }
 
+    function isTelemetryHexToken(token) {
+        var text = normalizedCallToken(token)
+        return text.length >= 7
+            && text.length <= 18
+            && /[A-F]/.test(text)
+            && /[0-9]/.test(text)
+            && /^[0-9A-F]+$/.test(text)
+    }
+
     function looksLikeCallsignTokenValue(token) {
         var text = normalizedCallToken(token)
         if (text.length === 0)
             return false
         if (text === "CQ" || text === "DX" || text === "QRZ" || text === "DE" || text === "TEST")
+            return false
+        if (isTelemetryHexToken(text))
             return false
         var hasLetter = /[A-Z]/.test(text)
         var hasDigit = /[0-9]/.test(text)
@@ -1093,7 +1200,10 @@ ApplicationWindow {
     function shouldShowStatusToast(message) {
         var lower = String(message || "").toLowerCase()
         return lower.indexOf("cty.dat") >= 0
-            || (lower.indexOf("qso ") === 0 && lower.indexOf("-> udp") >= 0)
+            || (lower.indexOf("qso ") === 0
+                && (lower.indexOf("-> udp") >= 0
+                    || lower.indexOf("-> n1mm") >= 0
+                    || lower.indexOf("-> easylog") >= 0))
     }
 
     function showStatusToast(message, color) {
@@ -2109,7 +2219,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ToolTip.visible: hovered
-                                    ToolTip.text: "Seleziona modo di decodifica"
+                                    ToolTip.text: qsTr("Select decoder mode")
                                 }
                             }
 
@@ -2297,7 +2407,7 @@ ApplicationWindow {
                             }
 
                             ToolTip.visible: wavMA.containsMouse
-                            ToolTip.text: "Click: apri WAV singolo\nClick destro: batch cartella"
+                            ToolTip.text: qsTr("Click: open one WAV file\nRight-click: decode a folder")
                         }
 
                         // Separator
@@ -2791,7 +2901,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: waterfallRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Waterfall"
+                    ToolTip.text: qsTr("Restore Waterfall")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -2843,7 +2953,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: logRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina QSO Log"
+                    ToolTip.text: qsTr("Restore QSO Log")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -2895,7 +3005,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: astroRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Astronomical Data"
+                    ToolTip.text: qsTr("Restore Astronomical Data")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -2974,7 +3084,7 @@ ApplicationWindow {
                     Item {
                         id: autoSpotRow
                         z: 3
-                        visible: bridge.dxCluster && bridge.dxCluster.connected
+                        visible: Boolean(bridge.dxCluster && bridge.dxCluster.connected)
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
@@ -3034,7 +3144,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: dxcBtnMA.containsMouse
-                    ToolTip.text: "DX Cluster\nSinistro: apri + connetti\nDestro: disconnetti"
+                    ToolTip.text: qsTr("DX Cluster\nLeft-click: open and connect\nRight-click: disconnect")
                     ToolTip.delay: 400
 
                     Behavior on color { ColorAnimation { duration: 150 } }
@@ -3081,7 +3191,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: macroRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Macro Configuration"
+                    ToolTip.text: qsTr("Restore Macro Configuration")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3133,7 +3243,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: rigRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Rig Control"
+                    ToolTip.text: qsTr("Restore Rig Control")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3187,7 +3297,7 @@ ApplicationWindow {
                     }
 
 	                    ToolTip.visible: p1RestoreMA.containsMouse
-	                    ToolTip.text: "Ripristina Full Spectrum"
+	                    ToolTip.text: qsTr("Restore Full Spectrum")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3239,7 +3349,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: p2RestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Period 2"
+                    ToolTip.text: qsTr("Restore Period 2")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3291,7 +3401,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: rxRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina Signal RX"
+                    ToolTip.text: qsTr("Restore Signal RX")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3343,7 +3453,7 @@ ApplicationWindow {
                     }
 
                     ToolTip.visible: txRestoreMA.containsMouse
-                    ToolTip.text: "Ripristina TX Panel"
+                    ToolTip.text: qsTr("Restore TX Panel")
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
@@ -3875,14 +3985,25 @@ ApplicationWindow {
                         decodePanel.lastSyncCount = newCount
                     }
 
-                    Component.onCompleted: {
-                        updatePeriodState()
-                        lastSyncCount = bridge.decodeList ? bridge.decodeList.length : 0
-                    }
+	                    Component.onCompleted: {
+	                        updatePeriodState()
+	                        lastSyncCount = bridge.decodeList ? bridge.decodeList.length : 0
+	                    }
 
-                    // Update decode list incrementalmente (solo nuovi elementi)
-                    Connections {
-                        target: bridge
+	                    function refreshRxDecodeModel() {
+	                        var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+	                        var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
+	                        decodePanel.rxDecodes = decodePanel.currentRxDecodes()
+	                        decodePanel.decodeListVersion++
+	                        if (stickRxTail && rxFrequencyList)
+	                            rxFrequencyList.forceTailFollow()
+	                        if (stickFloatingRxTail && rxFrequencyFloatingList)
+	                            rxFrequencyFloatingList.forceTailFollow()
+	                    }
+
+	                    // Update decode list incrementalmente (solo nuovi elementi)
+	                    Connections {
+	                        target: bridge
                         function onDecodeListChanged() {
                             var stickBandTail = evenPeriodList ? evenPeriodList.isNearTail() : true
                             var stickFloatingTail = period1FloatingList ? period1FloatingList.isNearTail() : true
@@ -3909,10 +4030,16 @@ ApplicationWindow {
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
                             if (rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-                            if (rxFrequencyFloatingList)
-                                rxFrequencyFloatingList.forceTailFollow()
-                        }
-                    }
+	                            if (rxFrequencyFloatingList)
+	                                rxFrequencyFloatingList.forceTailFollow()
+	                        }
+	                        function onDxCallChanged() {
+	                            decodePanel.refreshRxDecodeModel()
+	                        }
+	                        function onRxFrequencyChanged() {
+	                            decodePanel.refreshRxDecodeModel()
+	                        }
+	                    }
 
                     onShowTxMessagesInRxChanged: {
                         decodePanel.rxDecodes = currentRxDecodes()
@@ -3950,28 +4077,72 @@ ApplicationWindow {
                         }
                     }
 
-                    // Shannon RX frequency filter: ±200Hz OR messaggi per noi
-                    property int rxBandwidth: 200
-                    function isAtRxFrequency(freq, md) {
-                        var f = parseInt(freq)
-                        var inWindow = Math.abs(f - bridge.rxFrequency) <= rxBandwidth
-                        var relevant = md && (md.isMyCall || md.isTx)
-                        return inWindow || relevant
-                    }
-                    function currentRxDecodes() {
-                        var merged = []
-                        if (bridge.rxDecodeList) {
-                            for (var j = 0; j < bridge.rxDecodeList.length; j++) {
+	                    // Shannon RX frequency filter: ±200Hz OR messaggi per noi
+	                    property int rxBandwidth: 200
+	                    function isAtRxFrequency(freq, md) {
+	                        var f = parseInt(freq)
+	                        var inWindow = Math.abs(f - bridge.rxFrequency) <= rxBandwidth
+	                        var relevant = md && (md.isMyCall || md.isTx)
+	                        return inWindow || relevant
+	                    }
+
+	                    function messageContainsCallBase(message, base) {
+	                        var wanted = String(base || "").trim().toUpperCase()
+	                        if (wanted.length === 0)
+	                            return false
+	                        var parts = String(message || "").split(/\s+/)
+	                        for (var i = 0; i < parts.length; ++i) {
+	                            if (mainWindow.callsignBase(parts[i]) === wanted)
+	                                return true
+	                        }
+	                        return false
+	                    }
+
+	                    function currentQsoPartnerBase() {
+	                        return mainWindow.callsignBase(bridge.dxCall || "")
+	                    }
+
+	                    function rxEntryBelongsToCurrentQso(item) {
+	                        if (!item)
+	                            return false
+
+	                        var activeBase = currentQsoPartnerBase()
+	                        if (item.isTx === true) {
+	                            if (activeBase.length === 0)
+	                                return true
+	                            return messageContainsCallBase(item.message || "", activeBase)
+	                                || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
+	                        }
+
+	                        if (activeBase.length === 0)
+	                            return isAtRxFrequency(item.freq || "0", item)
+
+	                        var myBase = mainWindow.callsignBase(bridge.callsign || "")
+	                        var message = item.message || ""
+	                        var activeMatch = messageContainsCallBase(message, activeBase)
+	                            || mainWindow.callsignBase(item.fromCall || "") === activeBase
+	                            || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
+	                        var myMatch = item.isMyCall === true
+	                            || messageContainsCallBase(message, myBase)
+	                        return activeMatch && myMatch
+	                    }
+
+	                    function currentRxDecodes() {
+	                        var merged = []
+	                        if (bridge.rxDecodeList) {
+	                            for (var j = 0; j < bridge.rxDecodeList.length; j++) {
                                 if (bridge.rxDecodeList[j]) {
                                     var item = {}
                                     var src = bridge.rxDecodeList[j]
-                                    for (var key in src)
-                                        item[key] = src[key]
-                                    if (!mainWindow.showTxMessagesInRx && item.isTx)
-                                        continue
-                                    merged.push(item)
-                                }
-                            }
+	                                    for (var key in src)
+	                                        item[key] = src[key]
+	                                    if (!mainWindow.showTxMessagesInRx && item.isTx)
+	                                        continue
+	                                    if (!rxEntryBelongsToCurrentQso(item))
+	                                        continue
+	                                    merged.push(item)
+	                                }
+	                            }
                         }
                         return merged
                     }
@@ -4216,14 +4387,15 @@ ApplicationWindow {
                             property int targetPanelWidth: mainWindow.savedPeriod1PanelWidth
                             SplitView.preferredWidth: targetPanelWidth
                             SplitView.minimumWidth: 360
-                            readonly property bool compactColumns: width < 540
+                            readonly property bool compactColumns: width < 620
                             readonly property int utcColumnWidth: compactColumns ? 66 : 86
                             readonly property int dbColumnWidth: compactColumns ? 34 : 38
                             readonly property int dbDtGapWidth: compactColumns ? 4 : 6
                             readonly property int dtColumnWidth: compactColumns ? 42 : 48
                             readonly property int freqColumnWidth: compactColumns ? 42 : 45
                             readonly property int gapColumnWidth: compactColumns ? 4 : 6
-                            readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 96 : 132) : 0
+                            readonly property int distanceColumnWidth: compactColumns ? 0 : 58
+                            readonly property int dxccColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 108 : Math.min(300, Math.max(190, Math.round(width * 0.24)))) : 0
                             readonly property int azColumnWidth: mainWindow.showDxccInfo ? (compactColumns ? 42 : 52) : 0
                             readonly property int messageMinWidth: compactColumns ? 72 : 140
                             // Divisore Full Spectrum / Signal RX: 50/50 affidabile.
@@ -4433,7 +4605,7 @@ ApplicationWindow {
 	                                            }
 
 	                                            ToolTip.visible: p1DetachMA.containsMouse
-	                                            ToolTip.text: "Stacca Full Spectrum"
+	                                            ToolTip.text: qsTr("Detach Full Spectrum")
                                             ToolTip.delay: 500
                                         }
                                     }
@@ -4459,6 +4631,7 @@ ApplicationWindow {
                                         Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                         Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
+                                        Text { visible: period1Panel.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
                                         Item {
                                             visible: mainWindow.showDxccInfo
                                             Layout.preferredWidth: period1Panel.dxccColumnWidth
@@ -4547,11 +4720,14 @@ ApplicationWindow {
                                         delegate: Rectangle {
                                             width: evenPeriodList.width - 8
                                             height: Math.round(26 * fs)
-                                            color: modelData.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.25) :
-                                                   modelData.isMyCall ? Qt.rgba(244/255, 67/255, 54/255, 0.25) :
-                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
-                                                   decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? Qt.rgba(76/255, 175/255, 80/255, 0.2) :
-                                                   index % 2 === 0 ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+	                                            property var highlightFill: mainWindow.decodeHighlightFill(modelData)
+	                                            property var highlightBorder: mainWindow.decodeHighlightBorder(modelData)
+	                                            color: highlightFill ? highlightFill :
+	                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
+	                                                   decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? Qt.rgba(76/255, 175/255, 80/255, 0.2) :
+	                                                   index % 2 === 0 ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+                                            border.color: highlightBorder ? highlightBorder : "transparent"
+                                            border.width: highlightFill ? 1 : 0
                                             radius: 2
 
                                             MouseArea {
@@ -4606,7 +4782,8 @@ ApplicationWindow {
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
+                                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
+                                                Text { visible: period1Panel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
                                                 Item {
                                                     visible: mainWindow.showDxccInfo
                                                     Layout.preferredWidth: period1Panel.dxccColumnWidth
@@ -4619,7 +4796,10 @@ ApplicationWindow {
                                                         color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
                                                         horizontalAlignment: Text.AlignRight
                                                         verticalAlignment: Text.AlignVCenter
-                                                        elide: Text.ElideRight
+                                                        elide: Text.ElideNone
+                                                        fontSizeMode: Text.HorizontalFit
+                                                        minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65))
+                                                        maximumLineCount: 1
                                                     }
                                                 }
                                                 Item {
@@ -4799,7 +4979,7 @@ ApplicationWindow {
                                                 onClicked: bridge.clearRxDecodes()
                                             }
                                             ToolTip.visible: rxClearMA.containsMouse
-                                            ToolTip.text: "Pulisci Signal RX"
+                                            ToolTip.text: qsTr("Clear Signal RX")
                                         }
 
 	                                        // Pop button
@@ -4828,7 +5008,7 @@ ApplicationWindow {
 	                                            }
 
 	                                            ToolTip.visible: rxDetachMA.containsMouse
-	                                            ToolTip.text: "Stacca Signal RX"
+	                                            ToolTip.text: qsTr("Detach Signal RX")
                                             ToolTip.delay: 500
                                         }
                                     }
@@ -5176,7 +5356,7 @@ ApplicationWindow {
                         }
 
                         ToolTip.visible: txDetachMA.containsMouse
-                        ToolTip.text: "Sgancia TX Panel"
+                        ToolTip.text: qsTr("Detach TX Panel")
                         ToolTip.delay: 500
                     }
                 }
@@ -5622,7 +5802,7 @@ ApplicationWindow {
             console.error("[Bridge ERROR]", msg)
             // Estrai prefisso "Sorgente: dettaglio" per titolo specifico
             // (es. "DX Cluster: Cannot send spot..." → title=DX Cluster, summary=Cannot send spot...)
-            var prefixMatch = String(msg).match(/^([^:]{1,40}):\s*(.+)$/s)
+            var prefixMatch = String(msg).match(/^([^:]{1,40}):\s*([\s\S]+)$/)
             if (prefixMatch) {
                 warningDialogTitle = prefixMatch[1].trim()
                 warningDialogSummary = prefixMatch[2].trim()
@@ -6297,12 +6477,10 @@ ApplicationWindow {
         }
 
         MenuItem {
-            text: bridge.updateAvailable ? "🆕 " + qsTr("Update Decodium v%1").arg(bridge.latestVersion) : "☁ " + qsTr("Check for Updates")
+            enabled: false
+            text: "☁ " + qsTr("Update checks disabled")
             onTriggered: {
-                if (bridge.updateAvailable)
-                    Qt.openUrlExternally("https://github.com/IU8LMC/decodium/releases/latest")
-                else
-                    bridge.checkForUpdates()
+                bridge.checkForUpdates()
             }
             background: Rectangle {
                 color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
@@ -6310,7 +6488,7 @@ ApplicationWindow {
             }
             contentItem: Text {
                 text: parent.text; font.pixelSize: 12
-                color: bridge.updateAvailable ? "#FF9800" : textSecondary; leftPadding: 10
+                color: textSecondary; leftPadding: 10
             }
         }
 
@@ -7956,9 +8134,9 @@ ApplicationWindow {
     }
 
 	    // ========== DETACHABLE FULL SPECTRUM WINDOW ==========
-	    Window {
+    Window {
 	        id: period1FloatingWindow
-        width: 500
+        width: 680
         height: 400
         minimumWidth: 350
         minimumHeight: 250
@@ -7966,7 +8144,7 @@ ApplicationWindow {
 	        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
 		        title: "Full Spectrum - Decodium"
 	        color: "transparent"
-	        readonly property bool compactColumns: width < 650
+	        readonly property bool compactColumns: width < 560
 	        readonly property int utcColumnWidth: compactColumns ? 66 : 84
 	        readonly property int dbColumnWidth: compactColumns ? 34 : 38
 	        readonly property int dbDtGapWidth: compactColumns ? 4 : 6
@@ -7974,7 +8152,7 @@ ApplicationWindow {
 	        readonly property int freqColumnWidth: compactColumns ? 42 : 46
 	        readonly property int gapColumnWidth: compactColumns ? 4 : 6
 	        readonly property int distanceColumnWidth: compactColumns ? 0 : 56
-	        readonly property int dxccColumnWidth: compactColumns ? 90 : 130
+	        readonly property int dxccColumnWidth: compactColumns ? 108 : Math.min(300, Math.max(190, Math.round(width * 0.24)))
 	        readonly property int azColumnWidth: compactColumns ? 38 : 48
 
 	        x: mainWindow.x + 100
@@ -8230,8 +8408,14 @@ ApplicationWindow {
                         delegate: Rectangle {
                             width: parent ? parent.width - 8 : 100
                             height: Math.round(24 * fs)
-                            radius: 3
-                            color: modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05)
+	                            radius: 3
+	                            property var highlightFill: mainWindow.decodeHighlightFill(modelData)
+	                            property var highlightBorder: mainWindow.decodeHighlightBorder(modelData)
+	                            color: highlightFill ? highlightFill :
+	                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
+	                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+                            border.color: highlightBorder ? highlightBorder : "transparent"
+                            border.width: highlightFill ? 1 : 0
 
                             RowLayout {
                                 anchors.fill: parent
@@ -8243,9 +8427,9 @@ ApplicationWindow {
 	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
 	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
-	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
+	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
 	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
 	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
                             }
 

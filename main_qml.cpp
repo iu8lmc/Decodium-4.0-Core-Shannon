@@ -28,6 +28,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QSysInfo>
 #include <QLockFile>
 #include <QList>
@@ -699,17 +700,28 @@ int main(int argc, char* argv[])
     // bindings still reevaluate while root objects are being torn down.
     // If the context object dies first, QML sees bridge == null and floods the
     // terminal with TypeError messages on exit.
+    bool const runningFromAppImage =
+        qEnvironmentVariableIsSet("APPIMAGE")
+        || qEnvironmentVariableIsSet("APPDIR")
+        || QCoreApplication::applicationDirPath().startsWith(QStringLiteral("/tmp/.mount_"));
+
     // Keep QML disk cache enabled by default. Disabling it forces every launch
     // to recompile QML/JS and is expensive on Windows when antivirus scans the
-    // installed Qt/QML tree. Use DECODIUM_DISABLE_QML_CACHE=1 only for diagnosis.
+    // installed Qt/QML tree. AppImages are the exception: the executable lives
+    // in a transient mount path, and stale QML bytecode has caused startup
+    // failures after replacing the AppImage.
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_QML_CACHE")) {
         qputenv("QML_DISABLE_DISK_CACHE", "1");
         L("QML disk cache disabled by DECODIUM_DISABLE_QML_CACHE");
     } else if (qEnvironmentVariableIsSet("QML_DISABLE_DISK_CACHE")) {
         L("QML disk cache disabled by environment");
+    } else if (runningFromAppImage) {
+        qputenv("QML_DISABLE_DISK_CACHE", "1");
+        L("QML disk cache disabled for AppImage runtime");
     } else {
         L("QML disk cache enabled");
     }
+    logEnvVar("QML_DISABLE_DISK_CACHE");
     logEnvVar("QML_DISK_CACHE_PATH");
     L(("Qt CacheLocation: " + QStandardPaths::writableLocation(QStandardPaths::CacheLocation).toLocal8Bit()).constData());
     L(("Qt GenericCacheLocation: " + QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation).toLocal8Bit()).constData());
@@ -720,14 +732,17 @@ int main(int argc, char* argv[])
     QQmlApplicationEngine engine;
     L("engine OK");
     engine.setOutputWarningsToStandardError(true);  // show QML errors on stderr for debugging
+    QStringList qmlWarningMessages;
     QObject::connect(&engine, &QQmlEngine::warnings, &app,
-                     [&bridge] (const QList<QQmlError>& warnings) {
+                     [&bridge, &qmlWarningMessages] (const QList<QQmlError>& warnings) {
         logQmlWarnings(warnings);
         for (auto const& w : warnings) {
-            qWarning("QML WARNING: %s", qPrintable(w.toString()));
+            QString const warning = w.toString();
+            qmlWarningMessages.push_back(warning);
+            qWarning("QML WARNING: %s", qPrintable(warning));
             // Feed warnings to the in-app diagnostics system
             if (auto *diag = qobject_cast<DecodiumDiagnostics*>(bridge.diagnostics()))
-                diag->addQmlWarning(w.toString());
+                diag->addQmlWarning(warning);
         }
     });
     engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
@@ -864,12 +879,19 @@ int main(int argc, char* argv[])
 
     if (engine.rootObjects().isEmpty()) {
         L("ERROR: rootObjects empty — QML failed to load. Check console for QML errors.");
+        QString const startupLogPath = QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+            .absoluteFilePath(QStringLiteral("decodium-start.log"));
+        QString const details = qmlWarningMessages.isEmpty()
+            ? QStringLiteral("No QML warning was reported before the root object failed.")
+            : qmlWarningMessages.join(QStringLiteral("\n"));
         // Show a native error dialog so user knows what happened
         QMessageBox::critical(nullptr, QStringLiteral("Decodium — QML Error"),
             QStringLiteral("The user interface failed to load.\n\n"
                            "This is usually caused by a missing Qt plugin or a corrupted installation.\n\n"
                            "Try reinstalling Decodium or deleting the qmlcache folder in the install directory.\n\n"
-                           "QML path: %1").arg(qmlPath));
+                           "QML path: %1\n\n"
+                           "Startup log: %2\n\n"
+                           "QML details:\n%3").arg(qmlPath, startupLogPath, details));
         return -1;
     }
     L("QML OK - entering event loop");

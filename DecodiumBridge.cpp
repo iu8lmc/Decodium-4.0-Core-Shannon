@@ -96,6 +96,15 @@
 #include <chrono>
 #include <limits>
 #include <thread>
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
 #ifdef FFTW3_SINGLE_FOUND
 #include <fftw3.h>
 #endif
@@ -103,6 +112,46 @@
 
 static void bridgeLog(const QString& msg) {
     DIAG_INFO(msg);
+}
+
+static constexpr bool kDecodiumUpdateCheckerEnabled = false;
+
+namespace {
+
+#ifdef Q_OS_WIN
+quint64 decodiumFileTimeToUsec(FILETIME const& value)
+{
+    ULARGE_INTEGER ticks;
+    ticks.LowPart = value.dwLowDateTime;
+    ticks.HighPart = value.dwHighDateTime;
+    return static_cast<quint64>(ticks.QuadPart / 10ULL);
+}
+#endif
+
+quint64 decodiumCurrentProcessCpuUsec()
+{
+#ifdef Q_OS_WIN
+    FILETIME creation;
+    FILETIME exit;
+    FILETIME kernel;
+    FILETIME user;
+    if (!GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user)) {
+        return 0;
+    }
+    return decodiumFileTimeToUsec(kernel) + decodiumFileTimeToUsec(user);
+#else
+    rusage usage {};
+    if (getrusage(RUSAGE_SELF, &usage) != 0) {
+        return 0;
+    }
+    auto const timevalToUsec = [](timeval const& tv) -> quint64 {
+        return static_cast<quint64>(tv.tv_sec) * 1000000ULL
+            + static_cast<quint64>(tv.tv_usec);
+    };
+    return timevalToUsec(usage.ru_utime) + timevalToUsec(usage.ru_stime);
+#endif
+}
+
 }
 
 #ifdef Q_OS_WIN
@@ -666,6 +715,35 @@ struct ParsedAdifDocument
     bool loaded {false};
 };
 
+static QString freqHzToBandToken(quint64 freqHz);
+
+static QString adifDigitsOnly(QString const& value)
+{
+    QString digits;
+    digits.reserve(value.size());
+    for (QChar const& ch : value.trimmed()) {
+        if (ch.isDigit()) {
+            digits.append(ch);
+        }
+    }
+    return digits;
+}
+
+static QString normalizedAdifDateToken(QString const& value)
+{
+    QString const digits = adifDigitsOnly(value);
+    return digits.size() >= 8 ? digits.left(8) : QString {};
+}
+
+static QString normalizedAdifTimeToken(QString const& value)
+{
+    QString const digits = adifDigitsOnly(value);
+    if (digits.isEmpty()) {
+        return {};
+    }
+    return digits.leftJustified(6, QLatin1Char('0')).left(6);
+}
+
 static QString normalizeAdifModeForDisplay(QMap<QString, QString> const& fields)
 {
     QString const submode = fields.value(QStringLiteral("SUBMODE")).trimmed().toUpper();
@@ -677,18 +755,47 @@ static QString normalizeAdifModeForDisplay(QMap<QString, QString> const& fields)
 
 static QString normalizedAdifDateTime(QMap<QString, QString> const& fields)
 {
-    QString const date = fields.value(QStringLiteral("QSO_DATE")).trimmed();
-    QString time = fields.value(QStringLiteral("TIME_ON")).trimmed();
-    if (time.size() == 4) {
-        time += QStringLiteral("00");
-    }
+    QString const date = normalizedAdifDateToken(fields.value(QStringLiteral("QSO_DATE")));
     if (date.size() != 8) {
         return {};
     }
-    time = time.leftJustified(6, QLatin1Char('0')).left(6);
+    QString time = normalizedAdifTimeToken(fields.value(QStringLiteral("TIME_ON")));
+    if (time.isEmpty()) {
+        time = normalizedAdifTimeToken(fields.value(QStringLiteral("TIME_OFF")));
+    }
     QDateTime utc = QDateTime::fromString(date + time, QStringLiteral("yyyyMMddHHmmss"));
     utc.setTimeSpec(Qt::UTC);
     return utc.isValid() ? utc.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) : QString {};
+}
+
+static quint64 adifFrequencyHzFromFields(QMap<QString, QString> const& fields)
+{
+    QString freqMhzText = fields.value(QStringLiteral("FREQ")).trimmed();
+    if (freqMhzText.isEmpty()) {
+        freqMhzText = fields.value(QStringLiteral("FREQ_RX")).trimmed();
+    }
+    if (freqMhzText.isEmpty()) {
+        return 0;
+    }
+
+    freqMhzText.replace(QLatin1Char(','), QLatin1Char('.'));
+    bool ok = false;
+    double const freqMhz = freqMhzText.toDouble(&ok);
+    if (!ok || freqMhz <= 0.0) {
+        return 0;
+    }
+    return static_cast<quint64>(freqMhz * 1'000'000.0 + 0.5);
+}
+
+static QString adifBandFromFields(QMap<QString, QString> const& fields)
+{
+    QString const band = fields.value(QStringLiteral("BAND")).trimmed().toUpper();
+    if (!band.isEmpty()) {
+        return band;
+    }
+
+    quint64 const freqHz = adifFrequencyHzFromFields(fields);
+    return freqHz > 0 ? freqHzToBandToken(freqHz).toUpper() : QString {};
 }
 
 static QVariantMap qsoMapFromAdifRecord(QMap<QString, QString> const& fields, QString const& myGrid)
@@ -696,7 +803,7 @@ static QVariantMap qsoMapFromAdifRecord(QMap<QString, QString> const& fields, QS
     QVariantMap map;
     QString const call = fields.value(QStringLiteral("CALL")).trimmed().toUpper();
     QString const grid = fields.value(QStringLiteral("GRIDSQUARE")).trimmed().toUpper();
-    QString const band = fields.value(QStringLiteral("BAND")).trimmed().toUpper();
+    QString const band = adifBandFromFields(fields);
     QString const mode = normalizeAdifModeForDisplay(fields);
     QString const dateTime = normalizedAdifDateTime(fields);
     QString const reportSent = fields.value(QStringLiteral("RST_SENT")).trimmed().toUpper();
@@ -722,6 +829,152 @@ static QVariantMap qsoMapFromAdifRecord(QMap<QString, QString> const& fields, QS
     return map;
 }
 
+static ParsedAdifRecord normalizeImportedAdifRecord(ParsedAdifRecord record)
+{
+    auto normalizeUpperField = [&record](QString const& key) mutable {
+        QString const value = record.fields.value(key).trimmed().toUpper();
+        if (value.isEmpty()) {
+            record.fields.remove(key);
+        } else {
+            record.fields.insert(key, value);
+        }
+    };
+
+    normalizeUpperField(QStringLiteral("CALL"));
+    normalizeUpperField(QStringLiteral("GRIDSQUARE"));
+    normalizeUpperField(QStringLiteral("BAND"));
+    normalizeUpperField(QStringLiteral("MODE"));
+    normalizeUpperField(QStringLiteral("SUBMODE"));
+    normalizeUpperField(QStringLiteral("RST_SENT"));
+    normalizeUpperField(QStringLiteral("RST_RCVD"));
+
+    QString const date = normalizedAdifDateToken(record.fields.value(QStringLiteral("QSO_DATE")));
+    if (!date.isEmpty()) {
+        record.fields.insert(QStringLiteral("QSO_DATE"), date);
+    }
+
+    QString time = normalizedAdifTimeToken(record.fields.value(QStringLiteral("TIME_ON")));
+    if (time.isEmpty()) {
+        time = normalizedAdifTimeToken(record.fields.value(QStringLiteral("TIME_OFF")));
+    }
+    if (!time.isEmpty()) {
+        record.fields.insert(QStringLiteral("TIME_ON"), time);
+    }
+
+    QString const band = adifBandFromFields(record.fields);
+    if (!band.isEmpty()) {
+        record.fields.insert(QStringLiteral("BAND"), band);
+    }
+
+    return record;
+}
+
+static QString adifRecordDedupeKey(QMap<QString, QString> const& fields)
+{
+    QString const call = fields.value(QStringLiteral("CALL")).trimmed().toUpper();
+    if (call.isEmpty()) {
+        return {};
+    }
+
+    QString const dateTime = normalizedAdifDateTime(fields);
+    QString const mode = normalizeAdifModeForDisplay(fields);
+    QString const band = adifBandFromFields(fields);
+    if (!dateTime.isEmpty()) {
+        return QStringList { call, dateTime, mode, band }.join(QLatin1Char('|'));
+    }
+
+    QString time = normalizedAdifTimeToken(fields.value(QStringLiteral("TIME_ON")));
+    if (time.isEmpty()) {
+        time = normalizedAdifTimeToken(fields.value(QStringLiteral("TIME_OFF")));
+    }
+
+    return QStringList {
+        call,
+        QStringLiteral("RAW"),
+        normalizedAdifDateToken(fields.value(QStringLiteral("QSO_DATE"))),
+        time,
+        mode,
+        band,
+        fields.value(QStringLiteral("FREQ")).trimmed(),
+        fields.value(QStringLiteral("RST_SENT")).trimmed().toUpper(),
+        fields.value(QStringLiteral("RST_RCVD")).trimmed().toUpper(),
+        fields.value(QStringLiteral("GRIDSQUARE")).trimmed().toUpper()
+    }.join(QLatin1Char('|'));
+}
+
+static QList<ParsedAdifRecord> parseAdifRecordsBytes(QByteArray const& bodyBytes)
+{
+    QList<ParsedAdifRecord> records;
+    ParsedAdifRecord record;
+    int cursor = 0;
+    while (cursor < bodyBytes.size()) {
+        int const tagStart = bodyBytes.indexOf('<', cursor);
+        if (tagStart < 0) {
+            break;
+        }
+        int const tagEnd = bodyBytes.indexOf('>', tagStart + 1);
+        if (tagEnd < 0) {
+            break;
+        }
+
+        QByteArray const spec = bodyBytes.mid(tagStart + 1, tagEnd - tagStart - 1).trimmed();
+        QByteArray const specLower = spec.toLower();
+        if (specLower == "eor") {
+            if (!record.fields.isEmpty()) {
+                records.append(record);
+                record = ParsedAdifRecord {};
+            }
+            cursor = tagEnd + 1;
+            continue;
+        }
+        if (specLower == "eoh") {
+            record = ParsedAdifRecord {};
+            cursor = tagEnd + 1;
+            continue;
+        }
+
+        int const lengthSeparator = spec.indexOf(':');
+        if (lengthSeparator <= 0) {
+            cursor = tagEnd + 1;
+            continue;
+        }
+
+        QByteArray const fieldNameBytes = spec.left(lengthSeparator).trimmed().toUpper();
+        QByteArray lengthBytes = spec.mid(lengthSeparator + 1);
+        int const typeSeparator = lengthBytes.indexOf(':');
+        if (typeSeparator >= 0) {
+            lengthBytes = lengthBytes.left(typeSeparator);
+        }
+        lengthBytes = lengthBytes.trimmed();
+
+        bool ok = false;
+        int const valueLength = lengthBytes.toInt(&ok);
+        if (!ok || valueLength < 0) {
+            cursor = tagEnd + 1;
+            continue;
+        }
+
+        int const valueStart = tagEnd + 1;
+        if (valueStart > bodyBytes.size()) {
+            break;
+        }
+
+        int const available = bodyBytes.size() - valueStart;
+        QByteArray const valueBytes = bodyBytes.mid(valueStart, std::min(valueLength, available));
+        QString const fieldName = QString::fromLatin1(fieldNameBytes).trimmed().toUpper();
+        QString const value = QString::fromUtf8(valueBytes).trimmed();
+        if (!fieldName.isEmpty()) {
+            record.fields.insert(fieldName, value);
+        }
+        cursor = valueStart + valueLength;
+    }
+
+    if (!record.fields.isEmpty()) {
+        records.append(record);
+    }
+    return records;
+}
+
 static ParsedAdifDocument loadAdifDocument(QString const& path)
 {
     ParsedAdifDocument doc;
@@ -730,76 +983,28 @@ static ParsedAdifDocument loadAdifDocument(QString const& path)
         doc.header = QStringLiteral("Decodium4 ADIF Log\n<EOH>\n");
         return doc;
     }
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::ReadOnly)) {
         return doc;
     }
 
-    QString text = QString::fromUtf8(file.readAll());
+    QByteArray raw = file.readAll();
     file.close();
+    if (raw.startsWith("\xEF\xBB\xBF")) {
+        raw.remove(0, 3);
+    }
 
-    QRegularExpression const eohRe(QStringLiteral("<EOH>"), QRegularExpression::CaseInsensitiveOption);
-    QRegularExpressionMatch const eohMatch = eohRe.match(text);
-    QString body = text;
-    if (eohMatch.hasMatch()) {
-        doc.header = text.left(eohMatch.capturedEnd()).trimmed() + QLatin1Char('\n');
-        body = text.mid(eohMatch.capturedEnd());
+    QByteArray const rawLower = raw.toLower();
+    int const eohStart = rawLower.indexOf("<eoh>");
+    QByteArray body = raw;
+    if (eohStart >= 0) {
+        int const eohEnd = eohStart + 5;
+        doc.header = QString::fromUtf8(raw.left(eohEnd)).trimmed() + QLatin1Char('\n');
+        body = raw.mid(eohEnd);
     } else {
         doc.header = QStringLiteral("Decodium4 ADIF Log\n<EOH>\n");
     }
 
-    QRegularExpression const eorRe(QStringLiteral("<EOR>"), QRegularExpression::CaseInsensitiveOption);
-    int pos = 0;
-    while (true) {
-        QRegularExpressionMatch const eorMatch = eorRe.match(body, pos);
-        if (!eorMatch.hasMatch()) {
-            break;
-        }
-
-        QString const recordText = body.mid(pos, eorMatch.capturedStart() - pos).trimmed();
-        pos = eorMatch.capturedEnd();
-        if (recordText.isEmpty()) {
-            continue;
-        }
-
-        ParsedAdifRecord record;
-        int cursor = 0;
-        while (cursor < recordText.size()) {
-            int const tagStart = recordText.indexOf(QLatin1Char('<'), cursor);
-            if (tagStart < 0) {
-                break;
-            }
-            int const tagEnd = recordText.indexOf(QLatin1Char('>'), tagStart + 1);
-            if (tagEnd < 0) {
-                break;
-            }
-
-            QString const spec = recordText.mid(tagStart + 1, tagEnd - tagStart - 1).trimmed();
-            QStringList const parts = spec.split(QLatin1Char(':'));
-            if (parts.size() < 2) {
-                cursor = tagEnd + 1;
-                continue;
-            }
-
-            bool ok = false;
-            int const valueLength = parts.at(1).toInt(&ok);
-            if (!ok || valueLength < 0) {
-                cursor = tagEnd + 1;
-                continue;
-            }
-
-            QString const fieldName = parts.at(0).trimmed().toUpper();
-            QString const value = recordText.mid(tagEnd + 1, valueLength).trimmed();
-            if (!fieldName.isEmpty()) {
-                record.fields.insert(fieldName, value);
-            }
-            cursor = tagEnd + 1 + valueLength;
-        }
-
-        if (!record.fields.isEmpty()) {
-            doc.records.append(record);
-        }
-    }
-
+    doc.records = parseAdifRecordsBytes(body);
     doc.loaded = true;
     return doc;
 }
@@ -820,7 +1025,7 @@ static bool writeAdifDocument(QString const& path, ParsedAdifDocument const& doc
 
     auto writeField = [&ts](QString const& tag, QString const& value) {
         if (!tag.isEmpty() && !value.isNull() && !value.isEmpty()) {
-            ts << '<' << tag << ':' << value.size() << '>' << value << ' ';
+            ts << '<' << tag << ':' << value.toUtf8().size() << '>' << value << ' ';
         }
     };
 
@@ -1120,37 +1325,6 @@ static bool messageContainsCallToken(QString const& message,
     QStringList const tokens = normalizedMessageTokens(message);
     for (QString const& token : tokens) {
         if (tokenMatchesCall(token, fullCall, baseCall)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool isQsoExchangeToken(QString const& token)
-{
-    QString const upper = normalizeCallToken(token).toUpper();
-    if (upper.isEmpty()) {
-        return false;
-    }
-
-    static const QRegularExpression signedReportPattern {
-        R"(\A(?:R[-+]\d{2}|[-+]\d{2}|R\d{2})\z)"
-    };
-
-    return upper == QStringLiteral("R")
-        || upper == QStringLiteral("73")
-        || upper == QStringLiteral("RR73")
-        || upper == QStringLiteral("RRR")
-        || upper == QStringLiteral("TU")
-        || isGridTokenStrict(upper)
-        || signedReportPattern.match(upper).hasMatch();
-}
-
-static bool messageContainsExchangeToken(QString const& message)
-{
-    QStringList const tokens = normalizedMessageTokens(message);
-    for (QString const& token : tokens) {
-        if (isQsoExchangeToken(token)) {
             return true;
         }
     }
@@ -2797,6 +2971,16 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     }
     connect(m_spectrumTimer, &QTimer::timeout, this, &DecodiumBridge::onSpectrumTimer);
 
+    // Process CPU monitor: real Decodium process usage, normalized over logical cores.
+    m_processCpuLogicalCores = qMax(1, QThread::idealThreadCount());
+    m_lastProcessCpuUsec = decodiumCurrentProcessCpuUsec();
+    m_processCpuSampleClock.start();
+    m_processCpuSampleInitialized = true;
+    m_processCpuTimer = new QTimer(this);
+    m_processCpuTimer->setInterval(2000);
+    connect(m_processCpuTimer, &QTimer::timeout, this, &DecodiumBridge::updateProcessCpuUsage);
+    m_processCpuTimer->start();
+
     // Async decode timer: per FT2 turbo async, decodifica ogni 100ms
     m_asyncDecodeTimer = new QTimer(this);
     m_asyncDecodeTimer->setInterval(100);
@@ -3662,7 +3846,7 @@ void DecodiumBridge::primeLegacyAllTxtCursor()
             + QStringLiteral("|")
             + QString::number(info.size())
             + QStringLiteral("|")
-            + QString::number(info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+            + QString::number(info.lastModified().toMSecsSinceEpoch());
     } else {
         m_legacyAllTxtConsumedPath = path;
         m_legacyAllTxtConsumedSize = -1;
@@ -3766,7 +3950,7 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
                     + QStringLiteral("|")
                     + QString::number(info.size())
                     + QStringLiteral("|")
-                    + QString::number(info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+                    + QString::number(info.lastModified().toMSecsSinceEpoch());
             } else {
                 allTxtRevisionKey = path;
             }
@@ -4107,9 +4291,6 @@ bool DecodiumBridge::shouldMirrorToRxPane(const QVariantMap& entry) const
     QString const myBaseUpper = normalizedBaseCall(myCallUpper);
     bool const directedToMe = entry.value("isMyCall").toBool()
         || messageContainsCallToken(message, myCallUpper, myBaseUpper);
-    if (directedToMe) {
-        return true;
-    }
 
     QString activePartner = m_dxCall.trimmed();
     if (activePartner.isEmpty()) {
@@ -4120,16 +4301,15 @@ bool DecodiumBridge::shouldMirrorToRxPane(const QVariantMap& entry) const
     }
     QString const activePartnerBase = normalizedBaseCall(activePartner);
     QString const fromCallBase = normalizedBaseCall(entry.value("fromCall").toString());
-    bool const hasExchange = messageContainsExchangeToken(message);
     if (!activePartnerBase.isEmpty()) {
         bool const mentionsActivePartner =
             messageContainsCallToken(message, activePartner, activePartnerBase);
-        bool const activePartnerTraffic =
-            (mentionsActivePartner && (directedToMe || hasExchange))
-            || (fromCallBase == activePartnerBase && hasExchange);
-        if (activePartnerTraffic) {
-            return true;
-        }
+        bool const fromActivePartner = fromCallBase == activePartnerBase;
+        return directedToMe && (mentionsActivePartner || fromActivePartner);
+    }
+
+    if (directedToMe) {
+        return true;
     }
 
     bool ok = false;
@@ -4343,6 +4523,7 @@ QString DecodiumBridge::decodeHighlightBg(const QVariantMap& entry) const
     if (entry.value(QStringLiteral("dxIsNewGridBand")).toBool())     return m_colorNewGridBand;
     if (entry.value(QStringLiteral("dxIsNewGrid")).toBool())         return m_colorNewGrid;
     if (entry.value(QStringLiteral("dxIsNewCallBand")).toBool())     return m_colorNewCallBand;
+    if (entry.value(QStringLiteral("dxIsNewCall")).toBool())         return m_colorNewCall;
 
     if (entry.value(QStringLiteral("isLotw")).toBool())              return m_colorLotwUser;
     if (entry.value(QStringLiteral("isCQ")).toBool())                return m_colorCQ;
@@ -5638,6 +5819,38 @@ void DecodiumBridge::updateRigTelemetry(double powerWatts, double swr)
     m_rigSwr = swr;
     emit rigTelemetryChanged();
     enforceSwrTransmissionLimit(QStringLiteral("telemetry"));
+}
+
+void DecodiumBridge::updateProcessCpuUsage()
+{
+    quint64 const currentCpuUsec = decodiumCurrentProcessCpuUsec();
+    qint64 const wallUsec = m_processCpuSampleClock.isValid()
+        ? m_processCpuSampleClock.nsecsElapsed() / 1000
+        : 0;
+
+    if (!m_processCpuSampleInitialized || wallUsec <= 0 || currentCpuUsec < m_lastProcessCpuUsec) {
+        m_lastProcessCpuUsec = currentCpuUsec;
+        m_processCpuSampleClock.restart();
+        m_processCpuSampleInitialized = true;
+        return;
+    }
+
+    quint64 const cpuDeltaUsec = currentCpuUsec - m_lastProcessCpuUsec;
+    double usage = static_cast<double>(cpuDeltaUsec)
+        / (static_cast<double>(wallUsec) * qMax(1, m_processCpuLogicalCores));
+    if (!std::isfinite(usage)) {
+        usage = 0.0;
+    }
+    usage = qBound(0.0, usage, 1.0);
+
+    m_lastProcessCpuUsec = currentCpuUsec;
+    m_processCpuSampleClock.restart();
+
+    if (std::abs(m_processCpuUsage - usage) < 0.005) {
+        return;
+    }
+    m_processCpuUsage = usage;
+    emit processCpuUsageChanged();
 }
 
 bool DecodiumBridge::checkSwrAllowsTransmission(const QString& reason)
@@ -9229,7 +9442,11 @@ void DecodiumBridge::udpSendN1mmLoggedQso(const QString& dxCall, const QByteArra
 
     QString const serverName = getSetting(QStringLiteral("N1MMServer"), QStringLiteral("127.0.0.1")).toString().trimmed();
     quint16 const port = udpPortFromSettingValue(getSetting(QStringLiteral("N1MMServerPort"), 2333), 2333);
-    udpSendRawAdifDatagram(QStringLiteral("N1MM raw ADIF"), serverName, port, dxCall, adifRecord);
+    if (udpSendRawAdifDatagram(QStringLiteral("N1MM raw ADIF"), serverName, port, dxCall, adifRecord)) {
+        emit statusMessage(QStringLiteral("QSO %1 -> N1MM/EasyLog %2:%3")
+                           .arg(dxCall, serverName)
+                           .arg(port));
+    }
 }
 
 void DecodiumBridge::tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord)
@@ -9798,17 +10015,21 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
         if (callIdx + 1 < parts.size()) hisGrid = parts[callIdx + 1];
         newCurrentTx = 1; // risposta CQ con callsign+grid
     } else if (parts.size() >= 2) {
-        // FT8 formato: TO_CALL FROM_CALL INFO
-        // FROM_CALL è SEMPRE parts[1] — è chi ha trasmesso il messaggio (call di DESTRA)
-        // Shannon: identifica il mittente come parts[1] quando parts[0] è il TO
-        if (!m_callsign.isEmpty() &&
-            parts[0].compare(m_callsign, Qt::CaseInsensitive) == 0) {
-            // Messaggio diretto A noi: TO=noi, FROM=hisCall (dx di destra)
+        QString const myCallUpper = m_callsign.trimmed().toUpper();
+        QString const myBaseUpper = normalizedBaseCall(myCallUpper);
+        auto const tokenIsMine = [&](int index) {
+            return index >= 0
+                && index < parts.size()
+                && tokenMatchesCall(parts.at(index), myCallUpper, myBaseUpper);
+        };
+        if (tokenIsMine(0)) {
             hisCall = parts[1];
+        } else if (tokenIsMine(1)) {
+            hisCall = parts[0];
         } else {
-            // Messaggio non diretto a noi (es: HA8UM OH6CXP -12)
-            // TO=HA8UM (sinistra, non ci interessa), FROM=OH6CXP (destra = chi chiama)
-            hisCall = parts[1];  // Shannon: sempre il FROM = call di destra
+            // Per traffico non diretto a noi, mantieni la semantica storica:
+            // il secondo token è il mittente del messaggio decodificato.
+            hisCall = parts[1];
         }
         if (parts.size() >= 3) {
             QString last = parts.last();
@@ -10838,12 +11059,13 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     if (parts.size() < 2) return;
 
     QString const myCallUpper = m_callsign.trimmed().toUpper();
-    QString const myBaseUpper = Radio::base_callsign(m_callsign).trimmed().toUpper();
-    bool const directedToMe =
-        !myCallUpper.isEmpty() &&
-        (parts[0].compare(myCallUpper, Qt::CaseInsensitive) == 0 ||
-         (!myBaseUpper.isEmpty() &&
-          parts[0].compare(myBaseUpper, Qt::CaseInsensitive) == 0));
+    QString const myBaseUpper = normalizedBaseCall(myCallUpper);
+    auto const tokenIsMine = [&](int index) {
+        return index >= 0
+            && index < parts.size()
+            && tokenMatchesCall(parts.at(index), myCallUpper, myBaseUpper);
+    };
+    bool const directedToMe = tokenIsMine(0) || tokenIsMine(1);
 
     // Decodium3/legacy behavior: during FT8/FT4 sync TX, we still have to arm
     // auto-reply as soon as a directed call to us is decoded from our CQ.
@@ -10879,9 +11101,10 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
 
     // Estrai il mittente: TO_CALL FROM_CALL ...
     QString from;
-    if (!myCallUpper.isEmpty() &&
-        parts[0].compare(myCallUpper, Qt::CaseInsensitive) == 0) {
+    if (tokenIsMine(0) && parts.size() >= 2) {
         from = parts[1];
+    } else if (tokenIsMine(1)) {
+        from = parts[0];
     } else {
         from = parts[0];
     }
@@ -10890,7 +11113,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     if (fallbackDirectedPartner.isEmpty()
         && directedToMe
         && parts.size() >= 2
-        && isPlaceholderCallToken(parts[1])
+        && isPlaceholderCallToken(tokenIsMine(0) ? parts[1] : parts[0])
         && !m_dxCall.trimmed().isEmpty()) {
         fallbackDirectedPartner = m_dxCall.trimmed();
         bridgeLog(QStringLiteral("autoSeq: placeholder partner resolved to active DX %1 for msg=%2")
@@ -10969,10 +11192,9 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     bool inCqMode = m_autoCqRepeat
                     && (m_currentTx == 6 || m_dxCall.isEmpty() || m_qsoProgress <= 1);
     if (inCqMode) {
-        // Rispondo solo a chi mi ha mandato un messaggio diretto (parts[0] == mia stazione)
-        // Es: "IU8LMC OH6CXP KP20" → parts[0]="IU8LMC" = m_callsign → accettiamo
-        if (myCallUpper.isEmpty() ||
-            parts[0].compare(myCallUpper, Qt::CaseInsensitive) != 0) return;
+        // Rispondo solo a messaggi che coinvolgono il mio call. Alcuni decoder
+        // espongono i due call nell'ordine DX/MY invece di MY/DX.
+        if (!directedToMe) return;
     } else {
         // Non in CQ mode: nessun dxCall → non rispondere automaticamente (Shannon: clearDX)
         if (m_dxCall.isEmpty()) {
@@ -11064,7 +11286,10 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     bool const partnerSignoffRR73 =
         (last.compare(QStringLiteral("RR73"), Qt::CaseInsensitive) == 0
          && m_qsoProgress >= 4);
-    bool const partnerAnySignoff = partnerSignoff73 || partnerSignoffRR73;
+    bool const partnerSignoffRRR =
+        (last.compare(QStringLiteral("RRR"), Qt::CaseInsensitive) == 0
+         && m_qsoProgress >= 4);
+    bool const partnerAnySignoff = partnerSignoff73 || partnerSignoffRR73 || partnerSignoffRRR;
     bool const profileNeedsOwn73BeforeLog =
         ((m_mode == QStringLiteral("FT2") && !m_quickQsoEnabled)
          || m_mode == QStringLiteral("FT8")
@@ -12153,7 +12378,7 @@ QString DecodiumBridge::legacyAllTxtPath() const
             existingFallbackCandidates.append(info);
         }
         newestActiveMsecs = qMax(newestActiveMsecs,
-                                 info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+                                 info.lastModified().toMSecsSinceEpoch());
     }
 
     QList<QFileInfo> const existingCandidates =
@@ -12162,7 +12387,7 @@ QString DecodiumBridge::legacyAllTxtPath() const
     if (!existingCandidates.isEmpty()) {
         QFileInfo bestInfo;
         for (QFileInfo const& info : std::as_const(existingCandidates)) {
-            qint64 const modifiedMsecs = info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch();
+            qint64 const modifiedMsecs = info.lastModified().toMSecsSinceEpoch();
             // Se piu file stanno venendo aggiornati praticamente insieme,
             // scegli quello piu ricco invece di quello che ha solo qualche
             // millisecondo di vantaggio ma meno decode.
@@ -12172,7 +12397,7 @@ QString DecodiumBridge::legacyAllTxtPath() const
             if (!bestInfo.exists()
                 || info.size() > bestInfo.size()
                 || (info.size() == bestInfo.size()
-                    && modifiedMsecs > bestInfo.lastModified(QTimeZone::UTC).toMSecsSinceEpoch())) {
+                    && modifiedMsecs > bestInfo.lastModified().toMSecsSinceEpoch())) {
                 bestInfo = info;
             }
         }
@@ -13003,10 +13228,32 @@ bool isGridToken(const QString& token)
     return true;
 }
 
+bool isTelemetryHexToken(const QString& token)
+{
+    QString const t = token.trimmed().toUpper();
+    if (t.size() < 7 || t.size() > 18) {
+        return false;
+    }
+
+    bool hasLetter = false;
+    bool hasDigit = false;
+    for (QChar const& ch : t) {
+        bool const isHexDigit =
+            (ch >= QLatin1Char('0') && ch <= QLatin1Char('9'))
+            || (ch >= QLatin1Char('A') && ch <= QLatin1Char('F'));
+        if (!isHexDigit) {
+            return false;
+        }
+        hasLetter = hasLetter || ch.isLetter();
+        hasDigit = hasDigit || ch.isDigit();
+    }
+    return hasLetter && hasDigit;
+}
+
 bool looksLikeCallsignToken(const QString& token)
 {
     QString t = token.trimmed().toUpper();
-    if (t.size() < 3 || t.size() > 15 || isGridToken(t))
+    if (t.size() < 3 || t.size() > 15 || isGridToken(t) || isTelemetryHexToken(t))
         return false;
 
     bool hasLetter = false;
@@ -16823,10 +17070,23 @@ bool DecodiumBridge::exportCabrillo(const QString& filename)
 
 void DecodiumBridge::checkForUpdates()
 {
+    if (!kDecodiumUpdateCheckerEnabled) {
+        if (m_updateAvailable) {
+            m_updateAvailable = false;
+            emit updateAvailableChanged();
+        }
+        if (!m_latestVersion.isEmpty()) {
+            m_latestVersion.clear();
+            emit latestVersionChanged();
+        }
+        emit statusMessage(tr("Update checks are disabled in this build."));
+        return;
+    }
+
     QNetworkAccessManager* nam = new QNetworkAccessManager(this);
-    QNetworkRequest req(QUrl("https://api.github.com/repos/IU8LMC/decodium/releases/latest"));
+    QNetworkRequest req(QUrl("https://api.github.com/repos/elisir80/Decodium-4.0-Core-Shannon/releases/latest"));
     req.setRawHeader("Accept", "application/vnd.github.v3+json");
-    req.setRawHeader("User-Agent", "Decodium/3.0");
+    req.setRawHeader("User-Agent", "Decodium/4.0");
 
     QNetworkReply* reply = nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
@@ -17083,7 +17343,7 @@ bool DecodiumBridge::exportAdif(const QString& filename)
     QTextStream ts(&out);
     ts << "Decodium3 ADIF Export — " << QDateTime::currentDateTimeUtc().toString(Qt::ISODate) << "\n<EOH>\n";
     auto field = [](const QString& tag, const QString& val) -> QString {
-        return QString("<%1:%2>%3 ").arg(tag).arg(val.length()).arg(val);
+        return QString("<%1:%2>%3 ").arg(tag).arg(val.toUtf8().size()).arg(val);
     };
     QTextStream in(&src);
     int count = 0;
@@ -17439,19 +17699,21 @@ int DecodiumBridge::importFromAdif(const QString& filename)
     ParsedAdifDocument dest = loadAdifDocument(ensureAdifLogPath());
     QSet<QString> existingKeys;
     for (ParsedAdifRecord const& record : dest.records) {
-        QString const key = record.fields.value(QStringLiteral("CALL")).trimmed().toUpper()
-            + QLatin1Char('|')
-            + normalizedAdifDateTime(record.fields);
-        existingKeys.insert(key);
+        QString const key = adifRecordDedupeKey(record.fields);
+        if (!key.isEmpty()) {
+            existingKeys.insert(key);
+        }
     }
 
     int imported = 0;
     for (ParsedAdifRecord const& record : source.records) {
-        QString const key = record.fields.value(QStringLiteral("CALL")).trimmed().toUpper()
-            + QLatin1Char('|')
-            + normalizedAdifDateTime(record.fields);
+        ParsedAdifRecord normalizedRecord = normalizeImportedAdifRecord(record);
+        QString const key = adifRecordDedupeKey(normalizedRecord.fields);
+        if (key.isEmpty()) {
+            continue;
+        }
         if (!existingKeys.contains(key)) {
-            dest.records.append(record);
+            dest.records.append(normalizedRecord);
             existingKeys.insert(key);
             ++imported;
         }

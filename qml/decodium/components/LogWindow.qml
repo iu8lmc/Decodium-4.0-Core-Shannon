@@ -85,6 +85,18 @@ Popup {
         }
     }
 
+    function fileUrlToLocalPath(fileUrl) {
+        var path = String(fileUrl || "")
+        if (path.indexOf("file://localhost/") === 0)
+            path = path.substring(16)
+        else if (path.indexOf("file://") === 0)
+            path = path.substring(7)
+        path = decodeURIComponent(path)
+        if (Qt.platform.os === "windows" && path.length > 2 && path.charAt(0) === "/" && path.charAt(2) === ":")
+            path = path.substring(1)
+        return path
+    }
+
     function statsFromRows(rows) {
         var calls = ({})
         var grids = ({})
@@ -163,7 +175,7 @@ Popup {
         nameFilters: ["ADIF files (*.adi *.adif)", "All files (*)"]
         onAccepted: {
             if (appEngine && appEngine.logManager) {
-                var path = selectedFile.toString().replace("file:///", "")
+                var path = fileUrlToLocalPath(selectedFile)
                 var count = appEngine.logManager.importFromAdif(path)
                 clearSelection()
                 refreshLog()
@@ -179,7 +191,7 @@ Popup {
         fileMode: FileDialog.SaveFile
         onAccepted: {
             if (appEngine && appEngine.logManager) {
-                var path = selectedFile.toString().replace("file:///", "")
+                var path = fileUrlToLocalPath(selectedFile)
                 appEngine.logManager.exportToAdif(path)
             }
         }

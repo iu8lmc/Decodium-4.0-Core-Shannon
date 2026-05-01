@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to build Decodium3 for ARM using Docker
+# Script to build Decodium 4 for ARM using Docker
 set -euo pipefail
 
 IMAGE_NAME="${IMAGE_NAME:-ft2-trixie-arm}"
@@ -29,7 +29,7 @@ docker volume create ${OUTPUT_VOLUME} > /dev/null || true
 
 echo "=== Copying Source to Volume ==="
 # We copy only the necessary files to the volume to avoid bloat.
-tar \
+COPYFILE_DISABLE=1 tar \
   --exclude='.git' \
   --exclude='build' \
   --exclude='build-appimage' \
@@ -68,7 +68,8 @@ docker run --rm -i --platform linux/arm64 \
           -DWSJT_SKIP_MANPAGES=ON \
           -DWSJT_BUILD_UTILS=OFF \
           -DBUILD_TESTING=OFF \
-          -DCMAKE_INSTALL_PREFIX=/tmp/wsjtx_install
+          -DCMAKE_INSTALL_PREFIX=/tmp/wsjtx_install \
+          -DQT_MAJOR_VERSION=6
 
         echo '>>> Building targets...'
         # Reduced parallelism to avoid OOM killer on memory-intensive files like qcustomplot
@@ -85,8 +86,8 @@ docker run --rm -i --platform linux/arm64 \
             cp -r /tmp/wsjtx_install/bin/* ${DIST_DIR}/bin/
         fi
 
-        tar czf /output/decodium3_trixie_arm64.tar.gz -C /tmp wsjtx_dist_arm
-        echo '>>> Tarball Complete! Output at /output/decodium3_trixie_arm64.tar.gz'
+        tar czf /output/decodium4_trixie_arm64.tar.gz -C /tmp wsjtx_dist_arm
+        echo '>>> Tarball Complete! Output at /output/decodium4_trixie_arm64.tar.gz'
 
         echo '>>> Generating DEB package...'
         # Running cpack in the build directory
@@ -94,23 +95,52 @@ docker run --rm -i --platform linux/arm64 \
         cp *.deb /output/ 2>/dev/null || echo "No .deb files found"
 
         echo '>>> Generating AppImage...'
-        # linuxdeploy requires a desktop file and an icon
         export ARCH=aarch64
+        export QMAKE="$(command -v qmake6)"
+        export QML_SOURCES_PATHS=/build-src/qml
 
-        # Patch the desktop file to match our executable name (ft2)
-        # and update the name for better branding
-        sed -i 's/^Exec=wsjtx/Exec=ft2/' /build-src/wsjtx.desktop
-        sed -i 's/^Name=wsjtx/Name=Decodium FT2/' /build-src/wsjtx.desktop
+        cat > /tmp/decodium.desktop <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Decodium 4
+Comment=Amateur Radio Weak Signal Operating
+Exec=decodium
+Icon=decodium
+Terminal=false
+Categories=AudioVideo;Audio;HamRadio;
+StartupNotify=true
+DESKTOP
 
-        # We point linuxdeploy to the installation prefix
+        cp /build-src/icons/Unix/decodium_icon.png /tmp/decodium.png
+
         linuxdeploy --appdir /tmp/AppDir \
-            --executable /tmp/wsjtx_install/bin/ft2 \
-            --desktop-file /build-src/wsjtx.desktop \
-            --icon-file /build-src/icons/Unix/wsjtx_icon.png \
-            --plugin qt \
-            --output appimage
+            --executable /tmp/wsjtx_install/bin/decodium \
+            --desktop-file /tmp/decodium.desktop \
+            --icon-file /tmp/decodium.png \
+            --plugin qt
 
-        APPIMAGE_NAME="decodium3-ft2-${VERSION}-linux-aarch64.AppImage"
+        mkdir -p /tmp/AppDir/usr/bin/qml
+        QT_QML_DIR="$(qmake6 -query QT_INSTALL_QML 2>/dev/null || true)"
+        if [ -n "${QT_QML_DIR}" ] && [ -d "${QT_QML_DIR}" ]; then
+            cp -a "${QT_QML_DIR}/." /tmp/AppDir/usr/bin/qml/
+        fi
+        cp -a /tmp/wsjtx_install/bin/qml/. /tmp/AppDir/usr/bin/qml/
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Controls/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Controls/Material/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Dialogs/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Layouts/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Templates/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQuick/Window/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtCore/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQml/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQml/Models/qmldir
+        test -f /tmp/AppDir/usr/bin/qml/QtQml/WorkerScript/qmldir
+        find /tmp/AppDir -name '._*' -o -name '.DS_Store' | xargs -r rm -f
+
+        linuxdeploy --appdir /tmp/AppDir --output appimage
+
+        APPIMAGE_NAME="decodium4-ft2-${VERSION}-linux-aarch64.AppImage"
         APPIMAGE_SRC="$(find . -maxdepth 1 -name '*.AppImage' ! -name 'linuxdeploy*.AppImage' ! -name 'appimagetool*.AppImage' | head -n1)"
         if [ -n "${APPIMAGE_SRC}" ]; then
             mv "${APPIMAGE_SRC}" "/output/${APPIMAGE_NAME}"
@@ -131,4 +161,4 @@ docker cp ${TEMP_CONTAINER}:/data/. "${OUTPUT_DIR}/"
 docker rm ${TEMP_CONTAINER} > /dev/null
 
 echo "=== DONE! ==="
-ls -lh "${OUTPUT_DIR}"/decodium3*
+ls -lh "${OUTPUT_DIR}"/decodium4*

@@ -424,7 +424,7 @@ Item {
                                     boldLabel: apBtn.checked
                                 }
                                 ToolTip.visible: hovered
-                                ToolTip.text: qsTr("A-Priori Decoding")
+                                ToolTip.text: qsTr("A priori decoding")
                                 ToolTip.delay: 500
                             }
                         }
