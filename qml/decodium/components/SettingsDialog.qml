@@ -3324,6 +3324,41 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
+                        // ── N1MM Logger+ / EasyLog (binary UDP) ──
+                        Text { text: qsTr("N1MM / EasyLog"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Enable N1MM:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        CheckBox {
+                            id: n1mmEnableCheck
+                            checked: boolSetting("BroadcastToN1MM", false)
+                            onToggled: setBoolSettingIfChanged("BroadcastToN1MM", checked, false)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("N1MM Port:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        SpinBox {
+                            id: n1mmPortSpin
+                            from: 1; to: 65535; value: Number(bridge.getSetting("N1MMServerPort", 2333)); editable: true
+                            enabled: n1mmEnableCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            implicitHeight: controlHeight; Layout.fillWidth: true; Layout.preferredWidth: portFieldMinWidth
+                            onValueChanged: bridge.setSetting("N1MMServerPort", value)
+                            contentItem: TextInput { text: n1mmPortSpin.textFromValue(n1mmPortSpin.value, n1mmPortSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !n1mmPortSpin.editable; validator: n1mmPortSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly; enabled: n1mmPortSpin.enabled }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+
+                        Text { text: qsTr("N1MM Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: labelWidth }
+                        TextField {
+                            text: bridge.getSetting("N1MMServer", "127.0.0.1"); Layout.fillWidth: true; Layout.columnSpan: 3; Layout.minimumWidth: fieldMinWidth; implicitHeight: controlHeight; leftPadding: 8
+                            enabled: n1mmEnableCheck.checked
+                            opacity: enabled ? 1.0 : 0.5
+                            color: textPrimary; font.pixelSize: controlFontSize
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("N1MMServer", text)
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 4; Layout.preferredHeight: 6 }
+
                         Text { text: qsTr("Accept UDP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             // Default allineato con Configuration.cpp (true) per evitare
