@@ -1,5 +1,13 @@
 #include "HRDTransceiver.hpp"
 
+// HRDMessage usa placement new su buffer raw (vedi struct riga ~33): GCC 14+
+// non riesce a tracciare l'inizializzazione attraverso il placement new e
+// emette -Wmaybe-uninitialized in send_command. La build CI MSYS2 ha
+// -Werror attivo, quindi disabilitiamo localmente il warning.
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 #include <algorithm>
 #include <QHostAddress>
 #include <QByteArray>
