@@ -14,6 +14,9 @@ Rectangle {
     property double audioLevel: 0.0  // raw RMS 0.0..1.0 da DecodiumAudioSink
     property double signalLevel: 0.0 // legacy S-meter in dB circa 0..90
     property double cpuUsage: bridge ? bridge.processCpuUsage : 0.0    // Decodium process, normalized 0.0..1.0
+    property int gpuFrameCount: 0
+    property int gpuFps: 0
+    property double gpuActivity: 0.0
     property double rigPowerWatts: bridge ? bridge.rigPowerWatts : 0.0
     property double rigSwr: bridge ? bridge.rigSwr : 0.0
     property bool pwrAndSwrEnabled: bridge ? bridge.getSetting("PWRandSWR", false) : false
@@ -51,6 +54,29 @@ Rectangle {
                 pwrAndSwrEnabled = value
             else if (key === "CheckSWR")
                 checkSwrEnabled = value
+        }
+    }
+
+    Connections {
+        target: statusBarComponent.Window.window
+        function onFrameSwapped() {
+            statusBarComponent.gpuFrameCount += 1
+        }
+    }
+
+    Timer {
+        interval: 1000
+        running: true
+        repeat: true
+        onTriggered: {
+            var frames = statusBarComponent.gpuFrameCount
+            statusBarComponent.gpuFrameCount = 0
+            var activeFrames = frames <= 1 ? 0 : frames
+            statusBarComponent.gpuFps = activeFrames
+            var normalized = Math.min(1.0, activeFrames / 60.0)
+            statusBarComponent.gpuActivity = 0.65 * statusBarComponent.gpuActivity + 0.35 * normalized
+            if (activeFrames === 0 && statusBarComponent.gpuActivity < 0.02)
+                statusBarComponent.gpuActivity = 0.0
         }
     }
 
@@ -455,6 +481,65 @@ Rectangle {
                 font.pixelSize: 10
                 color: cpuUsage > 0.8 ? "#f44336" : textSecondary
                 Layout.preferredWidth: 30
+            }
+        }
+
+        // GPU/render activity monitor
+        Item {
+            id: gpuMonitor
+            implicitWidth: gpuMonitorLayout.implicitWidth
+            implicitHeight: gpuMonitorLayout.implicitHeight
+
+            RowLayout {
+                id: gpuMonitorLayout
+                anchors.centerIn: parent
+                spacing: 6
+
+                Text {
+                    text: "GPU:"
+                    font.pixelSize: 10
+                    color: textSecondary
+                }
+
+                Rectangle {
+                    width: 50
+                    height: 12
+                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.4)
+                    radius: 2
+                    border.color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 2
+                        width: Math.max(0, Math.min(parent.width - 4, (parent.width - 4) * gpuActivity))
+                        radius: 1
+                        color: gpuActivity < 0.5 ? secondaryCyan :
+                               gpuActivity < 0.8 ? "#ff9800" : "#f44336"
+                    }
+                }
+
+                Text {
+                    text: gpuFps > 0 ? gpuFps + "fps" : "idle"
+                    font.family: "Monospace"
+                    font.pixelSize: 10
+                    color: gpuActivity > 0.8 ? "#f44336" : textSecondary
+                    Layout.preferredWidth: 36
+                }
+            }
+
+            MouseArea {
+                id: gpuMonitorMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+
+                ToolTip {
+                    visible: gpuMonitorMouse.containsMouse
+                    delay: 500
+                    text: "Qt Quick GPU/render activity\n" + gpuFps + " rendered frames/s"
+                }
             }
         }
 

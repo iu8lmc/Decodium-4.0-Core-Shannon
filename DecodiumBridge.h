@@ -688,6 +688,10 @@ public slots:
     Q_INVOKABLE void stopTx();
     Q_INVOKABLE void triggerManualTx() { startTx(); }  // PTT manuale FT2
     Q_INVOKABLE void sendTx(int n);    // usato da TxPanel: seleziona messaggio n e trasmette
+    Q_INVOKABLE QString txMessage(int n) const;
+    Q_INVOKABLE void setTxMessage(int n, const QString& message);
+    Q_INVOKABLE QString validateTxMessage(const QString& message) const;
+    Q_INVOKABLE void resetStandardTxMessages();
     Q_INVOKABLE void clearTxMessages();
     Q_INVOKABLE void startTune();      // tono continuo fino a stopTune()
     Q_INVOKABLE void stopTune();

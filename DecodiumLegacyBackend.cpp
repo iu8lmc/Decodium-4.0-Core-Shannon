@@ -89,12 +89,12 @@ void seedEmbeddedLegacyConfigDefaults(QSettings& settings)
 
     setSettingIfMissing(settings, QStringLiteral("Common/Mode"), QStringLiteral("FT8"));
     setSettingIfMissing(settings, QStringLiteral("Common/NDepth"), 51);
-    setSettingIfMissing(settings, QStringLiteral("Common/MultithreadedFT8decoder"), false);
+    setSettingIfMissing(settings, QStringLiteral("Common/MultithreadedFT8decoder"), true);
     setSettingIfMissing(settings, QStringLiteral("Common/NFT8Cycles"), 3);
     setSettingIfMissing(settings, QStringLiteral("Common/NFT8QSORXfreqSensitivity"), 3);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8threads"), 0);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8Sensitivity"), 3);
-    setSettingIfMissing(settings, QStringLiteral("Common/FT8DecoderStart"), 3);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8DecoderStart"), 2);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8WideDXCallSearch"), true);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8AP"), false);
     setSettingIfMissing(settings, QStringLiteral("Common/CQonly"), false);
@@ -111,6 +111,27 @@ void seedEmbeddedLegacyConfigDefaults(QSettings& settings)
     setSettingIfMissing(settings, QStringLiteral("Configuration/SingleDecode"), false);
 }
 
+void migrateEmbeddedLegacyFt8Timing(QSettings& settings)
+{
+    QString const marker = QStringLiteral("Decodium4/FastFT8TimingMigrated");
+    if (settings.value(marker, false).toBool()) {
+        return;
+    }
+
+    bool const multithreadedFt8 =
+        settings.value(QStringLiteral("Common/MultithreadedFT8decoder"), false).toBool();
+    int const decoderStart =
+        settings.value(QStringLiteral("Common/FT8DecoderStart"), 3).toInt();
+
+    if (!multithreadedFt8) {
+        settings.setValue(QStringLiteral("Common/MultithreadedFT8decoder"), true);
+    }
+    if (decoderStart >= 3) {
+        settings.setValue(QStringLiteral("Common/FT8DecoderStart"), 2);
+    }
+    settings.setValue(marker, true);
+}
+
 void bootstrapEmbeddedLegacyConfig()
 {
     QString const targetPath = embeddedLegacyConfigPath();
@@ -121,6 +142,7 @@ void bootstrapEmbeddedLegacyConfig()
     QSettings target(targetPath, QSettings::IniFormat);
     mergeMissingSettings(target, legacyPath);
     seedEmbeddedLegacyConfigDefaults(target);
+    migrateEmbeddedLegacyFt8Timing(target);
     target.sync();
 }
 

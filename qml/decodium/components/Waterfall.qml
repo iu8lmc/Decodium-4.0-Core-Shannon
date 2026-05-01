@@ -457,6 +457,16 @@ Item {
             peakHold:       true
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
 
+            readonly property real rxFilterHz: 300
+            readonly property real viewRangeHz: Math.max(1, bandwidth) / Math.max(0.001, zoomFactor)
+            readonly property real viewStartHz: startFreq + Math.max(1, bandwidth) * 0.5 + panHz - viewRangeHz * 0.5
+            readonly property real rxFilterLeftX: Math.max(0, Math.min(width, freqToPixel(rxFreq - rxFilterHz * 0.5)))
+            readonly property real rxFilterRightX: Math.max(0, Math.min(width, freqToPixel(rxFreq + rxFilterHz * 0.5)))
+
+            function freqToPixel(freq) {
+                return (Number(freq) - viewStartHz) * width / viewRangeHz
+            }
+
             // Salva al bridge con debounce (2s dopo l'ultimo cambio)
             onPaletteIndexChanged: if (!waterfallPanel.restoringSettings) {
                 bridge.uiPaletteIndex = paletteIndex
@@ -475,6 +485,19 @@ Item {
             }
             onTxFrequencySelected: function(freq) {
                 waterfallPanel.txFrequencySelected(freq)      // TX
+            }
+
+            Rectangle {
+                id: rxFilterWaterfallOverlay
+                x: waterfallDisplay.rxFilterLeftX
+                y: waterfallDisplay.spectrumHeight
+                z: 2
+                width: Math.max(0, waterfallDisplay.rxFilterRightX - waterfallDisplay.rxFilterLeftX)
+                height: Math.max(0, waterfallDisplay.height - waterfallDisplay.spectrumHeight)
+                visible: (bridge.monitoring || bridge.transmitting || bridge.tuning) && width > 0 && height > 0
+                color: Qt.rgba(0.74, 0.74, 0.74, 0.16)
+                border.color: Qt.rgba(1, 1, 1, 0.20)
+                border.width: 1
             }
 
             // Overlay "Start monitoring"

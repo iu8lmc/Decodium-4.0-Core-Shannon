@@ -6,13 +6,97 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <QSGGeometryNode>
+#include <QSGMaterial>
+#include <QSGMaterialShader>
+#include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
+#include <QSGTexture>
 #include <QQuickWindow>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QMutexLocker>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+
+#ifdef DECODIUM_WATERFALL_SHADER_QSB
+class WaterfallPaletteMaterial final : public QSGMaterial
+{
+public:
+    ~WaterfallPaletteMaterial() override
+    {
+        delete intensityTexture;
+        delete paletteTexture;
+    }
+
+    QSGMaterialType* type() const override
+    {
+        static QSGMaterialType type;
+        return &type;
+    }
+
+    QSGMaterialShader* createShader(QSGRendererInterface::RenderMode) const override;
+
+    int compare(const QSGMaterial* other) const override
+    {
+        auto const* rhs = static_cast<const WaterfallPaletteMaterial*>(other);
+        if (intensityTexture == rhs->intensityTexture)
+            return paletteTexture == rhs->paletteTexture ? 0 : (paletteTexture < rhs->paletteTexture ? -1 : 1);
+        return intensityTexture < rhs->intensityTexture ? -1 : 1;
+    }
+
+    QSGTexture* intensityTexture = nullptr;
+    QSGTexture* paletteTexture = nullptr;
+};
+
+class WaterfallPaletteShader final : public QSGMaterialShader
+{
+public:
+    WaterfallPaletteShader()
+    {
+        setShaderFileName(VertexStage, QStringLiteral(":/shaders/waterfall_palette.vert.qsb"));
+        setShaderFileName(FragmentStage, QStringLiteral(":/shaders/waterfall_palette.frag.qsb"));
+    }
+
+    bool updateUniformData(RenderState& state, QSGMaterial*, QSGMaterial*) override
+    {
+        QByteArray* uniformData = state.uniformData();
+        bool changed = false;
+        if (uniformData->size() < 80) {
+            uniformData->resize(80);
+            changed = true;
+        }
+        if (state.isMatrixDirty()) {
+            const QMatrix4x4 matrix = state.combinedMatrix();
+            std::memcpy(uniformData->data(), matrix.constData(), 64);
+            changed = true;
+        }
+        if (state.isOpacityDirty()) {
+            float const opacity = state.opacity();
+            std::memcpy(uniformData->data() + 64, &opacity, 4);
+            changed = true;
+        }
+        return changed;
+    }
+
+    void updateSampledImage(RenderState&, int binding, QSGTexture** texture,
+                            QSGMaterial* newMaterial, QSGMaterial*) override
+    {
+        auto* material = static_cast<WaterfallPaletteMaterial*>(newMaterial);
+        if (binding == 1) {
+            *texture = material->intensityTexture;
+        } else if (binding == 2) {
+            *texture = material->paletteTexture;
+        }
+    }
+};
+
+QSGMaterialShader* WaterfallPaletteMaterial::createShader(QSGRendererInterface::RenderMode) const
+{
+    return new WaterfallPaletteShader;
+}
+#endif
 
 // ─── FlexRadio SmartSDR waterfall palette ────────────────────────────────────
 // Nero → blu scuro → blu → ciano → verde → giallo → arancio → rosso
@@ -100,6 +184,31 @@ PanadapterItem::PanadapterItem(QQuickItem* parent)
 }
 
 PanadapterItem::~PanadapterItem() = default;
+
+bool PanadapterItem::shaderWaterfallSupported() const
+{
+#ifdef DECODIUM_WATERFALL_SHADER_QSB
+    if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_WATERFALL_SHADER")) {
+        return false;
+    }
+    if (!qEnvironmentVariableIsSet("DECODIUM_ENABLE_WATERFALL_SHADER")) {
+        return false;
+    }
+    if (!window() || !window()->rendererInterface()) {
+        return false;
+    }
+    QSGRendererInterface::GraphicsApi const api = window()->rendererInterface()->graphicsApi();
+    if (api == QSGRendererInterface::Metal &&
+        !qEnvironmentVariableIsSet("DECODIUM_ENABLE_UNSAFE_METAL_WATERFALL_SHADER")) {
+        return false;
+    }
+    return api != QSGRendererInterface::Software
+        && api != QSGRendererInterface::Null
+        && api != QSGRendererInterface::Unknown;
+#else
+    return false;
+#endif
+}
 
 // ─── Palette ────────────────────────────────────────────────────────────────
 void PanadapterItem::buildPalette(int idx)
@@ -212,8 +321,20 @@ void PanadapterItem::rebuildImages(int w, int h)
             m_waterfallImage.height() != wfH) {
             m_waterfallImage = QImage(w, wfH, QImage::Format_RGB32);
             m_waterfallImage.fill(QColor(0, 0, 0));
+            m_waterfallDisplayImage = QImage(w, wfH, QImage::Format_RGB32);
+            m_waterfallDisplayImage.fill(QColor(0, 0, 0));
+            m_waterfallIntensityImage = QImage(w, wfH, QImage::Format_Grayscale8);
+            m_waterfallIntensityImage.fill(0);
+            m_waterfallIntensityDisplayImage = QImage(w, wfH, QImage::Format_Grayscale8);
+            m_waterfallIntensityDisplayImage.fill(0);
             m_wfWriteRow = 0;
         }
+    } else {
+        m_waterfallImage = QImage();
+        m_waterfallDisplayImage = QImage();
+        m_waterfallIntensityImage = QImage();
+        m_waterfallIntensityDisplayImage = QImage();
+        m_wfWriteRow = 0;
     }
 }
 
@@ -304,6 +425,12 @@ void PanadapterItem::resetWaterfall()
     QMutexLocker lock(&m_mutex);
     if (!m_waterfallImage.isNull())
         m_waterfallImage.fill(QColor(0,0,0));
+    if (!m_waterfallDisplayImage.isNull())
+        m_waterfallDisplayImage.fill(QColor(0,0,0));
+    if (!m_waterfallIntensityImage.isNull())
+        m_waterfallIntensityImage.fill(0);
+    if (!m_waterfallIntensityDisplayImage.isNull())
+        m_waterfallIntensityDisplayImage.fill(0);
     m_wfWriteRow = 0;
     m_spectrumDirty = true;
     lock.unlock();
@@ -314,9 +441,10 @@ void PanadapterItem::resetWaterfall()
 void PanadapterItem::renderSpectrum()
 {
     int w = (int)width();
-    int h = m_spectrumH;
     if (w <= 0 || m_bins.isEmpty()) return;
     if (m_spectrumImage.isNull() || m_spectrumImage.width() != w) return; // attende init
+    int h = m_spectrumImage.height();
+    if (h <= 0) return;
 
     // SmartSDR: background nero puro
     m_spectrumImage.fill(QColor(0, 0, 0));
@@ -386,7 +514,7 @@ void PanadapterItem::renderSpectrum()
     int pRight = fToX(m_rxFreq + narrowPassHz/2);
     if (pLeft < 0) pLeft = 0;
     if (pRight > w) pRight = w;
-    if (pRight > pLeft) { p.fillRect(pLeft, 0, pRight - pLeft, h, QColor(0, 229, 255, 25)); }
+    if (pRight > pLeft) { p.fillRect(pLeft, 0, pRight - pLeft, h, QColor(190, 190, 190, 32)); }
 
     // ── Path spettro ───────────────────────────────────────────────────────
     QPainterPath fillPath, linePath;
@@ -451,6 +579,42 @@ void PanadapterItem::renderSpectrum()
         p.drawPath(pkPath);
     }
 
+    int txX = fToX(m_txFreq);
+    bool const txVisible = txX >= 0 && txX < w && m_txFreq != m_rxFreq;
+    auto drawMarkerLabel = [&](int markerX, int preferredCenterY, const QString& text, const QColor& accent) {
+        QFont labelFont("Segoe UI", 9, QFont::Bold);
+        p.setFont(labelFont);
+        QFontMetrics fm(labelFont);
+
+        int const padX = 6;
+        int const padY = 3;
+        int const boxW = fm.horizontalAdvance(text) + padX * 2;
+        int const boxH = fm.height() + padY * 2;
+        int const minY = boxH / 2 + 3;
+        int const maxY = qMax(minY, h - boxH / 2 - 22);
+        int const centerY = qBound(minY, preferredCenterY, maxY);
+
+        int boxX = markerX + 8;
+        if (boxX + boxW > w - 2)
+            boxX = markerX - boxW - 8;
+        boxX = qBound(2, boxX, qMax(2, w - boxW - 2));
+        int const boxY = qBound(2, centerY - boxH / 2, qMax(2, h - boxH - 22));
+
+        QPainterPath box;
+        box.addRoundedRect(QRectF(boxX, boxY, boxW, boxH), 4, 4);
+        QColor bg(0, 0, 0, 180);
+        QColor border = accent;
+        border.setAlpha(210);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.fillPath(box, bg);
+        p.setPen(QPen(border, 1));
+        p.drawPath(box);
+        p.setRenderHint(QPainter::Antialiasing, false);
+        p.setPen(accent);
+        p.drawText(QRect(boxX + padX, boxY + padY, boxW - padX * 2, boxH - padY * 2),
+                   Qt::AlignCenter, text);
+    };
+
     // ── Marker VFO RX: linea verticale ciano #00E5FF (spessa + glow) ──────
     if (rxX >= 0 && rxX < w) {
         // Glow esterno (alone ampio)
@@ -462,9 +626,6 @@ void PanadapterItem::renderSpectrum()
         // Core brillante
         p.setPen(QPen(QColor(180, 255, 255, 255), 1.0));
         p.drawLine(rxX, 0, rxX, h);
-        p.setFont(QFont("Segoe UI", 9, QFont::Bold));
-        p.setPen(QColor(0, 229, 255));
-        p.drawText(rxX + 5, 12, QString("RX %1").arg(m_rxFreq));
     }
 
     // ── Frequency ticks ogni 500Hz ────────────────────────────────────────
@@ -479,8 +640,7 @@ void PanadapterItem::renderSpectrum()
     }
 
     // ── Marker TX: magenta (Slice B SmartSDR) — spessa + glow ───────────
-    int txX = fToX(m_txFreq);
-    if (txX >= 0 && txX < w && m_txFreq != m_rxFreq) {
+    if (txVisible) {
         // Glow esterno
         p.setPen(QPen(QColor(255, 0, 255, 70), 7.0));
         p.drawLine(txX, 0, txX, h);
@@ -490,9 +650,6 @@ void PanadapterItem::renderSpectrum()
         // Core brillante
         p.setPen(QPen(QColor(255, 200, 255, 255), 1.0));
         p.drawLine(txX, 0, txX, h);
-        p.setFont(QFont("Segoe UI", 9, QFont::Bold));
-        p.setPen(QColor(255, 0, 255));
-        p.drawText(txX + 5, 24, QString("TX %1").arg(m_txFreq));
     }
 
     // ── Decode labels: mostra callsign delle stazioni decodificate ─────
@@ -571,6 +728,16 @@ void PanadapterItem::renderSpectrum()
         }
     }
 
+    int const centerY = h / 2;
+    if (rxX >= 0 && rxX < w) {
+        drawMarkerLabel(rxX, centerY - (txVisible ? 12 : 0),
+                        QString("RX %1").arg(m_rxFreq), QColor(0, 229, 255));
+    }
+    if (txVisible) {
+        drawMarkerLabel(txX, centerY + 12,
+                        QString("TX %1").arg(m_txFreq), QColor(255, 0, 255));
+    }
+
     // ── Info in basso a destra ────────────────────────────────────────────
     if (m_autoRange) {
         p.setFont(QFont("Consolas", 8));
@@ -618,11 +785,19 @@ void PanadapterItem::addWaterfallRow()
     if (gamma < 0.3f) gamma = 0.3f;
 
     int row = m_wfWriteRow % h;
-    QRgb* line = reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
+    QRgb* line = m_useShaderWaterfall ? nullptr : reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
+    uchar* intensityLine = (!m_waterfallIntensityImage.isNull()
+                            && m_waterfallIntensityImage.width() == w
+                            && m_waterfallIntensityImage.height() == h)
+        ? m_waterfallIntensityImage.scanLine(row)
+        : nullptr;
     for (int x = 0; x < w; ++x) {
         float pixFreq = viewStart + (float)x * viewRange / w;
         if (pixFreq < m_dataFreqMin || pixFreq > m_dataFreqMax) {
-            line[x] = qRgb(0,0,0);
+            if (line)
+                line[x] = qRgb(0,0,0);
+            if (intensityLine)
+                intensityLine[x] = 0;
             continue;
         }
         int bin = (int)((pixFreq - m_dataFreqMin) / dataRange * nBins);
@@ -630,10 +805,19 @@ void PanadapterItem::addWaterfallRow()
         float raw = (m_bins[bin] - m_minDb) / range;
         // Sottrai la soglia nero e riscala
         raw = (raw - blackThresh) / (1.0f - blackThresh);
-        if (raw <= 0.f) { line[x] = qRgb(0,0,0); continue; }
+        if (raw <= 0.f) {
+            if (line)
+                line[x] = qRgb(0,0,0);
+            if (intensityLine)
+                intensityLine[x] = 0;
+            continue;
+        }
         // Gamma: valori bassi → nero, solo segnali veri → colore
         float pct = std::pow(qBound(0.f, raw, 1.f), gamma);
-        line[x] = wfColor(pct);
+        if (intensityLine)
+            intensityLine[x] = static_cast<uchar>(qBound(0, static_cast<int>(pct * 255.f + 0.5f), 255));
+        if (line)
+            line[x] = wfColor(pct);
     }
     m_wfWriteRow++;
 }
@@ -653,6 +837,8 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         m_geometryDirty = false;
     }
 
+    m_useShaderWaterfall = shaderWaterfallSupported();
+
     if (m_spectrumDirty && !m_bins.isEmpty()) {
         addWaterfallRow();
         renderSpectrum();
@@ -667,13 +853,15 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 
     // Spectrum node (top)
     if (!m_spectrumImage.isNull()) {
-        QRectF specRect(0, 0, w, m_spectrumH);
+        int const specH = m_spectrumImage.height();
+        QRectF specRect(0, 0, w, specH);
         QSGSimpleTextureNode* sn = nullptr;
         if (!isNew && root->firstChild())
             sn = static_cast<QSGSimpleTextureNode*>(root->firstChild());
         if (!sn) { sn = new QSGSimpleTextureNode(); sn->setOwnsTexture(true); root->prependChildNode(sn); }
         auto* tex = window()->createTextureFromImage(m_spectrumImage,
             QQuickWindow::CreateTextureOptions(QQuickWindow::TextureHasAlphaChannel));
+        tex->setFiltering(QSGTexture::Linear);
         sn->setTexture(tex);
         sn->setRect(specRect);
         sn->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
@@ -681,29 +869,112 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 
     // Waterfall node (bottom) — ring buffer: due draw calls per wrap-around
     if (!m_waterfallImage.isNull()) {
-        int wfH = h - m_spectrumH;
+        int const specH = m_spectrumImage.isNull() ? qMin(m_spectrumH, h) : m_spectrumImage.height();
+        int wfH = h - specH;
         int wfW = m_waterfallImage.width();
         int rows = m_waterfallImage.height();
+        if (wfH <= 0 || wfW <= 0 || rows <= 0)
+            return root;
+
+        QSGNode* waterfallChild = nullptr;
+        if (!isNew && root->childCount() > 1 && root->firstChild())
+            waterfallChild = root->firstChild()->nextSibling();
+
+#ifdef DECODIUM_WATERFALL_SHADER_QSB
+        if (m_useShaderWaterfall && !m_waterfallIntensityImage.isNull()) {
+            if (m_waterfallIntensityDisplayImage.isNull() ||
+                m_waterfallIntensityDisplayImage.width() != wfW ||
+                m_waterfallIntensityDisplayImage.height() != wfH) {
+                m_waterfallIntensityDisplayImage = QImage(wfW, wfH, QImage::Format_Grayscale8);
+                m_waterfallIntensityDisplayImage.fill(0);
+            }
+
+            for (int y = 0; y < wfH; ++y) {
+                int const srcRow = ((m_wfWriteRow - 1 - y) % rows + rows) % rows;
+                std::memcpy(m_waterfallIntensityDisplayImage.scanLine(y),
+                            m_waterfallIntensityImage.scanLine(srcRow),
+                            static_cast<size_t>(wfW));
+            }
+
+            if (auto* oldSimple = dynamic_cast<QSGSimpleTextureNode*>(waterfallChild)) {
+                root->removeChildNode(oldSimple);
+                delete oldSimple;
+                waterfallChild = nullptr;
+            }
+
+            auto* wn = static_cast<QSGGeometryNode*>(waterfallChild);
+            if (!wn) {
+                wn = new QSGGeometryNode();
+                auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+                geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
+                geometry->setVertexDataPattern(QSGGeometry::DynamicPattern);
+                wn->setGeometry(geometry);
+                wn->setFlag(QSGNode::OwnsGeometry);
+                wn->setMaterial(new WaterfallPaletteMaterial());
+                wn->setFlag(QSGNode::OwnsMaterial);
+                root->appendChildNode(wn);
+            }
+
+            QSGGeometry::updateTexturedRectGeometry(wn->geometry(),
+                                                    QRectF(0, specH, w, wfH),
+                                                    QRectF(0, 0, 1, 1));
+
+            auto* material = static_cast<WaterfallPaletteMaterial*>(wn->material());
+            delete material->intensityTexture;
+            material->intensityTexture = window()->createTextureFromImage(
+                m_waterfallIntensityDisplayImage,
+                QQuickWindow::CreateTextureOptions(QQuickWindow::TextureIsOpaque));
+            material->intensityTexture->setFiltering(QSGTexture::Nearest);
+
+            QImage paletteImage(256, 1, QImage::Format_RGBA8888);
+            auto* paletteLine = paletteImage.scanLine(0);
+            for (int i = 0; i < 256; ++i) {
+                QColor const c = QColor::fromRgb(m_palette.value(i, qRgb(0, 0, 0)));
+                paletteLine[i * 4 + 0] = static_cast<uchar>(c.red());
+                paletteLine[i * 4 + 1] = static_cast<uchar>(c.green());
+                paletteLine[i * 4 + 2] = static_cast<uchar>(c.blue());
+                paletteLine[i * 4 + 3] = 255;
+            }
+            delete material->paletteTexture;
+            material->paletteTexture = window()->createTextureFromImage(
+                paletteImage,
+                QQuickWindow::CreateTextureOptions(QQuickWindow::TextureHasAlphaChannel));
+            material->paletteTexture->setFiltering(QSGTexture::Linear);
+
+            wn->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+            return root;
+        }
+#endif
+
+        if (auto* oldGeometry = dynamic_cast<QSGGeometryNode*>(waterfallChild)) {
+            if (!dynamic_cast<QSGSimpleTextureNode*>(oldGeometry)) {
+                root->removeChildNode(oldGeometry);
+                delete oldGeometry;
+                waterfallChild = nullptr;
+            }
+        }
+
+        if (m_waterfallDisplayImage.isNull() ||
+            m_waterfallDisplayImage.width() != wfW ||
+            m_waterfallDisplayImage.height() != wfH) {
+            m_waterfallDisplayImage = QImage(wfW, wfH, QImage::Format_RGB32);
+            m_waterfallDisplayImage.fill(QColor(0, 0, 0));
+        }
 
         // Ring buffer → display: riga 0 = più recente (top), scende verso il basso
         // SmartSDR style: nuovi segnali appaiono in cima e "cadono" verso il basso
-        QImage display(wfW, wfH, QImage::Format_RGB32);
         for (int y = 0; y < wfH; ++y) {
             // y=0 → riga più recente, y=wfH-1 → riga più vecchia
             int srcRow = ((m_wfWriteRow - 1 - y) % rows + rows) % rows;
-            memcpy(display.scanLine(y), m_waterfallImage.scanLine(srcRow), wfW * 4);
+            memcpy(m_waterfallDisplayImage.scanLine(y), m_waterfallImage.scanLine(srcRow), wfW * 4);
         }
 
-        QSGSimpleTextureNode* wn = nullptr;
-        if (!isNew && root->childCount() > 1) {
-            QSGNode* child = root->firstChild()->nextSibling();
-            if (child && child->type() == QSGNode::GeometryNodeType)
-                wn = static_cast<QSGSimpleTextureNode*>(child);
-        }
+        QSGSimpleTextureNode* wn = dynamic_cast<QSGSimpleTextureNode*>(waterfallChild);
         if (!wn) { wn = new QSGSimpleTextureNode(); wn->setOwnsTexture(true); root->appendChildNode(wn); }
-        auto* tex = window()->createTextureFromImage(display, QQuickWindow::CreateTextureOptions(QQuickWindow::TextureIsOpaque));
+        auto* tex = window()->createTextureFromImage(m_waterfallDisplayImage, QQuickWindow::CreateTextureOptions(QQuickWindow::TextureIsOpaque));
+        tex->setFiltering(QSGTexture::Nearest);
         wn->setTexture(tex);
-        wn->setRect(QRectF(0, m_spectrumH, w, wfH));
+        wn->setRect(QRectF(0, specH, w, wfH));
         wn->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
     }
 

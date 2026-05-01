@@ -26,6 +26,8 @@ Item {
     property bool logPromptAccepted: false
     property var logSatelliteChoices: [""]
     property var logSatModeChoices: [""]
+    property int editingTxNum: 0
+    property string editingTxError: ""
 
     function refreshLogPreview() {
         var preview = engine && engine.pendingLogQsoPreview ? engine.pendingLogQsoPreview() : ({})
@@ -75,6 +77,35 @@ Item {
             return
         setComboText(satelliteCombo, satelliteDisplayForCode(engine.getSetting("Satellite", "")))
         setComboText(satModeCombo, engine.getSetting("SatMode", ""))
+    }
+
+    function openTxMessageEditor(txNum, currentMessage) {
+        if (!engine)
+            return
+        editingTxNum = txNum
+        editingTxError = ""
+        txEditField.text = String(currentMessage || "")
+        txEditPopup.open()
+        txEditField.forceActiveFocus()
+        txEditField.selectAll()
+    }
+
+    function applyTxMessageEdit(sendAfter) {
+        if (!engine || editingTxNum < 1 || editingTxNum > 6)
+            return
+        var msg = String(txEditField.text || "").trim().toUpperCase()
+        var validation = engine.validateTxMessage ? engine.validateTxMessage(msg) : ""
+        if (validation && validation.length > 0) {
+            editingTxError = validation
+            return
+        }
+        if (engine.setTxMessage)
+            engine.setTxMessage(editingTxNum, msg)
+        else
+            engine["tx" + editingTxNum] = msg
+        if (sendAfter)
+            engine.sendTx(editingTxNum)
+        txEditPopup.close()
     }
 
     function openLogPromptFromBridge() {
@@ -975,11 +1006,6 @@ Item {
                             elide: Text.ElideRight
                         }
 
-                        Text {
-                            text: log ? "QSOs:" + log.qsoCount : ""
-                            color: textSecondary
-                            font.pixelSize: 9
-                        }
                     }
                 }
 
@@ -1041,6 +1067,7 @@ Item {
                     isSelected: engine && engine.currentTx === 1
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 1
                     onClicked: if (engine) engine.sendTx(1)
+                    onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
                 // TX2 - Send Report
@@ -1051,6 +1078,7 @@ Item {
                     isSelected: engine && engine.currentTx === 2
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 2
                     onClicked: if (engine) engine.sendTx(2)
+                    onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
                 // TX3 - R+Report
@@ -1061,6 +1089,7 @@ Item {
                     isSelected: engine && engine.currentTx === 3
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 3
                     onClicked: if (engine) engine.sendTx(3)
+                    onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
                 // TX4 - RR73
@@ -1071,6 +1100,7 @@ Item {
                     isSelected: engine && engine.currentTx === 4
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 4
                     onClicked: if (engine) engine.sendTx(4)
+                    onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
                 // TX5 - 73
@@ -1081,6 +1111,7 @@ Item {
                     isSelected: engine && engine.currentTx === 5
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 5
                     onClicked: if (engine) engine.sendTx(5)
+                    onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
                 // TX6 - CQ
@@ -1092,6 +1123,7 @@ Item {
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 6
                     isCQ: true
                     onClicked: if (engine) engine.sendTx(6)
+                    onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
             }
@@ -1114,6 +1146,111 @@ Item {
                 NumberAnimation { to: 1.0; duration: 250 }
                 NumberAnimation { to: 0.3; duration: 250 }
                 onRunningChanged: if (!running) txPulseOverlay.opacity = 0
+            }
+        }
+    }
+
+    Popup {
+        id: txEditPopup
+        parent: Overlay.overlay
+        modal: true
+        focus: true
+        width: 520
+        height: 220
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.round((parent.height - height) / 2) : 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            radius: 10
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.96)
+            border.color: secondaryCyan
+            border.width: 1
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Text {
+                    text: "TX" + txPanel.editingTxNum
+                    color: secondaryCyan
+                    font.pixelSize: 18
+                    font.bold: true
+                }
+
+                Item { Layout.fillWidth: true }
+
+                ToolButton {
+                    text: "✕"
+                    onClicked: txEditPopup.close()
+                }
+            }
+
+            TextField {
+                id: txEditField
+                Layout.fillWidth: true
+                Layout.preferredHeight: 42
+                color: textPrimary
+                selectedTextColor: bgDeep
+                selectionColor: secondaryCyan
+                font.pixelSize: 16
+                font.family: "Monospace"
+                selectByMouse: true
+                inputMethodHints: Qt.ImhUppercaseOnly | Qt.ImhNoPredictiveText
+                onTextChanged: txPanel.editingTxError = ""
+                onAccepted: txPanel.applyTxMessageEdit(false)
+                background: Rectangle {
+                    radius: 5
+                    color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
+                    border.color: txPanel.editingTxError.length > 0 ? errorRed
+                                                                     : (txEditField.activeFocus ? secondaryCyan : glassBorder)
+                    border.width: 1
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: txPanel.editingTxError
+                visible: txPanel.editingTxError.length > 0
+                color: errorRed
+                font.pixelSize: 12
+                elide: Text.ElideRight
+            }
+
+            Item { Layout.fillHeight: true }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: 10
+
+                Button {
+                    text: qsTr("Cancel")
+                    onClicked: txEditPopup.close()
+                }
+
+                Button {
+                    text: qsTr("Standard")
+                    enabled: engine && engine.resetStandardTxMessages
+                    onClicked: {
+                        engine.resetStandardTxMessages()
+                        txEditPopup.close()
+                    }
+                }
+
+                Button {
+                    text: qsTr("Apply")
+                    onClicked: txPanel.applyTxMessageEdit(false)
+                }
+
+                Button {
+                    text: "TX"
+                    onClicked: txPanel.applyTxMessageEdit(true)
+                }
             }
         }
     }
@@ -1307,6 +1444,7 @@ Item {
         property bool isSelected: false
         property bool isTransmitting: false
         property bool isCQ: false
+        signal editRequested(int txNum, string message)
 
         Layout.fillWidth: true
         Layout.preferredHeight: 50
@@ -1360,6 +1498,11 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
+        }
+
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: editRequested(txNum, message)
         }
     }
 }

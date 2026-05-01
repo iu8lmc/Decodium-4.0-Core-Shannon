@@ -12826,14 +12826,14 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
     }
     if (request.nzhsym >= 50) {
       if (request.ndepth >= 4) {
-        request.maxDecodeMs = 14500;
-      } else if (request.ndepth >= 3) {
-        request.maxDecodeMs = 12000;
-      } else {
         request.maxDecodeMs = 6500;
+      } else if (request.ndepth >= 3) {
+        request.maxDecodeMs = 5500;
+      } else {
+        request.maxDecodeMs = 3500;
       }
     } else {
-      request.maxDecodeMs = request.ndepth >= 4 ? 3500 : 2500;
+      request.maxDecodeMs = request.ndepth >= 4 ? 3000 : 2200;
     }
   }
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
@@ -27915,6 +27915,32 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
                  .arg (elapsedMs)
                  .arg (m_ft8QueuedDecodePending ? 1 : 0));
 
+  auto dispatchQueuedFt8Decode = [this] () -> bool {
+    if (!m_ft8QueuedDecodePending) {
+      return false;
+    }
+    auto request = m_ft8QueuedDecodeRequest;
+    m_ft8QueuedDecodePending = false;
+    m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
+    dispatchFt8DecodeRequest (std::move (request));
+    return true;
+  };
+
+  bool const liveFt8Decode = !m_diskData && completedUtc > 0;
+  bool const staleLateDecode = liveFt8Decode && elapsedMs > 6500;
+  if (staleLateDecode) {
+    debugToFile (QString {"ft8Decode   drop late utc:%1 rows:%2 elapsedMs:%3 queued:%4"}
+                   .arg (completedUtc)
+                   .arg (rows.size ())
+                   .arg (elapsedMs)
+                   .arg (m_ft8QueuedDecodePending ? 1 : 0));
+    if (dispatchQueuedFt8Decode ()) {
+      return;
+    }
+    decodeDone ();
+    return;
+  }
+
   for (auto const& row : rows) {
     if (!row.trimmed ().isEmpty ()) {
       m_decodedTransportQueue.enqueue (row.toUtf8 ());
@@ -27923,11 +27949,7 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
 
   readFromStdout ();
 
-  if (m_ft8QueuedDecodePending) {
-    auto request = m_ft8QueuedDecodeRequest;
-    m_ft8QueuedDecodePending = false;
-    m_ft8QueuedDecodeRequest = decodium::ft8::DecodeRequest {};
-    dispatchFt8DecodeRequest (std::move (request));
+  if (dispatchQueuedFt8Decode ()) {
     return;
   }
 

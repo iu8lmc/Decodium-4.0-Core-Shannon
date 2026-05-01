@@ -878,6 +878,7 @@ endif ()
 # Widgets finds its own dependencies.
 find_package (Qt6 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql LinguistTools WebSockets Test Core5Compat REQUIRED)
 find_package (Qt6 COMPONENTS Qml Quick QuickControls2 REQUIRED)
+find_package (Qt6 COMPONENTS ShaderTools QUIET)
 
 if (WIN32)
   add_definitions (-DQT_NEEDS_QTMAIN)
@@ -1608,6 +1609,20 @@ target_link_libraries (decodium_qml
 )
 if (WIN32)
   target_link_libraries (decodium_qml Qt6::AxContainer)
+endif ()
+if (Qt6ShaderTools_FOUND)
+  qt_add_shaders(decodium_qml decodium_waterfall_shaders
+    PREFIX
+      "/shaders"
+    BASE
+      "shaders"
+    FILES
+      shaders/waterfall_palette.vert
+      shaders/waterfall_palette.frag
+  )
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_WATERFALL_SHADER_QSB=1)
+else ()
+  message (STATUS "Qt6 ShaderTools not found: Decodium waterfall shader disabled, CPU palette fallback will be used")
 endif ()
 # Copy QML files next to the decodium_qml executable on every build.
 # The runtime loads QML from the build tree, so stale copied files cause

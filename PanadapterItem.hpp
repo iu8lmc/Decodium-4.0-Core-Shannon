@@ -176,6 +176,7 @@ private:
     void rebuildImages(int w, int h);
     void renderSpectrum();
     void addWaterfallRow();
+    bool shaderWaterfallSupported() const;
 
     // Conversioni frequenza ↔ pixel (rispetta zoom/pan)
     int   freqToX(int freq) const;
@@ -198,6 +199,9 @@ private:
     // ── Immagini ────────────────────────────────────────────────────────────
     QImage m_spectrumImage;  // spectrum (larghezza × spectrumH)
     QImage m_waterfallImage; // waterfall (larghezza × waterfallH)
+    QImage m_waterfallDisplayImage; // waterfall lineare pronta per upload GPU
+    QImage m_waterfallIntensityImage; // intensità 0..255 per shader palette
+    QImage m_waterfallIntensityDisplayImage; // intensità lineare pronta per upload GPU
     int    m_wfWriteRow = 0; // riga corrente ring buffer
     QVector<QRgb> m_palette; // 256 colori waterfall
 
@@ -233,5 +237,6 @@ private:
     // ── Stato rendering ─────────────────────────────────────────────────────
     bool  m_spectrumDirty = true;
     bool  m_geometryDirty = true;
+    bool  m_useShaderWaterfall = false;
     QMutex m_mutex;
 };

@@ -15,6 +15,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QTimer>
 #include <QDir>
 #include <QElapsedTimer>
@@ -106,6 +108,65 @@ static void logEnvVar(const char* name)
     L(line.constData());
 }
 
+static const char* qsgGraphicsApiName(QSGRendererInterface::GraphicsApi api)
+{
+    switch (api) {
+    case QSGRendererInterface::Unknown: return "Unknown";
+    case QSGRendererInterface::Software: return "Software";
+    case QSGRendererInterface::OpenVG: return "OpenVG";
+    case QSGRendererInterface::OpenGL: return "OpenGL";
+    case QSGRendererInterface::Direct3D11: return "Direct3D11";
+    case QSGRendererInterface::Vulkan: return "Vulkan";
+    case QSGRendererInterface::Metal: return "Metal";
+    case QSGRendererInterface::Null: return "Null";
+    case QSGRendererInterface::Direct3D12: return "Direct3D12";
+    }
+    return "Unrecognized";
+}
+
+static QQuickWindow* firstQuickWindow(QQmlApplicationEngine& engine)
+{
+    for (QObject* root : engine.rootObjects()) {
+        if (auto* quickWindow = qobject_cast<QQuickWindow*>(root)) {
+            return quickWindow;
+        }
+        for (QObject* child : root->findChildren<QObject*>()) {
+            if (auto* quickWindow = qobject_cast<QQuickWindow*>(child)) {
+                return quickWindow;
+            }
+        }
+    }
+    return nullptr;
+}
+
+static void logQtQuickGraphicsApi(QQuickWindow* window, const char* context)
+{
+    QByteArray line("Qt Quick graphics API");
+    if (context && *context) {
+        line += " (";
+        line += context;
+        line += ")";
+    }
+    line += ": ";
+    if (!window || !window->rendererInterface()) {
+        line += "<no QQuickWindow>";
+        L(line.constData());
+        return;
+    }
+
+    QSGRendererInterface::GraphicsApi const api = window->rendererInterface()->graphicsApi();
+    line += qsgGraphicsApiName(api);
+    if (QSGRendererInterface::isApiRhiBased(api)) {
+        line += " / RHI";
+    }
+    L(line.constData());
+}
+
+static void logFirstQuickWindowGraphicsApi(QQmlApplicationEngine& engine, const char* context)
+{
+    logQtQuickGraphicsApi(firstQuickWindow(engine), context);
+}
+
 #ifdef Q_OS_WIN
 static bool hasCommandLineSwitch(int argc, char* argv[], const char* name)
 {
@@ -120,6 +181,12 @@ static QString slowQmlStartupFlagPath()
 {
     return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
         .absoluteFilePath(QStringLiteral("decodium-slow-qml-startup.flag"));
+}
+
+static QString graphicsStartupPendingFlagPath()
+{
+    return QDir {QStandardPaths::writableLocation(QStandardPaths::TempLocation)}
+        .absoluteFilePath(QStringLiteral("decodium-gpu-startup-pending.flag"));
 }
 
 static QString startupLogPath()
@@ -212,6 +279,12 @@ static void writeSlowQmlStartupFlag(const QByteArray& flagPath, const QByteArray
 
     flagFile.write(reason);
     flagFile.write("\n");
+}
+
+static void removeFileIfExists(const QString& path)
+{
+    if (QFile::exists(path))
+        QFile::remove(path);
 }
 
 static QString sanitizedCacheComponent(QString value)
@@ -496,13 +569,96 @@ int main(int argc, char* argv[])
     QQuickStyle::setStyle("Material");
     L("QQuickStyle OK");
 
+#if !defined(Q_OS_WIN)
+    if (qEnvironmentVariableIsSet("DECODIUM_GRAPHICS_BACKEND")
+        && !qEnvironmentVariableIsSet("QSG_RHI_BACKEND")
+        && !qEnvironmentVariableIsSet("QT_QUICK_BACKEND")) {
+        qputenv("QSG_RHI_BACKEND", qgetenv("DECODIUM_GRAPHICS_BACKEND"));
+        QByteArray backendMessage("Qt Quick graphics backend from DECODIUM_GRAPHICS_BACKEND: ");
+        backendMessage += qgetenv("DECODIUM_GRAPHICS_BACKEND");
+        L(backendMessage.constData());
+    }
+#endif
+
+#if defined(Q_OS_MACOS)
+    if (!qEnvironmentVariableIsSet("QSG_RHI_BACKEND")
+        && !qEnvironmentVariableIsSet("QT_QUICK_BACKEND")) {
+        qputenv("QSG_RHI_BACKEND", "metal");
+        L("Qt Quick graphics backend defaulted to Metal");
+    } else if (qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
+        QByteArray backendMessage("Qt Quick graphics backend from environment: ");
+        backendMessage += qgetenv("QSG_RHI_BACKEND");
+        L(backendMessage.constData());
+    }
+#elif defined(Q_OS_LINUX)
+    if (!qEnvironmentVariableIsSet("QSG_RHI_BACKEND")
+        && !qEnvironmentVariableIsSet("QT_QUICK_BACKEND")) {
+        L("Qt Quick graphics backend left to Qt auto-selection on Linux");
+    } else if (qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
+        QByteArray backendMessage("Qt Quick graphics backend from environment: ");
+        backendMessage += qgetenv("QSG_RHI_BACKEND");
+        L(backendMessage.constData());
+    }
+#endif
+
 #ifdef Q_OS_WIN
     QString const slowQmlStartupFlag = slowQmlStartupFlagPath();
+    QString const graphicsStartupPendingFlag = graphicsStartupPendingFlagPath();
     bool const commandLineResetSafeGraphics =
         hasCommandLineSwitch(argc, argv, "--reset-safe-graphics");
-    if (commandLineResetSafeGraphics && QFile::exists(slowQmlStartupFlag)) {
-        QFile::remove(slowQmlStartupFlag);
+    if (commandLineResetSafeGraphics) {
+        removeFileIfExists(slowQmlStartupFlag);
+        removeFileIfExists(graphicsStartupPendingFlag);
     }
+    auto normalizedBackend = [] (const char* name) -> QByteArray {
+        return qEnvironmentVariableIsSet(name) ? qgetenv(name).trimmed().toLower() : QByteArray {};
+    };
+    auto requestsSoftwareGraphics = [] (QByteArray const& backend) {
+        return backend == "safe" || backend == "software" || backend == "warp";
+    };
+    auto isSupportedWindowsRhiBackend = [] (QByteArray const& backend) {
+        return backend.isEmpty()
+            || backend == "d3d11"
+            || backend == "d3d12"
+            || backend == "opengl"
+            || backend == "vulkan"
+            || backend == "null";
+    };
+
+    QByteArray const decodiumGraphicsBackend = normalizedBackend("DECODIUM_GRAPHICS_BACKEND");
+    if (!decodiumGraphicsBackend.isEmpty()
+        && !requestsSoftwareGraphics(decodiumGraphicsBackend)
+        && !qEnvironmentVariableIsSet("QSG_RHI_BACKEND")
+        && !qEnvironmentVariableIsSet("QT_QUICK_BACKEND")) {
+        if (isSupportedWindowsRhiBackend(decodiumGraphicsBackend)) {
+            qputenv("QSG_RHI_BACKEND", decodiumGraphicsBackend);
+            QByteArray backendMessage("Qt Quick graphics backend from DECODIUM_GRAPHICS_BACKEND: ");
+            backendMessage += decodiumGraphicsBackend;
+            L(backendMessage.constData());
+        } else {
+            QByteArray backendMessage("Ignoring unsupported DECODIUM_GRAPHICS_BACKEND on Windows: ");
+            backendMessage += decodiumGraphicsBackend;
+            backendMessage += " (falling back to d3d11)";
+            L(backendMessage.constData());
+        }
+    }
+
+    QByteArray const requestedRhiBackend = normalizedBackend("QSG_RHI_BACKEND");
+    QByteArray const requestedQuickBackend = normalizedBackend("QT_QUICK_BACKEND");
+    bool const backendRequestsSoftware =
+        requestsSoftwareGraphics(decodiumGraphicsBackend)
+        || requestsSoftwareGraphics(requestedRhiBackend)
+        || requestsSoftwareGraphics(requestedQuickBackend);
+    if (!requestedRhiBackend.isEmpty()
+        && !requestsSoftwareGraphics(requestedRhiBackend)
+        && !isSupportedWindowsRhiBackend(requestedRhiBackend)) {
+        QByteArray backendMessage("Ignoring unsupported QSG_RHI_BACKEND on Windows: ");
+        backendMessage += requestedRhiBackend;
+        backendMessage += " (falling back to d3d11)";
+        L(backendMessage.constData());
+        qunsetenv("QSG_RHI_BACKEND");
+    }
+
     bool const envSafeGraphics = qEnvironmentVariableIsSet("DECODIUM_SAFE_GRAPHICS");
     bool const commandLineSafeGraphics =
         hasCommandLineSwitch(argc, argv, "--safe-graphics")
@@ -510,16 +666,26 @@ int main(int argc, char* argv[])
         || hasCommandLineSwitch(argc, argv, "--software-renderer");
     bool const autoSafeGraphics =
         !commandLineResetSafeGraphics
-        && (QFile::exists(slowQmlStartupFlag) || previousStartupLogShowsSlowQml());
+        && (QFile::exists(slowQmlStartupFlag)
+            || QFile::exists(graphicsStartupPendingFlag)
+            || previousStartupLogShowsSlowQml());
     bool const safeGraphicsRequested =
-        envSafeGraphics || commandLineSafeGraphics || autoSafeGraphics;
+        envSafeGraphics || commandLineSafeGraphics || autoSafeGraphics || backendRequestsSoftware;
     if (safeGraphicsRequested) {
         qputenv("QSG_RHI_BACKEND", "d3d11");
         qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "1");
         qputenv("QT_OPENGL", "software");
+        if (!requestedQuickBackend.isEmpty() && requestedQuickBackend != "software") {
+            qunsetenv("QT_QUICK_BACKEND");
+            L("Qt Quick safe graphics: ignored QT_QUICK_BACKEND so D3D11 WARP can be used");
+        }
         if (autoSafeGraphics && !envSafeGraphics && !commandLineSafeGraphics) {
-            L(("Qt Quick safe graphics auto-enabled after previous slow QML startup: "
-               + slowQmlStartupFlag.toLocal8Bit()).constData());
+            L(("Qt Quick safe graphics auto-enabled after previous startup problem: slow="
+               + slowQmlStartupFlag.toLocal8Bit()
+               + " gpu="
+               + graphicsStartupPendingFlag.toLocal8Bit()).constData());
+        } else if (backendRequestsSoftware && !envSafeGraphics && !commandLineSafeGraphics) {
+            L("Qt Quick safe graphics enabled by graphics backend request: D3D11 WARP software renderer");
         } else {
             L("Qt Quick safe graphics enabled: D3D11 WARP software renderer");
         }
@@ -549,6 +715,7 @@ int main(int argc, char* argv[])
     logEnvVar("QML_DISABLE_DISK_CACHE");
     logEnvVar("QML_DISK_CACHE_PATH");
     logEnvVar("DECODIUM_SAFE_GRAPHICS");
+    logEnvVar("DECODIUM_GRAPHICS_BACKEND");
     logEnvVar("DECODIUM_DISABLE_QML_CACHE");
     QIcon const appIcon = loadDecodiumApplicationIcon();
     if (!appIcon.isNull()) {
@@ -819,6 +986,13 @@ int main(int argc, char* argv[])
     QByteArray slowQmlStartupFlagBytes;
 #ifdef Q_OS_WIN
     slowQmlStartupFlagBytes = slowQmlStartupFlag.toLocal8Bit();
+    if (!safeGraphicsRequested) {
+        QByteArray const pendingReason(
+            "Windows hardware graphics startup did not complete; use safe graphics on next launch");
+        writeSlowQmlStartupFlag(graphicsStartupPendingFlag.toLocal8Bit(), pendingReason);
+        L(("Windows hardware graphics startup marker written: "
+           + graphicsStartupPendingFlag.toLocal8Bit()).constData());
+    }
 #endif
     std::thread qmlLoadWatchdog([&qmlLoadDone, &qmlLoadWatchdogMutex, &qmlLoadWatchdogCv,
                                   startupLogPath, watchedQmlPath,
@@ -894,6 +1068,20 @@ int main(int argc, char* argv[])
                            "QML details:\n%3").arg(qmlPath, startupLogPath, details));
         return -1;
     }
+    logFirstQuickWindowGraphicsApi(engine, "after engine.load");
+    QTimer::singleShot(0, &app, [&engine] {
+        logFirstQuickWindowGraphicsApi(engine, "event loop start");
+    });
+#ifdef Q_OS_WIN
+    if (!safeGraphicsRequested) {
+        QTimer::singleShot(8000, &app, [graphicsStartupPendingFlag] {
+            if (QFile::exists(graphicsStartupPendingFlag)) {
+                QFile::remove(graphicsStartupPendingFlag);
+                L("Windows hardware graphics startup completed; startup marker cleared");
+            }
+        });
+    }
+#endif
     L("QML OK - entering event loop");
 
     int r = app.exec();

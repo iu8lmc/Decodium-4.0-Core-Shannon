@@ -3957,9 +3957,20 @@ ApplicationWindow {
                     property int lastSyncCount: 0
                     property real currentPeriodIndex: -1
                     property int currentPeriodDecodeCount: 0
+                    property int heldPeriodDecodeCount: 0
+                    property real heldPeriodDecodeCountUntilIndex: -1
 
                     function currentPeriodMs() {
                         return Math.max(1, Math.round(decodePanel.periodLength * 1000))
+                    }
+
+                    function displayedDecodeCount() {
+                        if (decodePanel.currentPeriodDecodeCount > 0)
+                            return decodePanel.currentPeriodDecodeCount
+                        if (decodePanel.heldPeriodDecodeCount > 0
+                            && decodePanel.currentPeriodIndex <= decodePanel.heldPeriodDecodeCountUntilIndex)
+                            return decodePanel.heldPeriodDecodeCount
+                        return 0
                     }
 
                     function updatePeriodState() {
@@ -3969,6 +3980,13 @@ ApplicationWindow {
                         decodePanel.currentSecond = Math.floor((nowMs % 60000) / 1000)
                         decodePanel.isCurrentPeriodEven = (periodIndex % 2) === 0
                         if (decodePanel.currentPeriodIndex !== periodIndex) {
+                            if (decodePanel.currentPeriodDecodeCount > 0) {
+                                decodePanel.heldPeriodDecodeCount = decodePanel.currentPeriodDecodeCount
+                                decodePanel.heldPeriodDecodeCountUntilIndex = periodIndex
+                            } else if (decodePanel.heldPeriodDecodeCountUntilIndex < periodIndex) {
+                                decodePanel.heldPeriodDecodeCount = 0
+                                decodePanel.heldPeriodDecodeCountUntilIndex = -1
+                            }
                             decodePanel.currentPeriodIndex = periodIndex
                             decodePanel.currentPeriodDecodeCount = 0
                             decodePanel.decodeListVersion++
@@ -3981,6 +3999,8 @@ ApplicationWindow {
                             decodePanel.currentPeriodDecodeCount += newCount - decodePanel.lastSyncCount
                         } else {
                             decodePanel.currentPeriodDecodeCount = 0
+                            decodePanel.heldPeriodDecodeCount = 0
+                            decodePanel.heldPeriodDecodeCountUntilIndex = -1
                         }
                         decodePanel.lastSyncCount = newCount
                     }
@@ -4563,7 +4583,7 @@ ApplicationWindow {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: decodePanel.currentPeriodDecodeCount + " decodes"
+                                            text: decodePanel.displayedDecodeCount() + " decodes"
                                             font.pixelSize: 10
                                             color: textSecondary
                                         }
@@ -8254,7 +8274,7 @@ ApplicationWindow {
 
 	                            Text {
 	                                visible: period1FloatingWindow.width >= 470
-	                                text: decodePanel.currentPeriodDecodeCount + " " + qsTr("decodes")
+	                                text: decodePanel.displayedDecodeCount() + " " + qsTr("decodes")
 	                                font.pixelSize: 10
 	                                color: textSecondary
 	                            }

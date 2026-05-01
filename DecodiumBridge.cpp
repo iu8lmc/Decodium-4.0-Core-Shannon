@@ -7281,6 +7281,59 @@ void DecodiumBridge::sendTx(int n)
     startTx();
 }
 
+QString DecodiumBridge::txMessage(int n) const
+{
+    switch (qBound(1, n, 6)) {
+    case 1: return m_tx1;
+    case 2: return m_tx2;
+    case 3: return m_tx3;
+    case 4: return m_tx4;
+    case 5: return m_tx5;
+    case 6: return m_tx6;
+    default: return QString();
+    }
+}
+
+void DecodiumBridge::setTxMessage(int n, const QString& message)
+{
+    QString const normalized = message.trimmed().toUpper();
+    switch (qBound(1, n, 6)) {
+    case 1: setTx1(normalized); break;
+    case 2: setTx2(normalized); break;
+    case 3: setTx3(normalized); break;
+    case 4: setTx4(normalized); break;
+    case 5: setTx5(normalized); break;
+    case 6: setTx6(normalized); break;
+    default: break;
+    }
+}
+
+QString DecodiumBridge::validateTxMessage(const QString& message) const
+{
+    QString const msg = message.trimmed().toUpper();
+    if (msg.isEmpty()) {
+        return QStringLiteral("Messaggio TX vuoto");
+    }
+
+    QString const mode = m_mode.trimmed().toUpper();
+    bool ok = false;
+    if (mode == QStringLiteral("FT2")) {
+        ok = decodium::txmsg::encodeFt2(msg, true).ok;
+    } else if (mode == QStringLiteral("FT4")) {
+        ok = decodium::txmsg::encodeFt4(msg, true).ok;
+    } else {
+        ok = decodium::txmsg::encodeFt8(msg).ok;
+    }
+
+    return ok ? QString()
+              : QStringLiteral("Messaggio non codificabile in %1").arg(mode.isEmpty() ? QStringLiteral("FT8") : mode);
+}
+
+void DecodiumBridge::resetStandardTxMessages()
+{
+    regenerateTxMessages();
+}
+
 void DecodiumBridge::stopTx()
 {
     if (usingLegacyBackendForTx()) {
@@ -14082,6 +14135,19 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     QString const decodeMode = m_decodeModeBySerial.value(serial);
     QString const forcedUtcToken = m_decodeUtcTokenBySerial.value(serial);
     bool const trackTimeSync = isTimeSyncDecodeMode(decodeMode);
+    qint64 const startedAtMs = m_decodeStartMsBySerial.value(serial, 0);
+    qint64 const elapsedMs = startedAtMs > 0
+        ? QDateTime::currentMSecsSinceEpoch() - startedAtMs
+        : -1;
+    if (decodeMode == QStringLiteral("FT8") && elapsedMs > 6500) {
+        bridgeLog("onFt8DecodeReady: dropped late FT8 serial=" + QString::number(serial) +
+                  " rows=" + QString::number(rows.size()) +
+                  " elapsedMs=" + QString::number(elapsedMs));
+        finalizeTimeSyncDecodeCycle(serial, decodeMode, {});
+        m_decoding = false;
+        emit decodingChanged();
+        return;
+    }
     bool const legacyUiMirrorActive = usingLegacyBackendForTx();
     QVector<double> dtSamples;
     bool changed = false;
@@ -15710,6 +15776,14 @@ void DecodiumBridge::queueFt8DecodeRequest(const QVector<short>& audioSnapshot, 
     req.mycall = m_callsign.toLocal8Bit();
     req.hiscall = m_dxCall.toLocal8Bit();
     req.hisgrid = m_dxGrid.toLocal8Bit();
+    int const boundedDepth = qBound(1, req.ndepth, 4);
+    if (req.nzhsym >= 50) {
+        req.maxDecodeMs = boundedDepth >= 4 ? 6500
+                        : boundedDepth >= 3 ? 5500
+                                            : 3500;
+    } else {
+        req.maxDecodeMs = boundedDepth >= 4 ? 3000 : 2200;
+    }
 
     if (suppressUiRows) {
         m_ft8EarlyDecodeSerials.insert(serial);
