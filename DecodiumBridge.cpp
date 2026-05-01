@@ -8910,6 +8910,7 @@ void DecodiumBridge::initUdpMessageClient()
 
     // Send initial status
     udpSendStatus();
+    m_udpNoTargetWarningSent = false;
 }
 
 void DecodiumBridge::shutdownUdpMessageClient()
@@ -9156,6 +9157,32 @@ void DecodiumBridge::udpSendLoggedQso(const QString& dxCall, const QString& dxGr
                   .arg(wsjtxAdifTargets)
                   .arg(rawAdifTargets)
                   .arg(adifRecord.size()));
+
+    int const totalTargets = targets + rawAdifTargets;
+    if (totalTargets > 0) {
+        QString addrInfo;
+        if (m_udpMessageClient) {
+            addrInfo = m_udpMessageClient->server_address().toString()
+                       + QStringLiteral(":") + QString::number(m_udpMessageClient->server_port());
+        }
+        emit statusMessage(QStringLiteral("QSO %1 -> UDP %2 (%3 destinatari)")
+                           .arg(dxCall, addrInfo)
+                           .arg(totalTargets));
+    } else if (!m_udpNoTargetWarningSent) {
+        m_udpNoTargetWarningSent = true;
+        QString const udpPort = QString::number(
+            udpPortFromSettingValue(getSetting(QStringLiteral("UDPServerPort"), 2237), 2237));
+        emit warningRaised(
+            QStringLiteral("Logger esterno non raggiunto"),
+            QStringLiteral("Il QSO di %1 e' stato salvato localmente ma non inviato ad alcun logger esterno.")
+                .arg(dxCall),
+            QStringLiteral("Nessun client UDP attivo (porta %1).\n\n"
+                           "Verifica in Impostazioni -> Reporting:\n"
+                           "- UDP Server: 127.0.0.1\n"
+                           "- Porta UDP: %1\n"
+                           "- Il logger esterno deve ricevere UDP sulla stessa porta.")
+                .arg(udpPort));
+    }
 }
 
 bool DecodiumBridge::udpSendRawAdifDatagram(const QString& label,

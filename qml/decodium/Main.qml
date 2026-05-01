@@ -1093,6 +1093,7 @@ ApplicationWindow {
     function shouldShowStatusToast(message) {
         var lower = String(message || "").toLowerCase()
         return lower.indexOf("cty.dat") >= 0
+            || (lower.indexOf("qso ") === 0 && lower.indexOf("-> udp") >= 0)
     }
 
     function showStatusToast(message, color) {
@@ -5636,11 +5637,20 @@ ApplicationWindow {
         function onWarningRaised(title, summary, details) {
             // Quando il CAT nativo gestisce il rig, i warning Hamlib dal legacy
             // backend sono falsi positivi (conflitto porta COM) — li ignoriamo.
-            if (bridge.catBackend === "native") return
+            // PRIMA: il return sopprimeva TUTTI i warning con CAT nativo, inclusi
+            // quelli legittimi (es. logger UDP non raggiunto). Ora filtriamo solo
+            // i warning effettivamente legati a CAT/Hamlib/serial.
+            if (bridge.catBackend === "native") {
+                var lower = (String(title) + " " + String(summary) + " " + String(details)).toLowerCase()
+                if (lower.indexOf("hamlib") >= 0 || lower.indexOf("cat") >= 0 ||
+                    lower.indexOf("rig") >= 0 || lower.indexOf("serial") >= 0 ||
+                    lower.indexOf("com ") >= 0 || lower.indexOf("timed out") >= 0)
+                    return
+            }
             warningDialogTitle = title
             warningDialogSummary = summary
             warningDialogDetails = details
-            warningDialogDetailsVisible = false
+            warningDialogDetailsVisible = details.length > 0
             warningDialog.open()
         }
         function onTimeSyncSettingsRequested() {

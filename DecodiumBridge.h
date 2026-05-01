@@ -1464,6 +1464,7 @@ private:
     MessageClient* m_udpSecondaryMessageClient {nullptr};
     MessageClient* m_udpTertiaryMessageClient {nullptr};
     bool m_udpMessageClientRestartPending {false};
+    bool m_udpNoTargetWarningSent {false};
     int  m_legacyBandActivityRevision {-1};
     int  m_legacyRxFrequencyRevision {-1};
     QString m_legacyAllTxtRevisionKey;
