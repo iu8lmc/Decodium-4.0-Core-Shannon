@@ -4811,7 +4811,7 @@ ApplicationWindow {
                                                         font.family: mainWindow.decodedTextFontFamily
                                                         font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
                                                         color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
-                                                        horizontalAlignment: Text.AlignRight
+                                                        horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                         elide: Text.ElideNone
                                                         fontSizeMode: Text.HorizontalFit
@@ -8446,7 +8446,7 @@ ApplicationWindow {
 	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
 	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
 	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
 	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
                             }
 

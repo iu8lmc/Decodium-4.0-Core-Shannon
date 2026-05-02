@@ -213,6 +213,7 @@ public:
   bool tune_watchdog () const;
   bool TX_messages () const;
   bool split_mode () const;
+  void set_split_mode (QString const& mode, bool reopen_rig = true);
   bool enable_VHF_features () const;
   bool decode_at_52s () const;
   bool kHz_without_k () const;

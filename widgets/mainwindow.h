@@ -210,6 +210,7 @@ public:
   void legacySetCqOnly(bool enabled);
   void legacySetRxFrequency(int frequencyHz);
   void legacySetTxFrequency(int frequencyHz);
+  void legacySetSplitMode(QString const& mode);
   void legacySetRigPtt(bool enabled);
   void legacySetAudioInputDeviceName(QString const& name);
   void legacySetAudioOutputDeviceName(QString const& name);

@@ -4890,6 +4890,17 @@ void MainWindow::legacySetTxFrequency(int frequencyHz)
   onRemoteSetTxFrequencyRequested(QString {}, frequencyHz);
 }
 
+void MainWindow::legacySetSplitMode(QString const& mode)
+{
+  bool const reopenLegacyRig =
+    !(m_embeddedShellMode && !m_embeddedRigControlEnabled);
+  m_config.set_split_mode(mode, reopenLegacyRig);
+  if (ui && ui->TxFreqSpinBox)
+    {
+      setXIT(ui->TxFreqSpinBox->value());
+    }
+}
+
 void MainWindow::legacySetRigPtt(bool enabled)
 {
   requestRigPtt(enabled);
@@ -15539,11 +15550,6 @@ void MainWindow::guiUpdate()
     }
 
     double fTR=float((ms%int(1000.0*m_TRperiod)))/int(1000.0*m_TRperiod);
-    double const txSlotElapsed = m_bTxTime ? qMax(0.0, t2p - tx1) : 0.0;
-    bool const fixedPayloadFtxMode = (m_mode == "FT8" || m_mode == "FT4");
-    double const latestFixedPayloadStart = (m_mode == "FT4") ? 0.9 : 1.5;
-    bool const txStartAllowedBySlotAge =
-        !fixedPayloadFtxMode || txSlotElapsed <= latestFixedPayloadStart;
 
     auto currentTxText = [this] {
       if(m_ntx == 1) return ui->tx1->text();
@@ -15618,7 +15624,7 @@ void MainWindow::guiUpdate()
       ui->txrb5->setChecked(true);
     }
 
-    if(g_iptt==0 and ((m_bTxTime and (fTR < 0.75) and txReady and txStartAllowedBySlotAge) or m_tune)) {
+    if(g_iptt==0 and ((m_bTxTime and (fTR < 0.75) and txReady) or m_tune)) {
       //### Allow late starts
       icw[0]=m_ncw;
       g_iptt = 1;
@@ -15725,16 +15731,6 @@ void MainWindow::guiUpdate()
             m_btxok = false;  // stopTx() handled by m_btxok transition in guiUpdate()
           }
         });
-      }
-    } else if (g_iptt == 0 && m_auto && m_bTxTime && txReady
-               && !txStartAllowedBySlotAge && !m_tune) {
-      static int s_lastLateFtxStartSkipSec = -1;
-      if (s_lastLateFtxStartSkipSec != nsec) {
-        s_lastLateFtxStartSkipSec = nsec;
-        debugToFile (QString {"txStartSkip late mode:%1 elapsed:%2 latest:%3 waiting-next-slot"}
-                         .arg (m_mode)
-                         .arg (txSlotElapsed, 0, 'f', 3)
-                         .arg (latestFixedPayloadStart, 0, 'f', 3));
       }
     }
 //    if(!m_bTxTime and !m_tune and m_mode!="FT4") m_btxok=false;       //Time to stop transmitting
@@ -31242,6 +31238,15 @@ void MainWindow::onRemoteSetTxEnabledRequested(QString const& commandId, bool en
     {
       return;
     }
+
+  auto apply_auto_from_command = [this] (bool state) {
+      bool const notify = m_enableButtonNotify;
+      m_enableButtonNotify = false;
+      ui->autoButton->setChecked(state);
+      on_autoButton_clicked(state);
+      m_enableButtonNotify = notify;
+    };
+
   if (!enabled)
     {
       if (ui->autoCQButton && ui->autoCQButton->isChecked())
@@ -31249,20 +31254,23 @@ void MainWindow::onRemoteSetTxEnabledRequested(QString const& commandId, bool en
           ui->autoCQButton->setChecked(false);
           on_autoCQButton_clicked(false);
         }
-      if (ui->autoButton->isChecked())
+      if (ui->autoButton->isChecked() || m_auto || m_autoButtonState)
         {
-          ui->autoButton->setChecked(false);
-          on_autoButton_clicked(false);
+          apply_auto_from_command(false);
         }
       if (m_transmitting || m_tune)
         {
           on_stopTxButton_clicked();
         }
     }
-  else if (ui->autoButton->isChecked() != enabled)
+  else
     {
-      ui->autoButton->setChecked(enabled);
-      on_autoButton_clicked(enabled);
+      bool const checkboxMismatch = (ui->autoButton->isChecked() != enabled);
+      bool const autoMismatch = !m_auto || !m_autoButtonState;
+      if (checkboxMismatch || autoMismatch)
+        {
+          apply_auto_from_command(enabled);
+        }
     }
   showStatusMessage(enabled ? tr("Remote TX enabled") : tr("Remote TX disabled"));
 }

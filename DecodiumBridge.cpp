@@ -32,6 +32,7 @@
 #include "Modulator/Modulator.hpp"
 #include "Modulator/FtxMessageEncoder.hpp"
 #include "Modulator/FtxWaveformGenerator.hpp"
+#include "Transceiver/TransceiverFactory.hpp"
 #include "commons.h"
 #include "widgets/FoxWaveGuard.hpp"
 #include "widgets/itoneAndicw.h"
@@ -2168,6 +2169,44 @@ static QVector<float> buildTuneWaveform(double freq, int sampleRate, int duratio
     return wave;
 }
 
+static bool bridgeGeneratedTxWaveMode(QString const& mode)
+{
+    QString const normalized = mode.trimmed().toUpper();
+    return normalized == QStringLiteral("FT8")
+        || normalized == QStringLiteral("FT4")
+        || normalized == QStringLiteral("FT2");
+}
+
+static QString txWaveMetricsSummary(QVector<float> const& wave)
+{
+    double peak = 0.0;
+    double avgAbs = 0.0;
+    qsizetype nonzero = 0;
+    for (float const sample : wave) {
+        double const value = std::abs(static_cast<double>(sample));
+        peak = std::max(peak, value);
+        avgAbs += value;
+        if (value > 1.0e-7) {
+            ++nonzero;
+        }
+    }
+    if (!wave.isEmpty()) {
+        avgAbs /= static_cast<double>(wave.size());
+    }
+
+    qint64 const durationMs = wave.isEmpty()
+        ? 0
+        : qRound64(static_cast<double>(wave.size()) * 1000.0 / 48000.0);
+
+    return QStringLiteral("samples=%1 duration_ms=%2 peak=%3 avgAbs=%4 nonzero=%5/%6")
+        .arg(wave.size())
+        .arg(durationMs)
+        .arg(peak, 0, 'f', 6)
+        .arg(avgAbs, 0, 'f', 6)
+        .arg(nonzero)
+        .arg(wave.size());
+}
+
 static QVector<float> buildTxWaveformForMessage(QString const& mode,
                                                 QString const& msg,
                                                 int txFrequency,
@@ -2175,28 +2214,34 @@ static QVector<float> buildTxWaveformForMessage(QString const& mode,
 {
     QVector<float> wave;
     float const freq = static_cast<float>(txFrequency);
+    QString const normalizedMode = mode.trimmed().toUpper();
 
-    if (mode == QStringLiteral("FT2")) {
+    if (normalizedMode == QStringLiteral("FT2")) {
         auto enc = decodium::txmsg::encodeFt2(msg);
         if (!enc.ok) {
             if (errorOut) *errorOut = QStringLiteral("Codifica FT2 fallita");
             return {};
         }
         wave = decodium::txwave::generateFt2Wave(enc.tones.constData(), 103, 4 * 288, 48000.0f, freq);
-    } else if (mode == QStringLiteral("FT4")) {
+    } else if (normalizedMode == QStringLiteral("FT4")) {
         auto enc = decodium::txmsg::encodeFt4(msg);
         if (!enc.ok) {
             if (errorOut) *errorOut = QStringLiteral("Codifica FT4 fallita");
             return {};
         }
         wave = decodium::txwave::generateFt4Wave(enc.tones.constData(), 103, 4 * 576, 48000.0f, freq);
-    } else {
+    } else if (normalizedMode == QStringLiteral("FT8") || normalizedMode.isEmpty()) {
         auto enc = decodium::txmsg::encodeFt8(msg);
         if (!enc.ok) {
             if (errorOut) *errorOut = QStringLiteral("Codifica FT8 fallita");
             return {};
         }
         wave = decodium::txwave::generateFt8Wave(enc.tones.constData(), 79, 7680, 2.0f, 48000.0f, freq);
+    } else {
+        if (errorOut) {
+            *errorOut = QStringLiteral("Modo TX non supportato dal bridge audio: %1").arg(normalizedMode);
+        }
+        return {};
     }
 
     if (wave.isEmpty() && errorOut) {
@@ -2231,6 +2276,28 @@ static int syncTxStartBudgetMs(const QString& mode)
 #endif
 }
 
+static int latestD3CompatibleSyncTxStartMs(const QString& mode, int periodMs)
+{
+    if (periodMs <= 0) {
+        return 0;
+    }
+
+    // Decodium3 starts a queued sync TX while the selected slot is still in
+    // its first 75% (mainwindow fTR < 0.75). Keep that behavior here so a
+    // boundary tick that lands slightly late does not push TX to the next turn.
+    if (mode == QStringLiteral("FT8")
+        || mode == QStringLiteral("FT4")
+        || mode == QStringLiteral("FT2")) {
+        return (periodMs * 3) / 4;
+    }
+
+    int const payloadMs = estimatedSyncPayloadMs(mode);
+    if (payloadMs <= 0) {
+        return periodMs;
+    }
+    return qMax(0, periodMs - payloadMs - syncTxStartBudgetMs(mode));
+}
+
 #if defined(Q_OS_MAC)
 static AudioDevice::Channel txOutputChannelForFormat(const QAudioFormat& format, int configuredChannel)
 {
@@ -2259,6 +2326,32 @@ static inline bool useLegacyRigControlFallback(DecodiumLegacyBackend* legacy, co
 static inline bool legacyOwnsRigControl(DecodiumLegacyBackend* legacy)
 {
     return legacy && legacy->available() && legacy->rigControlEnabled();
+}
+
+static QString normalizedCatSplitMode(QString const& value)
+{
+    QString const normalized = value.trimmed().toLower();
+    if (normalized == QStringLiteral("rig")) {
+        return QStringLiteral("rig");
+    }
+    if (normalized == QStringLiteral("emulate")
+        || normalized == QStringLiteral("fake")
+        || normalized == QStringLiteral("fake it")) {
+        return QStringLiteral("emulate");
+    }
+    return QStringLiteral("none");
+}
+
+static QVariant legacySplitModeSettingValue(QString const& value)
+{
+    QString const normalized = normalizedCatSplitMode(value);
+    if (normalized == QStringLiteral("rig")) {
+        return QVariant::fromValue(TransceiverFactory::split_mode_rig);
+    }
+    if (normalized == QStringLiteral("emulate")) {
+        return QVariant::fromValue(TransceiverFactory::split_mode_emulate);
+    }
+    return QVariant::fromValue(TransceiverFactory::split_mode_none);
 }
 
 static inline bool isHamlibFamilyBackend(QString const& backend)
@@ -2291,6 +2384,19 @@ static inline void activeCatSetPtt(DecodiumCatManager* n, DecodiumTransceiverMan
     if (b=="native") n->setRigPtt(on);
     else if (b=="omnirig" && o) o->setRigPtt(on);
     else h->setRigPtt(on);
+}
+
+static inline void activeCatSetTxPtt(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b,
+                                     bool on, double txDialHz,
+                                     DecodiumOmniRigManager* o = nullptr, DecodiumLegacyBackend* legacy = nullptr)
+{
+    if (on && txDialHz > 0.0 && isHamlibFamilyBackend(b) && h
+        && !useLegacyRigControlFallback(legacy, b)) {
+        h->setRigTxFrequencyAndPtt(txDialHz, true);
+        return;
+    }
+
+    activeCatSetPtt(n, h, b, on, o, legacy);
 }
 
 static inline void activeCatSetFreq(DecodiumCatManager* n, DecodiumTransceiverManager* h, const QString& b, double hz,
@@ -2725,6 +2831,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             QString m = catProp("mode").toString();
             if (m_catMode != m) { m_catMode = m; emit catModeChanged(); }
+        });
+        connect(mgr, &std::remove_pointer_t<decltype(mgr)>::splitModeChanged, this, [this, backend, catProp]() {
+            if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
+            if (!catSignalMatchesBackend(m_catBackend, backend)) return;
+            QString const splitMode = catProp("splitMode").toString();
+            syncCatSplitModeToLegacy(splitMode, QStringLiteral("cat-manager"));
+            syncActiveCatTxSplitFrequency(QStringLiteral("split-mode-change"));
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::connectedChanged, this, [this, backend, catProp]() {
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
@@ -3348,7 +3461,13 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                     }
 #endif
                     if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-                        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, enabled, m_omniRigCat, m_legacyBackend);
+                        double txDialHz = 0.0;
+                        if (enabled) {
+                            syncActiveCatTxSplitFrequency(QStringLiteral("legacy-ptt-on"));
+                            txDialHz = catSplitTxDialFrequencyHz();
+                        }
+                        activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                                          enabled, txDialHz, m_omniRigCat, m_legacyBackend);
 #if defined(Q_OS_MAC)
                         if (enabled && shouldUseBridgeAudioForLegacyDigitalTx()) {
                             syncLegacyBackendState();
@@ -3371,7 +3490,10 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                                 }
                                 if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
                                     bridgeLog(QStringLiteral("legacyPttRequested: applying delayed PTT after CAT reconnect"));
-                                    activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+                                    syncActiveCatTxSplitFrequency(QStringLiteral("legacy-ptt-delayed"));
+                                    activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                                                      true, catSplitTxDialFrequencyHz(),
+                                                      m_omniRigCat, m_legacyBackend);
 #if defined(Q_OS_MAC)
                                     if (shouldUseBridgeAudioForLegacyDigitalTx()) {
                                         syncLegacyBackendState();
@@ -3403,6 +3525,10 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                       : QStringLiteral("Legacy backend enabled for shared Setup/Time Sync UI"));
 
         m_legacyBackend->setRigControlEnabled(!legacyTxBackendRequested());
+        if (QObject* cat = catManagerObj()) {
+            syncCatSplitModeToLegacy(cat->property("splitMode").toString(),
+                                     QStringLiteral("legacy-backend-init"));
+        }
 
         // All'avvio manteniamo il device/channel audio salvato nel bridge, invece di
         // lasciare che il backend legacy riparta dal default di sistema.
@@ -4233,11 +4359,6 @@ QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines,
 
     bool const isTimeSyncMode = isTimeSyncDecodeMode(m_mode);
     int const periodMs = periodMsForMode(m_mode);
-    QString const currentSlotUtcToken =
-        (isTimeSyncMode && periodMs > 0 && periodMs < 60000)
-        ? utcDisplayTokenForSlotStart(QDateTime::currentMSecsSinceEpoch() / periodMs, periodMs)
-        : QString {};
-
     auto stabilizeLegacyTimeToken = [&](QVariantMap& entry) {
         QString const rawTime = normalizeUtcDisplayToken(entry.value(QStringLiteral("time")).toString());
         if (!(isTimeSyncMode && periodMs > 0 && periodMs < 60000 && rawTime.size() == 4)) {
@@ -4268,7 +4389,11 @@ QVariantList DecodiumBridge::mirrorLegacyDecodeLines(QStringList const& lines,
         }
 
         if (resolvedTime.isEmpty()) {
-            resolvedTime = currentSlotUtcToken;
+            // Match Decodium3's DecodedText HHMM handling: missing seconds are
+            // interpreted as :00. Do not use the processing-time slot here; by
+            // the time legacy rows are mirrored we may already be in the next
+            // period, which flips TX parity and delays the response one slot.
+            resolvedTime = rawTime + QStringLiteral("00");
         }
 
         entry[QStringLiteral("time")] = resolvedTime.isEmpty() ? rawTime : resolvedTime;
@@ -4895,16 +5020,24 @@ int DecodiumBridge::effectiveTxAudioFrequencyHz() const
 
 double DecodiumBridge::catSplitTxDialFrequencyHz() const
 {
-    if (!catSplitOperationActiveForMode() || m_frequency <= 0.0 || m_txFrequency <= 0) {
+    if (!catSplitOperationActiveForMode() || m_txFrequency <= 0) {
         return 0.0;
     }
 
-    return m_frequency + static_cast<double>(catSplitXitHzForTxFrequency(m_txFrequency));
+    double dialHz = m_frequency;
+    if (dialHz <= 0.0 && isHamlibFamilyBackend(m_catBackend) && m_hamlibCat) {
+        dialHz = m_hamlibCat->frequency();
+    }
+    if (dialHz <= 0.0) {
+        return 0.0;
+    }
+
+    return dialHz + static_cast<double>(catSplitXitHzForTxFrequency(m_txFrequency));
 }
 
 void DecodiumBridge::syncActiveCatTxSplitFrequency(const QString& reason)
 {
-    if (usingLegacyBackendForTx()
+    if (legacyOwnsRigControl(m_legacyBackend)
         || useLegacyRigControlFallback(m_legacyBackend, m_catBackend)
         || !isHamlibFamilyBackend(m_catBackend)
         || !m_hamlibCat
@@ -4933,6 +5066,27 @@ void DecodiumBridge::syncActiveCatTxSplitFrequency(const QString& reason)
                            QString::number(m_txFrequency),
                            m_catBackend));
     }
+}
+
+void DecodiumBridge::syncCatSplitModeToLegacy(const QString& mode, const QString& reason)
+{
+    QString const normalized = normalizedCatSplitMode(mode);
+    QVariant const legacyValue = legacySplitModeSettingValue(normalized);
+
+    QSettings settings(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    settings.beginGroup(QStringLiteral("Transceiver"));
+    settings.setValue(QStringLiteral("splitMode"), normalized);
+    settings.endGroup();
+    settings.setValue(QStringLiteral("SplitMode"), legacyValue);
+    settings.sync();
+    syncSettingToLegacyIni(QStringLiteral("SplitMode"), legacyValue);
+
+    if (legacyBackendAvailable()) {
+        m_legacyBackend->setSplitMode(normalized);
+    }
+
+    bridgeLog(QStringLiteral("CAT split mode synced to legacy (%1): %2")
+                  .arg(reason, normalized));
 }
 
 bool DecodiumBridge::shouldIgnoreCatFrequencyDuringLocalQsy(double hz, const QString& backend)
@@ -5856,6 +6010,21 @@ void DecodiumBridge::setTxEnabled(bool v)
 
     if (v) {
         scheduleTxAudioPrecompute(25);
+        ensureSyncTxSchedulerActive(QStringLiteral("tx-enable"));
+        if (!usingLegacyBackendForTx()) {
+            QTimer::singleShot(0, this, [this]() {
+                if (m_shuttingDown || QCoreApplication::closingDown()
+                    || usingLegacyBackendForTx()) {
+                    return;
+                }
+                if (tryStartDeferredManualSyncTx()) {
+                    return;
+                }
+                checkAndStartPeriodicTx();
+            });
+        }
+    } else {
+        clearDeferredManualSyncTx(QStringLiteral("tx-disabled"));
     }
 }
 
@@ -5886,6 +6055,16 @@ void DecodiumBridge::setAutoCqRepeat(bool v)
         }
         if (m_autoCqRepeat) {
             scheduleTxAudioPrecompute(25);
+            ensureSyncTxSchedulerActive(QStringLiteral("autocq-enable"));
+            if (!usingLegacyBackendForTx()) {
+                QTimer::singleShot(0, this, [this]() {
+                    if (m_shuttingDown || QCoreApplication::closingDown()
+                        || usingLegacyBackendForTx()) {
+                        return;
+                    }
+                    checkAndStartPeriodicTx();
+                });
+            }
         }
     }
 }
@@ -6136,19 +6315,6 @@ bool DecodiumBridge::startBridgeAudioForLegacyDigitalTx(const QString& reason)
         emit errorMessage(QStringLiteral("Formato audio TX non supportato dal device selezionato"));
         return false;
     }
-    double wavePeak = 0.0;
-    double waveAbsSum = 0.0;
-    int waveNonZero = 0;
-    for (float const sample : wave) {
-        double const absSample = std::abs(static_cast<double>(sample));
-        wavePeak = qMax(wavePeak, absSample);
-        waveAbsSum += absSample;
-        if (absSample > 1.0e-7) {
-            ++waveNonZero;
-        }
-    }
-    double const waveAvgAbs = wave.isEmpty() ? 0.0 : waveAbsSum / static_cast<double>(wave.size());
-
     updateSoundOutputDevice();
     m_soundOutput->setAttenuation(attenuationDb);
     if (m_modulator->isActive()) {
@@ -6265,16 +6431,13 @@ bool DecodiumBridge::startBridgeAudioForLegacyDigitalTx(const QString& reason)
         finishModulatorIdlePlayback(QStringLiteral("legacy-bridge-pcm"));
     });
 
-    bridgeLog(QStringLiteral("legacyBridgeTxAudio start: reason=%1 mode=%2 msg=[%3] dev=%4 fmt=%5 pcm_fmt=%6 channels=%7 attn=%8 gain=%9 peak=%10 avgAbs=%11 nonzero=%12/%13 pcm_bytes=%14 hold_ms=%15")
+    bridgeLog(QStringLiteral("legacyBridgeTxAudio start: reason=%1 mode=%2 msg=[%3] dev=%4 fmt=%5 pcm_fmt=%6 channels=%7 attn=%8 gain=%9 payload=%10 pcm_bytes=%11 hold_ms=%12")
                   .arg(reason, m_mode, msg.trimmed(), outDev.description(),
                        audioFormatToString(outFmt), audioFormatToString(pcmFmt))
                   .arg(pcmFmt.channelCount())
                   .arg(attenuationDb, 0, 'f', 2)
                   .arg(txGainFromSlider(m_txOutputLevel), 0, 'f', 3)
-                  .arg(wavePeak, 0, 'f', 6)
-                  .arg(waveAvgAbs, 0, 'f', 6)
-                  .arg(waveNonZero)
-                  .arg(wave.size())
+                  .arg(txWaveMetricsSummary(wave))
                   .arg(m_txPcmData.size())
                   .arg(txPlaybackMs + 300));
     emit statusMessage(QStringLiteral("TX: ") + msg.trimmed());
@@ -7221,7 +7384,7 @@ void DecodiumBridge::startTx()
         bridgeLog("startTx: TX audio prepare failed: " + errorText + " msg=[" + msg + "]");
         return;
     }
-    bridgeLog("startTx: wave.size()=" + QString::number(wave.size()) +
+    bridgeLog("startTx: payload " + txWaveMetricsSummary(wave) +
               " cache=" + QString::number((m_txAudioCache.message == msg.trimmed()) ? 1 : 0));
 
 #if defined(Q_OS_MAC)
@@ -7273,8 +7436,11 @@ void DecodiumBridge::startTx()
         m_activeTxNumber = m_currentTx;
         m_activeTxMessage = msg.trimmed();
         syncActiveCatTxSplitFrequency(QStringLiteral("startTx"));
-        if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
-            activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
+            activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                              true, catSplitTxDialFrequencyHz(),
+                              m_omniRigCat, m_legacyBackend);
+        }
 
         m_transmitting = true;
         emit transmittingChanged();
@@ -7432,7 +7598,9 @@ void DecodiumBridge::startTx()
     m_activeTxMessage = msg.trimmed();
     syncActiveCatTxSplitFrequency(QStringLiteral("startTx"));
     if (!tciAudioTx && activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
-        activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, true, m_omniRigCat, m_legacyBackend);
+        activeCatSetTxPtt(m_nativeCat, m_hamlibCat, m_catBackend,
+                          true, catSplitTxDialFrequencyHz(),
+                          m_omniRigCat, m_legacyBackend);
         bridgeLog("PTT ON via " + m_catBackend);
     } else if (tciAudioTx) {
         bridgeLog(QStringLiteral("PTT ON deferred until TCI TX audio stream is armed"));
@@ -7691,6 +7859,8 @@ void DecodiumBridge::sendTx(int n)
 
     if (shouldDeferManualSyncTxStart()) {
         m_deferredManualSyncTx = true;
+        ensureSyncTxSchedulerActive(QStringLiteral("manual-sync-tx"));
+        scheduleTxAudioPrecompute(25);
         bridgeLog(QStringLiteral("manualSyncTx: queued TX%1 for next valid slot (mode=%2 txPeriod=%3 transmitting=%4)")
                       .arg(n)
                       .arg(m_mode)
@@ -7739,12 +7909,16 @@ QString DecodiumBridge::validateTxMessage(const QString& message) const
     }
 
     QString const mode = m_mode.trimmed().toUpper();
+    if (!mode.isEmpty() && !bridgeGeneratedTxWaveMode(mode)) {
+        return QString();
+    }
+
     bool ok = false;
     if (mode == QStringLiteral("FT2")) {
         ok = decodium::txmsg::encodeFt2(msg, true).ok;
     } else if (mode == QStringLiteral("FT4")) {
         ok = decodium::txmsg::encodeFt4(msg, true).ok;
-    } else {
+    } else if (mode == QStringLiteral("FT8") || mode.isEmpty()) {
         ok = decodium::txmsg::encodeFt8(msg).ok;
     }
 
@@ -10618,8 +10792,10 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
             msgSecond = secondsFromUtcDisplayToken(timeStr);
         }
         if (msgSecond < 0 && normalizeUtcDisplayToken(timeStr).size() == 4) {
-            // Solo HHMM: fallback all'orologio corrente.
-            msgSecond = QDateTime::currentDateTimeUtc().time().second();
+            // Decodium3/DecodedText treats HHMM rows as second 00, not as
+            // "current processing second". Using the processing second here can
+            // flip txFirst after the boundary and make D4 wait one extra slot.
+            msgSecond = 0;
         }
 
         if (msgSecond >= 0) {
@@ -11072,8 +11248,7 @@ bool DecodiumBridge::shouldDeferManualSyncTxStart() const
     }
 
     int const periodMs = periodMsForMode(m_mode);
-    int const payloadMs = estimatedSyncPayloadMs(m_mode);
-    if (periodMs <= 0 || payloadMs <= 0) {
+    if (periodMs <= 0) {
         return false;
     }
 
@@ -11086,9 +11261,9 @@ bool DecodiumBridge::shouldDeferManualSyncTxStart() const
         return true;
     }
 
-    int const remainingMs = periodMs - static_cast<int>(msNow % static_cast<qint64>(periodMs));
-    int const requiredMs = payloadMs + syncTxStartBudgetMs(m_mode);
-    return remainingMs <= requiredMs;
+    int const elapsedMs = static_cast<int>(msNow % static_cast<qint64>(periodMs));
+    int const latestStartMs = latestD3CompatibleSyncTxStartMs(m_mode, periodMs);
+    return latestStartMs > 0 && elapsedMs >= latestStartMs;
 }
 
 bool DecodiumBridge::tryStartDeferredManualSyncTx()
@@ -11122,14 +11297,12 @@ bool DecodiumBridge::tryStartDeferredManualSyncTx()
     }
 
     int const elapsedMs = static_cast<int>(msNow % static_cast<qint64>(periodMs));
-    int const remainingMs = periodMs - elapsedMs;
-    int const payloadMs = estimatedSyncPayloadMs(m_mode);
-    int const requiredMs = payloadMs + syncTxStartBudgetMs(m_mode);
-    if (requiredMs > 0 && remainingMs <= requiredMs) {
-        bridgeLog(QStringLiteral("manualSyncTx: slot too late for queued TX%1 remaining=%2ms required=%3ms")
+    int const latestStartMs = latestD3CompatibleSyncTxStartMs(m_mode, periodMs);
+    if (latestStartMs > 0 && elapsedMs >= latestStartMs) {
+        bridgeLog(QStringLiteral("manualSyncTx: slot too late for queued TX%1 elapsed=%2ms latest=%3ms")
                       .arg(m_currentTx)
-                      .arg(remainingMs)
-                      .arg(requiredMs));
+                      .arg(elapsedMs)
+                      .arg(latestStartMs));
         return false;
     }
 
@@ -11147,6 +11320,22 @@ void DecodiumBridge::clearDeferredManualSyncTx(const QString& reason)
     }
     m_deferredManualSyncTx = false;
     bridgeLog(QStringLiteral("manualSyncTx: cleared (%1)").arg(reason));
+}
+
+void DecodiumBridge::ensureSyncTxSchedulerActive(const QString& reason)
+{
+    if (!usesDeferredManualSyncTx() || !m_monitoring || !m_periodTimer) {
+        return;
+    }
+
+    if (m_periodTimer->isActive()) {
+        return;
+    }
+
+    quint64 const sessionId = ++m_periodTimerSessionId;
+    bridgeLog(QStringLiteral("%1: period timer inactive while sync TX is armed, rearming")
+                  .arg(reason));
+    armPeriodTimerForCurrentMode(sessionId, reason);
 }
 
 void DecodiumBridge::clearAutoCqPartnerLock()
@@ -11409,15 +11598,13 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         if (!isOurPeriod) return;
 
         int const elapsedMs = static_cast<int>(msNow % static_cast<qint64>(pMs));
-        int const remainingMs = pMs - elapsedMs;
-        int const payloadMs = estimatedSyncPayloadMs(m_mode);
-        int const requiredMs = payloadMs + syncTxStartBudgetMs(m_mode);
-        if (requiredMs > 0 && remainingMs <= requiredMs) {
-            bridgeLog(QStringLiteral("checkAndStartPeriodicTx: too late in %1 slot, defer TX%2 remaining=%3ms required=%4ms")
+        int const latestStartMs = latestD3CompatibleSyncTxStartMs(m_mode, pMs);
+        if (latestStartMs > 0 && elapsedMs >= latestStartMs) {
+            bridgeLog(QStringLiteral("checkAndStartPeriodicTx: too late in %1 slot, defer TX%2 elapsed=%3ms latest=%4ms")
                           .arg(m_mode)
                           .arg(m_currentTx)
-                          .arg(remainingMs)
-                          .arg(requiredMs));
+                          .arg(elapsedMs)
+                          .arg(latestStartMs));
             return;
         }
 

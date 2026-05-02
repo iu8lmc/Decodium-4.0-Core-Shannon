@@ -590,6 +590,7 @@ public:
   void transceiver_volume (double);
   void transceiver_txvolume (double);
   void sync_transceiver (bool force_signal);
+  void set_split_mode (QString const& mode, bool reopen_rig);
 
   Q_SLOT int exec () override;
   Q_SLOT void accept () override;
@@ -1328,6 +1329,7 @@ bool Configuration::check_SWR () const {return m_->check_SWR_;}
 bool Configuration::x2ToneSpacing() const {return m_->x2ToneSpacing_;}
 bool Configuration::x4ToneSpacing() const {return m_->x4ToneSpacing_;}
 bool Configuration::split_mode () const {return m_->split_mode ();}
+void Configuration::set_split_mode (QString const& mode, bool reopen_rig) {m_->set_split_mode (mode, reopen_rig);}
 QString Configuration::opCall() const {return m_->opCall_;}
 void Configuration::opCall (QString const& call) {m_->opCall_ = call;}
 QString Configuration::udp_server_name () const {return m_->udp_server_name_;}
@@ -5289,6 +5291,48 @@ void Configuration::impl::handleCatStopBitsGroupClicked (int /* id */)
 void Configuration::impl::on_CAT_poll_interval_spin_box_valueChanged (int /* value */)
 {
   set_rig_invariants ();
+}
+
+static TransceiverFactory::SplitMode split_mode_from_text (QString const& text)
+{
+  QString const normalized = text.trimmed ().toLower ();
+  if (normalized == QStringLiteral ("rig"))
+    {
+      return TransceiverFactory::split_mode_rig;
+    }
+  if (normalized == QStringLiteral ("emulate") || normalized == QStringLiteral ("fake")
+      || normalized == QStringLiteral ("fake it"))
+    {
+      return TransceiverFactory::split_mode_emulate;
+    }
+  return TransceiverFactory::split_mode_none;
+}
+
+void Configuration::impl::set_split_mode (QString const& mode, bool reopen_rig)
+{
+  TransceiverFactory::SplitMode const splitMode = split_mode_from_text (mode);
+  if (rig_params_.split_mode == splitMode)
+    {
+      return;
+    }
+
+  rig_params_.split_mode = splitMode;
+  if (ui_ && ui_->split_mode_button_group)
+    {
+      if (auto *button = ui_->split_mode_button_group->button (static_cast<int> (splitMode)))
+        {
+          button->setChecked (true);
+        }
+    }
+
+  settings_->setValue ("SplitMode", QVariant::fromValue (rig_params_.split_mode));
+  settings_->sync ();
+  set_rig_invariants ();
+
+  if (reopen_rig && rig_active_)
+    {
+      open_rig (true);
+    }
 }
 
 void Configuration::impl::handleSplitModeGroupClicked (int /* id */)

@@ -69,6 +69,7 @@ public:
     void setCqOnly(bool enabled);
     void setRxFrequency(int frequencyHz);
     void setTxFrequency(int frequencyHz);
+    void setSplitMode(const QString& mode);
     void setRigControlEnabled(bool enabled);
     void setRigPtt(bool enabled);
     void setAudioInputDeviceName(const QString& name);

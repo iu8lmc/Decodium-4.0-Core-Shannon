@@ -1154,9 +1154,8 @@ Window {
                                         elide: decodeWindow.messageElideMode(modelData.message)
                                     }
 
-                                    // Distanza
                                     Text {
-                                        visible: modelData.dxDistance > 0 && !decodeWindow.compactRxColumns
+                                        visible: !decodeWindow.compactRxColumns
                                         text: modelData.dxDistance > 0 ?
                                               Math.round(modelData.dxDistance) + "km" : ""
                                         font.pixelSize: 9

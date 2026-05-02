@@ -901,6 +901,13 @@ void DecodiumLegacyBackend::setTxFrequency(int frequencyHz)
     }
 }
 
+void DecodiumLegacyBackend::setSplitMode(const QString& mode)
+{
+    if (m_mainWindow) {
+        m_mainWindow->legacySetSplitMode(mode);
+    }
+}
+
 void DecodiumLegacyBackend::setRigControlEnabled(bool enabled)
 {
     m_rigControlEnabled = enabled;

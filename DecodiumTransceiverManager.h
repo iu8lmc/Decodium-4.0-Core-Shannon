@@ -137,6 +137,7 @@ public:
 
     Q_INVOKABLE void setRigFrequency(double hz);
     Q_INVOKABLE void setRigTxFrequency(double hz);
+    Q_INVOKABLE void setRigTxFrequencyAndPtt(double hz, bool on);
     Q_INVOKABLE void setRigPtt(bool on);
     Q_INVOKABLE void setRigMode(const QString& mode);
     Q_INVOKABLE void setRigAudio(bool on, double periodSeconds = 15.0, int blockSize = 6912 / 2);

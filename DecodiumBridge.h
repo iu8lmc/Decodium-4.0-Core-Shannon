@@ -1132,6 +1132,7 @@ private:
     int effectiveTxAudioFrequencyHz() const;
     double catSplitTxDialFrequencyHz() const;
     void syncActiveCatTxSplitFrequency(const QString& reason);
+    void syncCatSplitModeToLegacy(const QString& mode, const QString& reason);
     bool checkSwrAllowsTransmission(const QString& reason);
     void enforceSwrTransmissionLimit(const QString& reason);
     void applyRemoteDialFrequency(double hz, const QString& reason);
@@ -1195,6 +1196,7 @@ private:
     bool shouldDeferManualSyncTxStart() const;
     bool tryStartDeferredManualSyncTx();
     void clearDeferredManualSyncTx(const QString& reason);
+    void ensureSyncTxSchedulerActive(const QString& reason);
     void clearAutoCqPartnerLock();
     void updateAutoCqPartnerLock();
     void restoreAutoCqPartnerLock();

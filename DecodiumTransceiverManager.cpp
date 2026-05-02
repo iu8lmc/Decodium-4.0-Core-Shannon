@@ -675,8 +675,50 @@ static QString resolvedPttPort(const DecodiumTransceiverManager* m)
 static TransceiverFactory::SplitMode parseSplit(const QString& s)
 {
     if (s == "rig")     return TransceiverFactory::split_mode_rig;
+    if (s == "fake" || s == "fake it") return TransceiverFactory::split_mode_emulate;
     if (s == "emulate") return TransceiverFactory::split_mode_emulate;
     return TransceiverFactory::split_mode_none;
+}
+
+static QString splitModeName(TransceiverFactory::SplitMode mode)
+{
+    switch (mode) {
+    case TransceiverFactory::split_mode_rig:
+        return QStringLiteral("rig");
+    case TransceiverFactory::split_mode_emulate:
+        return QStringLiteral("emulate");
+    case TransceiverFactory::split_mode_none:
+    default:
+        return QStringLiteral("none");
+    }
+}
+
+static QString splitModeNameFromLegacyValue(const QVariant& value, const QString& fallback)
+{
+    if (!value.isValid()) {
+        return fallback;
+    }
+
+    QString const text = value.toString().trimmed().toLower();
+    if (text == QStringLiteral("rig") || text == QStringLiteral("split_mode_rig")) {
+        return QStringLiteral("rig");
+    }
+    if (text == QStringLiteral("emulate")
+        || text == QStringLiteral("fake")
+        || text == QStringLiteral("fake it")
+        || text == QStringLiteral("split_mode_emulate")) {
+        return QStringLiteral("emulate");
+    }
+    if (text == QStringLiteral("none") || text == QStringLiteral("split_mode_none")) {
+        return QStringLiteral("none");
+    }
+
+    bool ok = false;
+    int const raw = value.toInt(&ok);
+    if (ok) {
+        return splitModeName(static_cast<TransceiverFactory::SplitMode>(raw));
+    }
+    return fallback;
 }
 
 static TransceiverFactory::DataBits parseData(const QString& s)
@@ -1107,8 +1149,26 @@ void DecodiumTransceiverManager::setRigTxFrequency(double hz)
 {
     m_txFrequency = hz;
     emit txFrequencyChanged();
+    d->desired.split(hz > 0.0);
     d->desired.tx_frequency(static_cast<Transceiver::Frequency>(hz));
     sendState(d.get());
+}
+
+void DecodiumTransceiverManager::setRigTxFrequencyAndPtt(double hz, bool on)
+{
+    if (hz > 0.0) {
+        if (!qFuzzyCompare(m_txFrequency + 1.0, hz + 1.0)) {
+            m_txFrequency = hz;
+            emit txFrequencyChanged();
+        }
+        d->desired.split(true);
+        d->desired.tx_frequency(static_cast<Transceiver::Frequency>(hz));
+    } else {
+        d->desired.split(false);
+        d->desired.tx_frequency(0);
+    }
+    d->desired.ptt(on);
+    sendStateSync(d.get());
 }
 
 void DecodiumTransceiverManager::setRigPtt(bool on)
@@ -1241,6 +1301,7 @@ void DecodiumTransceiverManager::loadSettings()
     if (m_pttMethod.isEmpty())
         m_pttMethod = QStringLiteral("CAT");
     m_pttPort      = normalizeDevicePath(get("pttPort",      m_pttPort).toString());
+    bool const hasModernSplitMode = s.contains(QStringLiteral("splitMode"));
     m_splitMode    = get("splitMode",    m_splitMode).toString();
     int const rawPollInterval = get("pollInterval", m_pollInterval).toInt();
     int const secondsPart = rawPollInterval & 0xffff;
@@ -1252,6 +1313,10 @@ void DecodiumTransceiverManager::loadSettings()
     // setRigName DOPO gli altri per aggiornare portType correttamente
     QString rig = get("rigName", m_rigName).toString();
     s.endGroup();
+    if (!hasModernSplitMode || m_splitMode.trimmed().isEmpty()) {
+        m_splitMode = splitModeNameFromLegacyValue(s.value(QStringLiteral("SplitMode")), m_splitMode);
+    }
+    m_splitMode = splitModeName(parseSplit(m_splitMode.trimmed().toLower()));
     setRigName(rig);
     enforceForceLineAvailability();
 }
