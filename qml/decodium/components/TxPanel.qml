@@ -157,6 +157,21 @@ Item {
     property color textSecondary: bridge.themeManager.textSecondary
     property color bgDeep: bridge.themeManager.bgDeep
     readonly property var supportedModes: engine ? engine.availableModes() : ["FT8", "FT2", "FT4", "Q65", "MSK144", "JT65", "JT9", "JT4", "FST4", "FST4W", "WSPR"]
+    readonly property real toolbarScale: Math.max(0.9, Math.min(1.12, bridge ? bridge.fontScale : 1.0))
+    readonly property int toolbarSpacing: 3
+    readonly property int toolbarButtonHeight: 32
+    readonly property int toolbarButtonWidth: 62
+    readonly property int toolbarWideButtonWidth: 70
+    readonly property int toolbarLongButtonWidth: 76
+    readonly property int toolbarModeWidth: 116
+    readonly property int toolbarLabelSize: Math.max(9, Math.round(9 * toolbarScale))
+    readonly property int toolbarGlyphSize: Math.max(12, Math.round(13 * toolbarScale))
+    readonly property int toolbarControlsWidth: toolbarModeWidth
+                                                + (toolbarButtonWidth * 8)
+                                                + (toolbarWideButtonWidth * 5)
+                                                + toolbarLongButtonWidth
+                                                + (toolbarSpacing * 15)
+    readonly property int toolbarBandWidth: Math.max(220, Math.min(520, topControlsViewport.width - toolbarControlsWidth))
 
     // State colors based on QSO progress (bridge::QSOProgress enum)
     // 0=IDLE, 1=CALLING_CQ, 2=REPLYING, 3=REPORT, 4=ROGER_REPORT, 5=SIGNOFF, 6=IDLE_QSO
@@ -241,20 +256,30 @@ Item {
             ColumnLayout {
                 id: topControlsRow
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 3
 
                 Item {
                     Layout.fillWidth: true
                     Layout.rightMargin: 36
-                    implicitHeight: topControlsFlow.height
+                    implicitHeight: topControlsViewport.height
 
-                    Flow {
-                        id: topControlsFlow
+                    Flickable {
+                        id: topControlsViewport
                         width: parent.width
-                        spacing: 4
+                        height: topControlsFlow.implicitHeight
+                        contentWidth: topControlsFlow.implicitWidth
+                        contentHeight: topControlsFlow.implicitHeight
+                        flickableDirection: Flickable.HorizontalFlick
+                        boundsBehavior: Flickable.StopAtBounds
+                        interactive: contentWidth > width
+                        clip: true
+
+                        Row {
+                            id: topControlsFlow
+                            spacing: txPanel.toolbarSpacing
 
                         Rectangle {
-                            width: Math.min(560, topControlsFlow.width)
+                            width: txPanel.toolbarBandWidth
                             height: 28
                             radius: 4
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
@@ -332,9 +357,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 136
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarModeWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
                             border.color: secondaryCyan
                             border.width: 1
@@ -351,23 +376,23 @@ Item {
                                 }
                                 onCurrentTextChanged: if (engine && currentText) engine.mode = currentText
                                 font.family: "Monospace"
-                                font.pixelSize: 14
-                                itemHeight: 40
+                                font.pixelSize: Math.max(12, Math.round(12 * txPanel.toolbarScale))
+                                itemHeight: 34
                                 popupMinWidth: 176
                                 textHorizontalAlignment: Text.AlignHCenter
-                                leftPadding: 8
-                                rightPadding: 24
-                                topPadding: 6
-                                bottomPadding: 6
+                                leftPadding: 6
+                                rightPadding: 20
+                                topPadding: 4
+                                bottomPadding: 4
                                 bgColor: "transparent"
                                 borderColor: "transparent"
                             }
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: mamBtn.checked ? Qt.rgba(255/255, 152/255, 0, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: mamBtn.checked ? warningOrange : glassBorder
                             border.width: mamBtn.checked ? 2 : 1
@@ -384,8 +409,8 @@ Item {
                                     label: "MAM"
                                     glyph: "\u21C6"
                                     foreground: mamBtn.checked ? warningOrange : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: mamBtn.checked
                                 }
                                 ToolTip.visible: hovered
@@ -401,9 +426,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: deepBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: deepBtn.checked ? accentGreen : glassBorder
                             border.width: deepBtn.checked ? 2 : 1
@@ -420,8 +445,8 @@ Item {
                                     label: "DEEP"
                                     glyph: "\u25CE"
                                     foreground: deepBtn.checked ? accentGreen : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: deepBtn.checked
                                 }
                                 ToolTip.visible: hovered
@@ -431,9 +456,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: apBtn.checked ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: apBtn.checked ? secondaryCyan : glassBorder
                             border.width: apBtn.checked ? 2 : 1
@@ -450,8 +475,8 @@ Item {
                                     label: "AP"
                                     glyph: "\u25C6"
                                     foreground: apBtn.checked ? secondaryCyan : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: apBtn.checked
                                 }
                                 ToolTip.visible: hovered
@@ -461,9 +486,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: swlBtn.checked ? Qt.rgba(156/255, 39/255, 176/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: swlBtn.checked ? "#9c27b0" : glassBorder
                             border.width: swlBtn.checked ? 2 : 1
@@ -480,8 +505,8 @@ Item {
                                     label: "SWL"
                                     glyph: "\u2609"
                                     foreground: swlBtn.checked ? "#9c27b0" : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: swlBtn.checked
                                 }
                                 ToolTip.visible: hovered
@@ -491,9 +516,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: autoSeqBtn2.checked ? primaryBlue : glassBorder
                             border.width: autoSeqBtn2.checked ? 2 : 1
@@ -510,8 +535,8 @@ Item {
                                     label: "SEQ"
                                     glyph: "\u21BB"
                                     foreground: autoSeqBtn2.checked ? primaryBlue : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: autoSeqBtn2.checked
                                 }
                                 ToolTip.visible: hovered
@@ -521,9 +546,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: qqBtn.checked ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: qqBtn.checked ? accentGreen : glassBorder
                             border.width: qqBtn.checked ? 2 : 1
@@ -540,8 +565,8 @@ Item {
                                     label: "QQ"
                                     glyph: "\u21E8"
                                     foreground: qqBtn.checked ? accentGreen : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: qqBtn.checked
                                 }
                                 ToolTip.visible: hovered
@@ -551,18 +576,17 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
-                            color: txEnableBtn.checked ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                            border.color: txEnableBtn.checked ? errorRed : glassBorder
-                            border.width: txEnableBtn.checked ? 2 : 1
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
+                            color: txEnableBtn.txActive ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                            border.color: txEnableBtn.txActive ? errorRed : glassBorder
+                            border.width: txEnableBtn.txActive ? 2 : 1
 
                             Button {
                                 id: txEnableBtn
+                                property bool txActive: engine ? engine.txEnabled : false
                                 anchors.fill: parent
-                                checkable: true
-                                checked: engine ? engine.txEnabled : false
                                 padding: 0
                                 onClicked: {
                                     if (!engine) {
@@ -570,17 +594,19 @@ Item {
                                     }
                                     if (!engine.txEnabled) {
                                         engine.txEnabled = true
+                                    } else if (engine.autoCqRepeat) {
+                                        return
                                     } else {
-                                        engine.halt()
+                                        engine.haltWithReason("qml-tx-enable-toggle")
                                     }
                                 }
                                 background: Rectangle { color: "transparent" }
                                 contentItem: ToolbarButtonContent {
                                     label: "TX"
                                     glyph: "\u25B2"
-                                    foreground: txEnableBtn.checked ? errorRed : textSecondary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    foreground: txEnableBtn.txActive ? errorRed : textSecondary
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
@@ -590,9 +616,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 78
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: holdTxFreqBtn.checked ? Qt.rgba(255/255, 193/255, 7/255, 0.25) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             border.color: holdTxFreqBtn.checked ? "#FFC107" : glassBorder
                             border.width: holdTxFreqBtn.checked ? 2 : 1
@@ -613,8 +639,8 @@ Item {
                                     label: "HOLD"
                                     glyph: holdTxFreqBtn.checked ? "\uD83D\uDD12" : "\uD83D\uDD13"
                                     foreground: holdTxFreqBtn.checked ? "#FFC107" : textSecondary
-                                    glyphSize: 14
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: holdTxFreqBtn.checked
                                 }
                                 ToolTip.visible: hovered
@@ -624,9 +650,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 82
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarWideButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
                             border.color: engine && engine.autoCqRepeat ? successGreen : Qt.alpha(textPrimary, 0.2)
                             border.width: engine && engine.autoCqRepeat ? 2 : 1
@@ -640,8 +666,8 @@ Item {
                                     label: "ACQ"
                                     glyph: "⟳"
                                     foreground: engine && engine.autoCqRepeat ? successGreen : textPrimary
-                                    glyphSize: 16
-                                    labelSize: 11
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: engine && engine.autoCqRepeat
                                 }
                                 ToolTip.visible: hovered
@@ -659,9 +685,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 84
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarWideButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             visible: engine && engine.mode !== "FT2"
                             color: engine && engine.txPeriod === 1 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.28)
                                                                    : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -677,8 +703,8 @@ Item {
                                     label: engine && engine.txPeriod === 1 ? "1ST" : "2ND"
                                     glyph: engine && engine.txPeriod === 1 ? "\u2460" : "\u2461"
                                     foreground: engine && engine.txPeriod === 1 ? primaryBlue : textPrimary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
@@ -689,9 +715,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 92
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarLongButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             visible: engine && engine.mode !== "FT2"
                             color: engine && engine.alt12Enabled ? Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.22)
                                                                  : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -707,8 +733,8 @@ Item {
                                     label: "ALT 1/2"
                                     glyph: "\u21C4"
                                     foreground: engine && engine.alt12Enabled ? warningOrange : textPrimary
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: engine && engine.alt12Enabled
                                 }
                                 ToolTip.visible: hovered
@@ -719,9 +745,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 84
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarWideButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
                             border.color: warningOrange
                             border.width: tuneButton.isTuning ? 2 : 1
@@ -736,8 +762,8 @@ Item {
                                     label: tuneButton.isTuning ? "STOP" : "TUNE"
                                     glyph: "\u266B"
                                     foreground: warningOrange
-                                    glyphSize: 15
-                                    labelSize: 10
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: true
                                 }
                                 onClicked: {
@@ -753,9 +779,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 84
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarWideButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: clearTxButton.hovered ? Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.24)
                                                          : Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.12)
                             border.color: warningOrange
@@ -771,7 +797,7 @@ Item {
                                 contentItem: ToolbarButtonContent {
                                     label: "CLEAR"
                                     foreground: warningOrange
-                                    labelSize: 11
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: true
                                 }
                                 ToolTip.visible: hovered
@@ -781,9 +807,9 @@ Item {
                         }
 
                         Rectangle {
-                            width: 84
-                            height: 36
-                            radius: 6
+                            width: txPanel.toolbarWideButtonWidth
+                            height: txPanel.toolbarButtonHeight
+                            radius: 5
                             color: haltButton.hovered || (engine && engine.transmitting)
                                    ? Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.92)
                                    : Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.78)
@@ -799,11 +825,11 @@ Item {
                                     label: "HALT"
                                     glyph: "\u25A0"
                                     foreground: "#FFF8F6"
-                                    glyphSize: 14
-                                    labelSize: 11
+                                    glyphSize: txPanel.toolbarGlyphSize
+                                    labelSize: txPanel.toolbarLabelSize
                                     boldLabel: true
                                 }
-                                onClicked: if (engine) engine.halt()
+                                onClicked: if (engine) engine.haltWithReason("qml-halt-button")
                                 ToolTip.visible: hovered
                                 ToolTip.text: qsTr("Halt TX")
                                 ToolTip.delay: 500
@@ -823,6 +849,7 @@ Item {
                             ToolTip.delay: 400
                         }
 
+                        }
                     }
                 }
             }

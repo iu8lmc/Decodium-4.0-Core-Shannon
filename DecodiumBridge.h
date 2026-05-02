@@ -697,6 +697,7 @@ public slots:
     Q_INVOKABLE void stopTune();
     Q_INVOKABLE bool openAllTxtFolder() const;
     Q_INVOKABLE void halt();           // ferma TX e Tune immediatamente
+    Q_INVOKABLE void haltWithReason(const QString& reason);
     Q_INVOKABLE void logQso();
     Q_INVOKABLE void confirmLogQso();
     Q_INVOKABLE void rejectPromptedLogQso();
@@ -1175,8 +1176,12 @@ private:
     void removeCallerFromQueue(const QString& call);
     QString activeMamCallerBase() const;
     void removeActiveMamCallerFromQueue(const QString& reason);
-    void maybeEnqueueMamCallerFromMessage(const QString& message, int freq = -1, int snr = -99);
-    void maybeEnqueueMamCallerFromDecode(const QStringList& fields);
+    void maybeEnqueueMamCallerFromMessage(const QString& message,
+                                          int freq = -1,
+                                          int snr = -99,
+                                          bool markCompletedSignoff = false);
+    void maybeEnqueueMamCallerFromDecode(const QStringList& fields,
+                                         bool markCompletedSignoff = false);
     void clearNextLogClusterSpotOverride();
     QString inferredPartnerForAutolog() const;
     QString pskReporterProgramInfo() const;
@@ -1192,6 +1197,7 @@ private:
     void clearLateAutoLogSnapshot();
     void engageManualTxHold(const QString& reason, bool clearQueue = false);
     void clearManualTxHold(const QString& reason);
+    void resetManualTxRearmState(const QString& reason);
     bool usesDeferredManualSyncTx() const;
     bool shouldDeferManualSyncTxStart() const;
     bool tryStartDeferredManualSyncTx();
@@ -1344,7 +1350,7 @@ private:
     QStringList m_pskSearchBands {"160m","80m","40m","20m","15m","10m"};
     bool        m_pskReporterEnabled {false};
     int         m_ftThreads {3};
-    double m_fontScale {1.0};
+    double m_fontScale {1.08};
     int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
     int m_specialOperationActivity {0};
     bool m_forceLegacyTxForSpecialOp {false};
@@ -1449,7 +1455,9 @@ private:
     bool               m_rxAudioSuspendedForTx {false};
     bool               m_spectrumTimerPausedForTx {false};
     qint64             m_txPlaybackHoldUntilMs {0};
+    qint64             m_txPlaybackHardDeadlineMs {0};
     bool               m_txPlaybackReleasePending {false};
+    bool               m_txAudioRestartPending {false};
     qint64             m_audioUnhealthyStartMs {0};
     qint64             m_lastAudioWatchdogRestartMs {0};
     qint64             m_lastAudioWatchdogLogMs {0};
@@ -1463,6 +1471,7 @@ private:
         bool tciAudio {false};
         QString outputDeviceName;
         QString outputDeviceDescription;
+        int outputChannel {0};
         QAudioFormat outputFormat;
         QVector<float> wave;
         QByteArray pcm;
@@ -1499,6 +1508,7 @@ private:
     QString m_lastAutoSeqKey;      // deduplicazione autoSequenceStep
     qint64  m_lastAutoSeqMs {0};   // timestamp ultima deduplicazione
     QString m_lastTransmittedMessage;
+    QString m_autoSeqRogerReportBase;
     int     m_activeTxNumber {0};
     QString m_activeTxMessage;
     QDateTime m_lastTxActivityUtc;

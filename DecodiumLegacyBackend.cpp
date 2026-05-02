@@ -702,6 +702,11 @@ bool DecodiumLegacyBackend::monitoring() const
     return m_mainWindow && m_mainWindow->legacyMonitoring();
 }
 
+bool DecodiumLegacyBackend::txEnabled() const
+{
+    return m_mainWindow && m_mainWindow->legacyTxEnabled();
+}
+
 bool DecodiumLegacyBackend::transmitting() const
 {
     return m_mainWindow && m_mainWindow->legacyTransmitting();

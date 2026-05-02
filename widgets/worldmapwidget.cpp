@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFontMetricsF>
+#include <QGuiApplication>
 #include <QLineF>
 #include <QLinearGradient>
 #include <QPainter>
@@ -156,6 +157,25 @@ QString formatDistanceLabel(double distanceKm, bool miles)
   double const value = miles ? distanceKm * 0.621371192 : distanceKm;
   int const rounded = qMax(0, qRound(value));
   return QStringLiteral("%1 %2").arg(rounded).arg(miles ? QStringLiteral("mi") : QStringLiteral("km"));
+}
+
+QFont liveMapFont()
+{
+  QFont font = QGuiApplication::font();
+  if (font.pixelSize() > 0)
+    {
+      font.setPixelSize(qBound(10, font.pixelSize(), 12));
+    }
+  else
+    {
+      double pointSize = font.pointSizeF();
+      if (pointSize <= 0.0)
+        {
+          pointSize = 9.0;
+        }
+      font.setPointSizeF(qBound(8.0, pointSize, 9.5));
+    }
+  return font;
 }
 }
 
@@ -532,6 +552,7 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
   QPainter painter {this};
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.setRenderHint(QPainter::TextAntialiasing, true);
+  painter.setFont(liveMapFont());
 
   QRectF frame = rect().adjusted(3, 3, -3, -3);
   QLinearGradient borderGradient {frame.topLeft(), frame.bottomLeft()};
@@ -1222,7 +1243,8 @@ void WorldMapWidget::drawContact(QPainter * painter, QRectF const& bounds, Conta
                 }
             }
           QFontMetricsF fm {labelFont};
-          QRectF textRect {label + QPointF(-2.0, -12.0), QSizeF(fm.horizontalAdvance(text) + 6.0, 14.0)};
+          QRectF textRect {label + QPointF(-2.0, -fm.ascent() - 2.0),
+                           QSizeF(fm.horizontalAdvance(text) + 6.0, fm.height() + 4.0)};
           bool blocked = false;
           for (auto const& used : *usedLabelAreas)
             {
@@ -1493,7 +1515,8 @@ void WorldMapWidget::drawContact(QPainter * painter, QRectF const& bounds, Conta
             }
         }
       QFontMetricsF fm {labelFont};
-      QRectF textRect {label + QPointF(-2.0, -12.0), QSizeF(fm.horizontalAdvance(text) + 6.0, 14.0)};
+      QRectF textRect {label + QPointF(-2.0, -fm.ascent() - 2.0),
+                       QSizeF(fm.horizontalAdvance(text) + 6.0, fm.height() + 4.0)};
       bool blocked = false;
       for (auto const& used : *usedLabelAreas)
         {

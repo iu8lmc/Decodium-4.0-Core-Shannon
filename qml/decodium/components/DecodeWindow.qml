@@ -360,16 +360,19 @@ Window {
 	                || callsignBase(item.dxCallsign || "") === activeBase
 	        }
 
+	        var myBase = callsignBase(appEngine.callsign || "")
+	        var message = item.message || ""
+	        var myMatch = item.isMyCall === true
+	            || messageContainsCallBase(message, myBase)
+	        if (myMatch)
+	            return true
+
 	        if (activeBase.length === 0)
 	            return isAtRxFrequency(item.freq || "0", item)
 
-	        var myBase = callsignBase(appEngine.callsign || "")
-	        var message = item.message || ""
 	        var activeMatch = messageContainsCallBase(message, activeBase)
 	            || callsignBase(item.fromCall || "") === activeBase
 	            || callsignBase(item.dxCallsign || "") === activeBase
-	        var myMatch = item.isMyCall === true
-	            || messageContainsCallBase(message, myBase)
 	        return activeMatch && myMatch
 	    }
 
@@ -582,7 +585,7 @@ Window {
                                     font.pixelSize: 10
                                     font.bold: true
                                     color: secondaryCyan
-                                    horizontalAlignment: Text.AlignHCenter
+                                    horizontalAlignment: Text.AlignRight
                                     verticalAlignment: Text.AlignVCenter
                                 }
                             }
@@ -597,7 +600,7 @@ Window {
                                     font.pixelSize: 10
                                     font.bold: true
                                     color: secondaryCyan
-                                    horizontalAlignment: Text.AlignHCenter
+                                    horizontalAlignment: Text.AlignRight
                                     verticalAlignment: Text.AlignVCenter
                                 }
                             }
@@ -654,7 +657,7 @@ Window {
                             }
 
                             delegate: Rectangle {
-                                width: bandActivityList.width - 12
+                                width: bandActivityList.width
                                 height: 26
                                 // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
                                 color: {
@@ -804,7 +807,7 @@ Window {
                                             font.family: "Monospace"
                                             font.pixelSize: 11
                                             color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
-                                            horizontalAlignment: Text.AlignHCenter
+                                            horizontalAlignment: Text.AlignRight
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideNone
                                             fontSizeMode: Text.HorizontalFit
@@ -823,7 +826,7 @@ Window {
                                             font.family: "Monospace"
                                             font.pixelSize: 11
                                             color: secondaryCyan
-                                            horizontalAlignment: Text.AlignHCenter
+                                            horizontalAlignment: Text.AlignRight
                                             verticalAlignment: Text.AlignVCenter
                                         }
                                     }

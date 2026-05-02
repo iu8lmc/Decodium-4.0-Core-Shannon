@@ -38,6 +38,7 @@ public:
     bool alt12Enabled() const;
     bool txFirst() const;
     bool monitoring() const;
+    bool txEnabled() const;
     bool transmitting() const;
     bool tuning() const;
     bool catConnected() const;

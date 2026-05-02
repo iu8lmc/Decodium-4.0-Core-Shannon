@@ -205,6 +205,7 @@ private:
     std::unique_ptr<DecodiumTransceiverManagerPrivate> d;
 
     bool    m_connected    {false};
+    bool    m_connecting   {false};
     QString m_rigName      {"None"};   // "None" = Hamlib Dummy (basic_transceiver_name_)
     QString m_serialPort   {"COM3"};
     int     m_baudRate     {57600};

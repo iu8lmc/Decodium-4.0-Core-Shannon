@@ -180,6 +180,7 @@ public:
   int legacyRxInputLevel() const;
   QString legacyWaterfallPalette() const;
   bool legacyMonitoring() const;
+  bool legacyTxEnabled() const;
   bool legacyTransmitting() const;
   bool legacyTuning() const;
   bool legacyCatConnected() const;
@@ -1345,6 +1346,7 @@ private:
   QTimer ptt1Timer;                 //StartTx delay
   QTimer ptt0Timer;                 //StopTx delay
   QTimer logQSOTimer;
+  bool m_logQsoTriggeredByTimer {false};
   QTimer killFileTimer;
   QTimer tuneButtonTimer;
   QTimer uploadTimer;

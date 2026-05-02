@@ -1465,12 +1465,23 @@ namespace
       return false;
     }
 
-    if (ft2_word_matches_my_call (msg_parts.at (0), my_call, my_base)) {
+    auto first = msg_parts.at (0).trimmed ().toUpper ();
+    first.remove (QChar {'<'});
+    first.remove (QChar {'>'});
+    if (ft2_word_matches_my_call (first, my_call, my_base)) {
+      return true;
+    }
+
+    if (msg_parts.size () > 1
+        && first != "CQ"
+        && first != "QRZ"
+        && first != "DE"
+        && ft2_word_matches_my_call (msg_parts.at (1), my_call, my_base)) {
       return true;
     }
 
     return msg_parts.size () > 1
-        && msg_parts.at (0) == "DE"
+        && first == "DE"
         && ft2_word_matches_my_call (msg_parts.at (1), my_call, my_base);
   }
 
@@ -1499,6 +1510,35 @@ namespace
     token.remove (QChar {'<'});
     token.remove (QChar {'>'});
     return token.trimmed ();
+  }
+
+  bool message_contains_call_base (QString const& message, QString const& call_base)
+  {
+    auto const wantedBase = Radio::base_callsign (call_base).trimmed ().toUpper ();
+    if (wantedBase.isEmpty ()) {
+      return false;
+    }
+
+    auto const parts = message.split (' ', SkipEmptyParts);
+    for (auto const& part : parts) {
+      auto const tokenBase = Radio::base_callsign (normalize_call_token (part)).trimmed ().toUpper ();
+      if (tokenBase == wantedBase) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool roger_report_token (QString const& token)
+  {
+    static QRegularExpression const reportRx {R"(^R[+-]\d{1,2}$)"};
+    return reportRx.match (normalize_call_token (token).trimmed ().toUpper ()).hasMatch ();
+  }
+
+  bool signoff_token (QString const& token)
+  {
+    auto const upper = normalize_call_token (token).trimmed ().toUpper ();
+    return upper == "73" || upper == "RR73" || upper == "RRR";
   }
 
   bool placeholder_exchange_token (QString const& token)
@@ -3630,7 +3670,11 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect(&p1Timer, &QTimer::timeout, this, &MainWindow::startWsprDecode);
 
   logQSOTimer.setSingleShot(true);
-  connect(&logQSOTimer, &QTimer::timeout, this, &MainWindow::on_logQSOButton_clicked);
+  connect(&logQSOTimer, &QTimer::timeout, this, [this] {
+    m_logQsoTriggeredByTimer = true;
+    on_logQSOButton_clicked ();
+    m_logQsoTriggeredByTimer = false;
+  });
 
   tuneButtonTimer.setSingleShot(true);
   connect(&tuneButtonTimer, &QTimer::timeout, this, &MainWindow::end_tuning);
@@ -4456,6 +4500,14 @@ QString MainWindow::legacyWaterfallPalette() const
 bool MainWindow::legacyMonitoring() const
 {
   return m_monitoring;
+}
+
+bool MainWindow::legacyTxEnabled() const
+{
+  if (ui && ui->autoButton && ui->autoButton->isChecked()) {
+    return true;
+  }
+  return m_auto || m_autoButtonState;
 }
 
 bool MainWindow::legacyTransmitting() const
@@ -14917,9 +14969,58 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
   }
   bool const is_73 = payload_is_73 (wUpper);
   bool const ft2QuickTu = is_ft2_quick_tu_message (wUpper, m_mode);
-  auto const activePartnerCallForGate = (!m_hisCall.trimmed ().isEmpty ()
-                                         ? m_hisCall
-                                         : ui->dxCallEntry->text ()).trimmed ().toUpper ();
+  bool const ftDirectedResponseMode =
+      m_mode == "FT2" || m_mode == "FT4" || m_mode == "FT8";
+  auto activePartnerCallForGate = (!m_hisCall.trimmed ().isEmpty ()
+                                   ? m_hisCall
+                                   : ui->dxCallEntry->text ()).trimmed ().toUpper ();
+  if (activePartnerCallForGate.isEmpty ()
+      && m_autoCQ
+      && m_QSOProgress > CALLING
+      && !m_autoCqLockedCall.trimmed ().isEmpty ()) {
+    activePartnerCallForGate = m_autoCqLockedCall.trimmed ().toUpper ();
+  }
+  auto const activePartnerBaseForGate = Radio::base_callsign (activePartnerCallForGate).trimmed ().toUpper ();
+  auto const payloadWord0ForGate = normalize_call_token (wUpper.value (0)).trimmed ().toUpper ();
+  auto const payloadWord1ForGate = normalize_call_token (wUpper.value (1)).trimmed ().toUpper ();
+  bool const payloadWord0IsMineForGate =
+      ft2_word_matches_my_call (payloadWord0ForGate, m_config.my_callsign ().trimmed ().toUpper (), myBaseEffective);
+  bool const payloadWord1IsMineForGate =
+      ft2_word_matches_my_call (payloadWord1ForGate, m_config.my_callsign ().trimmed ().toUpper (), myBaseEffective);
+  int const payloadPartnerIndexForGate =
+      payloadWord0ForGate == "DE" ? 2 : (payloadWord0IsMineForGate ? 1 : (payloadWord1IsMineForGate ? 0 : 1));
+  int const payloadReportIndexForGate =
+      payloadWord0ForGate == "DE" ? 3 : 2;
+  auto const payloadPartnerBaseForGate =
+      Radio::base_callsign (normalize_call_token (wUpper.value (payloadPartnerIndexForGate))).trimmed ().toUpper ();
+  bool const ft2DirectedResponseToMeForGate =
+      ftDirectedResponseMode
+      && wUpper.size () > payloadReportIndexForGate
+      && !payloadPartnerBaseForGate.isEmpty ()
+      && payloadPartnerBaseForGate != myBaseEffective
+      && ft2_payload_targets_my_call (wUpper, m_config.my_callsign ().trimmed ().toUpper (), myBaseEffective)
+      && (roger_report_token (wUpper.value (payloadReportIndexForGate))
+          || signoff_token (wUpper.value (payloadReportIndexForGate)));
+  bool const payloadPartnerMatchesActiveQsoForGate =
+      !payloadPartnerBaseForGate.isEmpty ()
+      && ((!activePartnerBaseForGate.isEmpty () && payloadPartnerBaseForGate == activePartnerBaseForGate)
+          || message_contains_call_base (m_currentMessage, payloadPartnerBaseForGate)
+          || message_contains_call_base (m_lastMessageSent, payloadPartnerBaseForGate)
+          || ft2DirectedResponseToMeForGate);
+  bool const ft2DirectedRogerReportFromActivePartner =
+      ftDirectedResponseMode
+      && wUpper.size () > payloadReportIndexForGate
+      && ft2_payload_targets_my_call (wUpper, m_config.my_callsign ().trimmed ().toUpper (), myBaseEffective)
+      && payloadPartnerMatchesActiveQsoForGate
+      && roger_report_token (wUpper.value (payloadReportIndexForGate));
+  bool const ft2DirectedSignoffFromActivePartner =
+      ftDirectedResponseMode
+      && wUpper.size () > payloadReportIndexForGate
+      && ft2_payload_targets_my_call (wUpper, m_config.my_callsign ().trimmed ().toUpper (), myBaseEffective)
+      && payloadPartnerMatchesActiveQsoForGate
+      && signoff_token (wUpper.value (payloadReportIndexForGate));
+  bool const ft2DirectedResponseFromActivePartner =
+      ft2DirectedRogerReportFromActivePartner || ft2DirectedSignoffFromActivePartner;
   bool const compoundDirectedExchange =
       directed_partner_exchange_payload (w,
                                          m_config.my_callsign ().trimmed ().toUpper (),
@@ -14947,13 +15048,17 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     }
     // Auto CQ caller queue: intercept messages directed to us from OTHER stations
     // while we're already in an active QSO — queue them for later processing
-    if (m_autoCQ && m_auto && m_QSOProgress > CALLING && m_QSOProgress < SIGNOFF) {
+    if (m_autoCQ && m_auto && m_QSOProgress > CALLING && m_QSOProgress < SIGNOFF
+        && !ft2DirectedResponseToMeForGate) {
       if ((!myBaseEffective.isEmpty () && message_words.at (2).contains (myBaseEffective))
           || message_words.at (2).contains (m_config.my_callsign ())) {
         QString newCaller;
         QString grid;
         message.deCallAndGrid (newCaller, grid);
-        if (!newCaller.isEmpty () && newCaller != m_hisCall
+        auto const newCallerBase = Radio::base_callsign (newCaller).trimmed ().toUpper ();
+        if (!newCallerBase.isEmpty ()
+            && newCallerBase != activePartnerBaseForGate
+            && newCaller != m_hisCall
             && newCaller != Radio::base_callsign (ui->dxCallEntry->text ())) {
           enqueueCaller (newCaller, message.frequencyOffset (), message.snr (), message.dt ());
           return;
@@ -15139,7 +15244,7 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
       return;
     }
     bool const ft2ImmediateDirectedReply =
-        (m_mode == "FT2")
+        ftDirectedResponseMode
         && m_auto
         && m_bCallingCQ
         && !m_bAutoReply
@@ -15176,7 +15281,8 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
             || (signoffRetryWindowOpen && payload_partner_exchange)
             || (m_QSOProgress >= REPORT
                 && from_active_partner_effective
-                && payload_partner_exchange));
+                && payload_partner_exchange)
+            || ft2DirectedResponseFromActivePartner);
     bool const callingReplyMatch =
         m_bCallingCQ && (m_bAutoReply || calling_reply_eligible)
         && (caller_selection_open || from_active_partner_effective)
@@ -15220,7 +15326,7 @@ void MainWindow::auto_sequence (DecodedText const& message, unsigned start_toler
     if (m_auto             // transmit allowed
                //avt 10/2/25
                && (ft2AutoSeqEnabled () || legacyAutoSeqEnabled ()) // auto-sequencing allowed
-               && (activeQsoReplyMatch || callingReplyMatch)) {
+               && (activeQsoReplyMatch || callingReplyMatch || ft2DirectedResponseToMeForGate)) {
       if(SpecOp::FOX != m_specOp){
         if (m_autoCQ && m_QSOProgress > CALLING && !from_active_partner_effective) {
           // Keep partner lock during an active AutoCQ QSO: queue other callers
@@ -16135,11 +16241,18 @@ void MainWindow::guiUpdate()
       m_currentMessageType = -1;
     }
     if(m_restart) {
-      write_all("Tx",m_currentMessage);
-      if (m_config.TX_messages () and m_mode!="Echo") {
-        secondaryDecodeView()->displayTransmittedText(m_currentMessage.trimmed(),m_mode,
-              ui->TxFreqSpinBox->value(),m_bFastMode,m_TRperiod,m_config.superFox());
-        }
+      bool const restartChangesPayload =
+          m_currentMessage.trimmed () != m_lastMessageSent.trimmed ();
+      if (restartChangesPayload) {
+        write_all("Tx",m_currentMessage);
+        if (m_config.TX_messages () and m_mode!="Echo") {
+          secondaryDecodeView()->displayTransmittedText(m_currentMessage.trimmed(),m_mode,
+                ui->TxFreqSpinBox->value(),m_bFastMode,m_TRperiod,m_config.superFox());
+          }
+      } else {
+        debugToFile (QString {"txRestart duplicate payload suppressed mode:%1 msg:%2"}
+                       .arg (m_mode, m_currentMessage.trimmed ()));
+      }
     }
 
     auto t2 = QDateTime::currentDateTimeUtc ().toString ("hhmm");
@@ -17722,27 +17835,83 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   bool const wait_lock_enabled = m_config.Wait_features_enabled ()
                                  && ui->cbAutoSeq
                                  && ui->cbAutoSeq->isChecked ();
+  auto const my_call_upper = m_config.my_callsign ().trimmed ().toUpper ();
+  auto const my_base_upper = m_baseCall.trimmed ().toUpper ();
+  auto const payload_word_0 = nw > 0 ? normalize_call_token (w.at (0)).trimmed ().toUpper () : QString {};
+  auto const payload_word_1 = nw > 1 ? normalize_call_token (w.at (1)).trimmed ().toUpper () : QString {};
+  auto const payload_word_2 = nw > 2 ? normalize_call_token (w.at (2)).trimmed ().toUpper () : QString {};
+  bool const payload_word_0_is_mine =
+      ft2_word_matches_my_call (payload_word_0, my_call_upper, my_base_upper);
+  bool const payload_word_1_is_mine =
+      ft2_word_matches_my_call (payload_word_1, my_call_upper, my_base_upper);
+  bool const payload_directed_to_me =
+      payload_word_0_is_mine
+      || payload_word_1_is_mine
+      || (payload_word_0 == "DE"
+          && ft2_word_matches_my_call (payload_word_1, my_call_upper, my_base_upper));
+  auto const payload_partner_token =
+      payload_word_0 == "DE" ? payload_word_2
+                              : (payload_word_0_is_mine ? payload_word_1
+                                                        : (payload_word_1_is_mine ? payload_word_0
+                                                                                  : payload_word_1));
+  auto const payload_report_token =
+      payload_word_0 == "DE"
+          ? (nw > 3 ? normalize_call_token (w.at (3)).trimmed ().toUpper () : QString {})
+          : payload_word_2;
+  auto const payload_partner_base =
+      Radio::base_callsign (payload_partner_token).trimmed ().toUpper ();
+  bool const ftDirectedResponseMode =
+      m_mode == "FT2" || m_mode == "FT4" || m_mode == "FT8";
+  bool const ft2_directed_response_to_me =
+      ftDirectedResponseMode
+      && payload_directed_to_me
+      && !payload_partner_base.isEmpty ()
+      && payload_partner_base != my_base_upper
+      && (roger_report_token (payload_report_token)
+          || signoff_token (payload_report_token));
+  if (payload_directed_to_me
+      && !payload_partner_base.isEmpty ()
+      && payload_partner_base != my_base_upper
+      && (ft2_directed_response_to_me
+          || qso_partner_base_call.isEmpty ()
+          || qso_partner_base_call == my_base_upper
+          || message_contains_call_base (m_currentMessage, payload_partner_base)
+          || message_contains_call_base (m_lastMessageSent, payload_partner_base))) {
+    qso_partner_base_call = payload_partner_base;
+  }
   bool const lock_active_qso = m_auto
                                && wait_lock_enabled
                                && m_QSOProgress >= REPLYING
                                && m_QSOProgress <= SIGNOFF
                                && !manual_partner_override
                                && !qso_partner_base_call.isEmpty ();
-  auto const my_call_upper = m_config.my_callsign ().trimmed ().toUpper ();
-  auto const my_base_upper = m_baseCall.trimmed ().toUpper ();
-  auto const payload_word_0 = nw > 0 ? normalize_call_token (w.at (0)).trimmed ().toUpper () : QString {};
-  auto const payload_word_1 = nw > 1 ? normalize_call_token (w.at (1)).trimmed ().toUpper () : QString {};
-  auto const payload_word_2 = nw > 2 ? normalize_call_token (w.at (2)).trimmed ().toUpper () : QString {};
-  bool const payload_directed_to_me =
-      ft2_word_matches_my_call (payload_word_0, my_call_upper, my_base_upper)
-      || (payload_word_0 == "DE"
-          && ft2_word_matches_my_call (payload_word_1, my_call_upper, my_base_upper));
-  auto const payload_partner_token =
-      payload_word_0 == "DE" ? payload_word_2 : payload_word_1;
-  auto const payload_report_token =
-      payload_word_0 == "DE"
-          ? (nw > 3 ? normalize_call_token (w.at (3)).trimmed ().toUpper () : QString {})
-          : payload_word_2;
+  auto ensureDirectedFt2PartnerMessages = [&] {
+    if (!ft2_directed_response_to_me || payload_partner_token.trimmed ().isEmpty ()) {
+      return;
+    }
+
+    auto const partnerCall = payload_partner_token.trimmed ().toUpper ();
+    auto const partnerBase = Radio::base_callsign (partnerCall).trimmed ().toUpper ();
+    if (partnerBase.isEmpty ()) {
+      return;
+    }
+
+    if (Radio::base_callsign (ui->dxCallEntry->text ()).trimmed ().toUpper () != partnerBase) {
+      QSignalBlocker const callBlocker {ui->dxCallEntry};
+      ui->dxCallEntry->setText (partnerCall);
+    }
+    m_hisCall = partnerCall;
+    m_hisCall0 = partnerCall;
+
+    auto const lockedBase = Radio::base_callsign (m_autoCqLockedCall).trimmed ().toUpper ();
+    if (!m_autoCqLockedGrid.trimmed ().isEmpty () && lockedBase == partnerBase) {
+      QSignalBlocker const gridBlocker {ui->dxGridEntry};
+      ui->dxGridEntry->setText (m_autoCqLockedGrid.trimmed ().toUpper ());
+      m_hisGrid = m_autoCqLockedGrid.trimmed ().toUpper ();
+    }
+
+    genStdMsgs (QString::number (ui->rptSpinBox->value ()));
+  };
   bool const directed_to_me = payload_directed_to_me || (message_words.size () > 3
                               && (message_words.at (2).contains (m_baseCall)
                                   || message_words.at (2).contains (m_config.my_callsign ())
@@ -17765,6 +17934,12 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
           hisgrid = ui->dxGridEntry->text ().trimmed ().toUpper ();
         }
     }
+  if (directed_to_me
+      && !payload_partner_base.isEmpty ()
+      && payload_partner_base != my_base_upper
+      && Radio::is_callsign (payload_partner_base)) {
+    hiscall = payload_partner_token;
+  }
   auto base_call = Radio::base_callsign (hiscall).trimmed ().toUpper ();
   bool const qso_partner_matched = message_words.size () > 3
                                    && !qso_partner_base_call.isEmpty ()
@@ -17960,7 +18135,104 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     }
 
     bool bContestOK=(m_mode=="FT2" or m_mode=="FT4" or m_mode=="FT8" or m_mode=="Q65" or m_mode=="MSK144");
-    if(message_words.size () > 4   // enough fields for a normal message
+    auto const directedResponsePartnerBase =
+        Radio::base_callsign (normalize_call_token (payload_partner_token)).trimmed ().toUpper ();
+    bool const directedResponsePartnerMatchesActiveQso =
+        !qso_partner_base_call.isEmpty ()
+        && (directedResponsePartnerBase == qso_partner_base_call
+            || base_call == qso_partner_base_call
+            || qso_partner_matched
+            || placeholder_partner_reply
+            || ft2_directed_response_to_me);
+    bool const directedRogerReportForActiveQso =
+        ftDirectedResponseMode
+        && directed_to_me
+        && roger_report_token (payload_report_token)
+        && directedResponsePartnerMatchesActiveQso;
+    bool const directedSignoffForActiveQso =
+        ftDirectedResponseMode
+        && directed_to_me
+        && signoff_token (payload_report_token)
+        && directedResponsePartnerMatchesActiveQso;
+    if (directedSignoffForActiveQso) {
+      auto const currentMessagePartsForSignoff = m_currentMessage.split (' ', SkipEmptyParts);
+      auto const lastMessagePartsForSignoff = m_lastMessageSent.split (' ', SkipEmptyParts);
+      auto containsSignoffToken = [] (QStringList const& parts) {
+        for (auto const& part : parts) {
+          if (signoff_token (part)) {
+            return true;
+          }
+        }
+        return false;
+      };
+      bool const localSignoffAlreadySent =
+          (m_nTx73 > 0)
+          || containsSignoffToken (currentMessagePartsForSignoff)
+          || containsSignoffToken (lastMessagePartsForSignoff)
+          || message_is_73 (m_currentMessageType, currentMessagePartsForSignoff)
+          || message_is_73 (m_lastMessageType, lastMessagePartsForSignoff);
+      auto const signoff = normalize_call_token (payload_report_token).trimmed ().toUpper ();
+      if (signoff == "RR73") {
+        m_dateTimeRcvdRR73 = QDateTime::currentDateTimeUtc ();
+      }
+      bool const profileNeedsOwn73BeforeLog =
+          ((m_mode == "FT2"
+            && m_ft2QsoMessageProfile == Ft2QsoMessageProfile::Full5)
+           || ((m_mode == "FT8" || m_mode == "FT4")
+               && m_specOp == SpecOp::NONE));
+      m_txRetryCount = 0;
+      m_lastNtx = -1;
+      m_cqRetryCount = 0;
+      m_bTUmsg = false;
+      m_nextCall.clear ();
+      ensureDirectedFt2PartnerMessages ();
+      if (profileNeedsOwn73BeforeLog && !localSignoffAlreadySent) {
+        m_ft2DeferredLogPending = false;
+        m_nTx73 = 0;
+        m_logAfterOwn73 = true;
+        setTxMsg (5);
+        m_QSOProgress = SIGNOFF;
+        m_bCallingCQ = false;
+        m_bAutoReply = true;
+        debugToFile (QString {"processMess  FT directed signoff -> TX5 msg:%1"}
+                       .arg (payload_no_brackets.trimmed ()));
+      } else {
+        if (m_ft2DeferredLogPending) {
+          m_ft2DeferredLogPending = false;
+          m_nTx73 = 0;
+        }
+        if (m_config.prompt_to_log() || m_config.autoLog() || m_autoCQ) {
+          if (!is_externalCtrlMode()) {
+            if (m_mode == "FT2" || m_autoCQ) capturePendingAutoLogSnapshot ();
+            if (!logQSOTimer.isActive ()) logQSOTimer.start (0);
+          }
+        } else {
+          cease_auto_Tx_after_QSO ();
+        }
+        m_QSOProgress = SIGNOFF;
+        m_ntx = 6;
+        ui->txrb6->setChecked (true);
+        debugToFile (QString {"processMess  FT directed signoff -> log msg:%1"}
+                       .arg (payload_no_brackets.trimmed ()));
+      }
+    } else if (directedRogerReportForActiveQso) {
+      QString const report = normalize_call_token (payload_report_token).trimmed ().toUpper ().mid (1);
+      ensureDirectedFt2PartnerMessages ();
+      m_rptRcvd = report;
+      m_txRetryCount = 0;
+      m_lastNtx = -1;
+      m_cqRetryCount = 0;
+      m_nTx73 = 0;
+      m_logAfterOwn73 = false;
+      m_ft2DeferredLogPending = false;
+      m_ft2QuickPeerSignaled = false;
+      setTxMsg (4);
+      m_QSOProgress = ROGERS;
+      m_bCallingCQ = false;
+      m_bAutoReply = true;
+      debugToFile (QString {"processMess  FT directed R-report -> TX4 msg:%1 rpt:%2"}
+                     .arg (payload_no_brackets.trimmed (), report));
+    } else if(message_words.size () > 4   // enough fields for a normal message
        && (message_words.at(2).contains(m_baseCall) || "DE" == message_words.at(2))
        && (qso_partner_matched or m_bDoubleClicked
            or bEU_VHF_w2 or (m_QSOProgress==CALLING))) {
@@ -19320,13 +19592,13 @@ void MainWindow::clearDX ()
     return;
   }
   // Auto CQ con coda vuota: torna a CQ (Tx6)
-	  if ((kEnableAutoCqCallerQueue || m_bDXpedMode)
-	      && m_autoCQ && m_callerQueue.isEmpty ()) {
-	    setTxMsg (6);
-	    m_QSOProgress = CALLING;
-	    m_bCallingCQ = true;
-	    debugAutoCq ("cleardx-return-cq", QString {"previous:%1"}.arg (previousMapCall.trimmed ().toUpper ()));
-	  }
+  if ((kEnableAutoCqCallerQueue || m_bDXpedMode)
+      && m_autoCQ && m_callerQueue.isEmpty ()) {
+    setTxMsg (6);
+    m_QSOProgress = CALLING;
+    m_bCallingCQ = true;
+    debugAutoCq ("cleardx-return-cq", QString {"previous:%1"}.arg (previousMapCall.trimmed ().toUpper ()));
+  }
   if (m_QSOProgress != CALLING && !m_autoCQ) {
     auto_tx_mode (false);
   }
@@ -20525,11 +20797,14 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   auto const currentTxIs73 =
       message_is_73 (m_currentMessageType,
                      m_currentMessage.split (' ', SkipEmptyParts));
+  bool const logTriggeredByTimer = m_logQsoTriggeredByTimer;
   bool const shouldStopAfterLoggedSignoff =
       !m_autoCQ
       && !m_bDXpedMode
       && (currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF);
-  if (m_autoCQ && !m_pendingAutoLogValid && currentTxIs73) {
+  if ((m_autoCQ || logTriggeredByTimer)
+      && !m_pendingAutoLogValid
+      && (currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF)) {
     // Recovery path: after deferred RR73 retries, call context can be missing in m_hisCall.
     capturePendingAutoLogSnapshot ();
   }
@@ -20556,7 +20831,9 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
   QString logXRcvd = m_xRcvd;
   QDateTime logDateTimeQSOOn = m_dateTimeQSOOn;
   Frequency logDialFreq = m_freqNominal + ui->TxFreqSpinBox->value();
-  if (m_autoCQ && m_pendingAutoLogValid) {
+
+  auto applyPendingAutoLogSnapshot = [&] {
+    if (!m_pendingAutoLogValid || m_pendingAutoLogCall.trimmed ().isEmpty ()) return false;
     logHisCall = m_pendingAutoLogCall;
     if (!m_pendingAutoLogGrid.isEmpty()) logHisGrid = m_pendingAutoLogGrid;
     if (!m_pendingAutoLogRptSent.isEmpty()) logRptSent = m_pendingAutoLogRptSent;
@@ -20565,23 +20842,49 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     if (!m_pendingAutoLogXRcvd.isEmpty()) logXRcvd = m_pendingAutoLogXRcvd;
     if (m_pendingAutoLogOn.isValid()) logDateTimeQSOOn = m_pendingAutoLogOn;
     if (m_pendingAutoLogDialFreq > 0) logDialFreq = m_pendingAutoLogDialFreq;
+    return true;
+  };
+
+  auto applyLateAutoLogSnapshot = [&] {
+    if (!m_lateAutoLogValid || m_lateAutoLogCall.trimmed ().isEmpty ()) return false;
+    if (m_lateAutoLogExpires.isValid ()
+        && QDateTime::currentDateTimeUtc () > m_lateAutoLogExpires) {
+      return false;
+    }
+    logHisCall = m_lateAutoLogCall;
+    if (!m_lateAutoLogGrid.isEmpty()) logHisGrid = m_lateAutoLogGrid;
+    if (!m_lateAutoLogRptSent.isEmpty()) logRptSent = m_lateAutoLogRptSent;
+    if (!m_lateAutoLogRptRcvd.isEmpty()) logRptRcvd = m_lateAutoLogRptRcvd;
+    if (!m_lateAutoLogXSent.isEmpty()) logXSent = m_lateAutoLogXSent;
+    if (!m_lateAutoLogXRcvd.isEmpty()) logXRcvd = m_lateAutoLogXRcvd;
+    if (m_lateAutoLogOn.isValid()) logDateTimeQSOOn = m_lateAutoLogOn;
+    if (m_lateAutoLogDialFreq > 0) logDialFreq = m_lateAutoLogDialFreq;
+    return true;
+  };
+
+  bool const mayUseDeferredLogSnapshot =
+      m_autoCQ || logTriggeredByTimer || currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF;
+  if (mayUseDeferredLogSnapshot && !applyPendingAutoLogSnapshot ()) {
+    applyLateAutoLogSnapshot ();
   }
 
-  if (!logHisCall.size ()) {
-    if (m_autoCQ) {
+  if (logHisCall.trimmed ().isEmpty ()) {
+    if (mayUseDeferredLogSnapshot) {
       // Last chance recovery before discarding auto-log.
       capturePendingAutoLogSnapshot ();
-      if (m_pendingAutoLogValid) {
-        logHisCall = m_pendingAutoLogCall;
-        if (!m_pendingAutoLogGrid.isEmpty()) logHisGrid = m_pendingAutoLogGrid;
-        if (!m_pendingAutoLogRptSent.isEmpty()) logRptSent = m_pendingAutoLogRptSent;
-        if (!m_pendingAutoLogRptRcvd.isEmpty()) logRptRcvd = m_pendingAutoLogRptRcvd;
-        if (!m_pendingAutoLogXSent.isEmpty()) logXSent = m_pendingAutoLogXSent;
-        if (!m_pendingAutoLogXRcvd.isEmpty()) logXRcvd = m_pendingAutoLogXRcvd;
-        if (m_pendingAutoLogOn.isValid()) logDateTimeQSOOn = m_pendingAutoLogOn;
-        if (m_pendingAutoLogDialFreq > 0) logDialFreq = m_pendingAutoLogDialFreq;
+      if (!applyPendingAutoLogSnapshot ()) {
+        applyLateAutoLogSnapshot ();
       }
-      if (!logHisCall.size ()) return;  // Auto CQ: still no stable partner context.
+      if (logHisCall.trimmed ().isEmpty () && (m_autoCQ || logTriggeredByTimer)) {
+        debugToFile (QString {"logQSO-skip-empty-dx timer:%1 autoCQ:%2 tx73:%3 sent73:%4 qso:%5 ntx:%6"}
+                         .arg (logTriggeredByTimer)
+                         .arg (m_autoCQ)
+                         .arg (currentTxIs73)
+                         .arg (m_sentFirst73)
+                         .arg (m_QSOProgress)
+                         .arg (m_ntx));
+        return;  // Automatic/deferred log: stale trigger with no stable partner context.
+      }
     }
     MessageBox::warning_message (this, tr ("Warning:  DX Call field is empty."));
     if ((SpecOp::NA_VHF == m_specOp or SpecOp::WW_DIGI == m_specOp) && m_config.autoLog()) return;  // prevent program crash
@@ -20662,11 +20965,12 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
       }
     m_settings->sync ();
     bool const hasPromptToLog = m_settings->contains ("PromptToLog");
+    bool const hasAutoLog = m_settings->contains ("AutoLog");
     bool promptToLog = m_settings->value ("PromptToLog", m_config.prompt_to_log ()).toBool ();
     bool autoLog = m_settings->value ("AutoLog", m_config.autoLog ()).toBool ();
     if (promptToLog == autoLog)
       {
-        if (promptToLog && hasPromptToLog)
+        if (promptToLog && hasPromptToLog && !hasAutoLog)
           {
             autoLog = false;
           }
@@ -31247,6 +31551,42 @@ void MainWindow::onRemoteSetTxEnabledRequested(QString const& commandId, bool en
       m_enableButtonNotify = notify;
     };
 
+  auto reset_stale_tx_rearm_state = [this] {
+      bool const hadStaleState =
+          m_txRetryCount != 0
+          || m_lastNtx != -1
+          || m_cqRetryCount != 0
+          || m_autoCQPeriodsMissed != 0
+          || m_nTx73 != 0
+          || m_logAfterOwn73
+          || m_ft2DeferredLogPending
+          || m_ft2QuickPeerSignaled
+          || !m_lastMessageSent.trimmed().isEmpty();
+      if (!hadStaleState)
+        {
+          return;
+        }
+      debugToFile (QString {"legacyTxRearm reset stale state tx:%1 last:%2 retry:%3 cqRetry:%4 nTx73:%5 logAfter:%6 deferred:%7 lastMsg:[%8]"}
+                     .arg (m_ntx)
+                     .arg (m_lastNtx)
+                     .arg (m_txRetryCount)
+                     .arg (m_cqRetryCount)
+                     .arg (m_nTx73)
+                     .arg (m_logAfterOwn73 ? 1 : 0)
+                     .arg (m_ft2DeferredLogPending ? 1 : 0)
+                     .arg (m_lastMessageSent.trimmed ()));
+      m_txRetryCount = 0;
+      m_lastNtx = -1;
+      m_cqRetryCount = 0;
+      m_autoCQPeriodsMissed = 0;
+      m_nTx73 = 0;
+      m_logAfterOwn73 = false;
+      m_ft2DeferredLogPending = false;
+      m_ft2QuickPeerSignaled = false;
+      m_lastMessageSent.clear ();
+      m_bTUmsg = false;
+    };
+
   if (!enabled)
     {
       if (ui->autoCQButton && ui->autoCQButton->isChecked())
@@ -31265,6 +31605,12 @@ void MainWindow::onRemoteSetTxEnabledRequested(QString const& commandId, bool en
     }
   else
     {
+      bool const rearmingFromOff =
+          !ui->autoButton->isChecked() || !m_auto || !m_autoButtonState;
+      if (rearmingFromOff && !m_transmitting && !m_tune && !m_autoCQ)
+        {
+          reset_stale_tx_rearm_state ();
+        }
       bool const checkboxMismatch = (ui->autoButton->isChecked() != enabled);
       bool const autoMismatch = !m_auto || !m_autoButtonState;
       if (checkboxMismatch || autoMismatch)

@@ -4134,16 +4134,19 @@ ApplicationWindow {
 	                                || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
 	                        }
 
+	                        var myBase = mainWindow.callsignBase(bridge.callsign || "")
+	                        var message = item.message || ""
+	                        var myMatch = item.isMyCall === true
+	                            || messageContainsCallBase(message, myBase)
+	                        if (myMatch)
+	                            return true
+
 	                        if (activeBase.length === 0)
 	                            return isAtRxFrequency(item.freq || "0", item)
 
-	                        var myBase = mainWindow.callsignBase(bridge.callsign || "")
-	                        var message = item.message || ""
 	                        var activeMatch = messageContainsCallBase(message, activeBase)
 	                            || mainWindow.callsignBase(item.fromCall || "") === activeBase
 	                            || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
-	                        var myMatch = item.isMyCall === true
-	                            || messageContainsCallBase(message, myBase)
 	                        return activeMatch && myMatch
 	                    }
 
@@ -4637,8 +4640,8 @@ ApplicationWindow {
 
                                     RowLayout {
                                         anchors.fill: parent
-                                        anchors.leftMargin: 6
-                                        anchors.rightMargin: 6
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
                                         spacing: 0
 
                                         Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
@@ -4660,7 +4663,7 @@ ApplicationWindow {
                                                 font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
-                                                horizontalAlignment: Text.AlignHCenter
+                                                horizontalAlignment: Text.AlignRight
                                                 verticalAlignment: Text.AlignVCenter
                                             }
                                         }
@@ -4675,7 +4678,7 @@ ApplicationWindow {
                                                 font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
                                                 font.bold: true
                                                 color: "#4CAF50"
-                                                horizontalAlignment: Text.AlignHCenter
+                                                horizontalAlignment: Text.AlignRight
                                                 verticalAlignment: Text.AlignVCenter
                                             }
                                         }
@@ -4735,7 +4738,7 @@ ApplicationWindow {
                                         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
 
                                         delegate: Rectangle {
-                                            width: evenPeriodList.width - 8
+                                            width: evenPeriodList.width
                                             height: Math.round(26 * fs)
 	                                            property var highlightFill: mainWindow.decodeHighlightFill(modelData)
 	                                            property var highlightBorder: mainWindow.decodeHighlightBorder(modelData)
@@ -4811,7 +4814,7 @@ ApplicationWindow {
                                                         font.family: mainWindow.decodedTextFontFamily
                                                         font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
                                                         color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary
-                                                        horizontalAlignment: Text.AlignHCenter
+                                                        horizontalAlignment: Text.AlignRight
                                                         verticalAlignment: Text.AlignVCenter
                                                         elide: Text.ElideNone
                                                         fontSizeMode: Text.HorizontalFit
@@ -4829,7 +4832,7 @@ ApplicationWindow {
                                                         font.family: mainWindow.decodedTextFontFamily
                                                         font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs)
                                                         color: secondaryCyan
-                                                        horizontalAlignment: Text.AlignHCenter
+                                                        horizontalAlignment: Text.AlignRight
                                                         verticalAlignment: Text.AlignVCenter
                                                     }
                                                 }
@@ -8355,8 +8358,8 @@ ApplicationWindow {
 
 	                    RowLayout {
 	                        anchors.fill: parent
-	                        anchors.leftMargin: 6
-	                        anchors.rightMargin: 6
+		                        anchors.leftMargin: 8
+		                        anchors.rightMargin: 8
 	                        spacing: 0
 
 	                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
@@ -8367,8 +8370,8 @@ ApplicationWindow {
 	                        Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
 	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
 	                        Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                        Text { visible: mainWindow.showDxccInfo; text: "DXCC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
-	                        Text { visible: mainWindow.showDxccInfo; text: "Az"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
+	                        Text { visible: mainWindow.showDxccInfo; text: "DXCC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                        Text { visible: mainWindow.showDxccInfo; text: "Az"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
 	                    }
 	                }
 
@@ -8423,7 +8426,7 @@ ApplicationWindow {
                         ScrollBar.vertical: ScrollBar { active: true }
 
                         delegate: Rectangle {
-                            width: parent ? parent.width - 8 : 100
+	                            width: parent ? parent.width : 100
                             height: Math.round(24 * fs)
 	                            radius: 3
 	                            property var highlightFill: mainWindow.decodeHighlightFill(modelData)
@@ -8446,8 +8449,8 @@ ApplicationWindow {
 	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
 	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
 	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
-	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
+	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
                             }
 
                             MouseArea {

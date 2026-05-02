@@ -87,18 +87,20 @@ namespace
     bool prompt_to_log = fallback_prompt_to_log;
     bool auto_log = fallback_auto_log;
     bool has_prompt_to_log = false;
+    bool has_auto_log = false;
 
     if (settings)
       {
         settings->sync ();
         has_prompt_to_log = settings->contains ("PromptToLog");
+        has_auto_log = settings->contains ("AutoLog");
         prompt_to_log = settings->value ("PromptToLog", prompt_to_log).toBool ();
         auto_log = settings->value ("AutoLog", auto_log).toBool ();
       }
 
     if (prompt_to_log == auto_log)
       {
-        if (prompt_to_log && has_prompt_to_log)
+        if (prompt_to_log && has_prompt_to_log && !has_auto_log)
           {
             auto_log = false;
           }
@@ -110,6 +112,14 @@ namespace
       }
 
     return {prompt_to_log, auto_log};
+  }
+
+  bool normal_ft_mode (QString mode)
+  {
+    mode = mode.trimmed ().toUpper ();
+    return mode == QLatin1String ("FT8")
+        || mode == QLatin1String ("FT4")
+        || mode == QLatin1String ("FT2");
   }
 
   auto const sat_file_name = "sat.dat";
@@ -586,8 +596,11 @@ void LogQSO::initLogQSO(QString const& hisCall, QString const& hisGrid, QString 
 
   auto const logging_mode = current_logging_mode (m_settings, m_config->prompt_to_log (), m_config->autoLog ());
   bool const force_log_without_prompt = promptAlreadyAccepted || (externalCtrl && !logging_mode.prompt_to_log);
+  bool const normal_ft_auto_log =
+      logging_mode.auto_log && !logging_mode.prompt_to_log && normal_ft_mode (mode);
   if (SpOp::FOX == special_op
       || force_log_without_prompt                                      //avt 11/19/20 UDP listener requires auto logging
+      || normal_ft_auto_log
       || (logging_mode.auto_log && ((SpOp::NONE < special_op && special_op < SpOp::FOX)
           || SpOp::ARRL_DIGI == special_op || !m_config->contestingOnly ())))
     {

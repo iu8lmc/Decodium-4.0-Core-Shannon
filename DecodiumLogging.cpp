@@ -288,6 +288,7 @@ DecodiumLogging::~DecodiumLogging ()
 #include <QScreen>
 #include <QMediaDevices>
 #include <QAudioDevice>
+#include <QAudioFormat>
 #include <QCoreApplication>
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -300,6 +301,30 @@ static QFile* g_diagFile = nullptr;
 
 static QString diagDir() { return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation); }
 static QString diagPath() { return QDir(diagDir()).absoluteFilePath("decodium_diagnostic.log"); }
+
+static QString diagSampleFormatName(QAudioFormat::SampleFormat format)
+{
+    switch (format) {
+    case QAudioFormat::UInt8: return QStringLiteral("UInt8");
+    case QAudioFormat::Int16: return QStringLiteral("Int16");
+    case QAudioFormat::Int32: return QStringLiteral("Int32");
+    case QAudioFormat::Float: return QStringLiteral("Float");
+    case QAudioFormat::Unknown:
+    default: return QStringLiteral("Unknown");
+    }
+}
+
+static QString diagAudioFormatSummary(QAudioFormat const& format)
+{
+    if (!format.isValid()) {
+        return QStringLiteral("preferred=invalid");
+    }
+    return QStringLiteral("preferred rate=%1 ch=%2 fmt=%3 bytes=%4")
+        .arg(format.sampleRate())
+        .arg(format.channelCount())
+        .arg(diagSampleFormatName(format.sampleFormat()))
+        .arg(format.bytesPerFrame());
+}
 
 DecodiumLogging* DecodiumLogging::instance() { return s_instance; }
 QString DecodiumLogging::diagnosticLogPath() { return diagPath(); }
@@ -361,8 +386,10 @@ void DecodiumLogging::logStartupDiagnostics() {
     diagInfo(QString("Locale: %1 | TZ: %2").arg(QLocale::system().name(), QString(QTimeZone::systemTimeZone().id())));
     if (auto* s = QGuiApplication::primaryScreen())
         diagInfo(QString("Screen: %1x%2 @%3dpi").arg(s->size().width()).arg(s->size().height()).arg(s->logicalDotsPerInch()));
-    for (auto const& d : QMediaDevices::audioInputs()) diagInfo("AudioIn: " + d.description());
-    for (auto const& d : QMediaDevices::audioOutputs()) diagInfo("AudioOut: " + d.description());
+    for (auto const& d : QMediaDevices::audioInputs())
+        diagInfo("AudioIn: " + d.description() + " | " + diagAudioFormatSummary(d.preferredFormat()));
+    for (auto const& d : QMediaDevices::audioOutputs())
+        diagInfo("AudioOut: " + d.description() + " | " + diagAudioFormatSummary(d.preferredFormat()));
 #ifdef Q_OS_WIN
     MEMORYSTATUSEX m; m.dwLength = sizeof(m); GlobalMemoryStatusEx(&m);
     diagInfo(QString("RAM: %1 MB free / %2 MB total").arg(m.ullAvailPhys/1048576).arg(m.ullTotalPhys/1048576));

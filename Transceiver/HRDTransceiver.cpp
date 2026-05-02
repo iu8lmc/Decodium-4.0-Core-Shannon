@@ -131,7 +131,7 @@ int HRDTransceiver::do_start ()
       hrd_ = new QTcpSocket {this}; // QObject takes ownership
     }
   hrd_->connectToHost (std::get<0> (server_details), std::get<1> (server_details));
-  if (!hrd_->waitForConnected ())
+  if (!hrd_->waitForConnected (3000))
     {
       CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
       throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
@@ -156,7 +156,7 @@ int HRDTransceiver::do_start ()
 
       protocol_ = v4;		// try again with older protocol
       hrd_->connectToHost (std::get<0> (server_details), std::get<1> (server_details));
-      if (!hrd_->waitForConnected ())
+      if (!hrd_->waitForConnected (3000))
         {
           CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
           throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
@@ -1132,11 +1132,11 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd)
 {
   // waitForReadReady appears to be occasionally unreliable on Windows
   // timing out when data is waiting so retry a few times
-  unsigned retries {30};
+  unsigned retries {10};
   bool replied {false};
   while (!replied && retries--)
     {
-      replied = hrd_->waitForReadyRead ();
+      replied = hrd_->waitForReadyRead (500);
       if (!replied && hrd_->error () != hrd_->SocketTimeoutError)
         {
           CAT_ERROR (cmd << "failed to reply" << hrd_->errorString ());

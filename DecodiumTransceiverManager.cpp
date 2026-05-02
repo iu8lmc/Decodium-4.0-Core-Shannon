@@ -856,6 +856,10 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
 void DecodiumTransceiverManager::connectRig()
 {
     if (d->transceiver) {
+        if (m_connecting && !m_connected) {
+            emit statusUpdate(QStringLiteral("Connessione a %1 gia' in corso...").arg(m_rigName));
+            return;
+        }
         disconnectRig();
         // Piccola attesa per assicurarsi che il vecchio thread sia fermato
         if (d->xcvThread && d->xcvThread->isRunning())
@@ -896,6 +900,7 @@ void DecodiumTransceiverManager::connectRig()
     d->transceiver = xcv;
     d->desired = Transceiver::TransceiverState {};
     d->desired.online(true);
+    m_connecting = true;
 
     // Il transceiver è "ripe for destruction" quando emette finished().
     connect(xcv, &Transceiver::finished,
@@ -919,6 +924,7 @@ void DecodiumTransceiverManager::connectRig()
                 if (d->transceiver == xcv)
                     d->transceiver = nullptr;
                 d->desired = Transceiver::TransceiverState {};
+                m_connecting = false;
                 thread->deleteLater();
                 if (m_connected) {
                     m_connected = false;
@@ -971,6 +977,7 @@ void DecodiumTransceiverManager::connectRig()
                 bool    onl  = state.online();
 
                 if (m_connected != onl) {
+                    m_connecting = false;
                     m_connected = onl;
                     emit connectedChanged();
                     emit statusUpdate(onl ? ("Connesso: " + m_rigName) : "Disconnesso");
@@ -996,6 +1003,7 @@ void DecodiumTransceiverManager::connectRig()
             this,
             [this](QString const& reason) {
                 bool const wasConnected = m_connected;
+                m_connecting = false;
                 d->desired.online(false);
                 bool const recovering = m_transientCatRetryCount > 0;
                 if ((wasConnected || recovering) && isTransientCatIoFailure(reason)) {
@@ -1028,6 +1036,7 @@ void DecodiumTransceiverManager::connectRig()
 void DecodiumTransceiverManager::disconnectRig()
 {
     m_transientCatReconnectPending = false;
+    m_connecting = false;
     if (!d->transceiver) return;
 
     auto* xcv    = d->transceiver;

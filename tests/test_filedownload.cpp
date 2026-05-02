@@ -38,6 +38,31 @@ namespace
       connect (&server_, &QTcpServer::newConnection, this, &TestHttpServer::on_new_connection);
     }
 
+    ~TestHttpServer () override
+    {
+      server_.close ();
+
+      auto sockets = buffers_.keys ();
+      for (auto * socket : server_.findChildren<QTcpSocket *> ())
+        {
+          if (!sockets.contains (socket))
+            {
+              sockets.append (socket);
+            }
+        }
+      for (auto * socket : sockets)
+        {
+          if (!socket)
+            {
+              continue;
+            }
+          QObject::disconnect (socket, nullptr, this, nullptr);
+          socket->abort ();
+          delete socket;
+        }
+      buffers_.clear ();
+    }
+
     bool listen ()
     {
       if (server_.listen (QHostAddress::LocalHost, 0))
