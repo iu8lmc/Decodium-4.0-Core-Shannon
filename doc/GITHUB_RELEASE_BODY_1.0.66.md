@@ -1,6 +1,6 @@
-# Decodium 4 FT2 1.0.65
+# Decodium 4 FT2 1.0.66
 
-Release 1.0.65 raccoglie i fix successivi a 1.0.64 su TX, CAT/Fake It, schedulazione automatica e UI decode.
+Release 1.0.66 raccoglie i fix successivi a 1.0.64 su TX, CAT/Fake It, schedulazione automatica e UI decode.
 
 ## Highlights
 
@@ -20,12 +20,12 @@ Release 1.0.65 raccoglie i fix successivi a 1.0.64 su TX, CAT/Fake It, schedulaz
 
 ## Assets attesi
 
-- `Decodium_1.0.65_Setup_x64.exe`
-- `decodium4-ft2-1.0.65-linux-aarch64.AppImage`
-- `decodium4-ft2-1.0.65-linux-aarch64.AppImage.sha256.txt`
-- `decodium4-ft2-1.0.65-macos-tahoe-arm64.dmg`
-- `decodium4-ft2-1.0.65-macos-tahoe-arm64.zip`
-- `decodium4-ft2-1.0.65-macos-tahoe-arm64-sha256.txt`
-- `decodium4-ft2-1.0.65-macos-sequoia-arm64.dmg`
-- `decodium4-ft2-1.0.65-macos-sequoia-arm64.zip`
-- `decodium4-ft2-1.0.65-macos-sequoia-arm64-sha256.txt`
+- `Decodium_1.0.66_Setup_x64.exe`
+- `decodium4-ft2-1.0.66-linux-aarch64.AppImage`
+- `decodium4-ft2-1.0.66-linux-aarch64.AppImage.sha256.txt`
+- `decodium4-ft2-1.0.66-macos-tahoe-arm64.dmg`
+- `decodium4-ft2-1.0.66-macos-tahoe-arm64.zip`
+- `decodium4-ft2-1.0.66-macos-tahoe-arm64-sha256.txt`
+- `decodium4-ft2-1.0.66-macos-sequoia-arm64.dmg`
+- `decodium4-ft2-1.0.66-macos-sequoia-arm64.zip`
+- `decodium4-ft2-1.0.66-macos-sequoia-arm64-sha256.txt`
