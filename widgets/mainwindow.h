@@ -248,6 +248,7 @@ public:
   void legacySetRigControlEnabled(bool enabled);
   void legacyRaiseWarning(QString const& title, QString const& summary, QString const& details);
   void legacySetEmbeddedMode(bool enabled);
+  void legacyRearmMonitoring(QString const& reason);
   void legacyShutdownForEmbedding();
 
 public slots:
@@ -771,6 +772,7 @@ private:
 
 private:
   void requestRigPtt (bool enabled);
+  void updateEmbeddedBridgeTxAudioMute (bool mute, QString const& reason);
   void set_mode (QString const& mode);
   QString startup_mode_for_frequency (Frequency dial_frequency) const;
   void maybe_apply_startup_mode_from_rig_frequency (Frequency dial_frequency);
@@ -819,6 +821,7 @@ private:
   bool m_embeddedRigControlEnabled {true};
   bool m_forceLegacySettingsDialog {false};
   bool m_embeddedFt2MonitorPrepared {false};
+  bool m_embeddedBridgeMutesLegacyTxAudio {false};
   QScopedPointer<SampleDownloader> m_sampleDownloader;
   QScopedPointer<EqualizationToolsDialog> m_equalizationToolsDialog;
 

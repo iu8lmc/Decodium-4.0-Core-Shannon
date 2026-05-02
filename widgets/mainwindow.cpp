@@ -146,6 +146,27 @@ namespace
     effect->play ();
   }
 
+  unsigned legacy_tx_output_stream_channel_count (AudioDevice::Channel channel)
+  {
+#if defined(Q_OS_MAC)
+    // CoreAudio/USB CODEC devices used for radio TX are normally stereo. Keep
+    // the sink and modulator frame sizes aligned even when the UI says "Mono".
+    Q_UNUSED (channel);
+    return 2;
+#else
+    return AudioDevice::Mono == channel ? 1 : 2;
+#endif
+  }
+
+  AudioDevice::Channel legacy_tx_output_channel (AudioDevice::Channel channel)
+  {
+#if defined(Q_OS_MAC)
+    return AudioDevice::Mono == channel ? AudioDevice::Both : channel;
+#else
+    return channel;
+#endif
+  }
+
   QHostAddress select_preferred_udp_address (QString const& requested_name, QList<QHostAddress> const& addresses)
   {
     if (addresses.isEmpty ())
@@ -4721,6 +4742,60 @@ void MainWindow::legacySetMonitoring(bool enabled)
   onRemoteSetMonitoringRequested(QString {}, enabled);
 }
 
+void MainWindow::legacyRearmMonitoring(QString const& reason)
+{
+  if (!m_embeddedShellMode || m_diskData)
+    {
+      return;
+    }
+
+  if (m_transmitting)
+    {
+      debugToFile (QString {"monitor     rearm deferred tx-active reason:%1 mode:%2"}
+                     .arg (reason)
+                     .arg (m_mode));
+      return;
+    }
+
+  if (!m_monitoring)
+    {
+      debugToFile (QString {"monitor     rearm enables monitor reason:%1 mode:%2"}
+                     .arg (reason)
+                     .arg (m_mode));
+      legacySetMonitoring (true);
+      return;
+    }
+
+  if (ui && ui->monitorButton && !ui->monitorButton->isChecked ())
+    {
+      ui->monitorButton->setChecked (true);
+    }
+
+  debugToFile (QString {"monitor     rearm audio reason:%1 mode:%2 tci:%3"}
+                 .arg (reason)
+                 .arg (m_mode)
+                 .arg (m_tci_audio ? 1 : 0));
+
+  if (m_tci_audio)
+    {
+      if (ui && ui->bandComboBox && ui->bandComboBox->currentText () != "OOB")
+        {
+          Q_EMIT m_config.transceiver_audio (false);
+          QTimer::singleShot (120, this, [this] {
+            if (m_embeddedShellMode && m_monitoring && !m_transmitting && m_tci_audio
+                && ui && ui->bandComboBox && ui->bandComboBox->currentText () != "OOB")
+              {
+                Q_EMIT m_config.transceiver_audio (true);
+              }
+          });
+        }
+      return;
+    }
+
+  restartConfiguredAudioStreams (true);
+  armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
+}
+
 void MainWindow::legacySetAutoSeq(bool enabled)
 {
   if (!ui || !ui->cbAutoSeq) {
@@ -4827,6 +4902,30 @@ void MainWindow::requestRigPtt(bool enabled)
     return;
   }
   m_config.transceiver_ptt(enabled);
+}
+
+void MainWindow::updateEmbeddedBridgeTxAudioMute (bool mute, QString const& reason)
+{
+#if defined(Q_OS_MAC)
+  if (m_embeddedBridgeMutesLegacyTxAudio == mute)
+    {
+      return;
+    }
+
+  m_embeddedBridgeMutesLegacyTxAudio = mute;
+  qreal const dBAttn = mute
+      ? 999.0
+      : ((ui && ui->outAttenuation) ? ui->outAttenuation->value () / 10.0 : 0.0);
+  Q_EMIT outAttenuationChanged (dBAttn);
+  debugToFile (QString {"txEmbeddedAudioMute %1 reason:%2 mode:%3 attn:%4"}
+                 .arg (mute ? QStringLiteral ("on") : QStringLiteral ("off"))
+                 .arg (reason)
+                 .arg (m_mode)
+                 .arg (dBAttn, 0, 'f', 1));
+#else
+  Q_UNUSED (mute);
+  Q_UNUSED (reason);
+#endif
 }
 
 void MainWindow::legacySetAudioInputDeviceName(QString const& name)
@@ -4959,7 +5058,7 @@ void MainWindow::refreshConfiguredAudioDevicesAfterHotplug (QString const& reaso
   else if (rebound_output && !m_config.audio_output_device ().isNull ())
     {
       Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
-                                          , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                          , legacy_tx_output_stream_channel_count (m_config.audio_output_channel ())
                                           , m_tx_audio_buffer_frames);
       showStatusMessage (tr ("Audio output refreshed after device reconnect."));
     }
@@ -7766,7 +7865,7 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
   if (!output_device.isNull ())
     {
       Q_EMIT initializeAudioOutputStream (output_device
-                                          , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                          , legacy_tx_output_stream_channel_count (m_config.audio_output_channel ())
                                           , m_tx_audio_buffer_frames);
     }
   else
@@ -8086,7 +8185,7 @@ void MainWindow::onApplicationStateChanged(Qt::ApplicationState state)
           if (!m_tci_audio)
             {
               Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
-                                                  , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                                  , legacy_tx_output_stream_channel_count (m_config.audio_output_channel ())
                                                   , m_tx_audio_buffer_frames);
             }
         });
@@ -8296,7 +8395,7 @@ void MainWindow::on_actionSettings_triggered()           // Setup Dialog (Settin
 
       if(m_config.restart_audio_output () && !m_config.audio_output_device ().isNull ()) {
         Q_EMIT initializeAudioOutputStream (m_config.audio_output_device ()
-                                            , AudioDevice::Mono == m_config.audio_output_channel () ? 1 : 2
+                                            , legacy_tx_output_stream_channel_count (m_config.audio_output_channel ())
                                             , m_tx_audio_buffer_frames);
       }
     }
@@ -12833,7 +12932,7 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
         request.maxDecodeMs = 3500;
       }
     } else {
-      request.maxDecodeMs = request.ndepth >= 4 ? 3000 : 2200;
+      request.maxDecodeMs = request.ndepth >= 4 ? 3500 : 2200;
     }
   }
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
@@ -15440,6 +15539,11 @@ void MainWindow::guiUpdate()
     }
 
     double fTR=float((ms%int(1000.0*m_TRperiod)))/int(1000.0*m_TRperiod);
+    double const txSlotElapsed = m_bTxTime ? qMax(0.0, t2p - tx1) : 0.0;
+    bool const fixedPayloadFtxMode = (m_mode == "FT8" || m_mode == "FT4");
+    double const latestFixedPayloadStart = (m_mode == "FT4") ? 0.9 : 1.5;
+    bool const txStartAllowedBySlotAge =
+        !fixedPayloadFtxMode || txSlotElapsed <= latestFixedPayloadStart;
 
     auto currentTxText = [this] {
       if(m_ntx == 1) return ui->tx1->text();
@@ -15514,10 +15618,16 @@ void MainWindow::guiUpdate()
       ui->txrb5->setChecked(true);
     }
 
-    if(g_iptt==0 and ((m_bTxTime and (fTR < 0.75) and txReady) or m_tune)) {
+    if(g_iptt==0 and ((m_bTxTime and (fTR < 0.75) and txReady and txStartAllowedBySlotAge) or m_tune)) {
       //### Allow late starts
       icw[0]=m_ncw;
       g_iptt = 1;
+      if (m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio) {
+        if (m_iptt0 != 0) {
+          debugToFile (QString {"txEdge reset stale iptt0:%1 mode:%2"}.arg (m_iptt0).arg (m_mode));
+        }
+        m_iptt0 = 0;
+      }
       setRig ();
       if(m_mode=="FT8" or m_mode=="FT2") {
         if (SpecOp::FOX == m_specOp) {
@@ -15615,6 +15725,16 @@ void MainWindow::guiUpdate()
             m_btxok = false;  // stopTx() handled by m_btxok transition in guiUpdate()
           }
         });
+      }
+    } else if (g_iptt == 0 && m_auto && m_bTxTime && txReady
+               && !txStartAllowedBySlotAge && !m_tune) {
+      static int s_lastLateFtxStartSkipSec = -1;
+      if (s_lastLateFtxStartSkipSec != nsec) {
+        s_lastLateFtxStartSkipSec = nsec;
+        debugToFile (QString {"txStartSkip late mode:%1 elapsed:%2 latest:%3 waiting-next-slot"}
+                         .arg (m_mode)
+                         .arg (txSlotElapsed, 0, 'f', 3)
+                         .arg (latestFixedPayloadStart, 0, 'f', 3));
       }
     }
 //    if(!m_bTxTime and !m_tune and m_mode!="FT4") m_btxok=false;       //Time to stop transmitting
@@ -16279,6 +16399,35 @@ void MainWindow::guiUpdate()
     m_transmitting = true;
     transmitDisplay (true);
     statusUpdate ();
+
+#if defined(Q_OS_MAC)
+    if (m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio
+        && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2")) {
+      int const fallback_ms = (m_mode == "FT8")
+          ? qMax (static_cast<int> (1000.0 * m_config.txDelay ()), 120)
+          : qMax (static_cast<int> (1000.0 * m_config.txDelay ()), 20);
+      debugToFile (QString {"txEmbeddedFallback armed mode:%1 after:%2ms"}
+                     .arg (m_mode)
+                     .arg (fallback_ms));
+      QTimer::singleShot (fallback_ms, this, [this, fallback_ms] () {
+        if (g_iptt != 1 || !m_transmitting || m_tci_audio
+            || !(m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2")) {
+          return;
+        }
+        if (m_modulator && m_modulator->isActive ()) {
+          debugToFile (QString {"txEmbeddedFallback skip mode:%1 active-modulator after:%2ms"}
+                         .arg (m_mode)
+                         .arg (fallback_ms));
+          return;
+        }
+        debugToFile (QString {"txEmbeddedFallback startTx2 mode:%1 after:%2ms"}
+                       .arg (m_mode)
+                       .arg (fallback_ms));
+        m_tx_when_ready = false;
+        startTx2 ();
+      });
+    }
+#endif
   }
 
   if(!m_btxok && m_btxok0 && g_iptt==1) {
@@ -16631,11 +16780,22 @@ void MainWindow::startTx2()
 #else
       false;
 #endif
+  bool const force_embedded_macos_ftx =
+#if defined(Q_OS_MAC)
+      !tci_active && m_embeddedShellMode && !m_embeddedRigControlEnabled
+      && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+#else
+      false;
+#endif
   if (force_low_latency_ftx && modulator_active) {
     debugToFile (QString {"txStart2    forcing restart mode:%1 despite stale-active modulator state"}
                      .arg (m_mode));
   }
-    if (force_low_latency_ftx || !modulator_active) { // TODO - not thread safe
+  if (force_embedded_macos_ftx && modulator_active) {
+    debugToFile (QString {"txStart2    forcing embedded mac restart mode:%1 despite active modulator"}
+                   .arg (m_mode));
+  }
+  if (force_low_latency_ftx || force_embedded_macos_ftx || !modulator_active) { // TODO - not thread safe
     double fSpread=0.0;
     double snr=99.0;
     QString t=ui->tx5->currentText();
@@ -16650,6 +16810,13 @@ void MainWindow::startTx2()
       ui->cbAutoSeq->setChecked(true);
       ui->respondComboBox->setCurrentIndex(1);
     }
+#if defined(Q_OS_MAC)
+    bool const bridgeOwnsNormalFtxAudio =
+        m_embeddedShellMode && !m_embeddedRigControlEnabled && !m_tci_audio && !m_tune
+        && SpecOp::FOX != m_specOp && SpecOp::HOUND != m_specOp
+        && (m_mode == "FT8" || m_mode == "FT4" || m_mode == "FT2");
+    updateEmbeddedBridgeTxAudioMute (bridgeOwnsNormalFtxAudio, QStringLiteral ("startTx2"));
+#endif
     transmit (snr);
     ui->signal_meter_widget->setValue(0,0);
     if(m_mode=="Echo" and !m_tune) m_bTransmittedEcho=true;
@@ -16664,6 +16831,11 @@ void MainWindow::startTx2()
       write_all("Tx",m_currentMessage);
       if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
     }
+  } else {
+    debugToFile (QString {"txStart2 skip active mode:%1 tune:%2 transmitting:%3"}
+                   .arg (m_mode)
+                   .arg (m_tune ? 1 : 0)
+                   .arg (m_transmitting ? 1 : 0));
   }
 }
 
@@ -16696,6 +16868,9 @@ void MainWindow::stopTx2()
   } else {
     requestRigPtt (false); // Lower PTT
   }
+#if defined(Q_OS_MAC)
+  updateEmbeddedBridgeTxAudioMute (false, QStringLiteral ("stopTx2"));
+#endif
   if (m_mode == "JT9" && m_bFast9
       && legacyAutoSeqEnabled ()  //avt 9/30/25
       && m_ntx == 5 && m_nTx73 >= 5) {
@@ -23352,6 +23527,13 @@ void MainWindow::on_stopTxButton_clicked()                    // Stop Tx
   ui->pbBandHopping->setChecked(false); // disable band hopping
   if (m_tune) stop_tuning ();
   if ((m_autoButtonState or m_auto) and !m_tuneup) auto_tx_mode (false);  //avt 1/24/24
+  m_tx_when_ready = false;
+  if (ptt1Timer.isActive ()) {
+    ptt1Timer.stop ();
+  }
+  if (g_iptt == 1 && !m_transmitting) {
+    stopTx ();
+  }
 
   //report only if clicked by operator
   if (is_externalCtrlMode() && m_enableButtonNotify) {  //avt 1/23/24  only report clicks by user, not as result of command
@@ -23779,7 +23961,7 @@ void MainWindow::transmit (double snr)
     } else {
       Q_EMIT sendMessage (m_mode, NUM_JT65_SYMBOLS,
              4096.0*12000.0/11025.0, ui->TxFreqSpinBox->value () - m_XIT,
-             toneSpacing, m_soundOutput, m_config.audio_output_channel (),
+             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
              true, false, snr, m_TRperiod);
     }
   }
@@ -23804,19 +23986,71 @@ void MainWindow::transmit (double snr)
       } else {
         Q_EMIT sendMessage (m_mode, NUM_SUPERFOX_SYMBOLS,
             1024.0, ui->TxFreqSpinBox->value () - m_XIT,
-            toneSpacing, m_soundOutput, m_config.audio_output_channel (),
+            toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
             true, false, snr, m_TRperiod);
       }
-    } else {
-        if (m_tci_audio) {
-          Q_EMIT m_config.transceiver_modulator_start(m_mode, NUM_FT8_SYMBOLS,
-              1920.0,ui->TxFreqSpinBox->value()-m_XIT,
-              toneSpacing,true,false,snr,m_TRperiod);
-        } else {
-          Q_EMIT sendPrecomputedWave (m_mode, current_precomputed_tx_wave (m_mode));
-          Q_EMIT sendMessage (m_mode, NUM_FT8_SYMBOLS,
-              1920.0, ui->TxFreqSpinBox->value () - m_XIT,
-              toneSpacing, m_soundOutput, m_config.audio_output_channel (),
+	    } else {
+	        if (m_tci_audio) {
+	          Q_EMIT m_config.transceiver_modulator_start(m_mode, NUM_FT8_SYMBOLS,
+	              1920.0,ui->TxFreqSpinBox->value()-m_XIT,
+	              toneSpacing,true,false,snr,m_TRperiod);
+	        } else {
+	          QVector<float> wave = current_precomputed_tx_wave (m_mode);
+	          if (precomputed_wave_missing_or_silent (wave) && SpecOp::FOX != m_specOp)
+	            {
+	              QString txText;
+	              if (m_ntx == 1) txText = ui->tx1->text ();
+	              if (m_ntx == 2) txText = ui->tx2->text ();
+	              if (m_ntx == 3) txText = ui->tx3->text ();
+	              if (m_ntx == 4) txText = ui->tx4->text ();
+	              if (m_ntx == 5) txText = ui->tx5->currentText ();
+	              if (m_ntx == 6) txText = ui->tx6->text ();
+	              txText = txText.trimmed ();
+	              if (txText.isEmpty ())
+	                {
+	                  txText = m_currentMessage.trimmed ();
+	                }
+	              auto const encoded = decodium::txmsg::encodeFt8 (txText);
+	              if (encoded.ok && encoded.tones.size () >= NUM_FT8_SYMBOLS)
+	                {
+	                  std::fill_n (const_cast<int *> (itone), NUM_FT8_SYMBOLS, 0);
+	                  std::copy_n (encoded.tones.constBegin (), NUM_FT8_SYMBOLS, const_cast<int *> (itone));
+	                  m_currentMessage = QString::fromLatin1 (encoded.msgsent).trimmed ();
+	                  m_currentMessageType = encoded.messageType;
+	                  int constexpr nsym = NUM_FT8_SYMBOLS;
+	                  int constexpr nsps = 4 * 1920;
+	                  float constexpr fsample = 48000.0f;
+	                  float constexpr bt = 2.0f;
+	                  float const f0 = static_cast<float> (ui->TxFreqSpinBox->value () - m_XIT);
+	                  wave = decodium::txwave::generateFt8Wave (encoded.tones.constData (),
+	                                                              nsym, nsps, bt, fsample, f0);
+	                  if (!precomputed_wave_missing_or_silent (wave))
+	                    {
+	                      store_precomputed_tx_wave (QStringLiteral ("FT8"), wave, true);
+	                      debugToFile (QString {"ft8wave regen peak:%1 samples:%2 ntx:%3 msg:%4"}
+	                                     .arg (waveform_peak (wave.constData (), wave.size ()), 0, 'f', 6)
+	                                     .arg (wave.size ())
+	                                     .arg (m_ntx)
+	                                     .arg (m_currentMessage.trimmed ()));
+	                    }
+	                  else
+	                    {
+	                      debugToFile (QString {"ft8wave regen silent ntx:%1 msg:%2"}
+	                                     .arg (m_ntx)
+	                                     .arg (txText));
+	                    }
+	                }
+	              else
+	                {
+	                  debugToFile (QString {"ft8wave regen failed ntx:%1 msg:%2"}
+	                                 .arg (m_ntx)
+	                                 .arg (txText));
+	                }
+	            }
+	          Q_EMIT sendPrecomputedWave (m_mode, wave);
+	          Q_EMIT sendMessage (m_mode, NUM_FT8_SYMBOLS,
+	              1920.0, ui->TxFreqSpinBox->value () - m_XIT,
+	              toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
               true, false, snr, m_TRperiod);
         }
     }
@@ -23867,7 +24101,7 @@ void MainWindow::transmit (double snr)
                        .arg (m_currentMessage.trimmed ()));
       Q_EMIT sendMessage (m_mode, NUM_FT2_SYMBOLS,
              288.0, ui->TxFreqSpinBox->value() - m_XIT,
-             toneSpacing, m_soundOutput, m_config.audio_output_channel(),
+             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
              true, false, snr, m_TRperiod);
     }
   }
@@ -23915,7 +24149,7 @@ void MainWindow::transmit (double snr)
                        .arg (m_currentMessage.trimmed ()));
       Q_EMIT sendMessage (m_mode, NUM_FT4_SYMBOLS,
              576.0, ui->TxFreqSpinBox->value() - m_XIT,
-             toneSpacing, m_soundOutput, m_config.audio_output_channel(),
+             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
              true, false, snr, m_TRperiod);
     }
   }
@@ -23942,7 +24176,7 @@ void MainWindow::transmit (double snr)
              true,false,snr,m_TRperiod);
     } else {
       Q_EMIT sendMessage (m_mode, NUM_FST4_SYMBOLS,double(nsps),f0,toneSpacing,
-                          m_soundOutput,m_config.audio_output_channel(),
+                          m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
                           true, false, snr, m_TRperiod);
     }
   }
@@ -23963,7 +24197,7 @@ void MainWindow::transmit (double snr)
     } else {
       Q_EMIT sendMessage (m_mode, NUM_Q65_SYMBOLS,
              double(nsps), ui->TxFreqSpinBox->value () - m_XIT,
-             toneSpacing, m_soundOutput, m_config.audio_output_channel (),
+             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
              true, false, snr, m_TRperiod);
     }
   }
@@ -23988,7 +24222,7 @@ void MainWindow::transmit (double snr)
     } else {
       Q_EMIT sendMessage (m_mode, NUM_JT9_SYMBOLS, sps,
                           ui->TxFreqSpinBox->value() - m_XIT, m_toneSpacing,
-                          m_soundOutput, m_config.audio_output_channel (),
+                          m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
                           true, fastmode, snr, m_TRperiod);
     }
   }
@@ -24012,7 +24246,7 @@ void MainWindow::transmit (double snr)
              true,true,snr,m_TRperiod);
     } else {
       Q_EMIT sendMessage (m_mode, nsym, double(m_nsps), f0, m_toneSpacing,
-                          m_soundOutput, m_config.audio_output_channel (),
+                          m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
                           true, true, snr, m_TRperiod);
     }
   }
@@ -24032,7 +24266,7 @@ void MainWindow::transmit (double snr)
      } else {
       Q_EMIT sendMessage (m_mode, NUM_JT4_SYMBOLS,
              2520.0*12000.0/11025.0, ui->TxFreqSpinBox->value () - m_XIT,
-             toneSpacing, m_soundOutput, m_config.audio_output_channel (),
+             toneSpacing, m_soundOutput, legacy_tx_output_channel (m_config.audio_output_channel ()),
              true, false, snr, m_TRperiod);
     }
   }
@@ -24050,7 +24284,7 @@ void MainWindow::transmit (double snr)
       Q_EMIT sendMessage (m_mode, NUM_WSPR_SYMBOLS, 8192.0,
                           ui->TxFreqSpinBox->value() - 1.5 * 12000 / 8192,
                           m_toneSpacing*nToneSpacing, m_soundOutput,
-                          m_config.audio_output_channel(),true, false, snr,
+                          legacy_tx_output_channel (m_config.audio_output_channel ()), true, false, snr,
                           m_TRperiod);
     }
   }
@@ -24114,7 +24348,7 @@ void MainWindow::transmit (double snr)
              false,false,snr,m_TRperiod);
     } else {
       Q_EMIT sendMessage (m_mode,numEchoSymbols,framesPerSymbol,freq,toneSpacing,m_soundOutput,
-                          m_config.audio_output_channel(), false, false, snr, m_TRperiod);
+                          legacy_tx_output_channel (m_config.audio_output_channel ()), false, false, snr, m_TRperiod);
     }
   }
 
@@ -24187,6 +24421,12 @@ void MainWindow::on_outAttenuation_valueChanged (int a)
   if (m_tci_audio) {
     Q_EMIT m_config.transceiver_txvolume(dBAttn);
   } else {
+#if defined(Q_OS_MAC)
+    if (m_embeddedBridgeMutesLegacyTxAudio) {
+      Q_EMIT outAttenuationChanged (999.0);
+      return;
+    }
+#endif
     Q_EMIT outAttenuationChanged (dBAttn);
   }
 }
@@ -27926,19 +28166,12 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
     return true;
   };
 
-  bool const liveFt8Decode = !m_diskData && completedUtc > 0;
-  bool const staleLateDecode = liveFt8Decode && elapsedMs > 6500;
-  if (staleLateDecode) {
-    debugToFile (QString {"ft8Decode   drop late utc:%1 rows:%2 elapsedMs:%3 queued:%4"}
+  if (!m_diskData && completedUtc > 0 && elapsedMs > 6500) {
+    debugToFile (QString {"ft8Decode   slow utc:%1 rows:%2 elapsedMs:%3 queued:%4 processing"}
                    .arg (completedUtc)
                    .arg (rows.size ())
                    .arg (elapsedMs)
                    .arg (m_ft8QueuedDecodePending ? 1 : 0));
-    if (dispatchQueuedFt8Decode ()) {
-      return;
-    }
-    decodeDone ();
-    return;
   }
 
   for (auto const& row : rows) {

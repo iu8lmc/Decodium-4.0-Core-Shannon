@@ -89,12 +89,12 @@ void seedEmbeddedLegacyConfigDefaults(QSettings& settings)
 
     setSettingIfMissing(settings, QStringLiteral("Common/Mode"), QStringLiteral("FT8"));
     setSettingIfMissing(settings, QStringLiteral("Common/NDepth"), 51);
-    setSettingIfMissing(settings, QStringLiteral("Common/MultithreadedFT8decoder"), true);
+    setSettingIfMissing(settings, QStringLiteral("Common/MultithreadedFT8decoder"), false);
     setSettingIfMissing(settings, QStringLiteral("Common/NFT8Cycles"), 3);
     setSettingIfMissing(settings, QStringLiteral("Common/NFT8QSORXfreqSensitivity"), 3);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8threads"), 0);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8Sensitivity"), 3);
-    setSettingIfMissing(settings, QStringLiteral("Common/FT8DecoderStart"), 2);
+    setSettingIfMissing(settings, QStringLiteral("Common/FT8DecoderStart"), 3);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8WideDXCallSearch"), true);
     setSettingIfMissing(settings, QStringLiteral("Common/FT8AP"), false);
     setSettingIfMissing(settings, QStringLiteral("Common/CQonly"), false);
@@ -111,25 +111,26 @@ void seedEmbeddedLegacyConfigDefaults(QSettings& settings)
     setSettingIfMissing(settings, QStringLiteral("Configuration/SingleDecode"), false);
 }
 
-void migrateEmbeddedLegacyFt8Timing(QSettings& settings)
+void repairEmbeddedLegacyFt8TimingMigration(QSettings& settings)
 {
     QString const marker = QStringLiteral("Decodium4/FastFT8TimingMigrated");
-    if (settings.value(marker, false).toBool()) {
+    QString const repairMarker = QStringLiteral("Decodium4/FastFT8TimingRepairApplied");
+    if (!settings.value(marker, false).toBool()
+        || settings.value(repairMarker, false).toBool()) {
         return;
     }
 
-    bool const multithreadedFt8 =
-        settings.value(QStringLiteral("Common/MultithreadedFT8decoder"), false).toBool();
+    bool const multithreadedFt8 = settings
+        .value(QStringLiteral("Common/MultithreadedFT8decoder"), false)
+        .toBool();
     int const decoderStart =
         settings.value(QStringLiteral("Common/FT8DecoderStart"), 3).toInt();
 
-    if (!multithreadedFt8) {
-        settings.setValue(QStringLiteral("Common/MultithreadedFT8decoder"), true);
+    if (multithreadedFt8 && decoderStart == 2) {
+        settings.setValue(QStringLiteral("Common/MultithreadedFT8decoder"), false);
+        settings.setValue(QStringLiteral("Common/FT8DecoderStart"), 3);
     }
-    if (decoderStart >= 3) {
-        settings.setValue(QStringLiteral("Common/FT8DecoderStart"), 2);
-    }
-    settings.setValue(marker, true);
+    settings.setValue(repairMarker, true);
 }
 
 void bootstrapEmbeddedLegacyConfig()
@@ -142,7 +143,7 @@ void bootstrapEmbeddedLegacyConfig()
     QSettings target(targetPath, QSettings::IniFormat);
     mergeMissingSettings(target, legacyPath);
     seedEmbeddedLegacyConfigDefaults(target);
-    migrateEmbeddedLegacyFt8Timing(target);
+    repairEmbeddedLegacyFt8TimingMigration(target);
     target.sync();
 }
 
@@ -820,6 +821,16 @@ void DecodiumLegacyBackend::setMonitoring(bool enabled)
 
         m_startupMonitorEnablePending = false;
         m_mainWindow->legacySetMonitoring(enabled);
+    }
+}
+
+void DecodiumLegacyBackend::rearmMonitoring(const QString& reason)
+{
+    if (m_mainWindow) {
+        m_monitoringControlClaimed = true;
+        m_startupMonitorRequested = true;
+        m_startupMonitorEnablePending = false;
+        m_mainWindow->legacyRearmMonitoring(reason);
     }
 }
 

@@ -59,6 +59,7 @@ public:
     void setMode(const QString& mode);
     void setDialFrequency(double frequencyHz);
     void setMonitoring(bool enabled);
+    void rearmMonitoring(const QString& reason);
     void setAutoSeq(bool enabled);
     void setTxEnabled(bool enabled);
     void setHoldTxFreq(bool enabled);

@@ -1262,6 +1262,8 @@ private:
     bool m_monitorRequested {false};
     bool m_transmitting {false};
     bool m_tuning {false};
+    bool m_bridgeAudioTuneActive {false};
+    bool m_bridgeAudioLegacyTxActive {false};
     bool m_decoding {false};
     int m_rxFrequency {1500};
     int m_txFrequency {1500};
@@ -1738,6 +1740,7 @@ private:
     QVector<float> m_lastPanadapterData;   // ultimo spettro valido (evita fasce nere)
     qint64 m_lastPanadapterFrameMs {0};     // throttle visual FFT so decode keeps priority
     qint64 m_lastSpectrumRecoveryMs {0};
+    qint64 m_lastLegacyPcmSampleMs {0};
     float m_lastPanMinDb {0.f};
     float m_lastPanMaxDb {0.f};
     float m_lastPanFreqMin {0.f};
@@ -1821,6 +1824,9 @@ private:
     bool legacyTxBackendRequested() const;
     bool specialOperationRequiresLegacyTx() const;
     bool usingLegacyBackendForTx() const;
+    bool shouldUseBridgeAudioForLegacyDigitalTx() const;
+    bool startBridgeAudioForLegacyDigitalTx(const QString& reason);
+    void stopBridgeAudioForLegacyDigitalTx(const QString& reason);
     bool useModernSpectrumFeedWithLegacy() const;
     void syncSpecialOperationToLegacyBackend();
     void updateSpecialOperationFromLegacy(int activity);
@@ -1829,6 +1835,8 @@ private:
     void syncLegacyBackendState();
     void scheduleLegacyStateRefreshBurst();
     void migrateActiveMonitoringToLegacyBackend();
+    void rearmLegacyPcmSpectrumFeed(const QString& reason);
+    void scheduleLegacyPcmSpectrumRearm(const QString& reason);
     void teardownAudioCapture();
     void primeLegacyAllTxtCursor();
     void clearDecodeWindowsForModeChange(const QString& previousMode, const QString& nextMode);

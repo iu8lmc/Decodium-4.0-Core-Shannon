@@ -4249,16 +4249,16 @@ ApplicationWindow {
                         height: 28
                         radius: 4
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                        border.color: glassBorder
+                        border.color: timingBar.isTxPhase ? "#f44336" : Qt.rgba(76/255, 175/255, 80/255, 0.55)
                         border.width: 1
 
                         property real periodLen: decodePanel.periodLength
                         property real txDuration: bridge.mode === "FT2" ? 2.87 : (bridge.mode === "FT4" ? 5.04 : 12.64)
                         property real progress: 0.0
                         property real secInPeriod: 0.0
-                        property bool isTxPhase: false
+                        property bool isTxPhase: !!(bridge && bridge.transmitting)
                         property bool isEvenPeriod: true
-                        property string periodLabel: ""
+                        property string periodLabel: isTxPhase ? "TX" : "RX"
 
                         Timer {
                             interval: 50
@@ -4273,12 +4273,6 @@ ApplicationWindow {
                                 timingBar.progress = elapsed / periodMs
                                 var periodIndex = Math.floor(totalMs / periodMs)
                                 timingBar.isEvenPeriod = (periodIndex % 2) === 0
-                                // isTxPhase: true quando siamo nel NOSTRO periodo TX
-                                // bridge.txPeriod === 1 -> first/even (:00/:30)
-                                // bridge.txPeriod === 0 -> second/odd (:15/:45)
-                                var isOurTxPeriod = bridge ? ((bridge.txPeriod === 1) === timingBar.isEvenPeriod) : false
-                                timingBar.isTxPhase = isOurTxPeriod && timingBar.secInPeriod < timingBar.txDuration
-                                timingBar.periodLabel = isOurTxPeriod ? "TX" : "RX"
                             }
                         }
 
@@ -4294,6 +4288,7 @@ ApplicationWindow {
 
                             // TX zone marker
                             Rectangle {
+                                visible: timingBar.isTxPhase
                                 width: parent.width * (timingBar.txDuration / timingBar.periodLen)
                                 height: parent.height
                                 radius: 4
@@ -4323,6 +4318,7 @@ ApplicationWindow {
 
                             // TX/RX boundary marker
                             Rectangle {
+                                visible: timingBar.isTxPhase
                                 x: parent.width * (timingBar.txDuration / timingBar.periodLen) - 1
                                 y: -4
                                 width: 2
@@ -4348,7 +4344,8 @@ ApplicationWindow {
                             anchors.left: parent.left
                             anchors.leftMargin: 26
                             anchors.verticalCenter: parent.verticalCenter
-                            text: timingBar.isTxPhase ? "TX" : "RX"
+                            visible: false
+                            text: ""
                             font.pixelSize: 10
                             font.bold: true
                             font.family: "Monospace"
