@@ -5420,7 +5420,7 @@ void MainWindow::legacySetAlt12Enabled(bool enabled)
       return;
     }
 
-  if (m_mode == "FT2")
+  if (m_mode == "FT2" || m_specOp == SpecOp::HOUND)
     {
       ui->cbAutoTogglePeriod->setChecked(false);
       return;
@@ -5441,8 +5441,9 @@ void MainWindow::legacySetTxFirst(bool enabled)
       return;
     }
 
-  if (m_mode == "FT2")
+  if (m_mode == "FT2" || m_specOp == SpecOp::HOUND)
     {
+      m_txFirst = false;
       ui->txFirstCheckBox->setChecked(false);
       return;
     }
@@ -16483,6 +16484,7 @@ void MainWindow::guiUpdate()
         debugAutoCq ("cq-retry-progress",
                      QString {"count:%1/%2 txFirst:%3"}.arg (m_cqRetryCount).arg (MAX_CQ_RETRIES).arg (m_txFirst ? 1 : 0));
         if (m_cqRetryCount >= MAX_CQ_RETRIES
+            && m_specOp != SpecOp::HOUND
             && ui->cbAutoTogglePeriod
             && ui->cbAutoTogglePeriod->isVisible()
             && ui->cbAutoTogglePeriod->isChecked ()) {

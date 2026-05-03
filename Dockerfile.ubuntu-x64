@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     qt6-5compat-dev \
     qt6-svg-dev \
     qt6-declarative-dev \
+    qt6-shadertools-dev \
     qml6-module-qtcore \
     qml6-module-qtqml \
     qml6-module-qtqml-models \

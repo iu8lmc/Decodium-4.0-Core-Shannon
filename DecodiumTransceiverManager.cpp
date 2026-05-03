@@ -133,6 +133,24 @@ bool pttPortSharesCatPort(QString const& serialPort, QString const& pttPort)
     return comparablePortName(trimmedPttPort) == comparablePortName(serialPort);
 }
 
+QString defaultNetworkEndpointForRig(QString const& rigName)
+{
+    if (0 == rigName.compare(QStringLiteral("Ham Radio Deluxe"), Qt::CaseInsensitive))
+        return QStringLiteral("127.0.0.1:7809");
+    if (0 == rigName.compare(QStringLiteral("DX Lab Suite Commander"), Qt::CaseInsensitive))
+        return QStringLiteral("127.0.0.1:52002");
+    return QString();
+}
+
+bool isLegacyNetworkEndpoint(QString const& endpoint)
+{
+    QString const value = endpoint.trimmed().toLower();
+    return value.isEmpty()
+        || value == QStringLiteral("localhost:4532")
+        || value == QStringLiteral("127.0.0.1:4532")
+        || value == QStringLiteral("[::1]:4532");
+}
+
 QString normalizedRigIdentity(QString value)
 {
     value = value.toUpper();
@@ -269,10 +287,9 @@ bool d3ForceRtsAvailable(QString const& portType, QString const& handshake,
                          QString const& pttMethod, QString const& serialPort,
                          QString const& pttPort)
 {
+    Q_UNUSED(handshake);
     bool const serialCat = 0 == portType.compare(QStringLiteral("serial"), Qt::CaseInsensitive);
-    bool const hardwareHandshake = 0 == handshake.trimmed().compare(QStringLiteral("hardware"), Qt::CaseInsensitive);
     return serialCat
-        && !hardwareHandshake
         && !(0 == pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive)
              && pttPortSharesCatPort(serialPort, pttPort));
 }
@@ -632,6 +649,13 @@ void DecodiumTransceiverManager::setRigName(const QString& v)
     default:          m_portType = "none";    break;
     }
     emit portTypeChanged();
+    if (0 == m_portType.compare(QStringLiteral("network"), Qt::CaseInsensitive)) {
+        QString const endpoint = defaultNetworkEndpointForRig(v);
+        if (!endpoint.isEmpty() && isLegacyNetworkEndpoint(m_networkPort)) {
+            m_networkPort = endpoint;
+            emit networkPortChanged();
+        }
+    }
     int const civAddress = defaultCivAddressForRig(v, d->factory);
     if (m_civAddress != civAddress) {
         m_civAddress = civAddress;
@@ -775,9 +799,19 @@ static bool configuredPwrAndSwrEnabled()
 
 static TransceiverFactory::Handshake parseHandshake(const QString& s)
 {
-    if (s == "xonxoff")  return TransceiverFactory::handshake_XonXoff;
-    if (s == "hardware") return TransceiverFactory::handshake_hardware;
+    QString const value = s.trimmed().toLower();
+    if (value == "xonxoff")  return TransceiverFactory::handshake_XonXoff;
+    if (value == "hardware") return TransceiverFactory::handshake_hardware;
     return TransceiverFactory::handshake_none;
+}
+
+static QString handshakeName(TransceiverFactory::Handshake handshake)
+{
+    switch (handshake) {
+    case TransceiverFactory::handshake_XonXoff:  return QStringLiteral("xonxoff");
+    case TransceiverFactory::handshake_hardware: return QStringLiteral("hardware");
+    default:                                     return QStringLiteral("none");
+    }
 }
 
 static QString modeStr(Transceiver::MODE m)
@@ -862,11 +896,21 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.baud          = m->baudRate();
     p.data_bits     = parseData(m->dataBits());
     p.stop_bits     = parseStop(m->stopBits());
-    p.handshake     = parseHandshake(m->handshake());
+    TransceiverFactory::Handshake const requestedHandshake = parseHandshake(m->handshake());
+    p.handshake     = requestedHandshake;
     p.force_dtr     = canForceDtr && (m->forceDtr() || autoDtrLow);
     p.dtr_high      = canForceDtr && m->forceDtr() && m->dtrHigh();
     p.force_rts     = canForceRts && (m->forceRts() || autoRtsLow);
     p.rts_high      = canForceRts && m->forceRts() && m->rtsHigh();
+#if defined(Q_OS_LINUX)
+    bool const linuxRtsLowGuard = serialCat
+        && p.force_rts
+        && !p.rts_high
+        && requestedHandshake == TransceiverFactory::handshake_hardware;
+    if (linuxRtsLowGuard) {
+        p.handshake = TransceiverFactory::handshake_none;
+    }
+#endif
     p.ptt_type      = pttType;
     p.audio_source  = configuredTxAudioSource();
     p.split_mode    = parseSplit(m->splitMode());
@@ -881,12 +925,15 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
         p.poll_interval |= tci__audio;
     }
     qDebug().noquote()
-        << "[CATDBG] Hamlib params"
+        << "[CATDBG] Transceiver params"
         << "rig=" << p.rig_name
         << "portType=" << m->portType()
         << "serial=" << p.serial_port
+        << "network=" << p.network_port
+        << "tci=" << p.tci_port
         << "baud=" << p.baud
-        << "handshake=" << m->handshake()
+        << "handshake=" << handshakeName(p.handshake)
+        << "handshakeRequested=" << m->handshake()
         << "ptt=" << pttMethodName(p.ptt_type)
         << "pttPort=" << p.ptt_port
         << "forceDtr=" << p.force_dtr
@@ -896,6 +943,7 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
 #if defined(Q_OS_LINUX)
         << "linuxAutoDtrLow=" << autoDtrLow
         << "linuxAutoRtsLow=" << autoRtsLow
+        << "linuxRtsLowGuard=" << linuxRtsLowGuard
 #endif
         << "split=" << splitModeName(p.split_mode)
         << "poll=" << (p.poll_interval & 0xffff);
@@ -933,14 +981,43 @@ void DecodiumTransceiverManager::connectRig()
     Transceiver* xcv = nullptr;
     try {
         params = buildParams(this);
+        qInfo().noquote()
+            << "[CATDBG] Connect attempt"
+            << "rig=" << params.rig_name
+            << "portType=" << m_portType
+            << "serial=" << params.serial_port
+            << "network=" << params.network_port
+            << "tci=" << params.tci_port
+            << "baud=" << params.baud
+            << "handshake=" << handshakeName(params.handshake)
+            << "ptt=" << pttMethodName(params.ptt_type)
+            << "pttPort=" << params.ptt_port
+            << "split=" << splitModeName(params.split_mode)
+            << "poll=" << (params.poll_interval & 0xffff);
         auto uptr = d->factory.create(params, thread);
         xcv = uptr.release();          // trasferisce ownership al thread (via deleteLater)
     } catch (std::exception const& e) {
+        qWarning().noquote()
+            << "[CATDBG] Connect create failed"
+            << "rig=" << m_rigName
+            << "portType=" << m_portType
+            << "serial=" << m_serialPort
+            << "network=" << m_networkPort
+            << "tci=" << m_tciPort
+            << "reason=" << e.what();
         emit errorOccurred(QString("Errore creazione transceiver: %1").arg(e.what()));
         delete thread;
         d->xcvThread = nullptr;
         return;
     } catch (...) {
+        qWarning().noquote()
+            << "[CATDBG] Connect create failed"
+            << "rig=" << m_rigName
+            << "portType=" << m_portType
+            << "serial=" << m_serialPort
+            << "network=" << m_networkPort
+            << "tci=" << m_tciPort
+            << "reason=unknown";
         emit errorOccurred("Errore sconosciuto durante la creazione del transceiver");
         delete thread;
         d->xcvThread = nullptr;
@@ -1049,18 +1126,42 @@ void DecodiumTransceiverManager::connectRig()
             Qt::QueuedConnection);
 
     // Errori dal rig
+    QString const attemptRig = params.rig_name;
+    QString const attemptPortType = m_portType;
+    QString const attemptSerial = params.serial_port;
+    QString const attemptNetwork = params.network_port;
+    QString const attemptTci = params.tci_port;
+    int const attemptBaud = params.baud;
+    QString const attemptHandshake = handshakeName(params.handshake);
+    QString const attemptPtt = pttMethodName(params.ptt_type);
+    QString const attemptPttPort = params.ptt_port;
     connect(xcv, &Transceiver::failure,
             this,
-            [this](QString const& reason) {
+            [this, attemptRig, attemptPortType, attemptSerial, attemptNetwork, attemptTci,
+             attemptBaud, attemptHandshake, attemptPtt, attemptPttPort](QString const& reason) {
                 bool const wasConnected = m_connected;
+                bool const startupAttempt = m_connecting && !wasConnected;
                 m_connecting = false;
                 d->desired.online(false);
                 bool const recovering = m_transientCatRetryCount > 0;
+                QString const shownReason = sanitizeHamlibFailure(reason);
+                qWarning().noquote()
+                    << (startupAttempt ? "[CATDBG] Connect failed" : "[CATDBG] CAT failure")
+                    << "rig=" << attemptRig
+                    << "portType=" << attemptPortType
+                    << "serial=" << attemptSerial
+                    << "network=" << attemptNetwork
+                    << "tci=" << attemptTci
+                    << "baud=" << attemptBaud
+                    << "handshake=" << attemptHandshake
+                    << "ptt=" << attemptPtt
+                    << "pttPort=" << attemptPttPort
+                    << "raw=" << reason
+                    << "shown=" << shownReason;
                 if ((wasConnected || recovering) && isTransientCatIoFailure(reason)) {
-                    qWarning().noquote() << "Transient CAT failure:" << reason;
                     scheduleTransientReconnect(reason);
                 } else {
-                    emit errorOccurred("CAT failure: " + sanitizeHamlibFailure(reason));
+                    emit errorOccurred("CAT failure: " + shownReason);
                 }
                 if (m_connected) { m_connected = false; emit connectedChanged(); }
                 updateTelemetry(0.0, 0.0);
@@ -1208,6 +1309,16 @@ void DecodiumTransceiverManager::setRigTxFrequency(double hz)
 {
     m_txFrequency = hz;
     emit txFrequencyChanged();
+    if (hz > 0.0 && d->desired.frequency() == 0 && m_frequency > 0.0) {
+        d->desired.frequency(static_cast<Transceiver::Frequency>(m_frequency));
+    }
+    if (hz > 0.0 || d->desired.tx_frequency() > 0) {
+        qDebug().noquote()
+            << "[CATDBG] Hamlib set TX frequency"
+            << "splitMode=" << m_splitMode
+            << "rxHz=" << QString::number(static_cast<double>(d->desired.frequency()), 'f', 0)
+            << "txHz=" << QString::number(hz, 'f', 0);
+    }
     d->desired.split(hz > 0.0);
     d->desired.tx_frequency(static_cast<Transceiver::Frequency>(hz));
     sendState(d.get());
@@ -1215,6 +1326,9 @@ void DecodiumTransceiverManager::setRigTxFrequency(double hz)
 
 void DecodiumTransceiverManager::setRigTxFrequencyAndPtt(double hz, bool on)
 {
+    if (hz > 0.0 && d->desired.frequency() == 0 && m_frequency > 0.0) {
+        d->desired.frequency(static_cast<Transceiver::Frequency>(m_frequency));
+    }
     if (hz > 0.0) {
         if (!qFuzzyCompare(m_txFrequency + 1.0, hz + 1.0)) {
             m_txFrequency = hz;
@@ -1226,12 +1340,27 @@ void DecodiumTransceiverManager::setRigTxFrequencyAndPtt(double hz, bool on)
         d->desired.split(false);
         d->desired.tx_frequency(0);
     }
+    qDebug().noquote()
+        << "[CATDBG] Hamlib set TX frequency + PTT"
+        << "splitMode=" << m_splitMode
+        << "on=" << on
+        << "rxHz=" << QString::number(static_cast<double>(d->desired.frequency()), 'f', 0)
+        << "txHz=" << QString::number(hz, 'f', 0);
     d->desired.ptt(on);
     sendStateSync(d.get());
 }
 
 void DecodiumTransceiverManager::setRigPtt(bool on)
 {
+    if (m_pttMethod == QStringLiteral("VOX")) {
+        qDebug() << "[CATDBG] VOX PTT request ignored: TX must be triggered by audio only"
+                 << "on=" << on;
+        if (m_pttActive) {
+            m_pttActive = false;
+            emit pttActiveChanged();
+        }
+        return;
+    }
     d->desired.ptt(on);
     if (on)
         sendState(d.get());

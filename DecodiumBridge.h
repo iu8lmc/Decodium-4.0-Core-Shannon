@@ -139,6 +139,7 @@ class DecodiumBridge : public QObject
 
     // === TX CONTROL ===
     Q_PROPERTY(bool autoSeq          READ autoSeq          WRITE setAutoSeq          NOTIFY autoSeqChanged)
+    Q_PROPERTY(bool waitPounceActive READ waitPounceActive WRITE setWaitPounceActive NOTIFY waitPounceActiveChanged)
     Q_PROPERTY(bool txEnabled        READ txEnabled        WRITE setTxEnabled        NOTIFY txEnabledChanged)
     Q_PROPERTY(bool holdTxFreq       READ holdTxFreq       WRITE setHoldTxFreq       NOTIFY holdTxFreqChanged)
     Q_PROPERTY(bool autoCqRepeat     READ autoCqRepeat     WRITE setAutoCqRepeat     NOTIFY autoCqRepeatChanged)
@@ -411,6 +412,8 @@ public:
 
     bool autoSeq()           const { return m_autoSeq; }
     void setAutoSeq(bool v);
+    bool waitPounceActive()  const { return m_waitPounceActive; }
+    void setWaitPounceActive(bool v);
     bool txEnabled()         const { return m_txEnabled; }
     void setTxEnabled(bool v);
     bool holdTxFreq()        const { return m_holdTxFreq; }
@@ -504,10 +507,6 @@ public:
     int    ftThreads()            const { return m_ftThreads; }
     Q_INVOKABLE void setFtThreads(int v);
     Q_INVOKABLE void cycleFtThreads();
-    // Notify hooks chiamabili dai DecodeWorker (thread-safe via QueuedConnection)
-    Q_INVOKABLE void notifyCoherentAveraging(int signalsInCache);
-    Q_INVOKABLE void notifyNeuralSyncHit(double score);
-    Q_INVOKABLE void notifyTurboIterations(int itersUsed);
 
     // PSK Reporter
     bool        pskSearchFound()       const { return m_pskSearchFound; }
@@ -572,9 +571,9 @@ public:
     QString stationQth() const { return m_stationQth; }
     void    setStationQth(const QString& v){ if (m_stationQth!=v){m_stationQth=v;emit stationQthChanged();} }
     QString stationRigInfo() const { return m_stationRigInfo; }
-    void    setStationRigInfo(const QString& v){ if (m_stationRigInfo!=v){m_stationRigInfo=v;emit stationRigInfoChanged();} }
+    void    setStationRigInfo(const QString& v);
     QString stationAntenna() const { return m_stationAntenna; }
-    void    setStationAntenna(const QString& v){ if (m_stationAntenna!=v){m_stationAntenna=v;emit stationAntennaChanged();} }
+    void    setStationAntenna(const QString& v);
     int     stationPowerWatts() const { return m_stationPowerWatts; }
     void    setStationPowerWatts(int v){ v = qBound(0, v, 9999); if (m_stationPowerWatts!=v){m_stationPowerWatts=v;emit stationPowerWattsChanged();} }
     bool    autoStartMonitorOnStartup() const { return m_autoStartMonitorOnStartup; }
@@ -713,6 +712,11 @@ public:
     Q_INVOKABLE QStringList availableModes() const;
 
 public slots:
+    // Notify hooks chiamabili dai DecodeWorker (thread-safe via QueuedConnection)
+    void notifyCoherentAveraging(int signalsInCache);
+    void notifyNeuralSyncHit(double score);
+    void notifyTurboIterations(int itersUsed);
+
     // Monitor / TX
     Q_INVOKABLE void startRx();
     Q_INVOKABLE void stopRx();
@@ -947,6 +951,7 @@ signals:
     void txFrequencyChanged();
     void audioLevelChanged();
     void sMeterChanged();
+    void waitPounceActiveChanged();
     void rxInputLevelChanged();
     void txOutputLevelChanged();
     void audioInputDevicesChanged();
@@ -1209,6 +1214,9 @@ private:
     void appendLegacyAllTxtDecodeLine(const QVariantMap& entry) const;
     bool contestDecodeExchangesEnabled() const;
     bool shouldAcceptDecodedMessage(const QString& message, QString* reason = nullptr) const;
+    bool tryStartWaitPounceFromEntry(const QVariantMap& entry,
+                                     const QVariantList& previousEntries,
+                                     const QString& source);
     bool isRecentAutoCqDuplicate(const QString& call,
                                  double freqHz = -1.0,
                                  const QString& mode = QString()) const;
@@ -1227,6 +1235,16 @@ private:
     void clearNextLogClusterSpotOverride();
     QString inferredPartnerForAutolog() const;
     QString pskReporterProgramInfo() const;
+    QString pskReporterRigInfo() const;
+    QString pskReporterAntennaInfo() const;
+    void refreshPskReporterLocalStation();
+    void maybeQueuePskReporterSpot(const QVariantMap& entry,
+                                   const QString& message,
+                                   bool isCQ,
+                                   const QString& audioFreqHz,
+                                   const QString& snrText,
+                                   const QString& mode);
+    void replayPskReporterRecentEntries(const QVariantList& entries, const QString& source);
     bool promptToLogEnabled() const;
     void logQsoNow();
     void clearTxArmedAfterCompletedQso(const QString& completedCall, const QString& reason);
@@ -1348,6 +1366,9 @@ private:
     int     m_autoCQPeriodsMissed {0}; // periodi CQ senza risposta (watchdog count-based)
     bool m_multiAnswerMode {false};
     bool m_autoSeq          {true};
+    bool m_waitPounceActive {false};
+    QString m_lastWaitPounceKey;
+    qint64 m_lastWaitPounceMs {0};
     bool m_holdTxFreq       {false};
     bool m_txEnabled        {false};
     bool m_manualTxHold     {false};
@@ -1872,6 +1893,11 @@ private:
     void syncAudioDeviceSettingsToLegacyIni();
     void updatePeriodTicksMax();
     QVector<float> computeSpectrum() const;
+    void publishRemoteWaterfallFrame(const QVector<float>& dbValues,
+                                     float minDb,
+                                     float maxDb,
+                                     float freqMinHz,
+                                     float freqMaxHz);
     static PanadapterFrameResult computePanadapterFrame(const QVector<short>& samples,
                                                         int nfa,
                                                         int nfb);
@@ -1900,6 +1926,7 @@ private:
     void completeTxPlayback(const QString& reason, bool error = false);
     void finishModulatorIdlePlayback(const QString& reason);
     QString buildCurrentTxMessage() const;
+    bool prepareHoundTxSelectionForStart(const QString& reason);
     QString defaultLogCommentForQso(const QString& mode,
                                     const QString& rstSent,
                                     const QString& rstRcvd) const;

@@ -492,8 +492,8 @@ void DecodiumOmniRigManager::setRigPtt(bool on)
     }
     const QString ptt = normalizePttMethod(m_pttMethod);
     if (ptt == "VOX") {
-        if (m_pttActive != on) {
-            m_pttActive = on;
+        if (m_pttActive) {
+            m_pttActive = false;
             emit pttActiveChanged();
         }
         return;
@@ -689,6 +689,13 @@ void DecodiumOmniRigManager::setRigMode(const QString& mode)
 void DecodiumOmniRigManager::setRigPtt(bool on)
 {
     if (!m_mockEnabled || !m_connected) return;
+    if (normalizePttMethod(m_pttMethod) == QStringLiteral("VOX")) {
+        if (m_pttActive) {
+            m_pttActive = false;
+            emit pttActiveChanged();
+        }
+        return;
+    }
     if (m_pttActive != on) {
         m_pttActive = on;
         emit pttActiveChanged();

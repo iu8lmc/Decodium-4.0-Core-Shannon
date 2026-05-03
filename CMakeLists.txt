@@ -1625,17 +1625,21 @@ else ()
   message (STATUS "Qt6 ShaderTools not found: Decodium waterfall shader disabled, CPU palette fallback will be used")
 endif ()
 # FT8 features benchmark — misura overhead/recovery di Turbo Feedback + Neural Sync
-add_executable (bench_ft8_features tools/bench_ft8_features.cpp)
-target_link_libraries (bench_ft8_features
-  Qt6::Core
-  wsjt_qt
-  wsjt_fort
-  wsjt_cxx
-  Hamlib::Hamlib
-  Boost::log
-  ${FFTW3_LIBRARIES}
-  ${LIBM_LIBRARIES}
-)
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/bench_ft8_features.cpp")
+  add_executable (bench_ft8_features tools/bench_ft8_features.cpp)
+  target_link_libraries (bench_ft8_features
+    Qt6::Core
+    wsjt_qt
+    wsjt_fort
+    wsjt_cxx
+    Hamlib::Hamlib
+    Boost::log
+    ${FFTW3_LIBRARIES}
+    ${LIBM_LIBRARIES}
+  )
+else ()
+  message (STATUS "tools/bench_ft8_features.cpp not found: skipping optional FT8 features benchmark")
+endif ()
 
 # Copy QML files next to the decodium_qml executable on every build.
 # The runtime loads QML from the build tree, so stale copied files cause

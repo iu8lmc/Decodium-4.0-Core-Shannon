@@ -86,7 +86,7 @@ public:
     QStringList rigList()       const;
     QStringList portList()      const { return m_portList; }
     QStringList baudList()      const { return {"1200","2400","4800","9600","19200","38400","57600","115200"}; }
-    QStringList pttMethodList() const { return {"CAT","DTR","RTS"}; }
+    QStringList pttMethodList() const { return {"CAT","DTR","RTS","VOX"}; }
     QStringList splitModeList() const { return {"none"}; }
     double      frequency()     const { return m_frequency; }
     double      txFrequency()   const { return 0.0; }
@@ -98,8 +98,10 @@ public:
     bool        audioAutoStart() const { return m_audioAutoStart; }
     void        setAudioAutoStart(bool v) { if (m_audioAutoStart != v) { m_audioAutoStart = v; emit audioAutoStartChanged(); } }
 
-    // PTT disponibile se: CAT connesso, oppure porta aperta con metodo DTR/RTS
+    // PTT disponibile se: CAT connesso, oppure porta aperta con metodo DTR/RTS.
+    // VOX e' audio-only: non deve pilotare CAT/DTR/RTS.
     bool canPtt() const {
+        if (m_pttMethod == "VOX") return false;
         if (m_pttMethod == "CAT") return m_connected;
         return m_serial && m_serial->isOpen();
     }

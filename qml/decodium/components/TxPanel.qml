@@ -161,13 +161,15 @@ Item {
     readonly property int toolbarSpacing: 3
     readonly property int toolbarButtonHeight: 32
     readonly property int toolbarButtonWidth: 62
+    readonly property int toolbarHoldButtonWidth: 72
     readonly property int toolbarWideButtonWidth: 70
     readonly property int toolbarLongButtonWidth: 76
     readonly property int toolbarModeWidth: 116
     readonly property int toolbarLabelSize: Math.max(9, Math.round(9 * toolbarScale))
     readonly property int toolbarGlyphSize: Math.max(12, Math.round(13 * toolbarScale))
     readonly property int toolbarControlsWidth: toolbarModeWidth
-                                                + (toolbarButtonWidth * 8)
+                                                + (toolbarButtonWidth * 7)
+                                                + toolbarHoldButtonWidth
                                                 + (toolbarWideButtonWidth * 5)
                                                 + toolbarLongButtonWidth
                                                 + (toolbarSpacing * 15)
@@ -614,7 +616,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: txPanel.toolbarButtonWidth
+                            width: txPanel.toolbarHoldButtonWidth
                             height: txPanel.toolbarButtonHeight
                             radius: 5
                             color: holdTxFreqBtn.checked ? Qt.rgba(255/255, 193/255, 7/255, 0.25) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
@@ -844,6 +846,68 @@ Item {
                             snr: engine ? engine.asyncSnrDb : -99
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("FT2 Async Mode - sine wave: green=RX, red=TX")
+                            ToolTip.delay: 400
+                        }
+
+                        Rectangle {
+                            id: houndModeBadge
+                            width: 82
+                            height: txPanel.toolbarButtonHeight
+                            visible: engine && engine.houndMode
+                            radius: 5
+                            color: Qt.rgba(warningOrange.r, warningOrange.g, warningOrange.b, 0.24)
+                            border.color: warningOrange
+                            border.width: 2
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "HOUND"
+                                color: warningOrange
+                                font.family: "Monospace"
+                                font.pixelSize: Math.max(11, Math.round(11 * txPanel.toolbarScale))
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: houndModeBadgeHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
+
+                            ToolTip.visible: houndModeBadgeHover.containsMouse
+                            ToolTip.text: qsTr("Hound mode active")
+                            ToolTip.delay: 400
+                        }
+
+                        Rectangle {
+                            id: waitPounceBadge
+                            width: 54
+                            height: txPanel.toolbarButtonHeight
+                            visible: engine && engine.waitPounceActive
+                            radius: 5
+                            color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.20)
+                            border.color: secondaryCyan
+                            border.width: 2
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "W&P"
+                                color: secondaryCyan
+                                font.family: "Monospace"
+                                font.pixelSize: Math.max(11, Math.round(11 * txPanel.toolbarScale))
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: waitPounceBadgeHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
+
+                            ToolTip.visible: waitPounceBadgeHover.containsMouse
+                            ToolTip.text: qsTr("Wait & Pounce active")
                             ToolTip.delay: 400
                         }
 
