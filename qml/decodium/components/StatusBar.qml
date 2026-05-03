@@ -23,8 +23,8 @@ Rectangle {
     property bool checkSwrEnabled: bridge ? bridge.getSetting("CheckSWR", false) : false
     readonly property bool rigTelemetryBackendActive: bridge && (bridge.catBackend === "hamlib" || bridge.catBackend === "tci")
     readonly property bool rigTelemetryVisible: pwrAndSwrEnabled && rigTelemetryBackendActive && catStatus === "Connected"
-    readonly property color swrStatusColor: rigSwr >= 2.0 ? "#f44336"
-        : rigSwr >= 1.5 ? "#ffeb3b"
+    readonly property color swrStatusColor: rigSwr >= 2.0 ? colorRed
+        : rigSwr >= 1.5 ? colorYellow
         : textSecondary
 
     // Scala logaritmica: -60 dBFS → 0.0, 0 dBFS → 1.0
@@ -41,11 +41,15 @@ Rectangle {
     onDecodingChanged: console.log("StatusBar: decoding =", decoding)
 
     readonly property var themeManager: bridge && bridge.themeManager ? bridge.themeManager : null
-    property color accentGreen: themeManager ? themeManager.accentColor : "#4CAF50"
+    property color accentGreen: themeManager ? themeManager.accentColor : "#00FF88"
     property color secondaryCyan: themeManager ? themeManager.secondaryColor : "#00D4FF"
     property color textSecondary: themeManager ? themeManager.textSecondary : "#89B4D0"
     property color textPrimary: themeManager ? themeManager.textPrimary : "#E8F4FD"
     property color bgDeep: themeManager ? themeManager.bgDeep : "#111827"
+    property color colorRed:    themeManager ? themeManager.ledRed       : "#f44336"
+    property color colorYellow: themeManager ? themeManager.ledYellow    : "#FFEB3B"
+    property color colorGreen:  themeManager ? themeManager.successColor : "#4CAF50"
+    property color colorOrange: themeManager ? themeManager.warningColor : "#ff9800"
 
     Connections {
         target: bridge
@@ -133,9 +137,9 @@ Rectangle {
                             color: {
                                 var threshold = (index + 1) / 9.0
                                 if (scaledLevel >= threshold) {
-                                    if (index < 3) return "#4CAF50"  // Green S1-S3
-                                    if (index < 6) return "#FFEB3B"  // Yellow S4-S6
-                                    return "#f44336"  // Red S7-S9
+                                    if (index < 3) return colorGreen  // Green S1-S3
+                                    if (index < 6) return colorYellow  // Yellow S4-S6
+                                    return colorRed  // Red S7-S9
                                 }
                                 return Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
                             }
@@ -157,7 +161,7 @@ Rectangle {
                 }
                 font.family: "Monospace"
                 font.pixelSize: 10
-                color: scaledLevel > 0.9 ? "#f44336" : textSecondary
+                color: scaledLevel > 0.9 ? colorRed : textSecondary
                 Layout.preferredWidth: 35
             }
         }
@@ -192,14 +196,14 @@ Rectangle {
                 height: 18
                 radius: 9
                 color: txVisualActive ? Qt.rgba(244/255, 67/255, 54/255, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                border.color: txVisualActive ? "#f44336" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+                border.color: txVisualActive ? colorRed : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
 
                 Text {
                     anchors.centerIn: parent
                     text: "TX"
                     font.pixelSize: 9
                     font.bold: true
-                    color: txVisualActive ? "#f44336" : textSecondary
+                    color: txVisualActive ? colorRed : textSecondary
                 }
             }
 
@@ -234,7 +238,7 @@ Rectangle {
                     text: "DEC"
                     font.pixelSize: 9
                     font.bold: true
-                    color: decLed.ledOn ? "#ffffff" : textSecondary
+                    color: decLed.ledOn ? (themeManager && themeManager.isLightTheme ? bgDeep : "#ffffff") : textSecondary
                 }
 
                 // Click to test LED
@@ -265,7 +269,7 @@ Rectangle {
                 property bool isActive: threadCount > 1
 
                 color: isActive ? Qt.rgba(255/255, 152/255, 0/255, 0.4) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                border.color: isActive ? "#ff9800" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+                border.color: isActive ? colorOrange : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
                 border.width: isActive ? 2 : 1
 
                 // Glow effect when multiple threads active
@@ -286,7 +290,7 @@ Rectangle {
                         text: "FT"
                         font.pixelSize: 8
                         font.bold: true
-                        color: ftThreadsLed.isActive ? "#ff9800" : textSecondary
+                        color: ftThreadsLed.isActive ? colorOrange : textSecondary
                     }
 
                     Text {
@@ -294,7 +298,7 @@ Rectangle {
                         font.pixelSize: 9
                         font.bold: true
                         font.family: "Monospace"
-                        color: ftThreadsLed.isActive ? "#ffffff" : textSecondary
+                        color: ftThreadsLed.isActive ? (themeManager && themeManager.isLightTheme ? bgDeep : "#ffffff") : textSecondary
                     }
                 }
 
@@ -335,7 +339,7 @@ Rectangle {
                 height: 8
                 radius: 4
                 color: catStatus === "Connected" ? accentGreen :
-                       catStatus === "Connecting" ? "#ff9800" : "#f44336"
+                       catStatus === "Connecting" ? colorOrange : colorRed
             }
 
             Text {
@@ -385,7 +389,7 @@ Rectangle {
                     font.family: "Monospace"
                     font.pixelSize: 10
                     font.bold: rigSwr >= 1.5
-                    color: rigSwr >= 2.0 ? "#ffffff" : swrStatusColor
+                    color: rigSwr >= 2.0 ? (themeManager && themeManager.isLightTheme ? bgDeep : "#ffffff") : swrStatusColor
                 }
 
                 MouseArea {
@@ -418,14 +422,14 @@ Rectangle {
                 height: 8
                 radius: 4
                 color: pskStatusRow.pskConnected ? accentGreen :
-                       pskStatusRow.pskEnabled ? "#ff9800" : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
+                       pskStatusRow.pskEnabled ? colorOrange : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
             }
 
             Text {
                 text: "PSK"
                 font.pixelSize: 10
                 color: pskStatusRow.pskConnected ? accentGreen :
-                       pskStatusRow.pskEnabled ? "#ff9800" : textSecondary
+                       pskStatusRow.pskEnabled ? colorOrange : textSecondary
 
                 MouseArea {
                     anchors.fill: parent
@@ -470,8 +474,8 @@ Rectangle {
                     anchors.margins: 2
                     width: Math.max(0, Math.min(parent.width - 4, (parent.width - 4) * cpuUsage))
                     radius: 1
-                    color: cpuUsage < 0.5 ? "#4CAF50" :
-                           cpuUsage < 0.8 ? "#ff9800" : "#f44336"
+                    color: cpuUsage < 0.5 ? colorGreen :
+                           cpuUsage < 0.8 ? colorOrange : colorRed
                 }
             }
 
@@ -479,7 +483,7 @@ Rectangle {
                 text: (cpuUsage * 100).toFixed(0) + "%"
                 font.family: "Monospace"
                 font.pixelSize: 10
-                color: cpuUsage > 0.8 ? "#f44336" : textSecondary
+                color: cpuUsage > 0.8 ? colorRed : textSecondary
                 Layout.preferredWidth: 30
             }
         }
@@ -516,7 +520,7 @@ Rectangle {
                         width: Math.max(0, Math.min(parent.width - 4, (parent.width - 4) * gpuActivity))
                         radius: 1
                         color: gpuActivity < 0.5 ? secondaryCyan :
-                               gpuActivity < 0.8 ? "#ff9800" : "#f44336"
+                               gpuActivity < 0.8 ? colorOrange : colorRed
                     }
                 }
 
@@ -524,7 +528,7 @@ Rectangle {
                     text: gpuFps > 0 ? gpuFps + "fps" : "idle"
                     font.family: "Monospace"
                     font.pixelSize: 10
-                    color: gpuActivity > 0.8 ? "#f44336" : textSecondary
+                    color: gpuActivity > 0.8 ? colorRed : textSecondary
                     Layout.preferredWidth: 36
                 }
             }

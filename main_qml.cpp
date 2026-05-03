@@ -848,6 +848,7 @@ int main(int argc, char* argv[])
     });
 
     DecodiumBridge bridge;
+    app.setProperty("decodiumBridge", QVariant::fromValue<QObject*>(&bridge));
 #ifdef Q_OS_WIN
     QObject::connect(&bridge, &DecodiumBridge::mainQmlReadyForNativeWindowing, &app,
                      [&app, appIcon] {

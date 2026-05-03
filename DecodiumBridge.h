@@ -172,6 +172,17 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int    coherentCount        READ coherentCount        NOTIFY coherentCountChanged)
     Q_PROPERTY(double neuralScore          READ neuralScore          NOTIFY neuralScoreChanged)
     Q_PROPERTY(int    turboIterations      READ turboIterations      NOTIFY turboIterationsChanged)
+    Q_PROPERTY(bool   coherentAvgEnabled   READ coherentAvgEnabled   WRITE setCoherentAvgEnabled   NOTIFY coherentAvgEnabledChanged)
+    Q_PROPERTY(bool   neuralSyncEnabled    READ neuralSyncEnabled    WRITE setNeuralSyncEnabled    NOTIFY neuralSyncEnabledChanged)
+    Q_PROPERTY(bool   turboFeedbackEnabled READ turboFeedbackEnabled WRITE setTurboFeedbackEnabled NOTIFY turboFeedbackEnabledChanged)
+    // AUTO master: quando ON, le 3 feature si attivano in base a condizioni runtime
+    // (decode count rolling, SNR Q65) ignorando i toggle manuali sopra.
+    Q_PROPERTY(bool   advAutoModeEnabled   READ advAutoModeEnabled   WRITE setAdvAutoModeEnabled   NOTIFY advAutoModeEnabledChanged)
+    // Stato effettivo (read-only) — riflette ciò che il decoder usa veramente
+    // a ogni slot (manuale o calcolato dall'auto-mode).
+    Q_PROPERTY(bool   advNeuralSyncActive  READ advNeuralSyncActive  NOTIFY advNeuralSyncActiveChanged)
+    Q_PROPERTY(bool   advTurboFeedbackActive READ advTurboFeedbackActive NOTIFY advTurboFeedbackActiveChanged)
+    Q_PROPERTY(bool   advCoherentAvgActive READ advCoherentAvgActive NOTIFY advCoherentAvgActiveChanged)
     Q_PROPERTY(int    ftThreads            READ ftThreads            WRITE setFtThreads NOTIFY ftThreadsChanged)
 
     // === PSK REPORTER ===
@@ -472,9 +483,30 @@ public:
     int    coherentCount()        const { return m_coherentCount; }
     double neuralScore()          const { return m_neuralScore; }
     int    turboIterations()      const { return m_turboIterations; }
+    bool   coherentAvgEnabled()   const { return m_coherentAvgEnabled; }
+    void   setCoherentAvgEnabled(bool v) { if (m_coherentAvgEnabled != v) { m_coherentAvgEnabled = v; emit coherentAvgEnabledChanged(); } }
+    bool   neuralSyncEnabled()    const { return m_neuralSyncEnabled; }
+    void   setNeuralSyncEnabled(bool v)  { if (m_neuralSyncEnabled != v)  { m_neuralSyncEnabled = v;  emit neuralSyncEnabledChanged(); } }
+    bool   turboFeedbackEnabled() const { return m_turboFeedbackEnabled; }
+    void   setTurboFeedbackEnabled(bool v) { if (m_turboFeedbackEnabled != v) { m_turboFeedbackEnabled = v; emit turboFeedbackEnabledChanged(); } }
+    bool   advAutoModeEnabled()   const { return m_advAutoModeEnabled; }
+    void   setAdvAutoModeEnabled(bool v);
+    bool   advNeuralSyncActive()  const { return m_advNeuralSyncActive; }
+    bool   advTurboFeedbackActive() const { return m_advTurboFeedbackActive; }
+    bool   advCoherentAvgActive() const { return m_advCoherentAvgActive; }
+    // Effective flags da consumare nei worker FT8/Q65; tengono conto di auto-mode.
+    Q_INVOKABLE bool effectiveNeuralSync();
+    Q_INVOKABLE bool effectiveTurboFeedback();
+    Q_INVOKABLE bool effectiveCoherentAvg(double snr_db_avg);
+    // Hook chiamato dopo ogni slot FT8 per aggiornare la rolling window.
+    Q_INVOKABLE void recordFt8DecodeCount(int count);
     int    ftThreads()            const { return m_ftThreads; }
     Q_INVOKABLE void setFtThreads(int v);
     Q_INVOKABLE void cycleFtThreads();
+    // Notify hooks chiamabili dai DecodeWorker (thread-safe via QueuedConnection)
+    Q_INVOKABLE void notifyCoherentAveraging(int signalsInCache);
+    Q_INVOKABLE void notifyNeuralSyncHit(double score);
+    Q_INVOKABLE void notifyTurboIterations(int itersUsed);
 
     // PSK Reporter
     bool        pskSearchFound()       const { return m_pskSearchFound; }
@@ -971,6 +1003,13 @@ signals:
     void ledNeuralSyncChanged();
     void ledTurboFeedbackChanged();
     void coherentCountChanged();
+    void coherentAvgEnabledChanged();
+    void neuralSyncEnabledChanged();
+    void turboFeedbackEnabledChanged();
+    void advAutoModeEnabledChanged();
+    void advNeuralSyncActiveChanged();
+    void advTurboFeedbackActiveChanged();
+    void advCoherentAvgActiveChanged();
     void pskSearchFoundChanged();
     void pskSearchCallsignChanged();
     void pskSearchingChanged();
@@ -1344,6 +1383,16 @@ private:
     int    m_coherentCount {0};
     double m_neuralScore {0.0};
     int    m_turboIterations {0};
+    bool   m_coherentAvgEnabled {false};
+    bool   m_neuralSyncEnabled {false};
+    bool   m_turboFeedbackEnabled {false};
+    bool   m_advAutoModeEnabled {true};
+    bool   m_advNeuralSyncActive {false};
+    bool   m_advTurboFeedbackActive {false};
+    bool   m_advCoherentAvgActive {false};
+    // Rolling window degli ultimi N decode count FT8 (slot 15s)
+    QVector<int> m_ft8DecodeHistory;
+    static constexpr int kFt8HistoryDepth = 4;
     bool        m_pskSearchFound {false};
     QString     m_pskSearchCallsign;
     bool        m_pskSearching {false};

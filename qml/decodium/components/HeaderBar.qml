@@ -22,6 +22,7 @@ Rectangle {
     property color textPrimary: bridge.themeManager.textPrimary
     property color bgDeep: bridge.themeManager.bgDeep
     property color bgMedium: bridge.themeManager.bgMedium
+    property color colorRed: bridge.themeManager.ledRed
 
     signal modeChanged(string mode)
     signal startMonitor()
@@ -145,7 +146,7 @@ Rectangle {
                     font.pixelSize: 20
                     font.family: "Monospace"
                     font.bold: true
-                    color: transmitting ? "#ff6b6b" : accentGreen
+                    color: transmitting ? colorRed : accentGreen
                     Layout.fillWidth: true
                 }
 
@@ -180,7 +181,7 @@ Rectangle {
                 anchors.fill: parent
                 radius: 8
                 color: "transparent"
-                border.color: "#f44336"
+                border.color: colorRed
                 border.width: 3
                 visible: transmitting
                 opacity: transmitting ? 1 : 0
@@ -300,7 +301,7 @@ Rectangle {
 
                 background: Rectangle {
                     color: Qt.rgba(244/255, 67/255, 54/255, 0.2)
-                    border.color: "#f44336"
+                    border.color: colorRed
                     radius: 8
                 }
             }

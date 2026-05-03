@@ -10652,6 +10652,10 @@ void DecodiumBridge::saveSettings()
     s.setValue("zapEnabled",      m_zapEnabled);
     s.setValue("deepSearchEnabled",m_deepSearchEnabled);
     s.setValue("avgDecodeEnabled", m_avgDecodeEnabled);
+    s.setValue("coherentAvgEnabled",   m_coherentAvgEnabled);
+    s.setValue("neuralSyncEnabled",    m_neuralSyncEnabled);
+    s.setValue("turboFeedbackEnabled", m_turboFeedbackEnabled);
+    s.setValue("advAutoModeEnabled",   m_advAutoModeEnabled);
     s.setValue("FT8AP",             m_ft8ApEnabled);
     s.setValue("asyncDecodeEnabled",m_asyncDecodeEnabled);
     s.setValue("pskReporterEnabled",m_pskReporterEnabled);
@@ -12708,10 +12712,41 @@ void DecodiumBridge::resetLedStatus()
     m_ledNeuralSync = false;
     m_ledTurboFeedback = false;
     m_coherentCount = 0;
+    m_neuralScore = 0.0;
+    m_turboIterations = 0;
     emit ledCoherentAveragingChanged();
     emit ledNeuralSyncChanged();
     emit ledTurboFeedbackChanged();
     emit coherentCountChanged();
+    emit neuralScoreChanged();
+    emit turboIterationsChanged();
+}
+
+// ---- Hooks chiamati dai DecodeWorker (via QMetaObject::invokeMethod / Qt::QueuedConnection)
+// Restano on per la durata del periodo decode; resetLedStatus() li spegne a fine ciclo.
+void DecodiumBridge::notifyCoherentAveraging(int signalsInCache)
+{
+    bool const on = signalsInCache > 0;
+    if (m_ledCoherentAveraging != on) { m_ledCoherentAveraging = on; emit ledCoherentAveragingChanged(); }
+    if (m_coherentCount != signalsInCache) { m_coherentCount = signalsInCache; emit coherentCountChanged(); }
+}
+
+void DecodiumBridge::notifyNeuralSyncHit(double score)
+{
+    // score atteso 0..1 (es. % decodi recuperati da OSD nel periodo).
+    double const clamped = qBound(0.0, score, 1.0);
+    bool const on = clamped > 0.0;
+    if (m_ledNeuralSync != on)   { m_ledNeuralSync = on;   emit ledNeuralSyncChanged(); }
+    if (qAbs(m_neuralScore - clamped) > 1e-4) { m_neuralScore = clamped; emit neuralScoreChanged(); }
+}
+
+void DecodiumBridge::notifyTurboIterations(int itersUsed)
+{
+    int const v = qMax(0, itersUsed);
+    // LED on se il decoder ha lavorato oltre la soglia base (= recupero borderline).
+    bool const on = v > 8;
+    if (m_ledTurboFeedback != on)  { m_ledTurboFeedback = on; emit ledTurboFeedbackChanged(); }
+    if (m_turboIterations != v)    { m_turboIterations = v;   emit turboIterationsChanged(); }
 }
 
 QString DecodiumBridge::diagnosticLogPath() const
@@ -12819,6 +12854,10 @@ void DecodiumBridge::loadSettings()
         m_deepSearchEnabled = s.value("deepSearchEnabled",
                                       (legacyNDepthBits & 0x20) != 0).toBool();
         m_ft8ApEnabled = s.value("FT8AP", true).toBool();
+        m_coherentAvgEnabled   = s.value("coherentAvgEnabled",   false).toBool();
+        m_neuralSyncEnabled    = s.value("neuralSyncEnabled",    false).toBool();
+        m_turboFeedbackEnabled = s.value("turboFeedbackEnabled", false).toBool();
+        m_advAutoModeEnabled   = s.value("advAutoModeEnabled",   true).toBool();
     }
     m_dxCall   = s.value("dxCall", "").toString();
     m_dxGrid   = s.value("dxGrid", "").toString();
@@ -19132,4 +19171,85 @@ void DecodiumBridge::testCloudlogApi()
         if (data.contains("auth")) emit statusMessage("Cloudlog: API key OK");
         else emit errorMessage("Cloudlog: API key non valida");
     });
+}
+
+// === ADV AUTO-MODE ===
+// Logica:
+//  - Neural Sync (FT8 OSD always-on): attivo se decode rolling avg < 2/slot
+//    (banda povera → costo +80% CPU giustificato dal recovery extra ~12%).
+//  - Turbo Feedback (LDPC iter 30→50): attivo insieme a Neural Sync
+//    (overhead aggiuntivo ~5%, può aiutare codeword borderline da OSD).
+//  - Coherent Avg (Q65): attivo quando SNR Q65 medio < -22 dB.
+void DecodiumBridge::setAdvAutoModeEnabled(bool v)
+{
+    if (m_advAutoModeEnabled != v) {
+        m_advAutoModeEnabled = v;
+        emit advAutoModeEnabledChanged();
+        // Reset history quando cambia il mode per evitare carry-over stantio.
+        m_ft8DecodeHistory.clear();
+    }
+}
+
+void DecodiumBridge::recordFt8DecodeCount(int count)
+{
+    m_ft8DecodeHistory.append(qMax(0, count));
+    while (m_ft8DecodeHistory.size() > kFt8HistoryDepth) {
+        m_ft8DecodeHistory.removeFirst();
+    }
+}
+
+bool DecodiumBridge::effectiveNeuralSync()
+{
+    bool active;
+    if (m_advAutoModeEnabled) {
+        // Trigger: avg decodi recenti < soglia E history popolata
+        if (m_ft8DecodeHistory.size() >= 2) {
+            double sum = 0.0;
+            for (int v : m_ft8DecodeHistory) sum += v;
+            double const avg = sum / m_ft8DecodeHistory.size();
+            active = avg < 2.0;
+        } else {
+            // Bootstrap: prime 2 slot decode senza neural per misurare
+            active = false;
+        }
+    } else {
+        active = m_neuralSyncEnabled;
+    }
+    if (m_advNeuralSyncActive != active) {
+        m_advNeuralSyncActive = active;
+        emit advNeuralSyncActiveChanged();
+    }
+    return active;
+}
+
+bool DecodiumBridge::effectiveTurboFeedback()
+{
+    bool active;
+    if (m_advAutoModeEnabled) {
+        // Co-attivato con Neural Sync (overhead marginale, può recuperare bit borderline)
+        active = effectiveNeuralSync();
+    } else {
+        active = m_turboFeedbackEnabled;
+    }
+    if (m_advTurboFeedbackActive != active) {
+        m_advTurboFeedbackActive = active;
+        emit advTurboFeedbackActiveChanged();
+    }
+    return active;
+}
+
+bool DecodiumBridge::effectiveCoherentAvg(double snr_db_avg)
+{
+    bool active;
+    if (m_advAutoModeEnabled) {
+        // Trigger Q65: SNR medio basso (segnali EME tipici)
+        active = snr_db_avg < -22.0;
+    } else {
+        active = m_coherentAvgEnabled;
+    }
+    if (m_advCoherentAvgActive != active) {
+        m_advCoherentAvgActive = active;
+        emit advCoherentAvgActiveChanged();
+    }
+    return active;
 }

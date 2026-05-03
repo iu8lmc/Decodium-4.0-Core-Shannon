@@ -3817,6 +3817,12 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (&m_ft8DecodeThread, &QThread::finished, m_ft8DecodeWorker, &QObject::deleteLater);
   connect (m_ft8DecodeWorker, &decodium::ft8::FT8DecodeWorker::decodeReady,
            this, &MainWindow::processFt8DecodedRows, Qt::QueuedConnection);
+  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
+    connect (m_ft8DecodeWorker, SIGNAL (neuralSyncHit (double)),
+             bridge, SLOT (notifyNeuralSyncHit (double)), Qt::QueuedConnection);
+    connect (m_ft8DecodeWorker, SIGNAL (turboIterations (int)),
+             bridge, SLOT (notifyTurboIterations (int)), Qt::QueuedConnection);
+  }
 #if defined(Q_OS_LINUX)
   m_ft8DecodeThread.setStackSize (16 * 1024 * 1024);
 #else
@@ -3841,6 +3847,10 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (&m_q65DecodeThread, &QThread::finished, m_q65DecodeWorker, &QObject::deleteLater);
   connect (m_q65DecodeWorker, &decodium::q65::Q65DecodeWorker::decodeReady,
            this, &MainWindow::processQ65DecodedRows, Qt::QueuedConnection);
+  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
+    connect (m_q65DecodeWorker, SIGNAL (coherentCount (int)),
+             bridge, SLOT (notifyCoherentAveraging (int)), Qt::QueuedConnection);
+  }
 #if defined(Q_OS_LINUX)
   m_q65DecodeThread.setStackSize (32 * 1024 * 1024);
 #else
@@ -13001,6 +13011,18 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
   request.mycall = QByteArray (dec_data.params.mycall, int (sizeof dec_data.params.mycall));
   request.hiscall = QByteArray (dec_data.params.hiscall, int (sizeof dec_data.params.hiscall));
   request.hisgrid = QByteArray (dec_data.params.hisgrid, int (sizeof dec_data.params.hisgrid));
+  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
+    bool neural = false, turbo = false, coherent = false;
+    QMetaObject::invokeMethod (bridge, "effectiveNeuralSync", Qt::DirectConnection,
+                               Q_RETURN_ARG (bool, neural));
+    QMetaObject::invokeMethod (bridge, "effectiveTurboFeedback", Qt::DirectConnection,
+                               Q_RETURN_ARG (bool, turbo));
+    QMetaObject::invokeMethod (bridge, "effectiveCoherentAvg", Qt::DirectConnection,
+                               Q_RETURN_ARG (bool, coherent), Q_ARG (double, 0.0));
+    request.neuralSyncEnabled = neural;
+    request.turboFeedbackEnabled = turbo;
+    request.coherentAvgEnabled = coherent;
+  }
   return request;
 }
 
@@ -13137,6 +13159,9 @@ void MainWindow::requestInProcessQ65Decode ()
   request.nqsoprogress = qBound (0, int (dec_data.params.nQSOProgress), 6);
   request.ncontest = qBound (0, int (dec_data.params.nexp_decode & 7), 16);
   request.lapcqonly = dec_data.params.lapcqonly ? 1 : 0;
+  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
+    request.coherentAvgEnabled = bridge->property ("coherentAvgEnabled").toBool ();
+  }
 
   m_q65DecodePending = true;
   m_decodedTransportQueue.clear ();
@@ -28432,6 +28457,12 @@ void MainWindow::processFt8DecodedRows (quint64 serial, QStringList const& rows)
 {
   if (serial != m_ft8DecodeSerial) {
     return;
+  }
+
+  // Aggiorna rolling history del bridge per auto-trigger features.
+  if (auto * bridge = qApp ? qApp->property ("decodiumBridge").value<QObject*> () : nullptr) {
+    QMetaObject::invokeMethod (bridge, "recordFt8DecodeCount", Qt::QueuedConnection,
+                               Q_ARG (int, rows.size ()));
   }
 
   int const completedUtc = m_ft8DecodePendingUtc;

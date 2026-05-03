@@ -242,6 +242,39 @@ void PanadapterItem::buildPalette(int idx)
     case 8: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kFire,5); break;
     case 9: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kPlasma,5); break;
     case 10: for(int i=0;i<256;++i) m_palette[i]=gradInterp(i/255.f,kFlex,10); break;
+    case 11: // Stellar Light — pastel light palette per design mockup
+        for (int i=0;i<256;++i){
+            float t = i/255.f;
+            int r, g, b;
+            // 0.0  : #FFFFFF (white)
+            // 0.30 : #DCE8F6 (very pale blue)
+            // 0.55 : #6E9DD1 (pastel blue)
+            // 0.80 : #5EAE82 (pastel green)
+            // 1.00 : #D86A6A (pastel red — hot signals)
+            if (t < 0.30f) {
+                float s = t / 0.30f;
+                r = (int)(255 + (220 - 255) * s);
+                g = (int)(255 + (232 - 255) * s);
+                b = (int)(255 + (246 - 255) * s);
+            } else if (t < 0.55f) {
+                float s = (t - 0.30f) / 0.25f;
+                r = (int)(220 + (110 - 220) * s);
+                g = (int)(232 + (157 - 232) * s);
+                b = (int)(246 + (209 - 246) * s);
+            } else if (t < 0.80f) {
+                float s = (t - 0.55f) / 0.25f;
+                r = (int)(110 + (94 - 110) * s);
+                g = (int)(157 + (174 - 157) * s);
+                b = (int)(209 + (130 - 209) * s);
+            } else {
+                float s = (t - 0.80f) / 0.20f;
+                r = (int)(94 + (216 - 94) * s);
+                g = (int)(174 + (106 - 174) * s);
+                b = (int)(130 + (106 - 130) * s);
+            }
+            m_palette[i] = qRgb(r, g, b);
+        }
+        break;
     default: // 0 — SDR Classic
         for (int i=0;i<256;++i){float t=i/255.f;
             int r,g,b;
@@ -265,10 +298,17 @@ QRgb PanadapterItem::wfColor(float pct) const
 
 void PanadapterItem::setPaletteIndex(int v)
 {
-    v = qBound(0, v, 10);
+    v = qBound(0, v, 11);
     if (m_paletteIndex==v) return;
     m_paletteIndex=v;
     buildPalette(v);
+    // Repaint background of existing images to match new palette (white for Stellar Light, else black)
+    QColor const bg = (v == 11) ? QColor(255, 255, 255) : QColor(0, 0, 0);
+    if (!m_spectrumImage.isNull())                  m_spectrumImage.fill(bg);
+    if (!m_waterfallImage.isNull())                 m_waterfallImage.fill(bg);
+    if (!m_waterfallDisplayImage.isNull())          m_waterfallDisplayImage.fill(bg);
+    if (!m_waterfallIntensityImage.isNull())        m_waterfallIntensityImage.fill(0);
+    if (!m_waterfallIntensityDisplayImage.isNull()) m_waterfallIntensityDisplayImage.fill(0);
     emit paletteIndexChanged();
     markDirty();
 }
@@ -311,7 +351,7 @@ void PanadapterItem::rebuildImages(int w, int h)
         m_spectrumImage.width() != w ||
         m_spectrumImage.height() != specH) {
         m_spectrumImage = QImage(w, qMax(1, specH), QImage::Format_ARGB32_Premultiplied);
-        m_spectrumImage.fill(QColor(0, 0, 0));
+        m_spectrumImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
     }
 
     // Crea il waterfall image solo se c'è spazio
@@ -320,9 +360,9 @@ void PanadapterItem::rebuildImages(int w, int h)
             m_waterfallImage.width() != w ||
             m_waterfallImage.height() != wfH) {
             m_waterfallImage = QImage(w, wfH, QImage::Format_RGB32);
-            m_waterfallImage.fill(QColor(0, 0, 0));
+            m_waterfallImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
             m_waterfallDisplayImage = QImage(w, wfH, QImage::Format_RGB32);
-            m_waterfallDisplayImage.fill(QColor(0, 0, 0));
+            m_waterfallDisplayImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
             m_waterfallIntensityImage = QImage(w, wfH, QImage::Format_Grayscale8);
             m_waterfallIntensityImage.fill(0);
             m_waterfallIntensityDisplayImage = QImage(w, wfH, QImage::Format_Grayscale8);
@@ -424,9 +464,9 @@ void PanadapterItem::resetWaterfall()
 {
     QMutexLocker lock(&m_mutex);
     if (!m_waterfallImage.isNull())
-        m_waterfallImage.fill(QColor(0,0,0));
+        m_waterfallImage.fill(m_paletteIndex == 11 ? QColor(255,255,255) : QColor(0,0,0));
     if (!m_waterfallDisplayImage.isNull())
-        m_waterfallDisplayImage.fill(QColor(0,0,0));
+        m_waterfallDisplayImage.fill(m_paletteIndex == 11 ? QColor(255,255,255) : QColor(0,0,0));
     if (!m_waterfallIntensityImage.isNull())
         m_waterfallIntensityImage.fill(0);
     if (!m_waterfallIntensityDisplayImage.isNull())
@@ -446,8 +486,8 @@ void PanadapterItem::renderSpectrum()
     int h = m_spectrumImage.height();
     if (h <= 0) return;
 
-    // SmartSDR: background nero puro
-    m_spectrumImage.fill(QColor(0, 0, 0));
+    // Background: bianco per palette Stellar Light, nero per le altre (SDR-style)
+    m_spectrumImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
 
     QPainter p(&m_spectrumImage);
     p.setRenderHint(QPainter::Antialiasing, false);
@@ -784,6 +824,8 @@ void PanadapterItem::addWaterfallRow()
     float gamma = 2.5f - m_colorGain * 0.02f;   // gain 0→gamma 2.5, gain 50→gamma 1.5, gain 100→gamma 0.5
     if (gamma < 0.3f) gamma = 0.3f;
 
+    QRgb const wfBg = (m_paletteIndex == 11) ? qRgb(255,255,255) : qRgb(0,0,0);
+
     int row = m_wfWriteRow % h;
     QRgb* line = m_useShaderWaterfall ? nullptr : reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
     uchar* intensityLine = (!m_waterfallIntensityImage.isNull()
@@ -795,7 +837,7 @@ void PanadapterItem::addWaterfallRow()
         float pixFreq = viewStart + (float)x * viewRange / w;
         if (pixFreq < m_dataFreqMin || pixFreq > m_dataFreqMax) {
             if (line)
-                line[x] = qRgb(0,0,0);
+                line[x] = wfBg;
             if (intensityLine)
                 intensityLine[x] = 0;
             continue;
@@ -807,7 +849,7 @@ void PanadapterItem::addWaterfallRow()
         raw = (raw - blackThresh) / (1.0f - blackThresh);
         if (raw <= 0.f) {
             if (line)
-                line[x] = qRgb(0,0,0);
+                line[x] = wfBg;
             if (intensityLine)
                 intensityLine[x] = 0;
             continue;
@@ -958,7 +1000,7 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             m_waterfallDisplayImage.width() != wfW ||
             m_waterfallDisplayImage.height() != wfH) {
             m_waterfallDisplayImage = QImage(wfW, wfH, QImage::Format_RGB32);
-            m_waterfallDisplayImage.fill(QColor(0, 0, 0));
+            m_waterfallDisplayImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
         }
 
         // Ring buffer → display: riga 0 = più recente (top), scende verso il basso

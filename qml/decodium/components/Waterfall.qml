@@ -67,7 +67,9 @@ Item {
         labelColorCombo.currentIndex = Math.max(0, Math.min(labelColorPresets.length - 1,
                                            bridge.getSetting("uiLabelColorPreset", 0)))
 
-        waterfallDisplay.paletteIndex = paletteCombo.currentIndex
+        // In light theme la palette è forzata a 11 (mockup pastello). Non sovrascrivere col valore Settings.
+        if (!bridge.themeManager.isLightTheme)
+            waterfallDisplay.paletteIndex = paletteCombo.currentIndex
         waterfallDisplay.autoRange = autoRangeCheck.checked
         waterfallDisplay.showTxBrackets = txBracketsCheck.checked
         waterfallDisplay.peakHold = peakHoldCheck.checked
@@ -451,8 +453,31 @@ Item {
             running:        bridge.monitoring
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
-            // Carica valori da Settings al primo avvio
+            // Carica valori da Settings al primo avvio.
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
+
+            // In light theme forza la palette pastello chiara (indice 11) per coerenza visiva col mockup.
+            // Binding esplicito: ha priorità sopra qualsiasi assegnazione procedurale finché when=true.
+            Binding {
+                target: waterfallDisplay
+                property: "paletteIndex"
+                value: 11
+                when: bridge.themeManager.isLightTheme
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            Component.onCompleted: {
+                console.log("[Waterfall] theme=" + bridge.themeManager.currentTheme
+                    + " isLight=" + bridge.themeManager.isLightTheme
+                    + " paletteIndex=" + waterfallDisplay.paletteIndex)
+            }
+            Connections {
+                target: bridge.themeManager
+                function onPaletteChanged() {
+                    console.log("[Waterfall] paletteChanged → theme=" + bridge.themeManager.currentTheme
+                        + " isLight=" + bridge.themeManager.isLightTheme
+                        + " paletteIndex=" + waterfallDisplay.paletteIndex)
+                }
+            }
             autoRange:      autoRangeCheck.checked
             peakHold:       true
             zoomFactor:     bridge.uiZoomFactor > 0 ? bridge.uiZoomFactor : 1.0
@@ -468,7 +493,8 @@ Item {
             }
 
             // Salva al bridge con debounce (2s dopo l'ultimo cambio)
-            onPaletteIndexChanged: if (!waterfallPanel.restoringSettings) {
+            // Non persistere la palette light auto-attivata col tema (resta una scelta del tema, non utente).
+            onPaletteIndexChanged: if (!waterfallPanel.restoringSettings && paletteIndex !== 11) {
                 bridge.uiPaletteIndex = paletteIndex
                 bridge.setSetting("uiPaletteIndex", paletteIndex)
                 mainWindow.scheduleSave()
@@ -546,7 +572,8 @@ Item {
             waterfallPanel.restoringSettings = true
             if (key === "uiPaletteIndex") {
                 paletteCombo.currentIndex = Math.max(0, Number(value))
-                waterfallDisplay.paletteIndex = paletteCombo.currentIndex
+                if (!bridge.themeManager.isLightTheme)
+                    waterfallDisplay.paletteIndex = paletteCombo.currentIndex
             } else if (key === "uiWaterfallBlackLevel") {
                 blackSlider.value = Number(value)
                 waterfallDisplay.blackLevel = blackSlider.value

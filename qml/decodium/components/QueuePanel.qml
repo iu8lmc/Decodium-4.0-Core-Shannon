@@ -20,6 +20,9 @@ Rectangle {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
     property color glassBorder: bridge.themeManager.glassBorder
+    property color colorRed:    bridge.themeManager.ledRed
+    property color colorOrange: bridge.themeManager.warningColor
+    property color disabledMute: Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.5)
 
     // Queue data model
     property var queueModel: ListModel {
@@ -113,7 +116,7 @@ Rectangle {
                 height: 18
                 radius: 9
                 color: queueListModel.count > 0 ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.3) : Qt.rgba(100/255, 100/255, 100/255, 0.3)
-                border.color: queueListModel.count > 0 ? accentGreen : "#666"
+                border.color: queueListModel.count > 0 ? accentGreen : disabledMute
 
                 Text {
                     anchors.centerIn: parent
@@ -130,7 +133,7 @@ Rectangle {
                 text: "SLOTS"
                 font.pixelSize: 12
                 font.bold: true
-                color: "#ff9800"
+                color: colorOrange
             }
 
             Rectangle {
@@ -138,14 +141,14 @@ Rectangle {
                 height: 18
                 radius: 9
                 color: Qt.rgba(255/255, 152/255, 0, 0.3)
-                border.color: "#ff9800"
+                border.color: colorOrange
 
                 Text {
                     anchors.centerIn: parent
                     text: activeSlotModel.count + "/" + maxSlots
                     font.pixelSize: 10
                     font.bold: true
-                    color: "#ff9800"
+                    color: colorOrange
                 }
             }
         }
@@ -221,7 +224,7 @@ Rectangle {
                                     text: model.snr
                                     font.pixelSize: 10
                                     font.family: "Monospace"
-                                    color: parseInt(model.snr) >= 0 ? accentGreen : "#f44336"
+                                    color: parseInt(model.snr) >= 0 ? accentGreen : colorRed
                                     Layout.preferredWidth: 35
                                 }
                                 Text {
@@ -288,13 +291,13 @@ Rectangle {
 
                         background: Rectangle {
                             color: parent.enabled ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(100/255, 100/255, 100/255, 0.1)
-                            border.color: parent.enabled ? "#f44336" : "#666"
+                            border.color: parent.enabled ? colorRed : disabledMute
                             radius: 3
                         }
                         contentItem: Text {
                             text: parent.text
                             font: parent.font
-                            color: parent.enabled ? "#f44336" : "#666"
+                            color: parent.enabled ? colorRed : disabledMute
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -340,7 +343,7 @@ Rectangle {
                             height: 24
                             color: Qt.rgba(255/255, 152/255, 0, 0.15)
                             radius: 2
-                            border.color: "#ff9800"
+                            border.color: colorOrange
                             border.width: 1
 
                             RowLayout {
@@ -354,7 +357,7 @@ Rectangle {
                                     font.pixelSize: 11
                                     font.bold: true
                                     font.family: "Monospace"
-                                    color: "#ff9800"
+                                    color: colorOrange
                                     Layout.preferredWidth: 70
                                 }
                                 Rectangle {
@@ -378,7 +381,7 @@ Rectangle {
                                     text: model.snr
                                     font.pixelSize: 10
                                     font.family: "Monospace"
-                                    color: parseInt(model.snr) >= 0 ? accentGreen : "#f44336"
+                                    color: parseInt(model.snr) >= 0 ? accentGreen : colorRed
                                     Layout.preferredWidth: 35
                                 }
                                 Item { Layout.fillWidth: true }
@@ -389,14 +392,14 @@ Rectangle {
                                     height: 18
                                     radius: 2
                                     color: removeBtnArea.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-                                    border.color: "#f44336"
+                                    border.color: colorRed
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "×"
                                         font.pixelSize: 14
                                         font.bold: true
-                                        color: "#f44336"
+                                        color: colorRed
                                     }
 
                                     MouseArea {
@@ -453,13 +456,13 @@ Rectangle {
 
                             background: Rectangle {
                                 color: parent.enabled ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(100/255, 100/255, 100/255, 0.1)
-                                border.color: parent.enabled ? "#f44336" : "#666"
+                                border.color: parent.enabled ? colorRed : disabledMute
                                 radius: 3
                             }
                             contentItem: Text {
                                 text: parent.text
                                 font: parent.font
-                                color: parent.enabled ? "#f44336" : "#666"
+                                color: parent.enabled ? colorRed : disabledMute
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }

@@ -1,10 +1,17 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <mutex>
 #include <utility>
 #include <vector>
+
+// Turbo Feedback: massimo numero di iterazioni belief-propagation LDPC.
+// Default 30 (comportamento storico). Settabile a 50 quando l'utente abilita
+// "Turbo Feedback" — recupera segnali borderline che convergono lentamente.
+// File-scope (non in anon namespace) per essere visibile ai setter extern "C".
+static std::atomic<int> g_ldpc_max_iter{30};
 
 namespace
 {
@@ -894,6 +901,13 @@ void osd174_91_cpp (float const* llr_in, int k, signed char const* apmask_in, in
 
 }
 
+// Turbo Feedback setter — clamp [10..100], default 30. Vedi g_ldpc_max_iter.
+extern "C" void ftx_ft8_stage4_set_ldpc_max_iter_c (int max_iter)
+{
+  int const v = max_iter < 10 ? 10 : (max_iter > 100 ? 100 : max_iter);
+  g_ldpc_max_iter.store (v, std::memory_order_relaxed);
+}
+
 extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, int norder,
                                      signed char const* apmask_in, signed char* message91_out,
                                      signed char* cw_out, int* ntype_out,
@@ -946,7 +960,8 @@ extern "C" void ftx_decode174_91_c (float const* llr_in, int Keff, int maxosd, i
   int nclast = 0;
   zsum.fill (0.0f);
 
-  for (int iter = 0; iter <= 30; ++iter)
+  int const maxIter = g_ldpc_max_iter.load (std::memory_order_relaxed);
+  for (int iter = 0; iter <= maxIter; ++iter)
     {
       for (int bit = 0; bit < kLdpc17491N; ++bit)
         {

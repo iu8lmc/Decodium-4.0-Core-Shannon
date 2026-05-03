@@ -143,7 +143,7 @@ Window {
     }
 
     // Shannon-compatible color scheme
-    readonly property color colorTx:          "#FF8C00"   // Arancione — TX
+    readonly property color colorTx:          (bridge && bridge.themeManager) ? bridge.themeManager.warningColor : "#FF8C00"
     readonly property color colorLotw:        "#44BBFF"   // Azzurro — utente LotW
 
     function isSignoffMessage(message) {
@@ -421,8 +421,8 @@ Window {
         z: 1000
         width: tooltipLabel.width + 16
         height: tooltipLabel.height + 10
-        color: "#e0202020"
-        border.color: "#606060"
+        color: (bridge && bridge.themeManager) ? Qt.rgba(bridge.themeManager.bgDeep.r, bridge.themeManager.bgDeep.g, bridge.themeManager.bgDeep.b, 0.94) : "#e0202020"
+        border.color: (bridge && bridge.themeManager) ? bridge.themeManager.glassBorder : "#606060"
         border.width: 1
         radius: 4
 
@@ -1162,7 +1162,7 @@ Window {
                                         text: modelData.dxDistance > 0 ?
                                               Math.round(modelData.dxDistance) + "km" : ""
                                         font.pixelSize: 9
-                                        color: "#666688"
+                                        color: (bridge && bridge.themeManager) ? bridge.themeManager.textSecondary : "#666688"
                                         Layout.preferredWidth: decodeWindow.rxDistanceWidth
                                         horizontalAlignment: Text.AlignRight
                                     }

@@ -2422,8 +2422,38 @@ Dialog {
                         columns: 4; columnSpacing: 10; rowSpacing: 8
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
+                        // ── Aspetto / Tema ──
+                        Text { text: qsTr("ASPETTO / TEMA"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Tema:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                        ComboBox {
+                            id: themeCombo
+                            Layout.fillWidth: true
+                            implicitHeight: controlHeight
+                            model: bridge.themeManager.availableThemes
+                            currentIndex: Math.max(0, model.indexOf(bridge.themeManager.currentTheme))
+                            onActivated: bridge.themeManager.currentTheme = model[currentIndex]
+                            Connections {
+                                target: bridge.themeManager
+                                function onCurrentThemeChanged() {
+                                    var i = themeCombo.model.indexOf(bridge.themeManager.currentTheme)
+                                    if (i >= 0 && themeCombo.currentIndex !== i)
+                                        themeCombo.currentIndex = i
+                                }
+                            }
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            contentItem: Text { text: parent.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate {
+                                contentItem: Text { text: modelData; color: textPrimary; font.pixelSize: 12 }
+                                background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium }
+                            }
+                        }
+                        // riga vuota per riempire le 4 colonne
+                        Item { Layout.columnSpan: 2; Layout.preferredHeight: controlHeight }
+
                         // ── Font ──
-                        Text { text: qsTr("FONT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("FONT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         Text { text: qsTr("Font:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
@@ -4061,6 +4091,111 @@ Dialog {
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
                             Layout.columnSpan: 4
+                        }
+
+                        // ── ADV Decoding ──
+                        Text { text: qsTr("ADV DECODING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Auto Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
+                            Switch {
+                                text: qsTr("AUTO — attiva le 3 tecnologie quando servono")
+                                checked: bridge.advAutoModeEnabled
+                                onToggled: bridge.advAutoModeEnabled = checked
+                                contentItem: Text {
+                                    text: parent.text; color: textPrimary; font.pixelSize: 12; font.bold: true
+                                    leftPadding: parent.indicator.width + 8
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Text {
+                                text: qsTr("Quando ON, le 3 feature sotto sono ignorate. Trigger: Neural+Turbo se decode<2/slot in 4 slot. Coherent se SNR Q65<-22dB.")
+                                color: "#888"; font.pixelSize: 10
+                                wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                leftPadding: 8
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 12
+                                visible: bridge.advAutoModeEnabled
+                                Text { text: qsTr("Stato live:"); color: "#888"; font.pixelSize: 10 }
+                                Rectangle { width: 8; height: 8; radius: 4; color: bridge.advNeuralSyncActive ? "#0f0" : "#444" }
+                                Text { text: qsTr("Neural"); color: bridge.advNeuralSyncActive ? "#0f0" : "#666"; font.pixelSize: 10 }
+                                Rectangle { width: 8; height: 8; radius: 4; color: bridge.advTurboFeedbackActive ? "#0f0" : "#444" }
+                                Text { text: qsTr("Turbo"); color: bridge.advTurboFeedbackActive ? "#0f0" : "#666"; font.pixelSize: 10 }
+                                Rectangle { width: 8; height: 8; radius: 4; color: bridge.advCoherentAvgActive ? "#0f0" : "#444" }
+                                Text { text: qsTr("Coherent"); color: bridge.advCoherentAvgActive ? "#0f0" : "#666"; font.pixelSize: 10 }
+                            }
+                        }
+
+                        Text { text: qsTr("Coherent Avg:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0 }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
+                            opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0
+                            Switch {
+                                text: qsTr("Coherent Average (Q65/JT65)")
+                                checked: bridge.coherentAvgEnabled
+                                onToggled: bridge.coherentAvgEnabled = checked
+                                enabled: !bridge.advAutoModeEnabled
+                                contentItem: Text {
+                                    text: parent.text; color: textPrimary; font.pixelSize: 12
+                                    leftPadding: parent.indicator.width + 8
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Text {
+                                text: qsTr("Accumulates multi-slot averaging for Q65/JT65 decodes (+1-3 dB)")
+                                color: "#888"; font.pixelSize: 10
+                                wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                leftPadding: 8
+                            }
+                        }
+
+                        Text { text: qsTr("Neural Sync:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0 }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
+                            opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0
+                            Switch {
+                                text: qsTr("Neural Sync (FT8 OSD decoder)")
+                                checked: bridge.neuralSyncEnabled
+                                onToggled: bridge.neuralSyncEnabled = checked
+                                enabled: !bridge.advAutoModeEnabled
+                                contentItem: Text {
+                                    text: parent.text; color: textPrimary; font.pixelSize: 12
+                                    leftPadding: parent.indicator.width + 8
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Text {
+                                text: qsTr("Forces OSD-aware FT8 decoding (+2-3 dB on borderline signals)")
+                                color: "#888"; font.pixelSize: 10
+                                wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                leftPadding: 8
+                            }
+                        }
+
+                        Text { text: qsTr("Turbo Feedback:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0 }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
+                            opacity: bridge.advAutoModeEnabled ? 0.5 : 1.0
+                            Switch {
+                                text: qsTr("Turbo Feedback (extended LDPC iterations)")
+                                checked: bridge.turboFeedbackEnabled
+                                onToggled: bridge.turboFeedbackEnabled = checked
+                                enabled: !bridge.advAutoModeEnabled
+                                contentItem: Text {
+                                    text: parent.text; color: textPrimary; font.pixelSize: 12
+                                    leftPadding: parent.indicator.width + 8
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            Text {
+                                text: qsTr("Extended LDPC iterations for marginal decode recovery")
+                                color: "#888"; font.pixelSize: 10
+                                wrapMode: Text.WordWrap; Layout.fillWidth: true
+                                leftPadding: 8
+                            }
                         }
 
                         // ── OTP ──

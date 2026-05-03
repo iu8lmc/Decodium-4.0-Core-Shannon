@@ -186,7 +186,7 @@ Item {
                     color: {
                         if (modelData.isTx) return errorRed
                         var db = parseInt(modelData.db)
-                        if (db >= 0)   return "#69F0AE"
+                        if (db >= 0)   return (bridge && bridge.themeManager) ? bridge.themeManager.successColor : "#69F0AE"
                         if (db >= -10) return accentGreen
                         if (db >= -15) return textSecondary
                         return Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.7)
@@ -211,7 +211,7 @@ Item {
                           : ""
                     font.family: "Monospace"
                     font.pixelSize: 10
-                    color: "#80CBC4"  // teal chiaro
+                    color: (bridge && bridge.themeManager) ? bridge.themeManager.secondaryColor : "#80CBC4"
                     Layout.preferredWidth: 52
                     horizontalAlignment: Text.AlignRight
                 }

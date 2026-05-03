@@ -26,6 +26,7 @@ struct DecodeRequest
   int nfa {0};
   int nfb {0};
   int nclearave {0};
+  bool coherentAvgEnabled {false};
   int single_decode {0};
   int nagain {0};
   int max_drift {0};
@@ -50,6 +51,7 @@ public:
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
+  void coherentCount (int signalsInCache);
 };
 
 }

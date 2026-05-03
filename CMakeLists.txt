@@ -1624,6 +1624,19 @@ if (Qt6ShaderTools_FOUND)
 else ()
   message (STATUS "Qt6 ShaderTools not found: Decodium waterfall shader disabled, CPU palette fallback will be used")
 endif ()
+# FT8 features benchmark — misura overhead/recovery di Turbo Feedback + Neural Sync
+add_executable (bench_ft8_features tools/bench_ft8_features.cpp)
+target_link_libraries (bench_ft8_features
+  Qt6::Core
+  wsjt_qt
+  wsjt_fort
+  wsjt_cxx
+  Hamlib::Hamlib
+  Boost::log
+  ${FFTW3_LIBRARIES}
+  ${LIBM_LIBRARIES}
+)
+
 # Copy QML files next to the decodium_qml executable on every build.
 # The runtime loads QML from the build tree, so stale copied files cause
 # "fixed in source but still broken at startup" behavior.

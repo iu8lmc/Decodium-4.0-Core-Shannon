@@ -17,6 +17,7 @@ extern "C"
   void ftx_ft8_stage4_set_deadline_ms_c (long long deadline_ms);
   void ftx_ft8_stage4_set_ldpc_osd_c (int maxosd, int norder);
   void ftx_ft8_stage4_set_supplemental_c (int supplemental);
+  void ftx_ft8_stage4_set_ldpc_max_iter_c (int max_iter);
   void ftx_ft8_async_decode_stage4_c (short const* iwave, int* nqsoprogress, int* nfqso, int* nftx,
                                       int* nutc, int* nfa, int* nfb, int* nzhsym, int* ndepth,
                                       float* emedelay, int* ncontest, int* nagain,
@@ -180,11 +181,14 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
     }
   ftx_ft8_stage4_set_deadline_ms_c (ft8_stage4_deadline_ms_from_now (request.maxDecodeMs));
   ftx_ft8_stage4_set_supplemental_c (request.supplemental ? 1 : 0);
+  // Turbo Feedback: estende belief-propagation a 50 iter (default 30).
+  ftx_ft8_stage4_set_ldpc_max_iter_c (request.turboFeedbackEnabled ? 50 : 30);
+  bool const wantOsd = (request.supplemental && request.ndepth >= 3) || request.neuralSyncEnabled;
   if (request.supplemental && request.ndepth >= 4)
     {
       ftx_ft8_stage4_set_ldpc_osd_c (3, 4);
     }
-  else if (request.supplemental && request.ndepth >= 3)
+  else if (wantOsd)
     {
       ftx_ft8_stage4_set_ldpc_osd_c (3, 3);
     }
@@ -240,14 +244,29 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
   ftx_ft8_stage4_set_deadline_ms_c (0);
   ftx_ft8_stage4_set_ldpc_osd_c (-1, 0);
   ftx_ft8_stage4_set_supplemental_c (0);
+  ftx_ft8_stage4_set_ldpc_max_iter_c (30);
 
   if (m_shuttingDown.load (std::memory_order_relaxed))
     {
       return;
     }
   QString const utcPrefix = format_decode_utc (request.nutc);
-  Q_EMIT decodeReady (request.serial, build_rows (utcPrefix, nout, snrs, dts, freqs, naps, quals,
-                                                  decodeds));
+  QStringList rows = build_rows (utcPrefix, nout, snrs, dts, freqs, naps, quals, decodeds);
+  if (request.neuralSyncEnabled)
+    {
+      // Stage4 OSD non espone counter; proxy: rapporto decodi vs cap di 5.
+      double const score = wantOsd && !rows.isEmpty ()
+          ? std::min (1.0, rows.size () / 5.0)
+          : 0.0;
+      Q_EMIT neuralSyncHit (score);
+    }
+  if (request.turboFeedbackEnabled)
+    {
+      // Counter LDPC iter non esposto via callback; proxy: 50 (cap turbo) se decodi presenti, 0 altrimenti.
+      // Triggera LED Turbo Feedback (soglia >8 in DecodiumBridge::notifyTurboIterations).
+      Q_EMIT turboIterations (rows.isEmpty () ? 0 : 50);
+    }
+  Q_EMIT decodeReady (request.serial, rows);
 }
 
 void FT8DecodeWorker::resetDecoderState ()

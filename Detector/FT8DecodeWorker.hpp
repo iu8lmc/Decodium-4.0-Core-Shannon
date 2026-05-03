@@ -37,6 +37,9 @@ struct DecodeRequest
   int availableSamples {0};
   bool hasFreshAudio {true};
   bool supplemental {false};
+  bool coherentAvgEnabled {false};
+  bool neuralSyncEnabled {false};
+  bool turboFeedbackEnabled {false};
   QByteArray mycall;
   QByteArray hiscall;
   QByteArray hisgrid;
@@ -56,6 +59,8 @@ public:
 
 Q_SIGNALS:
   void decodeReady (quint64 serial, QStringList rows);
+  void neuralSyncHit (double score);
+  void turboIterations (int itersUsed);
 
 private:
   std::atomic<bool> m_shuttingDown {false};

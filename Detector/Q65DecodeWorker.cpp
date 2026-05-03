@@ -145,7 +145,8 @@ void Q65DecodeWorker::decode (DecodeRequest const& request)
   int ndepth = qMax (1, request.ndepth);
   int nfa = qBound (0, request.nfa, 5000);
   int nfb = qMax (nfa + 50, qBound (0, request.nfb, 5000));
-  int nclearave = request.nclearave ? 1 : 0;
+  // Coherent averaging ON => non azzerare la cache (nclearave=0 mantiene l'accumulatore).
+  int nclearave = request.coherentAvgEnabled ? 0 : (request.nclearave ? 1 : 0);
   int single_decode = request.single_decode ? 1 : 0;
   int nagain = request.nagain ? 1 : 0;
   int max_drift = qMax (0, request.max_drift);
@@ -174,6 +175,18 @@ void Q65DecodeWorker::decode (DecodeRequest const& request)
                      static_cast<fortran_charlen_t> (kQ65MaxLines * kDecodedChars));
 
   QString const utcPrefix = format_decode_utc (request.nutc);
+  if (request.coherentAvgEnabled)
+    {
+      // navg[] interno non e' esposto dalla C API: proxy basato su nused>=2 (accumulato>=2 epoche).
+      int signalsInCache = 0;
+      int const lim = qBound (0, nout, kQ65MaxLines);
+      for (int i = 0; i < lim; ++i)
+        {
+          if (nuseds[i] >= 2) ++signalsInCache;
+        }
+      if (signalsInCache == 0 && lim > 0) signalsInCache = 1;
+      Q_EMIT coherentCount (signalsInCache);
+    }
   Q_EMIT decodeReady (request.serial, build_rows (utcPrefix, nout, snrs, dts, freqs, idecs,
                                                   nuseds, decodeds));
 }

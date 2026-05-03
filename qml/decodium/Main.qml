@@ -950,9 +950,9 @@ ApplicationWindow {
 
     // IU8LMC: DXCC color scheme (JTDX-style)
     readonly property color colorWorked: "#808080"       // Gray - already worked
-    readonly property color colorNewBand: "#FFD700"      // Gold - new on this band
+    readonly property color colorNewBand: bridge.themeManager.ledYellow      // Gold - new on this band
     readonly property color colorNewCountry: "#00FF00"   // Bright green - new country
-    readonly property color colorMostWanted: "#FF00FF"   // Magenta - most wanted
+    readonly property color colorMostWanted: bridge.themeManager.ledMagenta   // Magenta - most wanted
 
     // IU8LMC: Tooltip properties
     property string dxccTooltipText: ""
@@ -992,7 +992,7 @@ ApplicationWindow {
     // Shannon-compatible color function (allineato a DecodeWindow.qml)
     function getDxccColor(modelData) {
         var customColor = customHighlightColor(modelData)
-        if (modelData.isTx)     return "#FF8C00"
+        if (modelData.isTx)     return bridge.themeManager.warningColor
         if (modelData.isMyCall) return bridge.colorMyCall
         if (customColor !== "") return customColor
         if (highlight73 && isSignoffMessage(modelData.message)) return bridge.color73
@@ -1235,6 +1235,8 @@ ApplicationWindow {
     Material.theme: bridge.themeManager.isLightTheme ? Material.Light : Material.Dark
     Material.accent: secondaryCyan
     Material.primary: primaryBlue
+    Material.foreground: bridge.themeManager.textPrimary
+    Material.background: bridge.themeManager.bgDeep
 
     // Font scale from settings (0.7 - 1.5)
     property double fs: bridge.fontScale || 1.0
@@ -1253,11 +1255,12 @@ ApplicationWindow {
     property color statusToastColor: secondaryCyan
     property bool statusToastVisible: false
 
-    // Main background gradient
+    // Main background gradient (flat in light themes per design mockup)
     background: Rectangle {
+        color: bgDeep
         gradient: Gradient {
             GradientStop { position: 0.0; color: bgDeep }
-            GradientStop { position: 0.5; color: bgMedium }
+            GradientStop { position: 0.5; color: bridge.themeManager.isLightTheme ? bgDeep : bgMedium }
             GradientStop { position: 1.0; color: bgDeep }
         }
     }
@@ -1390,7 +1393,7 @@ ApplicationWindow {
 
         background: Rectangle {
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.95)
-            border.color: bridge.pskSearchFound ? accentGreen : "#f44336"
+            border.color: bridge.pskSearchFound ? accentGreen : bridge.themeManager.ledRed
             border.width: 2
             radius: 12
         }
@@ -1407,7 +1410,7 @@ ApplicationWindow {
                     width: 12
                     height: 12
                     radius: 6
-                    color: bridge.pskSearchFound ? accentGreen : "#f44336"
+                    color: bridge.pskSearchFound ? accentGreen : bridge.themeManager.ledRed
                 }
 
                 Text {
@@ -1423,7 +1426,7 @@ ApplicationWindow {
                     text: bridge.pskSearching ? "Searching..." : (bridge.pskSearchFound ? "ONLINE" : "OFFLINE")
                     font.pixelSize: 12
                     font.bold: true
-                    color: bridge.pskSearchFound ? accentGreen : "#f44336"
+                    color: bridge.pskSearchFound ? accentGreen : bridge.themeManager.ledRed
                 }
             }
 
@@ -1579,7 +1582,7 @@ ApplicationWindow {
                 text: freqInputPopup.isTx ? "TX Frequency (Hz)" : "RX Frequency (Hz)"
                 font.pixelSize: 13
                 font.bold: true
-                color: freqInputPopup.isTx ? "#f44336" : accentGreen
+                color: freqInputPopup.isTx ? bridge.themeManager.ledRed : accentGreen
             }
 
             Text {
@@ -1844,7 +1847,7 @@ ApplicationWindow {
                                 text: "TX:"
                                 font.pixelSize: 10
                                 font.bold: true
-                                color: mainWindow.txVisualActive ? "#f44336" : textSecondary
+                                color: mainWindow.txVisualActive ? bridge.themeManager.ledRed : textSecondary
                             }
                             // TX frequency - click to edit
                             Rectangle {
@@ -1854,7 +1857,7 @@ ApplicationWindow {
                                     id: txFreqText; anchors.centerIn: parent
                                     text: bridge.txFrequency + " Hz"
                                     font.pixelSize: 10; font.family: "Monospace"
-                                    color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : "#f44336"
+                                    color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : bridge.themeManager.ledRed
                                 }
                                 MouseArea {
                                     id: txFreqMouseArea; anchors.fill: parent; hoverEnabled: true
@@ -1896,14 +1899,14 @@ ApplicationWindow {
                                 color: bridge.txFrequency === bridge.rxFrequency ?
                                        Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.3) :
                                        Qt.rgba(244/255, 67/255, 54/255, 0.3)
-                                border.color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : "#f44336"
+                                border.color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : bridge.themeManager.ledRed
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: "TX=RX"
                                     font.pixelSize: 8
                                     font.bold: true
-                                    color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : "#f44336"
+                                    color: bridge.txFrequency === bridge.rxFrequency ? accentGreen : bridge.themeManager.ledRed
                                 }
 
                                 MouseArea {
@@ -1926,7 +1929,9 @@ ApplicationWindow {
                             text: "ADV"
                             font.pixelSize: 8
                             font.bold: true
-                            color: (bridge.ledCoherentAveraging || bridge.ledNeuralSync || bridge.ledTurboFeedback) ? accentGreen : "#555"
+                            color: ((bridge.coherentAvgEnabled && bridge.ledCoherentAveraging)
+                                 || (bridge.neuralSyncEnabled && bridge.ledNeuralSync)
+                                 || (bridge.turboFeedbackEnabled && bridge.ledTurboFeedback)) ? accentGreen : "#555"
                         }
 
                         // LED 1: Coherent Averaging (Blue)
@@ -1935,24 +1940,32 @@ ApplicationWindow {
                             width: 8
                             height: 8
                             radius: 4
-                            color: bridge.ledCoherentAveraging ? "#2196F3" : "#333"
-                            border.color: bridge.ledCoherentAveraging ? "#64B5F6" : "#444"
+                            color: bridge.coherentAvgEnabled
+                                ? (bridge.ledCoherentAveraging ? bridge.themeManager.ledBlue : "#0D47A1")
+                                : "#333"
+                            border.color: bridge.coherentAvgEnabled
+                                ? (bridge.ledCoherentAveraging ? "#64B5F6" : "#1565C0")
+                                : "#444"
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.ledCoherentAveraging
+                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging
                                 loops: Animation.Infinite
                                 NumberAnimation { to: 0.5; duration: 400 }
                                 NumberAnimation { to: 1.0; duration: 400 }
                             }
 
                             ToolTip.visible: maCoherent.containsMouse
-                            ToolTip.text: "Coherent Avg: " + (bridge.ledCoherentAveraging ? bridge.coherentCount + " signals" : "OFF")
+                            ToolTip.text: "Coherent Avg: " + (bridge.coherentAvgEnabled
+                                ? (bridge.ledCoherentAveraging ? bridge.coherentCount + " signals" : "ON (idle)")
+                                : "OFF (disabled)") + "  -  click to toggle"
 
                             MouseArea {
                                 id: maCoherent
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.coherentAvgEnabled = !bridge.coherentAvgEnabled
                             }
                         }
 
@@ -1962,24 +1975,32 @@ ApplicationWindow {
                             width: 8
                             height: 8
                             radius: 4
-                            color: bridge.ledNeuralSync ? "#9C27B0" : "#333"
-                            border.color: bridge.ledNeuralSync ? "#CE93D8" : "#444"
+                            color: bridge.neuralSyncEnabled
+                                ? (bridge.ledNeuralSync ? "#9C27B0" : "#4A148C")
+                                : "#333"
+                            border.color: bridge.neuralSyncEnabled
+                                ? (bridge.ledNeuralSync ? "#CE93D8" : "#7B1FA2")
+                                : "#444"
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.ledNeuralSync
+                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync
                                 loops: Animation.Infinite
                                 NumberAnimation { to: 0.5; duration: 300 }
                                 NumberAnimation { to: 1.0; duration: 300 }
                             }
 
                             ToolTip.visible: maNeural.containsMouse
-                            ToolTip.text: "Neural Sync: " + (bridge.ledNeuralSync ? (bridge.neuralScore * 100).toFixed(0) + "%" : "OFF")
+                            ToolTip.text: "Neural Sync: " + (bridge.neuralSyncEnabled
+                                ? (bridge.ledNeuralSync ? (bridge.neuralScore * 100).toFixed(0) + "%" : "ON (idle)")
+                                : "OFF (disabled)") + "  -  click to toggle"
 
                             MouseArea {
                                 id: maNeural
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.neuralSyncEnabled = !bridge.neuralSyncEnabled
                             }
                         }
 
@@ -1989,24 +2010,32 @@ ApplicationWindow {
                             width: 8
                             height: 8
                             radius: 4
-                            color: bridge.ledTurboFeedback ? "#FF9800" : "#333"
-                            border.color: bridge.ledTurboFeedback ? "#FFCC80" : "#444"
+                            color: bridge.turboFeedbackEnabled
+                                ? (bridge.ledTurboFeedback ? "#FF9800" : "#E65100")
+                                : "#333"
+                            border.color: bridge.turboFeedbackEnabled
+                                ? (bridge.ledTurboFeedback ? "#FFCC80" : "#F57C00")
+                                : "#444"
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.ledTurboFeedback
+                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback
                                 loops: Animation.Infinite
                                 NumberAnimation { to: 0.5; duration: 350 }
                                 NumberAnimation { to: 1.0; duration: 350 }
                             }
 
                             ToolTip.visible: maTurbo.containsMouse
-                            ToolTip.text: "Turbo Feedback: " + (bridge.ledTurboFeedback ? bridge.turboIterations + " iter" : "OFF")
+                            ToolTip.text: "Turbo Feedback: " + (bridge.turboFeedbackEnabled
+                                ? (bridge.ledTurboFeedback ? bridge.turboIterations + " iter" : "ON (idle)")
+                                : "OFF (disabled)") + "  -  click to toggle"
 
                             MouseArea {
                                 id: maTurbo
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.turboFeedbackEnabled = !bridge.turboFeedbackEnabled
                             }
                         }
 
@@ -2014,7 +2043,7 @@ ApplicationWindow {
                         Rectangle {
                             width: 1
                             height: 8
-                            color: "#404060"
+                            color: glassBorder
                         }
 
                         // Time Sync LED (Green when synced)
@@ -2024,7 +2053,7 @@ ApplicationWindow {
                             height: 8
                             radius: 4
                             color: accentGreen
-                            border.color: "#81C784"
+                            border.color: bridge.themeManager.successColor
                             border.width: 1
                         }
 
@@ -2043,7 +2072,7 @@ ApplicationWindow {
                         anchors.fill: parent
                         radius: 6
                         color: "transparent"
-                        border.color: "#f44336"
+                        border.color: bridge.themeManager.ledRed
                         border.width: 3
                         visible: mainWindow.txVisualActive
                         opacity: 0
@@ -2336,7 +2365,7 @@ ApplicationWindow {
                             radius: 3
                             color: recMA.containsMouse ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.15) :
                                    (bridge.recordRxEnabled ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent")
-                            border.color: bridge.recordRxEnabled ? "#f44336" : "transparent"
+                            border.color: bridge.recordRxEnabled ? bridge.themeManager.ledRed : "transparent"
                             border.width: bridge.recordRxEnabled ? 1 : 0
 
                             Row {
@@ -2345,13 +2374,13 @@ ApplicationWindow {
                                 Text {
                                     text: bridge.recordRxEnabled ? "●" : "○"
                                     font.pixelSize: 12
-                                    color: bridge.recordRxEnabled ? "#f44336" : textPrimary
+                                    color: bridge.recordRxEnabled ? bridge.themeManager.ledRed : textPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                                 Text {
                                     text: "REC"
                                     font.pixelSize: 9
-                                    color: bridge.recordRxEnabled ? "#f44336" : textPrimary
+                                    color: bridge.recordRxEnabled ? bridge.themeManager.ledRed : textPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
@@ -2546,7 +2575,7 @@ ApplicationWindow {
                                     height: 8
                                     radius: 4
                                     anchors.verticalCenter: parent.verticalCenter
-                                    color: bridge.catConnected ? accentGreen : "#f44336"
+                                    color: bridge.catConnected ? accentGreen : bridge.themeManager.ledRed
                                 }
 
                                 Text {
@@ -3273,7 +3302,7 @@ ApplicationWindow {
 	                            text: "FS"
 	                            font.pixelSize: 20
 	                            font.bold: true
-	                            color: "#4CAF50"
+	                            color: bridge.themeManager.successColor
 	                        }
 
 	                        Text {
@@ -3419,7 +3448,7 @@ ApplicationWindow {
                     radius: 8
                     visible: txPanelMinimized
                     color: txRestoreMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                    border.color: txRestoreMA.containsMouse ? "#f44336" : glassBorder
+                    border.color: txRestoreMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
                     border.width: txRestoreMA.containsMouse ? 2 : 1
 
                     Column {
@@ -3437,7 +3466,7 @@ ApplicationWindow {
                             text: "TX Panel"
                             font.pixelSize: 10
                             font.bold: true
-                            color: "#f44336"
+                            color: bridge.themeManager.ledRed
                         }
                     }
 
@@ -4252,7 +4281,7 @@ ApplicationWindow {
                         height: 28
                         radius: 4
                         color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
-                        border.color: timingBar.isTxPhase ? "#f44336" : Qt.rgba(76/255, 175/255, 80/255, 0.55)
+                        border.color: timingBar.isTxPhase ? bridge.themeManager.ledRed : Qt.rgba(76/255, 175/255, 80/255, 0.55)
                         border.width: 1
 
                         property real periodLen: decodePanel.periodLength
@@ -4287,7 +4316,7 @@ ApplicationWindow {
                             anchors.margins: 60
                             height: 8
                             radius: 4
-                            color: Qt.rgba(1, 1, 1, 0.08)
+                            color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.08)
 
                             // TX zone marker
                             Rectangle {
@@ -4303,7 +4332,7 @@ ApplicationWindow {
                                 width: parent.width * timingBar.progress
                                 height: parent.height
                                 radius: 4
-                                color: timingBar.isTxPhase ? "#f44336" : accentGreen
+                                color: timingBar.isTxPhase ? bridge.themeManager.ledRed : accentGreen
                                 Behavior on width { NumberAnimation { duration: 50 } }
                                 Behavior on color { ColorAnimation { duration: 200 } }
                             }
@@ -4315,7 +4344,7 @@ ApplicationWindow {
                                 width: 4
                                 height: parent.height + 4
                                 radius: 2
-                                color: "#ffffff"
+                                color: textPrimary
                                 opacity: 0.9
                             }
 
@@ -4326,7 +4355,7 @@ ApplicationWindow {
                                 y: -4
                                 width: 2
                                 height: parent.height + 8
-                                color: Qt.rgba(1, 1, 1, 0.3)
+                                color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.3)
                             }
                         }
 
@@ -4339,7 +4368,7 @@ ApplicationWindow {
                             font.pixelSize: 11
                             font.bold: true
                             font.family: "Monospace"
-                            color: timingBar.isTxPhase ? "#f44336" : "#4CAF50"
+                            color: timingBar.isTxPhase ? bridge.themeManager.ledRed : bridge.themeManager.successColor
                         }
 
                         // Mode + phase label (left of bar)
@@ -4352,7 +4381,7 @@ ApplicationWindow {
                             font.pixelSize: 10
                             font.bold: true
                             font.family: "Monospace"
-                            color: timingBar.isTxPhase ? "#f44336" : accentGreen
+                            color: timingBar.isTxPhase ? bridge.themeManager.ledRed : accentGreen
                         }
 
                         // Time counter (right)
@@ -4464,7 +4493,7 @@ ApplicationWindow {
                                 visible: period1Detached
                                 color: period1DockHighlighted ? Qt.rgba(76/255, 175/255, 80/255, 0.3) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.4)
                                 radius: 8
-                                border.color: period1DockHighlighted ? "#4CAF50" : glassBorder
+                                border.color: period1DockHighlighted ? bridge.themeManager.successColor : glassBorder
                                 border.width: period1DockHighlighted ? 3 : 1
 
                                 Behavior on color { ColorAnimation { duration: 100 } }
@@ -4476,7 +4505,7 @@ ApplicationWindow {
 	                                    Text {
 	                                        anchors.horizontalCenter: parent.horizontalCenter
 	                                        text: period1DockHighlighted ? "🧲 Rilascia qui!" : "Full Spectrum detached"
-	                                        color: period1DockHighlighted ? "#4CAF50" : textSecondary
+	                                        color: period1DockHighlighted ? bridge.themeManager.successColor : textSecondary
                                         font.pixelSize: period1DockHighlighted ? 16 : 12
                                         font.bold: period1DockHighlighted
                                     }
@@ -4495,7 +4524,7 @@ ApplicationWindow {
                                     anchors.fill: parent
                                     color: "transparent"
                                     radius: 8
-                                    border.color: "#4CAF50"
+                                    border.color: bridge.themeManager.successColor
                                     border.width: 4
                                     visible: period1DockHighlighted
                                     opacity: 0.8
@@ -4520,7 +4549,7 @@ ApplicationWindow {
                                     Layout.preferredHeight: 28
                                     color: decodePanel.isCurrentPeriodEven ? Qt.rgba(76/255, 175/255, 80/255, 0.25) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
                                     radius: 4
-                                    border.color: decodePanel.isCurrentPeriodEven ? "#4CAF50" : "transparent"
+                                    border.color: decodePanel.isCurrentPeriodEven ? bridge.themeManager.successColor : "transparent"
                                     border.width: decodePanel.isCurrentPeriodEven ? 2 : 0
 
                                     Behavior on color { ColorAnimation { duration: 300 } }
@@ -4535,7 +4564,7 @@ ApplicationWindow {
                                             width: 10
                                             height: 10
                                             radius: 5
-                                            color: "#4CAF50"
+                                            color: bridge.themeManager.successColor
 
                                             SequentialAnimation on opacity {
                                                 running: decodePanel.isCurrentPeriodEven
@@ -4552,7 +4581,7 @@ ApplicationWindow {
                                             text: "Full Spectrum"
                                             font.pixelSize: 14
                                             font.bold: true
-                                            color: "#4CAF50"
+                                            color: bridge.themeManager.successColor
                                         }
 
                                         // ACTIVE badge when current period
@@ -4562,14 +4591,14 @@ ApplicationWindow {
                                             height: 16
                                             radius: 8
                                             color: Qt.rgba(76/255, 175/255, 80/255, 0.4)
-                                            border.color: "#4CAF50"
+                                            border.color: bridge.themeManager.successColor
 
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: "ACTIVE"
                                                 font.pixelSize: 9
                                                 font.bold: true
-                                                color: "#4CAF50"
+                                                color: bridge.themeManager.successColor
                                             }
 
                                             SequentialAnimation on opacity {
@@ -4644,14 +4673,14 @@ ApplicationWindow {
                                         anchors.rightMargin: 8
                                         spacing: 0
 
-                                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
                                         Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
-                                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
+                                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                         Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
-                                        Text { visible: period1Panel.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
+                                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.fillWidth: true }
+                                        Text { visible: period1Panel.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
                                         Item {
                                             visible: mainWindow.showDxccInfo
                                             Layout.preferredWidth: period1Panel.dxccColumnWidth
@@ -4662,7 +4691,7 @@ ApplicationWindow {
                                                 font.family: mainWindow.decodedTextFontFamily
                                                 font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
                                                 font.bold: true
-                                                color: "#4CAF50"
+                                                color: bridge.themeManager.successColor
                                                 horizontalAlignment: Text.AlignRight
                                                 verticalAlignment: Text.AlignVCenter
                                             }
@@ -4677,7 +4706,7 @@ ApplicationWindow {
                                                 font.family: mainWindow.decodedTextFontFamily
                                                 font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs)
                                                 font.bold: true
-                                                color: "#4CAF50"
+                                                color: bridge.themeManager.successColor
                                                 horizontalAlignment: Text.AlignRight
                                                 verticalAlignment: Text.AlignVCenter
                                             }
@@ -4800,7 +4829,7 @@ ApplicationWindow {
                                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
-                                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
                                                 Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.message) }
                                                 Text { visible: period1Panel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
@@ -4992,8 +5021,8 @@ ApplicationWindow {
                                         Rectangle {
                                             width: 40; height: 20; radius: 4
                                             color: rxClearMA.containsMouse ? Qt.rgba(1, 0.3, 0.3, 0.3) : "transparent"
-                                            border.color: rxClearMA.containsMouse ? "#f44336" : Qt.rgba(1,1,1,0.15)
-                                            Text { anchors.centerIn: parent; text: "Clear"; font.pixelSize: 9; color: rxClearMA.containsMouse ? "#f44336" : textSecondary }
+                                            border.color: rxClearMA.containsMouse ? bridge.themeManager.ledRed : Qt.rgba(textPrimary.r,textPrimary.g,textPrimary.b,0.15)
+                                            Text { anchors.centerIn: parent; text: "Clear"; font.pixelSize: 9; color: rxClearMA.containsMouse ? bridge.themeManager.ledRed : textSecondary }
                                             MouseArea {
                                                 id: rxClearMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                                 onClicked: bridge.clearRxDecodes()
@@ -5288,7 +5317,7 @@ ApplicationWindow {
                     visible: txPanelDetached
                     color: txPanelDockHighlighted ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.4)
                     radius: 12
-                    border.color: txPanelDockHighlighted ? "#f44336" : glassBorder
+                    border.color: txPanelDockHighlighted ? bridge.themeManager.ledRed : glassBorder
                     border.width: txPanelDockHighlighted ? 3 : 1
 
                     Behavior on color { ColorAnimation { duration: 100 } }
@@ -5300,7 +5329,7 @@ ApplicationWindow {
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: txPanelDockHighlighted ? "🧲 Rilascia qui!" : "📻 TX Panel Detached"
-                            color: txPanelDockHighlighted ? "#f44336" : textSecondary
+                            color: txPanelDockHighlighted ? bridge.themeManager.ledRed : textSecondary
                             font.pixelSize: txPanelDockHighlighted ? 16 : 12
                             font.bold: txPanelDockHighlighted
                         }
@@ -5319,7 +5348,7 @@ ApplicationWindow {
                         anchors.fill: parent
                         color: "transparent"
                         radius: 12
-                        border.color: "#f44336"
+                        border.color: bridge.themeManager.ledRed
                         border.width: 4
                         visible: txPanelDockHighlighted
                         opacity: 0.8
@@ -5436,8 +5465,8 @@ ApplicationWindow {
                 z: 9999
                 width: dxccTooltipLabel.width + 16
                 height: dxccTooltipLabel.height + 12
-                color: "#f0202020"
-                border.color: "#808080"
+                color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.94)
+                border.color: glassBorder
                 border.width: 1
                 radius: 4
 
@@ -5445,7 +5474,7 @@ ApplicationWindow {
                     id: dxccTooltipLabel
                     anchors.centerIn: parent
                     text: dxccTooltipText
-                    color: "#ffffff"
+                    color: textPrimary
                     font.pixelSize: 11
                     font.family: "Segoe UI"
                 }
@@ -6422,7 +6451,7 @@ ApplicationWindow {
             contentItem: Text {
                 text: parent.text
                 font.pixelSize: 12
-                color: bridge.recordRxEnabled ? "#f44336" : textSecondary
+                color: bridge.recordRxEnabled ? bridge.themeManager.ledRed : textSecondary
                 leftPadding: 10
             }
         }
@@ -6438,7 +6467,7 @@ ApplicationWindow {
             contentItem: Text {
                 text: parent.text
                 font.pixelSize: 12
-                color: bridge.recordTxEnabled ? "#f44336" : textSecondary
+                color: bridge.recordTxEnabled ? bridge.themeManager.ledRed : textSecondary
                 leftPadding: 10
             }
         }
@@ -6831,7 +6860,7 @@ ApplicationWindow {
                 font.family: "Monospace"; font.pixelSize: 11
                 color: textPrimary
                 background: Rectangle {
-                    color: Qt.rgba(1,1,1,0.07); border.color: glassBorder; radius: 4
+                    color: Qt.rgba(textPrimary.r,textPrimary.g,textPrimary.b,0.07); border.color: glassBorder; radius: 4
                 }
             }
         }
@@ -7561,14 +7590,14 @@ ApplicationWindow {
                             height: 24
                             radius: 4
                             color: closeMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: closeMA.containsMouse ? "#f44336" : glassBorder
+                            border.color: closeMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
 
                             Text {
                                 anchors.centerIn: parent
                                 text: "✕"
                                 font.pixelSize: 12
                                 font.bold: true
-                                color: closeMA.containsMouse ? "#f44336" : textPrimary
+                                color: closeMA.containsMouse ? bridge.themeManager.ledRed : textPrimary
                             }
 
                             MouseArea {
@@ -7754,8 +7783,8 @@ ApplicationWindow {
                         Rectangle {
                             width: 28; height: 28; radius: 4
                             color: logFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: logFloatCloseMA.containsMouse ? "#f44336" : glassBorder
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: logFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+                            border.color: logFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
+                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: logFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
                             MouseArea { id: logFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { logWindowDetached = false; logWindowMinimized = false; logFloatingWindow.close() }
                             }
@@ -7862,8 +7891,8 @@ ApplicationWindow {
                         Rectangle {
                             width: 28; height: 28; radius: 4
                             color: astroFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: astroFloatCloseMA.containsMouse ? "#f44336" : glassBorder
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: astroFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+                            border.color: astroFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
+                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: astroFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
                             MouseArea { id: astroFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { astroWindowDetached = false; astroWindowMinimized = false; astroFloatingWindow.close() }
                             }
@@ -7966,8 +7995,8 @@ ApplicationWindow {
                         Rectangle {
                             width: 28; height: 28; radius: 4
                             color: macroFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: macroFloatCloseMA.containsMouse ? "#f44336" : glassBorder
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: macroFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+                            border.color: macroFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
+                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: macroFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
                             MouseArea { id: macroFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { macroDialogDetached = false; macroDialogMinimized = false; macroFloatingWindow.close() }
                             }
@@ -8070,8 +8099,8 @@ ApplicationWindow {
                         Rectangle {
                             width: 28; height: 28; radius: 4
                             color: rigFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: rigFloatCloseMA.containsMouse ? "#f44336" : glassBorder
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: rigFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+                            border.color: rigFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
+                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 12; font.bold: true; color: rigFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
                             MouseArea { id: rigFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { rigControlDetached = false; rigControlMinimized = false; rigFloatingWindow.close() }
                             }
@@ -8192,7 +8221,7 @@ ApplicationWindow {
             anchors.fill: parent
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
             radius: 10
-            border.color: "#4CAF50"
+            border.color: bridge.themeManager.successColor
             border.width: 2
 
             FloatingResizeHandles {
@@ -8267,9 +8296,9 @@ ApplicationWindow {
                         anchors.margins: 8
                         spacing: 8
 
-                        Text { text: "⋮⋮"; font.pixelSize: 12; color: "#4CAF50" }
-		                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: "#4CAF50" }
-		                        Text { text: "Full Spectrum"; font.pixelSize: 14; font.bold: true; color: "#4CAF50" }
+                        Text { text: "⋮⋮"; font.pixelSize: 12; color: bridge.themeManager.successColor }
+		                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: bridge.themeManager.successColor }
+		                        Text { text: "Full Spectrum"; font.pixelSize: 14; font.bold: true; color: bridge.themeManager.successColor }
 		                        Item { Layout.fillWidth: true }
 
 	                            Text {
@@ -8284,13 +8313,13 @@ ApplicationWindow {
 	                                Layout.preferredHeight: 22
 	                                radius: 4
 	                                color: p1FloatClearMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.25) : "transparent"
-	                                border.color: p1FloatClearMA.containsMouse ? "#f44336" : Qt.rgba(1, 1, 1, 0.16)
+	                                border.color: p1FloatClearMA.containsMouse ? bridge.themeManager.ledRed : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.16)
 	                                border.width: 1
 	                                Text {
 	                                    anchors.centerIn: parent
 	                                    text: qsTr("Clear")
 	                                    font.pixelSize: 10
-	                                    color: p1FloatClearMA.containsMouse ? "#f44336" : textSecondary
+	                                    color: p1FloatClearMA.containsMouse ? bridge.themeManager.ledRed : textSecondary
 	                                }
 	                                MouseArea {
 	                                    id: p1FloatClearMA
@@ -8306,14 +8335,14 @@ ApplicationWindow {
 	                            Layout.preferredHeight: 22
 	                            radius: 4
 	                            color: p1FloatDockMA.containsMouse ? Qt.rgba(76/255, 175/255, 80/255, 0.3) : "transparent"
-	                            border.color: p1FloatDockMA.containsMouse ? "#4CAF50" : Qt.rgba(76/255, 175/255, 80/255, 0.45)
+	                            border.color: p1FloatDockMA.containsMouse ? bridge.themeManager.successColor : Qt.rgba(76/255, 175/255, 80/255, 0.45)
 	                            border.width: 1
 	                            Text {
 	                                anchors.centerIn: parent
 	                                text: "Dock"
 	                                font.pixelSize: 10
 	                                font.bold: true
-	                                color: p1FloatDockMA.containsMouse ? "#4CAF50" : textPrimary
+	                                color: p1FloatDockMA.containsMouse ? bridge.themeManager.successColor : textPrimary
 	                            }
 	                            MouseArea {
 	                                id: p1FloatDockMA
@@ -8342,7 +8371,7 @@ ApplicationWindow {
 		                            Layout.preferredHeight: 24
 		                            radius: 4
 	                            color: p1FloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-	                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: p1FloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+	                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: p1FloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
 	                            MouseArea { id: p1FloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
 	                                onClicked: mainWindow.dockFullSpectrumPanel()
 	                            }
@@ -8362,16 +8391,16 @@ ApplicationWindow {
 		                        anchors.rightMargin: 8
 	                        spacing: 0
 
-	                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
-	                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
+	                        Text { text: "UTC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
+	                        Text { text: "dB"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
 	                        Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
-	                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
-	                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
+	                        Text { text: "DT"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
+	                        Text { text: "Freq"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
 	                        Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
-	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; Layout.fillWidth: true }
-	                        Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
-	                        Text { visible: mainWindow.showDxccInfo; text: "DXCC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
-	                        Text { visible: mainWindow.showDxccInfo; text: "Az"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: "#4CAF50"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
+	                        Text { text: "Message"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; Layout.fillWidth: true }
+	                        Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: "Dist"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
+	                        Text { visible: mainWindow.showDxccInfo; text: "DXCC"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
+	                        Text { visible: mainWindow.showDxccInfo; text: "Az"; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextHeaderPixelSize * fs); font.bold: true; color: bridge.themeManager.successColor; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
 	                    }
 	                }
 
@@ -8445,7 +8474,7 @@ ApplicationWindow {
 	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
 	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
-	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? "#4CAF50" : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
+	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
 	                                Text { text: modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.message) }
 	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
@@ -8648,13 +8677,13 @@ ApplicationWindow {
 	                                Layout.preferredHeight: 22
 	                                radius: 4
 	                                color: rxFloatClearMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.25) : "transparent"
-	                                border.color: rxFloatClearMA.containsMouse ? "#f44336" : Qt.rgba(1, 1, 1, 0.16)
+	                                border.color: rxFloatClearMA.containsMouse ? bridge.themeManager.ledRed : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.16)
 	                                border.width: 1
 	                                Text {
 	                                    anchors.centerIn: parent
 	                                    text: qsTr("Clear")
 	                                    font.pixelSize: 10
-	                                    color: rxFloatClearMA.containsMouse ? "#f44336" : textSecondary
+	                                    color: rxFloatClearMA.containsMouse ? bridge.themeManager.ledRed : textSecondary
 	                                }
 	                                MouseArea {
 	                                    id: rxFloatClearMA
@@ -8706,7 +8735,7 @@ ApplicationWindow {
 		                            Layout.preferredHeight: 24
 		                            radius: 4
 	                            color: rxFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-	                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: rxFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+	                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: rxFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
 	                            MouseArea { id: rxFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
 	                                onClicked: mainWindow.dockSignalRxPanel()
 	                            }
@@ -8849,7 +8878,7 @@ ApplicationWindow {
             anchors.fill: parent
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
             radius: 12
-            border.color: "#f44336"
+            border.color: bridge.themeManager.ledRed
             border.width: 2
 
             // Resize handles
@@ -9082,9 +9111,9 @@ ApplicationWindow {
                         anchors.margins: 8
                         spacing: 8
 
-	                        Text { text: "⋮⋮"; font.pixelSize: 12; color: "#f44336" }
-	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: "#f44336" }
-	                        Text { text: "TX Panel"; font.pixelSize: 14; font.bold: true; color: "#f44336" }
+	                        Text { text: "⋮⋮"; font.pixelSize: 12; color: bridge.themeManager.ledRed }
+	                        Rectangle { Layout.preferredWidth: 10; Layout.preferredHeight: 10; radius: 5; color: bridge.themeManager.ledRed }
+	                        Text { text: "TX Panel"; font.pixelSize: 14; font.bold: true; color: bridge.themeManager.ledRed }
 	                        Item { Layout.fillWidth: true }
 
 	                        Rectangle {
@@ -9092,9 +9121,9 @@ ApplicationWindow {
 	                            Layout.preferredHeight: 22
 	                            radius: 4
 	                            color: txFloatDockMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-	                            border.color: txFloatDockMA.containsMouse ? "#f44336" : Qt.rgba(244/255, 67/255, 54/255, 0.45)
+	                            border.color: txFloatDockMA.containsMouse ? bridge.themeManager.ledRed : Qt.rgba(244/255, 67/255, 54/255, 0.45)
 	                            border.width: 1
-	                            Text { anchors.centerIn: parent; text: qsTr("Dock"); font.pixelSize: 10; font.bold: true; color: txFloatDockMA.containsMouse ? "#f44336" : textPrimary }
+	                            Text { anchors.centerIn: parent; text: qsTr("Dock"); font.pixelSize: 10; font.bold: true; color: txFloatDockMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
 	                            MouseArea {
 	                                id: txFloatDockMA
 	                                anchors.fill: parent
@@ -9122,7 +9151,7 @@ ApplicationWindow {
 	                            Layout.preferredHeight: 24
 	                            radius: 4
                             color: txFloatCloseMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : "transparent"
-                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: txFloatCloseMA.containsMouse ? "#f44336" : textPrimary }
+                            Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 11; font.bold: true; color: txFloatCloseMA.containsMouse ? bridge.themeManager.ledRed : textPrimary }
                             MouseArea { id: txFloatCloseMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { txPanelDetached = false; txPanelMinimized = false; txPanelFloatingWindow.close() }
                             }
