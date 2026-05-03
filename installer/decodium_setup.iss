@@ -5,7 +5,7 @@
   #define AppName "Decodium"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.64"
+  #define AppVersion "1.0.67"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "IU8LMC"
@@ -78,7 +78,10 @@ Type: filesandordirs; Name: "{localappdata}\decodium4\cache\qmlcache"
 [Files]
 ; Copia l'intero bundle portabile già preparato da windeployqt.
 ; In questo modo installer e portable restano sempre allineati 1:1.
-Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Esclude pollution di build CMake (oggetti, autogen, static libs, test, tools sperimentali).
+Source: "{#BuildDir}\*"; DestDir: "{app}"; \
+  Excludes: "CMakeFiles\*,CMakeCache.txt,cmake_install.cmake,CTestTestfile.cmake,Makefile,build.ninja,.ninja_*,compile_commands.json,*.obj,*.d,*.a,*.rc,*_autogen\*,.qt\*,tests\*,tools\*,bundle_fixup\*,qrc_*.cpp,qrc_*.cpp.depends,*.qrc.depends,*.cmake,VersionInfo_*.h,VersionResource_*.rc,DartConfiguration.tcl,CPack*.cmake"; \
+  Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; File licenza fuori dal bundle
 Source: "{#SourceRoot}\COPYING"; DestDir: "{app}"; DestName: "COPYING.txt"; Flags: ignoreversion skipifsourcedoesntexist
