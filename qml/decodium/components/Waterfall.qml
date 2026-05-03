@@ -34,13 +34,13 @@ Item {
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
     // Theme-aware toolbar palette (was hardcoded dark before).
     property color wfText:        bridge.themeManager.isLightTheme ? bridge.themeManager.textPrimary    : "#FFFFFF"
-    property color wfToolbarBg:   bridge.themeManager.isLightTheme ? bridge.themeManager.panelHeader    : wfToolbarBg
+    property color wfToolbarBg:   bridge.themeManager.isLightTheme ? bridge.themeManager.panelHeader    : Qt.rgba(0,0,0,0.75)
     property color wfTrack:       bridge.themeManager.isLightTheme ? bridge.themeManager.borderSoft     : "#1a2a3a"
-    property color wfFrame:       bridge.themeManager.isLightTheme ? bridge.themeManager.borderColor    : wfFrame
-    property color wfYellow:      bridge.themeManager.isLightTheme ? bridge.themeManager.warningColor   : wfYellow
-    property color wfBlue:        bridge.themeManager.isLightTheme ? bridge.themeManager.primaryColor   : wfBlue
-    property color wfPurple:      bridge.themeManager.isLightTheme ? bridge.themeManager.ledMagenta     : wfPurple
-    property color wfSlate:       bridge.themeManager.isLightTheme ? bridge.themeManager.textSecondary  : wfSlate
+    property color wfFrame:       bridge.themeManager.isLightTheme ? bridge.themeManager.borderColor    : "#3a5470"
+    property color wfYellow:      bridge.themeManager.isLightTheme ? bridge.themeManager.warningColor   : "#ffcc00"
+    property color wfBlue:        bridge.themeManager.isLightTheme ? bridge.themeManager.primaryColor   : "#88BBDD"
+    property color wfPurple:      bridge.themeManager.isLightTheme ? bridge.themeManager.ledMagenta     : "#AA88DD"
+    property color wfSlate:       bridge.themeManager.isLightTheme ? bridge.themeManager.textSecondary  : "#5888AA"
 
     readonly property var labelColorPresets: [
         { name: "Auto",    color: "#00E6FF", custom: false },

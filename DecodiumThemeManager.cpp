@@ -59,6 +59,21 @@ DecodiumThemeManager::DecodiumThemeManager(QObject* parent)
     : QObject(parent)
 {
     QSettings s("Decodium", "Decodium");
+    // One-shot migration: from 1.0.70 the dark Ocean Blue theme is the
+    // canonical default. Reset any persisted choice once so the upgrade
+    // lands on dark; the user can re-select Stellar Light afterwards.
+    if (!s.value("theme/migrated_v2", false).toBool()) {
+        s.setValue("theme/current", "Ocean Blue");
+        // Stellar Light forces palette index 11 (pastel light) on the
+        // panadapter. Reset any residual 11 so the dark default lands on
+        // a sensible spectrum palette instead of an all-white waterfall.
+        // uiPaletteIndex is persisted by DecodiumBridge under the
+        // "Decodium3" store, not the same one used for theme/current.
+        QSettings bridgeStore("Decodium", "Decodium3");
+        if (bridgeStore.value("uiPaletteIndex", 0).toInt() == 11)
+            bridgeStore.setValue("uiPaletteIndex", 0);
+        s.setValue("theme/migrated_v2", true);
+    }
     QString const stored = s.value("theme/current", "Ocean Blue").toString();
     if (stored == "Stellar Light" || stored == "Ocean Blue") {
         m_currentTheme = stored;
