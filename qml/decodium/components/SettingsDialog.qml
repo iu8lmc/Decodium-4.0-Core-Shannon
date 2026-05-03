@@ -2606,7 +2606,7 @@ Dialog {
                         ComboBox {
                             id: decodeDepthCombo
                             model: [qsTr("Fast"),qsTr("Normal"),qsTr("Deep")]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: bridge.ndepth - 1
+                            currentIndex: Math.max(0, Math.min(count - 1, bridge.ndepth - 1))
                             onActivated: bridge.ndepth = currentIndex + 1
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             contentItem: Text { text: decodeDepthCombo.displayText; color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
@@ -2654,8 +2654,8 @@ Dialog {
 
                         Text { text: qsTr("Single Decode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("SingleDecode", false)
-                            onCheckedChanged: bridge.setSetting("SingleDecode", checked)
+                            checked: bridge.singleDecode
+                            onToggled: bridge.singleDecode = checked
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }

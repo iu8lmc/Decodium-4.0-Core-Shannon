@@ -8,6 +8,7 @@ layout(location = 0) out vec2 vTexCoord;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
+    vec4 wf_Params;
 };
 
 void main()

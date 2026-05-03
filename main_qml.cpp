@@ -119,7 +119,9 @@ static const char* qsgGraphicsApiName(QSGRendererInterface::GraphicsApi api)
     case QSGRendererInterface::Vulkan: return "Vulkan";
     case QSGRendererInterface::Metal: return "Metal";
     case QSGRendererInterface::Null: return "Null";
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
     case QSGRendererInterface::Direct3D12: return "Direct3D12";
+#endif
     }
     return "Unrecognized";
 }

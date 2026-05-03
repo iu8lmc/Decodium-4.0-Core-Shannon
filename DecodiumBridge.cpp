@@ -71,7 +71,10 @@
 #include <QDir>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointer>
+#include <QRunnable>
 #include <QTimeZone>
+#include <QThreadPool>
 #include "Network/FoxVerifier.hpp"
 #include "wsjtx_config.h"
 #include <QFile>
@@ -5517,6 +5520,7 @@ void DecodiumBridge::resetStartupTransientQsoState()
     m_activeTxNumber = 0;
     m_activeTxMessage.clear();
     m_qsoCooldown.clear();
+    m_worldMapClosedQsoCallKeys.clear();
     clearPendingAutoLogSnapshot();
     clearLateAutoLogSnapshot();
     clearAutoCqPartnerLock();
@@ -6083,6 +6087,9 @@ void DecodiumBridge::setDxCall(const QString& v) {
     if (m_dxCall != v) {
         m_dxCall = v;
         QString const activeQueueCall = normalizedBaseCall(v);
+        if (!activeQueueCall.isEmpty()) {
+            clearWorldMapClosedQso(v);
+        }
         // Cambio partner: resetta l'ultimo messaggio trasmesso, altrimenti il
         // controllo `messageCarries73Payload(m_lastTransmittedMessage)` in
         // autoSequenceStep ricorderebbe il "73" del QSO precedente e marcherebbe
@@ -6170,6 +6177,7 @@ void DecodiumBridge::setTxEnabled(bool v)
     bool const rearmingFromOff = v && !m_txEnabled;
 
     if (v) {
+        clearWorldMapClosedQso(m_dxCall);
         clearManualTxHold(QStringLiteral("tx-enabled"));
         if (rearmingFromOff && !m_transmitting && !m_tuning && !m_autoCqRepeat) {
             resetManualTxRearmState(QStringLiteral("tx-enabled"));
@@ -6376,7 +6384,45 @@ void DecodiumBridge::setNfa(int v) { if (m_nfa!=v) { m_nfa=v; emit nfaChanged();
 int DecodiumBridge::nfb() const { return m_nfb; }
 void DecodiumBridge::setNfb(int v) { if (m_nfb!=v) { m_nfb=v; emit nfbChanged(); } }
 int DecodiumBridge::ndepth() const { return m_ndepth; }
-void DecodiumBridge::setNdepth(int v) { if (m_ndepth!=v) { m_ndepth=v; emit ndepthChanged(); } }
+void DecodiumBridge::setNdepth(int v)
+{
+    int const depth = qBound(1, v, 4);
+    if (m_ndepth == depth) {
+        return;
+    }
+
+    m_ndepth = depth;
+    int const legacyBits = legacyCompatibleDecodeDepthBits();
+
+    QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    s.setValue(QStringLiteral("ndepth"), m_ndepth);
+    s.setValue(QStringLiteral("NDepth"), legacyBits);
+    s.setValue(QStringLiteral("decodeDepthMigratedFromLegacy"), true);
+    s.sync();
+    syncSettingToLegacyIni(QStringLiteral("NDepth"), legacyBits);
+    syncSettingToLegacyIni(QStringLiteral("ndepth"), m_ndepth);
+
+    emit ndepthChanged();
+    emit settingValueChanged(QStringLiteral("ndepth"), m_ndepth);
+    emit settingValueChanged(QStringLiteral("NDepth"), legacyBits);
+}
+bool DecodiumBridge::singleDecode() const { return m_singleDecode; }
+void DecodiumBridge::setSingleDecode(bool v)
+{
+    if (m_singleDecode == v) {
+        return;
+    }
+
+    m_singleDecode = v;
+
+    QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    s.setValue(QStringLiteral("SingleDecode"), m_singleDecode);
+    s.sync();
+    syncSettingToLegacyIni(QStringLiteral("SingleDecode"), m_singleDecode);
+
+    emit singleDecodeChanged();
+    emit settingValueChanged(QStringLiteral("SingleDecode"), m_singleDecode);
+}
 int DecodiumBridge::ncontest() const { return m_ncontest; }
 void DecodiumBridge::setNcontest(int v) { setSpecialOperationActivity(v); }
 
@@ -9186,6 +9232,12 @@ void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
         if (legacyBackendAvailable()) {
             m_legacyBackend->setAutoSpotEnabled(enabled);
         }
+    } else if (key == QStringLiteral("SingleDecode")) {
+        bool const enabled = value.toBool();
+        if (m_singleDecode != enabled) {
+            m_singleDecode = enabled;
+            emit singleDecodeChanged();
+        }
     }
     emit settingValueChanged(key, value);
     if (legacyKey != key) {
@@ -9730,6 +9782,7 @@ bool DecodiumBridge::isLegacySyncKey(const QString& key) const
         QStringLiteral("FiltersCallingOnly"),
         QStringLiteral("Font"),
         QStringLiteral("DecodedTextFont"),
+        QStringLiteral("SingleDecode"),
     };
     if (keys.contains(key)) {
         return true;
@@ -10603,10 +10656,12 @@ void DecodiumBridge::saveSettings()
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
     s.setValue("ndepth", m_ndepth);
+    s.setValue("SingleDecode", m_singleDecode);
     s.setValue("SelectedActivity", m_specialOperationActivity);
     s.setValue("SpecialOpActivity", m_specialOperationActivity != kSpecialOpNone);
     s.setValue("NDepth", legacyCompatibleDecodeDepthBits());
     s.setValue("decodeDepthMigratedFromLegacy", true);
+    syncSettingToLegacyIni(QStringLiteral("SingleDecode"), m_singleDecode);
     s.setValue("tx6", m_tx6);
     s.remove("dxCall");
     s.remove("dxGrid");
@@ -11874,9 +11929,11 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             if (completedPartner.trimmed().isEmpty() && m_pendingAutoLogValid) {
                 completedPartner = m_pendingAutoLogCall;
             }
+            markWorldMapQsoClosed(completedPartner, reason);
             rememberCompletedAutoCqPartner(completedPartner, true, reason);
             logQso();
         } else {
+            markWorldMapQsoClosed(completedPartner, reason);
             rememberCompletedAutoCqPartner(completedPartner, false, reason);
         }
         bool const continueQueuedCaller = m_multiAnswerMode && !m_callerQueue.isEmpty();
@@ -12419,6 +12476,7 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         if (completedPartner.trimmed().isEmpty() && m_pendingAutoLogValid) {
             completedPartner = m_pendingAutoLogCall;
         }
+        markWorldMapQsoClosed(completedPartner, reason);
         rememberCompletedAutoCqPartner(completedPartner, true, reason);
         logQso();
         bool const continueQueuedCaller = m_multiAnswerMode && !m_callerQueue.isEmpty();
@@ -12820,6 +12878,7 @@ void DecodiumBridge::loadSettings()
                                       (legacyNDepthBits & 0x20) != 0).toBool();
         m_ft8ApEnabled = s.value("FT8AP", true).toBool();
     }
+    m_singleDecode = getSetting(QStringLiteral("SingleDecode"), false).toBool();
     m_dxCall   = s.value("dxCall", "").toString();
     m_dxGrid   = s.value("dxGrid", "").toString();
     m_tx1 = s.value("tx1", "").toString();
@@ -13121,6 +13180,7 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
     emit nfaChanged();
     emit nfbChanged();
     emit ndepthChanged();
+    emit singleDecodeChanged();
     emit ncontestChanged();
     emit specialOperationActivityChanged();
     emit foxModeChanged();
@@ -14042,6 +14102,8 @@ void DecodiumBridge::showLogQsoPromptDialog()
 
 void DecodiumBridge::clearTxArmedAfterCompletedQso(const QString& completedCall, const QString& reason)
 {
+    markWorldMapQsoClosed(completedCall, reason);
+
     bool const continueQueuedCaller = m_multiAnswerMode && !m_callerQueue.isEmpty();
     bool const continueAutoCq = m_autoCqRepeat && !m_tx6.trimmed().isEmpty();
 
@@ -14469,6 +14531,54 @@ bool looksLikeCallsignToken(const QString& token)
     return hasLetter && hasDigit;
 }
 
+static QString displayMessageWithCallsignsActorFirst(const QString& message,
+                                                     bool isTx,
+                                                     const QString& myCall)
+{
+    QString const trimmed = message.trimmed();
+    if (trimmed.isEmpty()) {
+        return trimmed;
+    }
+
+    QStringList words = trimmed.split(QRegularExpression(QStringLiteral("\\s+")),
+                                      Qt::SkipEmptyParts);
+    if (words.size() < 3) {
+        return trimmed;
+    }
+
+    QString const first = normalizeCallToken(words.at(0)).toUpper();
+    QString const second = normalizeCallToken(words.at(1)).toUpper();
+    if (first == QStringLiteral("CQ")
+        || first == QStringLiteral("CQDX")
+        || first == QStringLiteral("QRZ")
+        || first == QStringLiteral("DE")
+        || first == QStringLiteral("TEST")) {
+        return trimmed;
+    }
+
+    QString const myFull = normalizeCallToken(myCall).toUpper();
+    QString const myBase = normalizedBaseCall(myFull);
+
+    bool const firstIsMine = tokenMatchesCall(first, myFull, myBase);
+    bool const secondIsMine = tokenMatchesCall(second, myFull, myBase);
+    bool shouldSwap = false;
+    if (isTx) {
+        // Standard outgoing directed payload is "DX MYCALL ..."; display actor-first.
+        shouldSwap = secondIsMine && !firstIsMine && looksLikeCallsignToken(first);
+    } else {
+        // Standard incoming directed payload is "MYCALL DX ..."; display actor-first.
+        shouldSwap = firstIsMine && !secondIsMine && looksLikeCallsignToken(second);
+    }
+
+    if (!shouldSwap) {
+        return trimmed;
+    }
+
+    // Display only: keep the raw message unchanged for TX/autosequence logic.
+    std::swap(words[0], words[1]);
+    return words.join(QLatin1Char(' '));
+}
+
 }
 
 // Estrae il secondo callsign dal messaggio (quello a destra).
@@ -14743,6 +14853,48 @@ QString DecodiumBridge::approximateWorldMapGridForCall(const QString& call)
     return isGridTokenStrict(locator) ? locator : QString {};
 }
 
+void DecodiumBridge::markWorldMapQsoClosed(const QString& call, const QString& reason)
+{
+    QString mapCall = normalizeWorldMapCall(call);
+    if (mapCall.isEmpty()) {
+        mapCall = normalizeWorldMapCall(m_dxCall);
+    }
+    if (mapCall.isEmpty() && m_pendingAutoLogValid) {
+        mapCall = normalizeWorldMapCall(m_pendingAutoLogCall);
+    }
+    if (mapCall.isEmpty() && m_promptLogSnapshotValid) {
+        mapCall = normalizeWorldMapCall(m_promptLogCall);
+    }
+    if (mapCall.isEmpty() && m_lateAutoLogValid) {
+        mapCall = normalizeWorldMapCall(m_lateAutoLogCall);
+    }
+
+    QString const key = worldMapCallKey(mapCall);
+    if (key.isEmpty() || key == worldMapCallKey(m_callsign)) {
+        return;
+    }
+
+    m_worldMapClosedQsoCallKeys.insert(key);
+    emit worldMapContactDowngraded(mapCall);
+    if (!reason.isEmpty()) {
+        bridgeLog(QStringLiteral("WorldMap: closed QSO path %1 (%2)").arg(mapCall, reason));
+    }
+}
+
+void DecodiumBridge::clearWorldMapClosedQso(const QString& call)
+{
+    QString const key = worldMapCallKey(call);
+    if (!key.isEmpty()) {
+        m_worldMapClosedQsoCallKeys.remove(key);
+    }
+}
+
+bool DecodiumBridge::worldMapQsoPathSuppressed(const QString& call) const
+{
+    QString const key = worldMapCallKey(call);
+    return !key.isEmpty() && m_worldMapClosedQsoCallKeys.contains(key);
+}
+
 void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
 {
     QString const message = entry.value(QStringLiteral("message")).toString().trimmed();
@@ -14884,6 +15036,15 @@ void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
             remoteCall = normalizeWorldMapCall(m_dxCall);
         }
         remoteGrid = gridForMapCall(remoteCall);
+        if (isEndOfQso && !remoteCall.isEmpty()) {
+            markWorldMapQsoClosed(remoteCall);
+            if (isGridTokenStrict(remoteGrid)) {
+                emit worldMapContactAdded(remoteCall, remoteGrid, remoteGrid, roleBandOnly);
+            } else {
+                emitApproximateContact(remoteCall, roleBandOnly);
+            }
+            return;
+        }
         if (!remoteCall.isEmpty() && isGridTokenStrict(remoteGrid)) {
             emit worldMapContactAdded(remoteCall, myGrid, remoteGrid, roleOutgoingFromMe);
         } else {
@@ -14906,7 +15067,7 @@ void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
         remoteGrid = gridForMapCall(remoteCall);
         role = roleOutgoingFromMe;
         if (isEndOfQso && !remoteCall.isEmpty()) {
-            emit worldMapContactDowngraded(remoteCall);
+            markWorldMapQsoClosed(remoteCall);
             role = roleBandOnly;
         }
         if (isGridTokenStrict(remoteGrid)) {
@@ -14925,7 +15086,7 @@ void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
         remoteGrid = gridForMapCall(remoteCall);
         role = roleIncomingToMe;
         if (isEndOfQso && !remoteCall.isEmpty()) {
-            emit worldMapContactDowngraded(remoteCall);
+            markWorldMapQsoClosed(remoteCall);
             role = roleBandOnly;
         }
         if (isGridTokenStrict(remoteGrid)) {
@@ -14957,7 +15118,7 @@ void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
     }
 
     if (isEndOfQso && !remoteCall.isEmpty()) {
-        emit worldMapContactDowngraded(remoteCall);
+        markWorldMapQsoClosed(remoteCall);
     }
     if (remoteCall.isEmpty()) {
         return;
@@ -14980,10 +15141,13 @@ void DecodiumBridge::emitCurrentWorldMapQsoPath()
     myGrid = myGrid.left(qMin(6, myGrid.size()));
 
     QString remoteCall = normalizeWorldMapCall(m_dxCall);
-    if (remoteCall.isEmpty()) {
+    if (remoteCall.isEmpty() && m_txEnabled && m_qsoProgress > 1 && m_qsoProgress < 6) {
         remoteCall = normalizeWorldMapCall(inferredPartnerForAutolog());
     }
     if (remoteCall.isEmpty() || worldMapCallKey(remoteCall) == worldMapCallKey(m_callsign)) {
+        return;
+    }
+    if (worldMapQsoPathSuppressed(remoteCall)) {
         return;
     }
 
@@ -15107,6 +15271,10 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
 {
     QString msg = entry.value("message").toString();
     bool isCQ = entry.value("isCQ").toBool();
+    bool const localTxEntry = entry.value(QStringLiteral("isTx")).toBool()
+        || entry.value(QStringLiteral("db")).toString().trimmed().compare(QStringLiteral("TX"), Qt::CaseInsensitive) == 0;
+    entry[QStringLiteral("displayMessage")] =
+        displayMessageWithCallsignsActorFirst(msg, localTxEntry, m_callsign);
     QString fromCall = entry.value("fromCall").toString().trimmed().toUpper();
     if (fromCall.isEmpty())
         fromCall = extractDecodedCallsign(msg, isCQ);
@@ -15139,8 +15307,6 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
             break;
         }
     }
-    bool const localTxEntry = entry.value(QStringLiteral("isTx")).toBool()
-        || entry.value(QStringLiteral("db")).toString().trimmed().compare(QStringLiteral("TX"), Qt::CaseInsensitive) == 0;
     bool const selfEntry = localTxEntry || sameBaseCall(fromCall) || sameBaseCall(firstCall);
 
     QString dxCountry;
@@ -16064,32 +16230,82 @@ void DecodiumBridge::onSpectrumTimer()
                 && nowMs - m_lastPanadapterFrameMs < minPanadapterIntervalMs) {
                 return;
             }
+
+            bool expectedIdle = false;
+            if (!m_panadapterComputeBusy.compare_exchange_strong(expectedIdle, true)) {
+                return;
+            }
             m_lastPanadapterFrameMs = nowMs;
 
-            m_spectrumBuf.resize(fftLen);
-            m_spectrumBuf.fill(0);
-            for (int i = 0; i < usable; ++i) {
-                int pos = (m_wfRingPos - usable + i + WF_RING_SIZE * 2) % WF_RING_SIZE;
-                m_spectrumBuf[i] = m_wfRing[pos];
+            QVector<short> panadapterSamples(fftLen);
+            panadapterSamples.fill(0);
+            int ringStart = (m_wfRingPos - usable) % WF_RING_SIZE;
+            if (ringStart < 0)
+                ringStart += WF_RING_SIZE;
+            int const firstChunk = qMin(usable, WF_RING_SIZE - ringStart);
+            std::memcpy(panadapterSamples.data(), m_wfRing + ringStart,
+                        static_cast<size_t>(firstChunk) * sizeof(short));
+            if (firstChunk < usable) {
+                std::memcpy(panadapterSamples.data() + firstChunk, m_wfRing,
+                            static_cast<size_t>(usable - firstChunk) * sizeof(short));
             }
 
-            float minDb = 0.f, maxDb = 0.f;
-            QVector<float> hq = computePanadapter(minDb, maxDb);
-            if (!hq.isEmpty()) {
-                // Smooth con l'ultimo frame per transizioni uniformi
-                if (m_lastPanadapterData.size() == hq.size()) {
-                    float alpha = (usable >= fftLen) ? 1.0f : 0.7f;
-                    for (int i = 0; i < hq.size(); ++i)
-                        hq[i] = alpha * hq[i] + (1.0f - alpha) * m_lastPanadapterData[i];
-                }
-                m_lastPanadapterData = hq;
-                m_lastPanMinDb = minDb;
-                m_lastPanMaxDb = maxDb;
-                float freqPerBin = (float)SAMPLE_RATE / PANADAPTER_FFT_SIZE;
-                m_lastPanFreqMin = (int)(m_nfa / freqPerBin) * freqPerBin;
-                m_lastPanFreqMax = (int)(m_nfb / freqPerBin) * freqPerBin;
-                emit panadapterDataReady(hq, minDb, maxDb, m_lastPanFreqMin, m_lastPanFreqMax);
+            int const nfaSnapshot = m_nfa;
+            int const nfbSnapshot = m_nfb;
+            float const freqPerBin = static_cast<float>(SAMPLE_RATE) / PANADAPTER_FFT_SIZE;
+            float const freqMinHz = static_cast<int>(nfaSnapshot / freqPerBin) * freqPerBin;
+            float const freqMaxHz = static_cast<int>(nfbSnapshot / freqPerBin) * freqPerBin;
+            uint64_t const serial = ++m_panadapterComputeSerial;
+
+            static std::atomic_bool loggedAsyncPath {false};
+            bool expectedLog = false;
+            if (loggedAsyncPath.compare_exchange_strong(expectedLog, true)) {
+                qInfo().noquote()
+                    << "[PANDBG] Panadapter visual FFT scheduling active"
+                    << "thread=QThreadPool"
+                    << "mode=async"
+                    << "fallback=skip_frame_when_busy";
             }
+
+            QPointer<DecodiumBridge> guard(this);
+            auto* task = QRunnable::create([
+                guard,
+                samples = std::move(panadapterSamples),
+                nfaSnapshot,
+                nfbSnapshot,
+                usable,
+                freqMinHz,
+                freqMaxHz,
+                serial
+            ]() mutable {
+                PanadapterFrameResult result = DecodiumBridge::computePanadapterFrame(samples,
+                                                                                      nfaSnapshot,
+                                                                                      nfbSnapshot);
+                if (!guard)
+                    return;
+
+                QMetaObject::invokeMethod(guard, [
+                    guard,
+                    values = std::move(result.values),
+                    minDb = result.minDb,
+                    maxDb = result.maxDb,
+                    usable,
+                    freqMinHz,
+                    freqMaxHz,
+                    serial
+                ]() mutable {
+                    if (!guard)
+                        return;
+                    guard->finishPanadapterFrame(std::move(values),
+                                                 minDb,
+                                                 maxDb,
+                                                 usable,
+                                                 freqMinHz,
+                                                 freqMaxHz,
+                                                 serial);
+                }, Qt::QueuedConnection);
+            });
+            QThreadPool::globalInstance()->start(task, -1);
         }
     }
 
@@ -17570,87 +17786,191 @@ QVector<float> DecodiumBridge::computeSpectrum() const
     return result;
 }
 
+void DecodiumBridge::finishPanadapterFrame(QVector<float> values,
+                                           float minDb,
+                                           float maxDb,
+                                           int usableSamples,
+                                           float freqMinHz,
+                                           float freqMaxHz,
+                                           uint64_t serial)
+{
+    m_panadapterComputeBusy.store(false);
+
+    if (serial != m_panadapterComputeSerial.load())
+        return;
+    if (!m_monitoring || m_transmitting || m_tuning)
+        return;
+    if (values.isEmpty())
+        return;
+
+    // Smooth con l'ultimo frame per transizioni uniformi
+    if (m_lastPanadapterData.size() == values.size()) {
+        float const alpha = (usableSamples >= PANADAPTER_FFT_SIZE) ? 1.0f : 0.7f;
+        float const beta = 1.0f - alpha;
+        for (int i = 0; i < values.size(); ++i)
+            values[i] = alpha * values[i] + beta * m_lastPanadapterData[i];
+    }
+
+    m_lastPanadapterData = values;
+    m_lastPanMinDb = minDb;
+    m_lastPanMaxDb = maxDb;
+    m_lastPanFreqMin = freqMinHz;
+    m_lastPanFreqMax = freqMaxHz;
+    emit panadapterDataReady(values, minDb, maxDb, freqMinHz, freqMaxHz);
+}
+
 // ─── Alta risoluzione: FFTW 4096 bin, output in dB raw ─────────────────────
-QVector<float> DecodiumBridge::computePanadapter(float& outMinDb, float& outMaxDb) const
+DecodiumBridge::PanadapterFrameResult DecodiumBridge::computePanadapterFrame(const QVector<short>& samples,
+                                                                             int nfa,
+                                                                             int nfb)
 {
     const int N = PANADAPTER_FFT_SIZE; // 4096 → 2.93 Hz/bin @ 12kHz
-    if (m_spectrumBuf.size() < N) return {};
+    if (samples.size() < N) return {};
+
+    static const QVector<float> blackmanHarrisWindow = [] {
+        QVector<float> window(PANADAPTER_FFT_SIZE);
+        constexpr float a0 = 0.35875f;
+        constexpr float a1 = 0.48829f;
+        constexpr float a2 = 0.14128f;
+        constexpr float a3 = 0.01168f;
+        constexpr float twoPi = 6.2831853071795864769f;
+        for (int i = 0; i < PANADAPTER_FFT_SIZE; ++i) {
+            float const phase = twoPi * static_cast<float>(i) / static_cast<float>(PANADAPTER_FFT_SIZE - 1);
+            window[i] = a0
+                      - a1 * std::cos(phase)
+                      + a2 * std::cos(2.0f * phase)
+                      - a3 * std::cos(3.0f * phase);
+        }
+        return window;
+    }();
 
     // Usa FFTW se disponibile, altrimenti fallback al DFT interno
 #ifdef FFTW3_SINGLE_FOUND
-    // FFTW plan (cached per performance). Lo stato statico sotto è condiviso
-    // tra tutti i chiamanti: serializziamo via mutex per evitare data race se
-    // computePanadapter() è invocata da più thread (es. spectrum timer + property
-    // binding QML). Il lock copre l'intero ciclo allocazione/finestratura/execute
-    // perché fftIn/fftOut sono shared workspace dello stesso piano.
-    static QMutex          fftMutex;
-    static float*          fftIn  = nullptr;
-    static fftwf_complex*  fftOut = nullptr;
-    static fftwf_plan      fftPlan = nullptr;
-    static int             lastN   = 0;
-    QMutexLocker           fftLock (&fftMutex);
-    if (lastN != N) {
-        if (fftPlan) fftwf_destroy_plan(fftPlan);
-        if (fftIn)  fftwf_free(fftIn);
-        if (fftOut) fftwf_free(fftOut);
-        fftIn   = fftwf_alloc_real(N);
-        fftOut  = fftwf_alloc_complex(N/2 + 1);
-        fftPlan = fftwf_plan_dft_r2c_1d(N, fftIn, fftOut, FFTW_ESTIMATE);
-        lastN   = N;
+    struct FftwWorkspace {
+        float* in = nullptr;
+        fftwf_complex* out = nullptr;
+        fftwf_plan plan = nullptr;
+        int size = 0;
+
+        ~FftwWorkspace()
+        {
+            if (plan)
+                fftwf_destroy_plan(plan);
+            if (in)
+                fftwf_free(in);
+            if (out)
+                fftwf_free(out);
+        }
+
+        bool ensure(int n)
+        {
+            if (size == n && in && out && plan)
+                return true;
+
+            if (plan) {
+                fftwf_destroy_plan(plan);
+                plan = nullptr;
+            }
+            if (in) {
+                fftwf_free(in);
+                in = nullptr;
+            }
+            if (out) {
+                fftwf_free(out);
+                out = nullptr;
+            }
+
+            in = fftwf_alloc_real(n);
+            out = fftwf_alloc_complex(n / 2 + 1);
+            if (!in || !out)
+                return false;
+
+            static QMutex plannerMutex;
+            QMutexLocker plannerLock(&plannerMutex);
+            plan = fftwf_plan_dft_r2c_1d(n, in, out, FFTW_ESTIMATE);
+            size = plan ? n : 0;
+            return plan != nullptr;
+        }
+    };
+
+    thread_local FftwWorkspace fft;
+    if (!fft.ensure(N))
+        return {};
+
+    static std::atomic_bool loggedFastPath {false};
+    bool expected = false;
+    if (loggedFastPath.compare_exchange_strong(expected, true)) {
+        qInfo().noquote()
+            << "[PANDBG] Panadapter visual FFT path active"
+            << "engine=FFTW"
+            << "workspace=thread_local"
+            << "window=precomputed_blackman_harris"
+            << "post=power_db_no_sqrt";
     }
-    // Applica finestra Blackman-Harris (riduzione sidelobes > 92dB — meglio di Hann)
-    constexpr float a0=0.35875f, a1=0.48829f, a2=0.14128f, a3=0.01168f;
-    for (int i = 0; i < N; ++i) {
-        float w = a0 - a1*std::cos(2.f*3.14159265f*i/(N-1))
-                     + a2*std::cos(4.f*3.14159265f*i/(N-1))
-                     - a3*std::cos(6.f*3.14159265f*i/(N-1));
-        fftIn[i] = m_spectrumBuf[i] * w;
-    }
-    fftwf_execute(fftPlan);
+
+    for (int i = 0; i < N; ++i)
+        fft.in[i] = static_cast<float>(samples[i]) * blackmanHarrisWindow[i];
+
+    fftwf_execute(fft.plan);
 
     const float freqPerBin = (float)SAMPLE_RATE / N;
-    int binStart = (int)(m_nfa / freqPerBin);
-    int binEnd   = qMin((int)(m_nfb / freqPerBin), N/2);
+    int binStart = (int)(nfa / freqPerBin);
+    int binEnd   = qMin((int)(nfb / freqPerBin), N/2);
     int nBins    = binEnd - binStart;
     if (nBins <= 0) return {};
 
-    QVector<float> result;
-    result.reserve(nBins);
+    QVector<float> result(nBins);
     float minDb =  200.f, maxDb = -200.f;
+    constexpr float powerFloor = 1e-24f;
+    float const fftNorm = N / 2.0f;
+    float const inverseNormSquared = 1.0f / (fftNorm * fftNorm);
     for (int b = binStart; b < binEnd; ++b) {
-        float re = fftOut[b][0], im = fftOut[b][1];
-        float mag = std::sqrt(re*re + im*im) / (N/2.f);
-        float db  = (mag > 1e-12f) ? 20.f * std::log10(mag) : -200.f;
-        result.append(db);
+        float const re = fft.out[b][0];
+        float const im = fft.out[b][1];
+        float const normalizedPower = (re * re + im * im) * inverseNormSquared;
+        float const db = (normalizedPower > powerFloor)
+            ? 10.0f * std::log10(normalizedPower)
+            : -200.0f;
+        result[b - binStart] = db;
         if (db > -190.f) { minDb = qMin(minDb, db); maxDb = qMax(maxDb, db); }
     }
-    outMinDb = minDb;
-    outMaxDb = maxDb;
-    return result;
+    return {std::move(result), minDb, maxDb};
 #else
     // Fallback: DFT interno — molto più lento ma funzionale
-    std::vector<std::complex<float>> fftBuf(N);
-    for (int i = 0; i < N; ++i) {
-        float w = 0.5f*(1.f - std::cos(2.f*3.14159265f*i/(N-1)));
-        fftBuf[i] = std::complex<float>(m_spectrumBuf[i]*w, 0.f);
+    static std::atomic_bool loggedFallbackPath {false};
+    bool expected = false;
+    if (loggedFallbackPath.compare_exchange_strong(expected, true)) {
+        qInfo().noquote()
+            << "[PANDBG] Panadapter visual FFT path active"
+            << "engine=internal_radix2"
+            << "window=precomputed_blackman_harris"
+            << "post=power_db_no_sqrt";
     }
+
+    std::vector<std::complex<float>> fftBuf(N);
+    for (int i = 0; i < N; ++i)
+        fftBuf[i] = std::complex<float>(static_cast<float>(samples[i]) * blackmanHarrisWindow[i], 0.f);
+
     fft_inplace(fftBuf);
     const float freqPerBin = (float)SAMPLE_RATE / N;
-    int binStart = (int)(m_nfa / freqPerBin);
-    int binEnd   = qMin((int)(m_nfb / freqPerBin), N/2-1);
+    int binStart = (int)(nfa / freqPerBin);
+    int binEnd   = qMin((int)(nfb / freqPerBin), N/2-1);
     int nBins    = binEnd - binStart;
     if (nBins <= 0) return {};
-    QVector<float> result;
-    result.reserve(nBins);
+    QVector<float> result(nBins);
     float minDb = 200.f, maxDb = -200.f;
+    constexpr float powerFloor = 1e-24f;
+    float const fftNorm = N / 2.0f;
+    float const inverseNormSquared = 1.0f / (fftNorm * fftNorm);
     for (int b = binStart; b < binEnd; ++b) {
-        float mag = std::abs(fftBuf[b]) / (N/2.f);
-        float db  = (mag > 1e-12f) ? 20.f*std::log10(mag) : -200.f;
-        result.append(db);
+        float const normalizedPower = std::norm(fftBuf[b]) * inverseNormSquared;
+        float const db = (normalizedPower > powerFloor)
+            ? 10.0f * std::log10(normalizedPower)
+            : -200.0f;
+        result[b - binStart] = db;
         if (db > -190.f) { minDb = qMin(minDb, db); maxDb = qMax(maxDb, db); }
     }
-    outMinDb = minDb; outMaxDb = maxDb;
-    return result;
+    return {std::move(result), minDb, maxDb};
 #endif
 }
 

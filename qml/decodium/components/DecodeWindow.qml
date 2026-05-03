@@ -784,7 +784,7 @@ Window {
                                     // Messaggio con coloring Shannon-compatible
                                     Text {
                                         id: bandMsgText
-                                        text: modelData.message
+                                        text: modelData.displayMessage || modelData.message
                                         font.family: "Monospace"
                                         font.pixelSize: 11
                                         font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
@@ -794,7 +794,7 @@ Window {
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
                                         Layout.minimumWidth: decodeWindow.bandMessageMinWidth
-                                        elide: decodeWindow.messageElideMode(modelData.message)
+                                        elide: decodeWindow.messageElideMode(modelData.displayMessage || modelData.message)
                                     }
 
                                     Item {
@@ -1146,7 +1146,7 @@ Window {
                                     // Messaggio RX con coloring + strikethrough B4
                                     Text {
                                         id: rxMsgText
-                                        text: modelData.message
+                                        text: modelData.displayMessage || modelData.message
                                         font.family: "Monospace"
                                         font.pixelSize: 11
                                         font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
@@ -1154,7 +1154,7 @@ Window {
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
-                                        elide: decodeWindow.messageElideMode(modelData.message)
+                                        elide: decodeWindow.messageElideMode(modelData.displayMessage || modelData.message)
                                     }
 
                                     Text {

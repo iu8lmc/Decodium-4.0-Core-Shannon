@@ -701,6 +701,21 @@ int HamlibTransceiver::do_start ()
       throw error {tr ("Rig not ready — caps null after open (no response from radio?)")};
     }
 
+  if (RIG_PTT_NONE != m_->rig_->state.pttport.type.ptt)
+    {
+      CAT_TRACE ("startup rig_set_ptt PTT=false");
+      int const ptt_off_rc = rig_set_ptt (m_->rig_.data (), RIG_VFO_CURR, RIG_PTT_OFF);
+      if (RIG_OK == ptt_off_rc)
+        {
+          ptt_on_ = false;
+          update_PTT (false);
+        }
+      else if (-RIG_ENAVAIL != ptt_off_rc && -RIG_ENIMPL != ptt_off_rc)
+        {
+          CAT_TRACE ("startup rig_set_ptt PTT=false failed with rc:" << ptt_off_rc << "ignoring");
+        }
+    }
+
   // reset dynamic state
   m_->one_VFO_ = false;
   m_->reversed_ = false;

@@ -171,7 +171,7 @@ Item {
                                                 + (toolbarWideButtonWidth * 5)
                                                 + toolbarLongButtonWidth
                                                 + (toolbarSpacing * 15)
-    readonly property int toolbarBandWidth: Math.max(220, Math.min(520, topControlsViewport.width - toolbarControlsWidth))
+    readonly property int toolbarBandWidth: Math.max(220, Math.min(520, topControlsFlow.width))
 
     // State colors based on QSO progress (bridge::QSOProgress enum)
     // 0=IDLE, 1=CALLING_CQ, 2=REPLYING, 3=REPORT, 4=ROGER_REPORT, 5=SIGNOFF, 6=IDLE_QSO
@@ -258,103 +258,101 @@ Item {
                 Layout.fillWidth: true
                 spacing: 3
 
-                Item {
+                Rectangle {
+                    id: bandSelectorBar
                     Layout.fillWidth: true
                     Layout.rightMargin: 36
-                    implicitHeight: topControlsViewport.height
+                    Layout.preferredHeight: 28
+                    Layout.minimumHeight: 28
+                    radius: 4
+                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                    border.color: glassBorder
+                    clip: true
 
                     Flickable {
-                        id: topControlsViewport
-                        width: parent.width
-                        height: topControlsFlow.implicitHeight
-                        contentWidth: topControlsFlow.implicitWidth
-                        contentHeight: topControlsFlow.implicitHeight
+                        id: bandButtonsFlickable
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        contentWidth: Math.max(bandButtonsRow.implicitWidth, bandButtonsRow.childrenRect.width)
+                        contentHeight: Math.max(bandButtonsRow.implicitHeight, bandButtonsRow.childrenRect.height)
                         flickableDirection: Flickable.HorizontalFlick
                         boundsBehavior: Flickable.StopAtBounds
                         interactive: contentWidth > width
                         clip: true
 
                         Row {
-                            id: topControlsFlow
-                            spacing: txPanel.toolbarSpacing
+                            id: bandButtonsRow
+                            spacing: 1
 
-                        Rectangle {
-                            width: txPanel.toolbarBandWidth
-                            height: 28
-                            radius: 4
-                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
-                            border.color: glassBorder
+                            Repeater {
+                                model: [
+                                    { label: "160", lambda: "160M" },
+                                    { label: "80", lambda: "80M" },
+                                    { label: "60", lambda: "60M" },
+                                    { label: "40", lambda: "40M" },
+                                    { label: "30", lambda: "30M" },
+                                    { label: "20", lambda: "20M" },
+                                    { label: "17", lambda: "17M" },
+                                    { label: "15", lambda: "15M" },
+                                    { label: "12", lambda: "12M" },
+                                    { label: "10", lambda: "10M" },
+                                    { label: "6", lambda: "6M" },
+                                    { label: "4", lambda: "4M" },
+                                    { label: "2", lambda: "2M" },
+                                    { label: "70cm", lambda: "70CM" }
+                                ]
 
-                            Flickable {
-                                anchors.fill: parent
-                                anchors.margins: 1
-                                contentWidth: bandButtonsRow.width
-                                contentHeight: bandButtonsRow.height
-                                flickableDirection: Flickable.HorizontalFlick
-                                boundsBehavior: Flickable.StopAtBounds
-                                interactive: contentWidth > width
-                                clip: true
+                                Rectangle {
+                                    id: bandRect
+                                    readonly property string bandLabel: modelData.label
+                                    readonly property string bandLambda: modelData.lambda
 
-                                Row {
-                                    id: bandButtonsRow
-                                    spacing: 1
+                                    width: bandLabel.length > 2 ? 46 : 38
+                                    height: 26
+                                    radius: 3
 
-                                    Repeater {
-                                        model: [
-                                            { label: "160", lambda: "160M" },
-                                            { label: "80", lambda: "80M" },
-                                            { label: "60", lambda: "60M" },
-                                            { label: "40", lambda: "40M" },
-                                            { label: "30", lambda: "30M" },
-                                            { label: "20", lambda: "20M" },
-                                            { label: "17", lambda: "17M" },
-                                            { label: "15", lambda: "15M" },
-                                            { label: "12", lambda: "12M" },
-                                            { label: "10", lambda: "10M" },
-                                            { label: "6", lambda: "6M" },
-                                            { label: "4", lambda: "4M" },
-                                            { label: "2", lambda: "2M" },
-                                            { label: "70cm", lambda: "70CM" }
-                                        ]
+                                    readonly property bool isSelected: engine && engine.bandManager &&
+                                                                       engine.bandManager.currentBandLambda === bandLambda
 
-                                        Rectangle {
-                                            id: bandRect
-                                            readonly property string bandLabel: modelData.label
-                                            readonly property string bandLambda: modelData.lambda
+                                    color: isSelected ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                                    border.color: isSelected ? secondaryCyan : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
+                                    border.width: isSelected ? 2 : 1
 
-                                            width: bandLabel.length > 2 ? 46 : 38
-                                            height: 26
-                                            radius: 3
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: bandRect.bandLabel
+                                        font.pixelSize: 10
+                                        font.bold: bandRect.isSelected
+                                        color: bandRect.isSelected ? "#ffffff" : textPrimary
+                                    }
 
-                                            readonly property bool isSelected: engine && engine.bandManager &&
-                                                                               engine.bandManager.currentBandLambda === bandLambda
-
-                                            color: isSelected ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                                            border.color: isSelected ? secondaryCyan : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.2)
-                                            border.width: isSelected ? 2 : 1
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: bandRect.bandLabel
-                                                font.pixelSize: 10
-                                                font.bold: bandRect.isSelected
-                                                color: bandRect.isSelected ? "#ffffff" : textPrimary
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                hoverEnabled: true
-                                                onClicked: {
-                                                    if (engine && engine.bandManager)
-                                                        engine.bandManager.changeBandByLambda(bandRect.bandLambda)
-                                                }
-                                            }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (engine && engine.bandManager)
+                                                engine.bandManager.changeBandByLambda(bandRect.bandLambda)
                                         }
                                     }
                                 }
                             }
                         }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.rightMargin: 36
+                    Layout.preferredHeight: topControlsFlow.implicitHeight
+                    Layout.minimumHeight: topControlsFlow.implicitHeight
+                    implicitHeight: topControlsFlow.implicitHeight
+
+                    Flow {
+                        id: topControlsFlow
+                        width: parent.width
+                        height: topControlsFlow.implicitHeight
+                        spacing: txPanel.toolbarSpacing
 
                         Rectangle {
                             width: txPanel.toolbarModeWidth
@@ -839,7 +837,7 @@ Item {
                         AsyncModeWidget {
                             id: asyncModeVis
                             width: 90
-                            height: 50
+                            height: txPanel.toolbarButtonHeight
                             visible: txPanel.showAsyncIcon && engine && engine.mode === "FT2"
                             running: engine ? (engine.asyncTxEnabled || engine.asyncDecodeEnabled) : false
                             transmitting: engine ? engine.transmitting : false
@@ -849,7 +847,6 @@ Item {
                             ToolTip.delay: 400
                         }
 
-                        }
                     }
                 }
             }
