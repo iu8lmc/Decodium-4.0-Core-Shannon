@@ -96,7 +96,7 @@ public:
     bool catAutoConnect()       const { return m_catAutoConnect; }
     bool audioAutoStart()       const { return m_audioAutoStart; }
 
-    bool canPtt()               const { return m_connected; }
+    bool canPtt()               const { return m_connected && m_pttMethod != QStringLiteral("VOX"); }
 
     // ── Setter (stub per compatibilità interfaccia) ───────────────────────────
     void setRigName(const QString& v)     { if (m_rigName != v) { m_rigName = v; emit rigNameChanged(); } }

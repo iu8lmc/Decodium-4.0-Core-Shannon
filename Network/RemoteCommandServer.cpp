@@ -1676,6 +1676,8 @@ R"FT2JS((() => {
   let asyncSnrDb = -99;
   let waterfallEnabled = false;
   let waterfallMeta = {startHz:0, spanHz:0, width:0};
+  const WATERFALL_CANVAS_WIDTH = 960;
+  const WATERFALL_CANVAS_HEIGHT = 260;
   let currentMode = '';
   let monitoringState = false;
   let transmittingState = false;
@@ -2294,15 +2296,18 @@ R"FT2JS((() => {
     }
     if (!bytes.length) return;
 
-    if (wfCanvas.width !== bytes.length) {
-      wfCanvas.width = bytes.length;
-      if (wfCanvas.height <= 1) wfCanvas.height = 260;
+    if (wfCanvas.width <= 1 || wfCanvas.height <= 1) {
+      wfCanvas.width = WATERFALL_CANVAS_WIDTH;
+      wfCanvas.height = WATERFALL_CANVAS_HEIGHT;
       if (wfOverlay) {
         wfOverlay.width = wfCanvas.width;
         wfOverlay.height = wfCanvas.height;
       }
       wfCtx.fillStyle = '#02050d';
       wfCtx.fillRect(0, 0, wfCanvas.width, wfCanvas.height);
+    } else if (wfOverlay && (wfOverlay.width !== wfCanvas.width || wfOverlay.height !== wfCanvas.height)) {
+      wfOverlay.width = wfCanvas.width;
+      wfOverlay.height = wfCanvas.height;
     }
 
     wfCtx.drawImage(
@@ -2312,8 +2317,11 @@ R"FT2JS((() => {
     );
 
     const row = wfCtx.createImageData(wfCanvas.width, 1);
-    for (let i = 0; i < bytes.length; i++) {
-      const v = bytes[i];
+    const maxSrc = bytes.length - 1;
+    const maxDst = Math.max(1, wfCanvas.width - 1);
+    for (let i = 0; i < wfCanvas.width; i++) {
+      const src = maxSrc > 0 ? Math.min(maxSrc, Math.max(0, Math.round((i / maxDst) * maxSrc))) : 0;
+      const v = bytes[src];
       const t = v / 255.0;
       const r = Math.min(255, Math.round(255 * Math.max(0, (t - 0.35) * 1.8)));
       const g = Math.min(255, Math.round(220 * Math.max(0, (t - 0.10) * 1.5)));
@@ -2329,7 +2337,7 @@ R"FT2JS((() => {
     const startHz = Number(msg.start_frequency_hz || 0);
     const spanHz = Number(msg.span_hz || 0);
     if (spanHz > 0) {
-      waterfallMeta = {startHz, spanHz, width: bytes.length};
+      waterfallMeta = {startHz, spanHz, width: wfCanvas.width};
       drawWaterfallOverlay();
     }
   }

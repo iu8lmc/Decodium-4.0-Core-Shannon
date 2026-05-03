@@ -19,7 +19,10 @@ Dialog {
     closePolicy: Popup.CloseOnEscape
     property bool positionInitialized: false
     property bool warmupInProgress: false
-    property int currentTab: 0
+    property int currentTab: {
+        var savedTab = Number(bridge.getSetting("uiSettingsCurrentTab", 0))
+        return isFinite(savedTab) ? Math.max(0, Math.min(10, Math.floor(savedTab))) : 0
+    }
     readonly property int labelWidth: 140
     readonly property int fieldMinWidth: 300
     readonly property int wideFieldMinWidth: 420
@@ -408,11 +411,7 @@ Dialog {
     }
 
     function forceRtsControlEnabled() {
-        var controller = activeCatController()
-        var handshake = controller && controller.handshake !== undefined && controller.handshake !== null
-                ? String(controller.handshake).trim().toLowerCase() : "none"
         return activeCatPortType() === "serial"
-                && handshake !== "hardware"
                 && !(activePttMethod() === "RTS" && pttSharesCatPort())
     }
 
@@ -543,7 +542,8 @@ Dialog {
     }
 
     function openTab(index) {
-        currentTab = Math.max(0, index)
+        var tab = Number(index)
+        currentTab = isFinite(tab) ? Math.max(0, Math.min(10, Math.floor(tab))) : 0
         open()
     }
 
@@ -659,6 +659,11 @@ Dialog {
     onClosed: {
         if (!warmupInProgress)
             persistSettingsNow()
+    }
+
+    onCurrentTabChanged: {
+        if (!warmupInProgress)
+            bridge.setSetting("uiSettingsCurrentTab", currentTab)
     }
 
     Timer {
@@ -2850,8 +2855,8 @@ Dialog {
                         }
                         Text { text: qsTr("TCP/IP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
-                            checked: bridge.getSetting("PSKRtcpip", false)
-                            onCheckedChanged: bridge.setSetting("PSKRtcpip", checked)
+                            checked: bridge.getSetting("PSKReporterTCPIP", false)
+                            onCheckedChanged: bridge.setSetting("PSKReporterTCPIP", checked)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
@@ -4594,11 +4599,19 @@ Dialog {
 
                         Text { text: qsTr("Wait & Pounce:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
+                            checked: bridge.waitPounceActive
+                            onToggled: bridge.waitPounceActive = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("W&P Filters Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
                             checked: settingsDialog.boolSetting("FiltersForWaitAndPounceOnly", false)
                             onToggled: settingsDialog.setBoolSettingIfChanged("FiltersForWaitAndPounceOnly", checked, false)
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
+
                         Text { text: qsTr("Calling Only:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         CheckBox {
                             checked: settingsDialog.boolSetting("FiltersForWord2", false)

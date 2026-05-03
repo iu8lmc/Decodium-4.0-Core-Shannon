@@ -120,7 +120,7 @@ public:
     void setDtrHigh(bool v);
     void setForceRts(bool v);
     void setRtsHigh(bool v);
-    void setNetworkPort(const QString& v) { if (m_networkPort != v){ m_networkPort = v; emit networkPortChanged(); } }
+    void setNetworkPort(const QString& v) { const QString value = v.trimmed(); if (m_networkPort != value){ m_networkPort = value; emit networkPortChanged(); } }
     void setTciPort(const QString& v)     { if (m_tciPort != v)    { m_tciPort = v;    emit tciPortChanged(); } }
     void setPttMethod(const QString& v);
     void setPttPort(const QString& v);
@@ -132,8 +132,8 @@ public:
     void setTciAudioEnabled(bool v);
 
     // ── Comandi QML-invokable ─────────────────────────────────────────────
-    // Compatibilità con DecodiumCatManager: PTT disponibile se connesso
-    bool canPtt() const { return m_connected; }
+    // Compatibilita' con DecodiumCatManager: VOX e' audio-only.
+    bool canPtt() const { return m_connected && m_pttMethod != QStringLiteral("VOX"); }
 
     Q_INVOKABLE void setRigFrequency(double hz);
     Q_INVOKABLE void setRigTxFrequency(double hz);

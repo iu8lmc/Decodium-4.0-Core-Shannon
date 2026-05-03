@@ -625,20 +625,30 @@ Window {
                             model: decodeWindow.bandActivityModel
                             spacing: 1
                             property bool followTail: true
+                            property bool tailFollowPending: false
                             function isNearTail() {
                                 return contentHeight <= height + 2
                                       || contentY >= Math.max(0, contentHeight - height - 8)
                             }
                             function updateFollowTail() {
+                                if (tailFollowPending)
+                                    return
                                 followTail = isNearTail()
                             }
                             function forceTailFollow() {
                                 followTail = true
+                                tailFollowPending = true
                                 Qt.callLater(function() {
                                     if (!bandActivityList)
                                         return
                                     bandActivityList.positionViewAtEnd()
                                     bandActivityList.followTail = true
+                                    Qt.callLater(function() {
+                                        if (!bandActivityList)
+                                            return
+                                        bandActivityList.tailFollowPending = false
+                                        bandActivityList.followTail = bandActivityList.isNearTail()
+                                    })
                                 })
                             }
                             Component.onCompleted: Qt.callLater(function() {
@@ -654,8 +664,9 @@ Window {
                             }
 
                             ScrollBar.vertical: ScrollBar {
-                                active: true
                                 policy: ScrollBar.AsNeeded
+                                interactive: true
+                                width: 8
                             }
 
                             delegate: Rectangle {
@@ -1038,8 +1049,9 @@ Window {
                             }
 
                             ScrollBar.vertical: ScrollBar {
-                                active: true
                                 policy: ScrollBar.AsNeeded
+                                interactive: true
+                                width: 8
                             }
 
                             delegate: Rectangle {

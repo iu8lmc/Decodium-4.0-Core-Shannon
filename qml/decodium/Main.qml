@@ -315,6 +315,11 @@ ApplicationWindow {
         }
     }
 
+    function persistSettingsDialogIfOpen() {
+        if (settingsDialog && settingsDialog.visible && settingsDialog.persistSettingsNow)
+            settingsDialog.persistSettingsNow()
+    }
+
     function restoreFloatingWindowState(windowRef, key, detachedPropName, minimizedPropName) {
         if (!windowRef)
             return
@@ -363,6 +368,7 @@ ApplicationWindow {
     onClosing: function(close) {
         saveTimer.stop()
         windowStateSaveTimer.stop()
+        persistSettingsDialogIfOpen()
         persistWindowLayouts()
         bridge.saveSettings()
         console.log("Main window closing - shutting down application")
@@ -628,11 +634,11 @@ ApplicationWindow {
     onLiveMapMinimizedChanged: scheduleWindowStateSave()
 
     // === GAP 3 — Nuovi pannelli (A3, B9, A4, C14) ===
-    property bool timeSyncPanelVisible:       false
-    property bool activeStationsPanelVisible: false
+    property bool timeSyncPanelVisible:       !!bridge.getSetting("uiTimeSyncPanelVisible", false)
+    property bool activeStationsPanelVisible: !!bridge.getSetting("uiActiveStationsPanelVisible", false)
     property bool callerQueuePanelVisible:    false
-    property bool astroPanelVisible:          false
-    property bool dxClusterPanelVisible:      false
+    property bool astroPanelVisible:          !!bridge.getSetting("uiAstroPanelVisible", false)
+    property bool dxClusterPanelVisible:      !!bridge.getSetting("uiDxClusterPanelVisible", false)
     property bool dxClusterToolbarVisible:    !!bridge.getSetting("uiDxClusterToolbarVisible", true)
     property bool pskReporterToolbarVisible: !!bridge.getSetting("uiPskReporterToolbarVisible", true)
     property bool asyncIconVisible:          !!bridge.getSetting("uiAsyncIconVisible", true)
@@ -704,6 +710,10 @@ ApplicationWindow {
         asyncIconVisible = visible
         bridge.setSetting("uiAsyncIconVisible", visible)
     }
+    onTimeSyncPanelVisibleChanged: bridge.setSetting("uiTimeSyncPanelVisible", timeSyncPanelVisible)
+    onActiveStationsPanelVisibleChanged: bridge.setSetting("uiActiveStationsPanelVisible", activeStationsPanelVisible)
+    onAstroPanelVisibleChanged: bridge.setSetting("uiAstroPanelVisible", astroPanelVisible)
+    onDxClusterPanelVisibleChanged: bridge.setSetting("uiDxClusterPanelVisible", dxClusterPanelVisible)
     function syncLiveMapFloatingVisibility(activate) {
         if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
             return
@@ -3532,11 +3542,17 @@ ApplicationWindow {
                                     id: pskSearchInput
                                     anchors.fill: parent
                                     anchors.margins: 2
-                                    placeholderText: "Callsign..."
+                                    placeholderText: (activeFocus || text.length > 0) ? "" : "Callsign..."
                                     font.pixelSize: 11
                                     font.capitalization: Font.AllUppercase
                                     font.family: "Monospace"
                                     color: textPrimary
+                                    placeholderTextColor: textSecondary
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    leftPadding: 8
+                                    rightPadding: 8
+                                    topPadding: 0
+                                    bottomPadding: 0
                                     background: Rectangle { color: "transparent" }
                                     onAccepted: {
                                         if (text.trim().length > 0) {
@@ -4068,9 +4084,9 @@ ApplicationWindow {
                                 evenPeriodList.forceTailFollow()
                             if (stickFloatingTail && period1FloatingList)
                                 period1FloatingList.forceTailFollow()
-                            if (rxFrequencyList)
+                            if (stickRxTail && rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-                            if (rxFrequencyFloatingList)
+                            if (stickFloatingRxTail && rxFrequencyFloatingList)
                                 rxFrequencyFloatingList.forceTailFollow()
                         }
                         function onRxDecodeListChanged() {
@@ -4078,9 +4094,9 @@ ApplicationWindow {
                             var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            if (rxFrequencyList)
+                            if (stickRxTail && rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-	                            if (rxFrequencyFloatingList)
+	                            if (stickFloatingRxTail && rxFrequencyFloatingList)
 	                                rxFrequencyFloatingList.forceTailFollow()
 	                        }
 	                        function onDxCallChanged() {
@@ -4737,20 +4753,30 @@ ApplicationWindow {
                                         cacheBuffer: 3000
                                         interactive: true
                                         property bool followTail: true
+                                        property bool tailFollowPending: false
                                         function isNearTail() {
                                             return contentHeight <= height + 2
                                                 || contentY >= Math.max(0, contentHeight - height - 8)
                                         }
                                         function updateFollowTail() {
+                                            if (tailFollowPending)
+                                                return
                                             followTail = isNearTail()
                                         }
                                         function forceTailFollow() {
                                             followTail = true
+                                            tailFollowPending = true
                                             Qt.callLater(function() {
                                                 if (!evenPeriodList)
                                                     return
                                                 evenPeriodList.positionViewAtEnd()
                                                 evenPeriodList.followTail = true
+                                                Qt.callLater(function() {
+                                                    if (!evenPeriodList)
+                                                        return
+                                                    evenPeriodList.tailFollowPending = false
+                                                    evenPeriodList.followTail = evenPeriodList.isNearTail()
+                                                })
                                             })
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
@@ -4760,14 +4786,20 @@ ApplicationWindow {
                                         onContentYChanged: updateFollowTail()
                                         onHeightChanged: updateFollowTail()
                                         onCountChanged: {
-                                            forceTailFollow()
+                                            if (followTail)
+                                                forceTailFollow()
                                         }
                                         property int _ver: decodePanel.decodeListVersion
                                         on_VerChanged: {
-                                            forceTailFollow()
+                                            if (followTail)
+                                                forceTailFollow()
                                         }
 
-                                        ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
+                                        ScrollBar.vertical: ScrollBar {
+                                            policy: ScrollBar.AsNeeded
+                                            interactive: true
+                                            width: 8
+                                        }
 
                                         delegate: Rectangle {
                                             width: evenPeriodList.width
@@ -5147,7 +5179,11 @@ ApplicationWindow {
                                         on_VerChanged: forceTailFollow()
                                         model: decodePanel.rxDecodes
 
-                                        ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
+                                        ScrollBar.vertical: ScrollBar {
+                                            policy: ScrollBar.AsNeeded
+                                            interactive: true
+                                            width: 8
+                                        }
 
                                         delegate: Rectangle {
                                             width: rxFrequencyList.width - 8
@@ -8429,20 +8465,30 @@ ApplicationWindow {
                         cacheBuffer: 3000
                         interactive: true
                         property bool followTail: true
+                        property bool tailFollowPending: false
                         function isNearTail() {
                             return contentHeight <= height + 2
                                 || contentY >= Math.max(0, contentHeight - height - 8)
                         }
                         function updateFollowTail() {
+                            if (tailFollowPending)
+                                return
                             followTail = isNearTail()
                         }
                         function forceTailFollow() {
                             followTail = true
+                            tailFollowPending = true
                             Qt.callLater(function() {
                                 if (!period1FloatingList)
                                     return
                                 period1FloatingList.positionViewAtEnd()
                                 period1FloatingList.followTail = true
+                                Qt.callLater(function() {
+                                    if (!period1FloatingList)
+                                        return
+                                    period1FloatingList.tailFollowPending = false
+                                    period1FloatingList.followTail = period1FloatingList.isNearTail()
+                                })
                             })
                         }
                         Component.onCompleted: Qt.callLater(function() {
@@ -8452,13 +8498,19 @@ ApplicationWindow {
                         onContentYChanged: updateFollowTail()
                         onHeightChanged: updateFollowTail()
                         onCountChanged: {
-                            forceTailFollow()
+                            if (followTail)
+                                forceTailFollow()
                         }
                         property int _ver: decodePanel.decodeListVersion
                         on_VerChanged: {
-                            forceTailFollow()
+                            if (followTail)
+                                forceTailFollow()
                         }
-                        ScrollBar.vertical: ScrollBar { active: true }
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                            interactive: true
+                            width: 8
+                        }
 
                         delegate: Rectangle {
 	                            width: parent ? parent.width : 100
@@ -8824,7 +8876,11 @@ ApplicationWindow {
                         property int _ver: decodePanel.decodeListVersion
 	                        on_VerChanged: forceTailFollow()
                         model: decodePanel.rxDecodes
-                        ScrollBar.vertical: ScrollBar { active: true }
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
+                            interactive: true
+                            width: 8
+                        }
 
                         delegate: Rectangle {
                             width: parent ? parent.width - 8 : 100

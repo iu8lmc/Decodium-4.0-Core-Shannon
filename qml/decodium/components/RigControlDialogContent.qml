@@ -18,6 +18,8 @@ Rectangle {
     property color errorRed:       "#f44336"
 
     property var cat: bridge.catManager
+    readonly property bool networkRig: cat && String(cat.portType).toLowerCase() === "network"
+    readonly property bool serialRig: cat && !networkRig && String(cat.portType).toLowerCase() !== "tci" && String(cat.portType).toLowerCase() !== "none"
 
     ColumnLayout {
         anchors.fill: parent
@@ -189,9 +191,35 @@ Rectangle {
                 }
             }
 
-            // Row 2 — COM port
-            Text { text: "Serial port"; color: textSecondary; font.pixelSize: 12 }
+            // Row 2 — network endpoint for HRD/DXLab-style rigs
+            Text {
+                visible: networkRig
+                text: "Network host"
+                color: textSecondary
+                font.pixelSize: 12
+            }
+            TextField {
+                id: networkPortField
+                visible: networkRig
+                Layout.fillWidth: true
+                implicitHeight: 34
+                text: cat ? cat.networkPort : ""
+                placeholderText: cat && cat.rigName === "Ham Radio Deluxe" ? "127.0.0.1:7809" : "host:port"
+                selectByMouse: true
+                color: textPrimary
+                placeholderTextColor: textSecondary
+                font.pixelSize: 12
+                leftPadding: 8
+                rightPadding: 8
+                verticalAlignment: TextInput.AlignVCenter
+                onEditingFinished: if (cat) cat.networkPort = text.trim()
+                background: Rectangle { color: Qt.rgba(1,1,1,0.05); border.color: glassBorder; radius: 4 }
+            }
+
+            // Row 3 — COM port
+            Text { visible: serialRig; text: "Serial port"; color: textSecondary; font.pixelSize: 12 }
             RowLayout {
+                visible: serialRig
                 Layout.fillWidth: true
                 spacing: 6
                 ComboBox {
@@ -219,10 +247,11 @@ Rectangle {
                 }
             }
 
-            // Row 3 — Baud rate
-            Text { text: "Baud rate"; color: textSecondary; font.pixelSize: 12 }
+            // Row 4 — Baud rate
+            Text { visible: serialRig; text: "Baud rate"; color: textSecondary; font.pixelSize: 12 }
             ComboBox {
                 id: baudCombo
+                visible: serialRig
                 Layout.fillWidth: true
                 implicitHeight: 34
                 model: cat ? cat.baudList : []
@@ -242,7 +271,7 @@ Rectangle {
                 }
             }
 
-            // Row 4 — PTT method
+            // Row 5 — PTT method
             Text { text: "PTT method"; color: textSecondary; font.pixelSize: 12 }
             ComboBox {
                 id: pttCombo

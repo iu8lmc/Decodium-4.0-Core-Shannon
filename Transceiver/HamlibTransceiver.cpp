@@ -555,10 +555,7 @@ HamlibTransceiver::HamlibTransceiver (logger_type * logger,
             }
           if (params.force_rts)
             {
-              if (TransceiverFactory::handshake_hardware != params.handshake)
-                {
-                  m_->set_conf ("rts_state", params.rts_high ? "ON" : "OFF");
-                }
+              m_->set_conf ("rts_state", params.rts_high ? "ON" : "OFF");
             }
           break;
 

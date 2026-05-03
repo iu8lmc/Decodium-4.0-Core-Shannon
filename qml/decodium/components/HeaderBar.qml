@@ -212,10 +212,16 @@ Rectangle {
                     id: pskSearchInput
                     anchors.fill: parent
                     anchors.margins: 2
-                    placeholderText: "Call..."
+                    placeholderText: (activeFocus || text.length > 0) ? "" : "Call..."
                     font.pixelSize: 11
                     font.capitalization: Font.AllUppercase
                     color: textPrimary
+                    placeholderTextColor: textSecondary
+                    verticalAlignment: TextInput.AlignVCenter
+                    leftPadding: 8
+                    rightPadding: 8
+                    topPadding: 0
+                    bottomPadding: 0
                     background: Rectangle { color: "transparent" }
                     onAccepted: {
                         if (text.trim().length > 0 && appEngine) {

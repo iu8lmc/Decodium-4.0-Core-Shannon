@@ -313,9 +313,7 @@ bool DecodiumCatManager::forceDtrAvailable() const
 
 bool DecodiumCatManager::forceRtsAvailable() const
 {
-    bool const hardwareHandshake = 0 == m_handshake.trimmed().compare(QStringLiteral("hardware"), Qt::CaseInsensitive);
-    return !hardwareHandshake
-        && !(0 == m_pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive) && pttSharesCatPort());
+    return !(0 == m_pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive) && pttSharesCatPort());
 }
 
 void DecodiumCatManager::enforceForceLineAvailability()
@@ -458,10 +456,21 @@ void DecodiumCatManager::connectRig()
         serial->deleteLater();
         return;
     }
-    if (forceDtrAvailable() && m_forceDtr)
-        serial->setDataTerminalReady(m_dtrHigh);
-    if (forceRtsAvailable() && m_forceRts)
-        serial->setRequestToSend(m_rtsHigh);
+#if defined(Q_OS_LINUX)
+    bool const autoDtrLow = forceDtrAvailable()
+        && !m_forceDtr
+        && !(0 == m_pttMethod.compare(QStringLiteral("DTR"), Qt::CaseInsensitive) && pttSharesCatPort());
+    bool const autoRtsLow = forceRtsAvailable()
+        && !m_forceRts
+        && !(0 == m_pttMethod.compare(QStringLiteral("RTS"), Qt::CaseInsensitive) && pttSharesCatPort());
+#else
+    bool const autoDtrLow = false;
+    bool const autoRtsLow = false;
+#endif
+    if (forceDtrAvailable() && (m_forceDtr || autoDtrLow))
+        serial->setDataTerminalReady(m_forceDtr ? m_dtrHigh : false);
+    if (forceRtsAvailable() && (m_forceRts || autoRtsLow))
+        serial->setRequestToSend(m_forceRts ? m_rtsHigh : false);
 
     m_serial = serial;
     connect(m_serial, &QSerialPort::readyRead,
@@ -743,6 +752,16 @@ void DecodiumCatManager::setRigMode(const QString& mode)
 void DecodiumCatManager::setRigPtt(bool on)
 {
     DIAG_CAT(on ? QStringLiteral("setRigPtt(true)") : QStringLiteral("setRigPtt(false)"));
+    if (m_pttMethod == "VOX") {
+        DIAG_CAT(on
+                 ? QStringLiteral("VOX: nessun PTT CAT/DTR/RTS; la radio deve commutare con audio TX")
+                 : QStringLiteral("VOX: nessun rilascio PTT CAT/DTR/RTS richiesto"));
+        if (m_pttActive) {
+            m_pttActive = false;
+            emit pttActiveChanged();
+        }
+        return;
+    }
     // Pre-PTT warning: su Yaesu, se il rig è in voice mode il PTT native
     // userà TX; (percorso MIC) e l'audio digitale da USB codec non
     // raggiunge l'RF. Log diagnostico per aiutare a diagnosticare "nessuno

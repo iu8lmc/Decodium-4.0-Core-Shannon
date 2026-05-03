@@ -41,6 +41,22 @@ const char* waterfallGraphicsApiName(QSGRendererInterface::GraphicsApi api)
     default: return "Unknown";
     }
 }
+
+const QSGGeometry::AttributeSet& waterfallTexturedPoint2DAttributes()
+{
+    static QSGGeometry::Attribute attributes[] = {
+        QSGGeometry::Attribute::createWithAttributeType(
+            0, 2, QSGGeometry::FloatType, QSGGeometry::PositionAttribute),
+        QSGGeometry::Attribute::createWithAttributeType(
+            1, 2, QSGGeometry::FloatType, QSGGeometry::TexCoordAttribute)
+    };
+    static QSGGeometry::AttributeSet attributeSet {
+        2,
+        sizeof(QSGGeometry::TexturedPoint2D),
+        attributes
+    };
+    return attributeSet;
+}
 }
 
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
@@ -122,7 +138,7 @@ public:
         return true;
     }
 
-    void updateSampledImage(RenderState&, int binding, QSGTexture** texture,
+    void updateSampledImage(RenderState& state, int binding, QSGTexture** texture,
                             QSGMaterial* newMaterial, QSGMaterial*) override
     {
         auto* material = static_cast<WaterfallPaletteMaterial*>(newMaterial);
@@ -139,6 +155,15 @@ public:
             *texture = material->intensityTexture;
         else if (binding == 2)
             *texture = material->paletteTexture;
+
+        if (*texture) {
+            (*texture)->commitTextureOperations(state.rhi(), state.resourceUpdateBatch());
+            static std::atomic_bool loggedTextureCommit {false};
+            if (!loggedTextureCommit.exchange(true, std::memory_order_relaxed)) {
+                qInfo().noquote()
+                    << "[GPUDBG] Panadapter waterfall shader texture upload committed via RHI batch";
+            }
+        }
     }
 };
 
@@ -253,23 +278,44 @@ bool PanadapterItem::shaderWaterfallSupported()
         return false;
     }
     QSGRendererInterface::GraphicsApi const api = window()->rendererInterface()->graphicsApi();
-    if (api == QSGRendererInterface::Metal
-        && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_METAL_WATERFALL_SHADER")) {
-        m_shaderWaterfallDisabledReason =
-            QStringLiteral("shader disabled on Metal; colored texture upload");
-        return false;
-    }
-    if (api == QSGRendererInterface::Direct3D11
-        && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_D3D11_WATERFALL_SHADER")) {
-        m_shaderWaterfallDisabledReason =
-            QStringLiteral("shader disabled on Direct3D11; colored texture upload");
-        return false;
-    }
     if (api == QSGRendererInterface::Software
         || api == QSGRendererInterface::Null
         || api == QSGRendererInterface::Unknown) {
         m_shaderWaterfallDisabledReason =
             QStringLiteral("scenegraph api has no shader path; CPU fallback");
+        return false;
+    }
+    bool const globalExperimentalShader =
+        qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_WATERFALL_SHADER");
+    bool apiExperimentalShader = false;
+    switch (api) {
+    case QSGRendererInterface::OpenGL:
+        apiExperimentalShader = qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_OPENGL_WATERFALL_SHADER");
+        break;
+    case QSGRendererInterface::Metal:
+        apiExperimentalShader = qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_METAL_WATERFALL_SHADER");
+        break;
+    case QSGRendererInterface::Direct3D11:
+        apiExperimentalShader = qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_D3D11_WATERFALL_SHADER");
+        break;
+    case QSGRendererInterface::Vulkan:
+        apiExperimentalShader = qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_VULKAN_WATERFALL_SHADER");
+        break;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
+    case QSGRendererInterface::Direct3D12:
+        apiExperimentalShader = qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_D3D12_WATERFALL_SHADER");
+        break;
+#endif
+    default:
+        break;
+    }
+    bool const apiShaderEnabledByDefault =
+        api == QSGRendererInterface::OpenGL
+        || api == QSGRendererInterface::Direct3D11;
+    if (!apiShaderEnabledByDefault && !globalExperimentalShader && !apiExperimentalShader) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled by default on %1; colored texture upload")
+                .arg(QString::fromLatin1(waterfallGraphicsApiName(api)));
         return false;
     }
     return true;
@@ -1064,8 +1110,8 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         if (!isNew && root->childCount() > 1 && root->firstChild())
             waterfallChild = root->firstChild()->nextSibling();
 
-        bool waterfallGpuWaitingForRows = false;
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
+        bool waterfallGpuWaitingForRows = false;
         if (m_useShaderWaterfall && !m_waterfallIntensityImage.isNull() && m_wfWriteRow < rows) {
             waterfallGpuWaitingForRows = true;
             m_useShaderWaterfall = false;
@@ -1124,7 +1170,7 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                 auto* wn = static_cast<QSGGeometryNode*>(waterfallChild);
                 if (!wn) {
                     wn = new QSGGeometryNode();
-                    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+                    auto* geometry = new QSGGeometry(waterfallTexturedPoint2DAttributes(), 4);
                     geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
                     geometry->setVertexDataPattern(QSGGeometry::DynamicPattern);
                     wn->setGeometry(geometry);
@@ -1132,6 +1178,11 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                     wn->setMaterial(new WaterfallPaletteMaterial());
                     wn->setFlag(QSGNode::OwnsMaterial);
                     root->appendChildNode(wn);
+                    static std::atomic_bool loggedExplicitAttributes {false};
+                    if (!loggedExplicitAttributes.exchange(true, std::memory_order_relaxed)) {
+                        qInfo().noquote()
+                            << "[GPUDBG] Panadapter waterfall shader geometry attributes explicit position=0 texcoord=1";
+                    }
                 }
 
                 QSGGeometry::updateTexturedRectGeometry(wn->geometry(),
