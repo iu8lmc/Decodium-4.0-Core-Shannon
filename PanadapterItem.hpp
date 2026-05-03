@@ -177,8 +177,8 @@ private:
     void renderSpectrum();
     void addWaterfallRow();
     void rebuildRgbWaterfallFromIntensity();
-    void logWaterfallRenderPath(bool gpu, const char* reason);
-    bool shaderWaterfallSupported() const;
+    void logWaterfallRenderPath(bool gpu, const QString& reason);
+    bool shaderWaterfallSupported();
 
     // Conversioni frequenza ↔ pixel (rispetta zoom/pan)
     int   freqToX(int freq) const;
@@ -245,6 +245,8 @@ private:
     bool  m_waterfallRgbValid = true;
     int   m_loggedWaterfallPath = -1;
     int   m_loggedWaterfallApi = -1;
+    QString m_loggedWaterfallReason;
+    QString m_shaderWaterfallDisabledReason;
     bool  m_loggedWaterfallGpuUploadStats = false;
     int   m_lastWaterfallGpuStatsRow = -1;
     int   m_paletteGeneration = 0;

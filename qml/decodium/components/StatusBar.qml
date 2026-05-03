@@ -501,30 +501,11 @@ Rectangle {
                     color: textSecondary
                 }
 
-                Rectangle {
-                    width: 50
-                    height: 12
-                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.4)
-                    radius: 2
-                    border.color: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 2
-                        width: Math.max(0, Math.min(parent.width - 4, (parent.width - 4) * gpuActivity))
-                        radius: 1
-                        color: gpuActivity < 0.5 ? secondaryCyan :
-                               gpuActivity < 0.8 ? "#ff9800" : "#f44336"
-                    }
-                }
-
                 Text {
                     text: gpuFps > 0 ? gpuFps + "fps" : "idle"
                     font.family: "Monospace"
                     font.pixelSize: 10
-                    color: gpuActivity > 0.8 ? "#f44336" : textSecondary
+                    color: textSecondary
                     Layout.preferredWidth: 36
                 }
             }

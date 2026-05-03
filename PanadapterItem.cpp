@@ -235,27 +235,46 @@ PanadapterItem::PanadapterItem(QQuickItem* parent)
 
 PanadapterItem::~PanadapterItem() = default;
 
-bool PanadapterItem::shaderWaterfallSupported() const
+bool PanadapterItem::shaderWaterfallSupported()
 {
+    m_shaderWaterfallDisabledReason.clear();
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_WATERFALL_SHADER")) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled by DECODIUM_DISABLE_WATERFALL_SHADER; colored texture upload");
         return false;
     }
     if (m_shaderWaterfallBlocked) {
+        m_shaderWaterfallDisabledReason = QStringLiteral("shader resource fallback");
         return false;
     }
     if (!window() || !window()->rendererInterface()) {
+        m_shaderWaterfallDisabledReason = QStringLiteral("scenegraph window not ready; colored texture upload");
         return false;
     }
     QSGRendererInterface::GraphicsApi const api = window()->rendererInterface()->graphicsApi();
     if (api == QSGRendererInterface::Metal
         && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_METAL_WATERFALL_SHADER")) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled on Metal; colored texture upload");
         return false;
     }
-    return api != QSGRendererInterface::Software
-        && api != QSGRendererInterface::Null
-        && api != QSGRendererInterface::Unknown;
+    if (api == QSGRendererInterface::Direct3D11
+        && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_D3D11_WATERFALL_SHADER")) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled on Direct3D11; colored texture upload");
+        return false;
+    }
+    if (api == QSGRendererInterface::Software
+        || api == QSGRendererInterface::Null
+        || api == QSGRendererInterface::Unknown) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("scenegraph api has no shader path; CPU fallback");
+        return false;
+    }
+    return true;
 #else
+    m_shaderWaterfallDisabledReason = QStringLiteral("qsb shaders not compiled");
     return false;
 #endif
 }
@@ -911,7 +930,7 @@ void PanadapterItem::rebuildRgbWaterfallFromIntensity()
     m_waterfallRgbValid = true;
 }
 
-void PanadapterItem::logWaterfallRenderPath(bool gpu, const char* reason)
+void PanadapterItem::logWaterfallRenderPath(bool gpu, const QString& reason)
 {
     QSGRendererInterface::GraphicsApi api = QSGRendererInterface::Unknown;
     if (window() && window()->rendererInterface())
@@ -919,11 +938,13 @@ void PanadapterItem::logWaterfallRenderPath(bool gpu, const char* reason)
 
     int const path = gpu ? 1 : 0;
     int const apiKey = static_cast<int>(api);
-    if (m_loggedWaterfallPath == path && m_loggedWaterfallApi == apiKey)
+    if (m_loggedWaterfallPath == path && m_loggedWaterfallApi == apiKey
+        && m_loggedWaterfallReason == reason)
         return;
 
     m_loggedWaterfallPath = path;
     m_loggedWaterfallApi = apiKey;
+    m_loggedWaterfallReason = reason;
     bool const texturedGpu = !gpu
         && api != QSGRendererInterface::Software
         && api != QSGRendererInterface::Null
@@ -940,7 +961,7 @@ void PanadapterItem::logWaterfallRenderPath(bool gpu, const char* reason)
             "no"
 #endif
         )
-        << "reason=" << (reason ? reason : "");
+        << "reason=" << reason;
 }
 
 // ─── Qt Scene Graph update ────────────────────────────────────────────────────
@@ -1142,17 +1163,21 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         }
 #endif
 
-        logWaterfallRenderPath(false,
+        QString waterfallFallbackReason;
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
-                               m_shaderWaterfallBlocked
-                                   ? "shader resource fallback"
-                                   : (waterfallGpuWaitingForRows
-                                          ? "shader warmup waiting for full waterfall history"
-                                          : "shader unavailable/disabled; colored texture upload")
+        if (!m_shaderWaterfallDisabledReason.isEmpty()) {
+            waterfallFallbackReason = m_shaderWaterfallDisabledReason;
+        } else if (m_shaderWaterfallBlocked) {
+            waterfallFallbackReason = QStringLiteral("shader resource fallback");
+        } else if (waterfallGpuWaitingForRows) {
+            waterfallFallbackReason = QStringLiteral("shader warmup waiting for full waterfall history");
+        } else {
+            waterfallFallbackReason = QStringLiteral("shader unavailable/disabled; colored texture upload");
+        }
 #else
-                               "qsb shaders not compiled"
+        waterfallFallbackReason = QStringLiteral("qsb shaders not compiled");
 #endif
-        );
+        logWaterfallRenderPath(false, waterfallFallbackReason);
 
         if (auto* oldGeometry = dynamic_cast<QSGGeometryNode*>(waterfallChild)) {
             if (!dynamic_cast<QSGSimpleTextureNode*>(oldGeometry)) {

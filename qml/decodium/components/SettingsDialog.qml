@@ -215,6 +215,7 @@ Dialog {
     Connections {
         target: bridge
         function onSettingValueChanged(key, value) {
+            settingsDialog.scheduleSettingsPersist()
             if (key === "Font" || key === "DecodedTextFont")
                 settingsDialog.refreshFontLabels()
         }
@@ -620,6 +621,19 @@ Dialog {
         catPersistTimer.restart()
     }
 
+    function persistSettingsNow() {
+        var controller = activeCatController()
+        if (controller && controller.saveSettings)
+            controller.saveSettings()
+        bridge.saveSettings()
+    }
+
+    function scheduleSettingsPersist() {
+        if (!settingsDialog.visible || settingsDialog.warmupInProgress)
+            return
+        settingsPersistTimer.restart()
+    }
+
     function clampToParent() {
         if (!parent) return
         var parentWidth = parent.width > 0 ? parent.width : width
@@ -642,6 +656,11 @@ Dialog {
             ensureInitialPosition()
     }
 
+    onClosed: {
+        if (!warmupInProgress)
+            persistSettingsNow()
+    }
+
     Timer {
         id: warmupCloseTimer
         interval: 1
@@ -658,6 +677,13 @@ Dialog {
         interval: 300
         repeat: false
         onTriggered: bridge.saveSettings()
+    }
+
+    Timer {
+        id: settingsPersistTimer
+        interval: 500
+        repeat: false
+        onTriggered: settingsDialog.persistSettingsNow()
     }
 
     FolderDialog {
