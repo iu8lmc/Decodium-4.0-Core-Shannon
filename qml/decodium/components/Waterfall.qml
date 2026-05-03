@@ -32,6 +32,15 @@ Item {
     property color textPrimary: bridge.themeManager.textPrimary
     property color textSec:     Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.6)
     property color borderColor: Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
+    // Theme-aware toolbar palette (was hardcoded dark before).
+    property color wfText:        bridge.themeManager.isLightTheme ? bridge.themeManager.textPrimary    : "#FFFFFF"
+    property color wfToolbarBg:   bridge.themeManager.isLightTheme ? bridge.themeManager.panelHeader    : wfToolbarBg
+    property color wfTrack:       bridge.themeManager.isLightTheme ? bridge.themeManager.borderSoft     : "#1a2a3a"
+    property color wfFrame:       bridge.themeManager.isLightTheme ? bridge.themeManager.borderColor    : wfFrame
+    property color wfYellow:      bridge.themeManager.isLightTheme ? bridge.themeManager.warningColor   : wfYellow
+    property color wfBlue:        bridge.themeManager.isLightTheme ? bridge.themeManager.primaryColor   : wfBlue
+    property color wfPurple:      bridge.themeManager.isLightTheme ? bridge.themeManager.ledMagenta     : wfPurple
+    property color wfSlate:       bridge.themeManager.isLightTheme ? bridge.themeManager.textSecondary  : wfSlate
 
     readonly property var labelColorPresets: [
         { name: "Auto",    color: "#00E6FF", custom: false },
@@ -96,17 +105,17 @@ Item {
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 46
             Layout.bottomMargin: 6
-            color: Qt.rgba(0,0,0,0.75); visible: showControls
-            border.color: "#3a5470"; border.width: 1
+            color: wfToolbarBg; visible: showControls
+            border.color: wfFrame; border.width: 1
             clip: true
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
                 anchors.topMargin: 3; anchors.bottomMargin: 5
                 spacing: 6
 
-                Text { text: "Calls:"; color: "#00E5FF"; font.pixelSize: 10; font.bold: true }
+                Text { text: "Calls:"; color: accentCyan; font.pixelSize: 10; font.bold: true }
 
-                Text { text: "Font"; color: "#FFFFFF"; font.pixelSize: 10 }
+                Text { text: "Font"; color: wfText; font.pixelSize: 10 }
                 Slider {
                     id: labelFontSlider
                     Layout.preferredWidth: 70
@@ -118,16 +127,16 @@ Item {
                             bridge.setSetting("uiLabelFontSize", value)
                         }
                     }
-                    background: Rectangle { x:labelFontSlider.leftPadding; y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-2; width:labelFontSlider.availableWidth; height:4; radius:2; color:"#1a2a3a"
-                        Rectangle { width: labelFontSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#00E5FF" }
+                    background: Rectangle { x:labelFontSlider.leftPadding; y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-2; width:labelFontSlider.availableWidth; height:4; radius:2; color:wfTrack
+                        Rectangle { width: labelFontSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: accentCyan }
                     }
-                    handle: Rectangle { x:labelFontSlider.leftPadding+labelFontSlider.visualPosition*(labelFontSlider.availableWidth-width); y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-height/2; width:10; height:10; radius:5; color: labelFontSlider.pressed ? accentGreen : "#00E5FF" }
+                    handle: Rectangle { x:labelFontSlider.leftPadding+labelFontSlider.visualPosition*(labelFontSlider.availableWidth-width); y:labelFontSlider.topPadding+labelFontSlider.availableHeight/2-height/2; width:10; height:10; radius:5; color: labelFontSlider.pressed ? accentGreen : accentCyan }
                 }
-                Text { text: labelFontSlider.value.toFixed(0)+"px"; color: "#00E5FF"; font.pixelSize: 10; width: 26 }
+                Text { text: labelFontSlider.value.toFixed(0)+"px"; color: accentCyan; font.pixelSize: 10; width: 26 }
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Gap"; color: "#FFFFFF"; font.pixelSize: 10 }
+                Text { text: "Gap"; color: wfText; font.pixelSize: 10 }
                 Slider {
                     id: labelSpacingSlider
                     Layout.preferredWidth: 60
@@ -139,12 +148,12 @@ Item {
                             bridge.setSetting("uiLabelSpacing", value)
                         }
                     }
-                    background: Rectangle { x:labelSpacingSlider.leftPadding; y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-2; width:labelSpacingSlider.availableWidth; height:4; radius:2; color:"#1a2a3a"
-                        Rectangle { width: labelSpacingSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: "#88DD88" }
+                    background: Rectangle { x:labelSpacingSlider.leftPadding; y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-2; width:labelSpacingSlider.availableWidth; height:4; radius:2; color:wfTrack
+                        Rectangle { width: labelSpacingSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: accentGreen }
                     }
-                    handle: Rectangle { x:labelSpacingSlider.leftPadding+labelSpacingSlider.visualPosition*(labelSpacingSlider.availableWidth-width); y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-height/2; width:10; height:10; radius:5; color: labelSpacingSlider.pressed ? accentGreen : "#88DD88" }
+                    handle: Rectangle { x:labelSpacingSlider.leftPadding+labelSpacingSlider.visualPosition*(labelSpacingSlider.availableWidth-width); y:labelSpacingSlider.topPadding+labelSpacingSlider.availableHeight/2-height/2; width:10; height:10; radius:5; color: labelSpacingSlider.pressed ? accentGreen : accentGreen }
                 }
-                Text { text: labelSpacingSlider.value.toFixed(0); color: "#88DD88"; font.pixelSize: 10; width: 20 }
+                Text { text: labelSpacingSlider.value.toFixed(0); color: accentGreen; font.pixelSize: 10; width: 20 }
 
                 Rectangle { width:1; height:14; color:"#333" }
 
@@ -159,7 +168,7 @@ Item {
                     }
                     indicator: Rectangle {
                         implicitWidth: 14; implicitHeight: 14; radius: 2
-                        color: labelBoldCheck.checked ? "#FFFFFF" : Qt.rgba(30/255,45/255,70/255,0.9)
+                        color: labelBoldCheck.checked ? "#FFFFFF" : wfToolbarBg
                         border.color: "#FFFFFF"; border.width: 1
                         Text { anchors.centerIn: parent; text: "B"; color: "black"; font.pixelSize: 9; font.bold: true; visible: labelBoldCheck.checked }
                     }
@@ -168,7 +177,7 @@ Item {
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Colore"; color: "#FFFFFF"; font.pixelSize: 10 }
+                Text { text: "Colore"; color: wfText; font.pixelSize: 10 }
                 ComboBox {
                     id: labelColorCombo
                     Layout.preferredWidth: 86
@@ -184,7 +193,7 @@ Item {
                             bridge.setSetting("uiLabelColorPreset", currentIndex)
                         }
                     }
-                    background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
+                    background: Rectangle { color: wfToolbarBg; border.color: borderColor; radius: 2 }
                     contentItem: Row {
                         spacing: 4
                         leftPadding: 4
@@ -206,7 +215,7 @@ Item {
 
                 // ── Palette / Auto / [] / Peak / Zoom / dBm ──
                 // Unita alla barra Calls per avere un'unica riga superiore (feedback IK8OLM)
-                Text { text: "Palette:"; color: "#FFFFFF"; font.pixelSize: 10 }
+                Text { text: "Palette:"; color: wfText; font.pixelSize: 10 }
                 ComboBox {
                     id: paletteCombo
                     Layout.preferredWidth: 106
@@ -219,7 +228,7 @@ Item {
                         bridge.setSetting("uiPaletteIndex", currentIndex)
                         mainWindow.scheduleSave()
                     }
-                    background: Rectangle { color: Qt.rgba(30/255,45/255,70/255,0.9); border.color: borderColor; radius: 2 }
+                    background: Rectangle { color: wfToolbarBg; border.color: borderColor; radius: 2 }
                     contentItem: Text { text: paletteCombo.displayText; font.pixelSize: 10; color: textPrimary; verticalAlignment: Text.AlignVCenter; leftPadding: 4 }
                 }
 
@@ -243,12 +252,12 @@ Item {
                     ToolTip.delay: 400
                     indicator: Rectangle {
                         implicitWidth: 14; implicitHeight: 14; radius: 2
-                        color: autoRangeCheck.checked ? "#00e676" : Qt.rgba(30/255,45/255,70/255,0.9)
-                        border.color: "#00e676"; border.width: 1
+                        color: autoRangeCheck.checked ? accentGreen : wfToolbarBg
+                        border.color: accentGreen; border.width: 1
                         Text { anchors.centerIn: parent; text: "A"; color: "black"; font.pixelSize: 9; font.bold: true; visible: autoRangeCheck.checked }
                     }
                 }
-                Text { text: "Auto"; color: autoRangeCheck.checked ? "#00e676" : textSec; font.pixelSize: 10 }
+                Text { text: "Auto"; color: autoRangeCheck.checked ? accentGreen : textSec; font.pixelSize: 10 }
 
                 // TX brackets toggle
                 Text { text: "[ ]"; color: txBracketsCheck.checked ? accentGreen : textSec; font.pixelSize: 10; font.bold: true }
@@ -263,7 +272,7 @@ Item {
                     }
                     indicator: Rectangle {
                         implicitWidth: 16; implicitHeight: 16; radius: 2
-                        color: txBracketsCheck.checked ? accentGreen : Qt.rgba(30/255,45/255,70/255,0.9)
+                        color: txBracketsCheck.checked ? accentGreen : wfToolbarBg
                         border.color: accentGreen; border.width: 1
                         Text { anchors.centerIn: parent; text: "✓"; color: "white"; font.pixelSize: 10; visible: txBracketsCheck.checked }
                     }
@@ -286,15 +295,15 @@ Item {
                     ToolTip.delay: 400
                     indicator: Rectangle {
                         implicitWidth: 14; implicitHeight: 14; radius: 2
-                        color: peakHoldCheck.checked ? "#ffcc00" : Qt.rgba(30/255,45/255,70/255,0.9)
-                        border.color: "#ffcc00"; border.width: 1
+                        color: peakHoldCheck.checked ? wfYellow : wfToolbarBg
+                        border.color: wfYellow; border.width: 1
                         Text { anchors.centerIn: parent; text: "P"; color: "#262626"; font.pixelSize: 9; font.bold: true; visible: peakHoldCheck.checked }
                     }
                 }
-                Text { text: "Peak"; color: peakHoldCheck.checked ? "#ffcc00" : textSec; font.pixelSize: 10 }
+                Text { text: "Peak"; color: peakHoldCheck.checked ? wfYellow : textSec; font.pixelSize: 10 }
 
                 // Zoom
-                Text { text: "Zoom"; color: "#FFFFFF"; font.pixelSize: 10 }
+                Text { text: "Zoom"; color: wfText; font.pixelSize: 10 }
                 Slider {
                     id: zoomSlider
                     Layout.preferredWidth: 70
@@ -325,7 +334,7 @@ Item {
                 // dBm live noise floor
                 Text {
                     text: waterfallDisplay.measuredFloor.toFixed(0) + "dBm"
-                    color: "#00e676"
+                    color: accentGreen
                     font.pixelSize: 10
                     ToolTip.text: "Noise floor misurato"
                     ToolTip.visible: nfLabel.containsMouse
@@ -338,10 +347,10 @@ Item {
         // ── Slider Black / Gain ─────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 22
-            color: Qt.rgba(0,0,0,0.4); visible: showControls
+            color: wfToolbarBg; visible: showControls
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
-                Text { text: "Black:"; color: "#5888AA"; font.pixelSize: 10 }
+                Text { text: "Black:"; color: wfSlate; font.pixelSize: 10 }
                 Slider { id: blackSlider; Layout.preferredWidth: 80; from: 0; to: 100; value: 15; stepSize: 1
                     onValueChanged: {
                         waterfallDisplay.blackLevel = value
@@ -349,12 +358,12 @@ Item {
                             bridge.setSetting("uiWaterfallBlackLevel", value)
                         }
                     }
-                    background: Rectangle { x:blackSlider.leftPadding;y:blackSlider.topPadding+blackSlider.availableHeight/2-2;width:blackSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
-                    handle: Rectangle { x:blackSlider.leftPadding+blackSlider.visualPosition*(blackSlider.availableWidth-width);y:blackSlider.topPadding+blackSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#5888AA" }
+                    background: Rectangle { x:blackSlider.leftPadding;y:blackSlider.topPadding+blackSlider.availableHeight/2-2;width:blackSlider.availableWidth;height:4;radius:2;color:wfTrack }
+                    handle: Rectangle { x:blackSlider.leftPadding+blackSlider.visualPosition*(blackSlider.availableWidth-width);y:blackSlider.topPadding+blackSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:wfSlate }
                 }
-                Text { text: blackSlider.value.toFixed(0); color: "#5888AA"; font.pixelSize: 10; width: 20 }
+                Text { text: blackSlider.value.toFixed(0); color: wfSlate; font.pixelSize: 10; width: 20 }
                 Rectangle { width:1;height:14;color:"#333" }
-                Text { text: "Gain:"; color: "#88BBDD"; font.pixelSize: 10 }
+                Text { text: "Gain:"; color: wfBlue; font.pixelSize: 10 }
                 Slider { id: gainSlider; Layout.preferredWidth: 80; from: 0; to: 100; value: 50; stepSize: 1
                     onValueChanged: {
                         waterfallDisplay.colorGain = value
@@ -362,14 +371,14 @@ Item {
                             bridge.setSetting("uiWaterfallColorGain", value)
                         }
                     }
-                    background: Rectangle { x:gainSlider.leftPadding;y:gainSlider.topPadding+gainSlider.availableHeight/2-2;width:gainSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
-                    handle: Rectangle { x:gainSlider.leftPadding+gainSlider.visualPosition*(gainSlider.availableWidth-width);y:gainSlider.topPadding+gainSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#88BBDD" }
+                    background: Rectangle { x:gainSlider.leftPadding;y:gainSlider.topPadding+gainSlider.availableHeight/2-2;width:gainSlider.availableWidth;height:4;radius:2;color:wfTrack }
+                    handle: Rectangle { x:gainSlider.leftPadding+gainSlider.visualPosition*(gainSlider.availableWidth-width);y:gainSlider.topPadding+gainSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:wfBlue }
                 }
-                Text { text: gainSlider.value.toFixed(0); color: "#88BBDD"; font.pixelSize: 10; width: 20 }
+                Text { text: gainSlider.value.toFixed(0); color: wfBlue; font.pixelSize: 10; width: 20 }
 
                 Rectangle { width:1;height:14;color:"#333" }
 
-                Text { text: "Contrasto:"; color: "#AA88DD"; font.pixelSize: 10 }
+                Text { text: "Contrasto:"; color: wfPurple; font.pixelSize: 10 }
                 Slider { id: contrastSlider; Layout.preferredWidth: 70; from: 10; to: 150; value: 80; stepSize: 1
                     onValueChanged: {
                         waterfallPanel.applyManualContrast()
@@ -377,17 +386,17 @@ Item {
                             bridge.setSetting("uiWaterfallContrast", value)
                         }
                     }
-                    background: Rectangle { x:contrastSlider.leftPadding;y:contrastSlider.topPadding+contrastSlider.availableHeight/2-2;width:contrastSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
-                    handle: Rectangle { x:contrastSlider.leftPadding+contrastSlider.visualPosition*(contrastSlider.availableWidth-width);y:contrastSlider.topPadding+contrastSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#AA88DD" }
+                    background: Rectangle { x:contrastSlider.leftPadding;y:contrastSlider.topPadding+contrastSlider.availableHeight/2-2;width:contrastSlider.availableWidth;height:4;radius:2;color:wfTrack }
+                    handle: Rectangle { x:contrastSlider.leftPadding+contrastSlider.visualPosition*(contrastSlider.availableWidth-width);y:contrastSlider.topPadding+contrastSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:wfPurple }
                 }
-                Text { text: contrastSlider.value.toFixed(0); color: "#AA88DD"; font.pixelSize: 10; width: 20 }
+                Text { text: contrastSlider.value.toFixed(0); color: wfPurple; font.pixelSize: 10; width: 20 }
 
                 Rectangle { width:1;height:14;color:"#333" }
 
                 Text { text: "Vel:"; color: "#DD8866"; font.pixelSize: 10 }
                 Slider { id: speedSlider; Layout.preferredWidth: 60; from: 10; to: 500; value: 20; stepSize: 5
                     onValueChanged: if (!waterfallPanel.restoringSettings) bridge.setSetting("spectrumInterval", value)
-                    background: Rectangle { x:speedSlider.leftPadding;y:speedSlider.topPadding+speedSlider.availableHeight/2-2;width:speedSlider.availableWidth;height:4;radius:2;color:"#1a2a3a" }
+                    background: Rectangle { x:speedSlider.leftPadding;y:speedSlider.topPadding+speedSlider.availableHeight/2-2;width:speedSlider.availableWidth;height:4;radius:2;color:wfTrack }
                     handle: Rectangle { x:speedSlider.leftPadding+speedSlider.visualPosition*(speedSlider.availableWidth-width);y:speedSlider.topPadding+speedSlider.availableHeight/2-height/2;width:10;height:10;radius:5;color:"#DD8866" }
                 }
                 Text { text: speedSlider.value.toFixed(0)+"ms"; color: "#DD8866"; font.pixelSize: 10; width: 32 }
@@ -403,13 +412,13 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 6
             color: dividerMouse.containsMouse || dividerMouse.pressed
-                   ? "#00E5FF" : Qt.rgba(1,1,1,0.08)
+                   ? accentCyan : Qt.rgba(1,1,1,0.08)
 
             // Linea centrale visibile
             Rectangle {
                 anchors.centerIn: parent
                 width: 40; height: 2; radius: 1
-                color: "#00E5FF"; opacity: 0.6
+                color: accentCyan; opacity: 0.6
             }
 
             MouseArea {
@@ -531,7 +540,7 @@ Item {
                 anchors.centerIn: parent
                 width: startText.width + 40; height: startText.height + 20
                 color: Qt.rgba(0, 0, 0, 0.85)
-                border.color: "#00E5FF"; border.width: 1; radius: 6
+                border.color: accentCyan; border.width: 1; radius: 6
                 visible: !bridge.monitoring && !bridge.transmitting && !bridge.tuning
                 Text {
                     id: startText
