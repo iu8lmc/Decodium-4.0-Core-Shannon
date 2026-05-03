@@ -16,7 +16,9 @@ const DecodiumThemeManager::ThemePalette DecodiumThemeManager::s_oceanBlue {
     /* glassOverlay   */ QColor(26, 58, 92, 64),
     /* glassBorder    */ QColor(74, 144, 226, 80),
     /* borderColor    */ QColor(74, 144, 226, 80),
+    /* borderSoft     */ QColor(74, 144, 226, 40),
     /* panelColor     */ QColor("#1E2D42"),
+    /* panelHeader    */ QColor("#283C57"),
     /* rowMatchBg     */ QColor(0, 255, 136, 38),
     /* rowMatchBorder */ QColor("#00FF88"),
     /* ledRed         */ QColor("#FF5F56"),
@@ -27,27 +29,29 @@ const DecodiumThemeManager::ThemePalette DecodiumThemeManager::s_oceanBlue {
 };
 
 const DecodiumThemeManager::ThemePalette DecodiumThemeManager::s_stellarLight {
-    /* bgDeep         */ QColor("#EEF3F7"),
-    /* bgMedium       */ QColor("#E4ECF3"),
-    /* bgLight        */ QColor("#FFFFFF"),
-    /* primaryColor   */ QColor("#6E9DD1"),
-    /* secondaryColor */ QColor("#67B7C9"),
-    /* accentColor    */ QColor("#5EAE82"),
-    /* warningColor   */ QColor("#D9B154"),
-    /* errorColor     */ QColor("#D86A6A"),
-    /* textPrimary    */ QColor("#0F2235"),
-    /* textSecondary  */ QColor("#6B829A"),
-    /* successColor   */ QColor("#5EAE82"),
-    /* glassOverlay   */ QColor(255, 255, 255, 180),
-    /* glassBorder    */ QColor(201, 214, 226, 200),
-    /* borderColor    */ QColor("#C9D6E2"),
-    /* panelColor     */ QColor("#FFFFFF"),
-    /* rowMatchBg     */ QColor("#D7EFDF"),
-    /* rowMatchBorder */ QColor("#5CAE7F"),
-    /* ledRed         */ QColor("#D86A6A"),
-    /* ledBlue        */ QColor("#6E9DD1"),
-    /* ledYellow      */ QColor("#D9B154"),
-    /* ledMagenta     */ QColor("#9C8AC9"),
+    /* bgDeep         */ QColor("#DDE6EE"),
+    /* bgMedium       */ QColor("#CFDBE6"),
+    /* bgLight        */ QColor("#F2F6FA"),
+    /* primaryColor   */ QColor("#2D6BB0"),
+    /* secondaryColor */ QColor("#1F8AA0"),
+    /* accentColor    */ QColor("#2D8956"),
+    /* warningColor   */ QColor("#B68726"),
+    /* errorColor     */ QColor("#C33D3D"),
+    /* textPrimary    */ QColor("#061325"),
+    /* textSecondary  */ QColor("#3D5572"),
+    /* successColor   */ QColor("#2D8956"),
+    /* glassOverlay   */ QColor(255, 255, 255, 200),
+    /* glassBorder    */ QColor("#8FA4B8"),
+    /* borderColor    */ QColor("#8FA4B8"),
+    /* borderSoft     */ QColor("#A9BDCE"),
+    /* panelColor     */ QColor("#F2F6FA"),
+    /* panelHeader    */ QColor("#E1EAF2"),
+    /* rowMatchBg     */ QColor("#A8E0BC"),
+    /* rowMatchBorder */ QColor("#2D8956"),
+    /* ledRed         */ QColor("#C33D3D"),
+    /* ledBlue        */ QColor("#2D6BB0"),
+    /* ledYellow      */ QColor("#B68726"),
+    /* ledMagenta     */ QColor("#6B5BAB"),
     /* isLight        */ true
 };
 
@@ -94,7 +98,9 @@ QColor DecodiumThemeManager::successColor()   const { return currentPalette().su
 QColor DecodiumThemeManager::glassOverlay()   const { return currentPalette().glassOverlay; }
 QColor DecodiumThemeManager::glassBorder()    const { return currentPalette().glassBorder; }
 QColor DecodiumThemeManager::borderColor()    const { return currentPalette().borderColor; }
+QColor DecodiumThemeManager::borderSoft()     const { return currentPalette().borderSoft; }
 QColor DecodiumThemeManager::panelColor()     const { return currentPalette().panelColor; }
+QColor DecodiumThemeManager::panelHeader()    const { return currentPalette().panelHeader; }
 QColor DecodiumThemeManager::rowMatchBg()     const { return currentPalette().rowMatchBg; }
 QColor DecodiumThemeManager::rowMatchBorder() const { return currentPalette().rowMatchBorder; }
 QColor DecodiumThemeManager::ledRed()         const { return currentPalette().ledRed; }

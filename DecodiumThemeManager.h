@@ -22,7 +22,9 @@ class DecodiumThemeManager : public QObject
     Q_PROPERTY(QColor glassOverlay   READ glassOverlay   NOTIFY paletteChanged)
     Q_PROPERTY(QColor glassBorder    READ glassBorder    NOTIFY paletteChanged)
     Q_PROPERTY(QColor borderColor    READ borderColor    NOTIFY paletteChanged)
+    Q_PROPERTY(QColor borderSoft     READ borderSoft     NOTIFY paletteChanged)
     Q_PROPERTY(QColor panelColor     READ panelColor     NOTIFY paletteChanged)
+    Q_PROPERTY(QColor panelHeader    READ panelHeader    NOTIFY paletteChanged)
     Q_PROPERTY(QColor rowMatchBg     READ rowMatchBg     NOTIFY paletteChanged)
     Q_PROPERTY(QColor rowMatchBorder READ rowMatchBorder NOTIFY paletteChanged)
     Q_PROPERTY(QColor ledRed         READ ledRed         NOTIFY paletteChanged)
@@ -50,7 +52,9 @@ public:
     QColor glassOverlay()   const;
     QColor glassBorder()    const;
     QColor borderColor()    const;
+    QColor borderSoft()     const;
     QColor panelColor()     const;
+    QColor panelHeader()    const;
     QColor rowMatchBg()     const;
     QColor rowMatchBorder() const;
     QColor ledRed()         const;
@@ -86,7 +90,9 @@ private:
         QColor glassOverlay;
         QColor glassBorder;
         QColor borderColor;
+        QColor borderSoft;
         QColor panelColor;
+        QColor panelHeader;
         QColor rowMatchBg;
         QColor rowMatchBorder;
         QColor ledRed;
