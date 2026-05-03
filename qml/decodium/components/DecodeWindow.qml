@@ -51,8 +51,9 @@ Window {
     readonly property int bandDbWidth: compactBandColumns ? 34 : 40
     readonly property int bandDbDtGapWidth: compactBandColumns ? 4 : 6
     readonly property int bandDtWidth: compactBandColumns ? 42 : 50
+    readonly property int bandDtFreqGapWidth: compactBandColumns ? 6 : 8
     readonly property int bandFreqWidth: compactBandColumns ? 42 : 50
-    readonly property int bandGapWidth: compactBandColumns ? 6 : 10
+    readonly property int bandGapWidth: compactBandColumns ? 8 : 12
     readonly property int bandDxccWidth: showDxccInfo ? (compactBandColumns ? 92 : 132) : 0
     readonly property int bandAzWidth: showDxccInfo ? (compactBandColumns ? 42 : 52) : 0
     readonly property int bandMessageMinWidth: compactBandColumns ? 72 : 140
@@ -63,7 +64,7 @@ Window {
     readonly property int rxDbWidth: compactRxColumns ? 34 : 40
     readonly property int rxDbDtGapWidth: compactRxColumns ? 4 : 6
     readonly property int rxDtWidth: compactRxColumns ? 42 : 50
-    readonly property int rxGapWidth: compactRxColumns ? 4 : 6
+    readonly property int rxGapWidth: compactRxColumns ? 8 : 12
     readonly property int rxDistanceWidth: compactRxColumns ? 0 : 50
     readonly property int rxHeaderBadgeWidth: compactRxHeader ? 62 : 70
     property int decodeListVersion: 0
@@ -556,6 +557,7 @@ Window {
                                 horizontalAlignment: Text.AlignRight
                                 Layout.preferredWidth: decodeWindow.bandDtWidth
                             }
+                            Item { Layout.preferredWidth: decodeWindow.bandDtFreqGapWidth }
                             Text {
                                 text: "Freq"
                                 font.family: "Monospace"
@@ -769,6 +771,8 @@ Window {
                                         Layout.preferredWidth: decodeWindow.bandDtWidth
                                     }
 
+                                    Item { Layout.preferredWidth: decodeWindow.bandDtFreqGapWidth }
+
                                     Text {
                                         text: modelData.freq
                                         font.family: "Monospace"
@@ -784,7 +788,7 @@ Window {
                                     // Messaggio con coloring Shannon-compatible
                                     Text {
                                         id: bandMsgText
-                                        text: modelData.message
+                                        text: modelData.displayMessage || modelData.message
                                         font.family: "Monospace"
                                         font.pixelSize: 11
                                         font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
@@ -794,7 +798,7 @@ Window {
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
                                         Layout.minimumWidth: decodeWindow.bandMessageMinWidth
-                                        elide: decodeWindow.messageElideMode(modelData.message)
+                                        elide: decodeWindow.messageElideMode(modelData.displayMessage || modelData.message)
                                     }
 
                                     Item {
@@ -1146,7 +1150,7 @@ Window {
                                     // Messaggio RX con coloring + strikethrough B4
                                     Text {
                                         id: rxMsgText
-                                        text: modelData.message
+                                        text: modelData.displayMessage || modelData.message
                                         font.family: "Monospace"
                                         font.pixelSize: 11
                                         font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
@@ -1154,7 +1158,7 @@ Window {
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
-                                        elide: decodeWindow.messageElideMode(modelData.message)
+                                        elide: decodeWindow.messageElideMode(modelData.displayMessage || modelData.message)
                                     }
 
                                     Text {

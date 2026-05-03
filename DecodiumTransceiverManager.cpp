@@ -654,6 +654,17 @@ static TransceiverFactory::PTTMethod parsePtt(const QString& s)
     return TransceiverFactory::PTT_method_VOX;
 }
 
+static QString pttMethodName(TransceiverFactory::PTTMethod method)
+{
+    switch (method) {
+    case TransceiverFactory::PTT_method_CAT: return QStringLiteral("CAT");
+    case TransceiverFactory::PTT_method_DTR: return QStringLiteral("DTR");
+    case TransceiverFactory::PTT_method_RTS: return QStringLiteral("RTS");
+    case TransceiverFactory::PTT_method_VOX:
+    default: return QStringLiteral("VOX");
+    }
+}
+
 static QString resolvedPttPort(const DecodiumTransceiverManager* m)
 {
     QString const method = m->pttMethod().trimmed().toUpper();
@@ -816,6 +827,28 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     bool const canForceDtr = d3ForceDtrAvailable(m->portType(), m->pttMethod(), m->serialPort(), m->pttPort());
     bool const canForceRts = d3ForceRtsAvailable(m->portType(), m->handshake(), m->pttMethod(), m->serialPort(), m->pttPort());
     bool const serialCat = 0 == m->portType().compare(QStringLiteral("serial"), Qt::CaseInsensitive);
+    TransceiverFactory::PTTMethod const pttType =
+        0 == m->portType().compare(QStringLiteral("tci"), Qt::CaseInsensitive)
+            ? TransceiverFactory::PTT_method_CAT
+            : parsePtt(m->pttMethod());
+#if defined(Q_OS_LINUX)
+    // Linux tty drivers may assert DTR/RTS when Hamlib opens the CAT port.
+    // Keep unused control lines inactive so opening CAT cannot key PTT on
+    // radios/interfaces that map those lines to transmit.
+    bool const autoDtrLow = serialCat
+        && canForceDtr
+        && !m->forceDtr()
+        && !(pttType == TransceiverFactory::PTT_method_DTR
+             && pttPortSharesCatPort(m->serialPort(), m->pttPort()));
+    bool const autoRtsLow = serialCat
+        && canForceRts
+        && !m->forceRts()
+        && !(pttType == TransceiverFactory::PTT_method_RTS
+             && pttPortSharesCatPort(m->serialPort(), m->pttPort()));
+#else
+    bool const autoDtrLow = false;
+    bool const autoRtsLow = false;
+#endif
     bool const pwrAndSwrEnabled = configuredPwrAndSwrEnabled();
     int const requestedPollInterval = qBound(1, m->pollInterval(), 99);
     int const serialMinimumPollInterval = pwrAndSwrEnabled ? 1 : 2;
@@ -830,13 +863,11 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
     p.data_bits     = parseData(m->dataBits());
     p.stop_bits     = parseStop(m->stopBits());
     p.handshake     = parseHandshake(m->handshake());
-    p.force_dtr     = canForceDtr && m->forceDtr();
-    p.dtr_high      = canForceDtr && m->dtrHigh();
-    p.force_rts     = canForceRts && m->forceRts();
-    p.rts_high      = canForceRts && m->rtsHigh();
-    p.ptt_type      = 0 == m->portType().compare(QStringLiteral("tci"), Qt::CaseInsensitive)
-                      ? TransceiverFactory::PTT_method_CAT
-                      : parsePtt(m->pttMethod());
+    p.force_dtr     = canForceDtr && (m->forceDtr() || autoDtrLow);
+    p.dtr_high      = canForceDtr && m->forceDtr() && m->dtrHigh();
+    p.force_rts     = canForceRts && (m->forceRts() || autoRtsLow);
+    p.rts_high      = canForceRts && m->forceRts() && m->rtsHigh();
+    p.ptt_type      = pttType;
     p.audio_source  = configuredTxAudioSource();
     p.split_mode    = parseSplit(m->splitMode());
     // "CAT" in PTT Port means "use the same serial port as CAT", as in WSJT-X.
@@ -849,6 +880,25 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
         && 0 == m->portType().compare(QStringLiteral("tci"), Qt::CaseInsensitive)) {
         p.poll_interval |= tci__audio;
     }
+    qDebug().noquote()
+        << "[CATDBG] Hamlib params"
+        << "rig=" << p.rig_name
+        << "portType=" << m->portType()
+        << "serial=" << p.serial_port
+        << "baud=" << p.baud
+        << "handshake=" << m->handshake()
+        << "ptt=" << pttMethodName(p.ptt_type)
+        << "pttPort=" << p.ptt_port
+        << "forceDtr=" << p.force_dtr
+        << "dtrHigh=" << p.dtr_high
+        << "forceRts=" << p.force_rts
+        << "rtsHigh=" << p.rts_high
+#if defined(Q_OS_LINUX)
+        << "linuxAutoDtrLow=" << autoDtrLow
+        << "linuxAutoRtsLow=" << autoRtsLow
+#endif
+        << "split=" << splitModeName(p.split_mode)
+        << "poll=" << (p.poll_interval & 0xffff);
     return p;
 }
 

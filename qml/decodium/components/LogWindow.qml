@@ -463,7 +463,7 @@ Popup {
                 anchors.leftMargin: 10; anchors.rightMargin: 10
                 spacing: 0
 
-                Text { text: "Date/Time"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 130 }
+                Text { text: "Date/Time"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 148 }
                 Text { text: "Call"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 100 }
                 Text { text: "Grid"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 60 }
                 Text { text: "Band"; font.pixelSize: 10; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 55 }
@@ -550,7 +550,7 @@ Popup {
                             font.pixelSize: 8; color: primaryBlue
                             Layout.preferredWidth: 12
                         }
-                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 118 }
+                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 11; color: textSecondary; Layout.preferredWidth: 136 }
                         Text { text: modelData.call || ""; font.family: "Monospace"; font.pixelSize: 11; font.bold: true; color: accentGreen; Layout.preferredWidth: 100 }
                         Text { text: modelData.grid || ""; font.family: "Monospace"; font.pixelSize: 11; color: secondaryCyan; Layout.preferredWidth: 60 }
                         Text { text: modelData.band || ""; font.family: "Monospace"; font.pixelSize: 11; color: textPrimary; Layout.preferredWidth: 55 }
@@ -598,12 +598,14 @@ Popup {
                         spacing: 2
                         Text { text: "Call"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 120; height: 26; radius: 3
+                            width: 132; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editCall.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editCall; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"; font.bold: true
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -615,12 +617,14 @@ Popup {
                         spacing: 2
                         Text { text: "Grid"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 70; height: 26; radius: 3
+                            width: 78; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editGrid.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editGrid; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -632,12 +636,14 @@ Popup {
                         spacing: 2
                         Text { text: "Band"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 60; height: 26; radius: 3
+                            width: 66; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editBand.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editBand; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -649,12 +655,14 @@ Popup {
                         spacing: 2
                         Text { text: "Mode"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 60; height: 26; radius: 3
+                            width: 66; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editMode.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editMode; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -666,12 +674,14 @@ Popup {
                         spacing: 2
                         Text { text: "Sent"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 50; height: 26; radius: 3
+                            width: 56; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editSent.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editSent; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -683,12 +693,14 @@ Popup {
                         spacing: 2
                         Text { text: "Rcvd"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 50; height: 26; radius: 3
+                            width: 56; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editRcvd.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editRcvd; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }
@@ -708,12 +720,14 @@ Popup {
                         spacing: 2
                         Text { text: "Comment"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            Layout.fillWidth: true; height: 26; radius: 3
+                            Layout.fillWidth: true; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editComment.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
                             TextField {
                                 id: editComment; anchors.fill: parent; anchors.margins: 2
                                 font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
                                 color: textPrimary
                                 background: Rectangle { color: "transparent" }
                             }

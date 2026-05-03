@@ -16,18 +16,49 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QMutexLocker>
+#include <QDebug>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
+
+namespace
+{
+const char* waterfallGraphicsApiName(QSGRendererInterface::GraphicsApi api)
+{
+    switch (api) {
+    case QSGRendererInterface::Software: return "Software";
+    case QSGRendererInterface::OpenVG: return "OpenVG";
+    case QSGRendererInterface::OpenGL: return "OpenGL";
+    case QSGRendererInterface::Direct3D11: return "Direct3D11";
+    case QSGRendererInterface::Vulkan: return "Vulkan";
+    case QSGRendererInterface::Metal: return "Metal";
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
+    case QSGRendererInterface::Direct3D12: return "Direct3D12";
+#endif
+    case QSGRendererInterface::Null: return "Null";
+    case QSGRendererInterface::Unknown:
+    default: return "Unknown";
+    }
+}
+}
 
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
 class WaterfallPaletteMaterial final : public QSGMaterial
 {
 public:
+    WaterfallPaletteMaterial()
+    {
+        setFlag(QSGMaterial::NoBatching);
+        setFlag(QSGMaterial::RequiresFullMatrix);
+    }
+
     ~WaterfallPaletteMaterial() override
     {
         delete intensityTexture;
         delete paletteTexture;
+        for (QSGTexture* texture : retiredTextures)
+            delete texture;
     }
 
     QSGMaterialType* type() const override
@@ -41,13 +72,29 @@ public:
     int compare(const QSGMaterial* other) const override
     {
         auto const* rhs = static_cast<const WaterfallPaletteMaterial*>(other);
-        if (intensityTexture == rhs->intensityTexture)
-            return paletteTexture == rhs->paletteTexture ? 0 : (paletteTexture < rhs->paletteTexture ? -1 : 1);
-        return intensityTexture < rhs->intensityTexture ? -1 : 1;
+        if (intensityTexture != rhs->intensityTexture)
+            return intensityTexture < rhs->intensityTexture ? -1 : 1;
+        if (paletteTexture != rhs->paletteTexture)
+            return paletteTexture < rhs->paletteTexture ? -1 : 1;
+        return 0;
     }
 
     QSGTexture* intensityTexture = nullptr;
     QSGTexture* paletteTexture = nullptr;
+    float params[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+    int paletteGeneration = -1;
+
+    void retireTexture(QSGTexture*& texture)
+    {
+        if (!texture)
+            return;
+        retiredTextures.append(texture);
+        texture = nullptr;
+        while (retiredTextures.size() > 4)
+            delete retiredTextures.takeFirst();
+    }
+
+    QVector<QSGTexture*> retiredTextures;
 };
 
 class WaterfallPaletteShader final : public QSGMaterialShader
@@ -59,36 +106,39 @@ public:
         setShaderFileName(FragmentStage, QStringLiteral(":/shaders/waterfall_palette.frag.qsb"));
     }
 
-    bool updateUniformData(RenderState& state, QSGMaterial*, QSGMaterial*) override
+    bool updateUniformData(RenderState& state, QSGMaterial* newMaterial, QSGMaterial*) override
     {
         QByteArray* uniformData = state.uniformData();
-        bool changed = false;
-        if (uniformData->size() < 80) {
-            uniformData->resize(80);
-            changed = true;
+        if (uniformData->size() < 96) {
+            uniformData->resize(96);
+            std::memset(uniformData->data(), 0, static_cast<size_t>(uniformData->size()));
         }
-        if (state.isMatrixDirty()) {
-            const QMatrix4x4 matrix = state.combinedMatrix();
-            std::memcpy(uniformData->data(), matrix.constData(), 64);
-            changed = true;
-        }
-        if (state.isOpacityDirty()) {
-            float const opacity = state.opacity();
-            std::memcpy(uniformData->data() + 64, &opacity, 4);
-            changed = true;
-        }
-        return changed;
+        auto* material = static_cast<WaterfallPaletteMaterial*>(newMaterial);
+        const QMatrix4x4 matrix = state.combinedMatrix();
+        std::memcpy(uniformData->data(), matrix.constData(), 64);
+        float const opacity = state.opacity();
+        std::memcpy(uniformData->data() + 64, &opacity, 4);
+        std::memcpy(uniformData->data() + 80, material->params, sizeof(material->params));
+        return true;
     }
 
     void updateSampledImage(RenderState&, int binding, QSGTexture** texture,
                             QSGMaterial* newMaterial, QSGMaterial*) override
     {
         auto* material = static_cast<WaterfallPaletteMaterial*>(newMaterial);
-        if (binding == 1) {
-            *texture = material->intensityTexture;
-        } else if (binding == 2) {
-            *texture = material->paletteTexture;
+        static std::atomic_uint loggedBindings {0};
+        unsigned const bit = (binding >= 0 && binding < 31) ? (1u << binding) : 0u;
+        unsigned previous = loggedBindings.load(std::memory_order_relaxed);
+        if (bit && !(previous & bit)
+            && !(loggedBindings.fetch_or(bit, std::memory_order_relaxed) & bit)) {
+            qInfo().noquote()
+                << "[GPUDBG] Panadapter waterfall shader sampled-image binding"
+                << binding;
         }
+        if (binding == 1)
+            *texture = material->intensityTexture;
+        else if (binding == 2)
+            *texture = material->paletteTexture;
     }
 };
 
@@ -185,27 +235,46 @@ PanadapterItem::PanadapterItem(QQuickItem* parent)
 
 PanadapterItem::~PanadapterItem() = default;
 
-bool PanadapterItem::shaderWaterfallSupported() const
+bool PanadapterItem::shaderWaterfallSupported()
 {
+    m_shaderWaterfallDisabledReason.clear();
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_WATERFALL_SHADER")) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled by DECODIUM_DISABLE_WATERFALL_SHADER; colored texture upload");
         return false;
     }
-    if (!qEnvironmentVariableIsSet("DECODIUM_ENABLE_WATERFALL_SHADER")) {
+    if (m_shaderWaterfallBlocked) {
+        m_shaderWaterfallDisabledReason = QStringLiteral("shader resource fallback");
         return false;
     }
     if (!window() || !window()->rendererInterface()) {
+        m_shaderWaterfallDisabledReason = QStringLiteral("scenegraph window not ready; colored texture upload");
         return false;
     }
     QSGRendererInterface::GraphicsApi const api = window()->rendererInterface()->graphicsApi();
-    if (api == QSGRendererInterface::Metal &&
-        !qEnvironmentVariableIsSet("DECODIUM_ENABLE_UNSAFE_METAL_WATERFALL_SHADER")) {
+    if (api == QSGRendererInterface::Metal
+        && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_METAL_WATERFALL_SHADER")) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled on Metal; colored texture upload");
         return false;
     }
-    return api != QSGRendererInterface::Software
-        && api != QSGRendererInterface::Null
-        && api != QSGRendererInterface::Unknown;
+    if (api == QSGRendererInterface::Direct3D11
+        && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_D3D11_WATERFALL_SHADER")) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("shader disabled on Direct3D11; colored texture upload");
+        return false;
+    }
+    if (api == QSGRendererInterface::Software
+        || api == QSGRendererInterface::Null
+        || api == QSGRendererInterface::Unknown) {
+        m_shaderWaterfallDisabledReason =
+            QStringLiteral("scenegraph api has no shader path; CPU fallback");
+        return false;
+    }
+    return true;
 #else
+    m_shaderWaterfallDisabledReason = QStringLiteral("qsb shaders not compiled");
     return false;
 #endif
 }
@@ -213,6 +282,7 @@ bool PanadapterItem::shaderWaterfallSupported() const
 // ─── Palette ────────────────────────────────────────────────────────────────
 void PanadapterItem::buildPalette(int idx)
 {
+    ++m_paletteGeneration;
     m_palette.resize(256);
     switch (idx) {
     case 1: // Raptor Green
@@ -246,11 +316,6 @@ void PanadapterItem::buildPalette(int idx)
         for (int i=0;i<256;++i){
             float t = i/255.f;
             int r, g, b;
-            // 0.0  : #FFFFFF (white)
-            // 0.30 : #DCE8F6 (very pale blue)
-            // 0.55 : #6E9DD1 (pastel blue)
-            // 0.80 : #5EAE82 (pastel green)
-            // 1.00 : #D86A6A (pastel red — hot signals)
             if (t < 0.30f) {
                 float s = t / 0.30f;
                 r = (int)(255 + (220 - 255) * s);
@@ -302,7 +367,7 @@ void PanadapterItem::setPaletteIndex(int v)
     if (m_paletteIndex==v) return;
     m_paletteIndex=v;
     buildPalette(v);
-    // Repaint background of existing images to match new palette (white for Stellar Light, else black)
+    m_waterfallRgbValid = false;
     QColor const bg = (v == 11) ? QColor(255, 255, 255) : QColor(0, 0, 0);
     if (!m_spectrumImage.isNull())                  m_spectrumImage.fill(bg);
     if (!m_waterfallImage.isNull())                 m_waterfallImage.fill(bg);
@@ -354,6 +419,7 @@ void PanadapterItem::rebuildImages(int w, int h)
         m_spectrumImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
     }
 
+
     // Crea il waterfall image solo se c'è spazio
     if (wfH > 0) {
         if (m_waterfallImage.isNull() ||
@@ -367,14 +433,25 @@ void PanadapterItem::rebuildImages(int w, int h)
             m_waterfallIntensityImage.fill(0);
             m_waterfallIntensityDisplayImage = QImage(w, wfH, QImage::Format_Grayscale8);
             m_waterfallIntensityDisplayImage.fill(0);
+            m_waterfallIntensityTextureImage = QImage(w, wfH, QImage::Format_ARGB32_Premultiplied);
+            m_waterfallIntensityTextureImage.fill(QColor(0, 0, 0, 255));
             m_wfWriteRow = 0;
+            m_waterfallRgbValid = true;
+            m_shaderWaterfallBlocked = false;
+            m_loggedWaterfallGpuUploadStats = false;
+            m_lastWaterfallGpuStatsRow = -1;
         }
     } else {
         m_waterfallImage = QImage();
         m_waterfallDisplayImage = QImage();
         m_waterfallIntensityImage = QImage();
         m_waterfallIntensityDisplayImage = QImage();
+        m_waterfallIntensityTextureImage = QImage();
         m_wfWriteRow = 0;
+        m_waterfallRgbValid = true;
+        m_shaderWaterfallBlocked = false;
+        m_loggedWaterfallGpuUploadStats = false;
+        m_lastWaterfallGpuStatsRow = -1;
     }
 }
 
@@ -460,6 +537,7 @@ void PanadapterItem::addSpectrumDataNorm(const QVector<float>& normValues)
     addSpectrumData(db, -130.f, -40.f, 200.f, 4000.f);
 }
 
+
 void PanadapterItem::resetWaterfall()
 {
     QMutexLocker lock(&m_mutex);
@@ -471,7 +549,12 @@ void PanadapterItem::resetWaterfall()
         m_waterfallIntensityImage.fill(0);
     if (!m_waterfallIntensityDisplayImage.isNull())
         m_waterfallIntensityDisplayImage.fill(0);
+    if (!m_waterfallIntensityTextureImage.isNull())
+        m_waterfallIntensityTextureImage.fill(QColor(0, 0, 0, 255));
     m_wfWriteRow = 0;
+    m_waterfallRgbValid = true;
+    m_loggedWaterfallGpuUploadStats = false;
+    m_lastWaterfallGpuStatsRow = -1;
     m_spectrumDirty = true;
     lock.unlock();
     update();
@@ -827,7 +910,7 @@ void PanadapterItem::addWaterfallRow()
     QRgb const wfBg = (m_paletteIndex == 11) ? qRgb(255,255,255) : qRgb(0,0,0);
 
     int row = m_wfWriteRow % h;
-    QRgb* line = m_useShaderWaterfall ? nullptr : reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
+    QRgb* line = reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(row));
     uchar* intensityLine = (!m_waterfallIntensityImage.isNull()
                             && m_waterfallIntensityImage.width() == w
                             && m_waterfallIntensityImage.height() == h)
@@ -861,7 +944,63 @@ void PanadapterItem::addWaterfallRow()
         if (line)
             line[x] = wfColor(pct);
     }
+    m_waterfallRgbValid = true;
     m_wfWriteRow++;
+}
+
+void PanadapterItem::rebuildRgbWaterfallFromIntensity()
+{
+    if (m_waterfallImage.isNull() || m_waterfallIntensityImage.isNull()
+        || m_waterfallImage.size() != m_waterfallIntensityImage.size()) {
+        m_waterfallRgbValid = false;
+        return;
+    }
+
+    if (m_palette.size() < 256)
+        buildPalette(m_paletteIndex);
+
+    QRgb const fallback = (m_paletteIndex == 11) ? qRgb(255, 255, 255) : qRgb(0, 0, 0);
+    for (int y = 0; y < m_waterfallImage.height(); ++y) {
+        auto* dst = reinterpret_cast<QRgb*>(m_waterfallImage.scanLine(y));
+        uchar const* src = m_waterfallIntensityImage.constScanLine(y);
+        for (int x = 0; x < m_waterfallImage.width(); ++x)
+            dst[x] = m_palette.value(src[x], fallback);
+    }
+    m_waterfallRgbValid = true;
+}
+
+void PanadapterItem::logWaterfallRenderPath(bool gpu, const QString& reason)
+{
+    QSGRendererInterface::GraphicsApi api = QSGRendererInterface::Unknown;
+    if (window() && window()->rendererInterface())
+        api = window()->rendererInterface()->graphicsApi();
+
+    int const path = gpu ? 1 : 0;
+    int const apiKey = static_cast<int>(api);
+    if (m_loggedWaterfallPath == path && m_loggedWaterfallApi == apiKey
+        && m_loggedWaterfallReason == reason)
+        return;
+
+    m_loggedWaterfallPath = path;
+    m_loggedWaterfallApi = apiKey;
+    m_loggedWaterfallReason = reason;
+    bool const texturedGpu = !gpu
+        && api != QSGRendererInterface::Software
+        && api != QSGRendererInterface::Null
+        && api != QSGRendererInterface::Unknown;
+    qInfo().noquote()
+        << "[GPUDBG] Panadapter waterfall"
+        << (gpu ? "GPU shader path active"
+                : (texturedGpu ? "GPU texture path active" : "CPU fallback path active"))
+        << "api=" << waterfallGraphicsApiName(api)
+        << "qsb=" << (
+#ifdef DECODIUM_WATERFALL_SHADER_QSB
+            "yes"
+#else
+            "no"
+#endif
+        )
+        << "reason=" << reason;
 }
 
 // ─── Qt Scene Graph update ────────────────────────────────────────────────────
@@ -874,24 +1013,27 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 
     QMutexLocker lock(&m_mutex);
 
+
     if (m_geometryDirty) {
         rebuildImages(w, h);
         m_geometryDirty = false;
     }
 
-    m_useShaderWaterfall = shaderWaterfallSupported();
-
+    bool const shaderSupported = shaderWaterfallSupported();
+    m_useShaderWaterfall = shaderSupported && m_wfWriteRow > 0;
     if (m_spectrumDirty && !m_bins.isEmpty()) {
         addWaterfallRow();
         renderSpectrum();
         m_spectrumDirty = false;
     }
+    m_useShaderWaterfall = shaderSupported && m_wfWriteRow > 0;
 
     // ── Crea/aggiorna due texture node: spectrum + waterfall ─────────────
     // Node structure: root → spectrum node, waterfall node
     QSGNode* root = oldNode ? oldNode : new QSGNode();
 
     bool isNew = (root->childCount() == 0);
+
 
     // Spectrum node (top)
     if (!m_spectrumImage.isNull()) {
@@ -922,7 +1064,12 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         if (!isNew && root->childCount() > 1 && root->firstChild())
             waterfallChild = root->firstChild()->nextSibling();
 
+        bool waterfallGpuWaitingForRows = false;
 #ifdef DECODIUM_WATERFALL_SHADER_QSB
+        if (m_useShaderWaterfall && !m_waterfallIntensityImage.isNull() && m_wfWriteRow < rows) {
+            waterfallGpuWaitingForRows = true;
+            m_useShaderWaterfall = false;
+        }
         if (m_useShaderWaterfall && !m_waterfallIntensityImage.isNull()) {
             if (m_waterfallIntensityDisplayImage.isNull() ||
                 m_waterfallIntensityDisplayImage.width() != wfW ||
@@ -930,63 +1077,148 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                 m_waterfallIntensityDisplayImage = QImage(wfW, wfH, QImage::Format_Grayscale8);
                 m_waterfallIntensityDisplayImage.fill(0);
             }
+            if (m_waterfallIntensityTextureImage.isNull() ||
+                m_waterfallIntensityTextureImage.width() != wfW ||
+                m_waterfallIntensityTextureImage.height() != wfH) {
+                m_waterfallIntensityTextureImage = QImage(wfW, wfH, QImage::Format_ARGB32_Premultiplied);
+                m_waterfallIntensityTextureImage.fill(QColor(0, 0, 0, 255));
+                m_loggedWaterfallGpuUploadStats = false;
+                m_lastWaterfallGpuStatsRow = -1;
+            }
 
+            int maxUploadedLevel = 0;
+            qsizetype nonZeroUploaded = 0;
             for (int y = 0; y < wfH; ++y) {
                 int const srcRow = ((m_wfWriteRow - 1 - y) % rows + rows) % rows;
-                std::memcpy(m_waterfallIntensityDisplayImage.scanLine(y),
-                            m_waterfallIntensityImage.scanLine(srcRow),
-                            static_cast<size_t>(wfW));
+                uchar const* src = m_waterfallIntensityImage.constScanLine(srcRow);
+                std::memcpy(m_waterfallIntensityDisplayImage.scanLine(y), src, static_cast<size_t>(wfW));
+
+                auto* dst = reinterpret_cast<QRgb*>(m_waterfallIntensityTextureImage.scanLine(y));
+                for (int x = 0; x < wfW; ++x) {
+                    uchar const level = src[x];
+                    dst[x] = qRgba(level, level, level, 255);
+                    if (level) {
+                        ++nonZeroUploaded;
+                        maxUploadedLevel = qMax(maxUploadedLevel, static_cast<int>(level));
+                    }
+                }
             }
 
-            if (auto* oldSimple = dynamic_cast<QSGSimpleTextureNode*>(waterfallChild)) {
-                root->removeChildNode(oldSimple);
-                delete oldSimple;
-                waterfallChild = nullptr;
+            if (m_wfWriteRow >= rows && nonZeroUploaded == 0) {
+                m_shaderWaterfallBlocked = true;
+                qWarning().noquote()
+                    << "[GPUDBG] Panadapter waterfall GPU upload empty after warmup; falling back to CPU"
+                    << "intensity=" << QStringLiteral("%1x%2").arg(wfW).arg(wfH)
+                    << "rows_written=" << m_wfWriteRow
+                    << "max_level=" << maxUploadedLevel
+                    << "nonzero_pixels=" << nonZeroUploaded;
             }
 
-            auto* wn = static_cast<QSGGeometryNode*>(waterfallChild);
-            if (!wn) {
-                wn = new QSGGeometryNode();
-                auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
-                geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
-                geometry->setVertexDataPattern(QSGGeometry::DynamicPattern);
-                wn->setGeometry(geometry);
-                wn->setFlag(QSGNode::OwnsGeometry);
-                wn->setMaterial(new WaterfallPaletteMaterial());
-                wn->setFlag(QSGNode::OwnsMaterial);
-                root->appendChildNode(wn);
+            if (!m_shaderWaterfallBlocked) {
+                if (auto* oldSimple = dynamic_cast<QSGSimpleTextureNode*>(waterfallChild)) {
+                    root->removeChildNode(oldSimple);
+                    delete oldSimple;
+                    waterfallChild = nullptr;
+                }
+
+                auto* wn = static_cast<QSGGeometryNode*>(waterfallChild);
+                if (!wn) {
+                    wn = new QSGGeometryNode();
+                    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
+                    geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
+                    geometry->setVertexDataPattern(QSGGeometry::DynamicPattern);
+                    wn->setGeometry(geometry);
+                    wn->setFlag(QSGNode::OwnsGeometry);
+                    wn->setMaterial(new WaterfallPaletteMaterial());
+                    wn->setFlag(QSGNode::OwnsMaterial);
+                    root->appendChildNode(wn);
+                }
+
+                QSGGeometry::updateTexturedRectGeometry(wn->geometry(),
+                                                        QRectF(0, specH, w, wfH),
+                                                        QRectF(0, 0, 1, 1));
+
+                auto* material = static_cast<WaterfallPaletteMaterial*>(wn->material());
+                material->params[0] = 255.0f / 256.0f;
+                material->params[1] = 0.5f / 256.0f;
+                material->params[2] = 0.0f;
+                material->params[3] = 1.0f;
+
+                if (material->paletteGeneration != m_paletteGeneration || !material->paletteTexture) {
+                    QImage paletteImage(256, 1, QImage::Format_ARGB32_Premultiplied);
+                    auto* dst = reinterpret_cast<QRgb*>(paletteImage.scanLine(0));
+                    for (int x = 0; x < 256; ++x) {
+                        QColor const c = QColor::fromRgb(m_palette.value(x, qRgb(0, 0, 0)));
+                        dst[x] = qRgba(c.red(), c.green(), c.blue(), 255);
+                    }
+                    auto* newPaletteTexture = window()->createTextureFromImage(
+                        paletteImage,
+                        QQuickWindow::CreateTextureOptions(QQuickWindow::TextureIsOpaque));
+                    if (!newPaletteTexture) {
+                        m_shaderWaterfallBlocked = true;
+                        qWarning().noquote() << "[GPUDBG] Panadapter waterfall GPU palette texture creation failed; falling back to CPU";
+                    } else {
+                        newPaletteTexture->setFiltering(QSGTexture::Linear);
+                        material->retireTexture(material->paletteTexture);
+                        material->paletteTexture = newPaletteTexture;
+                        material->paletteGeneration = m_paletteGeneration;
+                    }
+                }
+
+                auto* newIntensityTexture = window()->createTextureFromImage(
+                    m_waterfallIntensityTextureImage,
+                    QQuickWindow::CreateTextureOptions(QQuickWindow::TextureIsOpaque));
+                if (!newIntensityTexture) {
+                    m_shaderWaterfallBlocked = true;
+                    qWarning().noquote() << "[GPUDBG] Panadapter waterfall GPU intensity texture creation failed; falling back to CPU";
+                } else {
+                    newIntensityTexture->setFiltering(QSGTexture::Nearest);
+                    material->retireTexture(material->intensityTexture);
+                    material->intensityTexture = newIntensityTexture;
+                }
+
+                if (!m_shaderWaterfallBlocked && material->intensityTexture && material->paletteTexture) {
+                    wn->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+                    bool const shouldLogStats = !m_loggedWaterfallGpuUploadStats
+                        || nonZeroUploaded == 0
+                        || (m_lastWaterfallGpuStatsRow >= 0
+                            && m_wfWriteRow - m_lastWaterfallGpuStatsRow >= rows);
+                    if (shouldLogStats) {
+                        m_loggedWaterfallGpuUploadStats = true;
+                        m_lastWaterfallGpuStatsRow = m_wfWriteRow;
+                        qInfo().noquote()
+                            << "[GPUDBG] Panadapter waterfall GPU upload"
+                            << "intensity_format=ARGB32_Premultiplied"
+                            << "intensity=" << QStringLiteral("%1x%2").arg(wfW).arg(wfH)
+                            << "palette=256x1"
+                            << "rows_written=" << m_wfWriteRow
+                            << "max_level=" << maxUploadedLevel
+                            << "nonzero_pixels=" << nonZeroUploaded;
+                    }
+                    logWaterfallRenderPath(true, "shader intensity + palette textures");
+                    return root;
+                }
             }
 
-            QSGGeometry::updateTexturedRectGeometry(wn->geometry(),
-                                                    QRectF(0, specH, w, wfH),
-                                                    QRectF(0, 0, 1, 1));
-
-            auto* material = static_cast<WaterfallPaletteMaterial*>(wn->material());
-            delete material->intensityTexture;
-            material->intensityTexture = window()->createTextureFromImage(
-                m_waterfallIntensityDisplayImage,
-                QQuickWindow::CreateTextureOptions(QQuickWindow::TextureIsOpaque));
-            material->intensityTexture->setFiltering(QSGTexture::Nearest);
-
-            QImage paletteImage(256, 1, QImage::Format_RGBA8888);
-            auto* paletteLine = paletteImage.scanLine(0);
-            for (int i = 0; i < 256; ++i) {
-                QColor const c = QColor::fromRgb(m_palette.value(i, qRgb(0, 0, 0)));
-                paletteLine[i * 4 + 0] = static_cast<uchar>(c.red());
-                paletteLine[i * 4 + 1] = static_cast<uchar>(c.green());
-                paletteLine[i * 4 + 2] = static_cast<uchar>(c.blue());
-                paletteLine[i * 4 + 3] = 255;
-            }
-            delete material->paletteTexture;
-            material->paletteTexture = window()->createTextureFromImage(
-                paletteImage,
-                QQuickWindow::CreateTextureOptions(QQuickWindow::TextureHasAlphaChannel));
-            material->paletteTexture->setFiltering(QSGTexture::Linear);
-
-            wn->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
-            return root;
+            m_useShaderWaterfall = false;
         }
 #endif
+
+        QString waterfallFallbackReason;
+#ifdef DECODIUM_WATERFALL_SHADER_QSB
+        if (!m_shaderWaterfallDisabledReason.isEmpty()) {
+            waterfallFallbackReason = m_shaderWaterfallDisabledReason;
+        } else if (m_shaderWaterfallBlocked) {
+            waterfallFallbackReason = QStringLiteral("shader resource fallback");
+        } else if (waterfallGpuWaitingForRows) {
+            waterfallFallbackReason = QStringLiteral("shader warmup waiting for full waterfall history");
+        } else {
+            waterfallFallbackReason = QStringLiteral("shader unavailable/disabled; colored texture upload");
+        }
+#else
+        waterfallFallbackReason = QStringLiteral("qsb shaders not compiled");
+#endif
+        logWaterfallRenderPath(false, waterfallFallbackReason);
 
         if (auto* oldGeometry = dynamic_cast<QSGGeometryNode*>(waterfallChild)) {
             if (!dynamic_cast<QSGSimpleTextureNode*>(oldGeometry)) {
@@ -995,6 +1227,9 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                 waterfallChild = nullptr;
             }
         }
+
+        if (!m_waterfallRgbValid)
+            rebuildRgbWaterfallFromIntensity();
 
         if (m_waterfallDisplayImage.isNull() ||
             m_waterfallDisplayImage.width() != wfW ||

@@ -273,7 +273,7 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 0
-                Text { text: "Date/Time"; font.pixelSize: 9; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 115 }
+                Text { text: "Date/Time"; font.pixelSize: 9; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 128 }
                 Text { text: "Call"; font.pixelSize: 9; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 85 }
                 Text { text: "Grid"; font.pixelSize: 9; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 50 }
                 Text { text: "Band"; font.pixelSize: 9; font.bold: true; color: secondaryCyan; Layout.preferredWidth: 50 }
@@ -336,7 +336,7 @@ Rectangle {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 0
                         Text { text: index === selectedIndex ? "\u25B6" : ""; font.pixelSize: 7; color: primaryBlue; Layout.preferredWidth: 10 }
-                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 105 }
+                        Text { text: modelData.dateTime || ""; font.family: "Monospace"; font.pixelSize: 10; color: textSecondary; Layout.preferredWidth: 118 }
                         Text { text: modelData.call || ""; font.family: "Monospace"; font.pixelSize: 10; font.bold: true; color: accentGreen; Layout.preferredWidth: 85 }
                         Text { text: modelData.grid || ""; font.family: "Monospace"; font.pixelSize: 10; color: secondaryCyan; Layout.preferredWidth: 50 }
                         Text { text: modelData.band || ""; font.family: "Monospace"; font.pixelSize: 10; color: textPrimary; Layout.preferredWidth: 50 }
@@ -376,10 +376,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Call"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 100; height: 26; radius: 3
+                            width: 112; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editCallF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editCallF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; font.bold: true; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editCallF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 11; font.family: "Monospace"; font.bold: true
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#FFFFFF"; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 
@@ -387,10 +393,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Grid"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 60; height: 26; radius: 3
+                            width: 70; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editGridF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editGridF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editGridF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#FFFFFF"; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 
@@ -398,10 +410,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Band"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 50; height: 26; radius: 3
+                            width: 58; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editBandF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editBandF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editBandF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#FFFFFF"; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 
@@ -409,10 +427,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Mode"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 50; height: 26; radius: 3
+                            width: 58; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editModeF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editModeF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editModeF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#FFFFFF"; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 
@@ -420,10 +444,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Sent"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 45; height: 26; radius: 3
+                            width: 52; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editSentF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editSentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editSentF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#FFFFFF"; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 
@@ -431,10 +461,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Rcvd"; font.pixelSize: 9; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            width: 45; height: 26; radius: 3
+                            width: 52; height: 30; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                             border.color: editRcvdF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.25)
-                            TextField { id: editRcvdF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 12; font.family: "Monospace"; color: "#FFFFFF"; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editRcvdF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 11; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#FFFFFF"; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 
@@ -450,10 +486,16 @@ Rectangle {
                         spacing: 1
                         Text { text: "Comment"; font.pixelSize: 8; font.bold: true; color: secondaryCyan }
                         Rectangle {
-                            Layout.fillWidth: true; height: 22; radius: 3
+                            Layout.fillWidth: true; height: 28; radius: 3
                             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.8)
                             border.color: editCommentF.focus ? primaryBlue : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.15)
-                            TextField { id: editCommentF; anchors.fill: parent; anchors.margins: 2; font.pixelSize: 10; font.family: "Monospace"; color: textPrimary; background: Rectangle { color: "transparent" } }
+                            TextField {
+                                id: editCommentF; anchors.fill: parent; anchors.margins: 2
+                                font.pixelSize: 10; font.family: "Monospace"
+                                leftPadding: 6; rightPadding: 4; topPadding: 0; bottomPadding: 0
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: textPrimary; background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
 

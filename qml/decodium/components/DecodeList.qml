@@ -218,7 +218,7 @@ Item {
 
                 // Testo messaggio
                 Text {
-                    text: modelData.message || ""
+                    text: modelData.displayMessage || modelData.message || ""
                     font.family: "Monospace"
                     font.pixelSize: 12
                     font.bold: modelData.isCQ || modelData.isTx
@@ -227,7 +227,7 @@ Item {
                     font.strikeout: modelData.isB4 !== undefined && modelData.isB4 && bridge.showB4Strikethrough
                     opacity: modelData.isB4 !== undefined && modelData.isB4 ? 0.55 : 1.0
                     Layout.fillWidth: true
-                    elide: decodeListComponent.messageElideMode(modelData.message)
+                    elide: decodeListComponent.messageElideMode(modelData.displayMessage || modelData.message)
                 }
             }
         }

@@ -264,6 +264,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int nfa READ nfa WRITE setNfa NOTIFY nfaChanged)
     Q_PROPERTY(int nfb READ nfb WRITE setNfb NOTIFY nfbChanged)
     Q_PROPERTY(int ndepth READ ndepth WRITE setNdepth NOTIFY ndepthChanged)
+    Q_PROPERTY(bool singleDecode READ singleDecode WRITE setSingleDecode NOTIFY singleDecodeChanged)
     Q_PROPERTY(int ncontest READ ncontest WRITE setNcontest NOTIFY ncontestChanged)
     Q_PROPERTY(int specialOperationActivity READ specialOperationActivity WRITE setSpecialOperationActivity NOTIFY specialOperationActivityChanged)
 
@@ -599,6 +600,7 @@ public:
     int nfa() const; void setNfa(int);
     int nfb() const; void setNfb(int);
     int ndepth() const; void setNdepth(int);
+    bool singleDecode() const; void setSingleDecode(bool);
     int ncontest() const; void setNcontest(int);
     int specialOperationActivity() const { return m_specialOperationActivity; }
     void setSpecialOperationActivity(int activity);
@@ -1017,6 +1019,7 @@ signals:
     void fontScaleChanged();
     void nfaChanged(); void nfbChanged();
     void ndepthChanged(); void ncontestChanged();
+    void singleDecodeChanged();
     void specialOperationActivityChanged();
     void spectrumColorPaletteChanged();
     void spectrumRefLevelChanged();
@@ -1329,6 +1332,7 @@ private:
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
+    QSet<QString> m_worldMapClosedQsoCallKeys;
     bool m_worldMapCall3Loaded {false};
     QString m_mapLastClickCall;
     qint64 m_mapLastClickMs {0};
@@ -1401,6 +1405,7 @@ private:
     int         m_ftThreads {3};
     double m_fontScale {1.08};
     int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
+    bool m_singleDecode {false};
     int m_specialOperationActivity {0};
     bool m_forceLegacyTxForSpecialOp {false};
 
@@ -1807,6 +1812,15 @@ private:
     float m_lastPanFreqMin {0.f};
     float m_lastPanFreqMax {0.f};
     bool m_legacyPcmSpectrumFeed {false};
+    std::atomic_bool m_panadapterComputeBusy {false};
+    std::atomic<uint64_t> m_panadapterComputeSerial {0};
+
+    struct PanadapterFrameResult
+    {
+        QVector<float> values;
+        float minDb {0.0f};
+        float maxDb {0.0f};
+    };
 
     QStringList ctyDatSearchPaths() const;
     bool reloadDxccLookup(QString* loadedPath = nullptr);
@@ -1858,7 +1872,16 @@ private:
     void syncAudioDeviceSettingsToLegacyIni();
     void updatePeriodTicksMax();
     QVector<float> computeSpectrum() const;
-    QVector<float> computePanadapter(float& outMinDb, float& outMaxDb) const;
+    static PanadapterFrameResult computePanadapterFrame(const QVector<short>& samples,
+                                                        int nfa,
+                                                        int nfb);
+    void finishPanadapterFrame(QVector<float> values,
+                               float minDb,
+                               float maxDb,
+                               int usableSamples,
+                               float freqMinHz,
+                               float freqMaxHz,
+                               uint64_t serial);
     void initTxDevices();
     void invalidateTxAudioCache();
     void scheduleTxAudioPrecompute(int delayMs = 75);
@@ -1913,6 +1936,9 @@ private:
     void rebuildRxDecodeList();
     void replayWorldMapEntry(const QVariantMap& entry);
     void emitCurrentWorldMapQsoPath();
+    void markWorldMapQsoClosed(const QString& call, const QString& reason = QString());
+    void clearWorldMapClosedQso(const QString& call);
+    bool worldMapQsoPathSuppressed(const QString& call) const;
     void rememberWorldMapGrid(const QString& call, const QString& grid);
     QString lookupWorldMapGrid(const QString& call);
     QString approximateWorldMapGridForCall(const QString& call);
