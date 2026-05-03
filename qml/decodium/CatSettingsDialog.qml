@@ -10,13 +10,13 @@ Dialog {
     width: 440
     height: 360
 
-    // Colors injected from parent (Main.qml properties)
-    property color bgColor:      "#111827"
-    property color bgLight:      "#1E2D42"
-    property color textColor:    "#E8F4FD"
-    property color textSec:      "#89B4D0"
-    property color accent:       "#4A90E2"
-    property color accentGreen:  "#00FF88"
+    // Colors injected from parent (Main.qml properties), with theme-aware fallback
+    property color bgColor:      (bridge && bridge.themeManager) ? bridge.themeManager.bgMedium      : "#111827"
+    property color bgLight:      (bridge && bridge.themeManager) ? bridge.themeManager.bgLight       : "#1E2D42"
+    property color textColor:    (bridge && bridge.themeManager) ? bridge.themeManager.textPrimary   : "#E8F4FD"
+    property color textSec:      (bridge && bridge.themeManager) ? bridge.themeManager.textSecondary : "#89B4D0"
+    property color accent:       (bridge && bridge.themeManager) ? bridge.themeManager.primaryColor  : "#4A90E2"
+    property color accentGreen:  (bridge && bridge.themeManager) ? bridge.themeManager.accentColor   : "#00FF88"
 
     background: Rectangle {
         color: bgColor
@@ -150,14 +150,14 @@ Dialog {
                                     elide: Text.ElideRight
                                 }
                                 background: Rectangle {
-                                    color: hovered || parent.highlighted ? "#1E2D42" : "#111827"
+                                    color: hovered || parent.highlighted ? bgLight : bgColor
                                 }
                                 onClicked: rigCombo.chooseRig(modelData)
                             }
                             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
                         }
                     }
-                    background: Rectangle { color: "#111827"; border.color: accent; radius: 4 }
+                    background: Rectangle { color: bgColor; border.color: accent; radius: 4 }
                 }
             }
         }
@@ -187,7 +187,7 @@ Dialog {
                 delegate: ItemDelegate {
                     width: portCombo.width
                     contentItem: Text { text: modelData; color: textColor; font.pixelSize: 12 }
-                    background: Rectangle { color: hovered ? "#1E2D42" : "#111827" }
+                    background: Rectangle { color: hovered ? bgLight : bgColor }
                 }
                 popup: Popup {
                     width: portCombo.width
@@ -197,7 +197,7 @@ Dialog {
                         model: portCombo.delegateModel
                         ScrollBar.vertical: ScrollBar {}
                     }
-                    background: Rectangle { color: "#111827"; border.color: accent; radius: 4 }
+                    background: Rectangle { color: bgColor; border.color: accent; radius: 4 }
                 }
                 Button {
                     anchors.right: parent.right
@@ -235,7 +235,7 @@ Dialog {
                 delegate: ItemDelegate {
                     width: baudCombo.width
                     contentItem: Text { text: modelData; color: textColor; font.pixelSize: 12 }
-                    background: Rectangle { color: hovered ? "#1E2D42" : "#111827" }
+                    background: Rectangle { color: hovered ? bgLight : bgColor }
                 }
             }
         }
@@ -262,7 +262,7 @@ Dialog {
                 delegate: ItemDelegate {
                     width: pttCombo.width
                     contentItem: Text { text: modelData; color: textColor; font.pixelSize: 12 }
-                    background: Rectangle { color: hovered ? "#1E2D42" : "#111827" }
+                    background: Rectangle { color: hovered ? bgLight : bgColor }
                 }
             }
         }

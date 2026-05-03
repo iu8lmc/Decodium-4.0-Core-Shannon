@@ -1233,10 +1233,11 @@ ApplicationWindow {
     readonly property int snapThreshold: 80
 
     Material.theme: bridge.themeManager.isLightTheme ? Material.Light : Material.Dark
-    Material.accent: secondaryCyan
-    Material.primary: primaryBlue
+    Material.accent: bridge.themeManager.primaryColor
+    Material.primary: bridge.themeManager.secondaryColor
     Material.foreground: bridge.themeManager.textPrimary
     Material.background: bridge.themeManager.bgDeep
+    color: bridge.themeManager.bgDeep
 
     // Font scale from settings (0.7 - 1.5)
     property double fs: bridge.fontScale || 1.0

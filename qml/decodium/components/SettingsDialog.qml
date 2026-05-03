@@ -2433,7 +2433,7 @@ Dialog {
                             implicitHeight: controlHeight
                             model: bridge.themeManager.availableThemes
                             currentIndex: Math.max(0, model.indexOf(bridge.themeManager.currentTheme))
-                            onActivated: bridge.themeManager.currentTheme = model[currentIndex]
+                            onActivated: bridge.themeManager.applyThemeByName(currentText)
                             Connections {
                                 target: bridge.themeManager
                                 function onCurrentThemeChanged() {
