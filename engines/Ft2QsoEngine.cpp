@@ -230,12 +230,13 @@ void Ft2QsoEngine::pruneStaleDedup() {
 // Caller queue
 // ==========================================================================
 
-void Ft2QsoEngine::enqueueCaller(DecodeRow const& row) {
+void Ft2QsoEngine::enqueueCaller(DecodeRow const& row, bool directReply) {
     if (row.fromCall.isEmpty()) return;
     if (inCooldown(row.fromCall)) return;
     if (row.fromCall == m_cfg.myBaseCall) return;
 
     // Replace any existing entry for the same call (refresh SNR / freq).
+    // A direct reply upgrades a previously-CQ entry but never downgrades it.
     for (auto& e : m_callerQueue) {
         if (e.call == row.fromCall) {
             e.snr     = row.snr;
@@ -243,6 +244,7 @@ void Ft2QsoEngine::enqueueCaller(DecodeRow const& row) {
             e.audioHz = row.audioHz;
             if (!row.grid.isEmpty()) e.grid = row.grid;
             e.enqueuedAt = clockNow();
+            if (directReply) e.directReply = true;
             emit callerQueueChanged();
             return;
         }
@@ -253,17 +255,18 @@ void Ft2QsoEngine::enqueueCaller(DecodeRow const& row) {
     }
 
     CallerEntry entry;
-    entry.call       = row.fromCall;
-    entry.grid       = row.grid;
-    entry.snr        = row.snr;
-    entry.dt         = row.dt;
-    entry.audioHz    = row.audioHz;
-    entry.enqueuedAt = clockNow();
+    entry.call        = row.fromCall;
+    entry.grid        = row.grid;
+    entry.snr         = row.snr;
+    entry.dt          = row.dt;
+    entry.audioHz     = row.audioHz;
+    entry.enqueuedAt  = clockNow();
+    entry.directReply = directReply;
     m_callerQueue.push_back(entry);
     emit callerQueueChanged();
 
-    emit engineDiagnostic(QStringLiteral("[Ft2Engine] queue+ %1 SNR=%2 (size=%3)")
-                          .arg(entry.call).arg(entry.snr).arg(m_callerQueue.size()));
+    emit engineDiagnostic(QStringLiteral("[Ft2Engine] queue+ %1 SNR=%2 direct=%3 (size=%4)")
+                          .arg(entry.call).arg(entry.snr).arg(directReply ? 1 : 0).arg(m_callerQueue.size()));
 }
 
 std::optional<CallerEntry> Ft2QsoEngine::popBestCaller() {
@@ -593,7 +596,14 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         // ----------------------------------------------------------------
         else if constexpr (std::is_same_v<T, state::ReplyingTx1>) {
             if (!row.directedToMe || row.fromCall != s.partnerCall) {
-                if (row.isCq) enqueueCaller(row);
+                // Other directed callers ARE candidates for the next QSO —
+                // queue them as direct replies so they outrank generic CQs.
+                if (row.directedToMe && !row.fromCall.isEmpty()
+                    && row.fromCall != s.partnerCall) {
+                    enqueueCaller(row, /*directReply=*/true);
+                } else if (row.isCq) {
+                    enqueueCaller(row);
+                }
                 return;
             }
             if (!row.report.isEmpty()) {
@@ -613,7 +623,12 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         // ----------------------------------------------------------------
         else if constexpr (std::is_same_v<T, state::AwaitingReport>) {
             if (!row.directedToMe || row.fromCall != s.partnerCall) {
-                if (row.isCq) enqueueCaller(row);
+                if (row.directedToMe && !row.fromCall.isEmpty()
+                    && row.fromCall != s.partnerCall) {
+                    enqueueCaller(row, /*directReply=*/true);
+                } else if (row.isCq) {
+                    enqueueCaller(row);
+                }
                 return;
             }
             if (row.hasRogerPrefix && !row.report.isEmpty()) {
@@ -643,7 +658,12 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         // ----------------------------------------------------------------
         else if constexpr (std::is_same_v<T, state::AwaitingRRR>) {
             if (!row.directedToMe || row.fromCall != s.partnerCall) {
-                if (row.isCq) enqueueCaller(row);
+                if (row.directedToMe && !row.fromCall.isEmpty()
+                    && row.fromCall != s.partnerCall) {
+                    enqueueCaller(row, /*directReply=*/true);
+                } else if (row.isCq) {
+                    enqueueCaller(row);
+                }
                 return;
             }
             QString u = row.report.toUpper();
@@ -668,7 +688,12 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
             // Closing on any partner reply — never resend RR73 (caused 1.0.72
             // regression "ripete troppe volte il 73").
             if (!row.directedToMe || row.fromCall != s.partnerCall) {
-                if (row.isCq) enqueueCaller(row);
+                if (row.directedToMe && !row.fromCall.isEmpty()
+                    && row.fromCall != s.partnerCall) {
+                    enqueueCaller(row, /*directReply=*/true);
+                } else if (row.isCq) {
+                    enqueueCaller(row);
+                }
                 return;
             }
             state::Closing c;
@@ -682,7 +707,12 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         // Closing: ignore — the tick() routine will finalize.
         // ----------------------------------------------------------------
         else if constexpr (std::is_same_v<T, state::Closing>) {
-            if (row.isCq) enqueueCaller(row);
+            if (row.directedToMe && !row.fromCall.isEmpty()
+                && row.fromCall != s.partnerCall) {
+                enqueueCaller(row, /*directReply=*/true);
+            } else if (row.isCq) {
+                enqueueCaller(row);
+            }
         }
     }, m_state);
 
@@ -744,9 +774,17 @@ QString Ft2QsoEngine::buildTxMessage(int txNum,
 
 bool Ft2QsoEngine::watchdogExpired() const {
     TimePoint entered{};
+    Duration  budget = kWatchdogPerStateMax;
     std::visit([&](auto const& s) {
         using T = std::decay_t<decltype(s)>;
-        if constexpr (std::is_same_v<T, state::ReplyingTx1>     ) entered = s.enteredAt;
+        if constexpr (std::is_same_v<T, state::ReplyingTx1>     ) {
+            entered = s.enteredAt;
+            // ReplyingTx1 is the slowest state: we are waiting on a remote
+            // operator to even acknowledge our call, which can legitimately
+            // take 15+ slots in poor propagation. Use a longer budget to
+            // avoid aborting QSOs ~1s before the partner finally answers.
+            budget  = kWatchdogReplyingTx1;
+        }
         else if constexpr (std::is_same_v<T, state::AwaitingReport> ) entered = s.enteredAt;
         else if constexpr (std::is_same_v<T, state::AwaitingRRR>    ) entered = s.enteredAt;
         else if constexpr (std::is_same_v<T, state::AwaitingSignoff>) entered = s.enteredAt;
@@ -754,7 +792,7 @@ bool Ft2QsoEngine::watchdogExpired() const {
     }, m_state);
 
     if (entered == TimePoint{}) return false;
-    return (clockNow() - entered) > kWatchdogPerStateMax;
+    return (clockNow() - entered) > budget;
 }
 
 } // namespace decodium::ft2

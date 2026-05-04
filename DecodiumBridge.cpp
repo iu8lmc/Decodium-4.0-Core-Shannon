@@ -6344,6 +6344,15 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     m_ft2Engine = std::make_unique<decodium::ft2::Ft2QsoEngine>(ecfg, this);
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txMessageRequested,
             this, [this](int txNum, QString msg) {
+                // When the engine drops back to TX6 (CQ) after a closing TX4/TX5,
+                // the legacy backend still holds stale retry counters (m_nTx73,
+                // m_txRetryCount) that would otherwise keep retransmitting the
+                // previous QSO's RR73. Reset them so checkAndStartPeriodicTx
+                // does not re-fire the closing message.
+                int const prevTx = m_currentTx;
+                if (txNum == 6 && (prevTx == 4 || prevTx == 5)) {
+                    resetManualTxRearmState(QStringLiteral("Ft2Engine closing -> CQ"));
+                }
                 setTxMessage(txNum, msg);
                 if (m_currentTx != txNum) setCurrentTx(txNum);
             });
