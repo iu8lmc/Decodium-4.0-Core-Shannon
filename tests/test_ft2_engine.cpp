@@ -79,6 +79,24 @@ private slots:
     }
 
     // ----------------------------------------------------------------
+    // Reversed-order reply: some stations transmit "<FROM> <TO> <PAYLOAD>"
+    // instead of canonical "<TO> <FROM> <PAYLOAD>". Decodium 3.0 accepts
+    // both; the engine must too. See Ft2QsoEngine.cpp enrichDecodeMeta.
+    // ----------------------------------------------------------------
+    void cqEngageOnReversedAnswer() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        eng.enableTx(true);
+        QVERIFY(std::holds_alternative<state::CallingCq>(eng.state()));
+
+        // Reversed form: our call IK8TWX is in slot 1, partner K1ABC in slot 0.
+        eng.feedParsed({ makeRow("K1ABC", "K1ABC IK8TWX FN42") });
+
+        QVERIFY(std::holds_alternative<state::AwaitingReport>(eng.state()));
+        QCOMPARE(eng.dxCall(), QStringLiteral("K1ABC"));
+        QCOMPARE(eng.currentTx(), 2);
+    }
+
+    // ----------------------------------------------------------------
     // AwaitingReport -> Closing on R+report decode (CQer side: TX4 RR73 is
     // the final TX of the QSO; we do not linger in AwaitingSignoff).
     // ----------------------------------------------------------------

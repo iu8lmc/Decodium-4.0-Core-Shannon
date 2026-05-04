@@ -127,7 +127,7 @@ private:
     // ------------------------------------------------------------------
     // Caller queue management
     // ------------------------------------------------------------------
-    void enqueueCaller(DecodeRow const& row);
+    void enqueueCaller(DecodeRow const& row, bool directReply = false);
     std::optional<CallerEntry> popBestCaller();
     void purgeCaller(QString const& call);
 

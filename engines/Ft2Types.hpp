@@ -114,9 +114,16 @@ struct CallerEntry {
     double     dt  {0.0};
     int        audioHz {0};
     TimePoint  enqueuedAt {};
+    // True when this entry was learned from a decode directed AT us (the
+    // station explicitly called myCall). Such "direct callers" outrank
+    // generic CQ entries: they have already targeted us once, so they're
+    // the most likely to convert if we engage them next.
+    bool       directReply {false};
 
-    // Used by stable sort (best SNR first, then FIFO on tie).
+    // Used by stable sort: directReply > !directReply, then best SNR first,
+    // then FIFO on tie.
     bool betterThan(CallerEntry const& other) const noexcept {
+        if (directReply != other.directReply) return directReply;
         if (snr != other.snr) return snr > other.snr;
         return enqueuedAt < other.enqueuedAt;
     }
@@ -134,6 +141,10 @@ using CooldownMap = std::unordered_map<QString, TimePoint>;
 constexpr Duration kCooldown73    = std::chrono::seconds(30);
 constexpr Duration kFreshnessWindow = std::chrono::seconds(20);
 constexpr Duration kWatchdogPerStateMax = std::chrono::seconds(60); // ~16 slots
+// ReplyingTx1 gets a longer budget: in 1.0.72 live ops we observed the
+// watchdog firing 1s before legitimate partner replies (e.g. F1PBZ at 61s),
+// because slow operators can take 15+ slots to acknowledge a call.
+constexpr Duration kWatchdogReplyingTx1 = std::chrono::seconds(120);
 constexpr Duration kEngineTickInterval  = std::chrono::milliseconds(100);
 // Hold in Closing for at least one FT2 slot so TX4/TX5 actually gets
 // transmitted once before we switch the legacy backend back to TX6 (CQ).
