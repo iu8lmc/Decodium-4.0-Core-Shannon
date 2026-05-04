@@ -47,6 +47,14 @@ QString extractPortNameFromReason(QString const& reason)
 // rileva e la sostituisce con un testo piu' comprensibile.
 QString sanitizeHamlibFailure(QString const& reason)
 {
+    if (reason.contains(QStringLiteral("Ham Radio Deluxe retries exhausted sending command \"get context\""),
+                        Qt::CaseInsensitive)) {
+        return QObject::tr(
+            "Ham Radio Deluxe accetta la connessione TCP, ma non risponde al protocollo HRD. "
+            "Verifica che HRD Rig Control sia avviato, che la radio sia gia' connessa in HRD "
+            "e che il server TCP/Remote sia abilitato sulla porta 7809.");
+    }
+
     // Prima cerchiamo pattern di porta seriale occupata (il dump hamlib
     // tipicamente contiene tutto il trace di debug seguito dall'errore
     // reale "serial port \\.\COMx is already open" / "Access denied").
@@ -185,6 +193,12 @@ QString normalizeNetworkHost(QString host)
         || compact == QStringLiteral("0.0.0.0")) {
         return QStringLiteral("127.0.0.1");
     }
+    static QRegularExpression const embeddedIpv4(
+        QStringLiteral("(\\d{1,3}(?:\\.\\d{1,3}){3})"));
+    QRegularExpressionMatch const ipv4Match = embeddedIpv4.match(compact);
+    if (ipv4Match.hasMatch() && ipv4Match.captured(1) != compact) {
+        return normalizeNetworkHost(ipv4Match.captured(1));
+    }
     return host;
 }
 
@@ -233,6 +247,13 @@ QString normalizeNetworkEndpoint(QString endpoint, QString const& rigName,
     }
 
     QStringList parts = value.split(QLatin1Char(':'), Qt::KeepEmptyParts);
+    if (parts.size() == 1 && defaultPort > 0) {
+        QString const host = normalizeNetworkHost(value);
+        if (!host.isEmpty() && !parseNetworkPortText(host)) {
+            return finish(join(host, defaultPort));
+        }
+    }
+
     if (parts.size() == 2) {
         QString const host = parts.at(0).trimmed();
         QString const rhs = parts.at(1).trimmed();

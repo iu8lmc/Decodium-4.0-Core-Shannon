@@ -130,22 +130,30 @@ int HRDTransceiver::do_start ()
     {
       hrd_ = new QTcpSocket {this}; // QObject takes ownership
     }
-  hrd_->connectToHost (std::get<0> (server_details), std::get<1> (server_details));
-  if (!hrd_->waitForConnected (3000))
+  auto const host = std::get<0> (server_details);
+  auto const port = std::get<1> (server_details);
+  auto const host_text = host.toString ();
+  CAT_INFO ("HRD TCP connecting to" << host_text << port);
+  hrd_->connectToHost (host, port);
+  if (!hrd_->waitForConnected ())
     {
       CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
       throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
     }
+  CAT_INFO ("HRD TCP connected to" << host_text << port);
 
   if (none == protocol_)
     {
       try
         {
           protocol_ = v5;	// try this first (works for v6 too)
+          CAT_INFO ("HRD protocol probe v5 starting");
           send_command ("get context", false, false);
+          CAT_INFO ("HRD protocol probe v5 accepted");
         }
-      catch (error const&)
+      catch (error const& e)
         {
+          CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
           protocol_ = none;
         }
     }
@@ -155,14 +163,25 @@ int HRDTransceiver::do_start ()
       hrd_->close ();
 
       protocol_ = v4;		// try again with older protocol
-      hrd_->connectToHost (std::get<0> (server_details), std::get<1> (server_details));
-      if (!hrd_->waitForConnected (3000))
+      CAT_INFO ("HRD TCP reconnecting for protocol v4 to" << host_text << port);
+      hrd_->connectToHost (host, port);
+      if (!hrd_->waitForConnected ())
         {
           CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
           throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
         }
 
-      send_command ("get context", false, false);
+      try
+        {
+          CAT_INFO ("HRD protocol probe v4 starting");
+          send_command ("get context", false, false);
+          CAT_INFO ("HRD protocol probe v4 accepted");
+        }
+      catch (error const& e)
+        {
+          CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
+          throw;
+        }
     }
 
   QFile HRD_info_file {QDir {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)}.absoluteFilePath ("HRD Interface Information.txt")};
@@ -1131,12 +1150,15 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
 QByteArray HRDTransceiver::read_reply (QString const& cmd)
 {
   // waitForReadReady appears to be occasionally unreliable on Windows
-  // timing out when data is waiting so retry a few times
-  unsigned retries {10};
+  // timing out when data is waiting so retry a few times. Keep the same
+  // long Windows tolerance used by Decodium3/WSJT-X: some HRD instances
+  // accept the TCP socket immediately but answer the first protocol probe
+  // slowly while Rig Control is still settling.
+  unsigned retries {30};
   bool replied {false};
   while (!replied && retries--)
     {
-      replied = hrd_->waitForReadyRead (500);
+      replied = hrd_->waitForReadyRead ();
       if (!replied && hrd_->error () != hrd_->SocketTimeoutError)
         {
           CAT_ERROR (cmd << "failed to reply" << hrd_->errorString ());

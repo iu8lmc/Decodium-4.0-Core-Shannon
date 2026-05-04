@@ -15661,6 +15661,11 @@ static QString displayMessageWithCallsignsActorFirst(const QString& message,
 
     QString const first = normalizeCallToken(words.at(0)).toUpper();
     QString const second = normalizeCallToken(words.at(1)).toUpper();
+    if (isGridTokenStrict(words.constLast())) {
+        // The locator belongs to the caller in a standard "MYCALL DX GRID" reply.
+        // Swapping the visible calls here makes the grid look attached to MYCALL.
+        return trimmed;
+    }
     if (first == QStringLiteral("CQ")
         || first == QStringLiteral("CQDX")
         || first == QStringLiteral("QRZ")
@@ -16392,7 +16397,7 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     if (fromCall.isEmpty())
         fromCall = extractDecodedCallsign(msg, isCQ);
 
-    bool isB4 = !fromCall.isEmpty() && m_workedCalls.contains(fromCall);
+    bool const isWorkedEver = !fromCall.isEmpty() && m_workedCalls.contains(fromCall);
     bool isLotw = m_lotwEnabled && !fromCall.isEmpty() && m_lotwUsers.contains(fromCall);
 
     // DXCC lookup: usa il callsign di DESTRA nel messaggio (il secondo call)
@@ -16421,6 +16426,13 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
         }
     }
     bool const selfEntry = localTxEntry || sameBaseCall(fromCall) || sameBaseCall(firstCall);
+    QString const curBand = freqHzToBandToken(m_frequency);
+    bool isB4 = false;
+    if (!selfEntry && !fromCall.isEmpty()) {
+        isB4 = !curBand.isEmpty()
+            ? m_worked.callByBand.contains(curBand + QLatin1Char('|') + fromCall)
+            : isWorkedEver;
+    }
 
     QString dxCountry;
     QString dxContinent;
@@ -16437,7 +16449,6 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     bool dxIsNewItuZone      = false;
     bool dxIsNewItuZoneBand  = false;
     bool dxIsNewCallBand     = false;
-    QString const curBand = freqHzToBandToken(m_frequency);
     if (m_dxccLookup && m_dxccLookup->isLoaded() && !rightCall.isEmpty()) {
         DxccEntity ent = m_dxccLookup->lookup(rightCall);
         if (ent.isValid()) {
@@ -16492,6 +16503,7 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     entry["dxCqZone"]  = dxCqZone;
     entry["dxItuZone"] = dxItuZone;
     entry["dxIsWorked"] = isB4;
+    entry["dxIsWorkedEver"] = isWorkedEver && !selfEntry;
     entry["dxIsNewBand"] = entry.value("dxIsNewBand", false);
     entry["dxIsNewCountry"] = dxIsNewCountry;
     entry["dxIsNewDxcc"]          = dxIsNewDxcc;
@@ -16504,7 +16516,7 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     entry["dxIsNewItuZoneBand"]   = dxIsNewItuZoneBand;
     entry["dxIsNewGrid"]          = dxIsNewGrid;
     entry["dxIsNewGridBand"]      = dxIsNewGridBand;
-    entry["dxIsNewCall"]          = !isB4 && !selfEntry && !rightCall.isEmpty();
+    entry["dxIsNewCall"]          = !isWorkedEver && !selfEntry && !rightCall.isEmpty();
     entry["dxIsNewCallBand"]      = dxIsNewCallBand;
     entry["dxIsMostWanted"] = entry.value("dxIsMostWanted", false);
     entry["dxBearing"] = bearing;
