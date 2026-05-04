@@ -567,6 +567,17 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
         }
     }
 
+    m_pendingWaterfallRows.append(WaterfallFrame {
+        m_bins,
+        m_minDb,
+        m_maxDb,
+        m_dataFreqMin,
+        m_dataFreqMax
+    });
+    static constexpr int kMaxPendingWaterfallRows = 8;
+    while (m_pendingWaterfallRows.size() > kMaxPendingWaterfallRows)
+        m_pendingWaterfallRows.removeFirst();
+
     m_spectrumDirty = true;
     lock.unlock();
     update();
@@ -598,6 +609,7 @@ void PanadapterItem::resetWaterfall()
     if (!m_waterfallIntensityTextureImage.isNull())
         m_waterfallIntensityTextureImage.fill(QColor(0, 0, 0, 255));
     m_wfWriteRow = 0;
+    m_pendingWaterfallRows.clear();
     m_waterfallRgbValid = true;
     m_loggedWaterfallGpuUploadStats = false;
     m_lastWaterfallGpuStatsRow = -1;
@@ -923,24 +935,28 @@ void PanadapterItem::setDecodeLabels(const QVariantList& labels)
 }
 
 // ─── Add waterfall row ────────────────────────────────────────────────────────
-void PanadapterItem::addWaterfallRow()
+void PanadapterItem::addWaterfallRow(const QVector<float>& bins,
+                                     float minDb,
+                                     float maxDb,
+                                     float dataFreqMin,
+                                     float dataFreqMax)
 {
-    if (m_waterfallImage.isNull() || m_bins.isEmpty()) return;
+    if (m_waterfallImage.isNull() || bins.isEmpty()) return;
     int w  = m_waterfallImage.width();
     int h  = m_waterfallImage.height();
     if (w <= 0 || h <= 0) return;
 
-    int nBins  = m_bins.size();
-    float range = m_maxDb - m_minDb;
+    int nBins  = bins.size();
+    float range = maxDb - minDb;
     if (range < 1.f) range = 1.f;
 
     // Ring buffer: scrivi nella riga corrente
     // Usa lo stesso sistema di coordinate del renderSpectrum per allineamento perfetto
-    float const baseStart = (m_bandwidth > 0) ? static_cast<float>(m_startFreq) : m_dataFreqMin;
-    float const baseEnd = (m_bandwidth > 0) ? static_cast<float>(m_startFreq + m_bandwidth) : m_dataFreqMax;
+    float const baseStart = (m_bandwidth > 0) ? static_cast<float>(m_startFreq) : dataFreqMin;
+    float const baseEnd = (m_bandwidth > 0) ? static_cast<float>(m_startFreq + m_bandwidth) : dataFreqMax;
     float viewportRange = baseEnd - baseStart;
     if (viewportRange <= 0.f) viewportRange = 1.f;
-    float dataRange = m_dataFreqMax - m_dataFreqMin;
+    float dataRange = dataFreqMax - dataFreqMin;
     if (dataRange <= 0.f) dataRange = 1.f;
     float viewRange  = viewportRange / m_zoomFactor;
     float viewCenter = baseStart + viewportRange * 0.5f + m_panHz;
@@ -964,16 +980,16 @@ void PanadapterItem::addWaterfallRow()
         : nullptr;
     for (int x = 0; x < w; ++x) {
         float pixFreq = viewStart + (float)x * viewRange / w;
-        if (pixFreq < m_dataFreqMin || pixFreq > m_dataFreqMax) {
+        if (pixFreq < dataFreqMin || pixFreq > dataFreqMax) {
             if (line)
                 line[x] = wfBg;
             if (intensityLine)
                 intensityLine[x] = 0;
             continue;
         }
-        int bin = (int)((pixFreq - m_dataFreqMin) / dataRange * nBins);
+        int bin = (int)((pixFreq - dataFreqMin) / dataRange * nBins);
         bin = qBound(0, bin, nBins - 1);
-        float raw = (m_bins[bin] - m_minDb) / range;
+        float raw = (bins[bin] - minDb) / range;
         // Sottrai la soglia nero e riscala
         raw = (raw - blackThresh) / (1.0f - blackThresh);
         if (raw <= 0.f) {
@@ -1068,7 +1084,19 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     bool const shaderSupported = shaderWaterfallSupported();
     m_useShaderWaterfall = shaderSupported && m_wfWriteRow > 0;
     if (m_spectrumDirty && !m_bins.isEmpty()) {
-        addWaterfallRow();
+        if (m_pendingWaterfallRows.isEmpty()) {
+            addWaterfallRow(m_bins, m_minDb, m_maxDb, m_dataFreqMin, m_dataFreqMax);
+        } else {
+            QVector<WaterfallFrame> pendingRows;
+            pendingRows.swap(m_pendingWaterfallRows);
+            for (WaterfallFrame const& row : std::as_const(pendingRows)) {
+                addWaterfallRow(row.bins,
+                                row.minDb,
+                                row.maxDb,
+                                row.dataFreqMin,
+                                row.dataFreqMax);
+            }
+        }
         renderSpectrum();
         m_spectrumDirty = false;
     }

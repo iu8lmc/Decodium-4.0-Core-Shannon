@@ -207,6 +207,21 @@ private slots:
         QVERIFY(msg.contains("IK8TWX"));
     }
 
+    void doubleClickHonorsRequestedTx() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        QSignalSpy txSpy(&eng, &Ft2QsoEngine::txMessageRequested);
+
+        eng.doubleClick("K1ABC", "FN42", 1500, -8, 1);
+
+        QCOMPARE(eng.currentTx(), 1);
+        QVERIFY(eng.isTxEnabled());
+        QVERIFY(std::holds_alternative<state::ReplyingTx1>(eng.state()));
+        QVERIFY(txSpy.count() >= 1);
+        auto args = txSpy.takeFirst();
+        QCOMPARE(args.value(0).toInt(), 1);
+        QCOMPARE(args.value(1).toString(), QStringLiteral("K1ABC IK8TWX JN70"));
+    }
+
     // ----------------------------------------------------------------
     // Watchdog: state stuck beyond budget falls back to Idle/CallingCq.
     // ----------------------------------------------------------------

@@ -47,6 +47,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTextBlock>
+#include <QTextDocument>
 #include <QProgressBar>
 #include <QLineEdit>
 #include <QFontDatabase>
@@ -4544,6 +4545,31 @@ double MainWindow::legacySignalLevel() const
   return qMax(0.0, static_cast<double>(m_px));
 }
 
+static QStringList recentDecodedTextLines(QTextDocument const* document, int maxLines)
+{
+  if (!document || maxLines <= 0) {
+    return {};
+  }
+
+  QStringList reversed;
+  reversed.reserve(maxLines);
+  for (QTextBlock block = document->lastBlock();
+       block.isValid() && reversed.size() < maxLines;
+       block = block.previous()) {
+    QString const text = block.text();
+    if (!text.isEmpty()) {
+      reversed.append(text);
+    }
+  }
+
+  QStringList lines;
+  lines.reserve(reversed.size());
+  for (auto it = reversed.crbegin(); it != reversed.crend(); ++it) {
+    lines.append(*it);
+  }
+  return lines;
+}
+
 int MainWindow::legacyBandActivityRevision() const
 {
   return (ui && ui->decodedTextBrowser && ui->decodedTextBrowser->document ())
@@ -4557,8 +4583,7 @@ QStringList MainWindow::legacyBandActivityLines() const
     return {};
   }
 
-  return ui->decodedTextBrowser->toPlainText ()
-      .split (QRegularExpression {"[\r\n]+"}, SkipEmptyParts);
+  return recentDecodedTextLines(ui->decodedTextBrowser->document(), 1800);
 }
 
 int MainWindow::legacyRxFrequencyRevision() const
@@ -4574,8 +4599,7 @@ QStringList MainWindow::legacyRxFrequencyLines() const
     return {};
   }
 
-  return ui->decodedTextBrowser2->toPlainText ()
-      .split (QRegularExpression {"[\r\n]+"}, SkipEmptyParts);
+  return recentDecodedTextLines(ui->decodedTextBrowser2->document(), 1800);
 }
 
 QString MainWindow::legacyTxMessage(int index) const
@@ -7886,6 +7910,11 @@ void MainWindow::showSoundInError(const QString& errorMsg)
 {
   debugToFile (QString {"audioInErr   %1"}.arg (errorMsg));
   if (m_splash && m_splash->isVisible ()) m_splash->hide ();
+  if (auto * app = QCoreApplication::instance ();
+      app && app->property ("decodiumEmbeddedLegacyShell").toBool ()) {
+    Q_EMIT legacyWarningRaised (tr ("Error in Sound Input"), errorMsg, QString {});
+    return;
+  }
   MessageBox::critical_message (this, tr ("Error in Sound Input"), errorMsg);
 }
 
@@ -7893,6 +7922,11 @@ void MainWindow::showSoundOutError(const QString& errorMsg)
 {
   debugToFile (QString {"audioOutErr  %1"}.arg (errorMsg));
   if (m_splash && m_splash->isVisible ()) m_splash->hide ();
+  if (auto * app = QCoreApplication::instance ();
+      app && app->property ("decodiumEmbeddedLegacyShell").toBool ()) {
+    Q_EMIT legacyWarningRaised (tr ("Error in Sound Output"), errorMsg, QString {});
+    return;
+  }
   MessageBox::critical_message (this, tr ("Error in Sound Output"), errorMsg);
 }
 

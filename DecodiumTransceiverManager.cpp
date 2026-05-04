@@ -142,6 +142,130 @@ QString defaultNetworkEndpointForRig(QString const& rigName)
     return QString();
 }
 
+bool parseNetworkPortText(QString const& text, quint16* out = nullptr)
+{
+    bool ok = false;
+    uint const value = text.trimmed().toUInt(&ok);
+    if (!ok || value == 0 || value > 65535) {
+        return false;
+    }
+    if (out) {
+        *out = static_cast<quint16>(value);
+    }
+    return true;
+}
+
+QString endpointHostPart(QString const& endpoint)
+{
+    QString const value = endpoint.trimmed();
+    int const colon = value.lastIndexOf(QLatin1Char(':'));
+    if (colon <= 0) {
+        return QString();
+    }
+    return value.left(colon).trimmed();
+}
+
+quint16 endpointPortPart(QString const& endpoint)
+{
+    QString const value = endpoint.trimmed();
+    int const colon = value.lastIndexOf(QLatin1Char(':'));
+    if (colon < 0) {
+        return 0;
+    }
+    quint16 port = 0;
+    return parseNetworkPortText(value.mid(colon + 1), &port) ? port : 0;
+}
+
+QString normalizeNetworkHost(QString host)
+{
+    host = host.trimmed();
+    QString const compact = host;
+    if (compact == QStringLiteral("127.0.01")
+        || compact == QStringLiteral("127.0.1")
+        || compact == QStringLiteral("0.0.0.0")) {
+        return QStringLiteral("127.0.0.1");
+    }
+    return host;
+}
+
+QString normalizeNetworkEndpoint(QString endpoint, QString const& rigName,
+                                 bool* changed = nullptr)
+{
+    QString const original = endpoint.trimmed();
+    QString value = original;
+    if (changed) {
+        *changed = false;
+    }
+
+    if (value.startsWith(QStringLiteral("tcp://"), Qt::CaseInsensitive)) {
+        value.remove(0, 6);
+    }
+
+    QString const defaultEndpoint = defaultNetworkEndpointForRig(rigName);
+    QString defaultHost = endpointHostPart(defaultEndpoint);
+    quint16 const defaultPort = endpointPortPart(defaultEndpoint);
+    auto finish = [&](QString normalized) {
+        normalized = normalized.trimmed();
+        if (changed) {
+            *changed = normalized != original;
+        }
+        return normalized;
+    };
+    auto join = [](QString host, quint16 port) {
+        host = normalizeNetworkHost(host);
+        return host.isEmpty()
+            ? QStringLiteral(":%1").arg(port)
+            : QStringLiteral("%1:%2").arg(host).arg(port);
+    };
+
+    if (value.isEmpty()) {
+        return finish(defaultEndpoint);
+    }
+
+    // Keep bracketed IPv6 untouched; NetworkServerLookup already understands it.
+    if (value.startsWith(QLatin1Char('['))) {
+        return finish(value);
+    }
+
+    quint16 portOnly = 0;
+    if (parseNetworkPortText(value, &portOnly) && !defaultHost.isEmpty()) {
+        return finish(join(defaultHost, portOnly));
+    }
+
+    QStringList parts = value.split(QLatin1Char(':'), Qt::KeepEmptyParts);
+    if (parts.size() == 2) {
+        QString const host = parts.at(0).trimmed();
+        QString const rhs = parts.at(1).trimmed();
+        quint16 port = 0;
+        if (parseNetworkPortText(rhs, &port)) {
+            return finish(join(host, port));
+        }
+        // Common broken state from pasted/merged fields: "localhost:127.0.0.1".
+        if (defaultPort > 0 && !rhs.isEmpty()) {
+            return finish(join(rhs, defaultPort));
+        }
+        return finish(value);
+    }
+
+    if (parts.size() >= 3) {
+        QString const last = parts.last().trimmed();
+        quint16 port = 0;
+        if (parseNetworkPortText(last, &port)) {
+            QString host = parts.at(parts.size() - 2).trimmed();
+            if (host.isEmpty()) {
+                host = defaultHost;
+            }
+            return finish(join(host, port));
+        }
+        // Common broken state while editing: "localhost:127.0.0.1".
+        if (defaultPort > 0 && !last.isEmpty()) {
+            return finish(join(last, defaultPort));
+        }
+    }
+
+    return finish(value);
+}
+
 bool isLegacyNetworkEndpoint(QString const& endpoint)
 {
     QString const value = endpoint.trimmed().toLower();
@@ -533,6 +657,18 @@ void DecodiumTransceiverManager::setRtsHigh(bool v)
     }
 }
 
+void DecodiumTransceiverManager::setNetworkPort(const QString& v)
+{
+    QString value = v.trimmed();
+    if (0 == m_portType.compare(QStringLiteral("network"), Qt::CaseInsensitive)) {
+        value = normalizeNetworkEndpoint(value, m_rigName);
+    }
+    if (m_networkPort != value) {
+        m_networkPort = value;
+        emit networkPortChanged();
+    }
+}
+
 void DecodiumTransceiverManager::setPttMethod(const QString& v)
 {
     QString const normalized = v.trimmed().toUpper();
@@ -653,6 +789,17 @@ void DecodiumTransceiverManager::setRigName(const QString& v)
         QString const endpoint = defaultNetworkEndpointForRig(v);
         if (!endpoint.isEmpty() && isLegacyNetworkEndpoint(m_networkPort)) {
             m_networkPort = endpoint;
+            emit networkPortChanged();
+        }
+        bool normalized = false;
+        QString const cleanEndpoint = normalizeNetworkEndpoint(m_networkPort, m_rigName, &normalized);
+        if (normalized) {
+            qInfo().noquote()
+                << "[CATDBG] Network endpoint normalized"
+                << "rig=" << m_rigName
+                << "raw=" << m_networkPort
+                << "normalized=" << cleanEndpoint;
+            m_networkPort = cleanEndpoint;
             emit networkPortChanged();
         }
     }
@@ -890,7 +1037,16 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
                                       requestedPollInterval);
     p.rig_name      = m->rigName();
     p.serial_port   = normalizeDevicePath(m->serialPort());
-    p.network_port  = m->networkPort();
+    bool networkEndpointNormalized = false;
+    p.network_port  = normalizeNetworkEndpoint(m->networkPort(), m->rigName(),
+                                                &networkEndpointNormalized);
+    if (networkEndpointNormalized) {
+        qInfo().noquote()
+            << "[CATDBG] Network endpoint normalized"
+            << "rig=" << m->rigName()
+            << "raw=" << m->networkPort()
+            << "normalized=" << p.network_port;
+    }
     p.usb_port      = normalizeDevicePath(m->serialPort());
     p.tci_port      = m->tciPort();
     p.baud          = m->baudRate();
@@ -1441,6 +1597,7 @@ void DecodiumTransceiverManager::saveSettings()
 {
     const QString serialPort = normalizeDevicePath(m_serialPort);
     const QString pttPort = m_pttPort.isEmpty() ? QStringLiteral("CAT") : normalizeDevicePath(m_pttPort);
+    const QString networkPort = normalizeNetworkEndpoint(m_networkPort, m_rigName);
     bool const canForceDtr = forceDtrAvailable();
     bool const canForceRts = forceRtsAvailable();
 
@@ -1456,7 +1613,7 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("dtrHigh",      canForceDtr && m_dtrHigh);
     s.setValue("forceRts",     canForceRts && m_forceRts);
     s.setValue("rtsHigh",      canForceRts && m_rtsHigh);
-    s.setValue("networkPort",  m_networkPort);
+    s.setValue("networkPort",  networkPort);
     s.setValue("tciPort",      m_tciPort);
     s.setValue("pttMethod",    m_pttMethod);
     s.setValue("pttPort",      pttPort);
@@ -1506,5 +1663,17 @@ void DecodiumTransceiverManager::loadSettings()
     }
     m_splitMode = splitModeName(parseSplit(m_splitMode.trimmed().toLower()));
     setRigName(rig);
+    bool networkEndpointNormalized = false;
+    QString const cleanEndpoint = normalizeNetworkEndpoint(m_networkPort, m_rigName,
+                                                           &networkEndpointNormalized);
+    if (networkEndpointNormalized) {
+        qInfo().noquote()
+            << "[CATDBG] Network endpoint normalized"
+            << "rig=" << m_rigName
+            << "raw=" << m_networkPort
+            << "normalized=" << cleanEndpoint;
+        m_networkPort = cleanEndpoint;
+        emit networkPortChanged();
+    }
     enforceForceLineAvailability();
 }

@@ -63,6 +63,12 @@ bool isRogerToken(QString const& tok) {
     return u == "RR73" || u == "RRR" || (u.startsWith('R') && u.size() >= 3);
 }
 
+QString formatReportFromSnr(int snr) {
+    return snr >= 0
+        ? QStringLiteral("+%1").arg(snr, 2, 10, QChar('0'))
+        : QStringLiteral("-%1").arg(-snr, 2, 10, QChar('0'));
+}
+
 quint64 fingerprintMessage(QString const& body) {
     // FNV-1a 64-bit on a normalized (collapsed-whitespace, upper-case) body.
     QString norm = body.simplified().toUpper();
@@ -412,7 +418,8 @@ void Ft2QsoEngine::tick() {
 void Ft2QsoEngine::doubleClick(QString const& fromCall,
                                QString const& grid,
                                int            audioHz,
-                               int            snr) {
+                               int            snr,
+                               int            requestedTx) {
     QString call = upperBaseCall(fromCall);
     if (call.isEmpty()) return;
 
@@ -423,16 +430,54 @@ void Ft2QsoEngine::doubleClick(QString const& fromCall,
     }
 
     purgeCaller(call); // explicit engagement supersedes the queue entry
-    state::ReplyingTx1 r;
-    r.partnerCall = call;
-    r.partnerGrid = grid.toUpper();
-    r.enteredAt   = clockNow();
-    transitionTo(r, QStringLiteral("doubleClick %1").arg(call));
+    QString const partnerGrid = grid.toUpper();
+    QString const sentReport = formatReportFromSnr(snr);
+    int tx = (requestedTx >= 1 && requestedTx <= 5)
+        ? requestedTx
+        : 1;
 
-    // First TX: we don't yet know their report — send TX1 (grid).
-    int tx = grid.isEmpty() ? 1 : 2;
-    QString report = (tx == 2) ? QStringLiteral("%1").arg(snr) : QString{};
-    requestTx(tx, buildTxMessage(tx, r.partnerCall, r.partnerGrid, report, {}, false));
+    switch (tx) {
+    case 1: {
+        state::ReplyingTx1 r;
+        r.partnerCall = call;
+        r.partnerGrid = partnerGrid;
+        r.enteredAt   = clockNow();
+        transitionTo(r, QStringLiteral("doubleClick %1 TX1").arg(call));
+        requestTx(1, buildTxMessage(1, r.partnerCall, r.partnerGrid, {}, {}, false));
+        break;
+    }
+    case 2: {
+        state::AwaitingReport r;
+        r.partnerCall = call;
+        r.partnerGrid = partnerGrid;
+        r.sentReport  = sentReport;
+        r.enteredAt   = clockNow();
+        transitionTo(r, QStringLiteral("doubleClick %1 TX2").arg(call));
+        requestTx(2, buildTxMessage(2, r.partnerCall, r.partnerGrid, r.sentReport, {}, false));
+        break;
+    }
+    case 3: {
+        state::AwaitingRRR r;
+        r.partnerCall = call;
+        r.sentReport  = sentReport;
+        r.receivedReport = sentReport;
+        r.enteredAt   = clockNow();
+        transitionTo(r, QStringLiteral("doubleClick %1 TX3").arg(call));
+        requestTx(3, buildTxMessage(3, r.partnerCall, {}, r.sentReport, r.receivedReport, false));
+        break;
+    }
+    default: {
+        state::Closing c;
+        c.partnerCall = call;
+        c.partnerGrid = partnerGrid;
+        c.sentReport = sentReport;
+        c.receivedReport = sentReport;
+        c.closedAt = clockNow();
+        transitionTo(c, QStringLiteral("doubleClick %1 TX%2").arg(call).arg(tx));
+        requestTx(tx, buildTxMessage(tx, c.partnerCall, c.partnerGrid, c.sentReport, c.receivedReport, tx == 4));
+        break;
+    }
+    }
     Q_UNUSED(audioHz);
 }
 

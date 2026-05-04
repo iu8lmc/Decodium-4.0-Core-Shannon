@@ -57,7 +57,8 @@ private:
   // data (a signals worth) at
   // the input sample rate
   unsigned m_bufferPos;
-  unsigned m_visualDownsamplePhase {0};
+  qint64 m_visualDownsampleSum {0};
+  unsigned m_visualDownsampleCount {0};
   bool m_boundaryResetRequiresRuntimeLock {true};
 
 };

@@ -39,13 +39,13 @@ QString socketErrorMessage(QAbstractSocket::SocketError error, const QString& fa
 {
     switch (error) {
     case QAbstractSocket::ConnectionRefusedError:
-        return QObject::tr("Connessione rifiutata");
+        return QObject::tr("Connection refused");
     case QAbstractSocket::HostNotFoundError:
-        return QObject::tr("Host non trovato");
+        return QObject::tr("Host not found");
     case QAbstractSocket::NetworkError:
-        return QObject::tr("Errore di rete");
+        return QObject::tr("Network error");
     case QAbstractSocket::SocketTimeoutError:
-        return QObject::tr("Timeout di connessione");
+        return QObject::tr("Connection timeout");
     default:
         return fallback;
     }
@@ -402,11 +402,11 @@ void DecodiumDxCluster::ensureSocket()
             }
 
             m_ignoreNextSocketError = true;
-            QString const reason = tr("Timeout di connessione");
+            QString const reason = tr("Connection timeout");
             m_socket->abort();
             if (!tryNextConnectionCandidate(reason)) {
-                setLastStatus(tr("Errore: %1").arg(reason));
-                emit errorOccurred(tr("DX Cluster non raggiungibile: %1").arg(reason));
+                setLastStatus(tr("Error: %1").arg(reason));
+                emit errorOccurred(tr("DX Cluster not reachable: %1").arg(reason));
             }
         });
     }
@@ -421,7 +421,7 @@ void DecodiumDxCluster::sendLogin()
     QString const login = m_callsign.trimmed().toUpper();
     m_socket->write((login + QStringLiteral("\r\n")).toUtf8());
     m_loginSent = true;
-    setLastStatus(tr("Login inviato come %1").arg(login));
+    setLastStatus(tr("Login sent as %1").arg(login));
     emit statusUpdate(tr("Login sent (%1).").arg(login));
 }
 
@@ -500,7 +500,7 @@ bool DecodiumDxCluster::tryNextConnectionCandidate(const QString& failureReason)
         m_socket->abort();
     }
 
-    setLastStatus(tr("Connessione a %1 in corso…").arg(endpointLabel(m_activeHost, m_activePort)));
+    setLastStatus(tr("Connecting to %1...").arg(endpointLabel(m_activeHost, m_activePort)));
     emit statusUpdate(tr("Connecting to %1 …").arg(endpointLabel(m_activeHost, m_activePort)));
     m_socket->connectToHost(m_activeHost, static_cast<quint16>(m_activePort));
     if (m_connectTimeoutTimer) {
@@ -516,13 +516,13 @@ bool DecodiumDxCluster::tryNextConnectionCandidate(const QString& failureReason)
 void DecodiumDxCluster::connectCluster()
 {
     if (m_socket && m_socket->state() != QAbstractSocket::UnconnectedState) {
-        setLastStatus(tr("Già connesso o in connessione."));
+        setLastStatus(tr("Already connected or connecting."));
         emit statusUpdate(tr("Already connected or connecting."));
         return;
     }
 
     if (m_callsign.trimmed().isEmpty()) {
-        setLastStatus(tr("Nominativo mancante. Imposta il callsign in Stazione."));
+        setLastStatus(tr("Callsign not set. Please set your callsign in Station."));
         emit errorOccurred(tr("Callsign not set. Please set your callsign before connecting."));
         return;
     }
@@ -566,9 +566,9 @@ void DecodiumDxCluster::connectCluster()
     m_connectionCandidates = buildConnectionCandidates(m_host, m_port);
     m_connectionCandidateIndex = -1;
     m_connectSequenceActive = true;
-    if (!tryNextConnectionCandidate(tr("Nessun motivo specificato"))) {
+    if (!tryNextConnectionCandidate(tr("No specific reason"))) {
         m_connectSequenceActive = false;
-        setLastStatus(tr("Errore: nessun endpoint DX Cluster valido"));
+        setLastStatus(tr("Error: no valid DX Cluster endpoint"));
         emit errorOccurred(tr("DX Cluster configuration is invalid."));
     }
 }
@@ -636,7 +636,7 @@ bool DecodiumDxCluster::sendSpot(const QString& dxCall, double freqKhz, const QS
         return false;
     }
     m_socket->flush();
-    setLastStatus(tr("Spot inviato: %1 %2 kHz").arg(call, freq));
+    setLastStatus(tr("Spot sent: %1 %2 kHz").arg(call, freq));
     emit statusUpdate(tr("Spot sent: %1 %2 kHz").arg(call, freq));
     return true;
 }
@@ -964,7 +964,7 @@ void DecodiumDxCluster::onDisconnected()
         m_manualDisconnect = false;
     }
 
-    setLastStatus(tr("Disconnesso"));
+    setLastStatus(tr("Disconnected"));
     emit statusUpdate(tr("Disconnected from DX cluster."));
 }
 
@@ -1026,7 +1026,7 @@ void DecodiumDxCluster::onError(QAbstractSocket::SocketError socketError)
     if (wasConnected) {
         emit connectedChanged();
     }
-    setLastStatus(tr("Errore: %1").arg(msg));
+    setLastStatus(tr("Error: %1").arg(msg));
     emit errorOccurred(tr("Socket error: %1").arg(msg));
 }
 

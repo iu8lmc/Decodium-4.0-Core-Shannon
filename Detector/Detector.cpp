@@ -59,7 +59,8 @@ void Detector::clear ()
   // dec_data.params.kin = qMin ((msInPeriod * m_frameRate) / 1000, static_cast<unsigned> (sizeof (dec_data.d2) / sizeof (dec_data.d2[0])));
   dec_data.params.kin = 0;
   m_bufferPos = 0;
-  m_visualDownsamplePhase = 0;
+  m_visualDownsampleSum = 0;
+  m_visualDownsampleCount = 0;
 
   // fill buffer with zeros (G4WJS commented out because it might cause decoder hangs)
   // qFill (dec_data.d2, dec_data.d2 + sizeof (dec_data.d2) / sizeof (dec_data.d2[0]), 0);
@@ -79,18 +80,27 @@ void Detector::emitVisualSamples (qint16 const * samples, unsigned count)
         reinterpret_cast<char const *> (samples),
         static_cast<int> (count * sizeof (qint16))
       };
+      m_visualDownsampleSum = 0;
+      m_visualDownsampleCount = 0;
     }
   else
     {
       pcmSamples.reserve (static_cast<int> ((count / m_downSampleFactor + 1) * sizeof (qint16)));
       for (unsigned i = 0; i < count; ++i)
         {
-          if (m_visualDownsamplePhase == 0)
+          m_visualDownsampleSum += samples[i];
+          ++m_visualDownsampleCount;
+          if (m_visualDownsampleCount >= m_downSampleFactor)
             {
-              pcmSamples.append (reinterpret_cast<char const *> (samples + i),
+              qint64 const avg = m_visualDownsampleSum
+                / static_cast<qint64> (m_visualDownsampleCount);
+              qint16 const visualSample = static_cast<qint16> (
+                qBound<qint64> (static_cast<qint64> (-32768), avg, static_cast<qint64> (32767)));
+              pcmSamples.append (reinterpret_cast<char const *> (&visualSample),
                                  static_cast<int> (sizeof (qint16)));
+              m_visualDownsampleSum = 0;
+              m_visualDownsampleCount = 0;
             }
-          m_visualDownsamplePhase = (m_visualDownsamplePhase + 1) % m_downSampleFactor;
         }
     }
 

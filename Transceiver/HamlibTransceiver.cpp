@@ -722,9 +722,30 @@ int HamlibTransceiver::do_start ()
   m_->tickle_hamlib_ = false;
   m_->get_vfo_works_ = true;
   m_->set_vfo_works_ = true;
-  do_pwr_ &= (!m_->is_dummy_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_LEVEL) && (rig_get_caps_int (m_->model_, RIG_CAPS_HAS_GET_LEVEL) & RIG_LEVEL_RFPOWER_METER_WATTS) == RIG_LEVEL_RFPOWER_METER_WATTS);
-  do_pwr2_ &= (!m_->is_dummy_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_LEVEL) && (rig_get_caps_int (m_->model_, RIG_CAPS_HAS_GET_LEVEL) & RIG_LEVEL_RFPOWER) == RIG_LEVEL_RFPOWER);
-  do_swr_ &= (!m_->is_dummy_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_LEVEL) && (rig_get_caps_int (m_->model_, RIG_CAPS_HAS_GET_LEVEL) & RIG_LEVEL_SWR) == RIG_LEVEL_SWR);
+  bool const requestedPowerSwrPolling = do_pwr_ || do_pwr2_ || do_swr_;
+  bool const hasGetLevelFunction = !m_->is_dummy_ && rig_get_function_ptr (m_->model_, RIG_FUNCTION_GET_LEVEL);
+  int const getLevelCaps = !m_->is_dummy_ ? rig_get_caps_int (m_->model_, RIG_CAPS_HAS_GET_LEVEL) : 0;
+  bool const hasRfPowerMeterWatts = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_RFPOWER_METER_WATTS) == RIG_LEVEL_RFPOWER_METER_WATTS;
+  bool const hasRfPower = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_RFPOWER) == RIG_LEVEL_RFPOWER;
+  bool const hasSwr = hasGetLevelFunction
+      && (getLevelCaps & RIG_LEVEL_SWR) == RIG_LEVEL_SWR;
+
+  do_pwr_ &= hasRfPowerMeterWatts;
+  do_pwr2_ &= hasRfPower;
+  do_swr_ &= hasSwr;
+  if (requestedPowerSwrPolling)
+    {
+      qInfo ().noquote ()
+        << "[CATDBG] Hamlib PWR/SWR polling support"
+        << "rig=" << rig_get_caps_cptr (m_->model_, RIG_CAPS_MODEL_NAME_CPTR)
+        << "model=" << m_->model_
+        << "getLevel=" << hasGetLevelFunction
+        << "rfpowerMeterWatts=" << hasRfPowerMeterWatts
+        << "rfpower=" << hasRfPower
+        << "swr=" << hasSwr;
+    }
 
   // the Net rigctl back end promises all functions work but we must
   // test get_vfo as it determines our strategy for Icom rigs

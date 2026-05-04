@@ -454,9 +454,9 @@ Dialog {
                         Layout.fillWidth: true; implicitHeight: controlHeight
                         visible: bridge.catManager.portType === "network"
                         text: bridge.catManager.networkPort
-                        placeholderText: "localhost:4532"
+                        placeholderText: bridge.catManager.rigName === "Ham Radio Deluxe" ? "127.0.0.1:7809" : "host:port"
                         color: textPrimary; font.pixelSize: controlFontSize
-                        onTextChanged: bridge.catManager.networkPort = text
+                        onEditingFinished: bridge.catManager.networkPort = text.trim()
                         background: Rectangle { color: bgMedium; border.color: activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                     }
 
@@ -696,6 +696,7 @@ Dialog {
                     bridge.catManager.baudRate    = parseInt(baudCombo.currentText)
                     bridge.catManager.pttMethod   = pttCombo.currentText
                     bridge.catManager.splitMode   = splitCombo.currentText
+                    bridge.catManager.networkPort = networkField.text.trim()
                     bridge.catManager.pttPort     = pttPortCombo.editText.trim()
                     bridge.catManager.pollInterval = pollSpin.value
                     bridge.catManager.dataBits    = dataCombo.currentText

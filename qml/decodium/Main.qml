@@ -638,7 +638,7 @@ ApplicationWindow {
     property bool activeStationsPanelVisible: !!bridge.getSetting("uiActiveStationsPanelVisible", false)
     property bool callerQueuePanelVisible:    false
     property bool astroPanelVisible:          !!bridge.getSetting("uiAstroPanelVisible", false)
-    property bool dxClusterPanelVisible:      !!bridge.getSetting("uiDxClusterPanelVisible", false)
+    property bool dxClusterPanelVisible:      false
     property bool dxClusterToolbarVisible:    !!bridge.getSetting("uiDxClusterToolbarVisible", true)
     property bool pskReporterToolbarVisible: !!bridge.getSetting("uiPskReporterToolbarVisible", true)
     property bool asyncIconVisible:          !!bridge.getSetting("uiAsyncIconVisible", true)
@@ -713,7 +713,6 @@ ApplicationWindow {
     onTimeSyncPanelVisibleChanged: bridge.setSetting("uiTimeSyncPanelVisible", timeSyncPanelVisible)
     onActiveStationsPanelVisibleChanged: bridge.setSetting("uiActiveStationsPanelVisible", activeStationsPanelVisible)
     onAstroPanelVisibleChanged: bridge.setSetting("uiAstroPanelVisible", astroPanelVisible)
-    onDxClusterPanelVisibleChanged: bridge.setSetting("uiDxClusterPanelVisible", dxClusterPanelVisible)
     function syncLiveMapFloatingVisibility(activate) {
         if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
             return
@@ -1696,6 +1695,7 @@ ApplicationWindow {
 
         // Header Bar - Responsive with Flow layout
         Rectangle {
+            id: headerBar
             Layout.fillWidth: true
             Layout.preferredHeight: headerFlow.height + 12
             Layout.minimumHeight: 86
@@ -4000,6 +4000,7 @@ ApplicationWindow {
                     property var allDecodes: bridge.decodeList
                     property var rxDecodes: currentRxDecodes()
                     property int decodeListVersion: 0
+                    property int rxDecodeListVersion: 0
                     property int lastSyncCount: 0
                     property real currentPeriodIndex: -1
                     property int currentPeriodDecodeCount: 0
@@ -4060,7 +4061,7 @@ ApplicationWindow {
 	                        var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
 	                        var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
 	                        decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-	                        decodePanel.decodeListVersion++
+	                        decodePanel.rxDecodeListVersion++
 	                        if (stickRxTail && rxFrequencyList)
 	                            rxFrequencyList.forceTailFollow()
 	                        if (stickFloatingRxTail && rxFrequencyFloatingList)
@@ -4069,30 +4070,23 @@ ApplicationWindow {
 
 	                    // Update decode list incrementalmente (solo nuovi elementi)
 	                    Connections {
-	                        target: bridge
+                        target: bridge
                         function onDecodeListChanged() {
                             var stickBandTail = evenPeriodList ? evenPeriodList.isNearTail() : true
                             var stickFloatingTail = period1FloatingList ? period1FloatingList.isNearTail() : true
-                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             var src = bridge.decodeList
                             decodePanel.updateCurrentPeriodDecodeCount(src)
                             decodePanel.allDecodes = src
-                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
                             if (stickBandTail && evenPeriodList)
                                 evenPeriodList.forceTailFollow()
                             if (stickFloatingTail && period1FloatingList)
                                 period1FloatingList.forceTailFollow()
-                            if (stickRxTail && rxFrequencyList)
-                                rxFrequencyList.forceTailFollow()
-                            if (stickFloatingRxTail && rxFrequencyFloatingList)
-                                rxFrequencyFloatingList.forceTailFollow()
                         }
                         function onRxDecodeListChanged() {
                             var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
                             var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
-                            decodePanel.decodeListVersion++
+                            decodePanel.rxDecodeListVersion++
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
                             if (stickRxTail && rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
@@ -4109,7 +4103,7 @@ ApplicationWindow {
 
                     onShowTxMessagesInRxChanged: {
                         decodePanel.rxDecodes = currentRxDecodes()
-                        decodePanel.decodeListVersion++
+                        decodePanel.rxDecodeListVersion++
                     }
 
                     Timer {
@@ -4200,11 +4194,8 @@ ApplicationWindow {
 	                        var merged = []
 	                        if (bridge.rxDecodeList) {
 	                            for (var j = 0; j < bridge.rxDecodeList.length; j++) {
-                                if (bridge.rxDecodeList[j]) {
-                                    var item = {}
-                                    var src = bridge.rxDecodeList[j]
-	                                    for (var key in src)
-	                                        item[key] = src[key]
+                                var item = bridge.rxDecodeList[j]
+                                if (item) {
 	                                    if (!mainWindow.showTxMessagesInRx && item.isTx)
 	                                        continue
 	                                    if (!rxEntryBelongsToCurrentQso(item))
@@ -4763,21 +4754,41 @@ ApplicationWindow {
                                                 return
                                             followTail = isNearTail()
                                         }
+                                        function tailContentY() {
+                                            return Math.max(0, contentHeight - height)
+                                        }
+                                        function finishTailFollow() {
+                                            tailFollowPending = false
+                                            followTail = isNearTail()
+                                        }
                                         function forceTailFollow() {
                                             followTail = true
                                             tailFollowPending = true
                                             Qt.callLater(function() {
                                                 if (!evenPeriodList)
                                                     return
-                                                evenPeriodList.positionViewAtEnd()
-                                                evenPeriodList.followTail = true
-                                                Qt.callLater(function() {
-                                                    if (!evenPeriodList)
-                                                        return
-                                                    evenPeriodList.tailFollowPending = false
-                                                    evenPeriodList.followTail = evenPeriodList.isNearTail()
-                                                })
+                                                var targetY = evenPeriodList.tailContentY()
+                                                var distance = Math.abs(evenPeriodList.contentY - targetY)
+                                                evenPeriodTailAnimation.stop()
+                                                evenPeriodList.tailFollowPending = true
+                                                if (distance < 1 || distance > Math.max(1200, evenPeriodList.height * 3)) {
+                                                    evenPeriodList.contentY = targetY
+                                                    evenPeriodList.finishTailFollow()
+                                                    return
+                                                }
+                                                evenPeriodTailAnimation.from = evenPeriodList.contentY
+                                                evenPeriodTailAnimation.to = targetY
+                                                evenPeriodTailAnimation.duration = Math.max(90, Math.min(170, 90 + distance * 0.2))
+                                                evenPeriodTailAnimation.start()
                                             })
+                                        }
+                                        NumberAnimation {
+                                            id: evenPeriodTailAnimation
+                                            target: evenPeriodList
+                                            property: "contentY"
+                                            duration: 130
+                                            easing.type: Easing.OutCubic
+                                            onStopped: evenPeriodList.finishTailFollow()
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
                                             positionViewAtEnd()
@@ -4785,6 +4796,13 @@ ApplicationWindow {
                                         })
                                         onContentYChanged: updateFollowTail()
                                         onHeightChanged: updateFollowTail()
+                                        onDraggingChanged: {
+                                            if (dragging) {
+                                                evenPeriodTailAnimation.stop()
+                                                tailFollowPending = false
+                                                followTail = false
+                                            }
+                                        }
                                         onCountChanged: {
                                             if (followTail)
                                                 forceTailFollow()
@@ -4793,6 +4811,18 @@ ApplicationWindow {
                                         on_VerChanged: {
                                             if (followTail)
                                                 forceTailFollow()
+                                        }
+                                        add: Transition {
+                                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 90; easing.type: Easing.OutCubic }
+                                        }
+                                        addDisplaced: Transition {
+                                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                                        }
+                                        moveDisplaced: Transition {
+                                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                                        }
+                                        removeDisplaced: Transition {
+                                            NumberAnimation { properties: "y"; duration: 100; easing.type: Easing.OutCubic }
                                         }
 
                                         ScrollBar.vertical: ScrollBar {
@@ -5045,7 +5075,7 @@ ApplicationWindow {
 
                                         Text {
                                             text: {
-                                                void(decodePanel.decodeListVersion)
+                                                void(decodePanel.rxDecodeListVersion)
                                                 return decodePanel.currentRxDecodes().length + " msgs"
                                             }
                                             font.pixelSize: 10
@@ -5150,21 +5180,41 @@ ApplicationWindow {
                                                 return
                                             followTail = isNearTail()
                                         }
+                                        function tailContentY() {
+                                            return Math.max(0, contentHeight - height)
+                                        }
+                                        function finishTailFollow() {
+                                            tailFollowPending = false
+                                            followTail = isNearTail()
+                                        }
                                         function forceTailFollow() {
                                             followTail = true
                                             tailFollowPending = true
                                             Qt.callLater(function() {
                                                 if (!rxFrequencyList)
                                                     return
-                                                rxFrequencyList.positionViewAtEnd()
-                                                rxFrequencyList.followTail = true
-                                                Qt.callLater(function() {
-                                                    if (!rxFrequencyList)
-                                                        return
-                                                    rxFrequencyList.tailFollowPending = false
-                                                    rxFrequencyList.followTail = rxFrequencyList.isNearTail()
-                                                })
+                                                var targetY = rxFrequencyList.tailContentY()
+                                                var distance = Math.abs(rxFrequencyList.contentY - targetY)
+                                                rxFrequencyTailAnimation.stop()
+                                                rxFrequencyList.tailFollowPending = true
+                                                if (distance < 1 || distance > Math.max(1200, rxFrequencyList.height * 3)) {
+                                                    rxFrequencyList.contentY = targetY
+                                                    rxFrequencyList.finishTailFollow()
+                                                    return
+                                                }
+                                                rxFrequencyTailAnimation.from = rxFrequencyList.contentY
+                                                rxFrequencyTailAnimation.to = targetY
+                                                rxFrequencyTailAnimation.duration = Math.max(90, Math.min(170, 90 + distance * 0.2))
+                                                rxFrequencyTailAnimation.start()
                                             })
+                                        }
+                                        NumberAnimation {
+                                            id: rxFrequencyTailAnimation
+                                            target: rxFrequencyList
+                                            property: "contentY"
+                                            duration: 130
+                                            easing.type: Easing.OutCubic
+                                            onStopped: rxFrequencyList.finishTailFollow()
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
                                             positionViewAtEnd()
@@ -5172,12 +5222,36 @@ ApplicationWindow {
                                         })
                                         onContentYChanged: updateFollowTail()
                                         onHeightChanged: updateFollowTail()
-                                        onCountChanged: forceTailFollow()
+                                        onDraggingChanged: {
+                                            if (dragging) {
+                                                rxFrequencyTailAnimation.stop()
+                                                tailFollowPending = false
+                                                followTail = false
+                                            }
+                                        }
+                                        onCountChanged: {
+                                            if (followTail)
+                                                forceTailFollow()
+                                        }
 
-                                        // Reattivo: si aggiorna quando la decodeList cambia
-                                        property int _ver: decodePanel.decodeListVersion
-                                        on_VerChanged: forceTailFollow()
+                                        property int _ver: decodePanel.rxDecodeListVersion
+                                        on_VerChanged: {
+                                            if (followTail)
+                                                forceTailFollow()
+                                        }
                                         model: decodePanel.rxDecodes
+                                        add: Transition {
+                                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 90; easing.type: Easing.OutCubic }
+                                        }
+                                        addDisplaced: Transition {
+                                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                                        }
+                                        moveDisplaced: Transition {
+                                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                                        }
+                                        removeDisplaced: Transition {
+                                            NumberAnimation { properties: "y"; duration: 100; easing.type: Easing.OutCubic }
+                                        }
 
                                         ScrollBar.vertical: ScrollBar {
                                             policy: ScrollBar.AsNeeded
@@ -8475,21 +8549,41 @@ ApplicationWindow {
                                 return
                             followTail = isNearTail()
                         }
+                        function tailContentY() {
+                            return Math.max(0, contentHeight - height)
+                        }
+                        function finishTailFollow() {
+                            tailFollowPending = false
+                            followTail = isNearTail()
+                        }
                         function forceTailFollow() {
                             followTail = true
                             tailFollowPending = true
                             Qt.callLater(function() {
                                 if (!period1FloatingList)
                                     return
-                                period1FloatingList.positionViewAtEnd()
-                                period1FloatingList.followTail = true
-                                Qt.callLater(function() {
-                                    if (!period1FloatingList)
-                                        return
-                                    period1FloatingList.tailFollowPending = false
-                                    period1FloatingList.followTail = period1FloatingList.isNearTail()
-                                })
+                                var targetY = period1FloatingList.tailContentY()
+                                var distance = Math.abs(period1FloatingList.contentY - targetY)
+                                period1FloatingTailAnimation.stop()
+                                period1FloatingList.tailFollowPending = true
+                                if (distance < 1 || distance > Math.max(1200, period1FloatingList.height * 3)) {
+                                    period1FloatingList.contentY = targetY
+                                    period1FloatingList.finishTailFollow()
+                                    return
+                                }
+                                period1FloatingTailAnimation.from = period1FloatingList.contentY
+                                period1FloatingTailAnimation.to = targetY
+                                period1FloatingTailAnimation.duration = Math.max(90, Math.min(170, 90 + distance * 0.2))
+                                period1FloatingTailAnimation.start()
                             })
+                        }
+                        NumberAnimation {
+                            id: period1FloatingTailAnimation
+                            target: period1FloatingList
+                            property: "contentY"
+                            duration: 130
+                            easing.type: Easing.OutCubic
+                            onStopped: period1FloatingList.finishTailFollow()
                         }
                         Component.onCompleted: Qt.callLater(function() {
                             positionViewAtEnd()
@@ -8497,6 +8591,13 @@ ApplicationWindow {
                         })
                         onContentYChanged: updateFollowTail()
                         onHeightChanged: updateFollowTail()
+                        onDraggingChanged: {
+                            if (dragging) {
+                                period1FloatingTailAnimation.stop()
+                                tailFollowPending = false
+                                followTail = false
+                            }
+                        }
                         onCountChanged: {
                             if (followTail)
                                 forceTailFollow()
@@ -8505,6 +8606,18 @@ ApplicationWindow {
                         on_VerChanged: {
                             if (followTail)
                                 forceTailFollow()
+                        }
+                        add: Transition {
+                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 90; easing.type: Easing.OutCubic }
+                        }
+                        addDisplaced: Transition {
+                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                        }
+                        moveDisplaced: Transition {
+                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                        }
+                        removeDisplaced: Transition {
+                            NumberAnimation { properties: "y"; duration: 100; easing.type: Easing.OutCubic }
                         }
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
@@ -8724,7 +8837,7 @@ ApplicationWindow {
 	                            Text {
 	                                visible: rxFreqFloatingWindow.width >= 500
 	                                text: {
-	                                    void(decodePanel.decodeListVersion)
+	                                    void(decodePanel.rxDecodeListVersion)
 	                                    return decodePanel.currentRxDecodes().length + " " + qsTr("msgs")
 	                                }
 	                                font.pixelSize: 10
@@ -8850,21 +8963,41 @@ ApplicationWindow {
                                 return
                             followTail = isNearTail()
                         }
+                        function tailContentY() {
+                            return Math.max(0, contentHeight - height)
+                        }
+                        function finishTailFollow() {
+                            tailFollowPending = false
+                            followTail = isNearTail()
+                        }
                         function forceTailFollow() {
                             followTail = true
                             tailFollowPending = true
                             Qt.callLater(function() {
                                 if (!rxFrequencyFloatingList)
                                     return
-                                rxFrequencyFloatingList.positionViewAtEnd()
-                                rxFrequencyFloatingList.followTail = true
-                                Qt.callLater(function() {
-                                    if (!rxFrequencyFloatingList)
-                                        return
-                                    rxFrequencyFloatingList.tailFollowPending = false
-                                    rxFrequencyFloatingList.followTail = rxFrequencyFloatingList.isNearTail()
-                                })
+                                var targetY = rxFrequencyFloatingList.tailContentY()
+                                var distance = Math.abs(rxFrequencyFloatingList.contentY - targetY)
+                                rxFrequencyFloatingTailAnimation.stop()
+                                rxFrequencyFloatingList.tailFollowPending = true
+                                if (distance < 1 || distance > Math.max(1200, rxFrequencyFloatingList.height * 3)) {
+                                    rxFrequencyFloatingList.contentY = targetY
+                                    rxFrequencyFloatingList.finishTailFollow()
+                                    return
+                                }
+                                rxFrequencyFloatingTailAnimation.from = rxFrequencyFloatingList.contentY
+                                rxFrequencyFloatingTailAnimation.to = targetY
+                                rxFrequencyFloatingTailAnimation.duration = Math.max(90, Math.min(170, 90 + distance * 0.2))
+                                rxFrequencyFloatingTailAnimation.start()
                             })
+                        }
+                        NumberAnimation {
+                            id: rxFrequencyFloatingTailAnimation
+                            target: rxFrequencyFloatingList
+                            property: "contentY"
+                            duration: 130
+                            easing.type: Easing.OutCubic
+                            onStopped: rxFrequencyFloatingList.finishTailFollow()
                         }
                         Component.onCompleted: Qt.callLater(function() {
                             positionViewAtEnd()
@@ -8872,10 +9005,35 @@ ApplicationWindow {
                         })
                         onContentYChanged: updateFollowTail()
                         onHeightChanged: updateFollowTail()
-	                        onCountChanged: forceTailFollow()
-                        property int _ver: decodePanel.decodeListVersion
-	                        on_VerChanged: forceTailFollow()
+                        onDraggingChanged: {
+                            if (dragging) {
+                                rxFrequencyFloatingTailAnimation.stop()
+                                tailFollowPending = false
+                                followTail = false
+                            }
+                        }
+	                        onCountChanged: {
+                            if (followTail)
+                                forceTailFollow()
+                        }
+                        property int _ver: decodePanel.rxDecodeListVersion
+	                        on_VerChanged: {
+                            if (followTail)
+                                forceTailFollow()
+                        }
                         model: decodePanel.rxDecodes
+                        add: Transition {
+                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 90; easing.type: Easing.OutCubic }
+                        }
+                        addDisplaced: Transition {
+                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                        }
+                        moveDisplaced: Transition {
+                            NumberAnimation { properties: "y"; duration: 120; easing.type: Easing.OutCubic }
+                        }
+                        removeDisplaced: Transition {
+                            NumberAnimation { properties: "y"; duration: 100; easing.type: Easing.OutCubic }
+                        }
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
                             interactive: true
@@ -9240,19 +9398,97 @@ ApplicationWindow {
     // TimeSyncPanel — angolo in alto a destra, togglabile da menu
     Item {
         id: timeSyncOverlay
+        readonly property int panelMargin: 12
+        readonly property int topRailY: 10
+        readonly property bool headerWrapped: headerFlow.height > 110
+        readonly property bool headerRightRailOccupied: headerFlow.childrenRect.x + headerFlow.childrenRect.width
+                                                   > mainWindow.width - width - panelMargin * 2
+        readonly property bool dockInsideHeader: headerWrapped || headerRightRailOccupied
+        function headerRows() {
+            var rows = []
+            var children = headerFlow.children
+            for (var i = 0; i < children.length; ++i) {
+                var child = children[i]
+                if (!child || !child.visible || child.width <= 0 || child.height <= 0)
+                    continue
+
+                var top = Math.round(child.y)
+                var row = null
+                for (var r = 0; r < rows.length; ++r) {
+                    if (Math.abs(rows[r].top - top) <= 2) {
+                        row = rows[r]
+                        break
+                    }
+                }
+                if (!row) {
+                    row = {
+                        top: top,
+                        left: child.x,
+                        right: child.x + child.width,
+                        height: child.height
+                    }
+                    rows.push(row)
+                } else {
+                    row.left = Math.min(row.left, child.x)
+                    row.right = Math.max(row.right, child.x + child.width)
+                    row.height = Math.max(row.height, child.height)
+                }
+            }
+            rows.sort(function(a, b) { return b.top - a.top })
+            return rows
+        }
+        function headerSlot() {
+            if (!dockInsideHeader)
+                return { valid: false, x: 0, y: 0 }
+
+            var rows = headerRows()
+            var headerLeft = headerBar.x + headerFlow.x
+            var headerTop = headerBar.y + headerFlow.y
+            var rightLimit = mainWindow.width - panelMargin
+            var maxHeaderY = Math.max(topRailY, headerBar.y + headerBar.height - height - 6)
+
+            for (var i = 0; i < rows.length; ++i) {
+                var row = rows[i]
+                var rowY = headerTop + row.top + Math.max(0, (row.height - height) / 2)
+                rowY = Math.min(Math.max(topRailY, rowY), maxHeaderY)
+
+                var afterRow = headerLeft + row.right + headerFlow.spacing
+                if (afterRow + width <= rightLimit)
+                    return { valid: true, x: Math.max(panelMargin, afterRow), y: rowY }
+
+                var beforeRow = headerLeft + row.left - headerFlow.spacing - width
+                if (beforeRow >= panelMargin)
+                    return { valid: true, x: beforeRow, y: rowY }
+            }
+
+            return { valid: false, x: 0, y: 0 }
+        }
+        function automaticX() {
+            var slot = headerSlot()
+            if (slot.valid)
+                return slot.x
+            return Math.max(panelMargin, mainWindow.width - width - panelMargin)
+        }
+        function automaticY() {
+            var slot = headerSlot()
+            if (slot.valid)
+                return slot.y
+            return topRailY
+        }
         visible: timeSyncPanelVisible
         z: 200
-        x: mainWindow.width - width - 12
-        y: 10
-        width: 360
+        x: automaticX()
+        y: Math.min(Math.max(topRailY, automaticY()),
+                    Math.max(topRailY, mainWindow.height - height - panelMargin))
+        width: Math.min(360, Math.max(280, mainWindow.width - panelMargin * 2))
         height: timeSyncLoader.item ? timeSyncLoader.item.implicitHeight : 28
 
         MouseArea {
             anchors.fill: parent
             drag.target: timeSyncOverlay
             drag.axis: Drag.XAndYAxis
-            drag.minimumX: 0; drag.maximumX: mainWindow.width - timeSyncOverlay.width
-            drag.minimumY: 0; drag.maximumY: mainWindow.height - 28
+            drag.minimumX: 0; drag.maximumX: Math.max(0, mainWindow.width - timeSyncOverlay.width)
+            drag.minimumY: 0; drag.maximumY: Math.max(0, mainWindow.height - timeSyncOverlay.height)
         }
 
         Loader {
@@ -9268,17 +9504,19 @@ ApplicationWindow {
         id: activeStationsOverlay
         visible: activeStationsPanelVisible
         z: 200
-        x: mainWindow.width - width - 12
-        y: timeSyncPanelVisible ? 100 + timeSyncOverlay.height + 8 : 100
-        width: 360
+        x: Math.max(12, mainWindow.width - width - 12)
+        y: Math.min(timeSyncPanelVisible ? timeSyncOverlay.y + timeSyncOverlay.height + 8
+                                         : Math.max(100, headerBar.y + headerBar.height + 8),
+                    Math.max(12, mainWindow.height - height - 12))
+        width: Math.min(360, Math.max(280, mainWindow.width - 24))
         height: 280
 
         MouseArea {
             anchors.fill: parent
             drag.target: activeStationsOverlay
             drag.axis: Drag.XAndYAxis
-            drag.minimumX: 0; drag.maximumX: mainWindow.width - activeStationsOverlay.width
-            drag.minimumY: 0; drag.maximumY: mainWindow.height - activeStationsOverlay.height
+            drag.minimumX: 0; drag.maximumX: Math.max(0, mainWindow.width - activeStationsOverlay.width)
+            drag.minimumY: 0; drag.maximumY: Math.max(0, mainWindow.height - activeStationsOverlay.height)
         }
 
         Loader {

@@ -727,22 +727,22 @@ Dialog {
         "#9933ff","#ff33cc","#ffffff","#cccccc","#666666","#000000"
     ]
     readonly property var decodeColorModel: [
-        { label: qsTr("Messaggio Trasmesso"),    prop: "colorTxMessage",        defaultColor: "#FFFF00" },
-        { label: qsTr("Mio Nominativo"),         prop: "colorMyCall",           defaultColor: "#FF5555" },
-        { label: qsTr("Nuovo DXCC in Banda"),    prop: "colorNewDxccBand",      defaultColor: "#F8AAD0" },
-        { label: qsTr("Nuovo DXCC"),             prop: "colorNewDxcc",          defaultColor: "#FF00FF" },
-        { label: qsTr("Nuovo Continente Banda"), prop: "colorNewContinentBand", defaultColor: "#F5B7C7" },
-        { label: qsTr("Nuovo Continente"),       prop: "colorNewContinent",     defaultColor: "#E91E63" },
-        { label: qsTr("Nuova Zona CQ Banda"),    prop: "colorNewCqZoneBand",    defaultColor: "#F5DDA0" },
-        { label: qsTr("Nuova Zona CQ"),          prop: "colorNewCqZone",        defaultColor: "#F0A030" },
-        { label: qsTr("Nuova Zona ITU Banda"),   prop: "colorNewItuZoneBand",   defaultColor: "#D4E89F" },
-        { label: qsTr("Nuova Zona ITU"),         prop: "colorNewItuZone",       defaultColor: "#9ACD32" },
-        { label: qsTr("Nuova Griglia Banda"),    prop: "colorNewGridBand",      defaultColor: "#FFCAA0" },
-        { label: qsTr("Nuova Griglia"),          prop: "colorNewGrid",          defaultColor: "#FF8C00" },
-        { label: qsTr("Nuovo Nominativo Banda"), prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
-        { label: qsTr("Nuovo Nominativo"),       prop: "colorNewCall",          defaultColor: "#00E0E0" },
-        { label: qsTr("Utente LoTW"),            prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
-        { label: qsTr("CQ nel messaggio"),       prop: "colorCQ",               defaultColor: "#33FF33" },
+        { label: qsTr("Transmitted Message"),    prop: "colorTxMessage",        defaultColor: "#FFFF00" },
+        { label: qsTr("My Callsign"),            prop: "colorMyCall",           defaultColor: "#FF5555" },
+        { label: qsTr("New DXCC on Band"),       prop: "colorNewDxccBand",      defaultColor: "#F8AAD0" },
+        { label: qsTr("New DXCC"),               prop: "colorNewDxcc",          defaultColor: "#FF00FF" },
+        { label: qsTr("New Continent on Band"),  prop: "colorNewContinentBand", defaultColor: "#F5B7C7" },
+        { label: qsTr("New Continent"),          prop: "colorNewContinent",     defaultColor: "#E91E63" },
+        { label: qsTr("New CQ Zone on Band"),    prop: "colorNewCqZoneBand",    defaultColor: "#F5DDA0" },
+        { label: qsTr("New CQ Zone"),            prop: "colorNewCqZone",        defaultColor: "#F0A030" },
+        { label: qsTr("New ITU Zone on Band"),   prop: "colorNewItuZoneBand",   defaultColor: "#D4E89F" },
+        { label: qsTr("New ITU Zone"),           prop: "colorNewItuZone",       defaultColor: "#9ACD32" },
+        { label: qsTr("New Grid on Band"),       prop: "colorNewGridBand",      defaultColor: "#FFCAA0" },
+        { label: qsTr("New Grid"),               prop: "colorNewGrid",          defaultColor: "#FF8C00" },
+        { label: qsTr("New Callsign on Band"),   prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
+        { label: qsTr("New Callsign"),           prop: "colorNewCall",          defaultColor: "#00E0E0" },
+        { label: qsTr("LoTW User"),              prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
+        { label: qsTr("CQ in Message"),          prop: "colorCQ",               defaultColor: "#33FF33" },
         { label: qsTr("DX Entity"),              prop: "colorDXEntity",         defaultColor: "#FFAA33" },
         { label: qsTr("73 / RR73"),              prop: "color73",               defaultColor: "#5599FF" },
         { label: qsTr("B4 (Worked)"),            prop: "colorB4",               defaultColor: "#888888" }
@@ -1611,11 +1611,11 @@ Dialog {
                             leftPadding: 8
                             color: textPrimary
                             font.pixelSize: controlFontSize
-                            placeholderText: "localhost:4532"
+                            placeholderText: bridge.catManager && bridge.catManager.rigName === "Ham Radio Deluxe" ? "127.0.0.1:7809" : "host:port"
                             selectByMouse: true
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: {
-                                if (bridge.catManager) bridge.catManager.networkPort = text
+                            onEditingFinished: {
+                                if (bridge.catManager) bridge.catManager.networkPort = text.trim()
                                 settingsDialog.scheduleCatPersist()
                             }
                         }
@@ -3880,7 +3880,15 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                        Text { text: qsTr("Direct Visual:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: settingsDialog.boolSetting("DirectVisualAudioCaptureUnsafe", false)
+                            onToggled: settingsDialog.setBoolSettingIfChanged("DirectVisualAudioCaptureUnsafe", checked, false)
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Fast visual panadapter. In legacy mode it may open a second audio capture; in normal mode it only raises the visual refresh rate.")
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
 
                         // ── Comportamento ──
                         Text { text: qsTr("BEHAVIOR"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
@@ -4132,7 +4140,7 @@ Dialog {
                         ColumnLayout {
                             Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 2
                             Switch {
-                                text: qsTr("AUTO — attiva le 3 tecnologie quando servono")
+                                text: qsTr("AUTO - enable the 3 technologies when needed")
                                 checked: bridge.advAutoModeEnabled
                                 onToggled: bridge.advAutoModeEnabled = checked
                                 contentItem: Text {
@@ -4142,7 +4150,7 @@ Dialog {
                                 }
                             }
                             Text {
-                                text: qsTr("Quando ON, le 3 feature sotto sono ignorate. Trigger: Neural+Turbo se decode<2/slot in 4 slot. Coherent se SNR Q65<-22dB.")
+                                text: qsTr("When ON, the 3 features below are managed automatically. Trigger: Neural+Turbo when decodes < 2/slot for 4 slots. Coherent when Q65 SNR < -22 dB.")
                                 color: "#888"; font.pixelSize: 10
                                 wrapMode: Text.WordWrap; Layout.fillWidth: true
                                 leftPadding: 8
@@ -4150,7 +4158,7 @@ Dialog {
                             RowLayout {
                                 Layout.fillWidth: true; spacing: 12
                                 visible: bridge.advAutoModeEnabled
-                                Text { text: qsTr("Stato live:"); color: "#888"; font.pixelSize: 10 }
+                                Text { text: qsTr("Live state:"); color: "#888"; font.pixelSize: 10 }
                                 Rectangle { width: 8; height: 8; radius: 4; color: bridge.advNeuralSyncActive ? "#0f0" : "#444" }
                                 Text { text: qsTr("Neural"); color: bridge.advNeuralSyncActive ? "#0f0" : "#666"; font.pixelSize: 10 }
                                 Rectangle { width: 8; height: 8; radius: 4; color: bridge.advTurboFeedbackActive ? "#0f0" : "#444" }

@@ -175,7 +175,11 @@ private:
 
     void rebuildImages(int w, int h);
     void renderSpectrum();
-    void addWaterfallRow();
+    void addWaterfallRow(const QVector<float>& bins,
+                         float minDb,
+                         float maxDb,
+                         float dataFreqMin,
+                         float dataFreqMax);
     void rebuildRgbWaterfallFromIntensity();
     void logWaterfallRenderPath(bool gpu, const QString& reason);
     bool shaderWaterfallSupported();
@@ -197,6 +201,15 @@ private:
     QVector<QVector<float>> m_avgStack; // stack per average
     float m_measuredFloor = -130.f;
     float m_measuredPeak  = -40.f;
+    struct WaterfallFrame
+    {
+        QVector<float> bins;
+        float minDb {-130.f};
+        float maxDb {-40.f};
+        float dataFreqMin {200.f};
+        float dataFreqMax {4000.f};
+    };
+    QVector<WaterfallFrame> m_pendingWaterfallRows;
 
     // ── Immagini ────────────────────────────────────────────────────────────
     QImage m_spectrumImage;  // spectrum (larghezza × spectrumH)

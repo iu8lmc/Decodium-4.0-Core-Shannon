@@ -1154,6 +1154,7 @@ private slots:
     void onUtcTimer();
     void onSpectrumTimer();
     void updateProcessCpuUsage();
+    void updateUiStallDiagnostics();
     void onLegacyWaterfallRow(QByteArray const& rowLevels,
                               int startFrequencyHz,
                               int spanHz,
@@ -1305,6 +1306,7 @@ private:
                                 const QByteArray& adifRecord);
     void udpSendN1mmLoggedQso(const QString& dxCall, const QByteArray& adifRecord);
     void tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord);
+    void maybePlayDecodeAlert(bool isCQ, bool isMyCall);
 
     QString m_callsign {"IU8LMC"};
     QString m_grid {"JN70"};
@@ -1395,6 +1397,9 @@ private:
     int m_processCpuLogicalCores {1};
     bool m_processCpuSampleInitialized {false};
     QElapsedTimer m_processCpuSampleClock;
+    QElapsedTimer m_uiStallClock;
+    qint64 m_lastUiStallTickMs {0};
+    qint64 m_lastUiStallLogMs {0};
     double m_localCatFrequencyTargetHz {0.0};
     qint64 m_localCatFrequencyGuardUntilMs {0};
     qint64 m_lastIgnoredCatFrequencyLogMs {0};
@@ -1525,6 +1530,7 @@ private:
     QTimer* m_utcTimer         {nullptr};
     QTimer* m_spectrumTimer    {nullptr};
     QTimer* m_processCpuTimer  {nullptr};
+    QTimer* m_uiStallTimer     {nullptr};
     QTimer* m_asyncDecodeTimer {nullptr};   // FT2 turbo async 100ms
     QTimer* m_legacyStateTimer {nullptr};
     SoundInput*        m_soundInput  {nullptr};
@@ -1577,6 +1583,9 @@ private:
     QString m_legacyAllTxtRevisionKey;
     mutable QString m_legacyAllTxtConsumedPath;
     mutable qint64 m_legacyAllTxtConsumedSize {-1};
+    bool m_syncingLegacyBackendState {false};
+    bool m_syncingLegacyBackendDecodeList {false};
+    bool m_legacyStateRefreshBurstQueued {false};
     QSet<QString> m_legacyModeChangeClearedDecodeKeys;
     QSet<QString> m_legacyClearedRxMirrorKeys;
 
@@ -1733,6 +1742,8 @@ private:
 
     // B8 — Alert sounds
     bool                 m_alertSoundsEnabled {false};
+    qint64               m_lastCqAlertMs {0};
+    qint64               m_lastMyCallAlertMs {0};
     DecodiumAlertManager* m_alertManager {nullptr};
     DxccLookup*           m_dxccLookup  {nullptr};
 
@@ -1838,6 +1849,7 @@ private:
     float m_lastPanFreqMin {0.f};
     float m_lastPanFreqMax {0.f};
     bool m_legacyPcmSpectrumFeed {false};
+    bool m_directVisualAudioCaptureUnsafe {false};
     std::atomic_bool m_panadapterComputeBusy {false};
     std::atomic<uint64_t> m_panadapterComputeSerial {0};
 
@@ -1951,6 +1963,7 @@ private:
     void syncLegacyBackendState();
     void scheduleLegacyStateRefreshBurst();
     void migrateActiveMonitoringToLegacyBackend();
+    void applyDirectVisualAudioCaptureMode(const QString& reason);
     void rearmLegacyPcmSpectrumFeed(const QString& reason);
     void scheduleLegacyPcmSpectrumRearm(const QString& reason);
     void teardownAudioCapture();

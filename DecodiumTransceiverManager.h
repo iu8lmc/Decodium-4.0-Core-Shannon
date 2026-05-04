@@ -120,7 +120,7 @@ public:
     void setDtrHigh(bool v);
     void setForceRts(bool v);
     void setRtsHigh(bool v);
-    void setNetworkPort(const QString& v) { const QString value = v.trimmed(); if (m_networkPort != value){ m_networkPort = value; emit networkPortChanged(); } }
+    void setNetworkPort(const QString& v);
     void setTciPort(const QString& v)     { if (m_tciPort != v)    { m_tciPort = v;    emit tciPortChanged(); } }
     void setPttMethod(const QString& v);
     void setPttPort(const QString& v);

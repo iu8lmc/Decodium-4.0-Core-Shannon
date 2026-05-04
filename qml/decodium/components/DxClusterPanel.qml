@@ -1,6 +1,6 @@
-/* Decodium — DX Cluster Panel
- * Mostra gli spot dal DX Cluster TCP in tempo reale.
- * Doppio-click su uno spot → QSY alla frequenza.
+/* Decodium DX Cluster Panel
+ * Shows live TCP DX Cluster spots.
+ * Double-click a spot to QSY.
  */
 
 import QtQuick
@@ -23,16 +23,24 @@ Rectangle {
     border.color:  glassBorder
     border.width:  1
     radius:        8
-    width:         460
-    height:        320
+    property int minPanelWidth: 500
+    property int minPanelHeight: 300
 
-    // ── header ──────────────────────────────────────────────────────────────
+    width:         Math.max(minPanelWidth, Number(bridge.getSetting("uiDxClusterPanelWidth", 560)))
+    height:        Math.max(minPanelHeight, Number(bridge.getSetting("uiDxClusterPanelHeight", 360)))
+
+    function saveGeometry() {
+        bridge.setSetting("uiDxClusterPanelWidth", Math.round(width))
+        bridge.setSetting("uiDxClusterPanelHeight", Math.round(height))
+    }
+
+    // Header
     Rectangle {
         id: header
         width: parent.width; height: 34
         color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
         radius: 8
-        // bottom corners piatti
+        // Square off the bottom corners.
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 8; color: parent.color }
 
         MouseArea {
@@ -52,7 +60,6 @@ Rectangle {
             anchors { fill: parent; leftMargin: 10; rightMargin: 6 }
             spacing: 6
 
-            // stato connessione
             Rectangle {
                 width: 8; height: 8; radius: 4
                 color: bridge.dxCluster && bridge.dxCluster.connected ? "#00e676" : "#ef5350"
@@ -64,20 +71,18 @@ Rectangle {
             Text {
                 text: bridge.dxCluster && bridge.dxCluster.connected
                       ? "● " + bridge.dxCluster.host
-                      : "disconnesso"
+                      : "disconnected"
                 color: textSecondary; font.pixelSize: 10
             }
             Item { Layout.fillWidth: true }
 
-            // contatore spot
             Text {
                 text: (bridge.dxCluster && bridge.dxCluster.spots ? bridge.dxCluster.spots.length : 0) + " spot"
                 color: textSecondary; font.pixelSize: 10
             }
 
-            // pulsante Connetti / Disconnetti
             Rectangle {
-                width: 72; height: 22; radius: 4
+                width: 86; height: 22; radius: 4
                 color: connMouse.containsMouse
                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
                        : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.15)
@@ -95,12 +100,12 @@ Rectangle {
                 }
                 Text {
                     anchors.centerIn: parent
-                    text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnetti" : "Connetti"
+                    text: bridge.dxCluster && bridge.dxCluster.connected ? "Disconnect" : "Connect"
                     color: secondaryCyan; font.pixelSize: 10
+                    elide: Text.ElideRight
                 }
             }
 
-            // pulsante chiudi
             Rectangle {
                 width: 22; height: 22; radius: 4
                 color: closeMouse.containsMouse ? Qt.rgba(1, 0.2, 0.2, 0.4) : "transparent"
@@ -114,7 +119,7 @@ Rectangle {
         }
     }
 
-    // ── colonne header tabella ───────────────────────────────────────────────
+    // Table headers
     Rectangle {
         id: colHeader
         anchors.top: header.bottom
@@ -124,17 +129,17 @@ Rectangle {
         Row {
             anchors { fill: parent; leftMargin: 6 }
             spacing: 0
-            Text { width: 46;  text: "Ora";      color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 46;  text: "Time";     color: textSecondary; font.pixelSize: 10; font.bold: true }
             Text { width: 76;  text: "DX Call";  color: textSecondary; font.pixelSize: 10; font.bold: true }
             Text { width: 70;  text: "Freq";     color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 44;  text: "Banda";    color: textSecondary; font.pixelSize: 10; font.bold: true }
-            Text { width: 48;  text: "Modo";     color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 44;  text: "Band";     color: textSecondary; font.pixelSize: 10; font.bold: true }
+            Text { width: 48;  text: "Mode";     color: textSecondary; font.pixelSize: 10; font.bold: true }
             Text { width: 70;  text: "Spotter";  color: textSecondary; font.pixelSize: 10; font.bold: true }
             Text { Layout.fillWidth: true; text: "Info"; color: textSecondary; font.pixelSize: 10; font.bold: true }
         }
     }
 
-    // ── lista spot ───────────────────────────────────────────────────────────
+    // Spot list
     ListView {
         id: spotList
         anchors {
@@ -151,7 +156,6 @@ Rectangle {
             return all.filter(function(s) { return s["mode"] === root.modeFilter })
         }
 
-        // auto-scroll verso il basso quando arrivano nuovi spot
         onCountChanged: if (count > 0) positionViewAtEnd()
 
         delegate: Rectangle {
@@ -160,7 +164,6 @@ Rectangle {
             color: {
                 if (rowMouse.containsMouse)
                     return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
-                // evidenzia modi digitali
                 var md = modelData["mode"] || ""
                 if (md === "FT8" || md === "FT4" || md === "FT2")
                     return Qt.rgba(0, 0.9, 0.5, 0.07)
@@ -174,7 +177,6 @@ Rectangle {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
 
-                // doppio-click → QSY alla frequenza dello spot
                 onDoubleClicked: {
                     var freqKhz = modelData["frequency"] || 0
                     if (freqKhz > 0) {
@@ -183,7 +185,6 @@ Rectangle {
                     }
                 }
 
-                // singolo click → pre-seleziona callsign
                 onClicked: {
                     var call = modelData["dxCall"] || ""
                     if (call.length > 0) bridge.dxCall = call
@@ -246,14 +247,13 @@ Rectangle {
                     elide: Text.ElideRight
                 }
                 Text {
-                    width: root.width - 358
+                    width: Math.max(90, spotList.width - 358)
                     text: modelData["comment"] || ""
                     color: textSecondary; font.pixelSize: 10
                     elide: Text.ElideRight
                 }
             }
 
-            // tooltip callsign su hover
             ToolTip {
                 id: spotTooltip
                 visible: rowMouse.containsMouse
@@ -262,8 +262,8 @@ Rectangle {
                     var c = (modelData && modelData["dxCall"]) ? modelData["dxCall"] : ""
                     var f = (modelData && modelData["frequency"]) ? modelData["frequency"] : 0
                     var sp = (modelData && modelData["spotter"]) ? modelData["spotter"] : ""
-                    return c + "  —  " + f.toFixed(1) + " kHz\nSpotter: " + sp +
-                           "\n↵ click = imposta DX call\n↵↵ doppio-click = QSY"
+                    return c + " - " + f.toFixed(1) + " kHz\nSpotter: " + sp +
+                           "\nClick: set DX call\nDouble-click: QSY"
                 }
                 contentItem: Text {
                     text: spotTooltip.text || ""
@@ -284,28 +284,27 @@ Rectangle {
         }
     }
 
-    // ── barra filtro in basso ─────────────────────────────────────────────────
+    // Bottom filter bar
     Rectangle {
         id: filterRow
         anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
         height: 34
         color: Qt.rgba(0, 0, 0, 0.2)
         radius: 8
-        // top corners piatti
+        // Square off the top corners.
         Rectangle { anchors.top: parent.top; width: parent.width; height: 8; color: parent.color }
 
         RowLayout {
             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
             spacing: 8
 
-            Text { text: "Filtro:"; color: textSecondary; font.pixelSize: 10 }
+            Text { text: "Filter:"; color: textSecondary; font.pixelSize: 10 }
 
-            // filtro per modo
             Repeater {
-                model: ["FT8", "FT4", "FT2", "CW", "SSB"]
+                model: ["All", "FT8", "FT4", "FT2", "CW", "SSB"]
                 delegate: Rectangle {
                     width: 34; height: 20; radius: 3
-                    property bool active: root.modeFilter === modelData
+                    property bool active: modelData === "All" ? root.modeFilter === "" : root.modeFilter === modelData
                     color: active
                            ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.4)
                            : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.1)
@@ -313,7 +312,7 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.modeFilter = (root.modeFilter === modelData ? "" : modelData)
+                        onClicked: root.modeFilter = modelData === "All" ? "" : modelData
                     }
                     Text { anchors.centerIn: parent; text: modelData; color: textPrimary; font.pixelSize: 9 }
                 }
@@ -321,7 +320,6 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
-            // pulsante svuota lista
             Rectangle {
                 width: 60; height: 22; radius: 4
                 color: clearMouse.containsMouse ? Qt.rgba(1,0.3,0.3,0.3) : Qt.rgba(0.5,0.5,0.5,0.1)
@@ -333,6 +331,52 @@ Rectangle {
                 }
                 Text { anchors.centerIn: parent; text: "Clear"; color: textSecondary; font.pixelSize: 10 }
             }
+        }
+    }
+
+    Rectangle {
+        id: resizeHandle
+        width: 18
+        height: 18
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 2
+        radius: 3
+        color: resizeHover.hovered || resizeDrag.active
+               ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
+               : "transparent"
+        border.color: resizeHover.hovered || resizeDrag.active ? secondaryCyan : "transparent"
+        border.width: 1
+        z: 20
+
+        HoverHandler { id: resizeHover }
+        DragHandler {
+            id: resizeDrag
+            target: null
+            property real startWidth: 0
+            property real startHeight: 0
+            onActiveChanged: {
+                if (active) {
+                    startWidth = root.width
+                    startHeight = root.height
+                    root.z = 250
+                } else {
+                    root.saveGeometry()
+                }
+            }
+            onTranslationChanged: {
+                if (!active)
+                    return
+                root.width = Math.max(root.minPanelWidth, startWidth + translation.x)
+                root.height = Math.max(root.minPanelHeight, startHeight + translation.y)
+            }
+        }
+        Text {
+            anchors.centerIn: parent
+            text: "/"
+            rotation: -45
+            color: textSecondary
+            font.pixelSize: 13
         }
     }
 

@@ -62,7 +62,8 @@ public:
     void doubleClick(QString const& fromCall,
                      QString const& grid,
                      int            audioHz,
-                     int            snr);
+                     int            snr,
+                     int            requestedTx = 0);
 
     // UI: TX Enable button. When false the engine stops requesting TX
     // messages but keeps consuming decodes for caller-queue maintenance.
