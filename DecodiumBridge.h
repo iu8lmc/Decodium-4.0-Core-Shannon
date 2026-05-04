@@ -53,7 +53,7 @@ class NtpClient;
 class QDialog;
 namespace decodium {
   namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
-  namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; }
+  namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; class Ft2QsoEngine; }
   namespace ft4     { class FT4DecodeWorker;       struct DecodeRequest; }
   namespace q65     { class Q65DecodeWorker;       struct DecodeRequest; }
   namespace msk144  { class MSK144DecodeWorker;    struct DecodeRequest; }
@@ -1503,6 +1503,11 @@ private:
     decodium::ft8::FT8DecodeWorker*    m_ft8Worker    {nullptr};
     QThread* m_workerThreadFt2 {nullptr};
     decodium::ft2::FT2DecodeWorker*    m_ft2Worker    {nullptr};
+    // FT2 single-pipeline QSO sequencer (replaces autoSequenceStep mirror in
+    // FT2 mode). Owned only while mode == "FT2"; reset otherwise.
+    std::unique_ptr<decodium::ft2::Ft2QsoEngine> m_ft2Engine;
+    void ensureFt2Engine(QString const& origin);
+    void teardownFt2Engine(QString const& reason);
     QThread* m_workerThreadFt4 {nullptr};
     decodium::ft4::FT4DecodeWorker*    m_ft4Worker    {nullptr};
     QThread* m_workerThreadQ65 {nullptr};

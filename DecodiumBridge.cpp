@@ -20,6 +20,7 @@
 #include "helper_functions.h"
 #include "Detector/FT8DecodeWorker.hpp"
 #include "Detector/FT2DecodeWorker.hpp"
+#include "engines/Ft2QsoEngine.hpp"
 #include "Detector/FT4DecodeWorker.hpp"
 #include "Detector/Q65DecodeWorker.hpp"
 #include "Detector/MSK144DecodeWorker.hpp"
@@ -4063,9 +4064,13 @@ void DecodiumBridge::syncLegacyBackendState()
             if (!m_asyncTxEnabled)     { m_asyncTxEnabled = true;     emit asyncTxEnabledChanged(); }
             if (!m_asyncDecodeEnabled) { m_asyncDecodeEnabled = true; emit asyncDecodeEnabledChanged(); }
             m_qsoCooldown.clear();
-        } else if (m_asyncDecodeEnabled) {
-            m_asyncDecodeEnabled = false;
-            emit asyncDecodeEnabledChanged();
+            ensureFt2Engine(QStringLiteral("legacy mode-sync"));
+        } else {
+            if (m_asyncDecodeEnabled) {
+                m_asyncDecodeEnabled = false;
+                emit asyncDecodeEnabledChanged();
+            }
+            teardownFt2Engine(QStringLiteral("legacy mode-sync to ") + legacyMode);
         }
         if (legacyModeChanged) {
             clearDecodeWindowsForModeChange(previousMode, legacyMode);
@@ -4432,26 +4437,23 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
                                       entry.value(QStringLiteral("mode"), m_mode).toString());
         }
     };
-    auto feedWaitPounceFromEntries = [this](QVariantList const& entries,
-                                            QVariantList const& previousEntries) {
-        if (!m_waitPounceActive) {
-            return;
-        }
-        for (QVariant const& value : entries) {
-            QVariantMap const entry = value.toMap();
-            if (tryStartWaitPounceFromEntry(entry,
-                                            previousEntries,
-                                            QStringLiteral("legacy-mirror"))) {
-                break;
-            }
-        }
-    };
+    // feedWaitPounceFromEntries upstream invocava tryStartWaitPounceFromEntry
+    // dal legacy mirror. Rimossa: il decoder diretto e' gia' il punto di
+    // trigger ufficiale, e il doppio path (decoder + mirror band + mirror rx)
+    // bypassava la throttle 60s causando QSO duplicati.
     auto feedAutoSequenceFromEntries = [this](QVariantList const& entries,
                                               QVariantList const& previousEntries) {
         bool const autoSeqActive = !m_callsign.isEmpty()
             && ((m_autoSeq && (m_txEnabled || !m_dxCall.isEmpty()))
                 || m_autoCqRepeat);
         if (!autoSeqActive || m_manualTxHold) {
+            return;
+        }
+        // FT2 mode: Ft2QsoEngine owns the auto-sequence pipeline. The legacy
+        // widget mirror used to feed autoSequenceStep here too — that's the
+        // dual-pipeline race that caused 1.0.71 TX duplication. Skip when
+        // the engine is active.
+        if (m_ft2Engine) {
             return;
         }
 
@@ -4537,7 +4539,12 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
         mirroredDecodes = dropModeChangeClearedEntries(mirroredDecodes);
         feedMamQueueFromEntries(mirroredDecodes);
-        feedWaitPounceFromEntries(mirroredDecodes, m_decodeList);
+        // feedWaitPounceFromEntries qui era ridondante: il decoder diretto
+        // (onFt8DecodeReady / onFt2AsyncDecodeReady / onLegacyJtDecodeReady)
+        // gia' invoca tryStartWaitPounceFromEntry per ogni nuova decode. Il
+        // legacy mirror serve solo per UI/PSK Reporter retrofit; chiamarlo da
+        // qui faceva passare la stessa entry due volte con previousEntries
+        // diversi, bypassando potenzialmente la throttle 60s.
         feedAutoSequenceFromEntries(mirroredDecodes, m_decodeList);
         publishWorldMapFromEntries(mirroredDecodes, m_decodeList);
         queuePskReporterFromEntries(mirroredDecodes, m_decodeList);
@@ -4622,7 +4629,8 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
 
         feedMamQueueFromEntries(mergedRxDecodes);
-        feedWaitPounceFromEntries(mergedRxDecodes, m_rxDecodeList);
+        // Vedi nota in band-mirror: feedWaitPounceFromEntries qui era
+        // ridondante — il decoder diretto e' gia' il punto di trigger.
         feedAutoSequenceFromEntries(mergedRxDecodes, m_rxDecodeList);
         publishWorldMapFromEntries(mergedRxDecodes, m_rxDecodeList);
         queuePskReporterFromEntries(mergedRxDecodes, m_rxDecodeList);
@@ -6009,6 +6017,40 @@ void DecodiumBridge::finalizeTimeSyncDecodeCycle(quint64 serial, const QString& 
 }
 
 QString DecodiumBridge::mode() const { return m_mode; }
+
+void DecodiumBridge::ensureFt2Engine(QString const& origin)
+{
+    if (m_ft2Engine) return;
+    decodium::ft2::EngineConfig ecfg;
+    ecfg.myCall          = m_callsign.toUpper();
+    ecfg.myBaseCall      = ecfg.myCall;
+    int slashPos = ecfg.myBaseCall.indexOf('/');
+    if (slashPos > 0) ecfg.myBaseCall = ecfg.myBaseCall.left(slashPos);
+    ecfg.myGrid          = m_grid.left(4).toUpper();
+    ecfg.multiAnswerMode = true;
+    ecfg.localSlot       = decodium::ft2::Slot::Async;
+    m_ft2Engine = std::make_unique<decodium::ft2::Ft2QsoEngine>(ecfg, this);
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txMessageRequested,
+            this, [this](int txNum, QString msg) {
+                setTxMessage(txNum, msg);
+                if (m_currentTx != txNum) setCurrentTx(txNum);
+            });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::dxCallChanged,
+            this, [this](QString call) { setDxCall(call); });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::currentTxChanged,
+            this, [this](int n) { if (m_currentTx != n) setCurrentTx(n); });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::engineDiagnostic,
+            this, [this](QString line) { bridgeLog(line); });
+    bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine activated (%1)").arg(origin));
+}
+
+void DecodiumBridge::teardownFt2Engine(QString const& reason)
+{
+    if (!m_ft2Engine) return;
+    bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine torn down (%1)").arg(reason));
+    m_ft2Engine.reset();
+}
+
 void DecodiumBridge::setMode(const QString& v) {
     if (m_mode != v) {
         QString const previousMode = m_mode;
@@ -6044,9 +6086,11 @@ void DecodiumBridge::setMode(const QString& v) {
             if (!m_asyncTxEnabled)     { m_asyncTxEnabled = true;     emit asyncTxEnabledChanged(); }
             if (!m_asyncDecodeEnabled) { m_asyncDecodeEnabled = true;  emit asyncDecodeEnabledChanged(); }
             m_qsoCooldown.clear();
+            ensureFt2Engine(QStringLiteral("setMode"));
         } else {
             // Uscendo da FT2, forza async decode OFF (mainwindow: cbAsyncDecode->setChecked(false))
             if (m_asyncDecodeEnabled)  { m_asyncDecodeEnabled = false; emit asyncDecodeEnabledChanged(); }
+            teardownFt2Engine(QStringLiteral("setMode -> ") + m_mode);
         }
         // Aggiorna frequenza banda per il nuovo modo (FT8/FT2/FT4 hanno sub-bande diverse)
         m_bandManager->setCurrentMode(v);
@@ -6585,6 +6629,9 @@ void DecodiumBridge::setTxEnabled(bool v)
         m_txEnabled = v;
         emit txEnabledChanged();
     }
+
+    // Forward TX enable to the FT2 engine when active.
+    if (m_ft2Engine) m_ft2Engine->enableTx(v);
 
     // The legacy backend can clear its own TX-enable state after completing a
     // QSO while the QML bridge still shows TX enabled. A subsequent double-click
@@ -7352,6 +7399,7 @@ void DecodiumBridge::startRx()
         m_asyncAudioPos.store(0, std::memory_order_release);
         m_asyncDecodePending = false;
         m_asyncDecodeTimer->start();
+        ensureFt2Engine(QStringLiteral("startRx"));
     }
 
     startAudioCapture();
@@ -11629,6 +11677,28 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
                                               int audioFreq)
 {
     if (message.isEmpty()) return;
+
+    // FT2 fast-path: delega l'ingaggio al motore single-pipeline.
+    if (m_ft2Engine) {
+        QStringList parts = message.trimmed().split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        QString hisCall, hisGrid;
+        if (!parts.isEmpty() && parts[0].compare("CQ", Qt::CaseInsensitive) == 0) {
+            int callIdx = (parts.size() > 2 && parts[1].length() <= 3) ? 2 : 1;
+            if (callIdx < parts.size()) hisCall = parts[callIdx];
+            if (callIdx + 1 < parts.size()) hisGrid = parts[callIdx + 1];
+        } else if (parts.size() >= 2) {
+            // Standard form "TO FROM PAYLOAD": engage the FROM (transmitter
+            // we're hearing) — never the TO (addressee, possibly off-air).
+            hisCall = parts[1];
+            if (parts.size() >= 3) hisGrid = parts[2];
+        }
+        int snr = 0;
+        if (!db.isEmpty()) snr = db.trimmed().toInt();
+        m_ft2Engine->doubleClick(hisCall, hisGrid, audioFreq, snr);
+        m_ft2Engine->enableTx(true);
+        Q_UNUSED(timeStr);
+        return;
+    }
 
     // Aggiorna il report che invieremo in TX2 basandoci sull'SNR del segnale decodificato
     if (!db.isEmpty()) {
@@ -16506,30 +16576,49 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
                   .arg(uiFiltered)
                   .arg(duplicatesSkipped));
 
-    // Auto-sequenza FT2 async: identico a onFt8DecodeReady
-    // Shannon cbAsyncDecode: quando arriva un decode con il nostro callsign,
-    // elabora auto-seq e avvia TX IMMEDIATAMENTE senza aspettare il boundary del periodo.
-    // IMPORTANTE: checkAndStartPeriodicTx() solo se gotResponse=true.
-    // Il CQ periodico è gestito dal boundary del periodo — chiamarlo qui
-    // incondizionatamente causerebbe loop CQ ogni ~100ms.
-    bool autoSeqActive = !m_callsign.isEmpty() &&
-                         ((m_autoSeq && (m_txEnabled || !m_dxCall.isEmpty()))
-                          || m_autoCqRepeat);
-    if (autoSeqActive) {
-        bool gotResponse = false;
+    // Auto-sequenza FT2 async.
+    // Path 1 (preferito): Ft2QsoEngine attivo — single pipeline,
+    // dedup unificata, state machine std::variant. Bypassa autoSequenceStep.
+    // Path 2 (fallback): vecchio autoSequenceStep per FT2 senza motore.
+    if (m_ft2Engine) {
+        QStringList canon;
+        canon.reserve(rows.size());
         for (const auto& row : rows) {
             QStringList f = parseFt8Row(row);
-            if (f.size() < 5) continue;
+            if (f.size() < 8) continue;
             if (!shouldAcceptDecodedMessage(f[4])) continue;
-            if (messageContainsCallToken(f[4], m_callsign.trimmed().toUpper(),
-                                         normalizedBaseCall(m_callsign.trimmed().toUpper()))) {
-                autoSequenceStep(f);
-                gotResponse = true;
+            canon.push_back(QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8")
+                                .arg(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7]));
+        }
+        if (!canon.isEmpty()) {
+            decodium::ft2::FeedOutcome outcome = m_ft2Engine->feed(canon);
+            if (outcome.triggeredAdvance && !m_transmitting) {
+                checkAndStartPeriodicTx();
             }
         }
-        // Avvia TX immediatamente solo se abbiamo ricevuto una risposta valida
-        if (gotResponse && !m_transmitting)
-            checkAndStartPeriodicTx();
+    } else {
+        // Shannon cbAsyncDecode legacy: quando arriva un decode con il nostro
+        // callsign, elabora auto-seq e avvia TX IMMEDIATAMENTE senza aspettare
+        // il boundary del periodo. IMPORTANTE: checkAndStartPeriodicTx() solo
+        // se gotResponse=true (CQ periodico è gestito dal boundary).
+        bool autoSeqActive = !m_callsign.isEmpty() &&
+                             ((m_autoSeq && (m_txEnabled || !m_dxCall.isEmpty()))
+                              || m_autoCqRepeat);
+        if (autoSeqActive) {
+            bool gotResponse = false;
+            for (const auto& row : rows) {
+                QStringList f = parseFt8Row(row);
+                if (f.size() < 5) continue;
+                if (!shouldAcceptDecodedMessage(f[4])) continue;
+                if (messageContainsCallToken(f[4], m_callsign.trimmed().toUpper(),
+                                             normalizedBaseCall(m_callsign.trimmed().toUpper()))) {
+                    autoSequenceStep(f);
+                    gotResponse = true;
+                }
+            }
+            if (gotResponse && !m_transmitting)
+                checkAndStartPeriodicTx();
+        }
     }
 }
 

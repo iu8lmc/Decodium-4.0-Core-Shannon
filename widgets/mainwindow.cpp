@@ -5443,7 +5443,14 @@ void MainWindow::legacySetTxFirst(bool enabled)
 
   if (m_mode == "FT2" || m_specOp == SpecOp::HOUND)
     {
-      m_txFirst = false;
+      // Solo Hound deve forzare m_txFirst=false: in FT2 normale il sequencer
+      // legge m_txFirst per la parity degli slot e azzerarlo qui rompe la
+      // sincronia TX/RX (sintomi: chiamata duplicata, stazione DX non vista,
+      // sequencer che salta a TX3/TX4). Il checkbox UI resta nascosto/unchecked
+      // come in 1.0.70.
+      if (m_specOp == SpecOp::HOUND) {
+        m_txFirst = false;
+      }
       ui->txFirstCheckBox->setChecked(false);
       return;
     }

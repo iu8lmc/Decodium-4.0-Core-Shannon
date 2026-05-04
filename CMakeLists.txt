@@ -395,6 +395,9 @@ set (wsjtx_CXXSRCS
   DecodiumPropagationManager.cpp
   DecodiumPropagationManager.h
   DecodiumAudioSink.h
+  engines/Ft2Types.hpp
+  engines/Ft2QsoEngine.hpp
+  engines/Ft2QsoEngine.cpp
   controllers/ActiveStationsModel.cpp
   controllers/ActiveStationsModel.hpp
   DecodiumThemeManager.cpp
@@ -1500,6 +1503,9 @@ add_executable (decodium_qml
   DecodiumPropagationManager.h
   DecodiumLegacyBackend.cpp
   DecodiumLegacyBackend.h
+  engines/Ft2Types.hpp
+  engines/Ft2QsoEngine.hpp
+  engines/Ft2QsoEngine.cpp
   helper_functions.cpp
   helper_functions.h
   controllers/ActiveStationsModel.cpp
