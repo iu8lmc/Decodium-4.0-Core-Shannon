@@ -45,6 +45,7 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QGuiApplication>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QApplication>
 #include <QCheckBox>
@@ -3327,6 +3328,11 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::decodeReady,
             this, &DecodiumBridge::onFt2DecodeReady);
     // path async turbo (ogni 100ms, senza serial check)
+    // Tier-1 telemetry: connect profile signal first so the FIFO order
+    // guarantees onFt2AsyncDecodeProfile lands BEFORE onFt2AsyncDecodeReady
+    // (Qt::QueuedConnection preserves emit order for same sender→receiver).
+    connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncDecodeProfile,
+            this, &DecodiumBridge::onFt2AsyncDecodeProfile, Qt::QueuedConnection);
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncDecodeReady,
             this, &DecodiumBridge::onFt2AsyncDecodeReady, Qt::QueuedConnection);
     connect(m_workerThreadFt2, &QThread::finished, m_ft2Worker, &QObject::deleteLater);
@@ -6495,6 +6501,24 @@ qlonglong DecodiumBridge::ft2MaxTxLatencyUs() const {
 }
 qlonglong DecodiumBridge::ft2AvgTxLatencyUs() const {
     return m_ft2Engine ? static_cast<qlonglong>(m_ft2Engine->avgTxLatencyUs()) : 0;
+}
+
+void DecodiumBridge::updatePipelineSegmentEma(qint64 sampleUs,
+                                              qint64& last, qint64& avg, qint64& max) noexcept
+{
+    if (sampleUs < 0) sampleUs = 0;
+    last = sampleUs;
+    if (sampleUs > max) max = sampleUs;
+    // EMA alpha=1/8, identical to engine TX latency stats.
+    if (avg == 0) avg = sampleUs;
+    else          avg += (sampleUs - avg) / 8;
+}
+
+void DecodiumBridge::onFt2AsyncDecodeProfile(qint64 decoderUs, qint64 emittedAtNs)
+{
+    m_ft2PendingEmittedAtNs = emittedAtNs;
+    updatePipelineSegmentEma(decoderUs, m_ft2LastDecoderUs, m_ft2AvgDecoderUs, m_ft2MaxDecoderUs);
+    emit ft2PipelineProfileChanged();
 }
 
 void DecodiumBridge::setMode(const QString& v) {
@@ -12370,6 +12394,21 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
 void DecodiumBridge::genStdMsgs(const QString& hisCall, const QString& hisGrid)
 {
     if (m_callsign.isEmpty() || hisCall.isEmpty()) return;
+    // Tier-1 telemetry: encoder duration sampled only in FT2 (other modes
+    // use this same path but Tier 1 scope is FT2-only). RAII via lambda guard
+    // keeps the early-return paths (empty callsign etc.) excluded.
+    auto const t_enc_start = (m_mode == QStringLiteral("FT2"))
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
+    auto encoderGuard = qScopeGuard([this, t_enc_start]() {
+        if (m_mode != QStringLiteral("FT2") || t_enc_start.time_since_epoch().count() == 0)
+            return;
+        auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                                   std::chrono::steady_clock::now() - t_enc_start).count();
+        updatePipelineSegmentEma(elapsedUs, m_ft2LastEncoderUs, m_ft2AvgEncoderUs, m_ft2MaxEncoderUs);
+        emit ft2PipelineProfileChanged();
+    });
+
     QString my   = m_callsign;
     QString mygr = m_grid.left(4); // gridsquare 4 chars
     QString rptSent = m_reportSent.isEmpty() ? "-10" : m_reportSent;
@@ -16965,6 +17004,17 @@ void DecodiumBridge::onFt2DecodeReady(quint64 serial, QStringList rows)
 
 void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
 {
+    // Tier-1 telemetry: cross-thread queue delay = (slot entry now) - (worker
+    // emit timestamp from the matching asyncDecodeProfile signal). Sampled
+    // first so the measurement excludes any work this slot performs.
+    if (m_ft2PendingEmittedAtNs > 0) {
+        auto const nowNs = std::chrono::steady_clock::now().time_since_epoch().count();
+        qint64 const queueUs = (nowNs - m_ft2PendingEmittedAtNs) / 1000;
+        updatePipelineSegmentEma(queueUs, m_ft2LastQueueUs, m_ft2AvgQueueUs, m_ft2MaxQueueUs);
+        m_ft2PendingEmittedAtNs = 0;
+        emit ft2PipelineProfileChanged();
+    }
+
     // Path turbo async: stessa logica di onFt8DecodeReady ma senza serial.
     // Deduplica per messaggio: non aggiunge righe già presenti nella lista.
     m_asyncDecodePending = false;

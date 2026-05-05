@@ -338,6 +338,17 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(qlonglong ft2LastTxLatencyUs READ ft2LastTxLatencyUs NOTIFY ft2TxLatencyChanged)
     Q_PROPERTY(qlonglong ft2MaxTxLatencyUs  READ ft2MaxTxLatencyUs  NOTIFY ft2TxLatencyChanged)
     Q_PROPERTY(qlonglong ft2AvgTxLatencyUs  READ ft2AvgTxLatencyUs  NOTIFY ft2TxLatencyChanged)
+    // FT2 pipeline-segment telemetry (Tier 1):
+    //   decoder = duration of stage7 native decode call
+    //   queue   = emit asyncDecodeReady → bridge slot entry (cross-thread)
+    //   encoder = genStdMsgs duration (TX message format)
+    // dispatch latency is the legacy ft2*TxLatency above (engine internal).
+    Q_PROPERTY(qlonglong ft2AvgDecoderUs READ ft2AvgDecoderUs NOTIFY ft2PipelineProfileChanged)
+    Q_PROPERTY(qlonglong ft2MaxDecoderUs READ ft2MaxDecoderUs NOTIFY ft2PipelineProfileChanged)
+    Q_PROPERTY(qlonglong ft2AvgQueueUs   READ ft2AvgQueueUs   NOTIFY ft2PipelineProfileChanged)
+    Q_PROPERTY(qlonglong ft2MaxQueueUs   READ ft2MaxQueueUs   NOTIFY ft2PipelineProfileChanged)
+    Q_PROPERTY(qlonglong ft2AvgEncoderUs READ ft2AvgEncoderUs NOTIFY ft2PipelineProfileChanged)
+    Q_PROPERTY(qlonglong ft2MaxEncoderUs READ ft2MaxEncoderUs NOTIFY ft2PipelineProfileChanged)
 
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
@@ -725,6 +736,14 @@ public:
     qlonglong ft2LastTxLatencyUs() const;
     qlonglong ft2MaxTxLatencyUs()  const;
     qlonglong ft2AvgTxLatencyUs()  const;
+
+    // FT2 pipeline-segment getters (Tier 1). All in microseconds. EMA alpha=1/8.
+    qlonglong ft2AvgDecoderUs() const noexcept { return m_ft2AvgDecoderUs; }
+    qlonglong ft2MaxDecoderUs() const noexcept { return m_ft2MaxDecoderUs; }
+    qlonglong ft2AvgQueueUs()   const noexcept { return m_ft2AvgQueueUs;   }
+    qlonglong ft2MaxQueueUs()   const noexcept { return m_ft2MaxQueueUs;   }
+    qlonglong ft2AvgEncoderUs() const noexcept { return m_ft2AvgEncoderUs; }
+    qlonglong ft2MaxEncoderUs() const noexcept { return m_ft2MaxEncoderUs; }
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
     QObject*    diagnostics() const { return m_diagnostics; }
@@ -1112,6 +1131,7 @@ signals:
     void ft2StateChanged();
     void ft2CallersChanged();
     void ft2TxLatencyChanged();
+    void ft2PipelineProfileChanged();
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();
@@ -1173,6 +1193,10 @@ private slots:
     void onFt8DecodeReady(quint64 serial, QStringList rows);
     void onFt2DecodeReady(quint64 serial, QStringList rows);
     void onFt2AsyncDecodeReady(QStringList rows);   // path async 100ms
+    // Tier-1 telemetry: emitted by worker right before asyncDecodeReady.
+    // Records decoder duration + emit timestamp so onFt2AsyncDecodeReady can
+    // measure the cross-thread queue delay against std::chrono::steady_clock.
+    void onFt2AsyncDecodeProfile(qint64 decoderUs, qint64 emittedAtNs);
     void onFt4DecodeReady(quint64 serial, QStringList rows);
     void onQ65DecodeReady(quint64 serial, QStringList rows);
     void onMsk144DecodeReady(quint64 serial, QStringList rows);
@@ -1551,6 +1575,23 @@ private:
     std::unique_ptr<decodium::ft2::Ft2QsoEngine> m_ft2Engine;
     void ensureFt2Engine(QString const& origin);
     void teardownFt2Engine(QString const& reason);
+
+    // Tier-1 pipeline telemetry (microseconds, EMA alpha=1/8).
+    // m_ft2PendingEmittedAtNs holds the last decoder-emit timestamp so the
+    // bridge slot can compute the cross-thread queue latency on entry. 0
+    // means "no pending sample" (no profile yet seen since reset).
+    qint64 m_ft2PendingEmittedAtNs {0};
+    qint64 m_ft2LastDecoderUs {0};
+    qint64 m_ft2AvgDecoderUs  {0};
+    qint64 m_ft2MaxDecoderUs  {0};
+    qint64 m_ft2LastQueueUs   {0};
+    qint64 m_ft2AvgQueueUs    {0};
+    qint64 m_ft2MaxQueueUs    {0};
+    qint64 m_ft2LastEncoderUs {0};
+    qint64 m_ft2AvgEncoderUs  {0};
+    qint64 m_ft2MaxEncoderUs  {0};
+    void   updatePipelineSegmentEma(qint64 sampleUs,
+                                    qint64& last, qint64& avg, qint64& max) noexcept;
     QThread* m_workerThreadFt4 {nullptr};
     decodium::ft4::FT4DecodeWorker*    m_ft4Worker    {nullptr};
     QThread* m_workerThreadQ65 {nullptr};

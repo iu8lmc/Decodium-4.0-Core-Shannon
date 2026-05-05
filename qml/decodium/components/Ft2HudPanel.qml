@@ -370,6 +370,78 @@ Rectangle {
             }
         }
 
+        // ----- Pipeline segment telemetry (Tier 1) -----
+        // Mostra le tre tappe pre-engine/post-engine misurate dal bridge:
+        //   DEC = stage7 native decoder (durata Fortran-style C++ call)
+        //   QUE = cross-thread queue delay (worker emit → bridge slot entry)
+        //   ENC = genStdMsgs encoder (TX1..TX6 message format)
+        // La latenza dispatch interna engine resta nel badge LAT sopra.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: bridge.ft2AvgDecoderUs > 0 || bridge.ft2AvgQueueUs > 0 || bridge.ft2AvgEncoderUs > 0
+
+            Text {
+                text: "PIPE"
+                font.family: "Monospace"
+                font.pixelSize: 9
+                font.bold: true
+                color: textSecondary
+            }
+            Repeater {
+                model: [
+                    { label: "DEC", avgUs: bridge.ft2AvgDecoderUs, maxUs: bridge.ft2MaxDecoderUs, sat: 200.0 },
+                    { label: "QUE", avgUs: bridge.ft2AvgQueueUs,   maxUs: bridge.ft2MaxQueueUs,   sat:  20.0 },
+                    { label: "ENC", avgUs: bridge.ft2AvgEncoderUs, maxUs: bridge.ft2MaxEncoderUs, sat:  20.0 }
+                ]
+                delegate: Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 16
+                    radius: 3
+                    clip: true
+                    readonly property real avgMs: modelData.avgUs / 1000.0
+                    readonly property real maxMs: modelData.maxUs / 1000.0
+                    readonly property real sat:   modelData.sat
+                    readonly property color tone:
+                        avgMs > sat        ? danger
+                      : avgMs > sat * 0.5  ? warning
+                      : avgMs > sat * 0.25 ? Qt.rgba(1, 1, 0.4, 1)
+                      : accent
+                    color: Qt.rgba(tone.r, tone.g, tone.b, 0.10)
+                    border.color: tone
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * Math.min(parent.avgMs / parent.sat, 1.0)
+                        radius: 3
+                        color: Qt.rgba(parent.tone.r, parent.tone.g, parent.tone.b, 0.40)
+                        Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    }
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 5
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.label + " " + parent.avgMs.toFixed(1)
+                        font.family: "Monospace"
+                        font.pixelSize: 9
+                        font.bold: true
+                        color: parent.tone
+                    }
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↑" + parent.maxMs.toFixed(1)
+                        font.family: "Monospace"
+                        font.pixelSize: 8
+                        color: textSecondary
+                    }
+                }
+            }
+        }
+
         // ----- Caller queue header -----
         RowLayout {
             Layout.fillWidth: true

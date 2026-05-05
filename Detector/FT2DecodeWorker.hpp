@@ -55,6 +55,14 @@ public:
   void beginShutdown ();
 
 Q_SIGNALS:
+  // Tier-1 telemetry: emitted right BEFORE asyncDecodeReady, so the
+  // matching profile data lands at the bridge slot before the rows handler
+  // (Qt::QueuedConnection preserves FIFO across same-receiver same-thread).
+  // decoderUs   = duration of the stage7 native decoder call
+  // emittedAtNs = std::chrono::steady_clock::now() count(), used by the
+  //               bridge to compute the cross-thread queue delay.
+  void asyncDecodeProfile (qint64 decoderUs, qint64 emittedAtNs);
+
   void asyncDecodeReady (QStringList rows);
   void decodeReady (quint64 serial, QStringList rows);
 

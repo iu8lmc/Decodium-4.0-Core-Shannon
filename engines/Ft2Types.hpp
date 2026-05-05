@@ -283,4 +283,25 @@ struct FeedOutcome {
     QString     diagnostic;         // human-readable trace line
 };
 
+// ============================================================================
+// TxPipelineProfile — telemetry per-segment for one TX-bound traversal.
+// All values in microseconds; 0 = not measured this round.
+//
+// Pipeline layout (end-to-end TX trigger):
+//   audio_in → ring → [decoder] → emit → [queue] → engine.feed →
+//   [dispatch] → txMessageRequested → [encoder] → audio_out + PTT
+//
+// Tier 1 covers the four segments observable from the engine + bridge layer.
+// audio_in/audio_out and PTT-assert latencies require backend hooks
+// (mainwindow + audio driver) and are tracked separately when available.
+// ============================================================================
+struct TxPipelineProfile {
+    qint64 decoderUs  {0};   // duration of stage7 native decoder call
+    qint64 queueUs    {0};   // emit asyncDecodeReady → bridge handler entry
+    qint64 dispatchUs {0};   // engine.feed entry → txMessageRequested
+    qint64 encoderUs  {0};   // genStdMsgs / message format duration
+    qint64 totalUs    {0};   // decoder + queue + dispatch + encoder
+    int    txNum      {0};   // resulting TX number (1..6)
+};
+
 } // namespace decodium::ft2

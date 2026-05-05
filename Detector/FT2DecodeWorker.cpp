@@ -2,6 +2,7 @@
 #include "Detector/FT2DecodeWorker.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <mutex>
 
@@ -218,15 +219,26 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
   auto mycall = to_fortran_field (request.mycall, 12);
   auto hiscall = to_fortran_field (request.hiscall, 12);
 
+  using SteadyClock = std::chrono::steady_clock;
+  auto const t_decode_start = SteadyClock::now ();
+
   ftx_ft2_async_decode_stage7_c (iwave, &nqsoprogress, &nfqso, &nfa, &nfb,
                                  &ndepth, &ncontest, mycall.data (), hiscall.data (),
                                  &snrs[0], &dts[0], &freqs[0], &naps[0], &quals[0],
                                  &bits77[0], &decodeds[0], &nout);
 
+  auto const t_decode_end = SteadyClock::now ();
+
   if (m_shuttingDown.load (std::memory_order_relaxed))
     {
       return;
     }
+
+  qint64 const decoderUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                               t_decode_end - t_decode_start).count ();
+  qint64 const emittedAtNs = t_decode_end.time_since_epoch ().count ();
+  Q_EMIT asyncDecodeProfile (decoderUs, emittedAtNs);
+
   Q_EMIT asyncDecodeReady (build_rows (QString {}, '~', nout, snrs, dts, freqs, naps, quals,
                                        decodeds));
 }
