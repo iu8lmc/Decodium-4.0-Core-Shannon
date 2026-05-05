@@ -619,6 +619,37 @@ QString Ft2QsoEngine::dxCall() const {
 bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
     bool advanced = false;
 
+    // ATS partner-timing sampling (PRE-visit). Doing this BEFORE the visit is
+    // crucial: the decode that fires the closing transition (e.g. R+report
+    // moving AwaitingReport→Closing) would otherwise be tracked after the
+    // active partner has been wiped, and the very last arrival would be lost
+    // — leaving us with N-1 samples for a QSO that only ever produces N=2.
+    //
+    // We accept the row if it comes from the current QSO partner OR (when no
+    // QSO is yet engaged) from a station that's about to become our partner
+    // (CallingCq + directedToMe). track() self-clears on call mismatch.
+    if (m_cfg.adaptiveTxSyncEnabled
+        && m_cfg.localSlot == Slot::Async
+        && !row.fromCall.isEmpty()) {
+        QString partner = std::visit([](auto const& s) -> QString {
+            using T = std::decay_t<decltype(s)>;
+            if constexpr (std::is_same_v<T, state::ReplyingTx1>      ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingReport>  ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingRRR>     ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingSignoff>) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::Closing>         ) return s.partnerCall;
+            else                                                          return QString();
+        }, m_state);
+        // CallingCq → AwaitingReport: this decode IS what engages the partner;
+        // adopt its fromCall as the candidate so we count it as sample 1.
+        if (partner.isEmpty() && row.directedToMe) {
+            partner = row.fromCall;
+        }
+        if (!partner.isEmpty() && row.fromCall == partner) {
+            m_partnerTiming.track(partner, row.receivedAt);
+        }
+    }
+
     std::visit([&](auto& s) {
         using T = std::decay_t<decltype(s)>;
 
@@ -834,35 +865,17 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         }
     }, m_state);
 
-    // ATS partner-timing sampling — register the arrival timestamp for the
-    // engaged partner. Called AFTER the visit so that a CQ→AwaitingReport
-    // transition (which sets partnerCall inside the visit) still seeds the
-    // tracker on its very first decode.
-    if (m_cfg.adaptiveTxSyncEnabled
-        && m_cfg.localSlot == Slot::Async
-        && !row.fromCall.isEmpty()) {
-        QString const partner = std::visit([](auto const& s) -> QString {
-            using T = std::decay_t<decltype(s)>;
-            if constexpr (std::is_same_v<T, state::ReplyingTx1>      ) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::AwaitingReport>  ) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::AwaitingRRR>     ) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::AwaitingSignoff>) return s.partnerCall;
-            else                                                          return QString();
-        }, m_state);
-        if (!partner.isEmpty() && row.fromCall == partner) {
-            m_partnerTiming.track(partner, row.receivedAt);
-        }
-    }
-
     return advanced;
 }
 
 void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
     char const* prevName = stateName(m_state);
     bool const enteringClosing = std::holds_alternative<state::Closing>(next);
+    // Closing is still part of the active QSO (partner is finishing) — the
+    // tracker should survive into Closing so that the very last partner
+    // arrival still counts. Only reset on Idle/CallingCq.
     bool const endsActiveQso = std::holds_alternative<state::Idle>(next)
-                            || std::holds_alternative<state::CallingCq>(next)
-                            || enteringClosing;
+                            || std::holds_alternative<state::CallingCq>(next);
     m_state = std::move(next);
     char const* nextName = stateName(m_state);
     if (enteringClosing) {

@@ -36,6 +36,10 @@ EngineConfig makeCfg(QString me = "IK8TWX", QString grid = "JN70") {
     c.myGrid          = grid;
     c.multiAnswerMode = true;
     c.localSlot       = Slot::Async;
+    // Default OFF for legacy tests — ATS would defer requestTx() emits via
+    // QTimer::singleShot, but most legacy tests inspect QSignalSpy without
+    // pumping the event loop. ATS-specific tests opt in by setting this true.
+    c.adaptiveTxSyncEnabled = false;
     return c;
 }
 

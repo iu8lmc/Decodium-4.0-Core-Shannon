@@ -172,7 +172,11 @@ constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(7000);
 // ============================================================================
 constexpr Duration    kFt2SlotPeriod      = std::chrono::milliseconds(3750);
 constexpr Duration    kAtsMaxCorrection   = std::chrono::milliseconds(500);
-constexpr std::size_t kAtsMinSamples      = 3;
+// 2 samples is the minimum useful confidence: with 1 we know "where" the
+// partner transmitted last, with 2 we also know their period is consistent.
+// FT2 standard exchange (CQ→TX1→TX3→close) only ever produces 2 partner
+// arrivals — requiring 3 would mean ATS never engages on single QSO flows.
+constexpr std::size_t kAtsMinSamples      = 2;
 constexpr std::size_t kAtsMaxSamples      = 5;
 
 struct PartnerTimingTracker {
