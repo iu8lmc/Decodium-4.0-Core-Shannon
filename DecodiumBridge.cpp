@@ -14046,6 +14046,15 @@ void DecodiumBridge::loadSettings()
                                        : (bridgeGrid.isEmpty() ? QStringLiteral("AA00") : bridgeGrid);
     m_frequency = s.value("frequency", 14074000.0).toDouble();
     m_mode     = s.value("mode", "FT8").toString();
+    // BandManager is constructed with m_currentMode="FT8" default; if the user
+    // had FT2 (or any non-FT8 mode) saved, Bridge::setMode would short-circuit
+    // its propagation here because Bridge's own m_mode default also matches the
+    // restored value. Force-sync so the very first band change after startup
+    // returns the correct per-mode frequency (e.g. 28184 kHz on 10m FT2 instead
+    // of 28074 kHz FT8).
+    if (m_bandManager) {
+        m_bandManager->setCurrentMode(m_mode);
+    }
     m_audioInputDevice  = s.value("audioInputDevice", s.value("SoundInName", "")).toString();
     m_audioOutputDevice = s.value("audioOutputDevice", s.value("SoundOutName", "")).toString();
     m_audioInputChannel = s.contains("audioInputChannel")
