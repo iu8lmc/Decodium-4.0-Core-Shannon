@@ -834,18 +834,47 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         }
     }, m_state);
 
+    // ATS partner-timing sampling — register the arrival timestamp for the
+    // engaged partner. Called AFTER the visit so that a CQ→AwaitingReport
+    // transition (which sets partnerCall inside the visit) still seeds the
+    // tracker on its very first decode.
+    if (m_cfg.adaptiveTxSyncEnabled
+        && m_cfg.localSlot == Slot::Async
+        && !row.fromCall.isEmpty()) {
+        QString const partner = std::visit([](auto const& s) -> QString {
+            using T = std::decay_t<decltype(s)>;
+            if constexpr (std::is_same_v<T, state::ReplyingTx1>      ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingReport>  ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingRRR>     ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingSignoff>) return s.partnerCall;
+            else                                                          return QString();
+        }, m_state);
+        if (!partner.isEmpty() && row.fromCall == partner) {
+            m_partnerTiming.track(partner, row.receivedAt);
+        }
+    }
+
     return advanced;
 }
 
 void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
     char const* prevName = stateName(m_state);
     bool const enteringClosing = std::holds_alternative<state::Closing>(next);
+    bool const endsActiveQso = std::holds_alternative<state::Idle>(next)
+                            || std::holds_alternative<state::CallingCq>(next)
+                            || enteringClosing;
     m_state = std::move(next);
     char const* nextName = stateName(m_state);
     if (enteringClosing) {
         // Arm TX-end short-circuit (see notifyBackendTxStateChanged()).
         m_closingSawTxBegin = false;
         m_closingSawTxEnd   = false;
+    }
+    if (endsActiveQso) {
+        // The active partner is gone — discard timing samples so the next QSO
+        // starts measuring from scratch (different station, different clock).
+        m_partnerTiming.clear();
+        m_lastAtsOffsetMs = 0;
     }
     emit engineDiagnostic(QStringLiteral("[Ft2Engine] %1 -> %2 (%3)")
                           .arg(prevName).arg(nextName).arg(reason));
@@ -878,16 +907,52 @@ void Ft2QsoEngine::requestTx(int txNum, QString const& formatted) {
     if (txNumChanged) {
         emit currentTxChanged(txNum);
     }
-    if (m_txEnabled && (txNumChanged || msgChanged)) {
-        emit txMessageRequested(txNum, formatted);
-        // Sample latency only when the TX was driven by a fresh decode
-        // (m_currentDispatchStart valid) — tick()-driven CQ rotations and
-        // doubleClick events have no upstream "decode arrived" instant.
-        if (m_currentDispatchStart != TimePoint{}) {
-            auto const us = std::chrono::duration_cast<std::chrono::microseconds>(
-                                clockNow() - m_currentDispatchStart).count();
-            updateLatencyStats(static_cast<qint64>(us), txNum);
+    if (!m_txEnabled || !(txNumChanged || msgChanged)) {
+        return;
+    }
+
+    // Latency is sampled BEFORE applying any ATS deliberate delay — ATS
+    // sleep time is a scheduling choice, not engine contention.
+    qint64 sampledLatencyUs = -1;
+    if (m_currentDispatchStart != TimePoint{}) {
+        sampledLatencyUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                               clockNow() - m_currentDispatchStart).count();
+    }
+
+    // Adaptive TX Sync — async only. If we have enough samples of the active
+    // partner's TX cadence, predict when their RX window opens and delay our
+    // emit so the message lands inside it. Capped at ±kAtsMaxCorrection.
+    int delayMs = 0;
+    if (m_cfg.adaptiveTxSyncEnabled
+        && m_cfg.localSlot == Slot::Async
+        && m_partnerTiming.hasConfidence()) {
+        if (auto const rec = m_partnerTiming.recommendedDelayMs(clockNow())) {
+            int const capMs = static_cast<int>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(kAtsMaxCorrection).count());
+            int v = *rec;
+            if (v >  capMs) v =  capMs;
+            if (v < -capMs) v = -capMs;
+            // Only honour positive offsets (delay until partner RX); negative
+            // values mean the window already passed, so fire immediately.
+            if (v > 0) delayMs = v;
         }
+    }
+    m_lastAtsOffsetMs = delayMs;
+    emit atsOffsetApplied(delayMs, static_cast<int>(m_partnerTiming.samples()));
+
+    auto doEmit = [this, txNum, formatted, sampledLatencyUs]() {
+        emit txMessageRequested(txNum, formatted);
+        if (sampledLatencyUs >= 0) {
+            updateLatencyStats(sampledLatencyUs, txNum);
+        }
+    };
+
+    if (delayMs > 0) {
+        QTimer::singleShot(delayMs, this, doEmit);
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] ATS: deferred TX%1 emit by %2ms (n=%3)")
+                              .arg(txNum).arg(delayMs).arg(m_partnerTiming.samples()));
+    } else {
+        doEmit();
     }
 }
 

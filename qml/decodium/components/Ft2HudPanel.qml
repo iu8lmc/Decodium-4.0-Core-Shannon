@@ -130,6 +130,42 @@ Rectangle {
             }
         }
 
+        // ATS badge: indica se l'Adaptive TX Sync è ingaggiato sul partner
+        // attivo e mostra l'offset (ms) applicato all'ultimo emit. Verde =
+        // confidence ok, grigio = sample insufficienti (< 3).
+        Rectangle {
+            id: atsBadge
+            Layout.preferredHeight: 16
+            Layout.preferredWidth: atsLabel.implicitWidth + 10
+            radius: 3
+            color: bridge.ft2AtsEngaged
+                   ? Qt.rgba(0, 0.9, 0.55, 0.18)
+                   : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.10)
+            border.width: 1
+            border.color: bridge.ft2AtsEngaged
+                          ? Qt.rgba(0, 0.9, 0.55, 0.55)
+                          : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.35)
+            ToolTip.visible: atsMa.containsMouse
+            ToolTip.delay: 400
+            ToolTip.text: bridge.ft2AtsEngaged
+                          ? ("Adaptive TX Sync: ritardo " + bridge.ft2AtsOffsetMs + "ms su "
+                             + bridge.ft2AtsTrackedCall + " (" + bridge.ft2AtsSamples + " sample)")
+                          : ("Adaptive TX Sync: in attesa di sample (" + bridge.ft2AtsSamples + "/3)")
+            Text {
+                id: atsLabel
+                anchors.centerIn: parent
+                font.pixelSize: 9
+                font.family: "Consolas, monospace"
+                font.bold: true
+                color: bridge.ft2AtsEngaged ? "#00e676" : textSecondary
+                text: bridge.ft2AtsEngaged
+                      ? ("ATS " + (bridge.ft2AtsOffsetMs >= 0 ? "+" : "")
+                         + bridge.ft2AtsOffsetMs + "ms")
+                      : ("ATS —")
+            }
+            MouseArea { id: atsMa; anchors.fill: parent; hoverEnabled: true }
+        }
+
         // Close panel button
         Rectangle {
             Layout.preferredWidth: 18

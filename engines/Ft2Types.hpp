@@ -158,6 +158,68 @@ constexpr Duration kEngineTickInterval  = std::chrono::milliseconds(100);
 constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(7000);
 
 // ============================================================================
+// Adaptive TX Sync (ATS) — async-only feature.
+//
+// In async FT2 we are not bound to slot grids: our TX can start at any moment.
+// ATS measures the cadence of the active partner's decodes and schedules our
+// txMessageRequested to land in the center of *their* RX window, not ours.
+// This gives peer-to-peer sync without NTP/GPS, and copes with stations that
+// have a stable but biased clock offset.
+//
+// Model: the partner transmits at ~2*slot intervals (one slot they TX, one
+// they RX). After observing N arrivals we predict the center of their next
+// RX window as: last_arrival + 1.5 * slotPeriod. We schedule our TX there.
+// ============================================================================
+constexpr Duration    kFt2SlotPeriod      = std::chrono::milliseconds(3750);
+constexpr Duration    kAtsMaxCorrection   = std::chrono::milliseconds(500);
+constexpr std::size_t kAtsMinSamples      = 3;
+constexpr std::size_t kAtsMaxSamples      = 5;
+
+struct PartnerTimingTracker {
+    std::deque<TimePoint>  arrivals;
+    QString                trackedCall;
+
+    void clear() noexcept {
+        arrivals.clear();
+        trackedCall.clear();
+    }
+
+    // Register an arrival from `call`. If the partner just changed, the
+    // previous samples are discarded — they no longer describe the same
+    // station's clock.
+    void track(QString const& call, TimePoint t) {
+        if (call != trackedCall) {
+            arrivals.clear();
+            trackedCall = call;
+        }
+        arrivals.push_back(t);
+        while (arrivals.size() > kAtsMaxSamples) arrivals.pop_front();
+    }
+
+    std::size_t samples() const noexcept { return arrivals.size(); }
+
+    bool hasConfidence() const noexcept { return arrivals.size() >= kAtsMinSamples; }
+
+    // Predicted center of the partner's next RX window, measured on our own
+    // monotonic clock. Returns nullopt when confidence is insufficient.
+    std::optional<TimePoint> predictNextRxWindowCenter() const {
+        if (!hasConfidence()) return std::nullopt;
+        // last_arrival is when their last TX reached us; their RX window
+        // opens immediately after, lasts ~slotPeriod, centered at +1.5 slots.
+        return arrivals.back() + (kFt2SlotPeriod * 3) / 2;
+    }
+
+    // Offset (in milliseconds) the engine should add to "emit now" to land at
+    // the predicted center. Positive = delay; nullopt = no ATS available.
+    std::optional<int> recommendedDelayMs(TimePoint now) const {
+        auto target = predictNextRxWindowCenter();
+        if (!target) return std::nullopt;
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(*target - now);
+        return static_cast<int>(diff.count());
+    }
+};
+
+// ============================================================================
 // State machine — std::variant of plain structs. Each state carries the
 // minimal context needed for transitions out of that state.
 // ============================================================================
@@ -257,6 +319,7 @@ struct EngineConfig {
     bool     quickQsoEnabled {false};  // FT2 Ultra2 fast exchange
     bool     contestExchange {false};  // R+grid contest mode
     Slot     localSlot { Slot::Async };
+    bool     adaptiveTxSyncEnabled {true};  // FT2 async: align our TX to partner's RX window
 };
 
 // ============================================================================
