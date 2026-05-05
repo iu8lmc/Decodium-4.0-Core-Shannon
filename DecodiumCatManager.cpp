@@ -879,7 +879,21 @@ void DecodiumCatManager::saveSettings()
     s.setValue("rtsHigh",        forceRtsAvailable() && m_rtsHigh);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
+    s.setValue("splitMode",      m_splitMode);
     s.endGroup();
+}
+
+void DecodiumCatManager::setSplitMode(const QString& v)
+{
+    QString normalized = v.trimmed().toLower();
+    if (normalized == QStringLiteral("fake") || normalized == QStringLiteral("fake it"))
+        normalized = QStringLiteral("emulate");
+    if (normalized != QStringLiteral("rig") && normalized != QStringLiteral("emulate"))
+        normalized = QStringLiteral("none");
+    if (m_splitMode == normalized)
+        return;
+    m_splitMode = normalized;
+    emit splitModeChanged();
 }
 
 void DecodiumCatManager::loadSettings()
@@ -907,6 +921,14 @@ void DecodiumCatManager::loadSettings()
     m_rtsHigh        = s.value("rtsHigh",         false).toBool();
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
+    {
+        QString sm = s.value("splitMode", "none").toString().trimmed().toLower();
+        if (sm == QStringLiteral("fake") || sm == QStringLiteral("fake it"))
+            sm = QStringLiteral("emulate");
+        if (sm != QStringLiteral("rig") && sm != QStringLiteral("emulate"))
+            sm = QStringLiteral("none");
+        m_splitMode = sm;
+    }
     s.endGroup();
     enforceForceLineAvailability();
 }

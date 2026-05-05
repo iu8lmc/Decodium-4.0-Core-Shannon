@@ -338,11 +338,6 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(qlonglong ft2LastTxLatencyUs READ ft2LastTxLatencyUs NOTIFY ft2TxLatencyChanged)
     Q_PROPERTY(qlonglong ft2MaxTxLatencyUs  READ ft2MaxTxLatencyUs  NOTIFY ft2TxLatencyChanged)
     Q_PROPERTY(qlonglong ft2AvgTxLatencyUs  READ ft2AvgTxLatencyUs  NOTIFY ft2TxLatencyChanged)
-    // FT2 Adaptive TX Sync (ATS) live state for the HUD badge.
-    Q_PROPERTY(int     ft2AtsOffsetMs   READ ft2AtsOffsetMs   NOTIFY ft2AtsChanged)
-    Q_PROPERTY(int     ft2AtsSamples    READ ft2AtsSamples    NOTIFY ft2AtsChanged)
-    Q_PROPERTY(bool    ft2AtsEngaged    READ ft2AtsEngaged    NOTIFY ft2AtsChanged)
-    Q_PROPERTY(QString ft2AtsTrackedCall READ ft2AtsTrackedCall NOTIFY ft2AtsChanged)
 
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
@@ -730,10 +725,6 @@ public:
     qlonglong ft2LastTxLatencyUs() const;
     qlonglong ft2MaxTxLatencyUs()  const;
     qlonglong ft2AvgTxLatencyUs()  const;
-    int       ft2AtsOffsetMs()     const;
-    int       ft2AtsSamples()      const;
-    bool      ft2AtsEngaged()      const;
-    QString   ft2AtsTrackedCall()  const;
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
     QObject*    diagnostics() const { return m_diagnostics; }
@@ -1121,7 +1112,6 @@ signals:
     void ft2StateChanged();
     void ft2CallersChanged();
     void ft2TxLatencyChanged();
-    void ft2AtsChanged();
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();

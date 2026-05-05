@@ -120,15 +120,6 @@ public:
     qint64 avgTxLatencyUs()  const noexcept { return m_avgTxLatencyUs; }
     void   resetTxLatencyStats();
 
-    // Adaptive TX Sync (ATS) introspection. lastAtsOffsetMs is the delay
-    // applied to the most recent requestTx() emit (positive = waited for
-    // partner's RX window; 0 = immediate). atsSampleCount and
-    // atsHasConfidence reflect the underlying PartnerTimingTracker.
-    int         lastAtsOffsetMs()   const noexcept { return m_lastAtsOffsetMs; }
-    std::size_t atsSampleCount()    const noexcept { return m_partnerTiming.samples(); }
-    bool        atsHasConfidence()  const noexcept { return m_partnerTiming.hasConfidence(); }
-    QString     atsTrackedCall()    const          { return m_partnerTiming.trackedCall; }
-
     // ------------------------------------------------------------------
     // Test hooks — inject a synthetic clock (production uses Clock::now).
     // ------------------------------------------------------------------
@@ -167,12 +158,6 @@ signals:
     // microsecond delta and the resulting TX number are reported so the HUD
     // can render a live latency badge.
     void txLatencyMeasured(qint64 latencyUs, int txNum);
-
-    // Adaptive TX Sync — emitted whenever requestTx() decides whether to
-    // delay the outbound emit to land in the partner's predicted RX window.
-    // offsetMs is the actual wait applied (0 when ATS not engaged or
-    // confidence insufficient); samples is the live tracker depth.
-    void atsOffsetApplied(int offsetMs, int samples);
 
 private:
     // ------------------------------------------------------------------
@@ -235,13 +220,6 @@ private:
     // Dedup cache: key -> first-seen time. Pruned by pruneStaleDedup() on
     // every feed() call. Caps growth at the freshness window.
     std::unordered_map<DecodeKey, TimePoint, DecodeKeyHash> m_dedup;
-
-    // Partner timing tracker — observes the cadence of the active partner's
-    // decodes so requestTx() can land our outbound message in their RX window
-    // (Adaptive TX Sync, async-only). Cleared by transitionTo() whenever the
-    // active partner changes or the QSO ends.
-    PartnerTimingTracker    m_partnerTiming;
-    int                     m_lastAtsOffsetMs {0};
 
     QTimer*                 m_tickTimer {nullptr};
     std::function<TimePoint()> m_clockOverride;

@@ -6380,8 +6380,6 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
             });
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txLatencyMeasured,
             this, [this](qint64 us, int txNum) { Q_UNUSED(us); Q_UNUSED(txNum); emit ft2TxLatencyChanged(); });
-    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::atsOffsetApplied,
-            this, [this](int offsetMs, int samples) { Q_UNUSED(offsetMs); Q_UNUSED(samples); emit ft2AtsChanged(); });
 
     // Forward TX-keying state into the engine so it can short-circuit the
     // Closing drain timer. Without this, the safety timer (7s) sometimes
@@ -6491,18 +6489,6 @@ qlonglong DecodiumBridge::ft2MaxTxLatencyUs() const {
 }
 qlonglong DecodiumBridge::ft2AvgTxLatencyUs() const {
     return m_ft2Engine ? static_cast<qlonglong>(m_ft2Engine->avgTxLatencyUs()) : 0;
-}
-int DecodiumBridge::ft2AtsOffsetMs() const {
-    return m_ft2Engine ? m_ft2Engine->lastAtsOffsetMs() : 0;
-}
-int DecodiumBridge::ft2AtsSamples() const {
-    return m_ft2Engine ? static_cast<int>(m_ft2Engine->atsSampleCount()) : 0;
-}
-bool DecodiumBridge::ft2AtsEngaged() const {
-    return m_ft2Engine && m_ft2Engine->atsHasConfidence();
-}
-QString DecodiumBridge::ft2AtsTrackedCall() const {
-    return m_ft2Engine ? m_ft2Engine->atsTrackedCall() : QString();
 }
 
 void DecodiumBridge::setMode(const QString& v) {
@@ -7372,8 +7358,16 @@ void DecodiumBridge::setFoxMode(bool v)
 
 void DecodiumBridge::setHoundMode(bool v)
 {
+    bridgeLog(QStringLiteral("setHoundMode: requested=%1 currentActivity=%2 legacyAvailable=%3 mode=%4")
+                  .arg(v ? "true" : "false")
+                  .arg(m_specialOperationActivity)
+                  .arg(legacyBackendAvailable() ? "true" : "false")
+                  .arg(m_mode));
     if (v) {
         setSpecialOperationActivity(kSpecialOpHound);
+        bridgeLog(QStringLiteral("setHoundMode: post-set activity=%1 houndMode=%2")
+                      .arg(m_specialOperationActivity)
+                      .arg(m_houndMode ? "true" : "false"));
     } else if (m_specialOperationActivity == kSpecialOpHound) {
         setSpecialOperationActivity(kSpecialOpNone);
     }

@@ -78,8 +78,8 @@ public:
     void        setPttPort(const QString& v);
     int         civAddress()    const { return m_civAddress; }
     void        setCivAddress(int v)             { if (m_civAddress != v)  { m_civAddress = v;  emit civAddressChanged(); } }
-    QString     splitMode()     const { return "none"; }
-    void        setSplitMode(const QString&)     {}
+    QString     splitMode()     const { return m_splitMode; }
+    void        setSplitMode(const QString& v);
     int         pollInterval()  const { return m_pollInterval; }
     void        setPollInterval(int v)           { if (m_pollInterval != v){ m_pollInterval = v; emit pollIntervalChanged(); applyPollInterval(); } }
     QString     portType()      const { return "serial"; }
@@ -87,7 +87,7 @@ public:
     QStringList portList()      const { return m_portList; }
     QStringList baudList()      const { return {"1200","2400","4800","9600","19200","38400","57600","115200"}; }
     QStringList pttMethodList() const { return {"CAT","DTR","RTS","VOX"}; }
-    QStringList splitModeList() const { return {"none"}; }
+    QStringList splitModeList() const { return {"none","rig","emulate"}; }
     double      frequency()     const { return m_frequency; }
     double      txFrequency()   const { return 0.0; }
     QString     mode()          const { return m_mode; }
@@ -185,6 +185,7 @@ private:
     QString m_pttMethod   {"CAT"};
     QString m_pttPort     {"CAT"};
     int     m_civAddress  {0};       // ICOM CI-V address (0 = non-ICOM)
+    QString m_splitMode   {"none"};  // "none" | "rig" | "emulate" (Fake It)
     int     m_pollInterval{2};
     double  m_frequency   {0.0};
     QString m_mode;

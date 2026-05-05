@@ -635,37 +635,6 @@ QString Ft2QsoEngine::dxCall() const {
 bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
     bool advanced = false;
 
-    // ATS partner-timing sampling (PRE-visit). Doing this BEFORE the visit is
-    // crucial: the decode that fires the closing transition (e.g. R+report
-    // moving AwaitingReport→Closing) would otherwise be tracked after the
-    // active partner has been wiped, and the very last arrival would be lost
-    // — leaving us with N-1 samples for a QSO that only ever produces N=2.
-    //
-    // We accept the row if it comes from the current QSO partner OR (when no
-    // QSO is yet engaged) from a station that's about to become our partner
-    // (CallingCq + directedToMe). track() self-clears on call mismatch.
-    if (m_cfg.adaptiveTxSyncEnabled
-        && m_cfg.localSlot == Slot::Async
-        && !row.fromCall.isEmpty()) {
-        QString partner = std::visit([](auto const& s) -> QString {
-            using T = std::decay_t<decltype(s)>;
-            if constexpr (std::is_same_v<T, state::ReplyingTx1>      ) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::AwaitingReport>  ) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::AwaitingRRR>     ) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::AwaitingSignoff>) return s.partnerCall;
-            else if constexpr (std::is_same_v<T, state::Closing>         ) return s.partnerCall;
-            else                                                          return QString();
-        }, m_state);
-        // CallingCq → AwaitingReport: this decode IS what engages the partner;
-        // adopt its fromCall as the candidate so we count it as sample 1.
-        if (partner.isEmpty() && row.directedToMe) {
-            partner = row.fromCall;
-        }
-        if (!partner.isEmpty() && row.fromCall == partner) {
-            m_partnerTiming.track(partner, row.receivedAt);
-        }
-    }
-
     std::visit([&](auto& s) {
         using T = std::decay_t<decltype(s)>;
 
@@ -894,11 +863,6 @@ void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
         m_closingSawTxBegin = false;
         m_closingSawTxEnd   = false;
     }
-    // ATS tracker NOT cleared on state transitions: the tracker self-manages
-    // (call-change reset + 30s sample TTL in PartnerTimingTracker::track).
-    // Resetting here would wipe samples on every watchdog-driven
-    // AwaitingRRR -> CallingCq, which fires repeatedly on stalled QSOs —
-    // the very scenario where ATS is supposed to help by re-locking phase.
     emit engineDiagnostic(QStringLiteral("[Ft2Engine] %1 -> %2 (%3)")
                           .arg(prevName).arg(nextName).arg(reason));
     emit dxCallChanged(dxCall());
@@ -934,48 +898,20 @@ void Ft2QsoEngine::requestTx(int txNum, QString const& formatted) {
         return;
     }
 
-    // Latency is sampled BEFORE applying any ATS deliberate delay — ATS
-    // sleep time is a scheduling choice, not engine contention.
     qint64 sampledLatencyUs = -1;
     if (m_currentDispatchStart != TimePoint{}) {
         sampledLatencyUs = std::chrono::duration_cast<std::chrono::microseconds>(
                                clockNow() - m_currentDispatchStart).count();
     }
 
-    // Adaptive TX Sync — async only. If we have enough samples of the active
-    // partner's TX cadence, predict when their RX window opens and delay our
-    // emit so the message lands inside it. Capped at ±kAtsMaxCorrection.
-    int delayMs = 0;
-    if (m_cfg.adaptiveTxSyncEnabled
-        && m_cfg.localSlot == Slot::Async
-        && m_partnerTiming.hasConfidence()) {
-        if (auto const rec = m_partnerTiming.recommendedDelayMs(clockNow())) {
-            int const capMs = static_cast<int>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(kAtsMaxCorrection).count());
-            int v = *rec;
-            if (v >  capMs) v =  capMs;
-            if (v < -capMs) v = -capMs;
-            // Only honour positive offsets (delay until partner RX); negative
-            // values mean the window already passed, so fire immediately.
-            if (v > 0) delayMs = v;
-        }
-    }
-    m_lastAtsOffsetMs = delayMs;
-    emit atsOffsetApplied(delayMs, static_cast<int>(m_partnerTiming.samples()));
-
-    auto doEmit = [this, txNum, formatted, sampledLatencyUs]() {
-        emit txMessageRequested(txNum, formatted);
-        if (sampledLatencyUs >= 0) {
-            updateLatencyStats(sampledLatencyUs, txNum);
-        }
-    };
-
-    if (delayMs > 0) {
-        QTimer::singleShot(delayMs, this, doEmit);
-        emit engineDiagnostic(QStringLiteral("[Ft2Engine] ATS: deferred TX%1 emit by %2ms (n=%3)")
-                              .arg(txNum).arg(delayMs).arg(m_partnerTiming.samples()));
-    } else {
-        doEmit();
+    // FT2 async policy: emit immediately. The 1.0.86 Adaptive TX Sync
+    // predictor was removed because its slot-period model does not match
+    // async behaviour (every firing saturated the 500ms cap, pushing our
+    // TX past the partner's RX window). Decodium 3.0 has shipped this
+    // immediate-emit behaviour for years on real on-air traffic.
+    emit txMessageRequested(txNum, formatted);
+    if (sampledLatencyUs >= 0) {
+        updateLatencyStats(sampledLatencyUs, txNum);
     }
 }
 

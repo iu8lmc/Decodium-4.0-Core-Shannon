@@ -1851,11 +1851,18 @@ Dialog {
                             visible: settingsDialog.usesSerialControls()
                             enabled: settingsDialog.forceDtrControlEnabled()
                             model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: enabled ? find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceDtr : false,
-                                                                                      bridge.catManager ? bridge.catManager.dtrHigh : false)) : 0
+                            currentIndex: {
+                                if (!enabled || !bridge.catManager)
+                                    return 0
+                                var v = settingsDialog.forceLineMode(bridge.catManager.forceDtr, bridge.catManager.dtrHigh)
+                                var idx = find(v)
+                                return idx >= 0 ? idx : 0
+                            }
                             onActivated: settingsDialog.applyForceLineValue("dtr", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            // Lookup diretto su model[currentIndex] — displayText non si propaga
+                            // affidabilmente al primo render con model JS array (Qt 6 quirk).
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.model[Math.max(0, forceDtrCombo.currentIndex)]); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup: SettingsComboPopup { combo: forceDtrCombo }
@@ -1866,11 +1873,16 @@ Dialog {
                             visible: settingsDialog.usesSerialControls()
                             enabled: settingsDialog.forceRtsControlEnabled()
                             model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: enabled ? find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceRts : false,
-                                                                                      bridge.catManager ? bridge.catManager.rtsHigh : false)) : 0
+                            currentIndex: {
+                                if (!enabled || !bridge.catManager)
+                                    return 0
+                                var v = settingsDialog.forceLineMode(bridge.catManager.forceRts, bridge.catManager.rtsHigh)
+                                var idx = find(v)
+                                return idx >= 0 ? idx : 0
+                            }
                             onActivated: settingsDialog.applyForceLineValue("rts", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.model[Math.max(0, forceRtsCombo.currentIndex)]); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup: SettingsComboPopup { combo: forceRtsCombo }
