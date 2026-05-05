@@ -178,6 +178,10 @@ constexpr Duration    kAtsMaxCorrection   = std::chrono::milliseconds(500);
 // arrivals — requiring 3 would mean ATS never engages on single QSO flows.
 constexpr std::size_t kAtsMinSamples      = 2;
 constexpr std::size_t kAtsMaxSamples      = 5;
+// Samples older than this are stale: either the partner went away or the
+// QSO stalled. 30s ≈ 8 slot periods, plenty for a healthy exchange while
+// short enough to avoid bridging across an Idle/CallingCq pause.
+constexpr Duration    kAtsSampleMaxAge    = std::chrono::seconds(30);
 
 struct PartnerTimingTracker {
     std::deque<TimePoint>  arrivals;
@@ -188,13 +192,19 @@ struct PartnerTimingTracker {
         trackedCall.clear();
     }
 
-    // Register an arrival from `call`. If the partner just changed, the
-    // previous samples are discarded — they no longer describe the same
-    // station's clock.
+    // Register an arrival from `call`. The tracker is self-managed: it auto-
+    // clears on call change, prunes samples older than kAtsSampleMaxAge, and
+    // caps total at kAtsMaxSamples. Callers MUST NOT clear() on state
+    // transitions — letting samples survive across watchdog-driven re-engages
+    // (AwaitingRRR -> CallingCq -> ReplyingTx1 with the same partner) is the
+    // whole reason ATS reaches confidence on long stalled QSOs.
     void track(QString const& call, TimePoint t) {
         if (call != trackedCall) {
             arrivals.clear();
             trackedCall = call;
+        }
+        while (!arrivals.empty() && (t - arrivals.front()) > kAtsSampleMaxAge) {
+            arrivals.pop_front();
         }
         arrivals.push_back(t);
         while (arrivals.size() > kAtsMaxSamples) arrivals.pop_front();

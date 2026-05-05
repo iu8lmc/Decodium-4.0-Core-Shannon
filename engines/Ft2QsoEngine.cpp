@@ -377,6 +377,22 @@ void Ft2QsoEngine::tick() {
     // Watchdog: stuck states fall back to Idle (or CallingCq if TX enabled).
     if (watchdogExpired()) {
         QString reason = QStringLiteral("watchdog: %1 exceeded budget").arg(stateLabel());
+        // Cool down the unresponsive partner so the next tick() doesn't
+        // re-engage them straight from the caller queue (observed live
+        // 1.0.85: a single non-replying station produced a 2-minute loop
+        // ReplyingTx1 -> CallingCq -> ReplyingTx1 with itself for ~10 min).
+        QString stalled = std::visit([](auto const& s) -> QString {
+            using T = std::decay_t<decltype(s)>;
+            if constexpr (std::is_same_v<T, state::ReplyingTx1>     ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingReport> ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingRRR>    ) return s.partnerCall;
+            else if constexpr (std::is_same_v<T, state::AwaitingSignoff>) return s.partnerCall;
+            else                                                          return QString();
+        }, m_state);
+        if (!stalled.isEmpty()) {
+            markCooldown(stalled);
+            purgeCaller(stalled);
+        }
         if (m_txEnabled) {
             transitionTo(state::CallingCq{ clockNow(), 0 }, reason);
             QString tx = buildTxMessage(6, {}, {}, {}, {}, false);
@@ -871,11 +887,6 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
 void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
     char const* prevName = stateName(m_state);
     bool const enteringClosing = std::holds_alternative<state::Closing>(next);
-    // Closing is still part of the active QSO (partner is finishing) — the
-    // tracker should survive into Closing so that the very last partner
-    // arrival still counts. Only reset on Idle/CallingCq.
-    bool const endsActiveQso = std::holds_alternative<state::Idle>(next)
-                            || std::holds_alternative<state::CallingCq>(next);
     m_state = std::move(next);
     char const* nextName = stateName(m_state);
     if (enteringClosing) {
@@ -883,12 +894,11 @@ void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
         m_closingSawTxBegin = false;
         m_closingSawTxEnd   = false;
     }
-    if (endsActiveQso) {
-        // The active partner is gone — discard timing samples so the next QSO
-        // starts measuring from scratch (different station, different clock).
-        m_partnerTiming.clear();
-        m_lastAtsOffsetMs = 0;
-    }
+    // ATS tracker NOT cleared on state transitions: the tracker self-manages
+    // (call-change reset + 30s sample TTL in PartnerTimingTracker::track).
+    // Resetting here would wipe samples on every watchdog-driven
+    // AwaitingRRR -> CallingCq, which fires repeatedly on stalled QSOs —
+    // the very scenario where ATS is supposed to help by re-locking phase.
     emit engineDiagnostic(QStringLiteral("[Ft2Engine] %1 -> %2 (%3)")
                           .arg(prevName).arg(nextName).arg(reason));
     emit dxCallChanged(dxCall());
