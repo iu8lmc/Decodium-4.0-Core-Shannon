@@ -146,15 +146,16 @@ constexpr Duration kWatchdogPerStateMax = std::chrono::seconds(60); // ~16 slots
 // because slow operators can take 15+ slots to acknowledge a call.
 constexpr Duration kWatchdogReplyingTx1 = std::chrono::seconds(120);
 constexpr Duration kEngineTickInterval  = std::chrono::milliseconds(100);
-// Hold in Closing for ~1.5 FT2 slots (3.75s each). The backend snapshots
-// m_currentTx at slot start, so we need to be sure the TX4/TX5 request lands
-// BEFORE the next snapshot AND the snapshot has time to commit the message
-// to the audio pipeline. 4000ms sat at the lower edge of the valid window
-// (3.75–7.5s) and produced a race where IU8LMC's RR73 was occasionally
-// dropped (F1PBZ retransmitted R-01 because it never saw RR73 on air).
-// 5500ms keeps us inside one slot of TX4 transmission while staying clear
-// of two slots (which produced the doubled RR73 we fixed in 1.0.79).
-constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(5500);
+// Closing drain — the engine waits in Closing until either:
+//   (a) the backend signals "TX finished" (transmittingChanged true→false)
+//       AFTER the engine has seen "TX started" inside Closing, OR
+//   (b) this safety fallback elapses, in case the backend never emits the
+//       transition (e.g. legacy mirror disabled, MAC bridge audio path).
+// 7000ms = ~1.86 slots: enough headroom for entry-time variance against
+// slot snapshots, but still under 2 full slots (which would let the backend
+// retransmit RR73 a second time). The TX-end signal short-circuits this in
+// the common case so most QSOs leave Closing in 4-5s on air.
+constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(7000);
 
 // ============================================================================
 // State machine — std::variant of plain structs. Each state carries the

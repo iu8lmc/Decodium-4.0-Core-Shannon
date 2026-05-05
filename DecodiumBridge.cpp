@@ -6386,6 +6386,16 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txLatencyMeasured,
             this, [this](qint64 us, int txNum) { Q_UNUSED(us); Q_UNUSED(txNum); emit ft2TxLatencyChanged(); });
 
+    // Forward TX-keying state into the engine so it can short-circuit the
+    // Closing drain timer. Without this, the safety timer (7s) sometimes
+    // straddles two FT2 slot boundaries and lets the backend retransmit
+    // RR73 a second time. The signal lets us drop back to TX6 within ~100ms
+    // of the closing slot ending.
+    connect(this, &DecodiumBridge::transmittingChanged,
+            this, [this]() {
+                if (m_ft2Engine) m_ft2Engine->notifyBackendTxStateChanged(m_transmitting);
+            });
+
     emit ft2StateChanged();
     emit ft2CallersChanged();
     bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine activated (%1)").arg(origin));

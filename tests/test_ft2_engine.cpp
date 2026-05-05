@@ -475,6 +475,79 @@ private slots:
         // TX still enabled -> we should fall back to CallingCq (CQ TX6).
         QVERIFY(std::holds_alternative<state::CallingCq>(eng.state()));
     }
+
+    // ----------------------------------------------------------------
+    // Closing TX-end short-circuit: when the backend signals TX-begin then
+    // TX-end inside Closing, the engine drains immediately on the next tick
+    // instead of waiting for kCloseDrainAfter (7s safety fallback). This
+    // prevents the doubled RR73 caused by the safety timer straddling two
+    // FT2 slot boundaries (observed live as RR73 transmitted twice).
+    // ----------------------------------------------------------------
+    void closingShortCircuitsOnBackendTxEnd() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        TimePoint synthetic = Clock::now();
+        eng.setClockOverride([&]() { return synthetic; });
+        eng.enableTx(true);
+
+        // Drive a QSO into Closing: K1ABC sends grid then R+report.
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC FN42") });
+        QVERIFY(std::holds_alternative<state::AwaitingReport>(eng.state()));
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC R-12") });
+        QVERIFY(std::holds_alternative<state::Closing>(eng.state()));
+        QCOMPARE(eng.currentTx(), 4);
+
+        // Tick once at t=0: Closing should NOT drain (timer not elapsed,
+        // backend hasn't signalled TX-begin/end yet).
+        synthetic += std::chrono::milliseconds(500);
+        eng.tick();
+        QVERIFY(std::holds_alternative<state::Closing>(eng.state()));
+
+        // Backend keys TX (slot starts), then unkeys TX (slot ends) — the
+        // Bridge would forward both events as the m_transmitting bool flips.
+        synthetic += std::chrono::milliseconds(500);
+        eng.notifyBackendTxStateChanged(true);   // TX begin
+        synthetic += std::chrono::milliseconds(3750); // 1 FT2 slot
+        eng.notifyBackendTxStateChanged(false);  // TX end -> short-circuit
+
+        // Next tick should drain immediately, well before kCloseDrainAfter.
+        synthetic += std::chrono::milliseconds(100);
+        eng.tick();
+        QVERIFY2(!std::holds_alternative<state::Closing>(eng.state()),
+                 "Closing should drain on backend TX-end, not wait for timer");
+    }
+
+    // ----------------------------------------------------------------
+    // Spurious TX-state changes outside Closing must be ignored — they
+    // belong to a separate QSO (e.g. a manual transmit) and must not
+    // affect future Closing states.
+    // ----------------------------------------------------------------
+    void notifyTxStateIgnoredOutsideClosing() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        eng.enableTx(true);
+
+        // Fire spurious TX-state events while NOT in Closing (engine is in
+        // CallingCq after enableTx(true)). These must be no-ops.
+        QVERIFY(!std::holds_alternative<state::Closing>(eng.state()));
+        eng.notifyBackendTxStateChanged(true);
+        eng.notifyBackendTxStateChanged(false);
+        QVERIFY(!std::holds_alternative<state::Closing>(eng.state()));
+
+        // Now drive into Closing. The flags must be fresh (reset on entry),
+        // so the next TX-end after entry triggers the short-circuit cleanly
+        // without being prematurely armed by the spurious events above.
+        TimePoint synthetic = Clock::now();
+        eng.setClockOverride([&]() { return synthetic; });
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC FN42") });
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC R-12") });
+        QVERIFY(std::holds_alternative<state::Closing>(eng.state()));
+
+        // A bare TX-end without a preceding TX-begin (inside Closing) must
+        // NOT short-circuit — could be the tail of a pre-Closing transmit.
+        eng.notifyBackendTxStateChanged(false);
+        synthetic += std::chrono::milliseconds(100);
+        eng.tick();
+        QVERIFY(std::holds_alternative<state::Closing>(eng.state()));
+    }
 };
 
 QTEST_MAIN(Ft2EngineTest)

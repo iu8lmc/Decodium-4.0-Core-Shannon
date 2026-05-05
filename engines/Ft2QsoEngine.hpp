@@ -70,6 +70,15 @@ public:
     void enableTx(bool on);
     bool isTxEnabled() const noexcept { return m_txEnabled; }
 
+    // Backend hook: forwarded by the Bridge whenever DecodiumBridge::transmitting
+    // changes (TX keyed / unkeyed). Used while in Closing to short-circuit the
+    // safety timer: as soon as we observe TX-end after a TX-start that occurred
+    // inside Closing, we know the closing message (TX4/TX5) has just finished
+    // on air and we can commit TX6 immediately, before the backend takes its
+    // next slot snapshot and re-transmits the closing message. Outside Closing
+    // this is a no-op.
+    void notifyBackendTxStateChanged(bool transmitting);
+
     // UI: user explicitly halted the current QSO ("Stop"). Forces Idle.
     void abortQso(QString const& reason = {});
 
@@ -195,6 +204,11 @@ private:
     StateVariant            m_state { state::Idle{} };
     int                     m_currentTx {0};       // 0 = none, 1..6 = WSJT TX
     bool                    m_txEnabled {false};
+
+    // Closing TX-end tracking — see notifyBackendTxStateChanged().
+    // Reset to {false,false} on every transition INTO state::Closing.
+    bool                    m_closingSawTxBegin {false};
+    bool                    m_closingSawTxEnd   {false};
 
     std::deque<CallerEntry> m_callerQueue;
     CooldownMap             m_cooldown;

@@ -399,9 +399,15 @@ void Ft2QsoEngine::tick() {
             emit engineDiagnostic(QStringLiteral("[Ft2Engine] qsoLogged %1")
                                   .arg(closing->partnerCall));
         }
-        // Hold in Closing for at least one slot so the closing TX (TX4/TX5)
-        // gets transmitted once before we switch the legacy backend to CQ.
-        if ((clockNow() - closing->closedAt) < kCloseDrainAfter) return;
+        // Hold in Closing until the backend has finished transmitting the
+        // closing TX (TX4/TX5). Short-circuit: leave as soon as
+        // notifyBackendTxStateChanged() reports TX-end after a TX-begin —
+        // this fires within ~100ms of the slot ending, so we switch the
+        // backend to TX6 BEFORE its next snapshot, preventing the doubled
+        // RR73 we used to get with a fixed-time wait. Fallback timer
+        // (kCloseDrainAfter) is the safety net if the signal never arrives.
+        if (!m_closingSawTxEnd
+            && (clockNow() - closing->closedAt) < kCloseDrainAfter) return;
         transitionTo(state::Idle{}, QStringLiteral("closing complete"));
         // Drain next caller if any and TX still enabled.
         if (m_txEnabled && m_cfg.multiAnswerMode) {
@@ -824,11 +830,30 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
 
 void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
     char const* prevName = stateName(m_state);
+    bool const enteringClosing = std::holds_alternative<state::Closing>(next);
     m_state = std::move(next);
     char const* nextName = stateName(m_state);
+    if (enteringClosing) {
+        // Arm TX-end short-circuit (see notifyBackendTxStateChanged()).
+        m_closingSawTxBegin = false;
+        m_closingSawTxEnd   = false;
+    }
     emit engineDiagnostic(QStringLiteral("[Ft2Engine] %1 -> %2 (%3)")
                           .arg(prevName).arg(nextName).arg(reason));
     emit dxCallChanged(dxCall());
+}
+
+void Ft2QsoEngine::notifyBackendTxStateChanged(bool transmitting) {
+    if (!std::holds_alternative<state::Closing>(m_state)) return;
+    if (transmitting) {
+        if (!m_closingSawTxBegin) {
+            m_closingSawTxBegin = true;
+            emit engineDiagnostic(QStringLiteral("[Ft2Engine] Closing: backend TX begin"));
+        }
+    } else if (m_closingSawTxBegin && !m_closingSawTxEnd) {
+        m_closingSawTxEnd = true;
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] Closing: backend TX end (short-circuit drain)"));
+    }
 }
 
 void Ft2QsoEngine::requestTx(int txNum, QString const& formatted) {
