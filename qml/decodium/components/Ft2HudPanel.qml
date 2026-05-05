@@ -112,6 +112,24 @@ Rectangle {
             }
         }
 
+        // LED ON-AIR: rosso pulsante quando trasmettiamo, grigio in RX.
+        // Permette di leggere lo stato TX/RX a colpo d'occhio senza guardare
+        // la barra di stato del backend.
+        Rectangle {
+            Layout.preferredWidth: 12
+            Layout.preferredHeight: 12
+            radius: 6
+            color: bridge.transmitting ? danger : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.20)
+            border.color: bridge.transmitting ? danger : Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.45)
+            border.width: 1
+            SequentialAnimation on opacity {
+                running: bridge.transmitting
+                loops: Animation.Infinite
+                NumberAnimation { from: 1.0; to: 0.45; duration: 380; easing.type: Easing.InOutSine }
+                NumberAnimation { from: 0.45; to: 1.0; duration: 380; easing.type: Easing.InOutSine }
+            }
+        }
+
         // Close panel button
         Rectangle {
             Layout.preferredWidth: 18
@@ -282,9 +300,11 @@ Rectangle {
                 color: textSecondary
             }
             Rectangle {
+                id: latBar
                 Layout.fillWidth: true
                 Layout.preferredHeight: 18
                 radius: 3
+                clip: true
                 readonly property real avgMs: bridge.ft2AvgTxLatencyUs / 1000.0
                 readonly property real maxMs: bridge.ft2MaxTxLatencyUs / 1000.0
                 readonly property color tone:
@@ -292,8 +312,20 @@ Rectangle {
                   : avgMs > 100 ? warning
                   : avgMs >  50 ? Qt.rgba(1, 1, 0.4, 1)
                   : accent
-                color: Qt.rgba(tone.r, tone.g, tone.b, 0.18)
+                color: Qt.rgba(tone.r, tone.g, tone.b, 0.10)
                 border.color: tone
+
+                // Fill gauge: larghezza proporzionale a avgMs (saturazione a 200ms,
+                // soglia oltre cui il primo TX dello slot rischia di essere troncato).
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: parent.width * Math.min(latBar.avgMs / 200.0, 1.0)
+                    radius: 3
+                    color: Qt.rgba(latBar.tone.r, latBar.tone.g, latBar.tone.b, 0.40)
+                    Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -302,14 +334,14 @@ Rectangle {
                     spacing: 8
 
                     Text {
-                        text: "avg " + parent.parent.avgMs.toFixed(1) + "ms"
+                        text: "avg " + latBar.avgMs.toFixed(1) + "ms"
                         font.family: "Monospace"
                         font.pixelSize: 10
                         font.bold: true
-                        color: parent.parent.tone
+                        color: latBar.tone
                     }
                     Text {
-                        text: "max " + parent.parent.maxMs.toFixed(1) + "ms"
+                        text: "max " + latBar.maxMs.toFixed(1) + "ms"
                         font.family: "Monospace"
                         font.pixelSize: 10
                         color: textSecondary
@@ -364,6 +396,33 @@ Rectangle {
                 }
             }
             Item { Layout.fillWidth: true }
+            // Bottone CLEAR: scarica tutta la queue in un colpo (utile dopo
+            // un pile-up se l'operatore vuole tornare al CQ pulito).
+            Rectangle {
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 14
+                radius: 2
+                visible: hud.callers.length > 0
+                color: clearAllMa.containsMouse ? Qt.rgba(danger.r, danger.g, danger.b, 0.25)
+                                                : Qt.rgba(danger.r, danger.g, danger.b, 0.10)
+                border.color: Qt.rgba(danger.r, danger.g, danger.b, 0.55)
+                border.width: 1
+                Text {
+                    anchors.centerIn: parent
+                    text: "CLEAR"
+                    font.family: "Monospace"
+                    font.pixelSize: 8
+                    font.bold: true
+                    color: danger
+                }
+                MouseArea {
+                    id: clearAllMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: bridge.ft2ClearQueue()
+                }
+            }
             Text {
                 text: "click=engage  ✕=skip"
                 font.family: "Monospace"

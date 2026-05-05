@@ -718,6 +718,7 @@ public:
     Q_INVOKABLE void ft2PromoteCaller(QString const& call);
     Q_INVOKABLE void ft2SkipCaller(QString const& call);
     Q_INVOKABLE void ft2CancelNextTx();
+    Q_INVOKABLE void ft2ClearQueue();
     Q_INVOKABLE void ft2ResetLatencyStats();
 
     // FT2 TX latency getters — 0 outside FT2 mode or before first sample.
@@ -1360,6 +1361,15 @@ private:
     bool m_monitorRequested {false};
     bool m_transmitting {false};
     bool m_tuning {false};
+
+    // Quando l'engine FT2 spinge una nuova TX request, il Bridge chiama in
+    // sequenza setTxMessage()+setCurrentTx(): ognuna emetterebbe
+    // currentTxMessageChanged + invalidateTxAudioCache + scheduleTxAudioPrecompute,
+    // raddoppiando il lavoro audio (e i refresh QML dell'HUD) per ogni TX.
+    // Questo flag fa in modo che i setter accumulino il refresh in
+    // m_pendingTxRefresh e lo si applichi una volta sola al termine.
+    bool m_coalescingTxRequest {false};
+    bool m_pendingTxRefresh {false};
     bool m_bridgeAudioTuneActive {false};
     bool m_bridgeAudioLegacyTxActive {false};
     bool m_decoding {false};
@@ -1956,6 +1966,9 @@ private:
     void initTxDevices();
     void invalidateTxAudioCache();
     void scheduleTxAudioPrecompute(int delayMs = 75);
+    // Helper coalescing: durante una FT2 TX request differisce
+    // invalidate+schedule a un singolo flush al termine del lambda Bridge.
+    void flushOrDeferTxAudioRefresh();
     void precomputeTxAudioForCurrentMessage(const QString& reason);
     bool ensureTxAudioPrepared(const QString& msg, int txAudioFrequency, bool needPcm,
                                QVector<float>* waveOut, QByteArray* pcmOut,

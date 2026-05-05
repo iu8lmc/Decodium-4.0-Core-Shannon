@@ -1777,22 +1777,6 @@ static QString currentTxVisualTimeToken(QString const& mode)
     return QDateTime::currentDateTimeUtc().toString(QStringLiteral("HHmmss"));
 }
 
-static bool txDecodeEntryAlreadyPresent(QVariantList const& entries, QVariantMap const& txEntry)
-{
-    QString const key = decodeMirrorEntryKey(txEntry);
-    int const first = qMax(0, entries.size() - 16);
-    for (int i = first; i < entries.size(); ++i) {
-        QVariantMap const existing = entries.at(i).toMap();
-        if (!existing.value(QStringLiteral("isTx")).toBool()) {
-            continue;
-        }
-        if (decodeMirrorEntryKey(existing) == key) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static QString decodeMirrorLooseKey(QVariantMap const& entry)
 {
     return entry.value("db").toString().trimmed() + "|" +
@@ -6354,8 +6338,19 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
                 if (txNum == 6 && (prevTx == 4 || prevTx == 5)) {
                     resetManualTxRearmState(QStringLiteral("Ft2Engine closing -> CQ"));
                 }
+                // Coalesce: setTxMessage + setCurrentTx accumulano in
+                // m_pendingTxRefresh invece di invalidare la cache audio
+                // due volte per ogni TX dell'engine FT2.
+                m_coalescingTxRequest = true;
+                m_pendingTxRefresh = false;
                 setTxMessage(txNum, msg);
                 if (m_currentTx != txNum) setCurrentTx(txNum);
+                m_coalescingTxRequest = false;
+                if (m_pendingTxRefresh) {
+                    m_pendingTxRefresh = false;
+                    invalidateTxAudioCache();
+                    scheduleTxAudioPrecompute();
+                }
             });
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::dxCallChanged,
             this, [this](QString call) { setDxCall(call); });
@@ -6472,6 +6467,12 @@ void DecodiumBridge::ft2CancelNextTx()
 {
     if (!m_ft2Engine) return;
     m_ft2Engine->cancelPendingTx();
+}
+
+void DecodiumBridge::ft2ClearQueue()
+{
+    if (!m_ft2Engine) return;
+    m_ft2Engine->clearQueue();
 }
 
 void DecodiumBridge::ft2ResetLatencyStats()
@@ -6844,8 +6845,7 @@ void DecodiumBridge::setTx1(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(1, v);
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 QString DecodiumBridge::tx2() const { return m_tx2; }
@@ -6856,8 +6856,7 @@ void DecodiumBridge::setTx2(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(2, v);
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 QString DecodiumBridge::tx3() const { return m_tx3; }
@@ -6868,8 +6867,7 @@ void DecodiumBridge::setTx3(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(3, v);
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 QString DecodiumBridge::tx4() const { return m_tx4; }
@@ -6880,8 +6878,7 @@ void DecodiumBridge::setTx4(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(4, v);
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 QString DecodiumBridge::tx5() const { return m_tx5; }
@@ -6892,8 +6889,7 @@ void DecodiumBridge::setTx5(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(5, v);
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 QString DecodiumBridge::tx6() const { return m_tx6; }
@@ -6904,8 +6900,7 @@ void DecodiumBridge::setTx6(const QString& v) {
         emit txMessagesChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->setTxMessage(6, v);
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 int DecodiumBridge::currentTx() const { return m_currentTx; }
@@ -6915,8 +6910,7 @@ void DecodiumBridge::setCurrentTx(int v) {
         emit currentTxChanged();
         emit currentTxMessageChanged();
         if (usingLegacyBackendForTx()) m_legacyBackend->selectTxMessage(qBound(1, v, 6));
-        invalidateTxAudioCache();
-        scheduleTxAudioPrecompute();
+        flushOrDeferTxAudioRefresh();
     }
 }
 QString DecodiumBridge::dxCall() const { return m_dxCall; }
@@ -7548,12 +7542,8 @@ bool DecodiumBridge::startBridgeAudioForLegacyDigitalTx(const QString& reason)
         txEntry["dxDistance"]     = -1.0;
         txEntry["dxBearing"]      = -1.0;
         txEntry["isB4"]           = false;
-        if (!txDecodeEntryAlreadyPresent(m_decodeList, txEntry)) {
-            m_decodeList.append(txEntry);
-            normalizeDecodeEntriesForDisplay(m_decodeList, 1500, m_mode);
-            appendRxDecodeEntry(txEntry);
-            emit decodeListChanged();
-        }
+        // TX outgoing solo in Signal RX — Full Spectrum mostra altre stazioni.
+        appendRxDecodeEntry(txEntry);
     }
 
     if (m_recordTxEnabled) {
@@ -8100,6 +8090,15 @@ static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceF
 void DecodiumBridge::invalidateTxAudioCache()
 {
     m_txAudioCache = TxAudioCache {};
+}
+
+void DecodiumBridge::flushOrDeferTxAudioRefresh()
+{
+    if (m_coalescingTxRequest) {
+        m_pendingTxRefresh = true;
+    } else {
+        flushOrDeferTxAudioRefresh();
+    }
 }
 
 QAudioDevice DecodiumBridge::resolveTxOutputDevice(bool* requestedDeviceFound)
@@ -8686,12 +8685,8 @@ void DecodiumBridge::startTx()
             txEntry["dxDistance"]     = -1.0;
             txEntry["dxBearing"]      = -1.0;
             txEntry["isB4"]           = false;
-            if (!txDecodeEntryAlreadyPresent(m_decodeList, txEntry)) {
-                m_decodeList.append(txEntry);
-                normalizeDecodeEntriesForDisplay(m_decodeList, 1500, m_mode);
-                appendRxDecodeEntry(txEntry);
-                emit decodeListChanged();
-            }
+            // TX outgoing solo in Signal RX — Full Spectrum mostra altre stazioni.
+            appendRxDecodeEntry(txEntry);
         }
 
         if (m_recordTxEnabled) {
@@ -8861,12 +8856,8 @@ void DecodiumBridge::startTx()
         txEntry["dxDistance"]    = -1.0;
         txEntry["dxBearing"]     = -1.0;
         txEntry["isB4"]          = false;
-        if (!txDecodeEntryAlreadyPresent(m_decodeList, txEntry)) {
-            m_decodeList.append(txEntry);
-            normalizeDecodeEntriesForDisplay(m_decodeList, 1500, m_mode);
-            appendRxDecodeEntry(txEntry);
-            emit decodeListChanged();
-        }
+        // TX outgoing solo in Signal RX — Full Spectrum mostra altre stazioni.
+        appendRxDecodeEntry(txEntry);
     }
 
     if (tciAudioTx) {

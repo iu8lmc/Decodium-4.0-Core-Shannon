@@ -654,7 +654,7 @@ Window {
                                     }
                                     bandActivityTailAnimation.from = bandActivityList.contentY
                                     bandActivityTailAnimation.to = targetY
-                                    bandActivityTailAnimation.duration = Math.max(90, Math.min(170, 90 + distance * 0.2))
+                                    bandActivityTailAnimation.duration = 110
                                     bandActivityTailAnimation.start()
                                 })
                             }
@@ -666,6 +666,14 @@ Window {
                                 easing.type: Easing.OutCubic
                                 onStopped: bandActivityList.finishTailFollow()
                             }
+                            // Debounce burst di insert (es. fine slot FT2): forceTailFollow
+                            // parte una sola volta a "calma" raggiunta, niente jitter.
+                            Timer {
+                                id: bandActivityTailDebounce
+                                interval: 80
+                                repeat: false
+                                onTriggered: bandActivityList.forceTailFollow()
+                            }
                             Component.onCompleted: Qt.callLater(function() {
                                 positionViewAtEnd()
                                 updateFollowTail()
@@ -675,13 +683,14 @@ Window {
                             onDraggingChanged: {
                                 if (dragging) {
                                     bandActivityTailAnimation.stop()
+                                    bandActivityTailDebounce.stop()
                                     tailFollowPending = false
                                     followTail = false
                                 }
                             }
                             onCountChanged: {
                                 if (followTail) {
-                                    forceTailFollow()
+                                    bandActivityTailDebounce.restart()
                                 }
                             }
                             add: Transition {
@@ -1088,7 +1097,7 @@ Window {
                                     }
                                     rxFrequencyTailAnimation.from = rxFrequencyList.contentY
                                     rxFrequencyTailAnimation.to = targetY
-                                    rxFrequencyTailAnimation.duration = Math.max(90, Math.min(170, 90 + distance * 0.2))
+                                    rxFrequencyTailAnimation.duration = 110
                                     rxFrequencyTailAnimation.start()
                                 })
                             }
@@ -1100,6 +1109,12 @@ Window {
                                 easing.type: Easing.OutCubic
                                 onStopped: rxFrequencyList.finishTailFollow()
                             }
+                            Timer {
+                                id: rxFrequencyTailDebounce
+                                interval: 80
+                                repeat: false
+                                onTriggered: rxFrequencyList.forceTailFollow()
+                            }
                             Component.onCompleted: Qt.callLater(function() {
                                 positionViewAtEnd()
                                 updateFollowTail()
@@ -1109,13 +1124,14 @@ Window {
                             onDraggingChanged: {
                                 if (dragging) {
                                     rxFrequencyTailAnimation.stop()
+                                    rxFrequencyTailDebounce.stop()
                                     tailFollowPending = false
                                     followTail = false
                                 }
                             }
                             onCountChanged: {
                                 if (followTail) {
-                                    forceTailFollow()
+                                    rxFrequencyTailDebounce.restart()
                                 }
                             }
                             add: Transition {

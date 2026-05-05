@@ -586,6 +586,15 @@ void Ft2QsoEngine::skipCaller(QString const& call) {
     }
 }
 
+void Ft2QsoEngine::clearQueue() {
+    if (m_callerQueue.empty()) return;
+    auto const removed = m_callerQueue.size();
+    m_callerQueue.clear();
+    emit callerQueueChanged();
+    emit engineDiagnostic(QStringLiteral("[Ft2Engine] clearQueue (%1 dropped)")
+                              .arg(static_cast<int>(removed)));
+}
+
 void Ft2QsoEngine::cancelPendingTx() {
     emit engineDiagnostic(QStringLiteral("[Ft2Engine] cancelPendingTx"));
     emit txCancelRequested();
@@ -857,9 +866,19 @@ void Ft2QsoEngine::notifyBackendTxStateChanged(bool transmitting) {
 }
 
 void Ft2QsoEngine::requestTx(int txNum, QString const& formatted) {
+    // Guard: durante CallingCq il sequencer ripete TX6 a ogni slot e il
+    // watchdog può richiedere lo stesso TX più volte. Emettere
+    // currentTxChanged/txMessageRequested con valori identici al precedente
+    // genera cascate di refresh QML (HUD + decode windows) inutili. Skip se
+    // nulla è cambiato.
+    bool const txNumChanged = (m_currentTx != txNum);
+    bool const msgChanged   = (m_lastTxFormatted != formatted);
     m_currentTx = txNum;
-    emit currentTxChanged(txNum);
-    if (m_txEnabled) {
+    m_lastTxFormatted = formatted;
+    if (txNumChanged) {
+        emit currentTxChanged(txNum);
+    }
+    if (m_txEnabled && (txNumChanged || msgChanged)) {
         emit txMessageRequested(txNum, formatted);
         // Sample latency only when the TX was driven by a fresh decode
         // (m_currentDispatchStart valid) — tick()-driven CQ rotations and

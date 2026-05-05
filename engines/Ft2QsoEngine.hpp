@@ -91,6 +91,9 @@ public:
     //                  outbound TX; engine state stays as-is.
     void promoteCaller(QString const& call);
     void skipCaller(QString const& call);
+    // Drop ogni caller in attesa: usato dal bottone "Clear queue" nell'HUD
+    // quando l'operatore vuole iniziare una nuova fase di CQ pulita.
+    void clearQueue();
     void cancelPendingTx();
 
     // ------------------------------------------------------------------
@@ -203,6 +206,7 @@ private:
     EngineConfig            m_cfg;
     StateVariant            m_state { state::Idle{} };
     int                     m_currentTx {0};       // 0 = none, 1..6 = WSJT TX
+    QString                 m_lastTxFormatted;     // last requestTx() formatted msg, for re-emit guard
     bool                    m_txEnabled {false};
 
     // Closing TX-end tracking — see notifyBackendTxStateChanged().
