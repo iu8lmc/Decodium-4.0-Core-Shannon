@@ -330,6 +330,15 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QStringList callerQueue    READ callerQueue    NOTIFY callerQueueChanged)
     Q_PROPERTY(int         callerQueueSize READ callerQueueSize NOTIFY callerQueueChanged)
 
+    // === FT2 HUD — Ft2HudPanel state model ===
+    // Empty/0 outside FT2 mode (m_ft2Engine == nullptr).
+    Q_PROPERTY(QString      ft2State    READ ft2State    NOTIFY ft2StateChanged)
+    Q_PROPERTY(QVariantList ft2Callers  READ ft2Callers  NOTIFY ft2CallersChanged)
+    // FT2 TX latency telemetry (microseconds).
+    Q_PROPERTY(qlonglong ft2LastTxLatencyUs READ ft2LastTxLatencyUs NOTIFY ft2TxLatencyChanged)
+    Q_PROPERTY(qlonglong ft2MaxTxLatencyUs  READ ft2MaxTxLatencyUs  NOTIFY ft2TxLatencyChanged)
+    Q_PROPERTY(qlonglong ft2AvgTxLatencyUs  READ ft2AvgTxLatencyUs  NOTIFY ft2TxLatencyChanged)
+
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
 
@@ -442,7 +451,7 @@ public:
     bool dualCarrierEnabled()  const { return m_dualCarrierEnabled; }
     void setDualCarrierEnabled(bool v){ if (m_dualCarrierEnabled!=v){ m_dualCarrierEnabled=v; emit dualCarrierEnabledChanged(); } }
     bool quickQsoEnabled()     const { return m_quickQsoEnabled; }
-    void setQuickQsoEnabled(bool v)   { if (m_quickQsoEnabled != v) { m_quickQsoEnabled = v; emit quickQsoEnabledChanged(); } }
+    void setQuickQsoEnabled(bool v);
     int  asyncSnrDb()          const { return m_asyncSnrDb; }
     void setAsyncSnrDb(int v)         { if (m_asyncSnrDb != v)          { m_asyncSnrDb = v;          emit asyncSnrDbChanged(); } }
 
@@ -700,6 +709,21 @@ public:
     void        setHoundMode(bool v);
     QStringList callerQueue()    const { return m_callerQueue; }
     int         callerQueueSize()const { return m_callerQueue.size(); }
+
+    // FT2 HUD getters — empty when m_ft2Engine is null (non-FT2 mode).
+    QString      ft2State()    const;
+    QVariantList ft2Callers()  const;
+
+    // FT2 HUD interactive controls — no-op outside FT2 mode.
+    Q_INVOKABLE void ft2PromoteCaller(QString const& call);
+    Q_INVOKABLE void ft2SkipCaller(QString const& call);
+    Q_INVOKABLE void ft2CancelNextTx();
+    Q_INVOKABLE void ft2ResetLatencyStats();
+
+    // FT2 TX latency getters — 0 outside FT2 mode or before first sample.
+    qlonglong ft2LastTxLatencyUs() const;
+    qlonglong ft2MaxTxLatencyUs()  const;
+    qlonglong ft2AvgTxLatencyUs()  const;
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
     QObject*    diagnostics() const { return m_diagnostics; }
@@ -1083,6 +1107,10 @@ signals:
     void foxModeChanged();
     void houndModeChanged();
     void callerQueueChanged();
+    // FT2 HUD
+    void ft2StateChanged();
+    void ft2CallersChanged();
+    void ft2TxLatencyChanged();
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();

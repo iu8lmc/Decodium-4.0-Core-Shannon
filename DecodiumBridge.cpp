@@ -6340,6 +6340,7 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     if (slashPos > 0) ecfg.myBaseCall = ecfg.myBaseCall.left(slashPos);
     ecfg.myGrid          = m_grid.left(4).toUpper();
     ecfg.multiAnswerMode = true;
+    ecfg.quickQsoEnabled = m_quickQsoEnabled;
     ecfg.localSlot       = decodium::ft2::Slot::Async;
     m_ft2Engine = std::make_unique<decodium::ft2::Ft2QsoEngine>(ecfg, this);
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txMessageRequested,
@@ -6362,7 +6363,46 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
             this, [this](int n) { if (m_currentTx != n) setCurrentTx(n); });
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::engineDiagnostic,
             this, [](QString line) { bridgeLog(line); });
+
+    // FT2 HUD wiring — re-emit Bridge-level signals so QML Q_PROPERTY bindings
+    // refresh. State changes ride on dxCall/currentTx (already connected); the
+    // HUD wants the explicit string label too. Caller queue mutations come via
+    // a dedicated signal so we don't poll callerQueueSnapshot() in QML.
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::dxCallChanged,
+            this, [this](QString) { emit ft2StateChanged(); });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::currentTxChanged,
+            this, [this](int) { emit ft2StateChanged(); });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::callerQueueChanged,
+            this, [this]() { emit ft2CallersChanged(); });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txCancelRequested,
+            this, [this]() {
+                // Drop the next outbound TX without disabling the engine —
+                // the user may want to re-engage immediately. Stopping TX
+                // matches the semantics of the WSJT-X "Halt TX" button.
+                if (m_transmitting) stopTx();
+                resetManualTxRearmState(QStringLiteral("Ft2 cancelPendingTx"));
+                bridgeLog(QStringLiteral("[Bridge] Ft2 next TX cancelled by user"));
+            });
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txLatencyMeasured,
+            this, [this](qint64 us, int txNum) { Q_UNUSED(us); Q_UNUSED(txNum); emit ft2TxLatencyChanged(); });
+
+    emit ft2StateChanged();
+    emit ft2CallersChanged();
     bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine activated (%1)").arg(origin));
+}
+
+void DecodiumBridge::setQuickQsoEnabled(bool v)
+{
+    if (m_quickQsoEnabled == v) return;
+    m_quickQsoEnabled = v;
+    emit quickQsoEnabledChanged();
+    // Push the new flag into the live FT2 engine so the next QSO uses the
+    // Ultra2 protocol immediately, without requiring a mode/restart cycle.
+    if (m_ft2Engine) {
+        auto cfg = m_ft2Engine->config();
+        cfg.quickQsoEnabled = v;
+        m_ft2Engine->setConfig(cfg);
+    }
 }
 
 void DecodiumBridge::teardownFt2Engine(QString const& reason)
@@ -6370,6 +6410,74 @@ void DecodiumBridge::teardownFt2Engine(QString const& reason)
     if (!m_ft2Engine) return;
     bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine torn down (%1)").arg(reason));
     m_ft2Engine.reset();
+    emit ft2StateChanged();
+    emit ft2CallersChanged();
+}
+
+// --------------------------------------------------------------------------
+// FT2 HUD getters / invokables (Q_PROPERTY backings used by Ft2HudPanel.qml)
+// --------------------------------------------------------------------------
+
+QString DecodiumBridge::ft2State() const
+{
+    if (!m_ft2Engine) return QString{};
+    return QString::fromLatin1(m_ft2Engine->stateLabel());
+}
+
+QVariantList DecodiumBridge::ft2Callers() const
+{
+    QVariantList out;
+    if (!m_ft2Engine) return out;
+    auto const snap = m_ft2Engine->callerQueueSnapshot();
+    auto const nowTp = decodium::ft2::Clock::now();
+    for (auto const& e : snap) {
+        QVariantMap m;
+        m[QStringLiteral("call")]    = e.call;
+        m[QStringLiteral("snr")]     = e.snr;
+        m[QStringLiteral("grid")]    = e.grid;
+        m[QStringLiteral("freq")]    = e.audioHz;
+        m[QStringLiteral("direct")]  = e.directReply;
+        // age in seconds since enqueue — UI fades stale entries.
+        auto const ageMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               nowTp - e.enqueuedAt).count();
+        m[QStringLiteral("ageMs")]   = static_cast<qlonglong>(ageMs);
+        out.append(m);
+    }
+    return out;
+}
+
+void DecodiumBridge::ft2PromoteCaller(QString const& call)
+{
+    if (!m_ft2Engine) return;
+    m_ft2Engine->promoteCaller(call);
+}
+
+void DecodiumBridge::ft2SkipCaller(QString const& call)
+{
+    if (!m_ft2Engine) return;
+    m_ft2Engine->skipCaller(call);
+}
+
+void DecodiumBridge::ft2CancelNextTx()
+{
+    if (!m_ft2Engine) return;
+    m_ft2Engine->cancelPendingTx();
+}
+
+void DecodiumBridge::ft2ResetLatencyStats()
+{
+    if (!m_ft2Engine) return;
+    m_ft2Engine->resetTxLatencyStats();
+}
+
+qlonglong DecodiumBridge::ft2LastTxLatencyUs() const {
+    return m_ft2Engine ? static_cast<qlonglong>(m_ft2Engine->lastTxLatencyUs()) : 0;
+}
+qlonglong DecodiumBridge::ft2MaxTxLatencyUs() const {
+    return m_ft2Engine ? static_cast<qlonglong>(m_ft2Engine->maxTxLatencyUs()) : 0;
+}
+qlonglong DecodiumBridge::ft2AvgTxLatencyUs() const {
+    return m_ft2Engine ? static_cast<qlonglong>(m_ft2Engine->avgTxLatencyUs()) : 0;
 }
 
 void DecodiumBridge::setMode(const QString& v) {

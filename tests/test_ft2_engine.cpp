@@ -9,6 +9,7 @@
 //  - Idempotency: duplicate decode does not double-advance state
 //  - Bounded queue caps at kCallerQueueCapacity (50) with FIFO evict
 //  - doubleClick engages partner regardless of CQ status
+//  - Ultra2 (QuickQSO): doubleClick skips TX1; AwaitingReport+R+rep -> TX3+TU
 
 #include "../engines/Ft2QsoEngine.hpp"
 
@@ -238,6 +239,187 @@ private slots:
         auto args = txSpy.takeFirst();
         QCOMPARE(args.value(0).toInt(), 1);
         QCOMPARE(args.value(1).toString(), QStringLiteral("K1ABC IK8TWX JN70"));
+    }
+
+    // ----------------------------------------------------------------
+    // promoteCaller: user-chosen station engages immediately, regardless
+    // of best-SNR order. Implies enableTx and removes the entry from queue.
+    // ----------------------------------------------------------------
+    void promoteCallerEngagesImmediately() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        // Two queued callers: K1ABC at -18 and W2DEF at -5 (W2DEF has best SNR).
+        eng.feedParsed({
+            makeRow("K1ABC", "CQ K1ABC FN42", -18),
+            makeRow("W2DEF", "CQ W2DEF FN20",  -5),
+        });
+        QCOMPARE(eng.callerQueueSize(), std::size_t{2});
+        QVERIFY(std::holds_alternative<state::Idle>(eng.state()));
+
+        // User promotes K1ABC (the lower-SNR one) — engine engages it now.
+        eng.promoteCaller("K1ABC");
+
+        QVERIFY(eng.isTxEnabled());
+        QVERIFY(std::holds_alternative<state::ReplyingTx1>(eng.state()));
+        QCOMPARE(eng.dxCall(), QStringLiteral("K1ABC"));
+        // W2DEF must remain queued for later.
+        QCOMPARE(eng.callerQueueSize(), std::size_t{1});
+    }
+
+    // ----------------------------------------------------------------
+    // skipCaller: removes the entry AND short-cooldowns it so a follow-up
+    // CQ decode does not re-enqueue the same station immediately.
+    // ----------------------------------------------------------------
+    void skipCallerRemovesAndCooldowns() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        TimePoint synthetic = Clock::now();
+        eng.setClockOverride([&]() { return synthetic; });
+
+        eng.feedParsed({ makeRow("K1ABC", "CQ K1ABC FN42", -10) });
+        QCOMPARE(eng.callerQueueSize(), std::size_t{1});
+
+        eng.skipCaller("K1ABC");
+        QCOMPARE(eng.callerQueueSize(), std::size_t{0});
+
+        // Same caller's CQ within the cooldown window must NOT re-enqueue.
+        synthetic += std::chrono::seconds(5);
+        eng.feedParsed({ makeRow("K1ABC", "CQ K1ABC FN42", -10) });
+        QCOMPARE(eng.callerQueueSize(), std::size_t{0});
+
+        // Past the cooldown the caller is allowed back in.
+        synthetic += std::chrono::seconds(31);
+        eng.feedParsed({ makeRow("K1ABC", "CQ K1ABC FN42", -10) });
+        QCOMPARE(eng.callerQueueSize(), std::size_t{1});
+    }
+
+    // ----------------------------------------------------------------
+    // cancelPendingTx: emits txCancelRequested without touching state.
+    // The Bridge slot is responsible for dropping the next outbound TX.
+    // ----------------------------------------------------------------
+    void cancelPendingTxEmitsSignal() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        QSignalSpy cancelSpy(&eng, &Ft2QsoEngine::txCancelRequested);
+
+        eng.enableTx(true);
+        QVERIFY(std::holds_alternative<state::CallingCq>(eng.state()));
+        auto const stateBefore = eng.state().index();
+
+        eng.cancelPendingTx();
+
+        QCOMPARE(cancelSpy.count(), 1);
+        // Cancel must not mutate engine state — only the Bridge intercepts TX.
+        QCOMPARE(eng.state().index(), stateBefore);
+    }
+
+    // ----------------------------------------------------------------
+    // TX latency profiling: feed-driven engagement records last/max/avg
+    // microseconds; resetTxLatencyStats clears all counters and emits a
+    // zero-sample.
+    // ----------------------------------------------------------------
+    void txLatencyProfilingRecorded() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        QSignalSpy latSpy(&eng, &Ft2QsoEngine::txLatencyMeasured);
+        eng.enableTx(true);
+        // enableTx -> CQ went through requestTx but with no
+        // m_currentDispatchStart set (not decode-driven), so no sample.
+        QCOMPARE(eng.lastTxLatencyUs(), qint64{0});
+        QCOMPARE(latSpy.count(), 0);
+
+        // Decode-driven engagement: feedParsed brackets dispatchDecodeToState
+        // so requestTx samples the elapsed time.
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC FN42") });
+
+        QVERIFY(latSpy.count() >= 1);
+        QVERIFY(eng.lastTxLatencyUs() > 0);
+        QVERIFY(eng.maxTxLatencyUs() >= eng.lastTxLatencyUs());
+        QVERIFY(eng.avgTxLatencyUs() > 0);
+
+        eng.resetTxLatencyStats();
+        QCOMPARE(eng.lastTxLatencyUs(), qint64{0});
+        QCOMPARE(eng.maxTxLatencyUs(),  qint64{0});
+        QCOMPARE(eng.avgTxLatencyUs(),  qint64{0});
+    }
+
+    // ----------------------------------------------------------------
+    // Ultra2 (QuickQSO) — caller side: doubleClick with default tx skips
+    // the grid exchange (TX1) and opens directly with TX2 (report).
+    // ----------------------------------------------------------------
+    void quickQsoDoubleClickSkipsTx1() {
+        EngineConfig cfg = makeCfg();
+        cfg.quickQsoEnabled = true;
+        Ft2QsoEngine eng(cfg, nullptr);
+        QSignalSpy txMsgSpy(&eng, &Ft2QsoEngine::txMessageRequested);
+        eng.enableTx(true);
+
+        // requestedTx omitted -> engine should choose TX2 (Ultra2 entry).
+        eng.doubleClick("K1ABC", "FN42", 1500, -10, 0);
+
+        QVERIFY(std::holds_alternative<state::AwaitingReport>(eng.state()));
+        QCOMPARE(eng.currentTx(), 2);
+        // txMsgSpy holds (txNum, msg) per emission; final TX must be TX2.
+        QVERIFY(txMsgSpy.count() >= 1);
+        auto const last = txMsgSpy.last();
+        QCOMPARE(last.at(0).toInt(), 2);
+    }
+
+    // ----------------------------------------------------------------
+    // Ultra2 (QuickQSO) — CQer side: AwaitingReport sees R+report ->
+    // closes via TX3+TU (NOT TX4 RR73). Confirms 2-message exchange.
+    // ----------------------------------------------------------------
+    void quickQsoSendsTx3WithTuOnRogerReport() {
+        EngineConfig cfg = makeCfg();
+        cfg.quickQsoEnabled = true;
+        Ft2QsoEngine eng(cfg, nullptr);
+        QSignalSpy txMsgSpy(&eng, &Ft2QsoEngine::txMessageRequested);
+        eng.enableTx(true);
+
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC FN42") });
+        QVERIFY(std::holds_alternative<state::AwaitingReport>(eng.state()));
+
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC R-12") });
+
+        QVERIFY(std::holds_alternative<state::Closing>(eng.state()));
+        QCOMPARE(eng.currentTx(), 3);
+        QVERIFY(txMsgSpy.count() >= 1);
+        QString const lastMsg = txMsgSpy.last().at(1).toString();
+        QVERIFY2(lastMsg.endsWith(QStringLiteral(" TU")),
+                 qPrintable(QStringLiteral("expected TX3 to end with TU, got: %1").arg(lastMsg)));
+        QVERIFY2(lastMsg.contains(QStringLiteral("R-12")),
+                 qPrintable(QStringLiteral("expected TX3 to echo received report, got: %1").arg(lastMsg)));
+    }
+
+    // ----------------------------------------------------------------
+    // Ultra2 (QuickQSO): runtime config flip via setConfig propagates
+    // to subsequent QSOs without rebuilding the engine.
+    // ----------------------------------------------------------------
+    void quickQsoConfigFlipTakesEffect() {
+        EngineConfig cfg = makeCfg();
+        cfg.quickQsoEnabled = false;
+        Ft2QsoEngine eng(cfg, nullptr);
+        QSignalSpy txMsgSpy(&eng, &Ft2QsoEngine::txMessageRequested);
+        eng.enableTx(true);
+
+        // Standard mode QSO: AwaitingReport -> R+rep -> TX4 RR73.
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC FN42") });
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC R-12") });
+        QCOMPARE(eng.currentTx(), 4);
+
+        // Flip to Ultra2 mid-session, run a fresh QSO with K2DEF.
+        cfg.quickQsoEnabled = true;
+        eng.setConfig(cfg);
+        // Drain Closing -> Idle by ticking past kCloseDrainAfter (8s).
+        TimePoint synthetic = Clock::now() + std::chrono::seconds(20);
+        eng.setClockOverride([&]() { return synthetic; });
+        eng.tick();
+        eng.tick();
+
+        eng.feedParsed({ makeRow("K2DEF", "IK8TWX K2DEF FN30") });
+        QVERIFY(std::holds_alternative<state::AwaitingReport>(eng.state()));
+        eng.feedParsed({ makeRow("K2DEF", "IK8TWX K2DEF R-08") });
+
+        QVERIFY(std::holds_alternative<state::Closing>(eng.state()));
+        QCOMPARE(eng.currentTx(), 3);
+        QString const lastMsg = txMsgSpy.last().at(1).toString();
+        QVERIFY(lastMsg.endsWith(QStringLiteral(" TU")));
     }
 
     // ----------------------------------------------------------------

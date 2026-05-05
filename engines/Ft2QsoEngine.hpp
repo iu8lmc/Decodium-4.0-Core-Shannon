@@ -73,6 +73,17 @@ public:
     // UI: user explicitly halted the current QSO ("Stop"). Forces Idle.
     void abortQso(QString const& reason = {});
 
+    // UI: caller-queue interactive controls (Ft2HudPanel).
+    // promoteCaller: engage the named caller NOW, bypassing best-SNR order.
+    //   If currently mid-QSO, aborts it first. Implies enableTx(true).
+    // skipCaller:    remove from the queue and short-cooldown to prevent
+    //                immediate re-enqueue from a follow-up CQ decode.
+    // cancelPendingTx: emit txCancelRequested so the Bridge drops the next
+    //                  outbound TX; engine state stays as-is.
+    void promoteCaller(QString const& call);
+    void skipCaller(QString const& call);
+    void cancelPendingTx();
+
     // ------------------------------------------------------------------
     // Introspection — read-only views for diagnostics and tests.
     // ------------------------------------------------------------------
@@ -83,6 +94,19 @@ public:
 
     std::deque<CallerEntry> callerQueueSnapshot() const { return m_callerQueue; }
     std::size_t callerQueueSize() const noexcept { return m_callerQueue.size(); }
+
+    // ------------------------------------------------------------------
+    // TX latency telemetry — microseconds elapsed between the entry of
+    // dispatchDecodeToState() (i.e. a decode that the engine accepts and
+    // routes) and the matching emit txMessageRequested(). In FT2 the
+    // total slot is 3.75s; sustained latency above ~200ms means the
+    // first TX of the slot will be cut short. Useful for diagnosing
+    // contention with the decoder thread or QML rendering hiccups.
+    // ------------------------------------------------------------------
+    qint64 lastTxLatencyUs() const noexcept { return m_lastTxLatencyUs; }
+    qint64 maxTxLatencyUs()  const noexcept { return m_maxTxLatencyUs; }
+    qint64 avgTxLatencyUs()  const noexcept { return m_avgTxLatencyUs; }
+    void   resetTxLatencyStats();
 
     // ------------------------------------------------------------------
     // Test hooks — inject a synthetic clock (production uses Clock::now).
@@ -113,6 +137,15 @@ signals:
 
     // Caller queue contents changed — UI updates the "next callers" pane.
     void callerQueueChanged();
+
+    // User asked to cancel the next outbound TX (Ft2HudPanel cancel button).
+    // Bridge slot drops the queued txMessageRequested before it goes on air.
+    void txCancelRequested();
+
+    // Emitted whenever a decode-driven dispatch produces a TX request — the
+    // microsecond delta and the resulting TX number are reported so the HUD
+    // can render a live latency badge.
+    void txLatencyMeasured(qint64 latencyUs, int txNum);
 
 private:
     // ------------------------------------------------------------------
@@ -176,6 +209,17 @@ private:
     // Monotonic event id — every feed() call increments to support replay
     // and idempotency assertions in tests.
     std::uint64_t           m_eventCounter {0};
+
+    // TX latency profiling. m_currentDispatchStart is set right before
+    // dispatchDecodeToState() runs and cleared right after; requestTx()
+    // samples the elapsed delta only while it's valid, which excludes
+    // tick()-driven CQ rotations and watchdog fallbacks (those have no
+    // upstream "decode arrived" event to measure against).
+    TimePoint m_currentDispatchStart {};
+    qint64    m_lastTxLatencyUs {0};
+    qint64    m_maxTxLatencyUs  {0};
+    qint64    m_avgTxLatencyUs  {0};   // simple EMA, alpha = 1/8
+    void      updateLatencyStats(qint64 us, int txNum);
 };
 
 } // namespace decodium::ft2

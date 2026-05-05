@@ -337,7 +337,9 @@ FeedOutcome Ft2QsoEngine::feed(QStringList const& rawRows) {
         if (!parsed) continue;
         DecodeKey key = makeKey(*parsed);
         if (isDuplicate(key)) continue;
+        m_currentDispatchStart = clockNow();
         bool advanced = dispatchDecodeToState(*parsed);
+        m_currentDispatchStart = TimePoint{};
         agg.accepted = true;
         if (advanced) {
             agg.triggeredAdvance = true;
@@ -358,7 +360,9 @@ FeedOutcome Ft2QsoEngine::feedParsed(std::vector<DecodeRow> const& rows) {
         if (row.receivedAt == TimePoint{}) row.receivedAt = clockNow();
         DecodeKey key = makeKey(row);
         if (isDuplicate(key)) continue;
+        m_currentDispatchStart = clockNow();
         bool advanced = dispatchDecodeToState(row);
+        m_currentDispatchStart = TimePoint{};
         agg.accepted = true;
         if (advanced) {
             agg.triggeredAdvance = true;
@@ -456,6 +460,9 @@ void Ft2QsoEngine::doubleClick(QString const& fromCall,
     int tx = (requestedTx >= 1 && requestedTx <= 5)
         ? requestedTx
         : 1;
+    // Ultra2: when the user did not pin a specific TX, skip the grid exchange
+    // and open with TX2 (report) so the QSO completes in 2 messages per side.
+    if (requestedTx == 0 && m_cfg.quickQsoEnabled) tx = 2;
 
     switch (tx) {
     case 1: {
@@ -521,6 +528,63 @@ void Ft2QsoEngine::abortQso(QString const& reason) {
     transitionTo(state::Idle{}, QStringLiteral("abort: %1").arg(reason));
 }
 
+// --------------------------------------------------------------------------
+// Interactive caller-queue controls used by the FT2 HUD panel.
+// --------------------------------------------------------------------------
+
+void Ft2QsoEngine::promoteCaller(QString const& call) {
+    QString const upperCall = upperBaseCall(call);
+    if (upperCall.isEmpty()) return;
+
+    auto it = std::find_if(m_callerQueue.begin(), m_callerQueue.end(),
+                           [&](CallerEntry const& e) { return e.call == upperCall; });
+    if (it == m_callerQueue.end()) {
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] promoteCaller: %1 not in queue").arg(upperCall));
+        return;
+    }
+
+    if (!m_txEnabled) {
+        m_txEnabled = true;
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] enableTx=true (promoteCaller)"));
+    }
+
+    CallerEntry const chosen = *it;
+    m_callerQueue.erase(it);
+    emit callerQueueChanged();
+
+    // If a QSO is mid-flight, abort it first — user pick supersedes everything.
+    if (!std::holds_alternative<state::Idle>(m_state) &&
+        !std::holds_alternative<state::CallingCq>(m_state)) {
+        abortQso(QStringLiteral("user promoted %1").arg(upperCall));
+    }
+
+    state::ReplyingTx1 r;
+    r.partnerCall = chosen.call;
+    r.partnerGrid = chosen.grid;
+    r.enteredAt   = clockNow();
+    transitionTo(r, QStringLiteral("promoteCaller %1").arg(chosen.call));
+    requestTx(2, buildTxMessage(2, r.partnerCall, r.partnerGrid,
+                                QStringLiteral("%1").arg(chosen.snr, 0, 10), {}, false));
+}
+
+void Ft2QsoEngine::skipCaller(QString const& call) {
+    QString const upperCall = upperBaseCall(call);
+    if (upperCall.isEmpty()) return;
+    auto const before = m_callerQueue.size();
+    purgeCaller(upperCall);
+    if (m_callerQueue.size() != before) {
+        // Brief cooldown so a subsequent CQ decode does not immediately
+        // re-enqueue the station the user just dismissed.
+        markCooldown(upperCall);
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] skipCaller %1").arg(upperCall));
+    }
+}
+
+void Ft2QsoEngine::cancelPendingTx() {
+    emit engineDiagnostic(QStringLiteral("[Ft2Engine] cancelPendingTx"));
+    emit txCancelRequested();
+}
+
 QString Ft2QsoEngine::dxCall() const {
     return std::visit([](auto const& v) -> QString {
         using T = std::decay_t<decltype(v)>;
@@ -555,6 +619,19 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 if (inCooldown(row.fromCall)) return;
                 state::AwaitingRRR next;
                 if (!row.report.isEmpty() && row.hasRogerPrefix) {
+                    // Ultra2: short-circuit straight into Closing with TX3+TU rather
+                    // than parking in AwaitingRRR waiting for the partner's 73.
+                    if (m_cfg.quickQsoEnabled) {
+                        state::Closing c;
+                        c.partnerCall    = row.fromCall;
+                        c.receivedReport = row.report;
+                        c.sentReport     = QStringLiteral("%1").arg(row.snr);
+                        c.closedAt       = clockNow();
+                        transitionTo(c, QStringLiteral("Idle: caught R+report (Ultra2)"));
+                        requestTx(3, buildTxMessage(3, c.partnerCall, {}, c.sentReport, c.receivedReport, false));
+                        advanced = true;
+                        return;
+                    }
                     next.partnerCall    = row.fromCall;
                     next.receivedReport = row.report;
                     next.sentReport     = QStringLiteral("%1").arg(row.snr);
@@ -653,14 +730,22 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 // Standard WSJT-X behavior: TX4 (RR73) is the CQer's last TX of the QSO.
                 // Log immediately; tick() finalizes Closing -> CQ. We do NOT linger in
                 // AwaitingSignoff waiting for partner's 73 (it would re-flood RR73).
+                // Ultra2 (QuickQSO): send TX3 (R+rep+TU) instead of TX4 (RR73) so the
+                // exchange completes in 2 messages per side; partner's R+rep+TU is the
+                // signoff and we do not expect their 73.
                 state::Closing c;
                 c.partnerCall    = s.partnerCall;
                 c.partnerGrid    = s.partnerGrid;
                 c.sentReport     = s.sentReport;
                 c.receivedReport = row.report;
                 c.closedAt       = clockNow();
-                transitionTo(c, QStringLiteral("got R+report from %1, sending RR73 once").arg(s.partnerCall));
-                requestTx(4, buildTxMessage(4, c.partnerCall, {}, c.sentReport, c.receivedReport, true));
+                if (m_cfg.quickQsoEnabled) {
+                    transitionTo(c, QStringLiteral("got R+report from %1, sending TX3+TU once (Ultra2)").arg(s.partnerCall));
+                    requestTx(3, buildTxMessage(3, c.partnerCall, {}, c.sentReport, c.receivedReport, false));
+                } else {
+                    transitionTo(c, QStringLiteral("got R+report from %1, sending RR73 once").arg(s.partnerCall));
+                    requestTx(4, buildTxMessage(4, c.partnerCall, {}, c.sentReport, c.receivedReport, true));
+                }
                 advanced = true;
                 return;
             }
@@ -751,7 +836,31 @@ void Ft2QsoEngine::requestTx(int txNum, QString const& formatted) {
     emit currentTxChanged(txNum);
     if (m_txEnabled) {
         emit txMessageRequested(txNum, formatted);
+        // Sample latency only when the TX was driven by a fresh decode
+        // (m_currentDispatchStart valid) — tick()-driven CQ rotations and
+        // doubleClick events have no upstream "decode arrived" instant.
+        if (m_currentDispatchStart != TimePoint{}) {
+            auto const us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                clockNow() - m_currentDispatchStart).count();
+            updateLatencyStats(static_cast<qint64>(us), txNum);
+        }
     }
+}
+
+void Ft2QsoEngine::updateLatencyStats(qint64 us, int txNum) {
+    m_lastTxLatencyUs = us;
+    if (us > m_maxTxLatencyUs) m_maxTxLatencyUs = us;
+    // EMA with alpha = 1/8 — first sample seeds the average.
+    m_avgTxLatencyUs = (m_avgTxLatencyUs == 0) ? us
+                                               : (m_avgTxLatencyUs * 7 + us) / 8;
+    emit txLatencyMeasured(us, txNum);
+}
+
+void Ft2QsoEngine::resetTxLatencyStats() {
+    m_lastTxLatencyUs = 0;
+    m_maxTxLatencyUs  = 0;
+    m_avgTxLatencyUs  = 0;
+    emit txLatencyMeasured(0, 0);
 }
 
 QString Ft2QsoEngine::buildTxMessage(int txNum,
@@ -777,8 +886,11 @@ QString Ft2QsoEngine::buildTxMessage(int txNum,
         return QStringLiteral("%1 %2 %3").arg(partnerCall, me, grid);
     case 2: // <DX> <ME> <REPORT>
         return QStringLiteral("%1 %2 %3").arg(partnerCall, me, fmtReport(sentReport));
-    case 3: // <DX> <ME> R<REPORT>
-        return QStringLiteral("%1 %2 R%3").arg(partnerCall, me, fmtReport(recvReport));
+    case 3: { // <DX> <ME> R<REPORT> [TU when QuickQSO/Ultra2]
+        QString base = QStringLiteral("%1 %2 R%3").arg(partnerCall, me, fmtReport(recvReport));
+        if (m_cfg.quickQsoEnabled) base += QStringLiteral(" TU");
+        return base;
+    }
     case 4: // <DX> <ME> RR73 or RRR
         return QStringLiteral("%1 %2 %3").arg(partnerCall, me, rrr ? QStringLiteral("RR73") : QStringLiteral("RRR"));
     case 5: // <DX> <ME> 73

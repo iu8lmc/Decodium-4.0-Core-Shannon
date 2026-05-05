@@ -9577,6 +9577,51 @@ ApplicationWindow {
         }
     }
 
+    // Ft2HudPanel — visibile solo in mode FT2, angolo in alto a destra,
+    // draggable. Mostra stato engine + DX + countdown + caller queue.
+    property bool ft2HudPanelVisible: bridge.mode === "FT2"
+    Item {
+        id: ft2HudOverlay
+        visible: bridge.mode === "FT2" && ft2HudPanelVisible
+        z: 200
+        x: mainWindow.width - width - 12
+        y: 90
+        width: 320
+        height: ft2HudLoader.item ? ft2HudLoader.item.implicitHeight : 220
+
+        MouseArea {
+            anchors.fill: parent
+            drag.target: ft2HudOverlay
+            drag.axis: Drag.XAndYAxis
+            drag.minimumX: 0; drag.maximumX: mainWindow.width  - ft2HudOverlay.width
+            drag.minimumY: 0; drag.maximumY: mainWindow.height - 50
+        }
+
+        Loader {
+            id: ft2HudLoader
+            anchors.fill: parent
+            active: bridge.mode === "FT2" && ft2HudPanelVisible
+            source: "components/Ft2HudPanel.qml"
+        }
+
+        Connections {
+            target: ft2HudLoader.item
+            ignoreUnknownSignals: true
+            function onCloseRequested() {
+                ft2HudPanelVisible = false
+            }
+        }
+    }
+
+    Connections {
+        target: bridge
+        ignoreUnknownSignals: true
+        function onModeChanged() {
+            // Riapri il pannello automaticamente quando si entra in FT2.
+            if (bridge.mode === "FT2") ft2HudPanelVisible = true
+        }
+    }
+
     // AstroPanel — C14: calcolatrice astronomica EME, angolo in basso a sinistra
     Item {
         id: astroPanelOverlay
