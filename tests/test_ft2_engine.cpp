@@ -423,6 +423,40 @@ private slots:
     }
 
     // ----------------------------------------------------------------
+    // Real-signal report formatting: the SNR we report on TX2 must match
+    // WSJT-X conventions (sign + zero-padded 2 digits). Positive SNR must
+    // not be flipped to negative; small magnitudes must be padded.
+    //   snr=+5  -> "+05"
+    //   snr=-3  -> "-03"
+    // Regression: prior code used QString::arg(int) which dropped the sign
+    // and padding, then fmtReport prepended "-" to anything sign-less,
+    // turning "+5" into "-5".
+    // ----------------------------------------------------------------
+    void txReportEncodesRealSnrSignAndPadding() {
+        Ft2QsoEngine eng(makeCfg(), nullptr);
+        QSignalSpy txMsgSpy(&eng, &Ft2QsoEngine::txMessageRequested);
+        eng.enableTx(true);
+
+        // CQer side: partner sends grid; engine answers TX2 with their SNR.
+        eng.feedParsed({ makeRow("K1ABC", "IK8TWX K1ABC FN42", /*snr=*/5) });
+        QCOMPARE(eng.currentTx(), 2);
+        QString const tx2 = txMsgSpy.last().at(1).toString();
+        QVERIFY2(tx2.contains(QStringLiteral("+05")),
+                 qPrintable(QStringLiteral("expected '+05' in TX2 for snr=+5, got: %1").arg(tx2)));
+        QVERIFY2(!tx2.contains(QStringLiteral("-05")),
+                 qPrintable(QStringLiteral("sign flipped: TX2 contains -05 for snr=+5, got: %1").arg(tx2)));
+
+        // Fresh engine for a single-digit negative SNR -> -03 padded.
+        Ft2QsoEngine eng2(makeCfg("IK1XYZ", "JN35"), nullptr);
+        QSignalSpy spy2(&eng2, &Ft2QsoEngine::txMessageRequested);
+        eng2.enableTx(true);
+        eng2.feedParsed({ makeRow("K2DEF", "IK1XYZ K2DEF FN30", /*snr=*/-3) });
+        QString const tx2neg = spy2.last().at(1).toString();
+        QVERIFY2(tx2neg.contains(QStringLiteral("-03")),
+                 qPrintable(QStringLiteral("expected '-03' in TX2 for snr=-3, got: %1").arg(tx2neg)));
+    }
+
+    // ----------------------------------------------------------------
     // Watchdog: state stuck beyond budget falls back to Idle/CallingCq.
     // ----------------------------------------------------------------
     void watchdogFallback() {

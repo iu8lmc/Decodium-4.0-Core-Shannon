@@ -146,9 +146,10 @@ constexpr Duration kWatchdogPerStateMax = std::chrono::seconds(60); // ~16 slots
 // because slow operators can take 15+ slots to acknowledge a call.
 constexpr Duration kWatchdogReplyingTx1 = std::chrono::seconds(120);
 constexpr Duration kEngineTickInterval  = std::chrono::milliseconds(100);
-// Hold in Closing for at least one FT2 slot so TX4/TX5 actually gets
-// transmitted once before we switch the legacy backend back to TX6 (CQ).
-constexpr Duration kCloseDrainAfter = std::chrono::seconds(8);
+// Hold in Closing just past one FT2 slot (3.75s) so TX4/TX5 gets
+// transmitted exactly once before we switch the backend back to TX6
+// (CQ). 8s used to span 2 slots and produced a doubled RR73 on air.
+constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(4000);
 
 // ============================================================================
 // State machine — std::variant of plain structs. Each state carries the

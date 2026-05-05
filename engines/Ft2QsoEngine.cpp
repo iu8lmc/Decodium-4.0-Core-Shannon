@@ -412,7 +412,7 @@ void Ft2QsoEngine::tick() {
                 r.enteredAt   = clockNow();
                 transitionTo(r, QStringLiteral("auto-drain caller queue"));
                 requestTx(2, buildTxMessage(2, r.partnerCall, r.partnerGrid,
-                                            QStringLiteral("%1").arg(next->snr, 0, 10), {}, false));
+                                            formatReportFromSnr(next->snr), {}, false));
             } else {
                 // Nothing else to call — go back to CQ.
                 state::CallingCq cq{ clockNow(), 0 };
@@ -434,7 +434,7 @@ void Ft2QsoEngine::tick() {
                 r.enteredAt   = clockNow();
                 transitionTo(r, QStringLiteral("CQ engage caller %1").arg(next->call));
                 requestTx(2, buildTxMessage(2, r.partnerCall, r.partnerGrid,
-                                            QStringLiteral("%1").arg(next->snr, 0, 10), {}, false));
+                                            formatReportFromSnr(next->snr), {}, false));
             }
         }
     }
@@ -564,7 +564,7 @@ void Ft2QsoEngine::promoteCaller(QString const& call) {
     r.enteredAt   = clockNow();
     transitionTo(r, QStringLiteral("promoteCaller %1").arg(chosen.call));
     requestTx(2, buildTxMessage(2, r.partnerCall, r.partnerGrid,
-                                QStringLiteral("%1").arg(chosen.snr, 0, 10), {}, false));
+                                formatReportFromSnr(chosen.snr), {}, false));
 }
 
 void Ft2QsoEngine::skipCaller(QString const& call) {
@@ -625,7 +625,7 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                         state::Closing c;
                         c.partnerCall    = row.fromCall;
                         c.receivedReport = row.report;
-                        c.sentReport     = QStringLiteral("%1").arg(row.snr);
+                        c.sentReport     = formatReportFromSnr(row.snr);
                         c.closedAt       = clockNow();
                         transitionTo(c, QStringLiteral("Idle: caught R+report (Ultra2)"));
                         requestTx(3, buildTxMessage(3, c.partnerCall, {}, c.sentReport, c.receivedReport, false));
@@ -634,7 +634,7 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                     }
                     next.partnerCall    = row.fromCall;
                     next.receivedReport = row.report;
-                    next.sentReport     = QStringLiteral("%1").arg(row.snr);
+                    next.sentReport     = formatReportFromSnr(row.snr);
                     next.enteredAt      = clockNow();
                     transitionTo(next, QStringLiteral("Idle: caught R+report"));
                     requestTx(4, buildTxMessage(4, next.partnerCall, {}, next.sentReport, next.receivedReport, true));
@@ -645,7 +645,7 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                     state::AwaitingRRR n;
                     n.partnerCall    = row.fromCall;
                     n.receivedReport = row.report;
-                    n.sentReport     = QStringLiteral("%1").arg(row.snr);
+                    n.sentReport     = formatReportFromSnr(row.snr);
                     n.enteredAt      = clockNow();
                     transitionTo(n, QStringLiteral("Idle: caught report"));
                     requestTx(3, buildTxMessage(3, n.partnerCall, {}, n.sentReport, n.receivedReport, false));
@@ -656,7 +656,7 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 state::AwaitingReport ar;
                 ar.partnerCall = row.fromCall;
                 ar.partnerGrid = row.grid;
-                ar.sentReport  = QStringLiteral("%1").arg(row.snr);
+                ar.sentReport  = formatReportFromSnr(row.snr);
                 ar.enteredAt   = clockNow();
                 transitionTo(ar, QStringLiteral("Idle: engaged on grid"));
                 requestTx(2, buildTxMessage(2, ar.partnerCall, ar.partnerGrid, ar.sentReport, {}, false));
@@ -673,7 +673,7 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 state::AwaitingReport ar;
                 ar.partnerCall = row.fromCall;
                 ar.partnerGrid = row.grid;
-                ar.sentReport  = QStringLiteral("%1").arg(row.snr);
+                ar.sentReport  = formatReportFromSnr(row.snr);
                 ar.enteredAt   = clockNow();
                 transitionTo(ar, QStringLiteral("CQ answered by %1").arg(row.fromCall));
                 requestTx(2, buildTxMessage(2, ar.partnerCall, ar.partnerGrid, ar.sentReport, {}, false));
@@ -705,7 +705,7 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 state::AwaitingRRR n;
                 n.partnerCall    = s.partnerCall;
                 n.receivedReport = row.report;
-                n.sentReport     = QStringLiteral("%1").arg(row.snr);
+                n.sentReport     = formatReportFromSnr(row.snr);
                 n.enteredAt      = clockNow();
                 transitionTo(n, QStringLiteral("got report from %1").arg(s.partnerCall));
                 requestTx(3, buildTxMessage(3, n.partnerCall, {}, n.sentReport, n.receivedReport, false));

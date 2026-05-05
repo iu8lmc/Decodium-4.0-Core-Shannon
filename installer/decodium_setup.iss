@@ -5,7 +5,7 @@
   #define AppName "Decodium"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.78"
+  #define AppVersion "1.0.79"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "IU8LMC"
