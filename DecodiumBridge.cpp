@@ -1403,8 +1403,14 @@ static QString normalizedUsableCallToken(QString const& token)
 {
     QString const upper = normalizeCallToken(token).trimmed().toUpper();
     if (upper.isEmpty()
-        || isPlaceholderCallToken(upper)
-        || isGridTokenStrict(upper)) {
+        || isPlaceholderCallToken(upper)) {
+        return {};
+    }
+    // Scarta grid 4-char (es. JN54). Non scartare grid 6-char ambigui:
+    // call special-event come RP81AS, RA82BX matchano il pattern Maidenhead
+    // esteso ma sono callsign reali. I grid 6-char non compaiono mai in
+    // posizione callsign nei messaggi FT/CW standard.
+    if (upper.size() == 4 && isGridTokenStrict(upper)) {
         return {};
     }
     if (upper == QStringLiteral("CQ")
