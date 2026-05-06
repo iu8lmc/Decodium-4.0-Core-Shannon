@@ -665,6 +665,53 @@ Rectangle {
             }
         }
 
+        // ----- Analytics row (Tier 3) -----
+        // Una sola riga compatta con i contatori non-microsecondi:
+        //   pass=N.N (D=K) → media pass su cui convergono i decode (K nello slot).
+        //   sync=Cx Yμs   → C chiamate ftx_sync2d_c medie/slot, Y μs/chiamata.
+        // Pass=1.0 → tutti decode su pass 1 (potresti skippare 2-5).
+        // Pass>5    → AP retry domina (potresti ridurre nappasses).
+        // sync per-call alta → ftx_sync2d_c stesso lento (Fortran).
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: bridge.ft2AvgSelectedPass > 0 || bridge.ft2AvgSyncCalls > 0
+
+            Text {
+                text: "INF"
+                font.family: "Monospace"
+                font.pixelSize: 9
+                font.bold: true
+                color: textSecondary
+                Layout.preferredWidth: 24
+            }
+
+            Text {
+                text: "pass=" + bridge.ft2AvgSelectedPass.toFixed(1) +
+                      " (D=" + bridge.ft2DecodesPerSlot + ")"
+                font.family: "Monospace"
+                font.pixelSize: 9
+                font.bold: true
+                color: bridge.ft2AvgSelectedPass > 5 ? warning
+                     : bridge.ft2AvgSelectedPass > 3 ? Qt.rgba(1, 1, 0.4, 1)
+                     : accent
+                Layout.preferredWidth: 90
+            }
+
+            Text {
+                readonly property real perCallMs:
+                    bridge.ft2AvgSyncCalls > 0
+                        ? (bridge.ft2AvgSyncUs / bridge.ft2AvgSyncCalls / 1000.0)
+                        : 0.0
+                text: "sync=" + bridge.ft2AvgSyncCalls + "×" + perCallMs.toFixed(2) + "ms"
+                font.family: "Monospace"
+                font.pixelSize: 9
+                color: textSecondary
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+            }
+        }
+
         // ----- Caller queue header -----
         RowLayout {
             Layout.fillWidth: true

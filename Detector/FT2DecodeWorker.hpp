@@ -75,6 +75,13 @@ Q_SIGNALS:
   //   l91Us = ftx_decode174_91_c cumulativo (BP + OSD nativo Fortran)
   void asyncStage7LdpcBreakdownProfile (qint64 priUs, qint64 aprUs, qint64 l91Us);
 
+  // Tier 3 telemetry: analytics counters dello slot (non microsecondi):
+  //   syncCalls       = numero totale chiamate ftx_sync2d_c
+  //   decodedCount    = numero decode OK
+  //   selectedPassSum = somma dei selected_pass (ipass su cui ogni decode OK)
+  // avg pass = selectedPassSum / decodedCount, calcolato dal bridge.
+  void asyncStage7Analytics (qint64 syncCalls, qint64 decodedCount, qint64 selectedPassSum);
+
   void asyncDecodeReady (QStringList rows);
   void decodeReady (quint64 serial, QStringList rows);
 

@@ -64,6 +64,10 @@ struct Stage7Profile
   qint64 pri_us     {0};   // pass 1-5: 5 LLR variants senza a-priori
   qint64 apr_us     {0};   // pass 6+ : a-priori retry (prepare_ap_pass + decode)
   qint64 l91_us     {0};   // ftx_decode174_91_c cumulativo (BP + OSD nativo)
+  // Tier 3 — analytics counters per slot (non microsecondi).
+  qint64 sync_calls {0};       // numero totale chiamate ftx_sync2d_c per slot
+  qint64 decoded_count {0};    // numero decode OK in questo slot
+  qint64 selected_pass_sum {0};// somma di selected_pass dei decode OK
 };
 
 inline Stage7Profile& stage7_profile ()
@@ -1652,6 +1656,11 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
       result.nharderror = nharderror;
       result.maxosd = maxosd;
       result.dmin = dmin;
+      // Tier 3 — analytics: incrementa contatori dello slot corrente.
+      // Ipass 1..5 = pass base, 6+ = AP retry. La distribuzione di selected
+      // pass guida le ottimizzazioni (es. se >90% al pass 1, skip 2-5 ha senso).
+      ++s7p_dec.decoded_count;
+      s7p_dec.selected_pass_sum += ipass;
       return result;
     }
 
@@ -1946,6 +1955,7 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                         for (int istart = ibmin; istart <= ibmax; istart += ibstp)
                           {
                             float sync = 0.0f;
+                            ++s7p.sync_calls;
                             ftx_sync2d_c (cd2.data (), kFt2NdMax, istart,
                                           state.ctwk2[static_cast<size_t> (idf_index (idf))].data (),
                                           1, &sync);
@@ -2528,6 +2538,22 @@ extern "C" void ftx_ft2_stage7_last_profile_c (qint64* getcand_us,
   if (pri_us)     *pri_us     = p.pri_us;
   if (apr_us)     *apr_us     = p.apr_us;
   if (l91_us)     *l91_us     = p.l91_us;
+}
+
+// Tier 3 — analytics counters separati dai microsecondi. Stessa convention:
+// chiamare dallo stesso worker thread che ha appena eseguito decode_ft2_stage7.
+//   sync_calls         = numero totale di chiamate ftx_sync2d_c nel slot
+//   decoded_count      = numero di decode OK in run_decode_passes
+//   selected_pass_sum  = somma dei selected_pass dei decode OK
+// L'avg pass = selected_pass_sum / decoded_count (calcolato lato bridge).
+extern "C" void ftx_ft2_stage7_last_analytics_c (qint64* sync_calls,
+                                                 qint64* decoded_count,
+                                                 qint64* selected_pass_sum)
+{
+  Stage7Profile const& p = stage7_profile ();
+  if (sync_calls)        *sync_calls        = p.sync_calls;
+  if (decoded_count)     *decoded_count     = p.decoded_count;
+  if (selected_pass_sum) *selected_pass_sum = p.selected_pass_sum;
 }
 
 extern "C" int ftx_ft2_cpp_dsp_rollout_stage_c ()

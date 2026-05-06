@@ -3558,6 +3558,9 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // Tier 2: sub-LDPC breakdown (PRI/APR/L91).
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncStage7LdpcBreakdownProfile,
             this, &DecodiumBridge::onFt2AsyncStage7LdpcBreakdownProfile, Qt::QueuedConnection);
+    // Tier 3: analytics counters (selected_pass, sync_calls, decoded_count).
+    connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncStage7Analytics,
+            this, &DecodiumBridge::onFt2AsyncStage7Analytics, Qt::QueuedConnection);
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncDecodeReady,
             this, &DecodiumBridge::onFt2AsyncDecodeReady, Qt::QueuedConnection);
     connect(m_workerThreadFt2, &QThread::finished, m_ft2Worker, &QObject::deleteLater);
@@ -6935,6 +6938,34 @@ void DecodiumBridge::onFt2AsyncStage7LdpcBreakdownProfile(qint64 priUs, qint64 a
     updatePipelineSegmentEma(aprUs, m_ft2LastAprUs, m_ft2AvgAprUs, m_ft2MaxAprUs);
     updatePipelineSegmentEma(l91Us, m_ft2LastL91Us, m_ft2AvgL91Us, m_ft2MaxL91Us);
     emit ft2LdpcBreakdownChanged();
+}
+
+// Tier 3 — analytics counters non-microsecondi.
+// selected_pass avg = sum / count quando count > 0; serve a sapere su quale
+// pass converge mediamente il decoder. Se ~1.0 i pass 2-5 sono inutili, se
+// ~6+ l'AP retry è il workhorse. EMA alpha=1/8 sulle slot dove c'è almeno
+// un decode OK (slot vuoti non spostano la media).
+//
+// sync_calls EMA = stima di quante chiamate ftx_sync2d_c facciamo per slot,
+// utile per capire se la latenza SYN è "tante chiamate veloci" o "poche
+// chiamate lente" (sync_us / sync_calls = costo per chiamata).
+void DecodiumBridge::onFt2AsyncStage7Analytics(qint64 syncCalls, qint64 decodedCount, qint64 selectedPassSum)
+{
+    m_ft2LastDecodedCount = decodedCount;
+    if (decodedCount > 0) {
+        qreal const sample = static_cast<qreal>(selectedPassSum) / static_cast<qreal>(decodedCount);
+        if (m_ft2AvgSelectedPass <= 0.0) {
+            m_ft2AvgSelectedPass = sample;
+        } else {
+            m_ft2AvgSelectedPass += (sample - m_ft2AvgSelectedPass) / 8.0;
+        }
+    }
+    if (m_ft2AvgSyncCalls == 0) {
+        m_ft2AvgSyncCalls = syncCalls;
+    } else {
+        m_ft2AvgSyncCalls += (syncCalls - m_ft2AvgSyncCalls) / 8;
+    }
+    emit ft2AnalyticsChanged();
 }
 
 void DecodiumBridge::setMode(const QString& v) {

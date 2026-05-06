@@ -28,6 +28,10 @@ extern "C"
                                       qint64* sync_us,    qint64* ldpc_us,
                                       qint64* pri_us,     qint64* apr_us,
                                       qint64* l91_us);
+  // Tier 3 — analytics counters dello stesso slot.
+  void ftx_ft2_stage7_last_analytics_c (qint64* sync_calls,
+                                        qint64* decoded_count,
+                                        qint64* selected_pass_sum);
 }
 
 namespace
@@ -259,6 +263,12 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
                                  &stage7Pri, &stage7Apr, &stage7L91);
   Q_EMIT asyncStage7BreakdownProfile (stage7Getcand, stage7Demod, stage7Sync, stage7Ldpc);
   Q_EMIT asyncStage7LdpcBreakdownProfile (stage7Pri, stage7Apr, stage7L91);
+  // Tier 3 — analytics counters non-microsecondi.
+  qint64 syncCalls       = 0;
+  qint64 decodedCount    = 0;
+  qint64 selectedPassSum = 0;
+  ftx_ft2_stage7_last_analytics_c (&syncCalls, &decodedCount, &selectedPassSum);
+  Q_EMIT asyncStage7Analytics (syncCalls, decodedCount, selectedPassSum);
 
   Q_EMIT asyncDecodeReady (build_rows (QString {}, '~', nout, snrs, dts, freqs, naps, quals,
                                        decodeds));

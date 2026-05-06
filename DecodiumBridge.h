@@ -373,6 +373,14 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(qlonglong ft2MaxAprUs READ ft2MaxAprUs NOTIFY ft2LdpcBreakdownChanged)
     Q_PROPERTY(qlonglong ft2AvgL91Us READ ft2AvgL91Us NOTIFY ft2LdpcBreakdownChanged)
     Q_PROPERTY(qlonglong ft2MaxL91Us READ ft2MaxL91Us NOTIFY ft2LdpcBreakdownChanged)
+    // Tier 3 — analytics:
+    //   ft2AvgSelectedPass = media (EMA) del pass su cui ogni decode OK ha
+    //                        risolto. 1.0 = tutti pass 1, ~6 = tutti AP retry.
+    //   ft2AvgSyncCalls    = media (EMA) chiamate ftx_sync2d_c per slot.
+    //   ft2DecodesPerSlot  = ultimo numero di decode OK in uno slot.
+    Q_PROPERTY(qreal     ft2AvgSelectedPass READ ft2AvgSelectedPass NOTIFY ft2AnalyticsChanged)
+    Q_PROPERTY(qlonglong ft2AvgSyncCalls    READ ft2AvgSyncCalls    NOTIFY ft2AnalyticsChanged)
+    Q_PROPERTY(qlonglong ft2DecodesPerSlot  READ ft2DecodesPerSlot  NOTIFY ft2AnalyticsChanged)
 
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
@@ -785,6 +793,10 @@ public:
     qlonglong ft2MaxAprUs()     const noexcept { return m_ft2MaxAprUs;     }
     qlonglong ft2AvgL91Us()     const noexcept { return m_ft2AvgL91Us;     }
     qlonglong ft2MaxL91Us()     const noexcept { return m_ft2MaxL91Us;     }
+    // Tier 3 — analytics getters.
+    qreal     ft2AvgSelectedPass() const noexcept { return m_ft2AvgSelectedPass; }
+    qlonglong ft2AvgSyncCalls()    const noexcept { return m_ft2AvgSyncCalls;    }
+    qlonglong ft2DecodesPerSlot()  const noexcept { return m_ft2LastDecodedCount; }
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
     QObject*    diagnostics() const { return m_diagnostics; }
@@ -1186,6 +1198,7 @@ signals:
     void ft2PipelineProfileChanged();
     void ft2Stage7BreakdownChanged();
     void ft2LdpcBreakdownChanged();
+    void ft2AnalyticsChanged();
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();
@@ -1257,6 +1270,8 @@ private slots:
                                           qint64 syncUs,    qint64 ldpcUs);
     // Tier 2 — sub-LDPC breakdown handler.
     void onFt2AsyncStage7LdpcBreakdownProfile(qint64 priUs, qint64 aprUs, qint64 l91Us);
+    // Tier 3 — analytics handler.
+    void onFt2AsyncStage7Analytics(qint64 syncCalls, qint64 decodedCount, qint64 selectedPassSum);
     void onFt4DecodeReady(quint64 serial, QStringList rows);
     void onQ65DecodeReady(quint64 serial, QStringList rows);
     void onMsk144DecodeReady(quint64 serial, QStringList rows);
@@ -1679,6 +1694,10 @@ private:
     qint64 m_ft2LastL91Us     {0};
     qint64 m_ft2AvgL91Us      {0};
     qint64 m_ft2MaxL91Us      {0};
+    // Tier 3 — analytics aggregati EMA.
+    qreal  m_ft2AvgSelectedPass {0.0};   // EMA della media pass per slot
+    qint64 m_ft2AvgSyncCalls    {0};     // EMA chiamate ftx_sync2d_c
+    qint64 m_ft2LastDecodedCount{0};     // ultimo conteggio decode OK in uno slot
     void   updatePipelineSegmentEma(qint64 sampleUs,
                                     qint64& last, qint64& avg, qint64& max) noexcept;
     QThread* m_workerThreadFt4 {nullptr};
