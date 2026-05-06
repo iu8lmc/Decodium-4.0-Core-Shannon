@@ -3,9 +3,11 @@
 #include "Ft2QsoEngine.hpp"
 
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QStringList>
 #include <QTimer>
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 
 namespace decodium::ft2 {
@@ -937,6 +939,12 @@ QString Ft2QsoEngine::buildTxMessage(int txNum,
                                      QString const& sentReport,
                                      QString const& recvReport,
                                      bool rrr) const {
+    auto const t_enc_start = std::chrono::steady_clock::now();
+    auto const encGuard = qScopeGuard([self = const_cast<Ft2QsoEngine*>(this), t_enc_start]() {
+        auto const us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - t_enc_start).count();
+        emit self->txEncodingProfile(us);
+    });
     Q_UNUSED(partnerGrid);
     QString const me   = m_cfg.myBaseCall;
     QString const grid = m_cfg.myGrid;

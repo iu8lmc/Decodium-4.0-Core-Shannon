@@ -6396,6 +6396,15 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txLatencyMeasured,
             this, [this](qint64 us, int txNum) { Q_UNUSED(us); Q_UNUSED(txNum); emit ft2TxLatencyChanged(); });
 
+    // Telemetria Tier 1 fix: bridge.genStdMsgs NON viene chiamato in path FT2
+    // (engine usa il proprio buildTxMessage). Il qScopeGuard sul bridge restava
+    // sempre 0. Misuriamo direttamente nell'engine, qui inoltriamo a HUD PIPE/ENC.
+    connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txEncodingProfile,
+            this, [this](qint64 encoderUs) {
+                updatePipelineSegmentEma(encoderUs, m_ft2LastEncoderUs, m_ft2AvgEncoderUs, m_ft2MaxEncoderUs);
+                emit ft2PipelineProfileChanged();
+            });
+
     // Forward TX-keying state into the engine so it can short-circuit the
     // Closing drain timer. Without this, the safety timer (7s) sometimes
     // straddles two FT2 slot boundaries and lets the backend retransmit
