@@ -657,8 +657,10 @@ Dialog {
     }
 
     onClosed: {
-        if (!warmupInProgress)
+        if (!warmupInProgress) {
             persistSettingsNow()
+            bridge.recoverAutoTxAfterSettings("settings-dialog-close")
+        }
     }
 
     onCurrentTabChanged: {

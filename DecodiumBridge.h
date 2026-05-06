@@ -164,6 +164,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(double rigPowerWatts READ rigPowerWatts NOTIFY rigTelemetryChanged)
     Q_PROPERTY(double rigSwr READ rigSwr NOTIFY rigTelemetryChanged)
     Q_PROPERTY(double processCpuUsage READ processCpuUsage NOTIFY processCpuUsageChanged)
+    Q_PROPERTY(double processGpuUsage READ processGpuUsage NOTIFY processGpuUsageChanged)
     Q_PROPERTY(QString lastCatError READ lastCatError NOTIFY lastCatErrorChanged)
 
     // === LED STATUS INDICATORS ===
@@ -451,7 +452,7 @@ public:
     bool sendRR73() const { return m_sendRR73; }
     void setSendRR73(bool v);
     bool multiAnswerMode() const { return m_multiAnswerMode; }
-    void setMultiAnswerMode(bool v) { if (m_multiAnswerMode != v) { m_multiAnswerMode = v; emit multiAnswerModeChanged(); } }
+    void setMultiAnswerMode(bool v);
 
     bool autoSeq()           const { return m_autoSeq; }
     void setAutoSeq(bool v);
@@ -521,6 +522,7 @@ public:
     double rigPowerWatts() const { return m_rigPowerWatts; }
     double rigSwr() const { return m_rigSwr; }
     double processCpuUsage() const { return m_processCpuUsage; }
+    double processGpuUsage() const { return m_processGpuUsage; }
     QString lastCatError() const { return m_lastCatError; }
 
     // LED status
@@ -864,6 +866,7 @@ public slots:
     Q_INVOKABLE void openTimeSyncSettings();
     Q_INVOKABLE void syncNtpNow();
     Q_INVOKABLE void openCatSettings();
+    Q_INVOKABLE void recoverAutoTxAfterSettings(const QString& reason = QString());
     Q_INVOKABLE void retryRigConnection();
     Q_INVOKABLE void openHamlibUpdatePage() const;
 
@@ -991,6 +994,7 @@ public slots:
     Q_INVOKABLE bool deleteQso(const QString& call, const QString& dateTime);
     Q_INVOKABLE bool editQso(const QString& call, const QString& dateTime, const QVariantMap& newData);
     Q_INVOKABLE QStringList workedCallsigns() const;
+    Q_INVOKABLE void setGpuPanadapterFftAvailable(bool available, const QString& reason = QString());
     int workedCount() const;
 
     // LotW lite
@@ -1014,6 +1018,14 @@ signals:
     // Alta risoluzione: dB raw + range + frequenze exact — per PanadapterItem
     void panadapterDataReady(QVector<float> dbValues, float minDb, float maxDb,
                              float freqMinHz, float freqMaxHz);
+    // Path GPU visuale: PCM grezzo verso PanadapterItem/RHI compute.
+    void panadapterPcmFrameReady(QVector<float> samples,
+                                 int usableSamples,
+                                 int nfa,
+                                 int nfb,
+                                 float freqMinHz,
+                                 float freqMaxHz,
+                                 quint64 serial);
     // TX — collegano bridge → Modulator (via QueuedConnection)
     void transmitFrequency(double freq);
     void sendMessage(QString mode, unsigned symbolsLength, double framesPerSymbol,
@@ -1083,6 +1095,7 @@ signals:
     void catModeChanged();
     void rigTelemetryChanged();
     void processCpuUsageChanged();
+    void processGpuUsageChanged();
     void lastCatErrorChanged();
     void dxClusterConnectedChanged();
     void dxClusterSpotsChanged();
@@ -1254,6 +1267,7 @@ private slots:
     void onUtcTimer();
     void onSpectrumTimer();
     void updateProcessCpuUsage();
+    void updateProcessGpuUsage();
     void updateUiStallDiagnostics();
     void onLegacyWaterfallRow(QByteArray const& rowLevels,
                               int startFrequencyHz,
@@ -1502,10 +1516,14 @@ private:
     double m_rigPowerWatts {0.0};
     double m_rigSwr {0.0};
     double m_processCpuUsage {0.0};
+    double m_processGpuUsage {-1.0};
     quint64 m_lastProcessCpuUsec {0};
+    quint64 m_lastProcessGpuTimeNs {0};
     int m_processCpuLogicalCores {1};
     bool m_processCpuSampleInitialized {false};
+    bool m_processGpuSampleInitialized {false};
     QElapsedTimer m_processCpuSampleClock;
+    QElapsedTimer m_processGpuSampleClock;
     QElapsedTimer m_uiStallClock;
     qint64 m_lastUiStallTickMs {0};
     qint64 m_lastUiStallLogMs {0};
@@ -1622,6 +1640,7 @@ private:
     std::unique_ptr<decodium::ft2::Ft2QsoEngine> m_ft2Engine;
     void ensureFt2Engine(QString const& origin);
     void teardownFt2Engine(QString const& reason);
+    void refreshFt2EngineConfig(QString const& reason);
 
     // Tier-1 pipeline telemetry (microseconds, EMA alpha=1/8).
     // m_ft2PendingEmittedAtNs holds the last decoder-emit timestamp so the
@@ -2001,6 +2020,7 @@ private:
     bool m_directVisualAudioCaptureUnsafe {false};
     std::atomic_bool m_panadapterComputeBusy {false};
     std::atomic<uint64_t> m_panadapterComputeSerial {0};
+    std::atomic_bool m_gpuPanadapterFftAvailable {true};
 
     struct PanadapterFrameResult
     {

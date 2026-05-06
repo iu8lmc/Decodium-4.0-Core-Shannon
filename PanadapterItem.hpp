@@ -12,7 +12,9 @@
 #include <QStringList>
 #include <QColor>
 
+class QSGNode;
 class QSGSimpleTextureNode;
+class QQuickWindow;
 
 class PanadapterItem : public QQuickItem
 {
@@ -61,6 +63,7 @@ class PanadapterItem : public QQuickItem
     Q_PROPERTY(float measuredFloor READ measuredFloor NOTIFY measuredFloorChanged)
     Q_PROPERTY(float measuredPeak  READ measuredPeak  NOTIFY measuredPeakChanged)
     Q_PROPERTY(int   fftBins       READ fftBins       CONSTANT)
+    Q_PROPERTY(bool  spectrumGpuOverlayAvailable READ spectrumGpuOverlayAvailable NOTIFY spectrumGpuOverlayAvailableChanged)
 
 public:
     explicit PanadapterItem(QQuickItem* parent = nullptr);
@@ -86,6 +89,7 @@ public:
     float measuredFloor()  const { return m_measuredFloor; }
     float measuredPeak()   const { return m_measuredPeak; }
     int   fftBins()        const { return 4096; }
+    bool  spectrumGpuOverlayAvailable() const { return spectrumGraphSupported(); }
     QStringList paletteNames() const {
         return {"SDR Classic","Raptor Green","Grayscale","SmartSDR","Hot (SDR#)","deskHPSDR",
                 "Aether Default","Aether BlueGreen","Aether Fire","Aether Plasma","FlexRadio"};
@@ -116,8 +120,8 @@ public:
     void setPaletteIndex(int v);
     void setRunning(bool v)        { if (m_running!=v){m_running=v;emit runningChanged();} }
     void setShowTxBrackets(bool v) { if (m_showTxBrackets!=v){m_showTxBrackets=v;emit showTxBracketsChanged();markDirty();} }
-    void setColorGain(int v)       { v=qBound(0,v,100); if(m_colorGain!=v){m_colorGain=v;emit colorGainChanged();markDirty();} }
-    void setBlackLevel(int v)      { v=qBound(0,v,100); if(m_blackLevel!=v){m_blackLevel=v;emit blackLevelChanged();markDirty();} }
+    void setColorGain(int v)       { v=qBound(0,v,100); if(m_colorGain!=v){m_colorGain=v;m_waterfallRgbValid=false;emit colorGainChanged();markDirty();} }
+    void setBlackLevel(int v)      { v=qBound(0,v,100); if(m_blackLevel!=v){m_blackLevel=v;m_waterfallRgbValid=false;emit blackLevelChanged();markDirty();} }
     void setLabelFontSize(int v)   { v=qBound(6,v,24); if(m_labelFontSize!=v){m_labelFontSize=v;emit labelFontSizeChanged();markDirty();} }
     void setLabelSpacing(int v)    { v=qBound(0,v,20); if(m_labelSpacing!=v){m_labelSpacing=v;emit labelSpacingChanged();markDirty();} }
     void setLabelBold(bool v)      { if(m_labelBold!=v){m_labelBold=v;emit labelBoldChanged();markDirty();} }
@@ -132,6 +136,13 @@ public:
                                       float freqMinHz = 0.f, float freqMaxHz = 0.f);
     // Compatibilità con WaterfallItem (valori normalizzati 0-1)
     Q_INVOKABLE void addSpectrumDataNorm(const QVector<float>& normValues);
+    Q_INVOKABLE bool addPcmFrame(const QVector<float>& samples,
+                                 int usableSamples,
+                                 int nfa,
+                                 int nfb,
+                                 float freqMinHz,
+                                 float freqMaxHz,
+                                 quint64 serial);
 
     Q_INVOKABLE void resetPeakHold()  { m_peakBins.clear(); markDirty(); }
     Q_INVOKABLE void resetWaterfall();
@@ -167,10 +178,14 @@ signals:
     void labelColorChanged();
     void labelUseCustomColorChanged();
     void throttleActiveChanged();
+    void spectrumGpuOverlayAvailableChanged();
+    void gpuFftUnavailable(QString reason);
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
     void geometryChange(const QRectF& newGeom, const QRectF& oldGeom) override;
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
+    void releaseResources() override;
     void mousePressEvent(QMouseEvent* ev) override;
     void mouseMoveEvent(QMouseEvent* ev)  override;
     void wheelEvent(QWheelEvent* ev)      override;
@@ -189,6 +204,13 @@ private:
     void rebuildRgbWaterfallFromIntensity();
     void logWaterfallRenderPath(bool gpu, const QString& reason);
     bool shaderWaterfallSupported();
+    bool spectrumGraphSupported() const;
+    void updateSpectrumGraphNodes(QSGNode* spectrumRoot, int w, int h);
+    void removeSpectrumGraphNodes(QSGNode* spectrumRoot);
+    bool gpuFftSupported(QString* reason = nullptr) const;
+    void recordGpuFftCompute();
+    void releaseGpuFftResources();
+    void failGpuFft(const QString& reason);
 
     // Conversioni frequenza ↔ pixel (rispetta zoom/pan)
     int   freqToX(int freq) const;
@@ -216,14 +238,31 @@ private:
         float dataFreqMax {4000.f};
     };
     QVector<WaterfallFrame> m_pendingWaterfallRows;
+    struct PcmFrame
+    {
+        QVector<float> samples;
+        int usableSamples {0};
+        int nfa {0};
+        int nfb {0};
+        float freqMinHz {0.0f};
+        float freqMaxHz {0.0f};
+        float samplePeak {0.0f};
+        float sampleRms {0.0f};
+        quint64 serial {0};
+    };
+    PcmFrame m_pendingPcmFrame;
+    bool m_hasPendingPcmFrame {false};
 
     // ── Immagini ────────────────────────────────────────────────────────────
     QImage m_spectrumImage;  // spectrum (larghezza × spectrumH)
     QImage m_waterfallImage; // waterfall (larghezza × waterfallH)
     QImage m_waterfallDisplayImage; // waterfall lineare pronta per upload GPU
-    QImage m_waterfallIntensityImage; // intensità 0..255 per shader palette
+    QImage m_waterfallIntensityImage; // fallback CPU: intensità 0..255 per shader palette
     QImage m_waterfallIntensityDisplayImage; // intensità lineare pronta per upload GPU
     QImage m_waterfallIntensityTextureImage; // atlas RGBA: palette + intensità per shader GPU
+    QVector<float> m_waterfallDbRows; // GPU shader path: dB grezzi per bin/riga
+    QVector<float> m_waterfallDbRowParams; // minDb, inverseRange per riga
+    int    m_waterfallRawBinsWidth = 0;
     int    m_wfWriteRow = 0; // riga corrente ring buffer
     QVector<QRgb> m_palette; // 256 colori waterfall
 
@@ -268,7 +307,22 @@ private:
     QString m_shaderWaterfallDisabledReason;
     bool  m_loggedWaterfallGpuUploadStats = false;
     int   m_lastWaterfallGpuStatsRow = -1;
+    int   m_waterfallGpuUploadedWriteRow = 0;
+    QSize m_waterfallGpuUploadedSize;
     int   m_paletteGeneration = 0;
+    bool  m_gpuFftFailed = false;
+    QString m_gpuFftFailureReason;
+    bool  m_loggedGpuFftRejected = false;
+    bool  m_loggedGpuFftAccepted = false;
+    bool  m_loggedGpuFftInputStats = false;
+    bool  m_loggedGpuFftWarmupSkip = false;
+    int   m_gpuFftInvalidReadbacks = 0;
+    bool  m_loggedLegacySpectrumSuppressed = false;
+    bool  m_loggedMismatchedSpectrumSuppressed = false;
+    qint64 m_lastGpuFftFrameMs = 0;
+    int   m_gpuFftUiBinsExpected = 0;
+    struct GpuFftState;
+    GpuFftState* m_gpuFft = nullptr;
     QMutex m_mutex;
 
     // Throttle: quando attivo, addSpectrumData chiama update() al massimo

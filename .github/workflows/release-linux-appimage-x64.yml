@@ -1,0 +1,191 @@
+name: Release Linux AppImage x86_64
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (leave empty to use fork_release_version.txt)"
+        required: false
+        default: ""
+      publish_release:
+        description: "Upload AppImage to GitHub release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  HAMLIB_TAG: "4.7.1"
+  HAMLIB_VERSION: "4.7.1"
+  HAMLIB_CACHE_DIR: ".ci/cache/hamlib-linux-x86_64-4.7.1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-x86_64:
+    name: Build Linux AppImage x86_64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select version
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ -f fork_release_version.txt ]]; then
+            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          else
+            VERSION="0.0.0-ci-${GITHUB_SHA::7}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using version: ${VERSION}"
+
+      - name: Install Ubuntu 24.04 Qt6 build environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            gfortran \
+            cmake \
+            make \
+            python3 \
+            pkg-config \
+            ca-certificates \
+            curl \
+            tar \
+            qt6-base-dev \
+            qt6-base-private-dev \
+            qt6-base-dev-tools \
+            qt6-tools-dev \
+            qt6-tools-dev-tools \
+            qt6-serialport-dev \
+            qt6-multimedia-dev \
+            qt6-websockets-dev \
+            qt6-svg-dev \
+            qt6-declarative-dev \
+            qt6-5compat-dev \
+            qt6-shadertools-dev \
+            qml6-module-qtcore \
+            qml6-module-qtqml \
+            qml6-module-qtqml-models \
+            qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-dialogs \
+            qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates \
+            qml6-module-qtquick-window \
+            libqt6sql6-sqlite \
+            libfftw3-dev \
+            libusb-1.0-0-dev \
+            libudev-dev \
+            libboost-log-dev \
+            libboost-filesystem-dev \
+            libboost-thread-dev \
+            portaudio19-dev \
+            libreadline-dev \
+            desktop-file-utils \
+            patchelf \
+            file \
+            texinfo
+          sudo apt-get install -y -qq libfuse2t64 || sudo apt-get install -y -qq libfuse2
+
+      - name: Restore Hamlib cache
+        id: hamlib-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HAMLIB_CACHE_DIR }}
+          key: linux-x86_64-hamlib-${{ env.HAMLIB_VERSION }}-ubuntu24.04-qt6.4.2-v1
+          restore-keys: |
+            linux-x86_64-hamlib-${{ env.HAMLIB_VERSION }}-
+            linux-x86_64-hamlib-
+
+      - name: Build AppImage
+        run: |
+          mkdir -p "${HAMLIB_CACHE_DIR}" dist-linux-appimage
+          HAMLIB_PREFIX="${GITHUB_WORKSPACE}/${HAMLIB_CACHE_DIR}" \
+          OUTPUT_DIR="${GITHUB_WORKSPACE}/dist-linux-appimage" \
+          bash scripts/ci-build-linux-appimage-x64.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64
+          if-no-files-found: error
+          path: |
+            dist-linux-appimage/decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64.AppImage
+            dist-linux-appimage/decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64.AppImage.sha256.txt
+
+  publish:
+    name: Publish AppImage to GitHub release
+    needs: [build-x86_64]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ -z "${VERSION}" && -f fork_release_version.txt ]]; then
+            VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using version: ${VERSION}"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64
+          path: release-assets
+
+      - name: Validate assets
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ls -lh release-assets
+          test -f "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
+          test -f "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REPO="${GITHUB_REPOSITORY}"
+          ASSETS=(
+            "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
+            "release-assets/decodium4-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+          )
+
+          if gh release view "${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" "${ASSETS[@]}" --repo "${REPO}" --clobber
+          else
+            NOTES_FILE="$(mktemp)"
+            NOTES_TEMPLATE="doc/GITHUB_RELEASE_BODY_${VERSION}.md"
+            if [[ -f "${NOTES_TEMPLATE}" ]]; then
+              cp "${NOTES_TEMPLATE}" "${NOTES_FILE}"
+            elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
+              cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
+            else
+              printf "# Decodium 4 FT2 %s\n\nLinux x86_64 AppImage release.\n" "${VERSION}" > "${NOTES_FILE}"
+            fi
+            gh release create "${VERSION}" "${ASSETS[@]}" \
+              --repo "${REPO}" \
+              --title "Decodium 4 FT2 ${VERSION}" \
+              --notes-file "${NOTES_FILE}"
+            rm -f "${NOTES_FILE}"
+          fi

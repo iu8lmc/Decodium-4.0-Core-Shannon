@@ -882,6 +882,7 @@ endif ()
 find_package (Qt6 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql LinguistTools WebSockets Test Core5Compat REQUIRED)
 find_package (Qt6 COMPONENTS Qml Quick QuickControls2 REQUIRED)
 find_package (Qt6 COMPONENTS ShaderTools QUIET)
+find_package (Qt6 COMPONENTS GuiPrivate QUIET)
 
 if (WIN32)
   add_definitions (-DQT_NEEDS_QTMAIN)
@@ -1613,8 +1614,17 @@ target_link_libraries (decodium_qml
   ${FFTW3_LIBRARIES}
   ${LIBM_LIBRARIES}
 )
+if (TARGET Qt6::GuiPrivate)
+  target_link_libraries (decodium_qml Qt6::GuiPrivate)
+  target_compile_definitions (decodium_qml PRIVATE DECODIUM_QT_RHI_TEXTURE_UPLOAD=1)
+  file (WRITE "${CMAKE_BINARY_DIR}/decodium_qt_rhi_texture_upload.enabled" "1\n")
+  message (STATUS "DECODIUM_QT_RHI_TEXTURE_UPLOAD=1 enabled: Qt6::GuiPrivate found")
+else ()
+  file (WRITE "${CMAKE_BINARY_DIR}/decodium_qt_rhi_texture_upload.enabled" "0\n")
+  message (WARNING "DECODIUM_QT_RHI_TEXTURE_UPLOAD disabled: Qt6::GuiPrivate not found, using legacy texture upload path")
+endif ()
 if (WIN32)
-  target_link_libraries (decodium_qml Qt6::AxContainer)
+  target_link_libraries (decodium_qml Qt6::AxContainer Pdh)
 endif ()
 if (Qt6ShaderTools_FOUND)
   qt_add_shaders(decodium_qml decodium_waterfall_shaders
@@ -1622,12 +1632,18 @@ if (Qt6ShaderTools_FOUND)
       "/shaders"
     BASE
       "shaders"
+    GLSL
+      "310 es,440"
     FILES
       shaders/waterfall_palette.vert
       shaders/waterfall_palette.frag
+      shaders/panadapter_fft.comp
   )
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_WATERFALL_SHADER_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_GPU_PANADAPTER_FFT_QSB=1)
+  file (WRITE "${CMAKE_BINARY_DIR}/decodium_qsb_shaders.enabled" "1\n")
 else ()
+  file (WRITE "${CMAKE_BINARY_DIR}/decodium_qsb_shaders.enabled" "0\n")
   message (STATUS "Qt6 ShaderTools not found: Decodium waterfall shader disabled, CPU palette fallback will be used")
 endif ()
 # FT8 features benchmark — misura overhead/recovery di Turbo Feedback + Neural Sync

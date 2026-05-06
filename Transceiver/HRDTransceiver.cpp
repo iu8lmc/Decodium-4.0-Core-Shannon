@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <QHostAddress>
 #include <QByteArray>
+#include <QDebug>
 #include <QRegularExpression>
 #include <QTcpSocket>
 #include <QThread>
@@ -27,6 +28,9 @@ namespace
   // some commands require a settling time, particularly "RX A" and
   // "RX B" on the Yaesu FTdx3000.
   int constexpr yaesu_delay {350};
+  int constexpr hrd_connect_timeout_ms {10000};
+  int constexpr hrd_reply_timeout_ms {1000};
+  unsigned constexpr hrd_reply_retries {20};
 }
 
 #include "moc_HRDTransceiver.cpp"
@@ -134,13 +138,24 @@ int HRDTransceiver::do_start ()
   auto const port = std::get<1> (server_details);
   auto const host_text = host.toString ();
   CAT_INFO ("HRD TCP connecting to" << host_text << port);
+  qInfo ().noquote () << "[HRDDBG] TCP connecting"
+                      << "host=" << host_text
+                      << "port=" << port
+                      << "timeoutMs=" << hrd_connect_timeout_ms;
   hrd_->connectToHost (host, port);
-  if (!hrd_->waitForConnected ())
+  if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
     {
       CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
+      qWarning ().noquote () << "[HRDDBG] TCP connect failed"
+                             << "host=" << host_text
+                             << "port=" << port
+                             << "error=" << hrd_->errorString ();
       throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
     }
   CAT_INFO ("HRD TCP connected to" << host_text << port);
+  qInfo ().noquote () << "[HRDDBG] TCP connected"
+                      << "host=" << host_text
+                      << "port=" << port;
 
   if (none == protocol_)
     {
@@ -148,12 +163,16 @@ int HRDTransceiver::do_start ()
         {
           protocol_ = v5;	// try this first (works for v6 too)
           CAT_INFO ("HRD protocol probe v5 starting");
+          qInfo ().noquote () << "[HRDDBG] protocol probe v5 starting";
           send_command ("get context", false, false);
           CAT_INFO ("HRD protocol probe v5 accepted");
+          qInfo ().noquote () << "[HRDDBG] protocol probe v5 accepted";
         }
       catch (error const& e)
         {
           CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
+          qWarning ().noquote () << "[HRDDBG] protocol probe v5 failed"
+                                 << "reason=" << e.what ();
           protocol_ = none;
         }
     }
@@ -164,22 +183,34 @@ int HRDTransceiver::do_start ()
 
       protocol_ = v4;		// try again with older protocol
       CAT_INFO ("HRD TCP reconnecting for protocol v4 to" << host_text << port);
+      qInfo ().noquote () << "[HRDDBG] TCP reconnecting for protocol v4"
+                          << "host=" << host_text
+                          << "port=" << port
+                          << "timeoutMs=" << hrd_connect_timeout_ms;
       hrd_->connectToHost (host, port);
-      if (!hrd_->waitForConnected ())
+      if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
         {
           CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
+          qWarning ().noquote () << "[HRDDBG] TCP reconnect failed"
+                                 << "host=" << host_text
+                                 << "port=" << port
+                                 << "error=" << hrd_->errorString ();
           throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
         }
 
       try
         {
           CAT_INFO ("HRD protocol probe v4 starting");
+          qInfo ().noquote () << "[HRDDBG] protocol probe v4 starting";
           send_command ("get context", false, false);
           CAT_INFO ("HRD protocol probe v4 accepted");
+          qInfo ().noquote () << "[HRDDBG] protocol probe v4 accepted";
         }
       catch (error const& e)
         {
           CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
+          qWarning ().noquote () << "[HRDDBG] protocol probe v4 failed"
+                                 << "reason=" << e.what ();
           throw;
         }
     }
@@ -1150,18 +1181,19 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
 QByteArray HRDTransceiver::read_reply (QString const& cmd)
 {
   // waitForReadReady appears to be occasionally unreliable on Windows
-  // timing out when data is waiting so retry a few times. Keep the same
-  // long Windows tolerance used by Decodium3/WSJT-X: some HRD instances
-  // accept the TCP socket immediately but answer the first protocol probe
-  // slowly while Rig Control is still settling.
-  unsigned retries {30};
+  // timing out when data is waiting so retry a few times. Bound the total
+  // wait so a dead HRD TCP endpoint does not leave CAT "connecting" forever.
+  unsigned retries {hrd_reply_retries};
   bool replied {false};
   while (!replied && retries--)
     {
-      replied = hrd_->waitForReadyRead ();
+      replied = hrd_->waitForReadyRead (hrd_reply_timeout_ms);
       if (!replied && hrd_->error () != hrd_->SocketTimeoutError)
         {
           CAT_ERROR (cmd << "failed to reply" << hrd_->errorString ());
+          qWarning ().noquote () << "[HRDDBG] command reply failed"
+                                 << "cmd=" << cmd
+                                 << "error=" << hrd_->errorString ();
           throw error {
             tr ("Ham Radio Deluxe failed to reply to command \"%1\" %2\n")
               .arg (cmd)
@@ -1172,6 +1204,12 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd)
   if (!replied)
     {
       CAT_ERROR (cmd << "retries exhausted");
+      qWarning ().noquote () << "[HRDDBG] command timeout"
+                             << "cmd=" << cmd
+                             << "timeoutMs=" << hrd_reply_timeout_ms
+                             << "retries=" << hrd_reply_retries
+                             << "socketState=" << int (hrd_->state ())
+                             << "error=" << hrd_->errorString ();
       throw error {
         tr ("Ham Radio Deluxe retries exhausted sending command \"%1\"")
           .arg (cmd)

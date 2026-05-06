@@ -59,6 +59,7 @@ jobs:
             ca-certificates \
             curl \
             qt6-base-dev \
+            qt6-base-private-dev \
             qt6-base-dev-tools \
             qt6-tools-dev \
             qt6-tools-dev-tools \
@@ -68,6 +69,7 @@ jobs:
             qt6-svg-dev \
             qt6-declarative-dev \
             qt6-5compat-dev \
+            qt6-shadertools-dev \
             qml6-module-qtcore \
             qml6-module-qtqml \
             qml6-module-qtqml-models \
@@ -126,6 +128,22 @@ jobs:
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
+
+      - name: Verify AppImage GPU build path
+        run: |
+          set -euo pipefail
+          RHI_FLAG="$(cat build-appimage/decodium_qt_rhi_texture_upload.enabled 2>/dev/null || echo 0)"
+          QSB_FLAG="$(cat build-appimage/decodium_qsb_shaders.enabled 2>/dev/null || echo 0)"
+          echo "DECODIUM_QT_RHI_TEXTURE_UPLOAD=${RHI_FLAG}"
+          echo "DECODIUM_QSB_SHADERS=${QSB_FLAG}"
+          if [[ "${RHI_FLAG}" != "1" ]]; then
+            echo "error: AppImage build did not enable DECODIUM_QT_RHI_TEXTURE_UPLOAD=1; install Qt6 GuiPrivate/private headers or fall back intentionally outside release runner" >&2
+            exit 1
+          fi
+          if [[ "${QSB_FLAG}" != "1" ]]; then
+            echo "error: AppImage build did not enable QSB shaders; install qt6-shadertools-dev" >&2
+            exit 1
+          fi
 
       - name: Build Fortran library
         run: make -C build-appimage -j1 wsjt_fort_omp

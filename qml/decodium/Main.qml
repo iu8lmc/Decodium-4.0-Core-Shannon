@@ -4006,6 +4006,12 @@ ApplicationWindow {
                     property int currentPeriodDecodeCount: 0
                     property int heldPeriodDecodeCount: 0
                     property real heldPeriodDecodeCountUntilIndex: -1
+                    property bool pendingDecodeModelRefresh: false
+                    property bool pendingBandTailFollow: false
+                    property bool pendingFloatingBandTailFollow: false
+                    property bool pendingRxDecodeModelRefresh: false
+                    property bool pendingRxTailFollow: false
+                    property bool pendingFloatingRxTailFollow: false
 
                     function currentPeriodMs() {
                         return Math.max(1, Math.round(decodePanel.periodLength * 1000))
@@ -4057,53 +4063,91 @@ ApplicationWindow {
 	                        lastSyncCount = bridge.decodeList ? bridge.decodeList.length : 0
 	                    }
 
+                    function queueListTailFollow(listView) {
+                        if (!listView)
+                            return
+                        if (listView.queueTailFollow)
+                            listView.queueTailFollow()
+                        else
+                            listView.forceTailFollow()
+                    }
+
+                    function scheduleDecodeModelRefresh() {
+                        pendingDecodeModelRefresh = true
+                        pendingBandTailFollow = pendingBandTailFollow
+                            || (evenPeriodList ? evenPeriodList.isNearTail() : true)
+                        pendingFloatingBandTailFollow = pendingFloatingBandTailFollow
+                            || (period1FloatingList ? period1FloatingList.isNearTail() : true)
+                        decodeModelApplyTimer.restart()
+                    }
+
+                    function scheduleRxDecodeModelRefresh() {
+                        pendingRxDecodeModelRefresh = true
+                        pendingRxTailFollow = pendingRxTailFollow
+                            || (rxFrequencyList ? rxFrequencyList.isNearTail() : true)
+                        pendingFloatingRxTailFollow = pendingFloatingRxTailFollow
+                            || (rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true)
+                        decodeModelApplyTimer.restart()
+                    }
+
+                    function applyPendingDecodeModelRefresh() {
+                        if (pendingDecodeModelRefresh) {
+                            var followBandTail = pendingBandTailFollow
+                            var followFloatingBandTail = pendingFloatingBandTailFollow
+                            pendingDecodeModelRefresh = false
+                            pendingBandTailFollow = false
+                            pendingFloatingBandTailFollow = false
+
+                            var src = bridge.decodeList
+                            decodePanel.updateCurrentPeriodDecodeCount(src)
+                            decodePanel.allDecodes = src
+                            decodePanel.decodeListVersion++
+                            if (followBandTail)
+                                queueListTailFollow(evenPeriodList)
+                            if (followFloatingBandTail)
+                                queueListTailFollow(period1FloatingList)
+                        }
+
+                        if (pendingRxDecodeModelRefresh) {
+                            var followRxTail = pendingRxTailFollow
+                            var followFloatingRxTail = pendingFloatingRxTailFollow
+                            pendingRxDecodeModelRefresh = false
+                            pendingRxTailFollow = false
+                            pendingFloatingRxTailFollow = false
+
+                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
+                            decodePanel.rxDecodeListVersion++
+                            if (followRxTail)
+                                queueListTailFollow(rxFrequencyList)
+                            if (followFloatingRxTail)
+                                queueListTailFollow(rxFrequencyFloatingList)
+                        }
+                    }
+
+                    Timer {
+                        id: decodeModelApplyTimer
+                        interval: 33
+                        repeat: false
+                        onTriggered: decodePanel.applyPendingDecodeModelRefresh()
+                    }
+
 	                    function refreshRxDecodeModel() {
-	                        var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-	                        var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
-	                        decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-	                        decodePanel.rxDecodeListVersion++
-	                        if (stickRxTail && rxFrequencyList)
-	                            rxFrequencyList.forceTailFollow()
-	                        if (stickFloatingRxTail && rxFrequencyFloatingList)
-	                            rxFrequencyFloatingList.forceTailFollow()
+	                        decodePanel.scheduleRxDecodeModelRefresh()
 	                    }
 
 	                    // Update decode list incrementalmente (solo nuovi elementi)
 	                    Connections {
                         target: bridge
                         function onDecodeListChanged() {
-                            var stickBandTail = evenPeriodList ? evenPeriodList.isNearTail() : true
-                            var stickFloatingTail = period1FloatingList ? period1FloatingList.isNearTail() : true
-                            decodePanel.decodeListVersion++
-                            var src = bridge.decodeList
-                            decodePanel.updateCurrentPeriodDecodeCount(src)
-                            decodePanel.allDecodes = src
-                            if (stickBandTail && evenPeriodList)
-                                evenPeriodList.forceTailFollow()
-                            if (stickFloatingTail && period1FloatingList)
-                                period1FloatingList.forceTailFollow()
+                            decodePanel.scheduleDecodeModelRefresh()
                         }
                         function onRxDecodeListChanged() {
-                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
-                            decodePanel.rxDecodeListVersion++
-                            decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            if (stickRxTail && rxFrequencyList)
-                                rxFrequencyList.forceTailFollow()
-	                            if (stickFloatingRxTail && rxFrequencyFloatingList)
-	                                rxFrequencyFloatingList.forceTailFollow()
-	                        }
-	                        function onDxCallChanged() {
-	                            decodePanel.refreshRxDecodeModel()
-	                        }
-	                        function onRxFrequencyChanged() {
-	                            decodePanel.refreshRxDecodeModel()
+                            decodePanel.scheduleRxDecodeModelRefresh()
 	                        }
 	                    }
 
                     onShowTxMessagesInRxChanged: {
-                        decodePanel.rxDecodes = currentRxDecodes()
-                        decodePanel.rxDecodeListVersion++
+                        decodePanel.scheduleRxDecodeModelRefresh()
                     }
 
                     Timer {
@@ -4146,50 +4190,6 @@ ApplicationWindow {
 	                        return inWindow || relevant
 	                    }
 
-	                    function messageContainsCallBase(message, base) {
-	                        var wanted = String(base || "").trim().toUpperCase()
-	                        if (wanted.length === 0)
-	                            return false
-	                        var parts = String(message || "").split(/\s+/)
-	                        for (var i = 0; i < parts.length; ++i) {
-	                            if (mainWindow.callsignBase(parts[i]) === wanted)
-	                                return true
-	                        }
-	                        return false
-	                    }
-
-	                    function currentQsoPartnerBase() {
-	                        return mainWindow.callsignBase(bridge.dxCall || "")
-	                    }
-
-	                    function rxEntryBelongsToCurrentQso(item) {
-	                        if (!item)
-	                            return false
-
-	                        var activeBase = currentQsoPartnerBase()
-	                        if (item.isTx === true) {
-	                            if (activeBase.length === 0)
-	                                return true
-	                            return messageContainsCallBase(item.message || "", activeBase)
-	                                || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
-	                        }
-
-	                        var myBase = mainWindow.callsignBase(bridge.callsign || "")
-	                        var message = item.message || ""
-	                        var myMatch = item.isMyCall === true
-	                            || messageContainsCallBase(message, myBase)
-	                        if (myMatch)
-	                            return true
-
-	                        if (activeBase.length === 0)
-	                            return isAtRxFrequency(item.freq || "0", item)
-
-	                        var activeMatch = messageContainsCallBase(message, activeBase)
-	                            || mainWindow.callsignBase(item.fromCall || "") === activeBase
-	                            || mainWindow.callsignBase(item.dxCallsign || "") === activeBase
-	                        return activeMatch && myMatch
-	                    }
-
 	                    function currentRxDecodes() {
 	                        var merged = []
 	                        if (bridge.rxDecodeList) {
@@ -4197,8 +4197,6 @@ ApplicationWindow {
                                 var item = bridge.rxDecodeList[j]
                                 if (item) {
 	                                    if (!mainWindow.showTxMessagesInRx && item.isTx)
-	                                        continue
-	                                    if (!rxEntryBelongsToCurrentQso(item))
 	                                        continue
 	                                    merged.push(item)
 	                                }
@@ -4741,6 +4739,7 @@ ApplicationWindow {
                                         clip: true
                                         model: decodePanel.allDecodes
                                         spacing: 1
+                                        reuseItems: true
                                         cacheBuffer: 3000
                                         interactive: true
                                         property bool followTail: true
@@ -4782,6 +4781,9 @@ ApplicationWindow {
                                                 evenPeriodTailAnimation.start()
                                             })
                                         }
+                                        function queueTailFollow() {
+                                            evenPeriodTailDebounce.restart()
+                                        }
                                         NumberAnimation {
                                             id: evenPeriodTailAnimation
                                             target: evenPeriodList
@@ -4789,6 +4791,12 @@ ApplicationWindow {
                                             duration: 130
                                             easing.type: Easing.OutCubic
                                             onStopped: evenPeriodList.finishTailFollow()
+                                        }
+                                        Timer {
+                                            id: evenPeriodTailDebounce
+                                            interval: 70
+                                            repeat: false
+                                            onTriggered: evenPeriodList.forceTailFollow()
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
                                             positionViewAtEnd()
@@ -4799,18 +4807,19 @@ ApplicationWindow {
                                         onDraggingChanged: {
                                             if (dragging) {
                                                 evenPeriodTailAnimation.stop()
+                                                evenPeriodTailDebounce.stop()
                                                 tailFollowPending = false
                                                 followTail = false
                                             }
                                         }
                                         onCountChanged: {
                                             if (followTail)
-                                                forceTailFollow()
+                                                queueTailFollow()
                                         }
                                         property int _ver: decodePanel.decodeListVersion
                                         on_VerChanged: {
                                             if (followTail)
-                                                forceTailFollow()
+                                                queueTailFollow()
                                         }
                                         add: Transition {
                                             NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 90; easing.type: Easing.OutCubic }
@@ -5169,6 +5178,8 @@ ApplicationWindow {
                                         clip: true
                                         spacing: 1
                                         interactive: true
+                                        reuseItems: true
+                                        cacheBuffer: Math.max(600, height * 3)
                                         property bool followTail: true
                                         property bool tailFollowPending: false
                                         function isNearTail() {
@@ -5208,6 +5219,9 @@ ApplicationWindow {
                                                 rxFrequencyTailAnimation.start()
                                             })
                                         }
+                                        function queueTailFollow() {
+                                            rxFrequencyTailDebounce.restart()
+                                        }
                                         NumberAnimation {
                                             id: rxFrequencyTailAnimation
                                             target: rxFrequencyList
@@ -5215,6 +5229,12 @@ ApplicationWindow {
                                             duration: 130
                                             easing.type: Easing.OutCubic
                                             onStopped: rxFrequencyList.finishTailFollow()
+                                        }
+                                        Timer {
+                                            id: rxFrequencyTailDebounce
+                                            interval: 70
+                                            repeat: false
+                                            onTriggered: rxFrequencyList.forceTailFollow()
                                         }
                                         Component.onCompleted: Qt.callLater(function() {
                                             positionViewAtEnd()
@@ -5225,19 +5245,20 @@ ApplicationWindow {
                                         onDraggingChanged: {
                                             if (dragging) {
                                                 rxFrequencyTailAnimation.stop()
+                                                rxFrequencyTailDebounce.stop()
                                                 tailFollowPending = false
                                                 followTail = false
                                             }
                                         }
                                         onCountChanged: {
                                             if (followTail)
-                                                forceTailFollow()
+                                                queueTailFollow()
                                         }
 
                                         property int _ver: decodePanel.rxDecodeListVersion
                                         on_VerChanged: {
                                             if (followTail)
-                                                forceTailFollow()
+                                                queueTailFollow()
                                         }
                                         model: decodePanel.rxDecodes
                                         add: Transition {
@@ -7698,38 +7719,8 @@ ApplicationWindow {
                             ToolTip.delay: 500
                         }
 
-                        // Close button
-                        Rectangle {
-                            width: 28
-                            height: 24
-                            radius: 4
-                            color: closeMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: closeMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "✕"
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: closeMA.containsMouse ? bridge.themeManager.ledRed : textPrimary
-                            }
-
-                            MouseArea {
-                                id: closeMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-	                                onClicked: {
-	                                    mainWindow.dockWaterfallPanel()
-	                                }
-	                            }
-
-                            ToolTip.visible: closeMA.containsMouse
-	                            ToolTip.text: "Close and dock"
-                            ToolTip.delay: 500
-                        }
-                    }
-                }
+	                    }
+	                }
 
                 Loader {
                     id: waterfallDetachedLoader
@@ -8536,6 +8527,7 @@ ApplicationWindow {
                         clip: true
                         spacing: 1
                         model: decodePanel.allDecodes
+                        reuseItems: true
                         cacheBuffer: 3000
                         interactive: true
                         property bool followTail: true
@@ -8577,6 +8569,9 @@ ApplicationWindow {
                                 period1FloatingTailAnimation.start()
                             })
                         }
+                        function queueTailFollow() {
+                            period1FloatingTailDebounce.restart()
+                        }
                         NumberAnimation {
                             id: period1FloatingTailAnimation
                             target: period1FloatingList
@@ -8584,6 +8579,12 @@ ApplicationWindow {
                             duration: 130
                             easing.type: Easing.OutCubic
                             onStopped: period1FloatingList.finishTailFollow()
+                        }
+                        Timer {
+                            id: period1FloatingTailDebounce
+                            interval: 70
+                            repeat: false
+                            onTriggered: period1FloatingList.forceTailFollow()
                         }
                         Component.onCompleted: Qt.callLater(function() {
                             positionViewAtEnd()
@@ -8594,18 +8595,19 @@ ApplicationWindow {
                         onDraggingChanged: {
                             if (dragging) {
                                 period1FloatingTailAnimation.stop()
+                                period1FloatingTailDebounce.stop()
                                 tailFollowPending = false
                                 followTail = false
                             }
                         }
                         onCountChanged: {
                             if (followTail)
-                                forceTailFollow()
+                                queueTailFollow()
                         }
                         property int _ver: decodePanel.decodeListVersion
                         on_VerChanged: {
                             if (followTail)
-                                forceTailFollow()
+                                queueTailFollow()
                         }
                         add: Transition {
                             NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 90; easing.type: Easing.OutCubic }
@@ -8952,6 +8954,8 @@ ApplicationWindow {
                         clip: true
                         spacing: 1
                         interactive: true
+                        reuseItems: true
+                        cacheBuffer: Math.max(600, height * 3)
                         property bool followTail: true
                         property bool tailFollowPending: false
                         function isNearTail() {
@@ -8991,6 +8995,9 @@ ApplicationWindow {
                                 rxFrequencyFloatingTailAnimation.start()
                             })
                         }
+                        function queueTailFollow() {
+                            rxFrequencyFloatingTailDebounce.restart()
+                        }
                         NumberAnimation {
                             id: rxFrequencyFloatingTailAnimation
                             target: rxFrequencyFloatingList
@@ -8998,6 +9005,12 @@ ApplicationWindow {
                             duration: 130
                             easing.type: Easing.OutCubic
                             onStopped: rxFrequencyFloatingList.finishTailFollow()
+                        }
+                        Timer {
+                            id: rxFrequencyFloatingTailDebounce
+                            interval: 70
+                            repeat: false
+                            onTriggered: rxFrequencyFloatingList.forceTailFollow()
                         }
                         Component.onCompleted: Qt.callLater(function() {
                             positionViewAtEnd()
@@ -9008,18 +9021,19 @@ ApplicationWindow {
                         onDraggingChanged: {
                             if (dragging) {
                                 rxFrequencyFloatingTailAnimation.stop()
+                                rxFrequencyFloatingTailDebounce.stop()
                                 tailFollowPending = false
                                 followTail = false
                             }
                         }
 	                        onCountChanged: {
                             if (followTail)
-                                forceTailFollow()
+                                queueTailFollow()
                         }
                         property int _ver: decodePanel.rxDecodeListVersion
 	                        on_VerChanged: {
                             if (followTail)
-                                forceTailFollow()
+                                queueTailFollow()
                         }
                         model: decodePanel.rxDecodes
                         add: Transition {
@@ -9580,17 +9594,19 @@ ApplicationWindow {
     // Ft2HudPanel — visibile solo in mode FT2, angolo in alto a destra,
     // draggable. Mostra stato engine + DX + countdown + caller queue.
     property bool ft2HudPanelVisible: bridge.mode === "FT2"
+    readonly property bool ft2HudPanelLoaded: bridge.mode === "FT2" && ft2HudPanelVisible
     Item {
         id: ft2HudOverlay
-        visible: bridge.mode === "FT2" && ft2HudPanelVisible
+        visible: ft2HudPanelLoaded
         z: 200
         x: mainWindow.width - width - 12
         y: 90
         width: 320
-        height: ft2HudLoader.item ? ft2HudLoader.item.implicitHeight : 220
+        height: ft2HudLoader.item ? ft2HudLoader.item.implicitHeight : 0
 
         MouseArea {
             anchors.fill: parent
+            enabled: ft2HudPanelLoaded
             drag.target: ft2HudOverlay
             drag.axis: Drag.XAndYAxis
             drag.minimumX: 0; drag.maximumX: mainWindow.width  - ft2HudOverlay.width
@@ -9600,8 +9616,8 @@ ApplicationWindow {
         Loader {
             id: ft2HudLoader
             anchors.fill: parent
-            active: bridge.mode === "FT2" && ft2HudPanelVisible
-            source: "components/Ft2HudPanel.qml"
+            active: ft2HudPanelLoaded
+            source: ft2HudPanelLoaded ? "components/Ft2HudPanel.qml" : ""
         }
 
         Connections {

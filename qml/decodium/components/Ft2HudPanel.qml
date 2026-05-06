@@ -402,6 +402,13 @@ Rectangle {
                     readonly property real avgMs: modelData.avgUs / 1000.0
                     readonly property real maxMs: modelData.maxUs / 1000.0
                     readonly property real sat:   modelData.sat
+                    function fmt(us) {
+                        if (us <= 0)
+                            return "0"
+                        if (us < 100)
+                            return Math.round(us) + "us"
+                        return (us / 1000.0).toFixed(1) + "ms"
+                    }
                     readonly property color tone:
                         avgMs > sat        ? danger
                       : avgMs > sat * 0.5  ? warning
@@ -423,7 +430,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.leftMargin: 5
                         anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.label + " " + parent.avgMs.toFixed(1)
+                        text: modelData.label + " " + parent.fmt(modelData.avgUs)
                         font.family: "Monospace"
                         font.pixelSize: 9
                         font.bold: true
@@ -433,7 +440,7 @@ Rectangle {
                         anchors.right: parent.right
                         anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "↑" + parent.maxMs.toFixed(1)
+                        text: "↑" + parent.fmt(modelData.maxUs)
                         font.family: "Monospace"
                         font.pixelSize: 8
                         color: textSecondary

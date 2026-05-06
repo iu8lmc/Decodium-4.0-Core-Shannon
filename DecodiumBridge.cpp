@@ -101,6 +101,7 @@
 #include <cmath>
 #include <complex>
 #include <chrono>
+#include <cwchar>
 #include <limits>
 #include <thread>
 #ifdef Q_OS_WIN
@@ -108,6 +109,11 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#if defined(_MSC_VER)
+#pragma comment(lib, "pdh.lib")
+#endif
 #else
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -162,6 +168,132 @@ quint64 decodiumFileTimeToUsec(FILETIME const& value)
     ticks.HighPart = value.dwHighDateTime;
     return static_cast<quint64>(ticks.QuadPart / 10ULL);
 }
+
+class WindowsProcessGpuUsageMonitor
+{
+public:
+    ~WindowsProcessGpuUsageMonitor()
+    {
+        closeQuery();
+    }
+
+    double sample(bool* ok)
+    {
+        if (ok)
+            *ok = false;
+
+        if (m_counters.isEmpty() && !rebuildQuery())
+            return -1.0;
+
+        PDH_STATUS status = PdhCollectQueryData(m_query);
+        if (status != ERROR_SUCCESS) {
+            closeQuery();
+            return -1.0;
+        }
+
+        double totalPercent = 0.0;
+        int validCounters = 0;
+        for (PDH_HCOUNTER counter : std::as_const(m_counters)) {
+            PDH_FMT_COUNTERVALUE value {};
+            status = PdhGetFormattedCounterValue(counter,
+                                                 PDH_FMT_DOUBLE | PDH_FMT_NOCAP100,
+                                                 nullptr,
+                                                 &value);
+            if (status == ERROR_SUCCESS
+                && value.CStatus == ERROR_SUCCESS
+                && std::isfinite(value.doubleValue)) {
+                totalPercent += qMax(0.0, value.doubleValue);
+                ++validCounters;
+            }
+        }
+
+        if (validCounters <= 0) {
+            closeQuery();
+            return -1.0;
+        }
+
+        // GPU Engine instances are created lazily by D3D/RHI.  If the query was
+        // built before the busy engine appeared, it can remain valid but read 0.
+        // Re-expand occasionally while idle so the monitor catches new engines.
+        if (totalPercent <= 0.0001) {
+            ++m_zeroSamples;
+            if (m_zeroSamples >= 4) {
+                m_zeroSamples = 0;
+                rebuildQuery();
+            }
+        } else {
+            m_zeroSamples = 0;
+        }
+
+        if (ok)
+            *ok = true;
+        return qBound(0.0, totalPercent / 100.0, 1.0);
+    }
+
+private:
+    void closeQuery()
+    {
+        if (m_query) {
+            PdhCloseQuery(m_query);
+            m_query = nullptr;
+        }
+        m_counters.clear();
+        m_zeroSamples = 0;
+    }
+
+    bool rebuildQuery()
+    {
+        closeQuery();
+
+        if (PdhOpenQueryW(nullptr, 0, &m_query) != ERROR_SUCCESS)
+            return false;
+
+        QString const wildcardPath = QStringLiteral("\\GPU Engine(pid_%1*)\\Utilization Percentage")
+            .arg(static_cast<qulonglong>(GetCurrentProcessId()));
+        std::wstring const wildcard = wildcardPath.toStdWString();
+        DWORD bufferChars = 0;
+        PDH_STATUS status = PdhExpandWildCardPathW(nullptr,
+                                                   wildcard.c_str(),
+                                                   nullptr,
+                                                   &bufferChars,
+                                                   0);
+        if (status != static_cast<PDH_STATUS>(PDH_MORE_DATA) || bufferChars == 0) {
+            closeQuery();
+            return false;
+        }
+
+        std::wstring buffer(bufferChars, L'\0');
+        status = PdhExpandWildCardPathW(nullptr,
+                                        wildcard.c_str(),
+                                        buffer.data(),
+                                        &bufferChars,
+                                        0);
+        if (status != ERROR_SUCCESS) {
+            closeQuery();
+            return false;
+        }
+
+        wchar_t const* path = buffer.c_str();
+        while (*path) {
+            PDH_HCOUNTER counter = nullptr;
+            if (PdhAddEnglishCounterW(m_query, path, 0, &counter) == ERROR_SUCCESS)
+                m_counters.append(counter);
+            path += std::wcslen(path) + 1;
+        }
+
+        if (m_counters.isEmpty()) {
+            closeQuery();
+            return false;
+        }
+
+        PdhCollectQueryData(m_query);
+        return true;
+    }
+
+    PDH_HQUERY m_query = nullptr;
+    QVector<PDH_HCOUNTER> m_counters;
+    int m_zeroSamples = 0;
+};
 #endif
 
 quint64 decodiumCurrentProcessCpuUsec()
@@ -187,6 +319,64 @@ quint64 decodiumCurrentProcessCpuUsec()
     return timevalToUsec(usage.ru_utime) + timevalToUsec(usage.ru_stime);
 #endif
 }
+
+bool decodiumCurrentProcessGpuTimeNs(quint64* gpuTimeNs)
+{
+#ifdef Q_OS_LINUX
+    QDir fdInfoDir(QStringLiteral("/proc/self/fdinfo"));
+    QStringList const entries = fdInfoDir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    if (entries.isEmpty())
+        return false;
+
+    static QRegularExpression const engineTimeRe(
+        QStringLiteral("^drm-engine-[^:]+:\\s*(\\d+)\\s*([a-zA-Z]*)"));
+    quint64 totalNs = 0;
+    bool found = false;
+    for (QString const& entry : entries) {
+        QFile file(fdInfoDir.absoluteFilePath(entry));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+
+        while (!file.atEnd()) {
+            QString const line = QString::fromLatin1(file.readLine()).trimmed();
+            QRegularExpressionMatch const match = engineTimeRe.match(line);
+            if (!match.hasMatch())
+                continue;
+
+            bool ok = false;
+            quint64 value = match.captured(1).toULongLong(&ok);
+            if (!ok)
+                continue;
+
+            QString const unit = match.captured(2).toLower();
+            if (unit == QStringLiteral("us"))
+                value *= 1000ULL;
+            else if (unit == QStringLiteral("ms"))
+                value *= 1000000ULL;
+
+            totalNs += value;
+            found = true;
+        }
+    }
+
+    if (!found)
+        return false;
+    if (gpuTimeNs)
+        *gpuTimeNs = totalNs;
+    return true;
+#else
+    Q_UNUSED(gpuTimeNs);
+    return false;
+#endif
+}
+
+#ifdef Q_OS_WIN
+double decodiumCurrentProcessGpuUsage(bool* available)
+{
+    static WindowsProcessGpuUsageMonitor monitor;
+    return monitor.sample(available);
+}
+#endif
 
 bool decodiumPskDebugEnabled()
 {
@@ -1380,6 +1570,22 @@ static int decodeSnrOrDefault(QString const& text, int fallback = -10)
     bool ok = false;
     int const parsed = text.trimmed().toInt(&ok);
     return ok ? qBound(-50, parsed, 49) : fallback;
+}
+
+static int bestRxSnrFromDecodeEntries(QVariantList const& entries, int fallback = -99)
+{
+    int bestSnr = fallback;
+    for (QVariant const& value : entries) {
+        QVariantMap const entry = value.toMap();
+        if (entry.value(QStringLiteral("isTx")).toBool()) {
+            continue;
+        }
+        int const snr = decodeSnrOrDefault(entry.value(QStringLiteral("db")).toString(), fallback);
+        if (snr > bestSnr) {
+            bestSnr = snr;
+        }
+    }
+    return bestSnr;
 }
 
 static QString normalizeCallToken(QString token)
@@ -2678,6 +2884,12 @@ static inline void activeCatSetTxFreq(DecodiumCatManager* n, DecodiumTransceiver
 DecodiumBridge::DecodiumBridge(QObject* parent)
     : QObject(parent)
 {
+    if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_GPU_PANADAPTER_FFT")) {
+        m_gpuPanadapterFftAvailable.store(false);
+        qWarning().noquote()
+            << "[PANDBG] Panadapter visual FFT GPU path disabled"
+            << "reason=DECODIUM_DISABLE_GPU_PANADAPTER_FFT";
+    }
     connect(this, &DecodiumBridge::errorMessage, this, [](const QString& msg) {
         DIAG_ERROR(QStringLiteral("[UIERR] non-blocking error: %1")
                        .arg(bridgeDiagnosticOneLine(msg)));
@@ -3246,6 +3458,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                         }
                     });
                 }
+                if (m_txEnabled || m_autoCqRepeat || m_deferredManualSyncTx) {
+                    QTimer::singleShot(350, this, [this, backend]() {
+                        if (catSignalMatchesBackend(m_catBackend, backend)) {
+                            recoverAutoTxAfterSettings(QStringLiteral("cat-%1-reconnected").arg(backend));
+                        }
+                    });
+                }
             }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::errorOccurred, this, [this, backend](const QString& msg) {
@@ -3444,9 +3663,12 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_lastProcessCpuUsec = decodiumCurrentProcessCpuUsec();
     m_processCpuSampleClock.start();
     m_processCpuSampleInitialized = true;
+    m_processGpuSampleInitialized = decodiumCurrentProcessGpuTimeNs(&m_lastProcessGpuTimeNs);
+    m_processGpuSampleClock.start();
     m_processCpuTimer = new QTimer(this);
     m_processCpuTimer->setInterval(2000);
     connect(m_processCpuTimer, &QTimer::timeout, this, &DecodiumBridge::updateProcessCpuUsage);
+    connect(m_processCpuTimer, &QTimer::timeout, this, &DecodiumBridge::updateProcessGpuUsage);
     m_processCpuTimer->start();
 
     // Main-thread stall probe: logs only visible event-loop delays, with FT slot phase.
@@ -4836,6 +5058,87 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
             autoSequenceStep(fields);
         }
     };
+    auto feedFt2EngineFromEntries = [this](QVariantList const& entries,
+                                           QVariantList const& previousEntries,
+                                           QString const& source) {
+        if (!m_ft2Engine || m_mode != QStringLiteral("FT2")) {
+            return;
+        }
+
+        QSet<QString> previousKeys;
+        previousKeys.reserve(previousEntries.size());
+        for (QVariant const& value : previousEntries) {
+            QString const key = decodeMirrorEntryKey(value.toMap());
+            if (!key.isEmpty()) {
+                previousKeys.insert(key);
+            }
+        }
+
+        int const nowSeconds =
+            QDateTime::currentDateTimeUtc().time().msecsSinceStartOfDay() / 1000;
+        int const periodMs = periodMsForMode(QStringLiteral("FT2"));
+        int const freshnessWindowSeconds = qMax(90, (periodMs > 0 ? periodMs / 1000 : 4) * 8);
+        auto const isFreshDecode = [&](QString const& token) {
+            int const decodeSeconds = secondsFromUtcDisplayToken(token);
+            if (decodeSeconds < 0) {
+                return true;
+            }
+            int diff = std::abs(nowSeconds - decodeSeconds);
+            diff = qMin(diff, 86400 - diff);
+            return diff <= freshnessWindowSeconds;
+        };
+
+        QStringList canon;
+        canon.reserve(entries.size());
+        for (QVariant const& value : entries) {
+            QVariantMap const entry = value.toMap();
+            if (entry.value(QStringLiteral("isTx")).toBool()) {
+                continue;
+            }
+            QString const key = decodeMirrorEntryKey(entry);
+            if (!key.isEmpty() && previousKeys.contains(key)) {
+                continue;
+            }
+            QString const message = entry.value(QStringLiteral("message")).toString().trimmed();
+            QString const time = entry.value(QStringLiteral("time")).toString().trimmed();
+            if (message.isEmpty() || !isFreshDecode(time)) {
+                continue;
+            }
+            QString const mode = entry.value(QStringLiteral("mode"), m_mode).toString().trimmed();
+            if (!mode.isEmpty() && mode != QStringLiteral("FT2")) {
+                continue;
+            }
+
+            QString const freq = entry.value(QStringLiteral("freq")).toString().trimmed();
+            canon.push_back(QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8")
+                                .arg(time,
+                                     entry.value(QStringLiteral("db")).toString().trimmed(),
+                                     entry.value(QStringLiteral("dt")).toString().trimmed(),
+                                     freq,
+                                     message,
+                                     entry.value(QStringLiteral("aptype")).toString().trimmed(),
+                                     entry.value(QStringLiteral("quality")).toString().trimmed(),
+                                     freq));
+        }
+
+        if (canon.isEmpty()) {
+            return;
+        }
+
+        std::size_t const queueBefore = m_ft2Engine->callerQueueSize();
+        decodium::ft2::FeedOutcome const outcome = m_ft2Engine->feed(canon);
+        std::size_t const queueAfter = m_ft2Engine->callerQueueSize();
+        if (outcome.triggeredAdvance || queueAfter != queueBefore) {
+            bridgeLog(QStringLiteral("legacy-mirror FT2 engine feed: source=%1 rows=%2 advance=%3 queue=%4")
+                          .arg(source)
+                          .arg(canon.size())
+                          .arg(outcome.triggeredAdvance ? 1 : 0)
+                          .arg(static_cast<int>(queueAfter)));
+        }
+        if (outcome.triggeredAdvance && !m_transmitting) {
+            checkAndStartPeriodicTx();
+        }
+    };
 
     if (bandChanged || allTxtChanged) {
         m_legacyBandActivityRevision = bandRevision;
@@ -4861,6 +5164,7 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
         mirroredDecodes = dropModeChangeClearedEntries(mirroredDecodes);
         feedMamQueueFromEntries(mirroredDecodes);
+        feedFt2EngineFromEntries(mirroredDecodes, m_decodeList, QStringLiteral("band"));
         // feedWaitPounceFromEntries qui era ridondante: il decoder diretto
         // (onFt8DecodeReady / onFt2AsyncDecodeReady / onLegacyJtDecodeReady)
         // gia' invoca tryStartWaitPounceFromEntry per ogni nuova decode. Il
@@ -4897,6 +5201,12 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
         mirroredDecodes = applyLegacyUiFilters(mirroredDecodes, true);
         normalizeDecodeEntriesForDisplay(mirroredDecodes, 1500, m_mode);
+        if (m_mode == QStringLiteral("FT2")) {
+            int const bestSnr = bestRxSnrFromDecodeEntries(mirroredDecodes, -99);
+            if (bestSnr > -99) {
+                setAsyncSnrDb(bestSnr);
+            }
+        }
         bridgeLog(QStringLiteral("legacy-mirror band: raw=%1 mirrored=%2")
                       .arg(bandLines.size())
                       .arg(mirroredDecodes.size()));
@@ -4951,6 +5261,7 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
         }
 
         feedMamQueueFromEntries(mergedRxDecodes);
+        feedFt2EngineFromEntries(mergedRxDecodes, m_rxDecodeList, QStringLiteral("rx"));
         // Vedi nota in band-mirror: feedWaitPounceFromEntries qui era
         // ridondante — il decoder diretto e' gia' il punto di trigger.
         feedAutoSequenceFromEntries(mergedRxDecodes, m_rxDecodeList);
@@ -5604,6 +5915,7 @@ void DecodiumBridge::setCallsign(const QString& v) {
         emit callsignChanged();
         refreshPskReporterLocalStation();
         if (m_dxCluster)   m_dxCluster->setCallsign(m_callsign);
+        refreshFt2EngineConfig(QStringLiteral("callsign"));
         regenerateTxMessages();
     }
 }
@@ -5614,8 +5926,19 @@ void DecodiumBridge::setGrid(const QString& v) {
         emit gridChanged();
         refreshPskReporterLocalStation();
         if (m_dxCluster)   m_dxCluster->setCallsign(m_callsign);
+        refreshFt2EngineConfig(QStringLiteral("grid"));
         regenerateTxMessages();
     }
+}
+
+void DecodiumBridge::setMultiAnswerMode(bool v)
+{
+    if (m_multiAnswerMode == v) {
+        return;
+    }
+    m_multiAnswerMode = v;
+    emit multiAnswerModeChanged();
+    refreshFt2EngineConfig(QStringLiteral("multi-answer"));
 }
 
 void DecodiumBridge::setStationRigInfo(const QString& v)
@@ -6345,9 +6668,12 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     if (m_ft2Engine) return;
     decodium::ft2::EngineConfig ecfg;
     ecfg.myCall          = m_callsign.toUpper();
-    ecfg.myBaseCall      = ecfg.myCall;
-    int slashPos = ecfg.myBaseCall.indexOf('/');
-    if (slashPos > 0) ecfg.myBaseCall = ecfg.myBaseCall.left(slashPos);
+    ecfg.myBaseCall      = normalizedBaseCall(ecfg.myCall);
+    if (ecfg.myBaseCall.isEmpty()) {
+        ecfg.myBaseCall = ecfg.myCall;
+        int slashPos = ecfg.myBaseCall.indexOf('/');
+        if (slashPos > 0) ecfg.myBaseCall = ecfg.myBaseCall.left(slashPos);
+    }
     ecfg.myGrid          = m_grid.left(4).toUpper();
     ecfg.multiAnswerMode = true;
     ecfg.quickQsoEnabled = m_quickQsoEnabled;
@@ -6435,6 +6761,32 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine activated (%1)").arg(origin));
 }
 
+void DecodiumBridge::refreshFt2EngineConfig(QString const& reason)
+{
+    if (!m_ft2Engine) {
+        return;
+    }
+
+    auto cfg = m_ft2Engine->config();
+    cfg.myCall = m_callsign.trimmed().toUpper();
+    cfg.myBaseCall = normalizedBaseCall(cfg.myCall);
+    if (cfg.myBaseCall.isEmpty()) {
+        cfg.myBaseCall = cfg.myCall;
+        int slashPos = cfg.myBaseCall.indexOf('/');
+        if (slashPos > 0) {
+            cfg.myBaseCall = cfg.myBaseCall.left(slashPos);
+        }
+    }
+    cfg.myGrid = m_grid.left(4).toUpper();
+    // Preserve the historical FT2 HUD behaviour: the engine keeps collecting
+    // callers for the HUD even when the legacy MAM flag is toggled elsewhere.
+    cfg.multiAnswerMode = true;
+    cfg.quickQsoEnabled = m_quickQsoEnabled;
+    m_ft2Engine->setConfig(cfg);
+    bridgeLog(QStringLiteral("[Bridge] Ft2QsoEngine config refreshed (%1): call=%2 base=%3 grid=%4")
+                  .arg(reason, cfg.myCall, cfg.myBaseCall, cfg.myGrid));
+}
+
 void DecodiumBridge::setQuickQsoEnabled(bool v)
 {
     if (m_quickQsoEnabled == v) return;
@@ -6443,9 +6795,7 @@ void DecodiumBridge::setQuickQsoEnabled(bool v)
     // Push the new flag into the live FT2 engine so the next QSO uses the
     // Ultra2 protocol immediately, without requiring a mode/restart cycle.
     if (m_ft2Engine) {
-        auto cfg = m_ft2Engine->config();
-        cfg.quickQsoEnabled = v;
-        m_ft2Engine->setConfig(cfg);
+        refreshFt2EngineConfig(QStringLiteral("quick-qso"));
     }
 }
 
@@ -6518,6 +6868,17 @@ void DecodiumBridge::ft2ResetLatencyStats()
 {
     if (!m_ft2Engine) return;
     m_ft2Engine->resetTxLatencyStats();
+    m_ft2PendingEmittedAtNs = 0;
+    m_ft2LastDecoderUs = 0;
+    m_ft2AvgDecoderUs = 0;
+    m_ft2MaxDecoderUs = 0;
+    m_ft2LastQueueUs = 0;
+    m_ft2AvgQueueUs = 0;
+    m_ft2MaxQueueUs = 0;
+    m_ft2LastEncoderUs = 0;
+    m_ft2AvgEncoderUs = 0;
+    m_ft2MaxEncoderUs = 0;
+    emit ft2PipelineProfileChanged();
 }
 
 qlonglong DecodiumBridge::ft2LastTxLatencyUs() const {
@@ -7296,6 +7657,55 @@ void DecodiumBridge::updateProcessCpuUsage()
     }
     m_processCpuUsage = usage;
     emit processCpuUsageChanged();
+}
+
+void DecodiumBridge::updateProcessGpuUsage()
+{
+    double usage = -1.0;
+
+#ifdef Q_OS_WIN
+    bool available = false;
+    usage = decodiumCurrentProcessGpuUsage(&available);
+    if (!available || !std::isfinite(usage))
+        usage = -1.0;
+#elif defined(Q_OS_LINUX)
+    quint64 currentGpuTimeNs = 0;
+    bool const available = decodiumCurrentProcessGpuTimeNs(&currentGpuTimeNs);
+    qint64 const wallNs = m_processGpuSampleClock.isValid()
+        ? m_processGpuSampleClock.nsecsElapsed()
+        : 0;
+
+    if (!available) {
+        m_processGpuSampleInitialized = false;
+        m_processGpuSampleClock.restart();
+        usage = -1.0;
+    } else if (!m_processGpuSampleInitialized
+               || wallNs <= 0
+               || currentGpuTimeNs < m_lastProcessGpuTimeNs) {
+        m_lastProcessGpuTimeNs = currentGpuTimeNs;
+        m_processGpuSampleClock.restart();
+        m_processGpuSampleInitialized = true;
+        return;
+    } else {
+        quint64 const gpuDeltaNs = currentGpuTimeNs - m_lastProcessGpuTimeNs;
+        usage = static_cast<double>(gpuDeltaNs) / static_cast<double>(wallNs);
+        if (!std::isfinite(usage))
+            usage = -1.0;
+        else
+            usage = qBound(0.0, usage, 1.0);
+        m_lastProcessGpuTimeNs = currentGpuTimeNs;
+        m_processGpuSampleClock.restart();
+    }
+#else
+    usage = -1.0;
+#endif
+
+    // Keep sub-1% Windows GPU counters visible. The CPU monitor uses a wider
+    // deadband, but GPU work here is often real while still below 0.5%.
+    if (std::abs(m_processGpuUsage - usage) < 0.0005)
+        return;
+    m_processGpuUsage = usage;
+    emit processGpuUsageChanged();
 }
 
 void DecodiumBridge::updateUiStallDiagnostics()
@@ -11980,6 +12390,80 @@ void DecodiumBridge::syncNtpNow()
 void DecodiumBridge::openCatSettings()
 {
     emit catSettingsRequested();
+}
+
+void DecodiumBridge::recoverAutoTxAfterSettings(const QString& reason)
+{
+    if (m_shuttingDown || QCoreApplication::closingDown()) {
+        return;
+    }
+
+    bool const txArmed = m_txEnabled || m_autoCqRepeat || m_deferredManualSyncTx;
+    if (!txArmed) {
+        return;
+    }
+
+    QString const label = reason.trimmed().isEmpty()
+        ? QStringLiteral("settings")
+        : reason.trimmed();
+
+    bridgeLog(QStringLiteral("autoTX recovery after %1: tx=%2 autoCQ=%3 manualHold=%4 monitoring=%5 requested=%6 transmitting=%7")
+                  .arg(label)
+                  .arg(m_txEnabled ? 1 : 0)
+                  .arg(m_autoCqRepeat ? 1 : 0)
+                  .arg(m_manualTxHold ? 1 : 0)
+                  .arg(m_monitoring ? 1 : 0)
+                  .arg(m_monitorRequested ? 1 : 0)
+                  .arg(m_transmitting ? 1 : 0));
+
+    clearManualTxHold(QStringLiteral("auto-tx-recovery/%1").arg(label));
+
+    if ((m_monitorRequested || m_monitoring) && !m_monitoring && !m_transmitting && !m_tuning) {
+        startRx();
+    }
+
+    if (usingLegacyBackendForTx()) {
+        syncLegacyBackendTxState();
+        if (legacyBackendAvailable()) {
+            if (m_monitorRequested && !m_legacyBackend->monitoring()) {
+                m_legacyBackend->setMonitoring(true);
+            }
+            m_legacyBackend->setAutoCq(m_autoCqRepeat);
+            m_legacyBackend->setTxEnabled(m_txEnabled);
+            scheduleLegacyStateRefreshBurst();
+        }
+        return;
+    }
+
+    if (m_ft2Engine) {
+        m_ft2Engine->enableTx(m_txEnabled);
+    }
+    scheduleTxAudioPrecompute(25);
+
+    auto rearmModernScheduler = [this, label]() {
+        if (m_shuttingDown || QCoreApplication::closingDown()) {
+            return;
+        }
+        if (!m_txEnabled && !m_autoCqRepeat && !m_deferredManualSyncTx) {
+            return;
+        }
+        if ((m_monitorRequested || m_monitoring) && !m_monitoring && !m_transmitting && !m_tuning) {
+            startRx();
+            return;
+        }
+        if (m_monitoring && m_periodTimer && !m_periodTimer->isActive()) {
+            quint64 const sessionId = ++m_periodTimerSessionId;
+            armPeriodTimerForCurrentMode(sessionId,
+                                         QStringLiteral("auto-tx-recovery/%1").arg(label));
+        }
+        if (!m_transmitting && !m_tuning) {
+            checkAndStartPeriodicTx();
+        }
+    };
+
+    QTimer::singleShot(0, this, rearmModernScheduler);
+    QTimer::singleShot(250, this, rearmModernScheduler);
+    QTimer::singleShot(1000, this, rearmModernScheduler);
 }
 
 void DecodiumBridge::retryRigConnection()
@@ -16848,6 +17332,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     int uiFiltered = 0;
     int duplicatesSkipped = 0;
     int accepted = 0;
+    int bestFt2Snr = -99;
     for (const auto& row : rows) {
         // parseFt8Row returns: [time, snr, dt, df, message, aptype, quality, freq]
         QStringList f = parseFt8Row(row);
@@ -16874,6 +17359,13 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                           .arg(semanticRejectReason, decodeMode.isEmpty() ? m_mode : decodeMode, f[4]));
             ++semanticFiltered;
             continue;
+        }
+
+        if ((decodeMode.isEmpty() ? m_mode : decodeMode) == QStringLiteral("FT2")) {
+            int const snr = decodeSnrOrDefault(f[1], -99);
+            if (snr > bestFt2Snr) {
+                bestFt2Snr = snr;
+            }
         }
 
         if (trackTimeSync) {
@@ -17046,6 +17538,9 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     if (changed) emit decodeListChanged();
     if (legacyUiMirrorActive) {
         syncLegacyBackendDecodeList();
+    }
+    if (bestFt2Snr > -99) {
+        setAsyncSnrDb(bestFt2Snr);
     }
     finalizeTimeSyncDecodeCycle(serial, decodeMode, dtSamples);
     m_decoding = false;
@@ -17622,12 +18117,6 @@ void DecodiumBridge::onSpectrumTimer()
                 return;
             }
 
-            bool expectedIdle = false;
-            if (!m_panadapterComputeBusy.compare_exchange_strong(expectedIdle, true)) {
-                return;
-            }
-            m_lastPanadapterFrameMs = nowMs;
-
             QVector<short> panadapterSamples(fftLen);
             panadapterSamples.fill(0);
             int ringStart = (m_wfRingPos - usable) % WF_RING_SIZE;
@@ -17647,6 +18136,55 @@ void DecodiumBridge::onSpectrumTimer()
             float const freqMinHz = static_cast<int>(nfaSnapshot / freqPerBin) * freqPerBin;
             float const freqMaxHz = static_cast<int>(nfbSnapshot / freqPerBin) * freqPerBin;
             uint64_t const serial = ++m_panadapterComputeSerial;
+
+            bool const remoteWaterfallNeedsCpu =
+                m_remoteServer
+                && m_remoteServer->isRunning()
+                && m_remoteServer->waterfallEnabled();
+            bool const gpuPanadapterFft =
+                m_gpuPanadapterFftAvailable.load()
+                && !remoteWaterfallNeedsCpu;
+            if (gpuPanadapterFft) {
+                QVector<float> pcmFrame(fftLen);
+                for (int i = 0; i < fftLen; ++i)
+                    pcmFrame[i] = static_cast<float>(panadapterSamples[i]);
+
+                static std::atomic_bool loggedGpuPath {false};
+                bool expectedLog = false;
+                if (loggedGpuPath.compare_exchange_strong(expectedLog, true)) {
+                    qInfo().noquote()
+                        << "[PANDBG] Panadapter visual FFT scheduling active"
+                        << "thread=QSG_render_thread"
+                        << "mode=RHI_compute_gpu"
+                        << "fallback=FFTW_CPU_on_failure";
+                }
+
+                m_lastPanadapterFrameMs = nowMs;
+                emit panadapterPcmFrameReady(std::move(pcmFrame),
+                                             usable,
+                                             nfaSnapshot,
+                                             nfbSnapshot,
+                                             freqMinHz,
+                                             freqMaxHz,
+                                             static_cast<qulonglong>(serial));
+                return;
+            }
+
+            static std::atomic_bool loggedRemoteCpu {false};
+            bool expectedRemoteCpuLog = false;
+            if (remoteWaterfallNeedsCpu
+                && loggedRemoteCpu.compare_exchange_strong(expectedRemoteCpuLog, true)) {
+                qInfo().noquote()
+                    << "[PANDBG] Panadapter visual FFT GPU path bypassed"
+                    << "reason=remote_waterfall_needs_CPU_db_values"
+                    << "fallback=FFTW_CPU";
+            }
+
+            bool expectedIdle = false;
+            if (!m_panadapterComputeBusy.compare_exchange_strong(expectedIdle, true)) {
+                return;
+            }
+            m_lastPanadapterFrameMs = nowMs;
 
             static std::atomic_bool loggedAsyncPath {false};
             bool expectedLog = false;
@@ -20571,6 +21109,24 @@ void DecodiumBridge::updateLotwUsers()
 
 QStringList DecodiumBridge::workedCallsigns() const { return QStringList(m_workedCalls.values()); }
 int         DecodiumBridge::workedCount()      const { return m_workedCalls.size(); }
+
+void DecodiumBridge::setGpuPanadapterFftAvailable(bool available, const QString& reason)
+{
+    bool const previous = m_gpuPanadapterFftAvailable.exchange(available);
+    if (previous == available)
+        return;
+
+    if (available) {
+        qInfo().noquote()
+            << "[PANDBG] Panadapter visual FFT GPU path available"
+            << "reason=" << (reason.isEmpty() ? QStringLiteral("manual/auto recovery") : reason);
+    } else {
+        qWarning().noquote()
+            << "[PANDBG] Panadapter visual FFT GPU path disabled"
+            << "reason=" << (reason.isEmpty() ? QStringLiteral("PanadapterItem rejected GPU compute") : reason)
+            << "fallback=FFTW_CPU";
+    }
+}
 int         DecodiumBridge::qsoCount()         const
 {
     if (m_qsoCountCache < 0) {

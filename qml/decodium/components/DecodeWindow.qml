@@ -79,43 +79,65 @@ Window {
     // reset del layout ListView che si verifica con function-call model
     // (new array reference ad ogni invocazione → contentY azzerato).
     property var rxDecodeModel: []
+    property bool pendingBandActivityRefresh: false
+    property bool pendingBandActivityTailFollow: false
+    property bool pendingRxDecodeRefresh: false
+    property bool pendingRxDecodeTailFollow: false
+
+    function scheduleBandActivityRefresh() {
+        pendingBandActivityRefresh = true
+        pendingBandActivityTailFollow = pendingBandActivityTailFollow
+            || (bandActivityList ? bandActivityList.isNearTail() : true)
+        decodeModelRefreshTimer.restart()
+    }
+
+    function scheduleRxDecodeRefresh() {
+        pendingRxDecodeRefresh = true
+        pendingRxDecodeTailFollow = pendingRxDecodeTailFollow
+            || (rxFrequencyList ? rxFrequencyList.isNearTail() : true)
+        decodeModelRefreshTimer.restart()
+    }
+
+    Timer {
+        id: decodeModelRefreshTimer
+        interval: 33
+        repeat: false
+        onTriggered: {
+            if (decodeWindow.pendingBandActivityRefresh) {
+                var followBandTail = decodeWindow.pendingBandActivityTailFollow
+                decodeWindow.pendingBandActivityRefresh = false
+                decodeWindow.pendingBandActivityTailFollow = false
+                decodeWindow.bandActivityModel = appEngine.decodeList
+                decodeWindow.decodeListVersion++
+                if (followBandTail && bandActivityList)
+                    bandActivityList.queueTailFollow()
+            }
+
+            if (decodeWindow.pendingRxDecodeRefresh) {
+                var followRxTail = decodeWindow.pendingRxDecodeTailFollow
+                decodeWindow.pendingRxDecodeRefresh = false
+                decodeWindow.pendingRxDecodeTailFollow = false
+                decodeWindow.rxDecodeModel = currentRxDecodes()
+                decodeWindow.rxDecodeListVersion++
+                if (followRxTail && rxFrequencyList)
+                    rxFrequencyList.queueTailFollow()
+            }
+        }
+    }
 
 	    Connections {
 	        target: appEngine
 	        function onDecodeListChanged() {
-            var stickBandTail = bandActivityList ? bandActivityList.isNearTail() : true
-            decodeWindow.bandActivityModel = appEngine.decodeList
-            decodeWindow.decodeListVersion++
-            if (stickBandTail && bandActivityList)
-                bandActivityList.forceTailFollow()
+            decodeWindow.scheduleBandActivityRefresh()
         }
         function onRxDecodeListChanged() {
-            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-            decodeWindow.rxDecodeModel = currentRxDecodes()
-            decodeWindow.rxDecodeListVersion++
-	            if (stickRxTail && rxFrequencyList)
-	                rxFrequencyList.forceTailFollow()
-	        }
-	        function onDxCallChanged() {
-	            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-	            decodeWindow.rxDecodeModel = currentRxDecodes()
-	            decodeWindow.rxDecodeListVersion++
-	            if (stickRxTail && rxFrequencyList)
-	                rxFrequencyList.forceTailFollow()
-	        }
-	        function onRxFrequencyChanged() {
-	            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-	            decodeWindow.rxDecodeModel = currentRxDecodes()
-	            decodeWindow.rxDecodeListVersion++
-	            if (stickRxTail && rxFrequencyList)
-	                rxFrequencyList.forceTailFollow()
+            decodeWindow.scheduleRxDecodeRefresh()
 	        }
 	    }
 
     // Refresh rxDecodeModel anche quando cambia il filtro Tx2QSO/TXMessagesToRX
     onShowTxMessagesInRxChanged: {
-        rxDecodeModel = currentRxDecodes()
-        rxDecodeListVersion++
+        scheduleRxDecodeRefresh()
     }
     Component.onCompleted: {
         rxDecodeModel = currentRxDecodes()
@@ -320,59 +342,15 @@ Window {
 	        return best.length > 0 ? best : text
 	    }
 
-	    function messageContainsCallBase(message, base) {
-	        var wanted = String(base || "").trim().toUpperCase()
-	        if (wanted.length === 0)
-	            return false
-	        var parts = String(message || "").split(/\s+/)
-	        for (var i = 0; i < parts.length; ++i) {
-	            if (callsignBase(parts[i]) === wanted)
-	                return true
-	        }
-	        return false
-	    }
-
 	    // Shannon: RX Frequency window ±200Hz (sbFtol default) + messaggi diretti a noi
 	    property int rxBandwidth: 200  // Shannon sbFtol default 200Hz
 
     // Shannon isAtRxFrequency: dentro finestra ±200Hz OR messaggio per noi
     function isAtRxFrequency(freq, md) {
         var f = parseInt(freq)
-        var inWindow = Math.abs(f - appEngine.rxFrequency) <= rxBandwidth
+	        var inWindow = Math.abs(f - appEngine.rxFrequency) <= rxBandwidth
 	        var relevant = md && (md.isMyCall || md.isTx)
 	        return inWindow || relevant
-	    }
-
-	    function currentQsoPartnerBase() {
-	        return callsignBase(appEngine.dxCall || "")
-	    }
-
-	    function rxEntryBelongsToCurrentQso(item) {
-	        if (!item)
-	            return false
-
-	        var activeBase = currentQsoPartnerBase()
-	        if (item.isTx === true) {
-	            if (activeBase.length === 0)
-	                return true
-	            return messageContainsCallBase(item.message || "", activeBase)
-	                || callsignBase(item.dxCallsign || "") === activeBase
-	        }
-
-	        var myBase = callsignBase(appEngine.callsign || "")
-	        var message = item.message || ""
-	        var myMatch = item.isMyCall === true
-	            || messageContainsCallBase(message, myBase)
-	        if (myMatch)
-	            return true
-
-	        if (activeBase.length === 0)
-	            return isAtRxFrequency(item.freq || "0", item)
-
-	        var activeMatch = messageContainsCallBase(message, activeBase)
-	            || callsignBase(item.fromCall || "") === activeBase
-	            || callsignBase(item.dxCallsign || "") === activeBase
-	        return activeMatch && myMatch
 	    }
 
 	    function currentRxDecodes() {
@@ -382,8 +360,6 @@ Window {
                 var item = appEngine.rxDecodeList[j]
                 if (item) {
 	                    if (!decodeWindow.showTxMessagesInRx && item.isTx)
-	                        continue
-	                    if (!rxEntryBelongsToCurrentQso(item))
 	                        continue
 	                    merged.push(item)
 	                }
@@ -619,6 +595,8 @@ Window {
                             clip: true
                             model: decodeWindow.bandActivityModel
                             spacing: 1
+                            reuseItems: true
+                            cacheBuffer: Math.max(600, height * 3)
                             property bool followTail: true
                             property bool tailFollowPending: false
                             function isNearTail() {
@@ -658,6 +636,9 @@ Window {
                                     bandActivityTailAnimation.start()
                                 })
                             }
+                            function queueTailFollow() {
+                                bandActivityTailDebounce.restart()
+                            }
                             NumberAnimation {
                                 id: bandActivityTailAnimation
                                 target: bandActivityList
@@ -690,7 +671,7 @@ Window {
                             }
                             onCountChanged: {
                                 if (followTail) {
-                                    bandActivityTailDebounce.restart()
+                                    queueTailFollow()
                                 }
                             }
                             add: Transition {
@@ -1057,6 +1038,8 @@ Window {
                             clip: true
                             spacing: 1
                             interactive: true
+                            reuseItems: true
+                            cacheBuffer: Math.max(600, height * 3)
                             // Pattern identico a bandActivityList: model property-backed
                             // (decodeWindow.rxDecodeModel) + followTail/isNearTail/updateFollowTail
                             // basato su contentY/contentHeight. Così Signal RX si comporta
@@ -1101,6 +1084,9 @@ Window {
                                     rxFrequencyTailAnimation.start()
                                 })
                             }
+                            function queueTailFollow() {
+                                rxFrequencyTailDebounce.restart()
+                            }
                             NumberAnimation {
                                 id: rxFrequencyTailAnimation
                                 target: rxFrequencyList
@@ -1131,7 +1117,7 @@ Window {
                             }
                             onCountChanged: {
                                 if (followTail) {
-                                    rxFrequencyTailDebounce.restart()
+                                    queueTailFollow()
                                 }
                             }
                             add: Transition {
