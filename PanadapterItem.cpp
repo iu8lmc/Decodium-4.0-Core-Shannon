@@ -19,6 +19,7 @@
 #include <QDebug>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
@@ -579,8 +580,24 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
         m_pendingWaterfallRows.removeFirst();
 
     m_spectrumDirty = true;
+
+    // Render throttle: quando attivo (es. FT2 engine non-Idle), saltiamo
+    // update() finché non sono passati 100 ms dall'ultimo paint. I dati FFT
+    // restano in m_pendingWaterfallRows (max 8 frame) e verranno tutti
+    // processati al prossimo updatePaintNode. Così riduciamo il carico
+    // main-thread sul render durante slot decode pesanti.
+    bool shouldEmitUpdate = true;
+    if (m_throttleActive) {
+        constexpr qint64 kThrottleIntervalNs = 100LL * 1000 * 1000;
+        const qint64 nowNs = std::chrono::steady_clock::now().time_since_epoch().count();
+        if (nowNs - m_lastUpdateNs < kThrottleIntervalNs) {
+            shouldEmitUpdate = false;
+        } else {
+            m_lastUpdateNs = nowNs;
+        }
+    }
     lock.unlock();
-    update();
+    if (shouldEmitUpdate) update();
 }
 
 // Compatibilità: riceve valori 0-1 normalizzati e li converte in dB

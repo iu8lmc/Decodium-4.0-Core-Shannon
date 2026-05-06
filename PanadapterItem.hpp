@@ -47,6 +47,9 @@ class PanadapterItem : public QQuickItem
     Q_PROPERTY(int   colorGain   READ colorGain   WRITE setColorGain   NOTIFY colorGainChanged)
     Q_PROPERTY(int   blackLevel  READ blackLevel  WRITE setBlackLevel  NOTIFY blackLevelChanged)
 
+    // ── Render throttle (paint cap durante carico CPU elevato, es. FT2 attivo)
+    Q_PROPERTY(bool  throttleActive READ throttleActive WRITE setThrottleActive NOTIFY throttleActiveChanged)
+
     // ── Decode labels (callsign overlay) ────────────────────────────────────
     Q_PROPERTY(int   labelFontSize      READ labelFontSize      WRITE setLabelFontSize      NOTIFY labelFontSizeChanged)
     Q_PROPERTY(int   labelSpacing       READ labelSpacing       WRITE setLabelSpacing       NOTIFY labelSpacingChanged)
@@ -94,6 +97,7 @@ public:
     bool  labelBold()      const { return m_labelBold; }
     QColor labelColor()    const { return m_labelColor; }
     bool  labelUseCustomColor() const { return m_labelUseCustomColor; }
+    bool  throttleActive() const { return m_throttleActive; }
 
     // ── Setters ─────────────────────────────────────────────────────────────
     void setMinDb(float v)         { if (m_minDb!=v){m_minDb=v;emit minDbChanged();markDirty();} }
@@ -119,6 +123,7 @@ public:
     void setLabelBold(bool v)      { if(m_labelBold!=v){m_labelBold=v;emit labelBoldChanged();markDirty();} }
     void setLabelColor(QColor v)   { if(m_labelColor!=v){m_labelColor=v;emit labelColorChanged();markDirty();} }
     void setLabelUseCustomColor(bool v) { if(m_labelUseCustomColor!=v){m_labelUseCustomColor=v;emit labelUseCustomColorChanged();markDirty();} }
+    void setThrottleActive(bool v)      { if(m_throttleActive!=v){m_throttleActive=v;emit throttleActiveChanged(); if(!v) update();} }
 
     // ── Invokable methods ───────────────────────────────────────────────────
     // Chiamato dal bridge: dB raw + range dB + range frequenze exact
@@ -161,6 +166,7 @@ signals:
     void labelBoldChanged();
     void labelColorChanged();
     void labelUseCustomColorChanged();
+    void throttleActiveChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
@@ -264,4 +270,10 @@ private:
     int   m_lastWaterfallGpuStatsRow = -1;
     int   m_paletteGeneration = 0;
     QMutex m_mutex;
+
+    // Throttle: quando attivo, addSpectrumData chiama update() al massimo
+    // ogni kThrottleIntervalMs (10 fps invece dei normali ~50 fps).
+    // I dati FFT non vengono persi: m_pendingWaterfallRows li bufferizza.
+    bool   m_throttleActive {false};
+    qint64 m_lastUpdateNs   {0};
 };
