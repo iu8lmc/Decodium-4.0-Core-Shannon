@@ -63,6 +63,12 @@ Q_SIGNALS:
   //               bridge to compute the cross-thread queue delay.
   void asyncDecodeProfile (qint64 decoderUs, qint64 emittedAtNs);
 
+  // Tier 1.5 telemetry: granular breakdown del decode_ft2_stage7. Tutti i
+  // valori sono in microsecondi e si riferiscono all'ultima invocazione
+  // appena conclusa. Emesso subito dopo asyncDecodeProfile.
+  void asyncStage7BreakdownProfile (qint64 getcandUs, qint64 demodUs,
+                                    qint64 syncUs,    qint64 ldpcUs);
+
   void asyncDecodeReady (QStringList rows);
   void decodeReady (quint64 serial, QStringList rows);
 

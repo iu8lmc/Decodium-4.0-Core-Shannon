@@ -3333,6 +3333,9 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // (Qt::QueuedConnection preserves emit order for same sender→receiver).
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncDecodeProfile,
             this, &DecodiumBridge::onFt2AsyncDecodeProfile, Qt::QueuedConnection);
+    // Tier 1.5: sub-stage breakdown — segue asyncDecodeProfile (FIFO).
+    connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncStage7BreakdownProfile,
+            this, &DecodiumBridge::onFt2AsyncStage7BreakdownProfile, Qt::QueuedConnection);
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncDecodeReady,
             this, &DecodiumBridge::onFt2AsyncDecodeReady, Qt::QueuedConnection);
     connect(m_workerThreadFt2, &QThread::finished, m_ft2Worker, &QObject::deleteLater);
@@ -6540,6 +6543,19 @@ void DecodiumBridge::onFt2AsyncDecodeProfile(qint64 decoderUs, qint64 emittedAtN
     m_ft2PendingEmittedAtNs = emittedAtNs;
     updatePipelineSegmentEma(decoderUs, m_ft2LastDecoderUs, m_ft2AvgDecoderUs, m_ft2MaxDecoderUs);
     emit ft2PipelineProfileChanged();
+}
+
+// Tier 1.5 — granular breakdown del decode_ft2_stage7. Stessa EMA del Tier 1.
+// Permette di vedere quale sub-stage domina la latenza DEC e indirizzare le
+// future ottimizzazioni (LDPC vs sync vs demod vs getcand).
+void DecodiumBridge::onFt2AsyncStage7BreakdownProfile(qint64 getcandUs, qint64 demodUs,
+                                                     qint64 syncUs,    qint64 ldpcUs)
+{
+    updatePipelineSegmentEma(getcandUs, m_ft2LastGetcandUs, m_ft2AvgGetcandUs, m_ft2MaxGetcandUs);
+    updatePipelineSegmentEma(demodUs,   m_ft2LastDemodUs,   m_ft2AvgDemodUs,   m_ft2MaxDemodUs);
+    updatePipelineSegmentEma(syncUs,    m_ft2LastSyncUs,    m_ft2AvgSyncUs,    m_ft2MaxSyncUs);
+    updatePipelineSegmentEma(ldpcUs,    m_ft2LastLdpcUs,    m_ft2AvgLdpcUs,    m_ft2MaxLdpcUs);
+    emit ft2Stage7BreakdownChanged();
 }
 
 void DecodiumBridge::setMode(const QString& v) {

@@ -349,6 +349,19 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(qlonglong ft2MaxQueueUs   READ ft2MaxQueueUs   NOTIFY ft2PipelineProfileChanged)
     Q_PROPERTY(qlonglong ft2AvgEncoderUs READ ft2AvgEncoderUs NOTIFY ft2PipelineProfileChanged)
     Q_PROPERTY(qlonglong ft2MaxEncoderUs READ ft2MaxEncoderUs NOTIFY ft2PipelineProfileChanged)
+    // FT2 stage7 sub-stage telemetry (Tier 1.5, microsecondi, EMA alpha=1/8):
+    //   getcand = ftx_getcandidates2_c (FFT + peak search)
+    //   demod   = ftx_ft2_downsample_c per-candidato
+    //   sync    = ftx_sync2d_c segment search loop
+    //   ldpc    = run_decode_passes (LDPC + OSD/AP)
+    Q_PROPERTY(qlonglong ft2AvgGetcandUs READ ft2AvgGetcandUs NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxGetcandUs READ ft2MaxGetcandUs NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2AvgDemodUs   READ ft2AvgDemodUs   NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxDemodUs   READ ft2MaxDemodUs   NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2AvgSyncUs    READ ft2AvgSyncUs    NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxSyncUs    READ ft2MaxSyncUs    NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2AvgLdpcUs    READ ft2AvgLdpcUs    NOTIFY ft2Stage7BreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxLdpcUs    READ ft2MaxLdpcUs    NOTIFY ft2Stage7BreakdownChanged)
 
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
@@ -744,6 +757,15 @@ public:
     qlonglong ft2MaxQueueUs()   const noexcept { return m_ft2MaxQueueUs;   }
     qlonglong ft2AvgEncoderUs() const noexcept { return m_ft2AvgEncoderUs; }
     qlonglong ft2MaxEncoderUs() const noexcept { return m_ft2MaxEncoderUs; }
+    // Tier 1.5 — stage7 sub-stage breakdown (microsecondi).
+    qlonglong ft2AvgGetcandUs() const noexcept { return m_ft2AvgGetcandUs; }
+    qlonglong ft2MaxGetcandUs() const noexcept { return m_ft2MaxGetcandUs; }
+    qlonglong ft2AvgDemodUs()   const noexcept { return m_ft2AvgDemodUs;   }
+    qlonglong ft2MaxDemodUs()   const noexcept { return m_ft2MaxDemodUs;   }
+    qlonglong ft2AvgSyncUs()    const noexcept { return m_ft2AvgSyncUs;    }
+    qlonglong ft2MaxSyncUs()    const noexcept { return m_ft2MaxSyncUs;    }
+    qlonglong ft2AvgLdpcUs()    const noexcept { return m_ft2AvgLdpcUs;    }
+    qlonglong ft2MaxLdpcUs()    const noexcept { return m_ft2MaxLdpcUs;    }
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
     QObject*    diagnostics() const { return m_diagnostics; }
@@ -1132,6 +1154,7 @@ signals:
     void ft2CallersChanged();
     void ft2TxLatencyChanged();
     void ft2PipelineProfileChanged();
+    void ft2Stage7BreakdownChanged();
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();
@@ -1197,6 +1220,10 @@ private slots:
     // Records decoder duration + emit timestamp so onFt2AsyncDecodeReady can
     // measure the cross-thread queue delay against std::chrono::steady_clock.
     void onFt2AsyncDecodeProfile(qint64 decoderUs, qint64 emittedAtNs);
+    // Tier 1.5 — sub-stage breakdown per decode_ft2_stage7. Riceve i 4
+    // accumulatori thread_local letti dal worker FT2 subito dopo il decode.
+    void onFt2AsyncStage7BreakdownProfile(qint64 getcandUs, qint64 demodUs,
+                                          qint64 syncUs,    qint64 ldpcUs);
     void onFt4DecodeReady(quint64 serial, QStringList rows);
     void onQ65DecodeReady(quint64 serial, QStringList rows);
     void onMsk144DecodeReady(quint64 serial, QStringList rows);
@@ -1590,6 +1617,19 @@ private:
     qint64 m_ft2LastEncoderUs {0};
     qint64 m_ft2AvgEncoderUs  {0};
     qint64 m_ft2MaxEncoderUs  {0};
+    // Tier 1.5 — stage7 sub-stage timing (microsecondi).
+    qint64 m_ft2LastGetcandUs {0};
+    qint64 m_ft2AvgGetcandUs  {0};
+    qint64 m_ft2MaxGetcandUs  {0};
+    qint64 m_ft2LastDemodUs   {0};
+    qint64 m_ft2AvgDemodUs    {0};
+    qint64 m_ft2MaxDemodUs    {0};
+    qint64 m_ft2LastSyncUs    {0};
+    qint64 m_ft2AvgSyncUs     {0};
+    qint64 m_ft2MaxSyncUs     {0};
+    qint64 m_ft2LastLdpcUs    {0};
+    qint64 m_ft2AvgLdpcUs     {0};
+    qint64 m_ft2MaxLdpcUs     {0};
     void   updatePipelineSegmentEma(qint64 sampleUs,
                                     qint64& last, qint64& avg, qint64& max) noexcept;
     QThread* m_workerThreadFt4 {nullptr};

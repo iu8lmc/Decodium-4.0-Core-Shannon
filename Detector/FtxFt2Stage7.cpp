@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdlib>
@@ -48,6 +49,42 @@ constexpr int kFt2Nh1 = 1152 / 2;
 constexpr float kFt2FsDown = 12000.0f / static_cast<float> (kFt2NDown);
 // Legacy FT2 uses a rounded 1333.33 samples/s when converting ibest -> dt.
 constexpr float kFt2FreqDtScale = 1.0f / 1333.33f;
+
+// Tier 1.5 — granular profiling per stage7 sub-stages.
+// Accumulato per chiamata di decode_ft2_stage7, esposto via
+// ftx_ft2_stage7_last_profile_c. Thread-local: ogni worker thread
+// (FT2 worker / FT4 worker / Q65) ha la propria istanza.
+struct Stage7Profile
+{
+  qint64 getcand_us {0};   // ftx_getcandidates2_c (FFT + peak search)
+  qint64 demod_us   {0};   // ftx_ft2_downsample_c (per-candidato)
+  qint64 sync_us    {0};   // ftx_sync2d_c loop (segment search)
+  qint64 ldpc_us    {0};   // run_decode_passes (LDPC + OSD/AP)
+};
+
+inline Stage7Profile& stage7_profile ()
+{
+  thread_local Stage7Profile p;
+  return p;
+}
+
+// RAII helper: alla distruzione aggiunge l'elapsed in microsecondi al sink.
+class Stage7TimeAccum
+{
+public:
+  explicit Stage7TimeAccum (qint64& sink)
+    : t_ (std::chrono::steady_clock::now ()), sink_ (sink) {}
+  ~Stage7TimeAccum ()
+  {
+    sink_ += std::chrono::duration_cast<std::chrono::microseconds> (
+                 std::chrono::steady_clock::now () - t_).count ();
+  }
+  Stage7TimeAccum (Stage7TimeAccum const&) = delete;
+  Stage7TimeAccum& operator= (Stage7TimeAccum const&) = delete;
+private:
+  std::chrono::steady_clock::time_point t_;
+  qint64& sink_;
+};
 constexpr int kFt2FoxMax = 1000;
 
 extern "C"
@@ -1668,6 +1705,10 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
   ensure_tweaks (state);
   ensure_symbol_tables (state);
   decodium::txmsg::Decode77Context context = make_decode77_context (mycall, hiscall);
+
+  // Tier 1.5 — reset breakdown bucket all'inizio di ogni decode_ft2_stage7.
+  Stage7Profile& s7p = stage7_profile ();
+  s7p = Stage7Profile {};
   auto abort_if_cancelled = [&state, nout] () {
     if (!stage7_should_cancel ())
       {
@@ -1778,9 +1819,12 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
         }
 
       int ncand = 0;
-      ftx_getcandidates2_c (dd.data (), static_cast<float> (nfa), static_cast<float> (nfb),
-                            syncmin_pass, static_cast<float> (nfqso), kFt2MaxCand,
-                            savg.data (), candidate.data (), &ncand, sbase.data ());
+      {
+        Stage7TimeAccum ta (s7p.getcand_us);
+        ftx_getcandidates2_c (dd.data (), static_cast<float> (nfa), static_cast<float> (nfb),
+                              syncmin_pass, static_cast<float> (nfqso), kFt2MaxCand,
+                              savg.data (), candidate.data (), &ncand, sbase.data ());
+      }
       if (stage7_trace_pass_only (isp))
         {
           stage7_debug_logf ("pass=%d ncand=%d", isp, ncand);
@@ -1803,7 +1847,10 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                                 isp, icand + 1, ncand, f0, snr);
             }
 
-          ftx_ft2_downsample_c (dd.data (), &newdata, f0, cd2.data ());
+          {
+            Stage7TimeAccum ta (s7p.demod_us);
+            ftx_ft2_downsample_c (dd.data (), &newdata, f0, cd2.data ());
+          }
           newdata = 0;
 
           float sum2 = 0.0f;
@@ -1877,26 +1924,29 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                   ibest = -1;
                   idfbest = 0;
                   smax = -99.0f;
-                  for (int idf = idfmin; idf <= idfmax; idf += idfstp)
-                    {
-                      if (abort_if_cancelled ())
-                        {
-                          return;
-                        }
-                      for (int istart = ibmin; istart <= ibmax; istart += ibstp)
-                        {
-                          float sync = 0.0f;
-                          ftx_sync2d_c (cd2.data (), kFt2NdMax, istart,
-                                        state.ctwk2[static_cast<size_t> (idf_index (idf))].data (),
-                                        1, &sync);
-                          if (sync > smax)
-                            {
-                              smax = sync;
-                              ibest = istart;
-                              idfbest = idf;
-                            }
-                        }
-                    }
+                  {
+                    Stage7TimeAccum ta (s7p.sync_us);
+                    for (int idf = idfmin; idf <= idfmax; idf += idfstp)
+                      {
+                        if (abort_if_cancelled ())
+                          {
+                            return;
+                          }
+                        for (int istart = ibmin; istart <= ibmax; istart += ibstp)
+                          {
+                            float sync = 0.0f;
+                            ftx_sync2d_c (cd2.data (), kFt2NdMax, istart,
+                                          state.ctwk2[static_cast<size_t> (idf_index (idf))].data (),
+                                          1, &sync);
+                            if (sync > smax)
+                              {
+                                smax = sync;
+                                ibest = istart;
+                                idfbest = idf;
+                              }
+                          }
+                      }
+                  }
                 }
 
               if (iseg == 1)
@@ -1946,7 +1996,10 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                   continue;
                 }
 
-              ftx_ft2_downsample_c (dd.data (), &newdata, f1, cb.data ());
+              {
+                Stage7TimeAccum ta (s7p.demod_us);
+                ftx_ft2_downsample_c (dd.data (), &newdata, f1, cb.data ());
+              }
 
               sum2 = 0.0f;
               for (size_t i = 0; i < cb.size (); ++i)
@@ -2029,9 +2082,12 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                 }
               apmag *= 1.1f;
 
+              auto t_ldpc_a = std::chrono::steady_clock::now ();
               DecodePassResult const decoded = run_decode_passes (
                   state, ap_setup, &context, llra, llrb, llrc, llrd, llre, ndepth0, ncontest,
                   qso_progress, doosd, false, nfqso, f1, false, apmag);
+              s7p.ldpc_us += std::chrono::duration_cast<std::chrono::microseconds> (
+                                 std::chrono::steady_clock::now () - t_ldpc_a).count ();
               stage7_debug_compare_with_reference (
                   llra, llrb, llrc, llrd, llre, decoded, ndepth0, ncontest, qso_progress,
                   false, nfqso, f1, false, doosd, apmag, mycall, hiscall);
@@ -2076,7 +2132,10 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                         }
 
                       int rescue_newdata = 0;
-                      ftx_ft2_downsample_c (dd.data (), &rescue_newdata, f1_try, cb.data ());
+                      {
+                        Stage7TimeAccum ta (s7p.demod_us);
+                        ftx_ft2_downsample_c (dd.data (), &rescue_newdata, f1_try, cb.data ());
+                      }
 
                       sum2 = 0.0f;
                       for (size_t i = 0; i < cb.size (); ++i)
@@ -2135,10 +2194,13 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                             }
                           apmag_try *= 1.1f;
 
+                          auto t_ldpc_b = std::chrono::steady_clock::now ();
                           DecodePassResult const decoded_try = run_decode_passes (
                               state, ap_setup, &context, llra_try, llrb_try, llrc_try, llrd_try, llre_try,
                               ndepth0, ncontest, qso_progress, doosd, false, nfqso, f1_try,
                               false, apmag_try);
+                          s7p.ldpc_us += std::chrono::duration_cast<std::chrono::microseconds> (
+                                             std::chrono::steady_clock::now () - t_ldpc_b).count ();
                           if (!decoded_try.ok)
                             {
                               if (decoded_try.stop_candidate)
@@ -2295,9 +2357,12 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
               return;
             }
 
+          auto t_ldpc_c = std::chrono::steady_clock::now ();
           DecodePassResult const decoded = run_decode_passes (
               state, ap_setup, &context, llra, llrb, llrc, llrd, llre, ndepth0, ncontest,
               qso_progress, doosd, false, nfqso, state.f_avg, true, apmag);
+          s7p.ldpc_us += std::chrono::duration_cast<std::chrono::microseconds> (
+                             std::chrono::steady_clock::now () - t_ldpc_c).count ();
           stage7_debug_compare_with_reference (
               llra, llrb, llrc, llrd, llre, decoded, ndepth0, ncontest, qso_progress,
               false, nfqso, state.f_avg, true, doosd, apmag, mycall, hiscall);
@@ -2425,6 +2490,22 @@ extern "C" void ftx_ft2_stage7_clravg_c ()
   Stage7State& state = stage7_state ();
   reset_average_state (state);
   clear_last_average_emit_state (state);
+}
+
+// Tier 1.5 — espone l'ultimo breakdown timing del decode_ft2_stage7
+// completato sul thread chiamante. I quattro accumulatori sono in
+// thread_local, quindi la funzione va invocata dallo stesso worker thread
+// che ha eseguito decode_ft2_stage7. Output in microsecondi.
+extern "C" void ftx_ft2_stage7_last_profile_c (qint64* getcand_us,
+                                               qint64* demod_us,
+                                               qint64* sync_us,
+                                               qint64* ldpc_us)
+{
+  Stage7Profile const& p = stage7_profile ();
+  if (getcand_us) *getcand_us = p.getcand_us;
+  if (demod_us)   *demod_us   = p.demod_us;
+  if (sync_us)    *sync_us    = p.sync_us;
+  if (ldpc_us)    *ldpc_us    = p.ldpc_us;
 }
 
 extern "C" int ftx_ft2_cpp_dsp_rollout_stage_c ()

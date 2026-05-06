@@ -21,6 +21,10 @@ extern "C"
                                       float* quals, signed char* bits77, char* decodeds,
                                       int* nout);
   void ftx_ft2_stage7_set_cancel_c (int cancel);
+  // Tier 1.5 — breakdown timing dell'ultimo decode_ft2_stage7 sul thread
+  // chiamante. Da invocare subito dopo ftx_ft2_async_decode_stage7_c.
+  void ftx_ft2_stage7_last_profile_c (qint64* getcand_us, qint64* demod_us,
+                                      qint64* sync_us,    qint64* ldpc_us);
 }
 
 namespace
@@ -238,6 +242,15 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
                                t_decode_end - t_decode_start).count ();
   qint64 const emittedAtNs = t_decode_end.time_since_epoch ().count ();
   Q_EMIT asyncDecodeProfile (decoderUs, emittedAtNs);
+
+  // Tier 1.5 — leggi breakdown sub-stage timing dal thread_local profiler.
+  // Va fatto qui (stesso thread del decode) prima di tornare nel main loop.
+  qint64 stage7Getcand = 0;
+  qint64 stage7Demod   = 0;
+  qint64 stage7Sync    = 0;
+  qint64 stage7Ldpc    = 0;
+  ftx_ft2_stage7_last_profile_c (&stage7Getcand, &stage7Demod, &stage7Sync, &stage7Ldpc);
+  Q_EMIT asyncStage7BreakdownProfile (stage7Getcand, stage7Demod, stage7Sync, stage7Ldpc);
 
   Q_EMIT asyncDecodeReady (build_rows (QString {}, '~', nout, snrs, dts, freqs, naps, quals,
                                        decodeds));
