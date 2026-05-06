@@ -941,9 +941,11 @@ QString Ft2QsoEngine::buildTxMessage(int txNum,
                                      bool rrr) const {
     auto const t_enc_start = std::chrono::steady_clock::now();
     auto const encGuard = qScopeGuard([self = const_cast<Ft2QsoEngine*>(this), t_enc_start]() {
-        auto const us = std::chrono::duration_cast<std::chrono::microseconds>(
+        // Misuriamo in nanosecondi: buildTxMessage è solo string formatting,
+        // tipicamente sotto 1 µs. Misurare in microsecondi perderebbe risoluzione.
+        auto const ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - t_enc_start).count();
-        emit self->txEncodingProfile(us);
+        emit self->txEncodingProfile(ns);
     });
     Q_UNUSED(partnerGrid);
     QString const me   = m_cfg.myBaseCall;

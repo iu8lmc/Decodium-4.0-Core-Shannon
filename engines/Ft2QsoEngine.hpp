@@ -160,8 +160,9 @@ signals:
     void txLatencyMeasured(qint64 latencyUs, int txNum);
 
     // Telemetria Tier 1: durata di buildTxMessage (encoder TX1..TX6).
-    // Emesso ad ogni chiamata. Bridge aggiorna stat EMA per HUD PIPE/ENC.
-    void txEncodingProfile(qint64 encoderUs);
+    // Emesso ad ogni chiamata, in NANOSECONDI (buildTxMessage è sub-µs).
+    // Bridge converte a µs con round-up prima di passare alla EMA.
+    void txEncodingProfile(qint64 encoderNs);
 
 private:
     // ------------------------------------------------------------------

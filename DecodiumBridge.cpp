@@ -6400,8 +6400,12 @@ void DecodiumBridge::ensureFt2Engine(QString const& origin)
     // (engine usa il proprio buildTxMessage). Il qScopeGuard sul bridge restava
     // sempre 0. Misuriamo direttamente nell'engine, qui inoltriamo a HUD PIPE/ENC.
     connect(m_ft2Engine.get(), &decodium::ft2::Ft2QsoEngine::txEncodingProfile,
-            this, [this](qint64 encoderUs) {
-                updatePipelineSegmentEma(encoderUs, m_ft2LastEncoderUs, m_ft2AvgEncoderUs, m_ft2MaxEncoderUs);
+            this, [this](qint64 encoderNs) {
+                // buildTxMessage è sub-microsecondo. Round-up al µs per non
+                // azzerare l'EMA (cui (avg==0 ? sample : ...) la lascia a 0).
+                qint64 us = encoderNs / 1000;
+                if (us == 0 && encoderNs > 0) us = 1;
+                updatePipelineSegmentEma(us, m_ft2LastEncoderUs, m_ft2AvgEncoderUs, m_ft2MaxEncoderUs);
                 emit ft2PipelineProfileChanged();
             });
 
