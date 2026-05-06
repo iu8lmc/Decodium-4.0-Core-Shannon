@@ -21,10 +21,13 @@ extern "C"
                                       float* quals, signed char* bits77, char* decodeds,
                                       int* nout);
   void ftx_ft2_stage7_set_cancel_c (int cancel);
-  // Tier 1.5 — breakdown timing dell'ultimo decode_ft2_stage7 sul thread
+  // Tier 1.5/2 — breakdown timing dell'ultimo decode_ft2_stage7 sul thread
   // chiamante. Da invocare subito dopo ftx_ft2_async_decode_stage7_c.
+  // pri/apr/l91 sono sub-bucket di ldpc (vedi commento nell'impl).
   void ftx_ft2_stage7_last_profile_c (qint64* getcand_us, qint64* demod_us,
-                                      qint64* sync_us,    qint64* ldpc_us);
+                                      qint64* sync_us,    qint64* ldpc_us,
+                                      qint64* pri_us,     qint64* apr_us,
+                                      qint64* l91_us);
 }
 
 namespace
@@ -243,14 +246,19 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
   qint64 const emittedAtNs = t_decode_end.time_since_epoch ().count ();
   Q_EMIT asyncDecodeProfile (decoderUs, emittedAtNs);
 
-  // Tier 1.5 — leggi breakdown sub-stage timing dal thread_local profiler.
+  // Tier 1.5/2 — leggi breakdown sub-stage timing dal thread_local profiler.
   // Va fatto qui (stesso thread del decode) prima di tornare nel main loop.
   qint64 stage7Getcand = 0;
   qint64 stage7Demod   = 0;
   qint64 stage7Sync    = 0;
   qint64 stage7Ldpc    = 0;
-  ftx_ft2_stage7_last_profile_c (&stage7Getcand, &stage7Demod, &stage7Sync, &stage7Ldpc);
+  qint64 stage7Pri     = 0;
+  qint64 stage7Apr     = 0;
+  qint64 stage7L91     = 0;
+  ftx_ft2_stage7_last_profile_c (&stage7Getcand, &stage7Demod, &stage7Sync, &stage7Ldpc,
+                                 &stage7Pri, &stage7Apr, &stage7L91);
   Q_EMIT asyncStage7BreakdownProfile (stage7Getcand, stage7Demod, stage7Sync, stage7Ldpc);
+  Q_EMIT asyncStage7LdpcBreakdownProfile (stage7Pri, stage7Apr, stage7L91);
 
   Q_EMIT asyncDecodeReady (build_rows (QString {}, '~', nout, snrs, dts, freqs, naps, quals,
                                        decodeds));

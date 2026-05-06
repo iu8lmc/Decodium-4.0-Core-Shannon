@@ -3336,6 +3336,9 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // Tier 1.5: sub-stage breakdown — segue asyncDecodeProfile (FIFO).
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncStage7BreakdownProfile,
             this, &DecodiumBridge::onFt2AsyncStage7BreakdownProfile, Qt::QueuedConnection);
+    // Tier 2: sub-LDPC breakdown (PRI/APR/L91).
+    connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncStage7LdpcBreakdownProfile,
+            this, &DecodiumBridge::onFt2AsyncStage7LdpcBreakdownProfile, Qt::QueuedConnection);
     connect(m_ft2Worker, &decodium::ft2::FT2DecodeWorker::asyncDecodeReady,
             this, &DecodiumBridge::onFt2AsyncDecodeReady, Qt::QueuedConnection);
     connect(m_workerThreadFt2, &QThread::finished, m_ft2Worker, &QObject::deleteLater);
@@ -6556,6 +6559,21 @@ void DecodiumBridge::onFt2AsyncStage7BreakdownProfile(qint64 getcandUs, qint64 d
     updatePipelineSegmentEma(syncUs,    m_ft2LastSyncUs,    m_ft2AvgSyncUs,    m_ft2MaxSyncUs);
     updatePipelineSegmentEma(ldpcUs,    m_ft2LastLdpcUs,    m_ft2AvgLdpcUs,    m_ft2MaxLdpcUs);
     emit ft2Stage7BreakdownChanged();
+}
+
+// Tier 2 — sub-LDPC breakdown. Decompone ldpcUs nei suoi 3 contributi:
+//   priUs = pass 1-5 (LLR variants senza a-priori)
+//   aprUs = pass 6+  (a-priori retry path)
+//   l91Us = ftx_decode174_91_c cumulativo (BP + OSD interno Fortran)
+// Confronto utile: se aprUs domina → AP retry costoso → candidato per
+// ridurre nappasses; se l91Us ≈ priUs+aprUs → overhead non-LDPC trascurabile,
+// ottimizzazioni vanno nel decoder Fortran stesso.
+void DecodiumBridge::onFt2AsyncStage7LdpcBreakdownProfile(qint64 priUs, qint64 aprUs, qint64 l91Us)
+{
+    updatePipelineSegmentEma(priUs, m_ft2LastPriUs, m_ft2AvgPriUs, m_ft2MaxPriUs);
+    updatePipelineSegmentEma(aprUs, m_ft2LastAprUs, m_ft2AvgAprUs, m_ft2MaxAprUs);
+    updatePipelineSegmentEma(l91Us, m_ft2LastL91Us, m_ft2AvgL91Us, m_ft2MaxL91Us);
+    emit ft2LdpcBreakdownChanged();
 }
 
 void DecodiumBridge::setMode(const QString& v) {

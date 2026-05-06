@@ -443,31 +443,172 @@ Rectangle {
         }
 
         // ----- Stage7 sub-stage breakdown (Tier 1.5) -----
-        // Decompone la latenza DEC nelle sue 4 fasi native:
+        // Decompone la latenza DEC nelle sue 4 fasi native. Layout 2x2 perché
+        // 4 celle in una sola riga sovrapponevano avg/max sui display narrow.
         //   GET = ftx_getcandidates2_c (FFT + peak search candidate list)
         //   DMD = ftx_ft2_downsample_c (per candidato + average path)
         //   SYN = ftx_sync2d_c loop (segment search across freq bins)
         //   LDP = run_decode_passes (LDPC iter + OSD + AP retry)
         // Saturazioni euristiche su slot 3.75s — calibrare dopo i primi run.
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
-            spacing: 6
+            spacing: 4
             visible: bridge.ft2AvgGetcandUs > 0 || bridge.ft2AvgDemodUs > 0 ||
                      bridge.ft2AvgSyncUs    > 0 || bridge.ft2AvgLdpcUs  > 0
 
+            // Riga 1: STG label + GET, DMD
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Text {
+                    text: "STG"
+                    font.family: "Monospace"
+                    font.pixelSize: 9
+                    font.bold: true
+                    color: textSecondary
+                    Layout.preferredWidth: 24
+                }
+                Repeater {
+                    model: [
+                        { label: "GET", avgUs: bridge.ft2AvgGetcandUs, maxUs: bridge.ft2MaxGetcandUs, sat:  10.0 },
+                        { label: "DMD", avgUs: bridge.ft2AvgDemodUs,   maxUs: bridge.ft2MaxDemodUs,   sat:  20.0 }
+                    ]
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 16
+                        radius: 3
+                        clip: true
+                        readonly property real avgMs: modelData.avgUs / 1000.0
+                        readonly property real maxMs: modelData.maxUs / 1000.0
+                        readonly property real sat:   modelData.sat
+                        readonly property color tone:
+                            avgMs > sat        ? danger
+                          : avgMs > sat * 0.5  ? warning
+                          : avgMs > sat * 0.25 ? Qt.rgba(1, 1, 0.4, 1)
+                          : accent
+                        color: Qt.rgba(tone.r, tone.g, tone.b, 0.10)
+                        border.color: tone
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: parent.width * Math.min(parent.avgMs / parent.sat, 1.0)
+                            radius: 3
+                            color: Qt.rgba(parent.tone.r, parent.tone.g, parent.tone.b, 0.40)
+                            Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 5
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.label + " " + parent.avgMs.toFixed(1)
+                            font.family: "Monospace"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: parent.tone
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "↑" + parent.maxMs.toFixed(1)
+                            font.family: "Monospace"
+                            font.pixelSize: 8
+                            color: textSecondary
+                        }
+                    }
+                }
+            }
+
+            // Riga 2: spacer (allineato sotto STG) + SYN, LDP
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Item {
+                    Layout.preferredWidth: 24
+                }
+                Repeater {
+                    model: [
+                        { label: "SYN", avgUs: bridge.ft2AvgSyncUs, maxUs: bridge.ft2MaxSyncUs, sat: 200.0 },
+                        { label: "LDP", avgUs: bridge.ft2AvgLdpcUs, maxUs: bridge.ft2MaxLdpcUs, sat: 800.0 }
+                    ]
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 16
+                        radius: 3
+                        clip: true
+                        readonly property real avgMs: modelData.avgUs / 1000.0
+                        readonly property real maxMs: modelData.maxUs / 1000.0
+                        readonly property real sat:   modelData.sat
+                        readonly property color tone:
+                            avgMs > sat        ? danger
+                          : avgMs > sat * 0.5  ? warning
+                          : avgMs > sat * 0.25 ? Qt.rgba(1, 1, 0.4, 1)
+                          : accent
+                        color: Qt.rgba(tone.r, tone.g, tone.b, 0.10)
+                        border.color: tone
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: parent.width * Math.min(parent.avgMs / parent.sat, 1.0)
+                            radius: 3
+                            color: Qt.rgba(parent.tone.r, parent.tone.g, parent.tone.b, 0.40)
+                            Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                        }
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 5
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.label + " " + parent.avgMs.toFixed(1)
+                            font.family: "Monospace"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: parent.tone
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "↑" + parent.maxMs.toFixed(1)
+                            font.family: "Monospace"
+                            font.pixelSize: 8
+                            color: textSecondary
+                        }
+                    }
+                }
+            }
+        }
+
+        // ----- LDPC sub-breakdown (Tier 2) -----
+        // Decompone LDP nelle sue 3 sub-fasi (subset di LDP, non si sommano):
+        //   PRI = pass 1-5 (LLR variants senza a-priori) — costo "base"
+        //   APR = pass 6+  (a-priori retry, prepare_ap_pass + decode)
+        //   L91 = ftx_decode174_91_c cumulativo (BP + OSD nativo Fortran)
+        // Se APR ≫ PRI → AP retry costoso, candidato per ridurre nappasses.
+        // Se L91 ≈ PRI+APR → overhead non-LDPC trascurabile, ottimizzare BP/OSD.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: bridge.ft2AvgPriUs > 0 || bridge.ft2AvgAprUs > 0 || bridge.ft2AvgL91Us > 0
+
             Text {
-                text: "STG"
+                text: "LDP"
                 font.family: "Monospace"
                 font.pixelSize: 9
                 font.bold: true
                 color: textSecondary
+                Layout.preferredWidth: 24
             }
             Repeater {
                 model: [
-                    { label: "GET", avgUs: bridge.ft2AvgGetcandUs, maxUs: bridge.ft2MaxGetcandUs, sat:  200.0 },
-                    { label: "DMD", avgUs: bridge.ft2AvgDemodUs,   maxUs: bridge.ft2MaxDemodUs,   sat:  500.0 },
-                    { label: "SYN", avgUs: bridge.ft2AvgSyncUs,    maxUs: bridge.ft2MaxSyncUs,    sat: 1000.0 },
-                    { label: "LDP", avgUs: bridge.ft2AvgLdpcUs,    maxUs: bridge.ft2MaxLdpcUs,    sat: 1500.0 }
+                    { label: "PRI", avgUs: bridge.ft2AvgPriUs, maxUs: bridge.ft2MaxPriUs, sat: 200.0 },
+                    { label: "APR", avgUs: bridge.ft2AvgAprUs, maxUs: bridge.ft2MaxAprUs, sat: 600.0 },
+                    { label: "L91", avgUs: bridge.ft2AvgL91Us, maxUs: bridge.ft2MaxL91Us, sat: 800.0 }
                 ]
                 delegate: Rectangle {
                     Layout.fillWidth: true

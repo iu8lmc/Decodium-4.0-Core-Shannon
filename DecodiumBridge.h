@@ -362,6 +362,16 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(qlonglong ft2MaxSyncUs    READ ft2MaxSyncUs    NOTIFY ft2Stage7BreakdownChanged)
     Q_PROPERTY(qlonglong ft2AvgLdpcUs    READ ft2AvgLdpcUs    NOTIFY ft2Stage7BreakdownChanged)
     Q_PROPERTY(qlonglong ft2MaxLdpcUs    READ ft2MaxLdpcUs    NOTIFY ft2Stage7BreakdownChanged)
+    // FT2 sub-LDPC breakdown (Tier 2, microsecondi):
+    //   pri = pass 1-5 totali (LLR variants senza a-priori)
+    //   apr = pass 6+ totali  (a-priori retry, prepare_ap_pass + decode)
+    //   l91 = ftx_decode174_91_c cumulativo (BP + OSD nativo Fortran)
+    Q_PROPERTY(qlonglong ft2AvgPriUs READ ft2AvgPriUs NOTIFY ft2LdpcBreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxPriUs READ ft2MaxPriUs NOTIFY ft2LdpcBreakdownChanged)
+    Q_PROPERTY(qlonglong ft2AvgAprUs READ ft2AvgAprUs NOTIFY ft2LdpcBreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxAprUs READ ft2MaxAprUs NOTIFY ft2LdpcBreakdownChanged)
+    Q_PROPERTY(qlonglong ft2AvgL91Us READ ft2AvgL91Us NOTIFY ft2LdpcBreakdownChanged)
+    Q_PROPERTY(qlonglong ft2MaxL91Us READ ft2MaxL91Us NOTIFY ft2LdpcBreakdownChanged)
 
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
@@ -766,6 +776,13 @@ public:
     qlonglong ft2MaxSyncUs()    const noexcept { return m_ft2MaxSyncUs;    }
     qlonglong ft2AvgLdpcUs()    const noexcept { return m_ft2AvgLdpcUs;    }
     qlonglong ft2MaxLdpcUs()    const noexcept { return m_ft2MaxLdpcUs;    }
+    // Tier 2 — sub-LDPC breakdown (microsecondi).
+    qlonglong ft2AvgPriUs()     const noexcept { return m_ft2AvgPriUs;     }
+    qlonglong ft2MaxPriUs()     const noexcept { return m_ft2MaxPriUs;     }
+    qlonglong ft2AvgAprUs()     const noexcept { return m_ft2AvgAprUs;     }
+    qlonglong ft2MaxAprUs()     const noexcept { return m_ft2MaxAprUs;     }
+    qlonglong ft2AvgL91Us()     const noexcept { return m_ft2AvgL91Us;     }
+    qlonglong ft2MaxL91Us()     const noexcept { return m_ft2MaxL91Us;     }
     QObject*    logManager() { return this; }
     QObject*    propagationManager() const;
     QObject*    diagnostics() const { return m_diagnostics; }
@@ -1155,6 +1172,7 @@ signals:
     void ft2TxLatencyChanged();
     void ft2PipelineProfileChanged();
     void ft2Stage7BreakdownChanged();
+    void ft2LdpcBreakdownChanged();
     // appEngine stub signals
     void swlModeChanged();
     void splitModeChanged();
@@ -1224,6 +1242,8 @@ private slots:
     // accumulatori thread_local letti dal worker FT2 subito dopo il decode.
     void onFt2AsyncStage7BreakdownProfile(qint64 getcandUs, qint64 demodUs,
                                           qint64 syncUs,    qint64 ldpcUs);
+    // Tier 2 — sub-LDPC breakdown handler.
+    void onFt2AsyncStage7LdpcBreakdownProfile(qint64 priUs, qint64 aprUs, qint64 l91Us);
     void onFt4DecodeReady(quint64 serial, QStringList rows);
     void onQ65DecodeReady(quint64 serial, QStringList rows);
     void onMsk144DecodeReady(quint64 serial, QStringList rows);
@@ -1630,6 +1650,16 @@ private:
     qint64 m_ft2LastLdpcUs    {0};
     qint64 m_ft2AvgLdpcUs     {0};
     qint64 m_ft2MaxLdpcUs     {0};
+    // Tier 2 — sub-LDPC.
+    qint64 m_ft2LastPriUs     {0};
+    qint64 m_ft2AvgPriUs      {0};
+    qint64 m_ft2MaxPriUs      {0};
+    qint64 m_ft2LastAprUs     {0};
+    qint64 m_ft2AvgAprUs      {0};
+    qint64 m_ft2MaxAprUs      {0};
+    qint64 m_ft2LastL91Us     {0};
+    qint64 m_ft2AvgL91Us      {0};
+    qint64 m_ft2MaxL91Us      {0};
     void   updatePipelineSegmentEma(qint64 sampleUs,
                                     qint64& last, qint64& avg, qint64& max) noexcept;
     QThread* m_workerThreadFt4 {nullptr};

@@ -59,7 +59,11 @@ struct Stage7Profile
   qint64 getcand_us {0};   // ftx_getcandidates2_c (FFT + peak search)
   qint64 demod_us   {0};   // ftx_ft2_downsample_c (per-candidato)
   qint64 sync_us    {0};   // ftx_sync2d_c loop (segment search)
-  qint64 ldpc_us    {0};   // run_decode_passes (LDPC + OSD/AP)
+  qint64 ldpc_us    {0};   // run_decode_passes total (LDPC + OSD + AP)
+  // Tier 2 — sub-LDPC breakdown (subset di ldpc_us, non si somma).
+  qint64 pri_us     {0};   // pass 1-5: 5 LLR variants senza a-priori
+  qint64 apr_us     {0};   // pass 6+ : a-priori retry (prepare_ap_pass + decode)
+  qint64 l91_us     {0};   // ftx_decode174_91_c cumulativo (BP + OSD nativo)
 };
 
 inline Stage7Profile& stage7_profile ()
@@ -1542,12 +1546,16 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
   // AP pass resolves to iaptype=0. Weak-signal cases rely on that quirk, so
   // the stage-7 port keeps the same mask state within a single decode attempt.
   std::array<signed char, kFt2Codeword> apmask {};
+  Stage7Profile& s7p_dec = stage7_profile ();
   for (int ipass = 1; ipass <= npasses; ++ipass)
     {
       if (stage7_should_cancel ())
         {
           return result;
         }
+      // Tier 2 — bucket pass time in PRI (1-5) o APR (>=6 = a-priori retry).
+      // Si distrugge a fine iterazione (continue/break/return) accumulando.
+      Stage7TimeAccum ta_pass (ipass <= 5 ? s7p_dec.pri_us : s7p_dec.apr_us);
       std::array<float, kFt2Codeword> llr {};
       int iaptype = 0;
       if (ipass == 1)
@@ -1594,8 +1602,11 @@ DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& set
         }
 
       stage7_debug_log_llr_state (ipass, iaptype, f_for_ap, llr, apmask);
-      ftx_decode174_91_c (llr.data (), 91, maxosd, 3, apmask.data (), message91.data (),
-                          cw.data (), &ntype, &nharderror, &dmin);
+      {
+        Stage7TimeAccum ta_l91 (s7p_dec.l91_us);
+        ftx_decode174_91_c (llr.data (), 91, maxosd, 3, apmask.data (), message91.data (),
+                            cw.data (), &ntype, &nharderror, &dmin);
+      }
       stage7_debug_logf ("pass=%d iaptype=%d maxosd=%d nharderror=%d dmin=%.3f",
                         ipass, iaptype, maxosd, nharderror, dmin);
       if (!any_message_bits (message91))
@@ -2493,19 +2504,30 @@ extern "C" void ftx_ft2_stage7_clravg_c ()
 }
 
 // Tier 1.5 — espone l'ultimo breakdown timing del decode_ft2_stage7
-// completato sul thread chiamante. I quattro accumulatori sono in
-// thread_local, quindi la funzione va invocata dallo stesso worker thread
-// che ha eseguito decode_ft2_stage7. Output in microsecondi.
+// completato sul thread chiamante. Gli accumulatori sono in thread_local,
+// quindi la funzione va invocata dallo stesso worker thread che ha eseguito
+// decode_ft2_stage7. Output in microsecondi.
+//
+// Tier 2 (1.0.96) — pri/apr/l91 sono sub-bucket di ldpc (non si sommano):
+//   pri = pass 1-5 totale (LLR variants senza a-priori)
+//   apr = pass 6+ totale  (a-priori retry)
+//   l91 = ftx_decode174_91_c cumulativo (BP + OSD nativo Fortran)
 extern "C" void ftx_ft2_stage7_last_profile_c (qint64* getcand_us,
                                                qint64* demod_us,
                                                qint64* sync_us,
-                                               qint64* ldpc_us)
+                                               qint64* ldpc_us,
+                                               qint64* pri_us,
+                                               qint64* apr_us,
+                                               qint64* l91_us)
 {
   Stage7Profile const& p = stage7_profile ();
   if (getcand_us) *getcand_us = p.getcand_us;
   if (demod_us)   *demod_us   = p.demod_us;
   if (sync_us)    *sync_us    = p.sync_us;
   if (ldpc_us)    *ldpc_us    = p.ldpc_us;
+  if (pri_us)     *pri_us     = p.pri_us;
+  if (apr_us)     *apr_us     = p.apr_us;
+  if (l91_us)     *l91_us     = p.l91_us;
 }
 
 extern "C" int ftx_ft2_cpp_dsp_rollout_stage_c ()

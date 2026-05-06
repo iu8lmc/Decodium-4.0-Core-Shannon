@@ -69,6 +69,12 @@ Q_SIGNALS:
   void asyncStage7BreakdownProfile (qint64 getcandUs, qint64 demodUs,
                                     qint64 syncUs,    qint64 ldpcUs);
 
+  // Tier 2 telemetry: sub-LDPC breakdown (subset di ldpcUs, non si somma):
+  //   priUs = run_decode_passes pass 1-5 totali (LLR variants senza AP)
+  //   aprUs = run_decode_passes pass 6+ totali  (a-priori retry)
+  //   l91Us = ftx_decode174_91_c cumulativo (BP + OSD nativo Fortran)
+  void asyncStage7LdpcBreakdownProfile (qint64 priUs, qint64 aprUs, qint64 l91Us);
+
   void asyncDecodeReady (QStringList rows);
   void decodeReady (quint64 serial, QStringList rows);
 
