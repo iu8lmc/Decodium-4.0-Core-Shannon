@@ -3339,10 +3339,15 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 #if defined(Q_OS_LINUX)
     m_workerThreadFt2->start(QThread::LowPriority);
 #else
-    // Windows: HighPriority per evitare preempt da render UI/waterfall.
-    // Misurazioni 1.0.89 mostravano DEC peak 2.9s e QUE peak 241ms con
-    // priorità default (InheritPriority = NormalPriority del main thread).
-    m_workerThreadFt2->start(QThread::HighPriority);
+    // Windows: NormalPriority esplicita.
+    // 1.0.90 aveva alzato a HighPriority per migliorare DEC peak/QUE peak,
+    // ma su Windows HighPriority preempta il main thread durante stage7
+    // (270ms-1.7s di CPU): si traducono in stalli main-thread di 260-320ms
+    // ogni slot e in audio watchdog restart per "waterfall stalled: no
+    // spectrum samples". Le ottimizzazioni telemetriche viste tra 1.0.89 e
+    // 1.0.92 (DEC -33% avg, -47% max) erano dovute al refactor pipeline,
+    // non al boost di priority — quindi tornare a NormalPriority è sicuro.
+    m_workerThreadFt2->start(QThread::NormalPriority);
 #endif
 
     // Worker thread for FT4 decoder
