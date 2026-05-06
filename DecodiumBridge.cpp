@@ -3339,7 +3339,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 #if defined(Q_OS_LINUX)
     m_workerThreadFt2->start(QThread::LowPriority);
 #else
-    m_workerThreadFt2->start();
+    // Windows: HighPriority per evitare preempt da render UI/waterfall.
+    // Misurazioni 1.0.89 mostravano DEC peak 2.9s e QUE peak 241ms con
+    // priorità default (InheritPriority = NormalPriority del main thread).
+    m_workerThreadFt2->start(QThread::HighPriority);
 #endif
 
     // Worker thread for FT4 decoder
