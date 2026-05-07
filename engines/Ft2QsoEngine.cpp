@@ -658,21 +658,27 @@ QString Ft2QsoEngine::dxCall() const {
 // ==========================================================================
 
 bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
-    // Quality gate: scarta decode "spuri" sotto SNR minimo.
-    if (row.snr < m_cfg.minSnr) {
-        emit engineDiagnostic(QStringLiteral("[Ft2Engine] dropped weak %1 SNR=%2 < %3")
+    // Stati passivi (Idle/CallingCq) vs impegnati. Sia il quality gate sia
+    // il double-confirm si applicano SOLO ai passivi: una volta dentro un
+    // QSO non vogliamo abbandonarlo solo perche` un singolo slot del partner
+    // arriva debole o sotto soglia. Se non avanziamo il sequencer, il QSO
+    // si blocca (sintomo 1.0.98: TX5/73 mandato ma chiusura non scatta
+    // perche` il decode di chiusura del partner viene scartato dal gate).
+    bool const isPassiveState = std::holds_alternative<state::Idle>(m_state)
+                             || std::holds_alternative<state::CallingCq>(m_state);
+
+    if (isPassiveState && row.snr < m_cfg.minSnr) {
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] dropped weak %1 SNR=%2 < %3 (passive)")
                               .arg(row.fromCall.isEmpty() ? QStringLiteral("?") : row.fromCall)
                               .arg(row.snr).arg(m_cfg.minSnr));
         return false;
     }
 
-    // Double-confirm: solo per decode directedToMe in stati passivi
-    // (Idle/CallingCq). Decode di partner gia` engaged sono sempre processati
-    // — non si abbandona un QSO aperto solo perche` un singolo slot e` perso.
-    if (m_cfg.requireDoubleConfirm && row.directedToMe && !row.fromCall.isEmpty()) {
-        bool const isPassive = std::holds_alternative<state::Idle>(m_state)
-                            || std::holds_alternative<state::CallingCq>(m_state);
-        if (isPassive && !checkAndUpdateDoubleConfirm(row)) {
+    // Double-confirm: solo per decode directedToMe in stati passivi.
+    // Decode di partner gia` engaged sono sempre processati.
+    if (m_cfg.requireDoubleConfirm && row.directedToMe && !row.fromCall.isEmpty()
+        && isPassiveState) {
+        if (!checkAndUpdateDoubleConfirm(row)) {
             return false;
         }
     }
