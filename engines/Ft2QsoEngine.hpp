@@ -237,6 +237,11 @@ private:
     QTimer*                 m_tickTimer {nullptr};
     std::function<TimePoint()> m_clockOverride;
 
+    // Anti-flap (1.0.98): istante dell'ultima transizione di stato. Usato da
+    // transitionTo per rifiutare regressioni Replying* -> Idle/CallingCq se
+    // siamo nello stato corrente da meno di m_cfg.minStateMs.
+    TimePoint               m_lastTransitionTime {};
+
     // Monotonic event id — every feed() call increments to support replay
     // and idempotency assertions in tests.
     std::uint64_t           m_eventCounter {0};

@@ -280,6 +280,11 @@ struct EngineConfig {
     // processati senza conferma — non si abbandona un QSO già aperto.
     bool     requireDoubleConfirm   {true};
     int      doubleConfirmWindowMs  {15000};   // ~3 slot FT2
+    // Anti-flap (1.0.98): rifiuta transizioni regressive (verso Idle/CallingCq
+    // da uno stato impegnato) se la permanenza nello stato corrente e' minore
+    // di minStateMs. Evita oscillazioni Replying<->Idle quando la propagazione
+    // cattiva fa apparire e sparire il partner ad ogni slot.
+    int      minStateMs             {5000};    // 1 slot FT2 di stickiness
 };
 
 // ============================================================================

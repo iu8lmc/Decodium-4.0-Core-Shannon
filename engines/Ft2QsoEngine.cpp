@@ -900,7 +900,34 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
 void Ft2QsoEngine::transitionTo(StateVariant next, QString const& reason) {
     char const* prevName = stateName(m_state);
     bool const enteringClosing = std::holds_alternative<state::Closing>(next);
+
+    // Anti-flap (1.0.98): rifiuta transizioni regressive (verso Idle o
+    // CallingCq da uno stato impegnato) se la permanenza nello stato corrente
+    // e' < minStateMs. Le transizioni di abort esplicito (abortQso) e quelle
+    // verso Closing rimangono sempre permesse — queste sono "esiti" del QSO,
+    // non flap di propagazione. La regressione e' identificata dal target.
+    bool const nextIsRegressive = std::holds_alternative<state::Idle>(next)
+                               || std::holds_alternative<state::CallingCq>(next);
+    bool const currentIsEngaged = !std::holds_alternative<state::Idle>(m_state)
+                               && !std::holds_alternative<state::CallingCq>(m_state)
+                               && !std::holds_alternative<state::Closing>(m_state);
+    bool const isExplicitAbort  = reason.startsWith(QStringLiteral("abort:"));
+    bool const isWatchdogExpiry = reason.startsWith(QStringLiteral("watchdog:"));
+    if (nextIsRegressive && currentIsEngaged && m_cfg.minStateMs > 0
+        && m_lastTransitionTime != TimePoint{}
+        && !isExplicitAbort && !isWatchdogExpiry) {
+        auto const elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   clockNow() - m_lastTransitionTime).count();
+        if (elapsedMs < m_cfg.minStateMs) {
+            emit engineDiagnostic(QStringLiteral("[Ft2Engine] anti-flap reject %1 -> %2 (%3 ms < %4 ms, reason=%5)")
+                                  .arg(prevName).arg(stateName(next))
+                                  .arg(elapsedMs).arg(m_cfg.minStateMs).arg(reason));
+            return;
+        }
+    }
+
     m_state = std::move(next);
+    m_lastTransitionTime = clockNow();
     char const* nextName = stateName(m_state);
     if (enteringClosing) {
         // Arm TX-end short-circuit (see notifyBackendTxStateChanged()).
