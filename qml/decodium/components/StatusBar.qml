@@ -14,9 +14,19 @@ Rectangle {
     property double audioLevel: 0.0  // raw RMS 0.0..1.0 da DecodiumAudioSink
     property double signalLevel: 0.0 // legacy S-meter in dB circa 0..90
     property double cpuUsage: bridge ? bridge.processCpuUsage : 0.0    // Decodium process, normalized 0.0..1.0
+    property double processGpuUsage: bridge ? bridge.processGpuUsage : -1.0
+    readonly property bool realGpuUsageAvailable: processGpuUsage >= 0.0
     property int gpuFrameCount: 0
     property int gpuFps: 0
     property double gpuActivity: 0.0
+    readonly property double displayedGpuActivity: realGpuUsageAvailable
+        ? Math.max(0.0, Math.min(1.0, processGpuUsage))
+        : gpuActivity
+    readonly property double gpuLoadPercentValue: displayedGpuActivity * 100.0
+    readonly property int gpuLoadPercent: Math.round(gpuLoadPercentValue)
+    readonly property string gpuLoadText: realGpuUsageAvailable
+        ? (gpuLoadPercentValue < 10.0 ? gpuLoadPercentValue.toFixed(1) + "%" : gpuLoadPercent.toFixed(0) + "%")
+        : gpuLoadPercent + "%"
     property double rigPowerWatts: bridge ? bridge.rigPowerWatts : 0.0
     property double rigSwr: bridge ? bridge.rigSwr : 0.0
     property bool pwrAndSwrEnabled: bridge ? bridge.getSetting("PWRandSWR", false) : false
@@ -517,19 +527,19 @@ Rectangle {
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
                         anchors.margins: 2
-                        width: Math.max(0, Math.min(parent.width - 4, (parent.width - 4) * gpuActivity))
+                        width: Math.max(0, Math.min(parent.width - 4, (parent.width - 4) * displayedGpuActivity))
                         radius: 1
-                        color: gpuActivity < 0.5 ? secondaryCyan :
-                               gpuActivity < 0.8 ? colorOrange : colorRed
+                        color: displayedGpuActivity < 0.5 ? secondaryCyan :
+                               displayedGpuActivity < 0.8 ? colorOrange : colorRed
                     }
                 }
 
                 Text {
-                    text: gpuFps > 0 ? gpuFps + "fps" : "idle"
+                    text: gpuLoadText
                     font.family: "Monospace"
                     font.pixelSize: 10
-                    color: gpuActivity > 0.8 ? colorRed : textSecondary
-                    Layout.preferredWidth: 36
+                    color: displayedGpuActivity > 0.8 ? colorRed : textSecondary
+                    Layout.preferredWidth: realGpuUsageAvailable ? 38 : 30
                 }
             }
 
@@ -542,7 +552,13 @@ Rectangle {
                 ToolTip {
                     visible: gpuMonitorMouse.containsMouse
                     delay: 500
-                    text: "Qt Quick GPU/render activity\n" + gpuFps + " rendered frames/s"
+                    text: realGpuUsageAvailable
+                          ? "Real Decodium GPU process usage\n"
+                            + gpuLoadText + " from OS GPU counters\n"
+                            + gpuFps + " rendered frames/s"
+                          : "Estimated Decodium GPU/render load\n"
+                            + gpuLoadText + " normalized render activity\n"
+                            + gpuFps + " rendered frames/s"
                 }
             }
         }

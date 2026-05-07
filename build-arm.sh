@@ -71,6 +71,20 @@ docker run --rm -i --platform linux/arm64 \
           -DCMAKE_INSTALL_PREFIX=/tmp/wsjtx_install \
           -DQT_MAJOR_VERSION=6
 
+        echo '>>> Verifying AppImage GPU build path...'
+        RHI_FLAG="$(cat /build/decodium_qt_rhi_texture_upload.enabled 2>/dev/null || echo 0)"
+        QSB_FLAG="$(cat /build/decodium_qsb_shaders.enabled 2>/dev/null || echo 0)"
+        echo "DECODIUM_QT_RHI_TEXTURE_UPLOAD=${RHI_FLAG}"
+        echo "DECODIUM_QSB_SHADERS=${QSB_FLAG}"
+        if [ "${RHI_FLAG}" != "1" ]; then
+            echo "error: AppImage build did not enable DECODIUM_QT_RHI_TEXTURE_UPLOAD=1; install Qt6 GuiPrivate/private headers or use a non-release fallback build" >&2
+            exit 1
+        fi
+        if [ "${QSB_FLAG}" != "1" ]; then
+            echo "error: AppImage build did not enable QSB shaders; install qt6-shadertools-dev" >&2
+            exit 1
+        fi
+
         echo '>>> Building targets...'
         # Reduced parallelism to avoid OOM killer on memory-intensive files like qcustomplot
         make -j2

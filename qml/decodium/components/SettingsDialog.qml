@@ -269,11 +269,59 @@ Dialog {
     function activeStopBitsText() {
         var controller = activeCatController()
         if (!controller || controller.stopBits === undefined || controller.stopBits === null)
-            return "1"
+            return "Default"
         var text = String(controller.stopBits).trim().toLowerCase()
+        if (text === "" || text === "default" || text === "predefinito" || text === "auto")
+            return "Default"
         if (text === "2" || text === "2.0" || text.indexOf("two") >= 0)
             return "2"
-        return "1"
+        if (text === "1" || text === "1.0" || text.indexOf("one") >= 0)
+            return "1"
+        return "Default"
+    }
+
+    function normalizedCatSerialChoice(value) {
+        var text = String(value === undefined || value === null ? "" : value).trim()
+        var lower = text.toLowerCase()
+        if (lower === "" || lower === "default" || lower === "predefinito" || lower === "auto")
+            return "Default"
+        if (lower === "none" || lower === "no" || lower === "off")
+            return "none"
+        if (lower === "xonxoff" || lower === "xon/xoff" || lower.indexOf("software") >= 0)
+            return "xonxoff"
+        if (lower === "hardware" || lower === "hw")
+            return "hardware"
+        if (lower === "7" || lower.indexOf("seven") >= 0)
+            return "7"
+        if (lower === "8" || lower.indexOf("eight") >= 0)
+            return "8"
+        if (lower === "2" || lower === "2.0" || lower.indexOf("two") >= 0)
+            return "2"
+        if (lower === "1" || lower === "1.0" || lower.indexOf("one") >= 0)
+            return "1"
+        return "Default"
+    }
+
+    function catSerialChoiceIndex(model, value, fallbackIndex) {
+        var wanted = normalizedCatSerialChoice(value).toLowerCase()
+        for (var i = 0; i < model.length; ++i) {
+            if (String(model[i]).trim().toLowerCase() === wanted)
+                return i
+        }
+        return fallbackIndex
+    }
+
+    function handshakeChoiceLabel(value) {
+        var normalized = normalizedCatSerialChoice(value)
+        if (normalized === "Default")
+            return qsTr("Default")
+        if (normalized === "none")
+            return qsTr("None")
+        if (normalized === "xonxoff")
+            return "XON/XOFF"
+        if (normalized === "hardware")
+            return qsTr("Hardware")
+        return String(value)
     }
 
     function stringListIndexOf(list, value) {
@@ -1785,11 +1833,11 @@ Dialog {
                         ComboBox {
                             id: dataBitsCombo
                             visible: settingsDialog.usesSerialControls()
-                            model: ["8","7"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Default","8","7"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
                                 if (!bridge.catManager)
                                     return 0
-                                return Math.max(0, find(String(bridge.catManager.dataBits)))
+                                return settingsDialog.catSerialChoiceIndex(model, bridge.catManager.dataBits, 0)
                             }
                             onActivated: {
                                 if (bridge.catManager) bridge.catManager.dataBits = currentText
@@ -1805,9 +1853,9 @@ Dialog {
                         ComboBox {
                             id: stopBitsCombo
                             visible: settingsDialog.usesSerialControls()
-                            model: ["1","2"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Default","1","2"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
-                                return settingsDialog.activeStopBitsText() === "2" ? 1 : 0
+                                return settingsDialog.catSerialChoiceIndex(model, settingsDialog.activeStopBitsText(), 0)
                             }
                             onActivated: {
                                 if (bridge.catManager) bridge.catManager.stopBits = currentText
@@ -1824,11 +1872,11 @@ Dialog {
                         ComboBox {
                             id: handshakeCombo
                             visible: settingsDialog.usesSerialControls()
-                            model: ["none","xonxoff","hardware"]; Layout.fillWidth: true; implicitHeight: controlHeight
+                            model: ["Default","none","xonxoff","hardware"]; Layout.fillWidth: true; implicitHeight: controlHeight
                             currentIndex: {
                                 if (!bridge.catManager)
                                     return 0
-                                return Math.max(0, find(String(bridge.catManager.handshake)))
+                                return settingsDialog.catSerialChoiceIndex(model, bridge.catManager.handshake, 0)
                             }
                             onActivated: {
                                 if (bridge.catManager) {
@@ -1838,8 +1886,8 @@ Dialog {
                                 settingsDialog.scheduleCatPersist()
                             }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: handshakeCombo.displayText === "none" ? qsTr("None") : (handshakeCombo.displayText === "xonxoff" ? "XON/XOFF" : qsTr("Hardware")); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
-                            delegate: ItemDelegate { contentItem: Text { text: modelData === "none" ? qsTr("None") : (modelData === "xonxoff" ? "XON/XOFF" : qsTr("Hardware")); color: textPrimary; font.pixelSize: 12 }
+                            contentItem: Text { text: settingsDialog.handshakeChoiceLabel(handshakeCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            delegate: ItemDelegate { contentItem: Text { text: settingsDialog.handshakeChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup: SettingsComboPopup { combo: handshakeCombo }
                         }
@@ -1851,11 +1899,18 @@ Dialog {
                             visible: settingsDialog.usesSerialControls()
                             enabled: settingsDialog.forceDtrControlEnabled()
                             model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: enabled ? find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceDtr : false,
-                                                                                      bridge.catManager ? bridge.catManager.dtrHigh : false)) : 0
+                            currentIndex: {
+                                if (!enabled || !bridge.catManager)
+                                    return 0
+                                var v = settingsDialog.forceLineMode(bridge.catManager.forceDtr, bridge.catManager.dtrHigh)
+                                var idx = find(v)
+                                return idx >= 0 ? idx : 0
+                            }
                             onActivated: settingsDialog.applyForceLineValue("dtr", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            // Lookup diretto su model[currentIndex] — displayText non si propaga
+                            // affidabilmente al primo render con model JS array (Qt 6 quirk).
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceDtrCombo.model[Math.max(0, forceDtrCombo.currentIndex)]); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup: SettingsComboPopup { combo: forceDtrCombo }
@@ -1866,11 +1921,16 @@ Dialog {
                             visible: settingsDialog.usesSerialControls()
                             enabled: settingsDialog.forceRtsControlEnabled()
                             model: ["Default","On","Off"]; Layout.fillWidth: true; implicitHeight: controlHeight
-                            currentIndex: enabled ? find(settingsDialog.forceLineMode(bridge.catManager ? bridge.catManager.forceRts : false,
-                                                                                      bridge.catManager ? bridge.catManager.rtsHigh : false)) : 0
+                            currentIndex: {
+                                if (!enabled || !bridge.catManager)
+                                    return 0
+                                var v = settingsDialog.forceLineMode(bridge.catManager.forceRts, bridge.catManager.rtsHigh)
+                                var idx = find(v)
+                                return idx >= 0 ? idx : 0
+                            }
                             onActivated: settingsDialog.applyForceLineValue("rts", currentText)
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
-                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.displayText); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
+                            contentItem: Text { text: settingsDialog.setupChoiceLabel(forceRtsCombo.model[Math.max(0, forceRtsCombo.currentIndex)]); color: textPrimary; font.pixelSize: controlFontSize; leftPadding: 8; verticalAlignment: Text.AlignVCenter }
                             delegate: ItemDelegate { contentItem: Text { text: settingsDialog.setupChoiceLabel(modelData); color: textPrimary; font.pixelSize: 12 }
                                 background: Rectangle { color: parent.highlighted ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.3) : bgMedium } }
                             popup: SettingsComboPopup { combo: forceRtsCombo }

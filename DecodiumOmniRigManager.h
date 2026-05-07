@@ -77,7 +77,7 @@ public:
     QString     tciPort()       const { return {}; }
     QString     pttMethod()     const { return m_pttMethod; }
     QString     pttPort()       const { return "CAT"; }
-    QString     splitMode()     const { return "none"; }
+    QString     splitMode()     const { return m_splitMode; }
     int         pollInterval()  const { return m_pollInterval; }
     QString     portType()      const { return "none"; }   // nessuna porta diretta
 
@@ -91,7 +91,7 @@ public:
     QStringList portList()      const { return {"CAT"}; }
     QStringList baudList()      const { return {}; }
     QStringList pttMethodList() const { return {"VOX","CAT","DTR","RTS"}; }
-    QStringList splitModeList() const { return {"none"}; }
+    QStringList splitModeList() const { return {"none","rig","emulate"}; }
 
     bool catAutoConnect()       const { return m_catAutoConnect; }
     bool audioAutoStart()       const { return m_audioAutoStart; }
@@ -113,7 +113,7 @@ public:
     void setTciPort(const QString&)       {}
     void setPttMethod(const QString& v)   { if (m_pttMethod != v) { m_pttMethod = v; emit pttMethodChanged(); } }
     void setPttPort(const QString&)       {}
-    void setSplitMode(const QString&)     {}
+    void setSplitMode(const QString& v);
     void setPollInterval(int v)           { if (m_pollInterval != v) { m_pollInterval = v; emit pollIntervalChanged(); applyPollInterval(); } }
     void setCatAutoConnect(bool v)        { if (m_catAutoConnect != v) { m_catAutoConnect = v; emit catAutoConnectChanged(); } }
     void setAudioAutoStart(bool v)        { if (m_audioAutoStart != v) { m_audioAutoStart = v; emit audioAutoStartChanged(); } }
@@ -178,6 +178,7 @@ private:
     int     m_pollInterval  {2};
     int     m_readableParams{0};
     int     m_writableParams{0};
+    QString m_splitMode     {"none"};  // "none" | "rig" | "emulate" (Fake It)
 
     double  m_frequency     {0.0};
     double  m_txFrequency   {0.0};

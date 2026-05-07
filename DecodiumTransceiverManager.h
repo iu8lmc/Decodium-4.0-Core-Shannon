@@ -113,8 +113,8 @@ public:
     void setRigName(const QString&);
     void setSerialPort(const QString& v);
     void setBaudRate(int v)               { if (m_baudRate != v)   { m_baudRate = v;   emit baudRateChanged(); } }
-    void setDataBits(const QString& v)    { if (m_dataBits != v)   { m_dataBits = v;   emit dataBitsChanged(); } }
-    void setStopBits(const QString& v)    { if (m_stopBits != v)   { m_stopBits = v;   emit stopBitsChanged(); } }
+    void setDataBits(const QString& v);
+    void setStopBits(const QString& v);
     void setHandshake(const QString& v);
     void setForceDtr(bool v);
     void setDtrHigh(bool v);
@@ -209,9 +209,9 @@ private:
     QString m_rigName      {"None"};   // "None" = Hamlib Dummy (basic_transceiver_name_)
     QString m_serialPort   {"COM3"};
     int     m_baudRate     {57600};
-    QString m_dataBits     {"8"};
-    QString m_stopBits     {"1"};
-    QString m_handshake    {"none"};
+    QString m_dataBits     {"Default"};
+    QString m_stopBits     {"Default"};
+    QString m_handshake    {"Default"};
     bool    m_forceDtr     {false};
     bool    m_dtrHigh      {false};
     bool    m_forceRts     {false};

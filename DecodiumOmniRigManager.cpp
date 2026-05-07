@@ -573,7 +573,21 @@ void DecodiumOmniRigManager::saveSettings()
     s.setValue("pollInterval",   m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
+    s.setValue("splitMode",      m_splitMode);
     s.endGroup();
+}
+
+void DecodiumOmniRigManager::setSplitMode(const QString& v)
+{
+    QString normalized = v.trimmed().toLower();
+    if (normalized == QStringLiteral("fake") || normalized == QStringLiteral("fake it"))
+        normalized = QStringLiteral("emulate");
+    if (normalized != QStringLiteral("rig") && normalized != QStringLiteral("emulate"))
+        normalized = QStringLiteral("none");
+    if (m_splitMode == normalized)
+        return;
+    m_splitMode = normalized;
+    emit splitModeChanged();
 }
 
 void DecodiumOmniRigManager::loadSettings()
@@ -588,6 +602,14 @@ void DecodiumOmniRigManager::loadSettings()
     m_pollInterval   = boundedPollInterval(s.value("pollInterval", 2).toInt());
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
+    {
+        QString sm = s.value("splitMode", "none").toString().trimmed().toLower();
+        if (sm == QStringLiteral("fake") || sm == QStringLiteral("fake it"))
+            sm = QStringLiteral("emulate");
+        if (sm != QStringLiteral("rig") && sm != QStringLiteral("emulate"))
+            sm = QStringLiteral("none");
+        m_splitMode = sm;
+    }
     s.endGroup();
 
     if (!hasRigName) {
@@ -719,7 +741,21 @@ void DecodiumOmniRigManager::saveSettings()
     s.setValue("pollInterval",   m_pollInterval);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
+    s.setValue("splitMode",      m_splitMode);
     s.endGroup();
+}
+
+void DecodiumOmniRigManager::setSplitMode(const QString& v)
+{
+    QString normalized = v.trimmed().toLower();
+    if (normalized == QStringLiteral("fake") || normalized == QStringLiteral("fake it"))
+        normalized = QStringLiteral("emulate");
+    if (normalized != QStringLiteral("rig") && normalized != QStringLiteral("emulate"))
+        normalized = QStringLiteral("none");
+    if (m_splitMode == normalized)
+        return;
+    m_splitMode = normalized;
+    emit splitModeChanged();
 }
 
 void DecodiumOmniRigManager::loadSettings()
@@ -734,6 +770,14 @@ void DecodiumOmniRigManager::loadSettings()
     m_pollInterval   = boundedPollInterval(s.value("pollInterval", 2).toInt());
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
+    {
+        QString sm = s.value("splitMode", "none").toString().trimmed().toLower();
+        if (sm == QStringLiteral("fake") || sm == QStringLiteral("fake it"))
+            sm = QStringLiteral("emulate");
+        if (sm != QStringLiteral("rig") && sm != QStringLiteral("emulate"))
+            sm = QStringLiteral("none");
+        m_splitMode = sm;
+    }
     s.endGroup();
 
     if (!hasRigName) {

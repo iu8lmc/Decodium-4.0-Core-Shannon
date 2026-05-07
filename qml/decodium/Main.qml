@@ -7698,36 +7698,6 @@ ApplicationWindow {
                             ToolTip.delay: 500
                         }
 
-                        // Close button
-                        Rectangle {
-                            width: 28
-                            height: 24
-                            radius: 4
-                            color: closeMA.containsMouse ? Qt.rgba(244/255, 67/255, 54/255, 0.3) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.1)
-                            border.color: closeMA.containsMouse ? bridge.themeManager.ledRed : glassBorder
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "✕"
-                                font.pixelSize: 12
-                                font.bold: true
-                                color: closeMA.containsMouse ? bridge.themeManager.ledRed : textPrimary
-                            }
-
-                            MouseArea {
-                                id: closeMA
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-	                                onClicked: {
-	                                    mainWindow.dockWaterfallPanel()
-	                                }
-	                            }
-
-                            ToolTip.visible: closeMA.containsMouse
-	                            ToolTip.text: "Close and dock"
-                            ToolTip.delay: 500
-                        }
                     }
                 }
 

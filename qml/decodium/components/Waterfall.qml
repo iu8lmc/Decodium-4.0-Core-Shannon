@@ -19,6 +19,7 @@ Item {
     property int  maxFreq: 3200
     property int  spectrumHeight: 150
     property bool restoringSettings: false
+    property var spectrumDecodeLabels: []
 
     // Altezza minima/massima del grafico spettro (regolabile tramite drag)
     readonly property int spectrumMinHeight: 60
@@ -462,6 +463,9 @@ Item {
             running:        bridge.monitoring
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
+            // 1.0.74 non espone ft2State: mantieni il throttle legato solo al modo FT2.
+            throttleActive: bridge.mode === "FT2"
+            throttleIntervalMs: 200
             // Carica valori da Settings al primo avvio.
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
 
@@ -514,12 +518,349 @@ Item {
                 mainWindow.scheduleSave()
             }
             onMeasuredFloorChanged: waterfallPanel.applyManualContrast()
+            onGpuFftUnavailable: function(reason) {
+                bridge.setGpuPanadapterFftAvailable(false, reason)
+            }
 
             onFrequencySelected: function(freq) {
                 waterfallPanel.frequencySelected(freq)        // RX
             }
             onTxFrequencySelected: function(freq) {
                 waterfallPanel.txFrequencySelected(freq)      // TX
+            }
+
+            Item {
+                id: spectrumGpuOverlay
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: Math.max(0, Math.min(waterfallDisplay.spectrumHeight, waterfallDisplay.height))
+                z: 10
+                clip: true
+                visible: waterfallDisplay.spectrumGpuOverlayAvailable && height > 0
+
+                readonly property string fixedFontFamily: Qt.platform.os === "osx" ? "Menlo"
+                                                       : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
+                readonly property real viewStartHz: waterfallDisplay.viewStartHz
+                readonly property real viewRangeHz: waterfallDisplay.viewRangeHz
+                readonly property real dbRange: Math.max(1, waterfallDisplay.maxDb - waterfallDisplay.minDb)
+                readonly property int freqStep: viewRangeHz > 3000 ? 500 : (viewRangeHz > 1000 ? 200 : 100)
+                readonly property bool txVisible: {
+                    var txX = xForFreq(waterfallDisplay.txFreq)
+                    return txX >= 0 && txX < width && waterfallDisplay.txFreq !== waterfallDisplay.rxFreq
+                }
+
+                function xForFreq(freq) {
+                    return (Number(freq) - viewStartHz) * width / viewRangeHz
+                }
+
+                function clamp(value, minValue, maxValue) {
+                    return Math.max(minValue, Math.min(maxValue, value))
+                }
+
+                function markerBoxX(markerX, boxWidth) {
+                    var boxX = markerX + 8
+                    if (boxX + boxWidth > width - 2)
+                        boxX = markerX - boxWidth - 8
+                    return clamp(boxX, 2, Math.max(2, width - boxWidth - 2))
+                }
+
+                function markerBoxY(centerY, boxHeight) {
+                    var minY = boxHeight / 2 + 3
+                    var maxY = Math.max(minY, height - boxHeight / 2 - 22)
+                    return clamp(centerY, minY, maxY) - boxHeight / 2
+                }
+
+                function frequencyGridModel() {
+                    var out = []
+                    var first = (Math.floor(viewStartHz / freqStep) + 1) * freqStep
+                    var end = viewStartHz + viewRangeHz
+                    for (var f = first; f < end; f += freqStep) {
+                        var x = xForFreq(f)
+                        if (x < 0 || x >= width)
+                            continue
+                        out.push({
+                            x: Math.round(x),
+                            label: f >= 1000 ? (f / 1000).toFixed(1) + "k" : String(Math.round(f))
+                        })
+                    }
+                    return out
+                }
+
+                function tickModel() {
+                    var out = []
+                    var first = Math.floor(viewStartHz / 500) * 500 + 500
+                    var end = viewStartHz + viewRangeHz
+                    for (var f = first; f < end; f += 500) {
+                        var x = xForFreq(f)
+                        if (x < 0 || x >= width)
+                            continue
+                        out.push({ x: Math.round(x), label: String(Math.round(f)) })
+                    }
+                    return out
+                }
+
+                function decodeColor(label) {
+                    if (waterfallDisplay.labelUseCustomColor)
+                        return waterfallDisplay.labelColor
+                    if (label.isMyCall)
+                        return "#ff5050"
+                    if (label.isCQ)
+                        return "#00e664"
+                    return "#00c8ff"
+                }
+
+                function decodeLabelModel() {
+                    var source = waterfallPanel.spectrumDecodeLabels || []
+                    var items = []
+                    var i
+                    for (i = 0; i < source.length; ++i) {
+                        var d = source[i]
+                        var call = d.call || ""
+                        var freq = Number(d.freq || 0)
+                        if (!call || freq <= 0)
+                            continue
+                        var x = xForFreq(freq)
+                        if (x < 0 || x >= width)
+                            continue
+                        var text = call + " " + Number(d.snr || 0)
+                        items.push({
+                            x: Math.round(x),
+                            text: text,
+                            color: decodeColor(d),
+                            widthHint: Math.max(24, text.length * Math.max(5, waterfallDisplay.labelFontSize * 0.66))
+                        })
+                    }
+
+                    items.sort(function(a, b) { return a.x - b.x })
+
+                    var rowHeight = Math.max(10, waterfallDisplay.labelFontSize + 5)
+                    var maxRows = Math.max(1, Math.floor(Math.max(1, height - 24) / rowHeight))
+                    var rowRight = []
+                    for (i = 0; i < maxRows; ++i)
+                        rowRight.push(-1000000)
+
+                    var laidOut = []
+                    for (i = 0; i < items.length; ++i) {
+                        var it = items[i]
+                        var textX = clamp(it.x + 2, 2, Math.max(2, width - it.widthHint - 2))
+                        var row = -1
+                        for (var r = 0; r < maxRows; ++r) {
+                            if (textX > rowRight[r] + waterfallDisplay.labelSpacing) {
+                                row = r
+                                break
+                            }
+                        }
+                        if (row < 0)
+                            continue
+                        laidOut.push({
+                            x: it.x,
+                            textX: textX,
+                            y: 2 + row * rowHeight,
+                            text: it.text,
+                            color: it.color
+                        })
+                        rowRight[row] = textX + it.widthHint
+                    }
+                    return laidOut
+                }
+
+                Rectangle {
+                    x: waterfallDisplay.rxFilterLeftX
+                    y: 0
+                    width: Math.max(0, waterfallDisplay.rxFilterRightX - waterfallDisplay.rxFilterLeftX)
+                    height: parent.height
+                    visible: width > 0
+                    color: Qt.rgba(0.74, 0.74, 0.74, 0.13)
+                }
+
+                Repeater {
+                    model: 6
+                    Rectangle {
+                        width: spectrumGpuOverlay.width
+                        height: 1
+                        x: 0
+                        y: Math.round(spectrumGpuOverlay.height - 1 - (index / 5) * (spectrumGpuOverlay.height - 16))
+                        color: "#262626"
+                    }
+                }
+
+                Repeater {
+                    model: 6
+                    Text {
+                        readonly property real norm: index / 5
+                        x: 2
+                        y: Math.max(0, Math.round(spectrumGpuOverlay.height - 1 - norm * (spectrumGpuOverlay.height - 16)) - height)
+                        text: String(Math.round(waterfallDisplay.minDb + norm * spectrumGpuOverlay.dbRange))
+                        color: "#a0a0a0"
+                        font.family: spectrumGpuOverlay.fixedFontFamily
+                        font.pixelSize: 8
+                    }
+                }
+
+                Repeater {
+                    model: spectrumGpuOverlay.frequencyGridModel()
+                    Rectangle {
+                        x: modelData.x
+                        y: 0
+                        width: 1
+                        height: Math.max(0, spectrumGpuOverlay.height - 16)
+                        color: "#282828"
+                    }
+                }
+
+                Repeater {
+                    model: spectrumGpuOverlay.frequencyGridModel()
+                    Text {
+                        x: spectrumGpuOverlay.clamp(modelData.x - 18, 2, Math.max(2, spectrumGpuOverlay.width - width - 2))
+                        y: Math.max(0, spectrumGpuOverlay.height - height - 1)
+                        text: modelData.label
+                        color: "#dcdcdc"
+                        font.family: spectrumGpuOverlay.fixedFontFamily
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+                }
+
+                Repeater {
+                    model: spectrumGpuOverlay.tickModel()
+                    Rectangle {
+                        x: modelData.x
+                        y: Math.max(0, spectrumGpuOverlay.height - 18)
+                        width: 1
+                        height: 12
+                        color: "#ffe600"
+                        opacity: 0.70
+                    }
+                }
+
+                Repeater {
+                    model: spectrumGpuOverlay.tickModel()
+                    Text {
+                        x: spectrumGpuOverlay.clamp(modelData.x - 20, 2, Math.max(2, spectrumGpuOverlay.width - width - 2))
+                        y: Math.max(0, spectrumGpuOverlay.height - 36)
+                        text: modelData.label
+                        color: "#dcd200"
+                        font.family: spectrumGpuOverlay.fixedFontFamily
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+                }
+
+                Repeater {
+                    model: spectrumGpuOverlay.decodeLabelModel()
+                    Item {
+                        width: spectrumGpuOverlay.width
+                        height: spectrumGpuOverlay.height
+                        Rectangle {
+                            x: modelData.x
+                            y: 0
+                            width: 1
+                            height: Math.max(0, spectrumGpuOverlay.height - 20)
+                            color: modelData.color
+                            opacity: 0.52
+                        }
+                        Text {
+                            x: modelData.textX
+                            y: modelData.y
+                            text: modelData.text
+                            color: modelData.color
+                            font.family: spectrumGpuOverlay.fixedFontFamily
+                            font.pixelSize: waterfallDisplay.labelFontSize
+                            font.bold: waterfallDisplay.labelBold
+                        }
+                    }
+                }
+
+                Item {
+                    id: rxMarkerLine
+                    readonly property real markerX: spectrumGpuOverlay.xForFreq(waterfallDisplay.rxFreq)
+                    x: Math.round(markerX)
+                    y: 0
+                    width: 1
+                    height: parent.height
+                    visible: markerX >= 0 && markerX < spectrumGpuOverlay.width
+                    Rectangle { x: -3; width: 7; height: parent.height; color: "#00e5ff"; opacity: 0.27 }
+                    Rectangle { x: -1; width: 3; height: parent.height; color: "#00e5ff"; opacity: 0.94 }
+                    Rectangle { x: 0; width: 1; height: parent.height; color: "#b4ffff" }
+                }
+
+                Item {
+                    id: txMarkerLine
+                    readonly property real markerX: spectrumGpuOverlay.xForFreq(waterfallDisplay.txFreq)
+                    x: Math.round(markerX)
+                    y: 0
+                    width: 1
+                    height: parent.height
+                    visible: spectrumGpuOverlay.txVisible
+                    Rectangle { x: -3; width: 7; height: parent.height; color: "#ff00ff"; opacity: 0.27 }
+                    Rectangle { x: -1; width: 3; height: parent.height; color: "#ff00ff"; opacity: 0.94 }
+                    Rectangle { x: 0; width: 1; height: parent.height; color: "#ffc8ff" }
+                }
+
+                Item {
+                    id: rxMarkerLabel
+                    readonly property real markerX: spectrumGpuOverlay.xForFreq(waterfallDisplay.rxFreq)
+                    readonly property real centerY: spectrumGpuOverlay.height / 2 - (spectrumGpuOverlay.txVisible ? 12 : 0)
+                    width: rxMarkerText.implicitWidth + 12
+                    height: rxMarkerText.implicitHeight + 6
+                    x: spectrumGpuOverlay.markerBoxX(markerX, width)
+                    y: spectrumGpuOverlay.markerBoxY(centerY, height)
+                    visible: markerX >= 0 && markerX < spectrumGpuOverlay.width
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 4
+                        color: Qt.rgba(0, 0, 0, 0.70)
+                        border.color: "#00e5ff"
+                        border.width: 1
+                    }
+                    Text {
+                        id: rxMarkerText
+                        anchors.centerIn: parent
+                        text: "RX " + Math.round(waterfallDisplay.rxFreq)
+                        color: "#00e5ff"
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+                }
+
+                Item {
+                    id: txMarkerLabel
+                    readonly property real markerX: spectrumGpuOverlay.xForFreq(waterfallDisplay.txFreq)
+                    readonly property real centerY: spectrumGpuOverlay.height / 2 + 12
+                    width: txMarkerText.implicitWidth + 12
+                    height: txMarkerText.implicitHeight + 6
+                    x: spectrumGpuOverlay.markerBoxX(markerX, width)
+                    y: spectrumGpuOverlay.markerBoxY(centerY, height)
+                    visible: spectrumGpuOverlay.txVisible
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 4
+                        color: Qt.rgba(0, 0, 0, 0.70)
+                        border.color: "#ff00ff"
+                        border.width: 1
+                    }
+                    Text {
+                        id: txMarkerText
+                        anchors.centerIn: parent
+                        text: "TX " + Math.round(waterfallDisplay.txFreq)
+                        color: "#ff00ff"
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.rightMargin: 4
+                    anchors.bottomMargin: 2
+                    visible: waterfallDisplay.autoRange
+                    text: "NF:" + Math.round(waterfallDisplay.measuredFloor) + "dB"
+                    color: "#646464"
+                    font.family: spectrumGpuOverlay.fixedFontFamily
+                    font.pixelSize: 8
+                }
             }
 
             Rectangle {
@@ -562,6 +903,11 @@ Item {
         function onPanadapterDataReady(dbValues, minDb, maxDb, freqMinHz, freqMaxHz) {
             if (!waterfallPanel.visible) return
             waterfallDisplay.addSpectrumData(dbValues, minDb, maxDb, freqMinHz, freqMaxHz)
+        }
+        function onPanadapterPcmFrameReady(samples, usableSamples, nfa, nfb, freqMinHz, freqMaxHz, serial) {
+            if (!waterfallPanel.visible) return
+            if (!waterfallDisplay.addPcmFrame(samples, usableSamples, nfa, nfb, freqMinHz, freqMaxHz, serial))
+                bridge.setGpuPanadapterFftAvailable(false, "PanadapterItem rejected GPU FFT frame")
         }
         // Fallback: valori normalizzati 0-1 dal legacy timer
         function onSpectrumDataReady(data) {
@@ -620,6 +966,7 @@ Item {
                     isMyCall: d.isMyCall || false
                 })
             }
+            waterfallPanel.spectrumDecodeLabels = labels
             waterfallDisplay.setDecodeLabels(labels)
         }
     }

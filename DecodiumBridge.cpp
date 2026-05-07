@@ -100,13 +100,20 @@
 #include <cmath>
 #include <complex>
 #include <chrono>
+#include <cwchar>
 #include <limits>
 #include <thread>
+#include <utility>
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#if defined(_MSC_VER)
+#pragma comment(lib, "pdh.lib")
+#endif
 #else
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -161,6 +168,131 @@ quint64 decodiumFileTimeToUsec(FILETIME const& value)
     ticks.HighPart = value.dwHighDateTime;
     return static_cast<quint64>(ticks.QuadPart / 10ULL);
 }
+
+class WindowsProcessGpuUsageMonitor
+{
+public:
+    ~WindowsProcessGpuUsageMonitor()
+    {
+        closeQuery();
+    }
+
+    double sample(bool* ok)
+    {
+        if (ok)
+            *ok = false;
+
+        if (m_counters.isEmpty() && !rebuildQuery())
+            return -1.0;
+
+        PDH_STATUS status = PdhCollectQueryData(m_query);
+        if (status != ERROR_SUCCESS) {
+            closeQuery();
+            return -1.0;
+        }
+
+        double totalPercent = 0.0;
+        int validCounters = 0;
+        for (PDH_HCOUNTER counter : std::as_const(m_counters)) {
+            PDH_FMT_COUNTERVALUE value {};
+            status = PdhGetFormattedCounterValue(counter,
+                                                 PDH_FMT_DOUBLE | PDH_FMT_NOCAP100,
+                                                 nullptr,
+                                                 &value);
+            if (status == ERROR_SUCCESS
+                && value.CStatus == ERROR_SUCCESS
+                && std::isfinite(value.doubleValue)) {
+                totalPercent += qMax(0.0, value.doubleValue);
+                ++validCounters;
+            }
+        }
+
+        if (validCounters <= 0) {
+            closeQuery();
+            return -1.0;
+        }
+
+        // GPU Engine instances are created lazily by D3D/RHI. Re-expand while
+        // idle so Windows catches engines that appear after startup.
+        if (totalPercent <= 0.0001) {
+            ++m_zeroSamples;
+            if (m_zeroSamples >= 4) {
+                m_zeroSamples = 0;
+                rebuildQuery();
+            }
+        } else {
+            m_zeroSamples = 0;
+        }
+
+        if (ok)
+            *ok = true;
+        return qBound(0.0, totalPercent / 100.0, 1.0);
+    }
+
+private:
+    void closeQuery()
+    {
+        if (m_query) {
+            PdhCloseQuery(m_query);
+            m_query = nullptr;
+        }
+        m_counters.clear();
+        m_zeroSamples = 0;
+    }
+
+    bool rebuildQuery()
+    {
+        closeQuery();
+
+        if (PdhOpenQueryW(nullptr, 0, &m_query) != ERROR_SUCCESS)
+            return false;
+
+        QString const wildcardPath = QStringLiteral("\\GPU Engine(pid_%1*)\\Utilization Percentage")
+            .arg(static_cast<qulonglong>(GetCurrentProcessId()));
+        std::wstring const wildcard = wildcardPath.toStdWString();
+        DWORD bufferChars = 0;
+        PDH_STATUS status = PdhExpandWildCardPathW(nullptr,
+                                                   wildcard.c_str(),
+                                                   nullptr,
+                                                   &bufferChars,
+                                                   0);
+        if (status != static_cast<PDH_STATUS>(PDH_MORE_DATA) || bufferChars == 0) {
+            closeQuery();
+            return false;
+        }
+
+        std::wstring buffer(bufferChars, L'\0');
+        status = PdhExpandWildCardPathW(nullptr,
+                                        wildcard.c_str(),
+                                        buffer.data(),
+                                        &bufferChars,
+                                        0);
+        if (status != ERROR_SUCCESS) {
+            closeQuery();
+            return false;
+        }
+
+        wchar_t const* path = buffer.c_str();
+        while (*path) {
+            PDH_HCOUNTER counter = nullptr;
+            if (PdhAddEnglishCounterW(m_query, path, 0, &counter) == ERROR_SUCCESS)
+                m_counters.append(counter);
+            path += std::wcslen(path) + 1;
+        }
+
+        if (m_counters.isEmpty()) {
+            closeQuery();
+            return false;
+        }
+
+        PdhCollectQueryData(m_query);
+        return true;
+    }
+
+    PDH_HQUERY m_query = nullptr;
+    QVector<PDH_HCOUNTER> m_counters;
+    int m_zeroSamples = 0;
+};
 #endif
 
 quint64 decodiumCurrentProcessCpuUsec()
@@ -186,6 +318,64 @@ quint64 decodiumCurrentProcessCpuUsec()
     return timevalToUsec(usage.ru_utime) + timevalToUsec(usage.ru_stime);
 #endif
 }
+
+bool decodiumCurrentProcessGpuTimeNs(quint64* gpuTimeNs)
+{
+#ifdef Q_OS_LINUX
+    QDir fdInfoDir(QStringLiteral("/proc/self/fdinfo"));
+    QStringList const entries = fdInfoDir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    if (entries.isEmpty())
+        return false;
+
+    static QRegularExpression const engineTimeRe(
+        QStringLiteral("^drm-engine-[^:]+:\\s*(\\d+)\\s*([a-zA-Z]*)"));
+    quint64 totalNs = 0;
+    bool found = false;
+    for (QString const& entry : entries) {
+        QFile file(fdInfoDir.absoluteFilePath(entry));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+
+        while (!file.atEnd()) {
+            QString const line = QString::fromLatin1(file.readLine()).trimmed();
+            QRegularExpressionMatch const match = engineTimeRe.match(line);
+            if (!match.hasMatch())
+                continue;
+
+            bool ok = false;
+            quint64 value = match.captured(1).toULongLong(&ok);
+            if (!ok)
+                continue;
+
+            QString const unit = match.captured(2).toLower();
+            if (unit == QStringLiteral("us"))
+                value *= 1000ULL;
+            else if (unit == QStringLiteral("ms"))
+                value *= 1000000ULL;
+
+            totalNs += value;
+            found = true;
+        }
+    }
+
+    if (!found)
+        return false;
+    if (gpuTimeNs)
+        *gpuTimeNs = totalNs;
+    return true;
+#else
+    Q_UNUSED(gpuTimeNs);
+    return false;
+#endif
+}
+
+#ifdef Q_OS_WIN
+double decodiumCurrentProcessGpuUsage(bool* available)
+{
+    static WindowsProcessGpuUsageMonitor monitor;
+    return monitor.sample(available);
+}
+#endif
 
 bool decodiumPskDebugEnabled()
 {
@@ -1403,8 +1593,14 @@ static QString normalizedUsableCallToken(QString const& token)
 {
     QString const upper = normalizeCallToken(token).trimmed().toUpper();
     if (upper.isEmpty()
-        || isPlaceholderCallToken(upper)
-        || isGridTokenStrict(upper)) {
+        || isPlaceholderCallToken(upper)) {
+        return {};
+    }
+    // Scarta grid 4-char (es. JN54). Non scartare grid 6-char ambigui:
+    // call special-event come RP81AS, RA82BX matchano il pattern Maidenhead
+    // esteso ma sono callsign reali. I grid 6-char non compaiono mai in
+    // posizione callsign nei messaggi FT/CW standard.
+    if (upper.size() == 4 && isGridTokenStrict(upper)) {
         return {};
     }
     if (upper == QStringLiteral("CQ")
@@ -2687,6 +2883,13 @@ static inline void activeCatSetTxFreq(DecodiumCatManager* n, DecodiumTransceiver
 DecodiumBridge::DecodiumBridge(QObject* parent)
     : QObject(parent)
 {
+    if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_GPU_PANADAPTER_FFT")) {
+        m_gpuPanadapterFftAvailable.store(false);
+        qWarning().noquote()
+            << "[PANDBG] Panadapter visual FFT GPU path disabled"
+            << "reason=DECODIUM_DISABLE_GPU_PANADAPTER_FFT";
+    }
+
     connect(this, &DecodiumBridge::errorMessage, this, [](const QString& msg) {
         DIAG_ERROR(QStringLiteral("[UIERR] non-blocking error: %1")
                        .arg(bridgeDiagnosticOneLine(msg)));
@@ -3434,9 +3637,12 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_lastProcessCpuUsec = decodiumCurrentProcessCpuUsec();
     m_processCpuSampleClock.start();
     m_processCpuSampleInitialized = true;
+    m_processGpuSampleInitialized = decodiumCurrentProcessGpuTimeNs(&m_lastProcessGpuTimeNs);
+    m_processGpuSampleClock.start();
     m_processCpuTimer = new QTimer(this);
     m_processCpuTimer->setInterval(2000);
     connect(m_processCpuTimer, &QTimer::timeout, this, &DecodiumBridge::updateProcessCpuUsage);
+    connect(m_processCpuTimer, &QTimer::timeout, this, &DecodiumBridge::updateProcessGpuUsage);
     m_processCpuTimer->start();
 
     // Main-thread stall probe: logs only visible event-loop delays, with FT slot phase.
@@ -7090,6 +7296,53 @@ void DecodiumBridge::updateProcessCpuUsage()
     }
     m_processCpuUsage = usage;
     emit processCpuUsageChanged();
+}
+
+void DecodiumBridge::updateProcessGpuUsage()
+{
+    double usage = -1.0;
+
+#ifdef Q_OS_WIN
+    bool available = false;
+    usage = decodiumCurrentProcessGpuUsage(&available);
+    if (!available || !std::isfinite(usage))
+        usage = -1.0;
+#elif defined(Q_OS_LINUX)
+    quint64 currentGpuTimeNs = 0;
+    bool const available = decodiumCurrentProcessGpuTimeNs(&currentGpuTimeNs);
+    qint64 const wallNs = m_processGpuSampleClock.isValid()
+        ? m_processGpuSampleClock.nsecsElapsed()
+        : 0;
+
+    if (!available) {
+        m_processGpuSampleInitialized = false;
+        m_processGpuSampleClock.restart();
+        usage = -1.0;
+    } else if (!m_processGpuSampleInitialized
+               || wallNs <= 0
+               || currentGpuTimeNs < m_lastProcessGpuTimeNs) {
+        m_lastProcessGpuTimeNs = currentGpuTimeNs;
+        m_processGpuSampleClock.restart();
+        m_processGpuSampleInitialized = true;
+        return;
+    } else {
+        quint64 const gpuDeltaNs = currentGpuTimeNs - m_lastProcessGpuTimeNs;
+        usage = static_cast<double>(gpuDeltaNs) / static_cast<double>(wallNs);
+        if (!std::isfinite(usage))
+            usage = -1.0;
+        else
+            usage = qBound(0.0, usage, 1.0);
+        m_lastProcessGpuTimeNs = currentGpuTimeNs;
+        m_processGpuSampleClock.restart();
+    }
+#else
+    usage = -1.0;
+#endif
+
+    if (std::abs(m_processGpuUsage - usage) < 0.0005)
+        return;
+    m_processGpuUsage = usage;
+    emit processGpuUsageChanged();
 }
 
 void DecodiumBridge::updateUiStallDiagnostics()
@@ -17376,12 +17629,6 @@ void DecodiumBridge::onSpectrumTimer()
                 return;
             }
 
-            bool expectedIdle = false;
-            if (!m_panadapterComputeBusy.compare_exchange_strong(expectedIdle, true)) {
-                return;
-            }
-            m_lastPanadapterFrameMs = nowMs;
-
             QVector<short> panadapterSamples(fftLen);
             panadapterSamples.fill(0);
             int ringStart = (m_wfRingPos - usable) % WF_RING_SIZE;
@@ -17401,6 +17648,55 @@ void DecodiumBridge::onSpectrumTimer()
             float const freqMinHz = static_cast<int>(nfaSnapshot / freqPerBin) * freqPerBin;
             float const freqMaxHz = static_cast<int>(nfbSnapshot / freqPerBin) * freqPerBin;
             uint64_t const serial = ++m_panadapterComputeSerial;
+
+            bool const remoteWaterfallNeedsCpu =
+                m_remoteServer
+                && m_remoteServer->isRunning()
+                && m_remoteServer->waterfallEnabled();
+            bool const gpuPanadapterFft =
+                m_gpuPanadapterFftAvailable.load()
+                && !remoteWaterfallNeedsCpu;
+            if (gpuPanadapterFft) {
+                QVector<float> pcmFrame(fftLen);
+                for (int i = 0; i < fftLen; ++i)
+                    pcmFrame[i] = static_cast<float>(panadapterSamples[i]);
+
+                static std::atomic_bool loggedGpuPath {false};
+                bool expectedGpuLog = false;
+                if (loggedGpuPath.compare_exchange_strong(expectedGpuLog, true)) {
+                    qInfo().noquote()
+                        << "[PANDBG] Panadapter visual FFT scheduling active"
+                        << "thread=QSG_render_thread"
+                        << "mode=RHI_compute_gpu"
+                        << "fallback=FFTW_CPU_on_failure";
+                }
+
+                m_lastPanadapterFrameMs = nowMs;
+                emit panadapterPcmFrameReady(std::move(pcmFrame),
+                                             usable,
+                                             nfaSnapshot,
+                                             nfbSnapshot,
+                                             freqMinHz,
+                                             freqMaxHz,
+                                             static_cast<qulonglong>(serial));
+                return;
+            }
+
+            static std::atomic_bool loggedRemoteCpu {false};
+            bool expectedRemoteCpuLog = false;
+            if (remoteWaterfallNeedsCpu
+                && loggedRemoteCpu.compare_exchange_strong(expectedRemoteCpuLog, true)) {
+                qInfo().noquote()
+                    << "[PANDBG] Panadapter visual FFT GPU path bypassed"
+                    << "reason=remote_waterfall_needs_CPU_db_values"
+                    << "fallback=FFTW_CPU";
+            }
+
+            bool expectedIdle = false;
+            if (!m_panadapterComputeBusy.compare_exchange_strong(expectedIdle, true)) {
+                return;
+            }
+            m_lastPanadapterFrameMs = nowMs;
 
             static std::atomic_bool loggedAsyncPath {false};
             bool expectedLog = false;
@@ -20325,6 +20621,25 @@ void DecodiumBridge::updateLotwUsers()
 
 QStringList DecodiumBridge::workedCallsigns() const { return QStringList(m_workedCalls.values()); }
 int         DecodiumBridge::workedCount()      const { return m_workedCalls.size(); }
+
+void DecodiumBridge::setGpuPanadapterFftAvailable(bool available, const QString& reason)
+{
+    bool const previous = m_gpuPanadapterFftAvailable.exchange(available);
+    if (previous == available)
+        return;
+
+    if (available) {
+        qInfo().noquote()
+            << "[PANDBG] Panadapter visual FFT GPU path available"
+            << "reason=" << (reason.isEmpty() ? QStringLiteral("manual/auto recovery") : reason);
+    } else {
+        qWarning().noquote()
+            << "[PANDBG] Panadapter visual FFT GPU path disabled"
+            << "reason=" << (reason.isEmpty() ? QStringLiteral("PanadapterItem rejected GPU compute") : reason)
+            << "fallback=FFTW_CPU";
+    }
+}
+
 int         DecodiumBridge::qsoCount()         const
 {
     if (m_qsoCountCache < 0) {

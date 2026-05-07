@@ -212,6 +212,87 @@ const RigDefaults* findRigDefaults(QString const& rigName)
     return nullptr;
 }
 
+bool isDefaultSerialChoice(QString const& value)
+{
+    QString const text = value.trimmed().toLower();
+    return text.isEmpty()
+        || text == QStringLiteral("default")
+        || text == QStringLiteral("predefinito")
+        || text == QStringLiteral("auto");
+}
+
+QString normalizeDataBitsChoice(QString const& value)
+{
+    QString const text = value.trimmed();
+    QString const lower = text.toLower();
+    if (lower == QStringLiteral("7") || lower.contains(QStringLiteral("seven")))
+        return QStringLiteral("7");
+    if (lower == QStringLiteral("8") || lower.contains(QStringLiteral("eight")))
+        return QStringLiteral("8");
+    if (isDefaultSerialChoice(text))
+        return QStringLiteral("Default");
+    return QStringLiteral("Default");
+}
+
+QString normalizeStopBitsChoice(QString const& value)
+{
+    QString const text = value.trimmed();
+    QString const lower = text.toLower();
+    if (lower == QStringLiteral("2") || lower == QStringLiteral("2.0") || lower.contains(QStringLiteral("two")))
+        return QStringLiteral("2");
+    if (lower == QStringLiteral("1") || lower == QStringLiteral("1.0") || lower.contains(QStringLiteral("one")))
+        return QStringLiteral("1");
+    if (isDefaultSerialChoice(text))
+        return QStringLiteral("Default");
+    return QStringLiteral("Default");
+}
+
+QString normalizeHandshakeChoice(QString const& value)
+{
+    QString const text = value.trimmed();
+    QString const lower = text.toLower();
+    if (isDefaultSerialChoice(text))
+        return QStringLiteral("Default");
+    if (lower == QStringLiteral("none") || lower == QStringLiteral("no") || lower == QStringLiteral("off"))
+        return QStringLiteral("none");
+    if (lower == QStringLiteral("xonxoff") || lower == QStringLiteral("xon/xoff")
+        || lower == QStringLiteral("xoff") || lower.contains(QStringLiteral("software")))
+        return QStringLiteral("xonxoff");
+    if (lower == QStringLiteral("hardware") || lower == QStringLiteral("hw"))
+        return QStringLiteral("hardware");
+    return QStringLiteral("Default");
+}
+
+QString resolvedDataBitsChoice(QString const& requested, QString const& rigName)
+{
+    QString const normalized = normalizeDataBitsChoice(requested);
+    if (!isDefaultSerialChoice(normalized))
+        return normalized;
+    if (auto const* defaults = findRigDefaults(rigName))
+        return QString::fromLatin1(defaults->dataBits);
+    return QStringLiteral("8");
+}
+
+QString resolvedStopBitsChoice(QString const& requested, QString const& rigName)
+{
+    QString const normalized = normalizeStopBitsChoice(requested);
+    if (!isDefaultSerialChoice(normalized))
+        return normalized;
+    if (auto const* defaults = findRigDefaults(rigName))
+        return QString::fromLatin1(defaults->stopBits);
+    return QStringLiteral("1");
+}
+
+QString resolvedHandshakeChoice(QString const& requested, QString const& rigName)
+{
+    QString const normalized = normalizeHandshakeChoice(requested);
+    if (!isDefaultSerialChoice(normalized))
+        return normalized;
+    if (auto const* defaults = findRigDefaults(rigName))
+        return normalizeHandshakeChoice(QString::fromLatin1(defaults->handshake));
+    return QStringLiteral("none");
+}
+
 QByteArray nativePttOnCommand(QString const& rigName, QString const& mode)
 {
     // Kenwood TS-590S/SG, TS-480, TS-2000, TS-890S:
@@ -277,9 +358,12 @@ void DecodiumCatManager::applyRigDefaults(const QString& rigName)
                  .arg(d->civAddress, 2, 16, QChar('0')));
 
     setBaudRate(d->baud);
-    setDataBits(QString::fromLatin1(d->dataBits));
-    setStopBits(QString::fromLatin1(d->stopBits));
-    setHandshake(QString::fromLatin1(d->handshake));
+    if (!isDefaultSerialChoice(m_dataBits))
+        setDataBits(QString::fromLatin1(d->dataBits));
+    if (!isDefaultSerialChoice(m_stopBits))
+        setStopBits(QString::fromLatin1(d->stopBits));
+    if (!isDefaultSerialChoice(m_handshake))
+        setHandshake(QString::fromLatin1(d->handshake));
     setPttMethod(QString::fromLatin1(d->pttMethod));
     setCivAddress(d->civAddress);
 }
@@ -347,11 +431,30 @@ void DecodiumCatManager::setSerialPort(const QString& v)
 
 void DecodiumCatManager::setHandshake(const QString& v)
 {
-    if (m_handshake != v) {
-        m_handshake = v;
+    QString const normalized = normalizeHandshakeChoice(v);
+    if (m_handshake != normalized) {
+        m_handshake = normalized;
         emit handshakeChanged();
     }
     enforceForceLineAvailability();
+}
+
+void DecodiumCatManager::setDataBits(const QString& v)
+{
+    QString const normalized = normalizeDataBitsChoice(v);
+    if (m_dataBits != normalized) {
+        m_dataBits = normalized;
+        emit dataBitsChanged();
+    }
+}
+
+void DecodiumCatManager::setStopBits(const QString& v)
+{
+    QString const normalized = normalizeStopBitsChoice(v);
+    if (m_stopBits != normalized) {
+        m_stopBits = normalized;
+        emit stopBitsChanged();
+    }
 }
 
 void DecodiumCatManager::setForceDtr(bool v)
@@ -445,10 +548,26 @@ void DecodiumCatManager::connectRig()
     auto* serial = new QSerialPort(this);
     serial->setPortName(m_serialPort);
     serial->setBaudRate(m_baudRate);
-    serial->setDataBits(QSerialPort::Data8);
+    QString const effectiveDataBits = resolvedDataBitsChoice(m_dataBits, m_rigName);
+    QString const effectiveStopBits = resolvedStopBitsChoice(m_stopBits, m_rigName);
+    QString const effectiveHandshake = resolvedHandshakeChoice(m_handshake, m_rigName);
+    serial->setDataBits(effectiveDataBits == QStringLiteral("7")
+                            ? QSerialPort::Data7
+                            : QSerialPort::Data8);
     serial->setParity(QSerialPort::NoParity);
-    serial->setStopBits(QSerialPort::OneStop);
-    serial->setFlowControl(QSerialPort::NoFlowControl);
+    serial->setStopBits(effectiveStopBits == QStringLiteral("2")
+                            ? QSerialPort::TwoStop
+                            : QSerialPort::OneStop);
+    if (effectiveHandshake == QStringLiteral("xonxoff"))
+        serial->setFlowControl(QSerialPort::SoftwareControl);
+    else if (effectiveHandshake == QStringLiteral("hardware"))
+        serial->setFlowControl(QSerialPort::HardwareControl);
+    else
+        serial->setFlowControl(QSerialPort::NoFlowControl);
+
+    DIAG_CAT(QStringLiteral("serial params requested data=%1 stop=%2 handshake=%3 effective data=%4 stop=%5 handshake=%6")
+                 .arg(m_dataBits, m_stopBits, m_handshake,
+                      effectiveDataBits, effectiveStopBits, effectiveHandshake));
 
     if (!serial->open(QIODevice::ReadWrite)) {
         const QString err = serial->errorString();
@@ -879,7 +998,21 @@ void DecodiumCatManager::saveSettings()
     s.setValue("rtsHigh",        forceRtsAvailable() && m_rtsHigh);
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
+    s.setValue("splitMode",      m_splitMode);
     s.endGroup();
+}
+
+void DecodiumCatManager::setSplitMode(const QString& v)
+{
+    QString normalized = v.trimmed().toLower();
+    if (normalized == QStringLiteral("fake") || normalized == QStringLiteral("fake it"))
+        normalized = QStringLiteral("emulate");
+    if (normalized != QStringLiteral("rig") && normalized != QStringLiteral("emulate"))
+        normalized = QStringLiteral("none");
+    if (m_splitMode == normalized)
+        return;
+    m_splitMode = normalized;
+    emit splitModeChanged();
 }
 
 void DecodiumCatManager::loadSettings()
@@ -889,9 +1022,9 @@ void DecodiumCatManager::loadSettings()
     m_rigName        = s.value("rigName",        "Kenwood TS-590S").toString();
     m_serialPort     = s.value("serialPort",     QString{}).toString();
     m_baudRate       = s.value("baudRate",        57600).toInt();
-    m_dataBits       = s.value("dataBits",        m_dataBits).toString();
-    m_stopBits       = s.value("stopBits",        m_stopBits).toString();
-    m_handshake      = s.value("handshake",       m_handshake).toString();
+    m_dataBits       = normalizeDataBitsChoice(s.value("dataBits",        m_dataBits).toString());
+    m_stopBits       = normalizeStopBitsChoice(s.value("stopBits",        m_stopBits).toString());
+    m_handshake      = normalizeHandshakeChoice(s.value("handshake",       m_handshake).toString());
     m_pttMethod      = s.value("pttMethod",       "CAT").toString().trimmed().toUpper();
     if (m_pttMethod.isEmpty())
         m_pttMethod = QStringLiteral("CAT");
@@ -907,6 +1040,14 @@ void DecodiumCatManager::loadSettings()
     m_rtsHigh        = s.value("rtsHigh",         false).toBool();
     m_catAutoConnect = s.value("catAutoConnect",  false).toBool();
     m_audioAutoStart = s.value("audioAutoStart",  false).toBool();
+    {
+        QString sm = s.value("splitMode", "none").toString().trimmed().toLower();
+        if (sm == QStringLiteral("fake") || sm == QStringLiteral("fake it"))
+            sm = QStringLiteral("emulate");
+        if (sm != QStringLiteral("rig") && sm != QStringLiteral("emulate"))
+            sm = QStringLiteral("none");
+        m_splitMode = sm;
+    }
     s.endGroup();
     enforceForceLineAvailability();
 }

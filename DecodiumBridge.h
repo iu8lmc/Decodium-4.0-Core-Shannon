@@ -164,6 +164,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(double rigPowerWatts READ rigPowerWatts NOTIFY rigTelemetryChanged)
     Q_PROPERTY(double rigSwr READ rigSwr NOTIFY rigTelemetryChanged)
     Q_PROPERTY(double processCpuUsage READ processCpuUsage NOTIFY processCpuUsageChanged)
+    Q_PROPERTY(double processGpuUsage READ processGpuUsage NOTIFY processGpuUsageChanged)
     Q_PROPERTY(QString lastCatError READ lastCatError NOTIFY lastCatErrorChanged)
 
     // === LED STATUS INDICATORS ===
@@ -478,6 +479,7 @@ public:
     double rigPowerWatts() const { return m_rigPowerWatts; }
     double rigSwr() const { return m_rigSwr; }
     double processCpuUsage() const { return m_processCpuUsage; }
+    double processGpuUsage() const { return m_processGpuUsage; }
     QString lastCatError() const { return m_lastCatError; }
 
     // LED status
@@ -908,6 +910,7 @@ public slots:
     Q_INVOKABLE bool deleteQso(const QString& call, const QString& dateTime);
     Q_INVOKABLE bool editQso(const QString& call, const QString& dateTime, const QVariantMap& newData);
     Q_INVOKABLE QStringList workedCallsigns() const;
+    Q_INVOKABLE void setGpuPanadapterFftAvailable(bool available, const QString& reason = QString());
     int workedCount() const;
 
     // LotW lite
@@ -931,6 +934,14 @@ signals:
     // Alta risoluzione: dB raw + range + frequenze exact — per PanadapterItem
     void panadapterDataReady(QVector<float> dbValues, float minDb, float maxDb,
                              float freqMinHz, float freqMaxHz);
+    // Path GPU visuale: PCM grezzo verso PanadapterItem/RHI compute.
+    void panadapterPcmFrameReady(QVector<float> samples,
+                                 int usableSamples,
+                                 int nfa,
+                                 int nfb,
+                                 float freqMinHz,
+                                 float freqMaxHz,
+                                 quint64 serial);
     // TX — collegano bridge → Modulator (via QueuedConnection)
     void transmitFrequency(double freq);
     void sendMessage(QString mode, unsigned symbolsLength, double framesPerSymbol,
@@ -1000,6 +1011,7 @@ signals:
     void catModeChanged();
     void rigTelemetryChanged();
     void processCpuUsageChanged();
+    void processGpuUsageChanged();
     void lastCatErrorChanged();
     void dxClusterConnectedChanged();
     void dxClusterSpotsChanged();
@@ -1154,6 +1166,7 @@ private slots:
     void onUtcTimer();
     void onSpectrumTimer();
     void updateProcessCpuUsage();
+    void updateProcessGpuUsage();
     void updateUiStallDiagnostics();
     void onLegacyWaterfallRow(QByteArray const& rowLevels,
                               int startFrequencyHz,
@@ -1393,10 +1406,14 @@ private:
     double m_rigPowerWatts {0.0};
     double m_rigSwr {0.0};
     double m_processCpuUsage {0.0};
+    double m_processGpuUsage {-1.0};
     quint64 m_lastProcessCpuUsec {0};
+    quint64 m_lastProcessGpuTimeNs {0};
     int m_processCpuLogicalCores {1};
     bool m_processCpuSampleInitialized {false};
+    bool m_processGpuSampleInitialized {false};
     QElapsedTimer m_processCpuSampleClock;
+    QElapsedTimer m_processGpuSampleClock;
     QElapsedTimer m_uiStallClock;
     qint64 m_lastUiStallTickMs {0};
     qint64 m_lastUiStallLogMs {0};
@@ -1852,6 +1869,7 @@ private:
     bool m_directVisualAudioCaptureUnsafe {false};
     std::atomic_bool m_panadapterComputeBusy {false};
     std::atomic<uint64_t> m_panadapterComputeSerial {0};
+    std::atomic_bool m_gpuPanadapterFftAvailable {true};
 
     struct PanadapterFrameResult
     {

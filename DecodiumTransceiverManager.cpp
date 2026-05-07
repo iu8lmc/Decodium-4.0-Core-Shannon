@@ -515,6 +515,57 @@ QStringList enumerateSerialPorts(QString const& savedSerialPort, QString const& 
     sortSerialPorts(ports);
     return ports;
 }
+
+bool isDefaultSerialChoice(QString const& value)
+{
+    QString const text = value.trimmed().toLower();
+    return text.isEmpty()
+        || text == QStringLiteral("default")
+        || text == QStringLiteral("predefinito")
+        || text == QStringLiteral("auto");
+}
+
+QString normalizeDataBitsChoice(QString const& value)
+{
+    QString const text = value.trimmed();
+    QString const lower = text.toLower();
+    if (lower == QStringLiteral("7") || lower.contains(QStringLiteral("seven")))
+        return QStringLiteral("7");
+    if (lower == QStringLiteral("8") || lower.contains(QStringLiteral("eight")))
+        return QStringLiteral("8");
+    if (isDefaultSerialChoice(text))
+        return QStringLiteral("Default");
+    return QStringLiteral("Default");
+}
+
+QString normalizeStopBitsChoice(QString const& value)
+{
+    QString const text = value.trimmed();
+    QString const lower = text.toLower();
+    if (lower == QStringLiteral("2") || lower == QStringLiteral("2.0") || lower.contains(QStringLiteral("two")))
+        return QStringLiteral("2");
+    if (lower == QStringLiteral("1") || lower == QStringLiteral("1.0") || lower.contains(QStringLiteral("one")))
+        return QStringLiteral("1");
+    if (isDefaultSerialChoice(text))
+        return QStringLiteral("Default");
+    return QStringLiteral("Default");
+}
+
+QString normalizeHandshakeChoice(QString const& value)
+{
+    QString const text = value.trimmed();
+    QString const lower = text.toLower();
+    if (isDefaultSerialChoice(text))
+        return QStringLiteral("Default");
+    if (lower == QStringLiteral("none") || lower == QStringLiteral("no") || lower == QStringLiteral("off"))
+        return QStringLiteral("none");
+    if (lower == QStringLiteral("xonxoff") || lower == QStringLiteral("xon/xoff")
+        || lower == QStringLiteral("xoff") || lower.contains(QStringLiteral("software")))
+        return QStringLiteral("xonxoff");
+    if (lower == QStringLiteral("hardware") || lower == QStringLiteral("hw"))
+        return QStringLiteral("hardware");
+    return QStringLiteral("Default");
+}
 }
 
 // ── PIMPL privato ──────────────────────────────────────────────────────────
@@ -625,10 +676,29 @@ void DecodiumTransceiverManager::setSerialPort(const QString& v)
     enforceForceLineAvailability();
 }
 
+void DecodiumTransceiverManager::setDataBits(const QString& v)
+{
+    QString const normalized = normalizeDataBitsChoice(v);
+    if (m_dataBits != normalized) {
+        m_dataBits = normalized;
+        emit dataBitsChanged();
+    }
+}
+
+void DecodiumTransceiverManager::setStopBits(const QString& v)
+{
+    QString const normalized = normalizeStopBitsChoice(v);
+    if (m_stopBits != normalized) {
+        m_stopBits = normalized;
+        emit stopBitsChanged();
+    }
+}
+
 void DecodiumTransceiverManager::setHandshake(const QString& v)
 {
-    if (m_handshake != v) {
-        m_handshake = v;
+    QString const normalized = normalizeHandshakeChoice(v);
+    if (m_handshake != normalized) {
+        m_handshake = normalized;
         emit handshakeChanged();
     }
     enforceForceLineAvailability();
@@ -926,12 +996,40 @@ static QString splitModeNameFromLegacyValue(const QVariant& value, const QString
 
 static TransceiverFactory::DataBits parseData(const QString& s)
 {
-    return s == "7" ? TransceiverFactory::seven_data_bits : TransceiverFactory::eight_data_bits;
+    QString const value = normalizeDataBitsChoice(s);
+    if (value == QStringLiteral("7"))
+        return TransceiverFactory::seven_data_bits;
+    if (value == QStringLiteral("8"))
+        return TransceiverFactory::eight_data_bits;
+    return TransceiverFactory::default_data_bits;
 }
 
 static TransceiverFactory::StopBits parseStop(const QString& s)
 {
-    return s == "2" ? TransceiverFactory::two_stop_bits : TransceiverFactory::one_stop_bit;
+    QString const value = normalizeStopBitsChoice(s);
+    if (value == QStringLiteral("2"))
+        return TransceiverFactory::two_stop_bits;
+    if (value == QStringLiteral("1"))
+        return TransceiverFactory::one_stop_bit;
+    return TransceiverFactory::default_stop_bits;
+}
+
+static QString dataBitsName(TransceiverFactory::DataBits dataBits)
+{
+    switch (dataBits) {
+    case TransceiverFactory::seven_data_bits: return QStringLiteral("7");
+    case TransceiverFactory::eight_data_bits: return QStringLiteral("8");
+    default:                                  return QStringLiteral("Default");
+    }
+}
+
+static QString stopBitsName(TransceiverFactory::StopBits stopBits)
+{
+    switch (stopBits) {
+    case TransceiverFactory::one_stop_bit:  return QStringLiteral("1");
+    case TransceiverFactory::two_stop_bits: return QStringLiteral("2");
+    default:                                return QStringLiteral("Default");
+    }
 }
 
 static TransceiverFactory::TXAudioSource configuredTxAudioSource()
@@ -967,15 +1065,17 @@ static bool configuredPwrAndSwrEnabled()
 
 static TransceiverFactory::Handshake parseHandshake(const QString& s)
 {
-    QString const value = s.trimmed().toLower();
-    if (value == "xonxoff")  return TransceiverFactory::handshake_XonXoff;
-    if (value == "hardware") return TransceiverFactory::handshake_hardware;
+    QString const value = normalizeHandshakeChoice(s);
+    if (value == QStringLiteral("Default")) return TransceiverFactory::handshake_default;
+    if (value == QStringLiteral("xonxoff")) return TransceiverFactory::handshake_XonXoff;
+    if (value == QStringLiteral("hardware")) return TransceiverFactory::handshake_hardware;
     return TransceiverFactory::handshake_none;
 }
 
 static QString handshakeName(TransceiverFactory::Handshake handshake)
 {
     switch (handshake) {
+    case TransceiverFactory::handshake_default:  return QStringLiteral("Default");
     case TransceiverFactory::handshake_XonXoff:  return QStringLiteral("xonxoff");
     case TransceiverFactory::handshake_hardware: return QStringLiteral("hardware");
     default:                                     return QStringLiteral("none");
@@ -1109,6 +1209,10 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
         << "network=" << p.network_port
         << "tci=" << p.tci_port
         << "baud=" << p.baud
+        << "dataBits=" << dataBitsName(p.data_bits)
+        << "dataBitsRequested=" << m->dataBits()
+        << "stopBits=" << stopBitsName(p.stop_bits)
+        << "stopBitsRequested=" << m->stopBits()
         << "handshake=" << handshakeName(p.handshake)
         << "handshakeRequested=" << m->handshake()
         << "ptt=" << pttMethodName(p.ptt_type)
@@ -1166,6 +1270,8 @@ void DecodiumTransceiverManager::connectRig()
             << "network=" << params.network_port
             << "tci=" << params.tci_port
             << "baud=" << params.baud
+            << "dataBits=" << dataBitsName(params.data_bits)
+            << "stopBits=" << stopBitsName(params.stop_bits)
             << "handshake=" << handshakeName(params.handshake)
             << "ptt=" << pttMethodName(params.ptt_type)
             << "pttPort=" << params.ptt_port
@@ -1654,9 +1760,9 @@ void DecodiumTransceiverManager::loadSettings()
     auto get = [&](const QString& k, const QVariant& def) { return s.value(k, def); };
     m_serialPort   = normalizeDevicePath(get("serialPort",   m_serialPort).toString());
     m_baudRate     = get("baudRate",     m_baudRate).toInt();
-    m_dataBits     = get("dataBits",     m_dataBits).toString();
-    m_stopBits     = get("stopBits",     m_stopBits).toString();
-    m_handshake    = get("handshake",    m_handshake).toString();
+    m_dataBits     = normalizeDataBitsChoice(get("dataBits",     m_dataBits).toString());
+    m_stopBits     = normalizeStopBitsChoice(get("stopBits",     m_stopBits).toString());
+    m_handshake    = normalizeHandshakeChoice(get("handshake",    m_handshake).toString());
     m_forceDtr     = get("forceDtr",     m_forceDtr).toBool();
     m_dtrHigh      = get("dtrHigh",      m_dtrHigh).toBool();
     m_forceRts     = get("forceRts",     m_forceRts).toBool();
