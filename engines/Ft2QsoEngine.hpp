@@ -226,6 +226,14 @@ private:
     // every feed() call. Caps growth at the freshness window.
     std::unordered_map<DecodeKey, TimePoint, DecodeKeyHash> m_dedup;
 
+    // Double-confirm cache (1.0.98): callsign upper -> (msgKey, firstSeen).
+    // Popolato in dispatchDecodeToState quando un decode directedToMe arriva
+    // in stato passivo. Al secondo decode coerente entro la finestra il
+    // partner viene "confirmed" e il dispatch procede. Pulito da
+    // pruneStaleDedup() con la stessa cadenza del dedup principale.
+    std::unordered_map<QString, std::pair<QString, TimePoint>> m_pendingConfirms;
+    bool checkAndUpdateDoubleConfirm(DecodeRow const& row);
+
     QTimer*                 m_tickTimer {nullptr};
     std::function<TimePoint()> m_clockOverride;
 

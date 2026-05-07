@@ -269,6 +269,17 @@ struct EngineConfig {
     bool     quickQsoEnabled {false};  // FT2 Ultra2 fast exchange
     bool     contestExchange {false};  // R+grid contest mode
     Slot     localSlot { Slot::Async };
+    // Quality gate (1.0.98): scarta decode "spuri" sotto SNR minimo. Default
+    // -22 dB taglia il rumore al limite del decoder FT2 evitando partenze TX
+    // su falsi positivi causati da propagazione cattiva.
+    int      minSnr {-22};
+    // Double-confirm (1.0.98): per decode directedToMe in stati passivi
+    // (Idle/CallingCq) richiedi 2 decode coerenti consecutivi del partner
+    // entro doubleConfirmWindowMs prima di committarsi a TX. Decode di
+    // partner già engaged (AwaitingReport/AwaitingRRR/Closing) sono sempre
+    // processati senza conferma — non si abbandona un QSO già aperto.
+    bool     requireDoubleConfirm   {true};
+    int      doubleConfirmWindowMs  {15000};   // ~3 slot FT2
 };
 
 // ============================================================================

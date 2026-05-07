@@ -244,6 +244,29 @@ void Ft2QsoEngine::pruneStaleDedup() {
         if ((now - it->second) > kFreshnessWindow * 2) it = m_dedup.erase(it);
         else ++it;
     }
+    auto const confirmWindow = std::chrono::milliseconds(m_cfg.doubleConfirmWindowMs);
+    for (auto it = m_pendingConfirms.begin(); it != m_pendingConfirms.end(); ) {
+        if ((now - it->second.second) > confirmWindow) it = m_pendingConfirms.erase(it);
+        else ++it;
+    }
+}
+
+bool Ft2QsoEngine::checkAndUpdateDoubleConfirm(DecodeRow const& row) {
+    QString const msgKey = row.message.trimmed().toUpper();
+    auto const now    = clockNow();
+    auto const window = std::chrono::milliseconds(m_cfg.doubleConfirmWindowMs);
+    auto it = m_pendingConfirms.find(row.fromCall);
+    if (it != m_pendingConfirms.end()) {
+        auto const& [prevMsg, prevSeen] = it->second;
+        if (prevMsg == msgKey && (now - prevSeen) < window) {
+            m_pendingConfirms.erase(it);
+            return true;
+        }
+    }
+    m_pendingConfirms[row.fromCall] = {msgKey, now};
+    emit engineDiagnostic(QStringLiteral("[Ft2Engine] await confirm %1 (%2)")
+                          .arg(row.fromCall, msgKey));
+    return false;
 }
 
 // ==========================================================================
@@ -635,6 +658,25 @@ QString Ft2QsoEngine::dxCall() const {
 // ==========================================================================
 
 bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
+    // Quality gate: scarta decode "spuri" sotto SNR minimo.
+    if (row.snr < m_cfg.minSnr) {
+        emit engineDiagnostic(QStringLiteral("[Ft2Engine] dropped weak %1 SNR=%2 < %3")
+                              .arg(row.fromCall.isEmpty() ? QStringLiteral("?") : row.fromCall)
+                              .arg(row.snr).arg(m_cfg.minSnr));
+        return false;
+    }
+
+    // Double-confirm: solo per decode directedToMe in stati passivi
+    // (Idle/CallingCq). Decode di partner gia` engaged sono sempre processati
+    // — non si abbandona un QSO aperto solo perche` un singolo slot e` perso.
+    if (m_cfg.requireDoubleConfirm && row.directedToMe && !row.fromCall.isEmpty()) {
+        bool const isPassive = std::holds_alternative<state::Idle>(m_state)
+                            || std::holds_alternative<state::CallingCq>(m_state);
+        if (isPassive && !checkAndUpdateDoubleConfirm(row)) {
+            return false;
+        }
+    }
+
     bool advanced = false;
 
     std::visit([&](auto& s) {
