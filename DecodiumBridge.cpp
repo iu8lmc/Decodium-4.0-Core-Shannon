@@ -743,14 +743,31 @@ static QString decodeDedupKey(QString const& time,
 // in scansioni consecutive con freq leggermente diversa (±1-10 Hz di jitter). Quantizza
 // la frequenza in bucket da 20 Hz così gli stessi decode non producono righe duplicate
 // nella decodeList, mantenendo comunque la distinzione tra QSO vicini su bande diverse.
+//
+// 1.0.98 fix 3/4: aggiunto callBucket (fromCall upper-case base) come prima
+// componente. Lo stage7 multi-pass emette spesso la stessa stazione con LLR
+// variants che differiscono di pochi caratteri nel payload (R prefix, grid
+// trailing, '?' di low-confidence) — il vecchio schema "time|fBucket|message"
+// non li dedupava perché message differiva, e l'utente vedeva la stessa call
+// due volte in Band Activity. Anteporre la callBucket batte questo caso e
+// allinea il dedup UI con il dedup interno dell'engine (DecodeKey in
+// Ft2Types.hpp che già usa fromCall + msgFingerprint + freqBucket).
+//
+// Quando fromCall e' vuoto (es. messaggi non-standard senza callsign decodibile)
+// la chiave degrada al vecchio comportamento "time|fBucket|message" — nessuna
+// regressione per questi casi marginali.
 static QString decodeDedupKeyFt2Async(QString const& time,
                                       QString const& freq,
-                                      QString const& message)
+                                      QString const& message,
+                                      QString const& fromCall = QString())
 {
     bool ok = false;
     int const f = freq.trimmed().toInt(&ok);
     QString const fBucket = ok ? QString::number((f / 20) * 20) : freq.trimmed();
-    return normalizeUtcDisplayToken(time).trimmed()
+    QString const callBucket = fromCall.trimmed().toUpper();
+    return callBucket
+        + QLatin1Char('|')
+        + normalizeUtcDisplayToken(time).trimmed()
         + QLatin1Char('|')
         + fBucket
         + QLatin1Char('|')
@@ -17643,7 +17660,8 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         }
         QString const key = decodeDedupKeyFt2Async(prev.value("time").toString(),
                                                    prev.value("freq").toString(),
-                                                   prev.value("message").toString());
+                                                   prev.value("message").toString(),
+                                                   prev.value("fromCall").toString());
         if (!key.isEmpty()) {
             existing.insert(key);
         }
@@ -17711,7 +17729,8 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
 
         QString const dedupKey = decodeDedupKeyFt2Async(entry.value("time").toString(),
                                                         entry.value("freq").toString(),
-                                                        msg);
+                                                        msg,
+                                                        entry.value("fromCall").toString());
         if (existing.contains(dedupKey)) {
             ++duplicatesSkipped;
             continue;
