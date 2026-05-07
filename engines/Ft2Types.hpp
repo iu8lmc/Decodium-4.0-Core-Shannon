@@ -151,11 +151,15 @@ constexpr Duration kEngineTickInterval  = std::chrono::milliseconds(100);
 //       AFTER the engine has seen "TX started" inside Closing, OR
 //   (b) this safety fallback elapses, in case the backend never emits the
 //       transition (e.g. legacy mirror disabled, MAC bridge audio path).
-// 7000ms = ~1.86 slots: enough headroom for entry-time variance against
-// slot snapshots, but still under 2 full slots (which would let the backend
-// retransmit RR73 a second time). The TX-end signal short-circuits this in
-// the common case so most QSOs leave Closing in 4-5s on air.
-constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(7000);
+// 3000ms = ~0.8 slot FT2: la TX di chiusura (TX4 RR73 / TX5 73) e` 1 messaggio
+// FT2 da ~3.7s ON-AIR, ma il safety drain gestisce il SOLO caso in cui il
+// backend non emette il signal TX-end. Nel flusso normale il signal arriva
+// entro ~100ms dalla fine TX e Closing exits subito. Tenere 7s lasciava il
+// QSO "fermo" 7 secondi di troppo se per qualunque motivo il signal mancava
+// — il sintomo utente "da il 73 ma non chiude" coincide con questo caso.
+// 3000ms e` abbastanza per un singolo TX di chiusura senza lasciar partire
+// una seconda iterazione del closing message.
+constexpr Duration kCloseDrainAfter = std::chrono::milliseconds(3000);
 
 // ============================================================================
 // TX Sync policy: FT2 async = emit immediately on decode-driven advance.
@@ -269,22 +273,24 @@ struct EngineConfig {
     bool     quickQsoEnabled {false};  // FT2 Ultra2 fast exchange
     bool     contestExchange {false};  // R+grid contest mode
     Slot     localSlot { Slot::Async };
-    // Quality gate (1.0.98): scarta decode "spuri" sotto SNR minimo. Default
-    // -22 dB taglia il rumore al limite del decoder FT2 evitando partenze TX
-    // su falsi positivi causati da propagazione cattiva.
-    int      minSnr {-22};
+    // Quality gate (1.0.98): scarta decode "spuri" sotto SNR minimo SOLO in
+    // stati passivi (Idle/CallingCq). Default -99 dB = effettivamente off,
+    // comportamento identico a 1.0.97. Alza a -22..-25 quando la propagazione
+    // cattiva genera engagement su falsi positivi.
+    int      minSnr {-99};
     // Double-confirm (1.0.98): per decode directedToMe in stati passivi
-    // (Idle/CallingCq) richiedi 2 decode coerenti consecutivi del partner
-    // entro doubleConfirmWindowMs prima di committarsi a TX. Decode di
-    // partner già engaged (AwaitingReport/AwaitingRRR/Closing) sono sempre
-    // processati senza conferma — non si abbandona un QSO già aperto.
-    bool     requireDoubleConfirm   {true};
+    // richiedi 2 decode coerenti consecutivi del partner entro
+    // doubleConfirmWindowMs prima di committarsi a TX. Default OFF (1.0.97
+    // behavior) — il primo decode valido fa partire ReplyingTx1. Accendi
+    // quando hai partner che chiamano una sola volta e non vuoi engagement
+    // su replay decoder spuri.
+    bool     requireDoubleConfirm   {false};
     int      doubleConfirmWindowMs  {15000};   // ~3 slot FT2
     // Anti-flap (1.0.98): rifiuta transizioni regressive (verso Idle/CallingCq
     // da uno stato impegnato) se la permanenza nello stato corrente e' minore
-    // di minStateMs. Evita oscillazioni Replying<->Idle quando la propagazione
-    // cattiva fa apparire e sparire il partner ad ogni slot.
-    int      minStateMs             {5000};    // 1 slot FT2 di stickiness
+    // di minStateMs. Default 0 = off (1.0.97 behavior). Alza a 5000 (1 slot
+    // FT2 di stickiness) quando la propagazione cattiva fa flap Replying->Idle.
+    int      minStateMs             {0};
 };
 
 // ============================================================================

@@ -683,6 +683,24 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
         }
     }
 
+    // Diagnostic verbose: log ogni decode quando lo state machine e` engaged.
+    // Aiuta a tracciare on-air il caso "trasmette ma non passa": vediamo lo
+    // stato corrente, cosa il parser ha estratto e quale ramo del dispatch
+    // verra` colpito. Stati passivi (Idle/CallingCq) non sono loggati per non
+    // intasare il pannello durante CQ in banda affollata.
+    if (!isPassiveState && (row.directedToMe || !row.fromCall.isEmpty())) {
+        emit engineDiagnostic(
+            QStringLiteral("[Ft2Engine] state=%1 from=%2 dirMe=%3 R=%4 rep=%5 grid=%6 cq=%7 msg='%8'")
+                .arg(stateLabel())
+                .arg(row.fromCall.isEmpty() ? QStringLiteral("?") : row.fromCall)
+                .arg(row.directedToMe ? QStringLiteral("Y") : QStringLiteral("N"))
+                .arg(row.hasRogerPrefix ? QStringLiteral("Y") : QStringLiteral("N"))
+                .arg(row.report.isEmpty() ? QStringLiteral("-") : row.report)
+                .arg(row.grid.isEmpty() ? QStringLiteral("-") : row.grid)
+                .arg(row.isCq ? QStringLiteral("Y") : QStringLiteral("N"))
+                .arg(row.message));
+    }
+
     bool advanced = false;
 
     std::visit([&](auto& s) {
@@ -782,16 +800,55 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 }
                 return;
             }
+            // Riallineamento Decodium 3.0: ReplyingTx1 (TX1 mandato) accetta
+            // 4 input dal partner:
+            //   1. signoff (RR73/RRR/73)  -> chiudiamo, mandiamo TX5/73
+            //   2. R+report (TX3 partner) -> chiudiamo, mandiamo TX5/73
+            //   3. bare report (TX2)      -> avanziamo a AwaitingRRR, mandiamo TX3 R+report
+            //   4. solo grid (TX1 ripet.) -> partner non ci ha sentito, resend TX1
+            QString const ru = row.report.toUpper();
+            bool const isSignoff = isSignoffToken(ru);
+            if (isSignoff) {
+                state::Closing c;
+                c.partnerCall    = s.partnerCall;
+                c.sentReport     = formatReportFromSnr(row.snr);
+                c.receivedReport = row.report;
+                c.closedAt       = clockNow();
+                transitionTo(c, QStringLiteral("got signoff from %1 in ReplyingTx1").arg(s.partnerCall));
+                requestTx(5, buildTxMessage(5, c.partnerCall, {}, c.sentReport, c.receivedReport, false));
+                advanced = true;
+                return;
+            }
+            if (row.hasRogerPrefix && !row.report.isEmpty()) {
+                // Partner ha gia` mandato R+report (TX3) — siamo "B" nel dialogo
+                // standard, prossima e` TX5/73 da parte nostra.
+                state::Closing c;
+                c.partnerCall    = s.partnerCall;
+                c.sentReport     = formatReportFromSnr(row.snr);
+                c.receivedReport = row.report;
+                c.closedAt       = clockNow();
+                transitionTo(c, QStringLiteral("got R+report from %1 in ReplyingTx1, sending 73").arg(s.partnerCall));
+                requestTx(5, buildTxMessage(5, c.partnerCall, {}, c.sentReport, c.receivedReport, false));
+                advanced = true;
+                return;
+            }
             if (!row.report.isEmpty()) {
+                // Bare report (TX2 partner) — avanziamo a AwaitingRRR (TX3).
                 state::AwaitingRRR n;
                 n.partnerCall    = s.partnerCall;
                 n.receivedReport = row.report;
                 n.sentReport     = formatReportFromSnr(row.snr);
                 n.enteredAt      = clockNow();
-                transitionTo(n, QStringLiteral("got report from %1").arg(s.partnerCall));
+                transitionTo(n, QStringLiteral("got bare report from %1").arg(s.partnerCall));
                 requestTx(3, buildTxMessage(3, n.partnerCall, {}, n.sentReport, n.receivedReport, false));
                 advanced = true;
+                return;
             }
+            // Solo grid o nessun payload — partner non ha visto la TX1, resend.
+            ++s.retries;
+            emit engineDiagnostic(QStringLiteral("[Ft2Engine] ReplyingTx1: partner %1 echoed grid, resending TX1 (retries=%2)")
+                                  .arg(s.partnerCall).arg(s.retries));
+            requestTx(1, buildTxMessage(1, s.partnerCall, s.partnerGrid, {}, {}, false));
         }
 
         // ----------------------------------------------------------------
@@ -807,13 +864,29 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 }
                 return;
             }
+            // Riallineamento Decodium 3.0: AwaitingReport (TX2 mandato) accetta
+            // 4 input dal partner:
+            //   1. signoff (RR73/RRR/73)  -> partner ha gia` chiuso, log e TX5/73
+            //   2. R+report (TX3)         -> standard, log e TX4/RR73
+            //   3. bare report (TX2)      -> partner non ha ancora R, mandiamo TX3
+            //   4. solo grid/repeat TX1   -> partner non ci ha sentito, resend TX2
+            QString const ru = row.report.toUpper();
+            bool const isSignoff = isSignoffToken(ru);
+            if (isSignoff) {
+                // Partner ha "compresso" — salta direttamente al 73.
+                state::Closing c;
+                c.partnerCall    = s.partnerCall;
+                c.partnerGrid    = s.partnerGrid;
+                c.sentReport     = s.sentReport;
+                c.receivedReport = row.report;
+                c.closedAt       = clockNow();
+                transitionTo(c, QStringLiteral("got signoff from %1 in AwaitingReport").arg(s.partnerCall));
+                requestTx(5, buildTxMessage(5, c.partnerCall, {}, c.sentReport, c.receivedReport, false));
+                advanced = true;
+                return;
+            }
             if (row.hasRogerPrefix && !row.report.isEmpty()) {
-                // Standard WSJT-X behavior: TX4 (RR73) is the CQer's last TX of the QSO.
-                // Log immediately; tick() finalizes Closing -> CQ. We do NOT linger in
-                // AwaitingSignoff waiting for partner's 73 (it would re-flood RR73).
-                // Ultra2 (QuickQSO): send TX3 (R+rep+TU) instead of TX4 (RR73) so the
-                // exchange completes in 2 messages per side; partner's R+rep+TU is the
-                // signoff and we do not expect their 73.
+                // Standard WSJT-X: chiudiamo con TX4 RR73 (TX3+TU in Ultra2).
                 state::Closing c;
                 c.partnerCall    = s.partnerCall;
                 c.partnerGrid    = s.partnerGrid;
@@ -830,11 +903,25 @@ bool Ft2QsoEngine::dispatchDecodeToState(DecodeRow const& row) {
                 advanced = true;
                 return;
             }
-            // Bare report (no R) — partner still acknowledging; resend TX2.
             if (!row.report.isEmpty()) {
-                ++s.retries;
-                requestTx(2, buildTxMessage(2, s.partnerCall, s.partnerGrid, s.sentReport, {}, false));
+                // Bare report — partner ha ricevuto la nostra TX2 ma non ha
+                // ancora aggiunto R. In 3.0 si avanzava a TX3 (ROGER_REPORT)
+                // mandando "DX ME R-report"; il partner risponde poi con RR73.
+                state::AwaitingRRR n;
+                n.partnerCall    = s.partnerCall;
+                n.receivedReport = row.report;
+                n.sentReport     = s.sentReport;
+                n.enteredAt      = clockNow();
+                transitionTo(n, QStringLiteral("got bare report from %1, advancing to TX3").arg(s.partnerCall));
+                requestTx(3, buildTxMessage(3, n.partnerCall, {}, n.sentReport, n.receivedReport, false));
+                advanced = true;
+                return;
             }
+            // Solo grid o ripetizione TX1 partner — non ci ha sentito, resend TX2.
+            ++s.retries;
+            emit engineDiagnostic(QStringLiteral("[Ft2Engine] AwaitingReport: partner %1 repeated TX1, resending TX2 (retries=%2)")
+                                  .arg(s.partnerCall).arg(s.retries));
+            requestTx(2, buildTxMessage(2, s.partnerCall, s.partnerGrid, s.sentReport, {}, false));
         }
 
         // ----------------------------------------------------------------
