@@ -463,9 +463,12 @@ Item {
             running:        bridge.monitoring
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
-            // Throttle render a 10 fps quando engine FT2 è attivo (non Idle):
+            // Throttle render quando engine FT2 è attivo (non Idle):
             // libera CPU main-thread per il decoder. Vedi Tier 1.7.
+            // 1.0.98 fix 4/4: intervallo a 200ms (5 fps) per battere lo "scattoso"
+            // del Full Spectrum sotto propagazione cattiva (utente IU8LMC).
             throttleActive: bridge.mode === "FT2" && bridge.ft2State !== "Idle"
+            throttleIntervalMs: 200
             // Carica valori da Settings al primo avvio.
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
 

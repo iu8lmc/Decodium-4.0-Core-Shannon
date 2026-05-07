@@ -51,6 +51,11 @@ class PanadapterItem : public QQuickItem
 
     // ── Render throttle (paint cap durante carico CPU elevato, es. FT2 attivo)
     Q_PROPERTY(bool  throttleActive READ throttleActive WRITE setThrottleActive NOTIFY throttleActiveChanged)
+    // 1.0.98 fix 4/4: intervallo minimo (ms) tra emit update() quando throttleActive=true.
+    // Default 100 (10 fps). QML imposta 200 (5 fps) durante QSO FT2 sotto propagazione cattiva
+    // — riduce ulteriormente il carico GPU + main-thread e contrasta lo "scattoso" sul
+    // Full Spectrum cherry-picked dall'upstream 1.0.95.
+    Q_PROPERTY(int   throttleIntervalMs READ throttleIntervalMs WRITE setThrottleIntervalMs NOTIFY throttleIntervalMsChanged)
 
     // ── Decode labels (callsign overlay) ────────────────────────────────────
     Q_PROPERTY(int   labelFontSize      READ labelFontSize      WRITE setLabelFontSize      NOTIFY labelFontSizeChanged)
@@ -102,6 +107,7 @@ public:
     QColor labelColor()    const { return m_labelColor; }
     bool  labelUseCustomColor() const { return m_labelUseCustomColor; }
     bool  throttleActive() const { return m_throttleActive; }
+    int   throttleIntervalMs() const { return m_throttleIntervalMs; }
 
     // ── Setters ─────────────────────────────────────────────────────────────
     void setMinDb(float v)         { if (m_minDb!=v){m_minDb=v;emit minDbChanged();markDirty();} }
@@ -128,6 +134,7 @@ public:
     void setLabelColor(QColor v)   { if(m_labelColor!=v){m_labelColor=v;emit labelColorChanged();markDirty();} }
     void setLabelUseCustomColor(bool v) { if(m_labelUseCustomColor!=v){m_labelUseCustomColor=v;emit labelUseCustomColorChanged();markDirty();} }
     void setThrottleActive(bool v)      { if(m_throttleActive!=v){m_throttleActive=v;emit throttleActiveChanged(); if(!v) update();} }
+    void setThrottleIntervalMs(int v)   { v=qBound(20,v,1000); if(m_throttleIntervalMs!=v){m_throttleIntervalMs=v;emit throttleIntervalMsChanged();} }
 
     // ── Invokable methods ───────────────────────────────────────────────────
     // Chiamato dal bridge: dB raw + range dB + range frequenze exact
@@ -178,6 +185,7 @@ signals:
     void labelColorChanged();
     void labelUseCustomColorChanged();
     void throttleActiveChanged();
+    void throttleIntervalMsChanged();
     void spectrumGpuOverlayAvailableChanged();
     void gpuFftUnavailable(QString reason);
 
@@ -329,5 +337,6 @@ private:
     // ogni kThrottleIntervalMs (10 fps invece dei normali ~50 fps).
     // I dati FFT non vengono persi: m_pendingWaterfallRows li bufferizza.
     bool   m_throttleActive {false};
+    int    m_throttleIntervalMs {100};   // 1.0.98: configurabile da QML (5-50 fps)
     qint64 m_lastUpdateNs   {0};
 };

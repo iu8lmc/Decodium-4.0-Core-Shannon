@@ -1148,9 +1148,13 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
     // main-thread sul render durante slot decode pesanti.
     bool shouldEmitUpdate = true;
     if (m_throttleActive) {
-        constexpr qint64 kThrottleIntervalNs = 100LL * 1000 * 1000;
+        // 1.0.98: intervallo letto da m_throttleIntervalMs (default 100ms = 10 fps).
+        // QML può alzarlo a 200ms (5 fps) durante FT2 sotto propagazione cattiva
+        // per recuperare il bottleneck GPU/main introdotto dal panadapter
+        // cherry-pickato dall'upstream 1.0.95.
+        const qint64 throttleNs = qint64(m_throttleIntervalMs) * 1000 * 1000;
         const qint64 nowNs = std::chrono::steady_clock::now().time_since_epoch().count();
-        if (nowNs - m_lastUpdateNs < kThrottleIntervalNs) {
+        if (nowNs - m_lastUpdateNs < throttleNs) {
             shouldEmitUpdate = false;
         } else {
             m_lastUpdateNs = nowNs;
