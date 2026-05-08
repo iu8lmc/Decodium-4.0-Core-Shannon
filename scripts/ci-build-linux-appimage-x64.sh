@@ -143,7 +143,6 @@ if [[ "${QSB_FLAG}" != "1" ]]; then
 fi
 
 log "Build"
-cmake --build "${BUILD_DIR}" --target wsjt_fort_omp --parallel 1
 cmake --build "${BUILD_DIR}" --target wsjtx decodium_app wsprd message_aggregator --parallel "${JOBS}"
 
 log "Assemble AppDir"
