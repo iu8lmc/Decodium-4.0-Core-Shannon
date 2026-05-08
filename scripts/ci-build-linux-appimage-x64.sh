@@ -179,7 +179,53 @@ if [[ ! -x "${QT_PLUGIN}" ]]; then
     https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
   chmod +x "${QT_PLUGIN}"
 fi
-ln -sf "${QT_PLUGIN}" "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+
+resolve_appimage_runner() {
+  local appimage="$1"
+  local name="$2"
+  local extract_dir="${TOOLS_DIR}/${name}-extracted"
+  local squashfs="${TOOLS_DIR}/${name}.squashfs"
+  local found=0
+  local offset
+
+  if "${appimage}" --appimage-version >/dev/null 2>&1; then
+    printf '%s\n' "${appimage}"
+    return 0
+  fi
+
+  if ! command -v unsquashfs >/dev/null 2>&1; then
+    echo "error: ${name} AppImage cannot run directly and unsquashfs is not installed" >&2
+    exit 1
+  fi
+
+  rm -rf "${extract_dir}" "${squashfs}"
+  while IFS=: read -r offset _; do
+    rm -rf "${extract_dir}" "${squashfs}"
+    tail -c +$((offset + 1)) "${appimage}" > "${squashfs}"
+    if unsquashfs -q -d "${extract_dir}" "${squashfs}" >/dev/null 2>&1; then
+      found=1
+      break
+    fi
+  done < <(grep -aob "hsqs" "${appimage}" || true)
+  rm -f "${squashfs}"
+
+  if [[ "${found}" != "1" || ! -x "${extract_dir}/AppRun" ]]; then
+    echo "error: failed to extract ${name} AppImage payload" >&2
+    exit 1
+  fi
+
+  echo "Using extracted ${name} AppImage payload" >&2
+  printf '%s\n' "${extract_dir}/AppRun"
+}
+
+LINUXDEPLOY_RUNNER="$(resolve_appimage_runner "${LINUXDEPLOY}" linuxdeploy)"
+QT_PLUGIN_RUNNER="$(resolve_appimage_runner "${QT_PLUGIN}" linuxdeploy-plugin-qt)"
+rm -f "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'exec %q "$@"\n' "${QT_PLUGIN_RUNNER}"
+} > "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+chmod +x "${TOOLS_DIR}/linuxdeploy-plugin-qt"
 
 export APPIMAGE_EXTRACT_AND_RUN=1
 export QMAKE="${QMAKE}"
@@ -203,7 +249,7 @@ for helper in rigctl-wsjtx rigctld-wsjtx rigctlcom-wsjtx; do
 done
 linuxdeploy_args+=(--plugin qt)
 
-"${LINUXDEPLOY}" "${linuxdeploy_args[@]}"
+"${LINUXDEPLOY_RUNNER}" "${linuxdeploy_args[@]}"
 
 log "Bundle QML modules"
 mkdir -p "${APPDIR}/usr/bin/qml"
@@ -234,7 +280,7 @@ log "Create AppImage"
 (
   cd "${ROOT_DIR}"
   rm -f ./*.AppImage
-  "${LINUXDEPLOY}" --appdir "${APPDIR}" --output appimage
+  "${LINUXDEPLOY_RUNNER}" --appdir "${APPDIR}" --output appimage
 )
 
 APPIMAGE_NAME="decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
