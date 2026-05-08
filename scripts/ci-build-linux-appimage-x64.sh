@@ -89,10 +89,21 @@ else
   ./configure --prefix="${HAMLIB_PREFIX}" --disable-static --enable-shared
   make -j"${JOBS}"
   make install
-  "${HAMLIB_PREFIX}/bin/rigctl" --version
+  "${HAMLIB_PREFIX}/bin/rigctl" --version || true
 fi
 
-HAMLIB_LIBRARY="$(find "${HAMLIB_PREFIX}/lib" "${HAMLIB_PREFIX}/lib64" \
+hamlib_lib_dirs=()
+for hamlib_lib_dir in "${HAMLIB_PREFIX}/lib" "${HAMLIB_PREFIX}/lib64"; do
+  if [[ -d "${hamlib_lib_dir}" ]]; then
+    hamlib_lib_dirs+=("${hamlib_lib_dir}")
+  fi
+done
+if [[ "${#hamlib_lib_dirs[@]}" -eq 0 ]]; then
+  echo "error: unable to locate Hamlib library directories under ${HAMLIB_PREFIX}" >&2
+  exit 1
+fi
+
+HAMLIB_LIBRARY="$(find "${hamlib_lib_dirs[@]}" \
   -maxdepth 1 \( -name 'libhamlib.so' -o -name 'libhamlib.so.*' \) 2>/dev/null \
   | sort | head -n1)"
 if [[ -z "${HAMLIB_LIBRARY}" ]]; then
