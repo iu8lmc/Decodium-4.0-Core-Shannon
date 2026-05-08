@@ -638,6 +638,11 @@ void DecodiumTransceiverManager::setConnecting(bool v)
         return;
     }
     m_connecting = v;
+    if (v) {
+        m_connectAttemptTimer.restart();
+    } else {
+        m_connectAttemptTimer.invalidate();
+    }
     emit connectingChanged();
 }
 
@@ -1295,10 +1300,26 @@ void DecodiumTransceiverManager::connectRig()
 {
     if (d->transceiver) {
         if (m_connecting && !m_connected) {
-            emit statusUpdate(QStringLiteral("Connessione a %1 gia' in corso...").arg(m_rigName));
-            return;
+            qint64 const elapsedMs = m_connectAttemptTimer.isValid()
+                ? m_connectAttemptTimer.elapsed()
+                : -1;
+            if (elapsedMs >= 20000 || elapsedMs < 0) {
+                qWarning().noquote()
+                    << "[CATDBG] Stale connect attempt reset"
+                    << "rig=" << m_rigName
+                    << "portType=" << m_portType
+                    << "network=" << m_networkPort
+                    << "elapsedMs=" << elapsedMs;
+                emit statusUpdate(QStringLiteral("Connessione a %1 scaduta, riavvio tentativo...")
+                                  .arg(m_rigName));
+                disconnectRig();
+            } else {
+                emit statusUpdate(QStringLiteral("Connessione a %1 gia' in corso...").arg(m_rigName));
+                return;
+            }
+        } else {
+            disconnectRig();
         }
-        disconnectRig();
         // Piccola attesa per assicurarsi che il vecchio thread sia fermato
         if (d->xcvThread && d->xcvThread->isRunning())
             d->xcvThread->wait(2000);
@@ -1374,7 +1395,7 @@ void DecodiumTransceiverManager::connectRig()
     if (isHamRadioDeluxeRig(params.rig_name)) {
         QString const shownReason = sanitizeHamlibFailure(
             QStringLiteral("Ham Radio Deluxe retries exhausted sending command \"get context\""));
-        QTimer::singleShot(15000, this, [this, xcv, thread, shownReason]() {
+        QTimer::singleShot(25000, this, [this, xcv, thread, shownReason]() {
             abortConnectingRigAfterTimeout(xcv, thread, shownReason);
         });
     }

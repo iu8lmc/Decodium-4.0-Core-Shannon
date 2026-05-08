@@ -3,6 +3,7 @@
 // Supporta Hamlib (100+ radio), OmniRig, HRD, DXLab Suite Commander, TCI.
 // Stessa interfaccia pubblica di DecodiumCatManager + campi aggiuntivi.
 #include <QObject>
+#include <QElapsedTimer>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -247,4 +248,5 @@ private:
     bool    m_tciAudioEnabled {true};
     int     m_transientCatRetryCount {0};
     bool    m_transientCatReconnectPending {false};
+    QElapsedTimer m_connectAttemptTimer;
 };

@@ -29,8 +29,8 @@ namespace
   int constexpr yaesu_delay {350};
   int constexpr hrd_connect_timeout_ms {5000};
   int constexpr hrd_write_timeout_ms {1500};
-  int constexpr hrd_probe_reply_timeout_ms {750};
-  unsigned constexpr hrd_probe_reply_retries {4};
+  int constexpr hrd_probe_reply_timeout_ms {1000};
+  unsigned constexpr hrd_probe_reply_retries {10};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
 
@@ -1160,9 +1160,10 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
 
 QByteArray HRDTransceiver::read_reply (QString const& cmd)
 {
-  // HRD can accept the TCP socket while Rig Control is not actually speaking
-  // the remote protocol. Keep a small retry window for Windows timing jitter,
-  // but fail fast enough that Settings can remain interactive.
+  // HRD can accept the TCP socket before the remote protocol has a reply
+  // ready. JTDX/WSJT-X tolerate this on slower Windows installs; keep the
+  // initial context probe patient enough to match that behavior without
+  // making ordinary CAT polling sluggish.
   bool const context_probe = is_context_probe (cmd);
   int const timeout_ms = context_probe ? hrd_probe_reply_timeout_ms
                                        : hrd_command_reply_timeout_ms;
