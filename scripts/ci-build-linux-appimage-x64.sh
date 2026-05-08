@@ -152,6 +152,7 @@ cmake --install "${BUILD_DIR}" --prefix "${APPDIR}/usr"
 cp "${ROOT_DIR}/icons/Unix/decodium_icon.png" \
   "${APPDIR}/usr/share/icons/hicolor/256x256/apps/decodium.png"
 find "${APPDIR}" -name '._*' -o -name '.DS_Store' | xargs -r rm -f
+find "${APPDIR}/usr/share/applications" -name '*.desktop' -type f -exec sed -i 's/\r$//' {} +
 
 cat > "${APPDIR}/usr/share/applications/decodium.desktop" <<'DESKTOP'
 [Desktop Entry]
@@ -280,7 +281,11 @@ log "Create AppImage"
 (
   cd "${ROOT_DIR}"
   rm -f ./*.AppImage
-  "${LINUXDEPLOY_RUNNER}" --appdir "${APPDIR}" --output appimage
+  "${LINUXDEPLOY_RUNNER}" \
+    --appdir "${APPDIR}" \
+    --desktop-file "${APPDIR}/usr/share/applications/decodium.desktop" \
+    --icon-file "${APPDIR}/usr/share/icons/hicolor/256x256/apps/decodium.png" \
+    --output appimage
 )
 
 APPIMAGE_NAME="decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
