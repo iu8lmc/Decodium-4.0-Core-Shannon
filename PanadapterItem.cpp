@@ -1601,6 +1601,8 @@ void PanadapterItem::renderSpectrum()
             int textW;
             QString text;
             QColor color;
+            QString call;
+            int freq;
         };
         QVector<LabelItem> items;
         items.reserve(m_decodeLabels.size());
@@ -1628,7 +1630,7 @@ void PanadapterItem::renderSpectrum()
                            : (isMyCall ? QColor(255, 80, 80) : QColor(0, 200, 255));
             }
 
-            items.push_back({lx, textW, text, col});
+            items.push_back({lx, textW, text, col, call, freq});
         }
 
         std::sort(items.begin(), items.end(),
@@ -1636,6 +1638,8 @@ void PanadapterItem::renderSpectrum()
 
         QVector<int> rowRightX(maxRows, -1000000);
 
+        m_decodeHitRects.clear();
+        m_decodeHitRects.reserve(items.size());
         for (const auto& it : items) {
             int textX = it.x + 2;
             int chosenRow = -1;
@@ -1656,6 +1660,71 @@ void PanadapterItem::renderSpectrum()
             p.drawText(textX, textY, it.text);
 
             rowRightX[chosenRow] = textX + it.textW;
+
+            // Hit-rect per click-to-call sul callsign decodificato
+            QRect hr(textX - 2, textY - rowH + fm.descent(),
+                     it.textW + 4, rowH);
+            m_decodeHitRects.push_back({hr, it.call, it.freq});
+        }
+    } else {
+        m_decodeHitRects.clear();
+    }
+
+    // ── DX Cluster spots overlay ─────────────────────────────────────────
+    // Render in colore distinto (giallo) sotto le decode label, riga in basso.
+    // Lista già pre-filtrata dal QML per banda/dial corrente: ogni voce ha
+    // {call, freq} con freq in audio Hz relativi alla dial.
+    m_clusterHitRects.clear();
+    if (m_showDxClusterSpots && !m_dxClusterSpots.isEmpty()) {
+        QFont clusterFont("Consolas", m_labelFontSize, QFont::Bold);
+        p.setFont(clusterFont);
+        QFontMetrics fm(clusterFont);
+        const int rowH = fm.height();
+        // Riga dedicata: subito sopra il bottomKeepOut (h-22).
+        const int clusterBaseline = h - 24;
+
+        QVector<int> takenLeft;
+        takenLeft.reserve(m_dxClusterSpots.size());
+        for (const auto& v : m_dxClusterSpots) {
+            QVariantMap d = v.toMap();
+            QString call = d.value("call").toString();
+            int freq = d.value("freq").toInt();
+            if (call.isEmpty() || freq <= 0) continue;
+            int lx = fToX(freq);
+            if (lx < 0 || lx >= w) continue;
+
+            QString text = call;
+            int textW = fm.horizontalAdvance(text);
+            int textX = lx + 2;
+
+            // Anti-overlap rudimentale: salta se la X parte troppo vicina.
+            bool conflict = false;
+            for (int taken : takenLeft) {
+                if (qAbs(textX - taken) < textW + m_labelSpacing + 4) {
+                    conflict = true;
+                    break;
+                }
+            }
+            if (conflict) continue;
+            takenLeft.push_back(textX);
+
+            // Linea verticale tratteggiata gialla (solo sopra la riga label)
+            p.setPen(QPen(m_dxClusterSpotColor, 1, Qt::DashDotLine));
+            p.drawLine(lx, 0, lx, clusterBaseline - rowH);
+
+            // Background scuro per leggibilità
+            QRect labelRect(textX - 2,
+                            clusterBaseline - rowH + fm.descent(),
+                            textW + 4,
+                            rowH);
+            p.fillRect(labelRect, QColor(0, 0, 0, 180));
+            p.setPen(QPen(m_dxClusterSpotColor, 1));
+            p.drawRect(labelRect);
+            p.drawText(textX, clusterBaseline, text);
+
+            // Hit-test rect (espanso un po' verticalmente per click facili)
+            QRect hitRect = labelRect.adjusted(-2, -2, 2, 2);
+            m_clusterHitRects.push_back({hitRect, call, freq});
         }
     }
 
@@ -1802,6 +1871,12 @@ void PanadapterItem::updateSpectrumGraphNodes(QSGNode* spectrumRoot, int w, int 
 void PanadapterItem::setDecodeLabels(const QVariantList& labels)
 {
     m_decodeLabels = labels;
+    markDirty();
+}
+
+void PanadapterItem::setDxClusterSpots(const QVariantList& spots)
+{
+    m_dxClusterSpots = spots;
     markDirty();
 }
 
@@ -2928,6 +3003,30 @@ void PanadapterItem::geometryChange(const QRectF& newGeom, const QRectF& oldGeom
 // ─── Mouse / Wheel ───────────────────────────────────────────────────────────
 void PanadapterItem::mousePressEvent(QMouseEvent* ev)
 {
+    // Hit-test sulle label callsign (decode + cluster) prima del normale
+    // freq-selection: click sinistro su una label = chiama la stazione.
+    if (ev->button() == Qt::LeftButton) {
+        QPoint pos((int)ev->position().x(), (int)ev->position().y());
+        // Cluster prima (sono in basso, più visibili) se attivi
+        if (m_showDxClusterSpots) {
+            for (const auto& hit : m_clusterHitRects) {
+                if (hit.rect.contains(pos)) {
+                    emit dxClusterSpotClicked(hit.call, hit.freq);
+                    ev->accept();
+                    return;
+                }
+            }
+        }
+        // Poi i decode label (sono in alto)
+        for (const auto& hit : m_decodeHitRects) {
+            if (hit.rect.contains(pos)) {
+                emit decodeLabelClicked(hit.call, hit.freq);
+                ev->accept();
+                return;
+            }
+        }
+    }
+
     int freq = xToFreq((int)ev->position().x());
     if (ev->button() == Qt::LeftButton) {
         setTxFreq(freq);

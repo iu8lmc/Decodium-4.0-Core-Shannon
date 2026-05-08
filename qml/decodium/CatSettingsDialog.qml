@@ -173,6 +173,10 @@ Dialog {
                 editable: true
                 currentIndex: model.indexOf(bridge.catManager.serialPort)
                 editText: bridge.catManager.serialPort
+                onActivated: if (bridge.catManager.serialPort !== editText)
+                                 bridge.catManager.serialPort = editText
+                onEditTextChanged: if (bridge.catManager.serialPort !== editText)
+                                       bridge.catManager.serialPort = editText
                 contentItem: TextField {
                     leftPadding: 8
                     text: portCombo.editText
@@ -222,6 +226,11 @@ Dialog {
                 Layout.fillWidth: true
                 model: bridge.catManager.baudList
                 currentIndex: model.indexOf(String(bridge.catManager.baudRate).trim())
+                onActivated: {
+                    var v = parseInt(currentText)
+                    if (!isNaN(v) && bridge.catManager.baudRate !== v)
+                        bridge.catManager.baudRate = v
+                }
                 contentItem: Text {
                     leftPadding: 8
                     text: baudCombo.currentIndex >= 0 ? baudCombo.displayText : String(bridge.catManager.baudRate).trim()
@@ -249,6 +258,8 @@ Dialog {
                 Layout.fillWidth: true
                 model: ["CAT","DTR","RTS","VOX"]
                 currentIndex: model.indexOf(bridge.catManager.pttMethod)
+                onActivated: if (bridge.catManager.pttMethod !== currentText)
+                                 bridge.catManager.pttMethod = currentText
                 contentItem: Text {
                     leftPadding: 8
                     text: pttCombo.displayText
@@ -275,6 +286,8 @@ Dialog {
                 id: autoConnectCheck
                 text: "Auto-connect CAT all'avvio"
                 checked: bridge.catManager.catAutoConnect
+                onCheckedChanged: if (bridge.catManager.catAutoConnect !== checked)
+                                      bridge.catManager.catAutoConnect = checked
                 contentItem: Text {
                     leftPadding: autoConnectCheck.indicator.width + 6
                     text: autoConnectCheck.text
@@ -299,6 +312,8 @@ Dialog {
                 id: autoStartCheck
                 text: "Avvia audio alla connessione"
                 checked: bridge.catManager.audioAutoStart
+                onCheckedChanged: if (bridge.catManager.audioAutoStart !== checked)
+                                      bridge.catManager.audioAutoStart = checked
                 contentItem: Text {
                     leftPadding: autoStartCheck.indicator.width + 6
                     text: autoStartCheck.text

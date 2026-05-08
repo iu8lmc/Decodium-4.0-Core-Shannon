@@ -423,6 +423,30 @@ void DecodiumDxCluster::sendLogin()
     m_loginSent = true;
     setLastStatus(tr("Login sent as %1").arg(login));
     emit statusUpdate(tr("Login sent (%1).").arg(login));
+
+    // Dopo login, richiedi dump storico via SHOW/DX.
+    // dxspider la documentazione ufficiale usa il nome esteso.
+    // Delay 8s per dare al server tempo di processare login + banner.
+    QTimer::singleShot(8000, this, [this]() {
+        if (m_socket && m_socket->state() == QAbstractSocket::ConnectedState) {
+            QByteArray cmd = "SHOW/DX 30\n";
+            qint64 written = m_socket->write(cmd);
+            m_socket->flush();
+            emit statusUpdate(QStringLiteral("Sent SHOW/DX 30 (bytes=%1)").arg(written));
+        }
+    });
+    // Refresh periodico ogni 2 min.
+    QTimer* refreshTimer = new QTimer(this);
+    refreshTimer->setInterval(120000);
+    connect(refreshTimer, &QTimer::timeout, this, [this, refreshTimer]() {
+        if (m_socket && m_socket->state() == QAbstractSocket::ConnectedState) {
+            m_socket->write("SHOW/DX 30\n");
+            m_socket->flush();
+        } else {
+            refreshTimer->deleteLater();
+        }
+    });
+    refreshTimer->start();
 }
 
 QString DecodiumDxCluster::endpointLabel(const QString& host, int port) const
@@ -1062,6 +1086,62 @@ void DecodiumDxCluster::processLine(const QString& line)
             emit spotsChanged();
         }
         return;
+    }
+
+    // ---- SH/DX historical dump format ----
+    // dxspider invia all'avvio l'output di "SH/DX 30":
+    //   "  14182.0 AJ2I         8-May-2026 2131Z CQ USB             <EA5JMN>"
+    // La riga non comincia con "DX de" ma contiene comunque uno spot
+    // valido. Riconosciuta euristicamente: parte con freq numerica,
+    // contiene <SPOTTER> in chiusura.
+    static const QRegularExpression dumpRe(
+        R"(^\s*(\d+\.?\d*)\s+(\S+)\s+\d{1,2}-[A-Za-z]{3}-\d{2,4}\s+(\d{4}Z)\s+(.*?)\s*<(\S+)>\s*$)"
+    );
+    QRegularExpressionMatch dumpM = dumpRe.match(line);
+    if (dumpM.hasMatch()) {
+        double const freqKhz = dumpM.captured(1).toDouble();
+        qDebug() << "[DxCluster][DUMP-MATCH]" << "freq=" << freqKhz
+                 << "call=" << dumpM.captured(2)
+                 << "spotter=" << dumpM.captured(5);
+        if (freqKhz > 0.0) {
+            QString const dxCall = dumpM.captured(2).toUpper();
+            QString const time   = dumpM.captured(3);
+            QString const comment= dumpM.captured(4).trimmed();
+            QString const spotter= dumpM.captured(5).toUpper();
+
+            QString mode;
+            QString const cu = comment.toUpper();
+            if      (cu.contains("FT8"))  mode = "FT8";
+            else if (cu.contains("FT4"))  mode = "FT4";
+            else if (cu.contains("FT2"))  mode = "FT2";
+            else if (cu.contains("JS8"))  mode = "JS8";
+            else if (cu.contains("JT65")) mode = "JT65";
+            else if (cu.contains("JT9"))  mode = "JT9";
+            else if (cu.contains("Q65"))  mode = "Q65";
+            else if (cu.contains("CW"))   mode = "CW";
+            else if (cu.contains("SSB"))  mode = "SSB";
+            else if (cu.contains("USB") || cu.contains("LSB")) mode = "SSB";
+            else                          mode = "DATA";
+
+            QVariantMap spot;
+            spot["spotter"]   = spotter;
+            spot["dxCall"]    = dxCall;
+            spot["frequency"] = freqKhz;
+            spot["comment"]   = comment;
+            spot["time"]      = time;
+            spot["band"]      = bandFromFreq(freqKhz);
+            spot["mode"]      = mode;
+            spot["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+            while (m_spots.size() >= k_maxSpots)
+                m_spots.removeFirst();
+            m_spots.append(spot);
+            qDebug() << "[DxCluster][SPOT-ADDED]" << dxCall << "@" << freqKhz
+                     << "kHz total=" << m_spots.size();
+            emit newSpot(spot);
+            emit spotsChanged();
+            return;
+        }
     }
 
     // ---- Everything else → plain status update ----

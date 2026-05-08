@@ -728,6 +728,9 @@ public slots:
     Q_INVOKABLE void stopTx();
     Q_INVOKABLE void triggerManualTx() { startTx(); }  // PTT manuale FT2
     Q_INVOKABLE void sendTx(int n);    // usato da TxPanel: seleziona messaggio n e trasmette
+    // Click su uno spot DX cluster nel waterfall: setta dxCall, txFrequency
+    // sull'audio offset dello spot, abilita TX e avvia la sequenza QSO.
+    Q_INVOKABLE void engageDxClusterSpot(const QString& call, int audioFreqHz);
     Q_INVOKABLE QString txMessage(int n) const;
     Q_INVOKABLE void setTxMessage(int n, const QString& message);
     Q_INVOKABLE QString validateTxMessage(const QString& message) const;

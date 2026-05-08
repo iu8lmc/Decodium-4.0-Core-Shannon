@@ -78,6 +78,8 @@ Item {
         labelColorCombo.currentIndex = Math.max(0, Math.min(labelColorPresets.length - 1,
                                            bridge.getSetting("uiLabelColorPreset", 0)))
         waterfallPanel.showDecodeCallsigns = bridge.getSetting("uiWaterfallShowCallsigns", true)
+        dxClusterCheck.checked = bridge.getSetting("uiWaterfallShowDxCluster", false)
+        waterfallDisplay.showDxClusterSpots = dxClusterCheck.checked
 
         // In light theme la palette è forzata a 11 (mockup pastello). Non sovrascrivere col valore Settings.
         if (!bridge.themeManager.isLightTheme)
@@ -141,8 +143,87 @@ Item {
         waterfallDisplay.setDecodeLabels(labels)
     }
 
+    // Filtra gli spot del DX cluster per la dial corrente e li passa al
+    // PanadapterItem. Ogni voce: { call, freq } con freq in audio Hz.
+    // bridge.frequency è la dial in Hz. Spot.frequency è in kHz.
+    // Se la dial non è nota (CAT scollegato), inferiamo dalla mediana
+    // degli spot intorno a una banda plausibile per non bloccare la feature.
+    function refreshDxClusterSpots() {
+        if (!waterfallPanel.visible)
+            return
+        if (!dxClusterCheck.checked) {
+            waterfallDisplay.setDxClusterSpots([])
+            return
+        }
+        var spots = (bridge.dxCluster && bridge.dxCluster.spots) ? bridge.dxCluster.spots : []
+        var dialHz = Number(bridge.frequency) || 0
+        var fmin = waterfallPanel.minFreq
+        var fmax = waterfallPanel.maxFreq
+        console.log("[Waterfall][DxCluster] refresh: spots=" + spots.length
+                    + " dialHz=" + dialHz + " fmin=" + fmin + " fmax=" + fmax
+                    + " toggle=" + dxClusterCheck.checked)
+        if (!spots || spots.length === 0) {
+            waterfallDisplay.setDxClusterSpots([])
+            return
+        }
+        // Fallback: se dialHz=0 o molto piccola, prova a usare la freq media
+        // degli spot 20m (14000-14400 kHz) come dial pseudo per non perdere
+        // visualizzazione totale.
+        if (dialHz <= 1000) {
+            // Conta spot per banda 20m e usa 14074 come default FT8 dial.
+            var has20m = false
+            for (var k = 0; k < spots.length; ++k) {
+                var fk = Number(spots[k].frequency || 0)
+                if (fk >= 14000 && fk <= 14400) { has20m = true; break }
+            }
+            if (has20m) {
+                dialHz = 14074000
+                console.log("[Waterfall][DxCluster] fallback dial=14074000Hz (20m FT8)")
+            }
+        }
+        if (dialHz <= 0) {
+            waterfallDisplay.setDxClusterSpots([])
+            return
+        }
+        var out = []
+        var seen = {}
+        var totalRange = 0
+        for (var i = spots.length - 1; i >= 0; --i) {
+            var s = spots[i]
+            if (!s) continue
+            var call = (s.dxCall || "").toString().toUpperCase()
+            if (!call) continue
+            if (seen[call]) continue
+            var fkhz = Number(s.frequency || 0)
+            if (!fkhz) continue
+            var audio = Math.round(fkhz * 1000 - dialHz)
+            if (audio < fmin || audio > fmax) continue
+            seen[call] = true
+            // PanadapterItem rifiuta freq<=0; se cade esattamente a 0, sposta a 1Hz.
+            if (audio <= 0) audio = 1
+            out.push({ call: call, freq: audio })
+            totalRange++
+            if (out.length >= 40) break
+        }
+        console.log("[Waterfall][DxCluster] inRange=" + totalRange + " sentToWaterfall=" + out.length)
+        waterfallDisplay.setDxClusterSpots(out)
+    }
+
     Component.onCompleted: Qt.callLater(loadPanadapterSettings)
     onVisibleChanged: if (visible) Qt.callLater(loadPanadapterSettings)
+
+    // Aggiorna gli spot cluster sul waterfall quando arrivano nuovi spot
+    // o quando cambia la dial (cambia anche il filtro audio offset).
+    Connections {
+        target: bridge.dxCluster
+        function onSpotsChanged() { Qt.callLater(refreshDxClusterSpots) }
+    }
+    Connections {
+        target: bridge
+        function onFrequencyChanged() {
+            if (dxClusterCheck.checked) Qt.callLater(refreshDxClusterSpots)
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -323,6 +404,31 @@ Item {
                         Text { anchors.centerIn: parent; text: "✓"; color: "white"; font.pixelSize: 10; visible: txBracketsCheck.checked }
                     }
                 }
+
+                // DX Cluster spots toggle (giallo, click = chiama stazione)
+                CheckBox {
+                    id: dxClusterCheck
+                    checked: false
+                    onCheckedChanged: {
+                        waterfallDisplay.showDxClusterSpots = checked
+                        if (!waterfallPanel.restoringSettings) {
+                            bridge.setSetting("uiWaterfallShowDxCluster", checked)
+                        }
+                        if (checked) {
+                            waterfallPanel.refreshDxClusterSpots()
+                        }
+                    }
+                    ToolTip.text: "Mostra spot DX Cluster sul waterfall (click = chiama)"
+                    ToolTip.visible: dxClusterCheck.hovered
+                    ToolTip.delay: 400
+                    indicator: Rectangle {
+                        implicitWidth: 14; implicitHeight: 14; radius: 2
+                        color: dxClusterCheck.checked ? "#FFC800" : wfToolbarBg
+                        border.color: "#FFC800"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "DX"; color: "black"; font.pixelSize: 7; font.bold: true; visible: dxClusterCheck.checked }
+                    }
+                }
+                Text { text: "Cluster"; color: dxClusterCheck.checked ? "#FFC800" : textSec; font.pixelSize: 10 }
 
                 Item { Layout.fillWidth: true }
 
@@ -572,6 +678,14 @@ Item {
             }
             onTxFrequencySelected: function(freq) {
                 waterfallPanel.txFrequencySelected(freq)      // TX
+            }
+            onDxClusterSpotClicked: function(call, audioFreqHz) {
+                console.log("[Waterfall] DX cluster click → engage", call, "@", audioFreqHz, "Hz")
+                bridge.engageDxClusterSpot(call, audioFreqHz)
+            }
+            onDecodeLabelClicked: function(call, audioFreqHz) {
+                console.log("[Waterfall] decode label click → engage", call, "@", audioFreqHz, "Hz")
+                bridge.engageDxClusterSpot(call, audioFreqHz)
             }
 
             Item {

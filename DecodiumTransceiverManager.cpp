@@ -16,6 +16,7 @@
 #include <QMetaType>
 #include <QDebug>
 #include <QRegularExpression>
+#include <QTimer>
 #include <algorithm>
 #include <atomic>
 #include <stdexcept>
@@ -598,6 +599,42 @@ DecodiumTransceiverManager::DecodiumTransceiverManager(QObject* parent)
 {
     qRegisterMetaType<QVector<short>>("QVector<short>");
     loadSettings();
+
+    // Auto-save debounced: ogni cambio di parametro CAT salva entro 500ms.
+    // Risolve "CAT non ricorda le impostazioni" quando l'utente chiude il
+    // dialog senza premere Connetti.
+    auto* saveTimer = new QTimer(this);
+    saveTimer->setSingleShot(true);
+    saveTimer->setInterval(500);
+    connect(saveTimer, &QTimer::timeout, this, [this]() {
+        qInfo().noquote() << "[CATSAVE] auto-save firing: rig=" << m_rigName
+                          << "port=" << m_serialPort
+                          << "baud=" << m_baudRate
+                          << "autoConn=" << m_catAutoConnect;
+        saveSettings();
+    });
+    auto scheduleSave = [saveTimer]() {
+        qInfo().noquote() << "[CATSAVE] scheduleSave triggered (debounce 500ms)";
+        saveTimer->start();
+    };
+    connect(this, &DecodiumTransceiverManager::rigNameChanged,        this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::serialPortChanged,     this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::baudRateChanged,       this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::dataBitsChanged,       this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::stopBitsChanged,       this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::handshakeChanged,      this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::pttMethodChanged,      this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::pttPortChanged,        this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::forceDtrChanged,       this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::dtrHighChanged,        this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::forceRtsChanged,       this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::rtsHighChanged,        this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::networkPortChanged,    this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::tciPortChanged,        this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::pollIntervalChanged,   this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::catAutoConnectChanged, this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::audioAutoStartChanged, this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::splitModeChanged,      this, scheduleSave);
 }
 
 DecodiumTransceiverManager::~DecodiumTransceiverManager()

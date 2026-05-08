@@ -3933,11 +3933,17 @@ void DecodiumBridge::runPostQmlStartupServices()
     bool const autoConn = (m_catBackend == QStringLiteral("native")) ? m_nativeCat->catAutoConnect()
                         : (m_catBackend == QStringLiteral("omnirig")) ? m_omniRigCat->catAutoConnect()
                                                                       : m_hamlibCat->catAutoConnect();
-    // Respect the user's CAT Auto Connect choice. A previous successful CAT
-    // session is useful telemetry, but it must not start HRD/Hamlib again when
-    // Auto Connect is off; stale HRD sockets can otherwise leave Settings
-    // stuck in "connection in progress" on Windows.
-    bool const retryLastSuccessfulCat = false;
+    // Respect the user's CAT Auto Connect choice. Inoltre, se l'utente ha
+    // gia' avuto una connessione CAT riuscita in passato e il backend NON e'
+    // HRD-based (HRD ha problemi di socket stale che possono bloccare il
+    // Settings dialog su Windows), prova comunque a riconnettere all'avvio.
+    QSettings catLastSettings(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+    bool const lastSuccess = catLastSettings.value(QStringLiteral("lastSuccessfulCatConnected"), false).toBool();
+    QString const lastBackend = catLastSettings.value(QStringLiteral("lastSuccessfulCatBackend")).toString();
+    bool const sameBackend = (lastBackend == m_catBackend);
+    bool const isHrdBackend = (m_catBackend == QStringLiteral("hamlib") && m_hamlibCat
+                               && m_hamlibCat->rigName().contains(QStringLiteral("HRD"), Qt::CaseInsensitive));
+    bool const retryLastSuccessfulCat = lastSuccess && sameBackend && !isHrdBackend;
     bridgeLog(QStringLiteral("CAT[%1] autoConnect=%2 retryLastSuccessful=%3")
                   .arg(m_catBackend)
                   .arg(autoConn ? 1 : 0)
@@ -12391,6 +12397,35 @@ bool DecodiumBridge::tryStartWaitPounceFromEntry(const QVariantMap& entry,
                              entry.value(QStringLiteral("db")).toString(),
                              entry.value(QStringLiteral("freq")).toString().toInt());
     return true;
+}
+
+void DecodiumBridge::engageDxClusterSpot(const QString& call, int audioFreqHz)
+{
+    QString const cleaned = call.trimmed().toUpper();
+    if (cleaned.isEmpty()) {
+        bridgeLog("engageDxClusterSpot: callsign vuoto, ignorato");
+        return;
+    }
+    bridgeLog(QStringLiteral("engageDxClusterSpot: call=%1 audioHz=%2 mode=%3")
+              .arg(cleaned).arg(audioFreqHz).arg(m_mode));
+
+    setDxCall(cleaned);
+    setDxGrid(QString {});  // grid non noto, sarà aggiornato dal primo decode
+
+    if (audioFreqHz > 0) {
+        setTxFrequency(audioFreqHz);
+    }
+
+    // Forza TX1 (chiamata: <them> <me> <my-grid>)
+    if (m_currentTx != 1) {
+        setCurrentTx(1);
+    }
+
+    if (!m_txEnabled) {
+        setTxEnabled(true);
+    }
+
+    startTx();
 }
 
 void DecodiumBridge::processDecodeDoubleClick(const QString& message,

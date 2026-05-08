@@ -64,6 +64,10 @@ class PanadapterItem : public QQuickItem
     Q_PROPERTY(QColor labelColor        READ labelColor         WRITE setLabelColor         NOTIFY labelColorChanged)
     Q_PROPERTY(bool  labelUseCustomColor READ labelUseCustomColor WRITE setLabelUseCustomColor NOTIFY labelUseCustomColorChanged)
 
+    // ── DX Cluster spots overlay ────────────────────────────────────────────
+    Q_PROPERTY(bool   showDxClusterSpots READ showDxClusterSpots WRITE setShowDxClusterSpots NOTIFY showDxClusterSpotsChanged)
+    Q_PROPERTY(QColor dxClusterSpotColor READ dxClusterSpotColor WRITE setDxClusterSpotColor NOTIFY dxClusterSpotColorChanged)
+
     // ── Read-only status ────────────────────────────────────────────────────
     Q_PROPERTY(float measuredFloor READ measuredFloor NOTIFY measuredFloorChanged)
     Q_PROPERTY(float measuredPeak  READ measuredPeak  NOTIFY measuredPeakChanged)
@@ -108,6 +112,8 @@ public:
     bool  labelUseCustomColor() const { return m_labelUseCustomColor; }
     bool  throttleActive() const { return m_throttleActive; }
     int   throttleIntervalMs() const { return m_throttleIntervalMs; }
+    bool   showDxClusterSpots() const { return m_showDxClusterSpots; }
+    QColor dxClusterSpotColor() const { return m_dxClusterSpotColor; }
 
     // ── Setters ─────────────────────────────────────────────────────────────
     void setMinDb(float v)         { if (m_minDb!=v){m_minDb=v;emit minDbChanged();markDirty();} }
@@ -135,6 +141,8 @@ public:
     void setLabelUseCustomColor(bool v) { if(m_labelUseCustomColor!=v){m_labelUseCustomColor=v;emit labelUseCustomColorChanged();markDirty();} }
     void setThrottleActive(bool v)      { if(m_throttleActive!=v){m_throttleActive=v;emit throttleActiveChanged(); if(!v) update();} }
     void setThrottleIntervalMs(int v)   { v=qBound(20,v,1000); if(m_throttleIntervalMs!=v){m_throttleIntervalMs=v;emit throttleIntervalMsChanged();} }
+    void setShowDxClusterSpots(bool v)  { if(m_showDxClusterSpots!=v){m_showDxClusterSpots=v;emit showDxClusterSpotsChanged();markDirty();} }
+    void setDxClusterSpotColor(QColor v){ if(m_dxClusterSpotColor!=v){m_dxClusterSpotColor=v;emit dxClusterSpotColorChanged();markDirty();} }
 
     // ── Invokable methods ───────────────────────────────────────────────────
     // Chiamato dal bridge: dB raw + range dB + range frequenze exact
@@ -155,6 +163,8 @@ public:
     Q_INVOKABLE void resetWaterfall();
     // Mostra callsign decodificati sul grafico spettro
     Q_INVOKABLE void setDecodeLabels(const QVariantList& labels);
+    // Mostra spot DX cluster sul waterfall (lista [{call, freq audio Hz}, ...])
+    Q_INVOKABLE void setDxClusterSpots(const QVariantList& spots);
 
 signals:
     void minDbChanged();
@@ -188,6 +198,12 @@ signals:
     void throttleIntervalMsChanged();
     void spectrumGpuOverlayAvailableChanged();
     void gpuFftUnavailable(QString reason);
+    void showDxClusterSpotsChanged();
+    void dxClusterSpotColorChanged();
+    // Emesso al click su uno spot cluster nel waterfall (call + freq audio Hz)
+    void dxClusterSpotClicked(QString call, int audioFreqHz);
+    // Emesso al click su una etichetta decode (callsign decodificato) nel waterfall
+    void decodeLabelClicked(QString call, int audioFreqHz);
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
@@ -302,6 +318,15 @@ private:
     bool   m_labelBold           = true;
     QColor m_labelColor          = QColor(0, 230, 255);
     bool   m_labelUseCustomColor = false;
+
+    // ── DX Cluster spots overlay ────────────────────────────────────────────
+    QVariantList m_dxClusterSpots;       // [{call,freq}, ...] freq in audio Hz
+    bool   m_showDxClusterSpots  = false;
+    QColor m_dxClusterSpotColor  = QColor(255, 200, 0); // Giallo brillante
+    struct ClusterHit { QRect rect; QString call; int freq; };
+    QVector<ClusterHit> m_clusterHitRects;
+    // Stesso pattern per le decode labels: bounding-box per click-to-call.
+    QVector<ClusterHit> m_decodeHitRects;
 
     // ── Stato rendering ─────────────────────────────────────────────────────
     bool  m_spectrumDirty = true;
