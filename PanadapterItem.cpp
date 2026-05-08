@@ -29,6 +29,11 @@
 #else
 #error "DECODIUM_QT_RHI_TEXTURE_UPLOAD requires Qt RHI private headers"
 #endif
+#if QT_VERSION < QT_VERSION_CHECK(6, 6, 0)
+using DecodiumRhiBufferReadbackResult = QRhiBufferReadbackResult;
+#else
+using DecodiumRhiBufferReadbackResult = QRhiReadbackResult;
+#endif
 #endif
 #include <algorithm>
 #include <atomic>
@@ -2223,7 +2228,7 @@ void PanadapterItem::recordGpuFftCompute()
                                 sizeof(GpuFftParams),
                                 &params);
 
-    auto* readback = new QRhiReadbackResult;
+    auto* readback = new DecodiumRhiBufferReadbackResult;
     QPointer<PanadapterItem> guard(this);
     readback->completed = [guard,
                            readback,
