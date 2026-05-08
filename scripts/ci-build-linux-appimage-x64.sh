@@ -143,7 +143,7 @@ if [[ "${QSB_FLAG}" != "1" ]]; then
 fi
 
 log "Build"
-cmake --build "${BUILD_DIR}" --target wsjtx decodium_app wsprd message_aggregator --parallel "${JOBS}"
+cmake --build "${BUILD_DIR}" --target wsjtx decodium_app wsprd udp_daemon message_aggregator wsjtx_app_version --parallel "${JOBS}"
 
 log "Assemble AppDir"
 mkdir -p "${APPDIR}/usr/share/applications"
