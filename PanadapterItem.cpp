@@ -21,8 +21,14 @@
 #include <QPointer>
 #include <QDebug>
 #ifdef DECODIUM_QT_RHI_TEXTURE_UPLOAD
+#if __has_include(<rhi/qrhi.h>)
 #include <rhi/qrhi.h>
 #include <rhi/qshader.h>
+#elif __has_include(<private/qrhi_p.h>)
+#include <private/qrhi_p.h>
+#else
+#error "DECODIUM_QT_RHI_TEXTURE_UPLOAD requires Qt RHI private headers"
+#endif
 #endif
 #include <algorithm>
 #include <atomic>
