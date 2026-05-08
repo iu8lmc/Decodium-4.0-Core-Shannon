@@ -79,7 +79,7 @@ namespace
         {
           if (entry.second)
             {
-              fftwf_destroy_plan (entry.second);
+              decodium::fft_compat::destroy_plan (entry.second);
             }
         }
       plans_.clear ();
@@ -99,19 +99,19 @@ namespace
 
       if (isign == -1 && iform == 1)
         {
-          return fftwf_plan_dft_1d (nfft, complex_data, complex_data, FFTW_FORWARD, flags);
+          return decodium::fft_compat::plan_dft_1d (nfft, complex_data, complex_data, FFTW_FORWARD, flags);
         }
       if (isign == 1 && iform == 1)
         {
-          return fftwf_plan_dft_1d (nfft, complex_data, complex_data, FFTW_BACKWARD, flags);
+          return decodium::fft_compat::plan_dft_1d (nfft, complex_data, complex_data, FFTW_BACKWARD, flags);
         }
       if (isign == -1 && iform == 0)
         {
-          return fftwf_plan_dft_r2c_1d (nfft, real_data, complex_data, flags);
+          return decodium::fft_compat::plan_dft_r2c_1d (nfft, real_data, complex_data, flags);
         }
       if (isign == 1 && iform == -1)
         {
-          return fftwf_plan_dft_c2r_1d (nfft, complex_data, real_data, flags);
+          return decodium::fft_compat::plan_dft_c2r_1d (nfft, complex_data, real_data, flags);
         }
 
       std::fprintf (stderr, "Unsupported legacy FFT request: nfft=%d isign=%d iform=%d\n",

@@ -5,6 +5,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 namespace
 {
 
@@ -17,7 +19,7 @@ void fft_inplace (std::vector<Complex>& values, int direction)
       return;
     }
 
-  fftwf_plan plan = fftwf_plan_dft_1d (static_cast<int> (values.size ()),
+  fftwf_plan plan = decodium::fft_compat::plan_dft_1d (static_cast<int> (values.size ()),
                                        reinterpret_cast<fftwf_complex*> (values.data ()),
                                        reinterpret_cast<fftwf_complex*> (values.data ()),
                                        direction, FFTW_ESTIMATE);
@@ -27,7 +29,7 @@ void fft_inplace (std::vector<Complex>& values, int direction)
     }
 
   fftwf_execute (plan);
-  fftwf_destroy_plan (plan);
+  decodium::fft_compat::destroy_plan (plan);
 }
 
 std::vector<Complex> circular_shift_right (Complex const* input, int size, int shift)

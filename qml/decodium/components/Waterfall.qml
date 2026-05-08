@@ -19,6 +19,7 @@ Item {
     property int  maxFreq: 3200
     property int  spectrumHeight: 150
     property bool restoringSettings: false
+    property bool showDecodeCallsigns: true
     property var spectrumDecodeLabels: []
 
     // Altezza minima/massima del grafico spettro (regolabile tramite drag)
@@ -76,6 +77,7 @@ Item {
         labelBoldCheck.checked = bridge.getSetting("uiLabelBold", true)
         labelColorCombo.currentIndex = Math.max(0, Math.min(labelColorPresets.length - 1,
                                            bridge.getSetting("uiLabelColorPreset", 0)))
+        waterfallPanel.showDecodeCallsigns = bridge.getSetting("uiWaterfallShowCallsigns", true)
 
         // In light theme la palette è forzata a 11 (mockup pastello). Non sovrascrivere col valore Settings.
         if (!bridge.themeManager.isLightTheme)
@@ -93,7 +95,50 @@ Item {
         waterfallDisplay.labelUseCustomColor = preset.custom
         waterfallDisplay.labelColor = preset.color
         applyManualContrast()
+        if (!waterfallPanel.showDecodeCallsigns)
+            clearDecodeLabels()
         restoringSettings = false
+    }
+
+    function clearDecodeLabels() {
+        spectrumDecodeLabels = []
+        waterfallDisplay.setDecodeLabels([])
+    }
+
+    function refreshDecodeLabels() {
+        if (!waterfallPanel.visible)
+            return
+        if (!waterfallPanel.showDecodeCallsigns) {
+            clearDecodeLabels()
+            return
+        }
+
+        var labels = []
+        var seen = {}
+        var list = bridge.decodeList
+        // Prendi solo gli ultimi decode (ultimo periodo) — max 30
+        var start = Math.max(0, list.length - 30)
+        for (var i = start; i < list.length; ++i) {
+            var d = list[i]
+            if (d.isTx)
+                continue
+            var call = d.fromCall || ""
+            var freq = parseInt(d.freq || "0")
+            if (!call || freq <= 0)
+                continue
+            if (seen[call])
+                continue
+            seen[call] = true
+            labels.push({
+                call: call,
+                freq: freq,
+                snr: parseInt(d.db || "0"),
+                isCQ: d.isCQ || false,
+                isMyCall: d.isMyCall || false
+            })
+        }
+        waterfallPanel.spectrumDecodeLabels = labels
+        waterfallDisplay.setDecodeLabels(labels)
     }
 
     Component.onCompleted: Qt.callLater(loadPanadapterSettings)
@@ -611,6 +656,9 @@ Item {
                 }
 
                 function decodeLabelModel() {
+                    if (!waterfallPanel.showDecodeCallsigns)
+                        return []
+
                     var source = waterfallPanel.spectrumDecodeLabels || []
                     var items = []
                     var i
@@ -921,7 +969,8 @@ Item {
             if (key !== "uiPaletteIndex"
                 && key !== "uiWaterfallBlackLevel"
                 && key !== "uiWaterfallColorGain"
-                && key !== "uiWaterfallContrast")
+                && key !== "uiWaterfallContrast"
+                && key !== "uiWaterfallShowCallsigns")
                 return
 
             waterfallPanel.restoringSettings = true
@@ -938,36 +987,16 @@ Item {
             } else if (key === "uiWaterfallContrast") {
                 contrastSlider.value = Number(value)
                 waterfallPanel.applyManualContrast()
+            } else if (key === "uiWaterfallShowCallsigns") {
+                waterfallPanel.showDecodeCallsigns = !!value
+                waterfallPanel.refreshDecodeLabels()
             }
             waterfallPanel.restoringSettings = false
         }
 
         // Aggiorna i callsign decodificati sul grafico spettro
         function onDecodeListChanged() {
-            if (!waterfallPanel.visible) return
-            var labels = []
-            var seen = {}
-            var list = bridge.decodeList
-            // Prendi solo gli ultimi decode (ultimo periodo) — max 30
-            var start = Math.max(0, list.length - 30)
-            for (var i = start; i < list.length; ++i) {
-                var d = list[i]
-                if (d.isTx) continue
-                var call = d.fromCall || ""
-                var freq = parseInt(d.freq || "0")
-                if (!call || freq <= 0) continue
-                if (seen[call]) continue
-                seen[call] = true
-                labels.push({
-                    call: call,
-                    freq: freq,
-                    snr: parseInt(d.db || "0"),
-                    isCQ: d.isCQ || false,
-                    isMyCall: d.isMyCall || false
-                })
-            }
-            waterfallPanel.spectrumDecodeLabels = labels
-            waterfallDisplay.setDecodeLabels(labels)
+            waterfallPanel.refreshDecodeLabels()
         }
     }
 }

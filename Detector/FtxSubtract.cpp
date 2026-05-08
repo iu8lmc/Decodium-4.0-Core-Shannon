@@ -6,6 +6,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 namespace
 {
 
@@ -59,8 +61,8 @@ struct Ft8ComplexFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kFt8NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
-        inverse = fftwf_plan_dft_1d (kFt8NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kFt8NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        inverse = decodium::fft_compat::plan_dft_1d (kFt8NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -68,11 +70,11 @@ struct Ft8ComplexFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (inverse)
       {
-        fftwf_destroy_plan (inverse);
+        decodium::fft_compat::destroy_plan (inverse);
       }
     if (data)
       {
@@ -104,7 +106,7 @@ struct Ft8RealFft
   {
     if (in && out)
       {
-        plan = fftwf_plan_dft_r2c_1d (kFt8NMax, in, out, FFTW_ESTIMATE);
+        plan = decodium::fft_compat::plan_dft_r2c_1d (kFt8NMax, in, out, FFTW_ESTIMATE);
       }
   }
 
@@ -112,7 +114,7 @@ struct Ft8RealFft
   {
     if (plan)
       {
-        fftwf_destroy_plan (plan);
+        decodium::fft_compat::destroy_plan (plan);
       }
     if (out)
       {
@@ -143,8 +145,8 @@ struct Ft2ComplexFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kFt2NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
-        inverse = fftwf_plan_dft_1d (kFt2NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kFt2NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        inverse = decodium::fft_compat::plan_dft_1d (kFt2NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -152,11 +154,11 @@ struct Ft2ComplexFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (inverse)
       {
-        fftwf_destroy_plan (inverse);
+        decodium::fft_compat::destroy_plan (inverse);
       }
     if (data)
       {
@@ -188,8 +190,8 @@ struct Ft4ComplexFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kFt4NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
-        inverse = fftwf_plan_dft_1d (kFt4NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kFt4NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        inverse = decodium::fft_compat::plan_dft_1d (kFt4NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -197,11 +199,11 @@ struct Ft4ComplexFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (inverse)
       {
-        fftwf_destroy_plan (inverse);
+        decodium::fft_compat::destroy_plan (inverse);
       }
     if (data)
       {

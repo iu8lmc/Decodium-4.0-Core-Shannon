@@ -8,6 +8,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 namespace
 {
 
@@ -30,7 +32,7 @@ struct ComplexFft32
   {
     if (in && out)
       {
-        plan = fftwf_plan_dft_1d (32, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+        plan = decodium::fft_compat::plan_dft_1d (32, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -38,7 +40,7 @@ struct ComplexFft32
   {
     if (plan)
       {
-        fftwf_destroy_plan (plan);
+        decodium::fft_compat::destroy_plan (plan);
       }
     if (out)
       {

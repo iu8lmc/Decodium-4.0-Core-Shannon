@@ -72,6 +72,7 @@
 #include "WaterfallItem.hpp"
 #include "PanadapterItem.hpp"
 #include "WorldMapItem.hpp"
+#include "Detector/FftCompat.hpp"
 #include "lib/init_random_seed.h"
 
 static void L(const char* msg) {
@@ -558,6 +559,8 @@ static bool ensureLegacySqliteDatabase()
 
 int main(int argc, char* argv[])
 {
+    decodium::fft_compat::initialize_planner_thread_safety();
+
     qInstallMessageHandler(qtMsgHandler);
     L("main() START");
     L((QByteArray("Decodium version: ") + FORK_RELEASE_VERSION).constData());

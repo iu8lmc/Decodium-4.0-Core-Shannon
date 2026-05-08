@@ -56,14 +56,6 @@ add_executable (test_ft2_qso_sim test_ft2_qso_sim.cpp)
 target_link_libraries (test_ft2_qso_sim wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_ft2_qso_sim COMMAND $<TARGET_FILE:test_ft2_qso_sim>)
 
-add_executable (test_ft2_engine
-  test_ft2_engine.cpp
-  ../engines/Ft2QsoEngine.cpp)
-set_target_properties (test_ft2_engine PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON AUTOMOC ON)
-target_include_directories (test_ft2_engine PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries (test_ft2_engine Qt6::Core Qt6::Test)
-add_test (NAME test_ft2_engine COMMAND $<TARGET_FILE:test_ft2_engine>)
-
 add_executable (test_secure_settings test_secure_settings.cpp)
 target_link_libraries (test_secure_settings wsjt_qt wsjt_cxx Qt6::Test)
 add_test (NAME test_secure_settings COMMAND $<TARGET_FILE:test_secure_settings>)

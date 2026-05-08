@@ -7,6 +7,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 namespace
 {
 
@@ -66,8 +68,8 @@ struct Ft8DownsampleWorkspace
     std::memset (long_freq, 0, static_cast<size_t> (kFt8Half1 + 1) * sizeof (fftwf_complex));
     std::memset (short_time, 0, static_cast<size_t> (kFt8Nfft2) * sizeof (fftwf_complex));
 
-    long_forward = fftwf_plan_dft_r2c_1d (kFt8Nfft1, long_time, long_freq, FFTW_ESTIMATE);
-    short_inverse = fftwf_plan_dft_1d (kFt8Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
+    long_forward = decodium::fft_compat::plan_dft_r2c_1d (kFt8Nfft1, long_time, long_freq, FFTW_ESTIMATE);
+    short_inverse = decodium::fft_compat::plan_dft_1d (kFt8Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
     ready = long_forward && short_inverse;
   }
 
@@ -75,11 +77,11 @@ struct Ft8DownsampleWorkspace
   {
     if (long_forward)
       {
-        fftwf_destroy_plan (long_forward);
+        decodium::fft_compat::destroy_plan (long_forward);
       }
     if (short_inverse)
       {
-        fftwf_destroy_plan (short_inverse);
+        decodium::fft_compat::destroy_plan (short_inverse);
       }
     if (short_time)
       {
@@ -122,8 +124,8 @@ struct Ft2DownsampleWorkspace
     std::memset (long_freq, 0, static_cast<size_t> (kFt2Half1 + 1) * sizeof (fftwf_complex));
     std::memset (short_time, 0, static_cast<size_t> (kFt2Nfft2) * sizeof (fftwf_complex));
 
-    long_forward = fftwf_plan_dft_r2c_1d (kFt2Nfft1, long_time, long_freq, FFTW_ESTIMATE);
-    short_inverse = fftwf_plan_dft_1d (kFt2Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
+    long_forward = decodium::fft_compat::plan_dft_r2c_1d (kFt2Nfft1, long_time, long_freq, FFTW_ESTIMATE);
+    short_inverse = decodium::fft_compat::plan_dft_1d (kFt2Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
     ready = long_forward && short_inverse;
   }
 
@@ -131,11 +133,11 @@ struct Ft2DownsampleWorkspace
   {
     if (long_forward)
       {
-        fftwf_destroy_plan (long_forward);
+        decodium::fft_compat::destroy_plan (long_forward);
       }
     if (short_inverse)
       {
-        fftwf_destroy_plan (short_inverse);
+        decodium::fft_compat::destroy_plan (short_inverse);
       }
     if (short_time)
       {
@@ -178,8 +180,8 @@ struct Ft4DownsampleWorkspace
     std::memset (long_freq, 0, static_cast<size_t> (kFt4Half1 + 1) * sizeof (fftwf_complex));
     std::memset (short_time, 0, static_cast<size_t> (kFt4Nfft2) * sizeof (fftwf_complex));
 
-    long_forward = fftwf_plan_dft_r2c_1d (kFt4Nfft1, long_time, long_freq, FFTW_ESTIMATE);
-    short_inverse = fftwf_plan_dft_1d (kFt4Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
+    long_forward = decodium::fft_compat::plan_dft_r2c_1d (kFt4Nfft1, long_time, long_freq, FFTW_ESTIMATE);
+    short_inverse = decodium::fft_compat::plan_dft_1d (kFt4Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
     ready = long_forward && short_inverse;
   }
 
@@ -187,11 +189,11 @@ struct Ft4DownsampleWorkspace
   {
     if (long_forward)
       {
-        fftwf_destroy_plan (long_forward);
+        decodium::fft_compat::destroy_plan (long_forward);
       }
     if (short_inverse)
       {
-        fftwf_destroy_plan (short_inverse);
+        decodium::fft_compat::destroy_plan (short_inverse);
       }
     if (short_time)
       {
@@ -235,8 +237,8 @@ struct Ft8VarDownsampleWorkspace
     std::memset (long_freq, 0, static_cast<size_t> (kFt8Half1 + 1) * sizeof (fftwf_complex));
     std::memset (short_time, 0, static_cast<size_t> (kFt8Nfft2) * sizeof (fftwf_complex));
 
-    long_forward = fftwf_plan_dft_r2c_1d (kFt8Nfft1, long_time, long_freq, FFTW_ESTIMATE);
-    short_inverse = fftwf_plan_dft_1d (kFt8Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
+    long_forward = decodium::fft_compat::plan_dft_r2c_1d (kFt8Nfft1, long_time, long_freq, FFTW_ESTIMATE);
+    short_inverse = decodium::fft_compat::plan_dft_1d (kFt8Nfft2, short_time, short_time, FFTW_BACKWARD, FFTW_ESTIMATE);
     ready = long_forward && short_inverse;
   }
 
@@ -244,11 +246,11 @@ struct Ft8VarDownsampleWorkspace
   {
     if (long_forward)
       {
-        fftwf_destroy_plan (long_forward);
+        decodium::fft_compat::destroy_plan (long_forward);
       }
     if (short_inverse)
       {
-        fftwf_destroy_plan (short_inverse);
+        decodium::fft_compat::destroy_plan (short_inverse);
       }
     if (short_time)
       {
@@ -899,11 +901,11 @@ void ft8_filter_impl (float f0, int nslots, float width, float* wave)
 {
   thread_local std::vector<float> x (static_cast<size_t> (kFiltNfft), 0.0f);
   thread_local std::vector<Complex> cx (static_cast<size_t> (kFiltNh + 1));
-  thread_local fftwf_plan forward = fftwf_plan_dft_r2c_1d (kFiltNfft,
+  thread_local fftwf_plan forward = decodium::fft_compat::plan_dft_r2c_1d (kFiltNfft,
                                                            x.data (),
                                                            reinterpret_cast<fftwf_complex*> (cx.data ()),
                                                            FFTW_ESTIMATE);
-  thread_local fftwf_plan inverse = fftwf_plan_dft_c2r_1d (kFiltNfft,
+  thread_local fftwf_plan inverse = decodium::fft_compat::plan_dft_c2r_1d (kFiltNfft,
                                                            reinterpret_cast<fftwf_complex*> (cx.data ()),
                                                            x.data (),
                                                            FFTW_ESTIMATE);

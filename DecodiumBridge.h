@@ -53,7 +53,7 @@ class NtpClient;
 class QDialog;
 namespace decodium {
   namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
-  namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; class Ft2QsoEngine; }
+  namespace ft2     { class FT2DecodeWorker;       struct DecodeRequest; }
   namespace ft4     { class FT4DecodeWorker;       struct DecodeRequest; }
   namespace q65     { class Q65DecodeWorker;       struct DecodeRequest; }
   namespace msk144  { class MSK144DecodeWorker;    struct DecodeRequest; }
@@ -577,7 +577,7 @@ public:
     QString stationAntenna() const { return m_stationAntenna; }
     void    setStationAntenna(const QString& v);
     int     stationPowerWatts() const { return m_stationPowerWatts; }
-    void    setStationPowerWatts(int v){ v = qBound(0, v, 9999); if (m_stationPowerWatts!=v){m_stationPowerWatts=v;emit stationPowerWattsChanged();} }
+    void    setStationPowerWatts(int v){ v = qBound(0, v, 9999); if (m_stationPowerWatts!=v){m_stationPowerWatts=v;emit stationPowerWattsChanged(); if (m_mode.trimmed().compare(QStringLiteral("WSPR"), Qt::CaseInsensitive) == 0) regenerateTxMessages();} }
     bool    autoStartMonitorOnStartup() const { return m_autoStartMonitorOnStartup; }
     void    setAutoStartMonitorOnStartup(bool){ if (!m_autoStartMonitorOnStartup){m_autoStartMonitorOnStartup=true;emit autoStartMonitorOnStartupChanged();} }
     bool    startFromTx2()   const { return m_startFromTx2; }
@@ -1525,11 +1525,6 @@ private:
     decodium::ft8::FT8DecodeWorker*    m_ft8Worker    {nullptr};
     QThread* m_workerThreadFt2 {nullptr};
     decodium::ft2::FT2DecodeWorker*    m_ft2Worker    {nullptr};
-    // FT2 single-pipeline QSO sequencer (replaces autoSequenceStep mirror in
-    // FT2 mode). Owned only while mode == "FT2"; reset otherwise.
-    std::unique_ptr<decodium::ft2::Ft2QsoEngine> m_ft2Engine;
-    void ensureFt2Engine(QString const& origin);
-    void teardownFt2Engine(QString const& reason);
     QThread* m_workerThreadFt4 {nullptr};
     decodium::ft4::FT4DecodeWorker*    m_ft4Worker    {nullptr};
     QThread* m_workerThreadQ65 {nullptr};
@@ -1621,6 +1616,7 @@ private:
     QDateTime m_qsoStartedOn;
     bool    m_logAfterOwn73 {false};
     bool    m_ft2DeferredLogPending {false};
+    int     m_pendingAutoSeqTxAfterActiveTx {0};
     bool    m_quickPeerSignaled {false};
     bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
     int  m_maxCallerRetries {10};  // invii totali per step prima di fermarsi
@@ -1995,6 +1991,7 @@ private:
     QVariantList augmentLegacyMirrorWithAllTxt(QVariantList const& mirroredEntries,
                                                bool rxPane) const;
     bool shouldMirrorToRxPane(const QVariantMap& entry) const;
+    void appendTxDecodeEntry(const QString& message);
     void appendRxDecodeEntry(const QVariantMap& entry);
     void rebuildRxDecodeList();
     void replayWorldMapEntry(const QVariantMap& entry);
@@ -2008,6 +2005,10 @@ private:
     void loadWorldMapCall3Cache();
     void genStdMsgs(const QString& hisCall, const QString& hisGrid);
     void checkAndStartPeriodicTx();
+    bool shouldDeferAutoTxUntilTimeSyncDecode(const QString& modeSnapshot) const;
+    bool hasPendingTimeSyncDecodeForMode(const QString& modeSnapshot) const;
+    void scheduleDeferredAutoTxAfterTimeSyncDecode(const QString& modeSnapshot,
+                                                  quint64 sessionId);
     void autoSequenceStep(const QStringList& parsedFields);
     static int periodMsForMode(const QString& mode) {
         if (mode=="FT2")      return 3750;

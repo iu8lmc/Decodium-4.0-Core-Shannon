@@ -193,6 +193,7 @@ WorldMapWidget::WorldMapWidget(QWidget * parent)
   m_worldTexture = loadPixmapWithFallback({
       ":/earth_2048x1024.jpg",
       ":/artwork/maps/earth_2048x1024.jpg",
+      QDir {appDir}.absoluteFilePath("artwork/maps/earth_2048x1024.jpg"),
       QDir {appDir}.absoluteFilePath("../Resources/earth_2048x1024.jpg"),
       QDir {appDir}.absoluteFilePath("../Resources/wsjtx/earth_2048x1024.jpg"),
       QDir {appDir}.absoluteFilePath("../Resources/wsjtx/maps/earth_2048x1024.jpg"),
@@ -203,6 +204,7 @@ WorldMapWidget::WorldMapWidget(QWidget * parent)
   m_worldOverlay = loadPixmapWithFallback({
       ":/world_overlay_2048x1024.png",
       ":/artwork/maps/world_overlay_2048x1024.png",
+      QDir {appDir}.absoluteFilePath("artwork/maps/world_overlay_2048x1024.png"),
       QDir {appDir}.absoluteFilePath("../Resources/world_overlay_2048x1024.png"),
       QDir {appDir}.absoluteFilePath("../Resources/wsjtx/world_overlay_2048x1024.png"),
       QDir {appDir}.absoluteFilePath("../Resources/wsjtx/maps/world_overlay_2048x1024.png"),

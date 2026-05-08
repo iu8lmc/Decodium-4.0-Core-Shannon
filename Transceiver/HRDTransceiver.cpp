@@ -27,6 +27,17 @@ namespace
   // some commands require a settling time, particularly "RX A" and
   // "RX B" on the Yaesu FTdx3000.
   int constexpr yaesu_delay {350};
+  int constexpr hrd_connect_timeout_ms {5000};
+  int constexpr hrd_write_timeout_ms {1500};
+  int constexpr hrd_probe_reply_timeout_ms {750};
+  unsigned constexpr hrd_probe_reply_retries {4};
+  int constexpr hrd_command_reply_timeout_ms {1000};
+  unsigned constexpr hrd_command_reply_retries {5};
+
+  bool is_context_probe (QString const& cmd)
+  {
+    return 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive);
+  }
 }
 
 #include "moc_HRDTransceiver.cpp"
@@ -135,7 +146,7 @@ int HRDTransceiver::do_start ()
   auto const host_text = host.toString ();
   CAT_INFO ("HRD TCP connecting to" << host_text << port);
   hrd_->connectToHost (host, port);
-  if (!hrd_->waitForConnected ())
+  if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
     {
       CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
       throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
@@ -165,7 +176,7 @@ int HRDTransceiver::do_start ()
       protocol_ = v4;		// try again with older protocol
       CAT_INFO ("HRD TCP reconnecting for protocol v4 to" << host_text << port);
       hrd_->connectToHost (host, port);
-      if (!hrd_->waitForConnected ())
+      if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
         {
           CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
           throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
@@ -1137,7 +1148,7 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
   while (total_bytes_sent < length)
     {
       auto bytes_sent = hrd_->write (data + total_bytes_sent, length - total_bytes_sent);
-      if (bytes_sent < 0 || !hrd_->waitForBytesWritten ())
+      if (bytes_sent < 0 || !hrd_->waitForBytesWritten (hrd_write_timeout_ms))
         {
           return false;
         }
@@ -1149,16 +1160,18 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
 
 QByteArray HRDTransceiver::read_reply (QString const& cmd)
 {
-  // waitForReadReady appears to be occasionally unreliable on Windows
-  // timing out when data is waiting so retry a few times. Keep the same
-  // long Windows tolerance used by Decodium3/WSJT-X: some HRD instances
-  // accept the TCP socket immediately but answer the first protocol probe
-  // slowly while Rig Control is still settling.
-  unsigned retries {30};
+  // HRD can accept the TCP socket while Rig Control is not actually speaking
+  // the remote protocol. Keep a small retry window for Windows timing jitter,
+  // but fail fast enough that Settings can remain interactive.
+  bool const context_probe = is_context_probe (cmd);
+  int const timeout_ms = context_probe ? hrd_probe_reply_timeout_ms
+                                       : hrd_command_reply_timeout_ms;
+  unsigned retries = context_probe ? hrd_probe_reply_retries
+                                   : hrd_command_reply_retries;
   bool replied {false};
   while (!replied && retries--)
     {
-      replied = hrd_->waitForReadyRead ();
+      replied = hrd_->waitForReadyRead (timeout_ms);
       if (!replied && hrd_->error () != hrd_->SocketTimeoutError)
         {
           CAT_ERROR (cmd << "failed to reply" << hrd_->errorString ());
@@ -1171,7 +1184,7 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd)
     }
   if (!replied)
     {
-      CAT_ERROR (cmd << "retries exhausted");
+      CAT_ERROR (cmd << "retries exhausted, timeoutMs=" << timeout_ms);
       throw error {
         tr ("Ham Radio Deluxe retries exhausted sending command \"%1\"")
           .arg (cmd)

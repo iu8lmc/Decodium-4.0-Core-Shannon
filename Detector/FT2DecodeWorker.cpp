@@ -227,7 +227,8 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
     {
       return;
     }
-  Q_EMIT asyncDecodeReady (build_rows (QString {}, '~', nout, snrs, dts, freqs, naps, quals,
+  QString const utcPrefix = format_decode_utc (request.nutc);
+  Q_EMIT asyncDecodeReady (build_rows (utcPrefix, '~', nout, snrs, dts, freqs, naps, quals,
                                        decodeds));
 }
 

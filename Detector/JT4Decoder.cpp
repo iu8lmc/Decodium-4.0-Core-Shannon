@@ -22,6 +22,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 namespace
 {
 
@@ -81,18 +83,18 @@ float db_value (float x)
 void fftw_r2c_inplace (float* buf, int nfft)
 {
   auto* cx = reinterpret_cast<fftwf_complex*> (buf);
-  fftwf_plan p = fftwf_plan_dft_r2c_1d (nfft, buf, cx, FFTW_ESTIMATE);
+  fftwf_plan p = decodium::fft_compat::plan_dft_r2c_1d (nfft, buf, cx, FFTW_ESTIMATE);
   fftwf_execute (p);
-  fftwf_destroy_plan (p);
+  decodium::fft_compat::destroy_plan (p);
 }
 
 // In-place complex-to-real inverse FFT of size n2, reading from cx (which must
 // be the start of a buffer ≥ n2+2 floats).  FFTW does NOT normalise.
 void fftw_c2r_inplace (fftwf_complex* cx, float* out_buf, int n2)
 {
-  fftwf_plan p = fftwf_plan_dft_c2r_1d (n2, cx, out_buf, FFTW_ESTIMATE);
+  fftwf_plan p = decodium::fft_compat::plan_dft_c2r_1d (n2, cx, out_buf, FFTW_ESTIMATE);
   fftwf_execute (p);
-  fftwf_destroy_plan (p);
+  decodium::fft_compat::destroy_plan (p);
 }
 
 // Forward r2c for a pre-allocated buffer (used in compute_jt4_snr and ps4).
@@ -414,7 +416,7 @@ void sync4_cpp (float const* dat, int jz, int ntol, int nfqso, int mode4, int mi
 
   // Allocate reusable buffer + plan for ps4
   std::vector<float> ps4_buf (static_cast<std::size_t> (nfft + 2), 0.0f);
-  fftwf_plan ps4_plan = fftwf_plan_dft_r2c_1d (
+  fftwf_plan ps4_plan = decodium::fft_compat::plan_dft_r2c_1d (
       nfft, ps4_buf.data (),
       reinterpret_cast<fftwf_complex*> (ps4_buf.data ()), FFTW_ESTIMATE);
 
@@ -424,7 +426,7 @@ void sync4_cpp (float const* dat, int jz, int ntol, int nfqso, int mode4, int mi
       ps4_cpp (dat + k0, nh, ps4_plan, ps4_buf.data (),
                s2.data () + static_cast<std::size_t> (nh * (j - 1)));
     }
-  fftwf_destroy_plan (ps4_plan);
+  decodium::fft_compat::destroy_plan (ps4_plan);
 
   // ── Frequency search range ────────────────────────────────────────────────
   int ia = static_cast<int> (static_cast<float> (nfqso - ntol) / df);

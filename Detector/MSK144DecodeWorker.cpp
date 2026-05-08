@@ -15,6 +15,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 #include <QDateTime>
 #include <QDir>
 #include <QMutexLocker>
@@ -346,19 +348,19 @@ struct ComplexFftWorkspace
   ComplexFftWorkspace ()
   {
     auto* buffer = reinterpret_cast<fftwf_complex*> (data.data ());
-    forward = fftwf_plan_dft_1d (N, buffer, buffer, FFTW_FORWARD, FFTW_ESTIMATE);
-    inverse = fftwf_plan_dft_1d (N, buffer, buffer, FFTW_BACKWARD, FFTW_ESTIMATE);
+    forward = decodium::fft_compat::plan_dft_1d (N, buffer, buffer, FFTW_FORWARD, FFTW_ESTIMATE);
+    inverse = decodium::fft_compat::plan_dft_1d (N, buffer, buffer, FFTW_BACKWARD, FFTW_ESTIMATE);
   }
 
   ~ComplexFftWorkspace ()
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (inverse)
       {
-        fftwf_destroy_plan (inverse);
+        decodium::fft_compat::destroy_plan (inverse);
       }
   }
 

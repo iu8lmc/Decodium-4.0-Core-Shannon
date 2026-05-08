@@ -47,8 +47,14 @@ QString extractPortNameFromReason(QString const& reason)
 // rileva e la sostituisce con un testo piu' comprensibile.
 QString sanitizeHamlibFailure(QString const& reason)
 {
-    if (reason.contains(QStringLiteral("Ham Radio Deluxe retries exhausted sending command \"get context\""),
-                        Qt::CaseInsensitive)) {
+    bool const hrdContextTimeout =
+        reason.contains(QStringLiteral("get context"), Qt::CaseInsensitive)
+        && (reason.contains(QStringLiteral("retries exhausted"), Qt::CaseInsensitive)
+            || reason.contains(QStringLiteral("ritenta esaurito"), Qt::CaseInsensitive)
+            || reason.contains(QStringLiteral("failed to reply"), Qt::CaseInsensitive)
+            || reason.contains(QStringLiteral("non risponde"), Qt::CaseInsensitive)
+            || reason.contains(QStringLiteral("timed out"), Qt::CaseInsensitive));
+    if (hrdContextTimeout) {
         return QObject::tr(
             "Ham Radio Deluxe accetta la connessione TCP, ma non risponde al protocollo HRD. "
             "Verifica che HRD Rig Control sia avviato, che la radio sia gia' connessa in HRD "
@@ -148,6 +154,11 @@ QString defaultNetworkEndpointForRig(QString const& rigName)
     if (0 == rigName.compare(QStringLiteral("DX Lab Suite Commander"), Qt::CaseInsensitive))
         return QStringLiteral("127.0.0.1:52002");
     return QString();
+}
+
+bool isHamRadioDeluxeRig(QString const& rigName)
+{
+    return 0 == rigName.compare(QStringLiteral("Ham Radio Deluxe"), Qt::CaseInsensitive);
 }
 
 bool parseNetworkPortText(QString const& text, quint16* out = nullptr)
@@ -619,6 +630,54 @@ DecodiumTransceiverManager::~DecodiumTransceiverManager()
     if (thread) {
         delete thread;
     }
+}
+
+void DecodiumTransceiverManager::setConnecting(bool v)
+{
+    if (m_connecting == v) {
+        return;
+    }
+    m_connecting = v;
+    emit connectingChanged();
+}
+
+void DecodiumTransceiverManager::abortConnectingRigAfterTimeout(Transceiver* xcv, QThread* thread,
+                                                                const QString& shownReason)
+{
+    if (!m_connecting || m_connected || d->transceiver != xcv) {
+        return;
+    }
+
+    qWarning().noquote()
+        << "[CATDBG] Connect watchdog abort"
+        << "rig=" << m_rigName
+        << "portType=" << m_portType
+        << "network=" << m_networkPort;
+
+    d->transceiver = nullptr;
+    if (d->xcvThread == thread) {
+        d->xcvThread = nullptr;
+    }
+    d->desired = Transceiver::TransceiverState {};
+    setConnecting(false);
+    if (m_connected) {
+        m_connected = false;
+        emit connectedChanged();
+    }
+    updateTelemetry(0.0, 0.0);
+    emit errorOccurred(QStringLiteral("CAT failure: ") + shownReason);
+
+    if (!thread) {
+        return;
+    }
+
+    thread->requestInterruption();
+    thread->quit();
+    if (!thread->wait(250)) {
+        thread->terminate();
+        thread->wait(1000);
+    }
+    thread->deleteLater();
 }
 
 bool DecodiumTransceiverManager::pttSharesCatPort() const
@@ -1153,9 +1212,9 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
 #endif
     bool const pwrAndSwrEnabled = configuredPwrAndSwrEnabled();
     int const requestedPollInterval = qBound(1, m->pollInterval(), 99);
-    int const serialMinimumPollInterval = pwrAndSwrEnabled ? 1 : 2;
-    int const basePollInterval = qMax(serialCat ? serialMinimumPollInterval : 1,
-                                      requestedPollInterval);
+    int const basePollInterval = pwrAndSwrEnabled
+        ? 1
+        : qMax(serialCat ? 2 : 1, requestedPollInterval);
     p.rig_name      = m->rigName();
     p.serial_port   = normalizeDevicePath(m->serialPort());
     bool networkEndpointNormalized = false;
@@ -1310,7 +1369,15 @@ void DecodiumTransceiverManager::connectRig()
     d->transceiver = xcv;
     d->desired = Transceiver::TransceiverState {};
     d->desired.online(true);
-    m_connecting = true;
+    setConnecting(true);
+
+    if (isHamRadioDeluxeRig(params.rig_name)) {
+        QString const shownReason = sanitizeHamlibFailure(
+            QStringLiteral("Ham Radio Deluxe retries exhausted sending command \"get context\""));
+        QTimer::singleShot(15000, this, [this, xcv, thread, shownReason]() {
+            abortConnectingRigAfterTimeout(xcv, thread, shownReason);
+        });
+    }
 
     // Il transceiver è "ripe for destruction" quando emette finished().
     connect(xcv, &Transceiver::finished,
@@ -1334,7 +1401,7 @@ void DecodiumTransceiverManager::connectRig()
                 if (d->transceiver == xcv)
                     d->transceiver = nullptr;
                 d->desired = Transceiver::TransceiverState {};
-                m_connecting = false;
+                setConnecting(false);
                 thread->deleteLater();
                 if (m_connected) {
                     m_connected = false;
@@ -1387,7 +1454,7 @@ void DecodiumTransceiverManager::connectRig()
                 bool    onl  = state.online();
 
                 if (m_connected != onl) {
-                    m_connecting = false;
+                    setConnecting(false);
                     m_connected = onl;
                     emit connectedChanged();
                     emit statusUpdate(onl ? ("Connesso: " + m_rigName) : "Disconnesso");
@@ -1424,7 +1491,7 @@ void DecodiumTransceiverManager::connectRig()
              attemptBaud, attemptHandshake, attemptPtt, attemptPttPort](QString const& reason) {
                 bool const wasConnected = m_connected;
                 bool const startupAttempt = m_connecting && !wasConnected;
-                m_connecting = false;
+                setConnecting(false);
                 d->desired.online(false);
                 bool const recovering = m_transientCatRetryCount > 0;
                 QString const shownReason = sanitizeHamlibFailure(reason);
@@ -1470,7 +1537,7 @@ void DecodiumTransceiverManager::connectRig()
 void DecodiumTransceiverManager::disconnectRig()
 {
     m_transientCatReconnectPending = false;
-    m_connecting = false;
+    setConnecting(false);
     if (!d->transceiver) return;
 
     auto* xcv    = d->transceiver;

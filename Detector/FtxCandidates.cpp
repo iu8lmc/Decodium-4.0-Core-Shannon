@@ -7,6 +7,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 extern "C" void ftx_baseline_fit_c (float const* spectrum, int size, int ia, int ib,
                                     float offset_db, int linear_output, float* baseline);
 
@@ -45,7 +47,7 @@ struct FftBuffers
   {
     if (in && out)
       {
-        plan = fftwf_plan_dft_r2c_1d (nfft, in, out, FFTW_ESTIMATE);
+        plan = decodium::fft_compat::plan_dft_r2c_1d (nfft, in, out, FFTW_ESTIMATE);
       }
   }
 
@@ -53,7 +55,7 @@ struct FftBuffers
   {
     if (plan)
       {
-        fftwf_destroy_plan (plan);
+        decodium::fft_compat::destroy_plan (plan);
       }
     if (out)
       {

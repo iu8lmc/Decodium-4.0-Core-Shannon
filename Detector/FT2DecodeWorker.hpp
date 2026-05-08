@@ -16,6 +16,7 @@ namespace ft2
 struct AsyncDecodeRequest
 {
   QVector<short> audio;
+  int nutc {0};
   int nqsoprogress {0};
   int nfqso {0};
   int nfa {0};

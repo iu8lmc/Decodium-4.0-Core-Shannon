@@ -609,12 +609,19 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
 
 DecodiumLegacyBackend::~DecodiumLegacyBackend()
 {
-    if (m_mainWindow) {
-        m_mainWindow->legacyShutdownForEmbedding();
+    if (m_app) {
+        m_app->setProperty("decodiumShuttingDown", true);
     }
-    restoreEmbeddedWidgetTheme();
-    delete m_mainWindow;
+
+    auto *mainWindow = m_mainWindow;
     m_mainWindow = nullptr;
+    if (mainWindow) {
+        QObject::disconnect(mainWindow, nullptr, this, nullptr);
+        mainWindow->legacyShutdownForEmbedding();
+        delete mainWindow;
+    }
+
+    restoreEmbeddedWidgetTheme();
     if (m_app) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});

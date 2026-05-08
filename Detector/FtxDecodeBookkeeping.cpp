@@ -14,6 +14,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 extern "C" void ftx_sync8d_c (std::complex<float> const* cd0, int np, int i0,
                                std::complex<float> const* ctwk, int itwk, float* sync);
 extern "C" void ftx_twkfreq1_c (fftwf_complex const* ca, int const* npts, float const* fsample,
@@ -90,7 +92,7 @@ struct Ft8A8SearchFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kFt8A8Nfft, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kFt8A8Nfft, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -98,7 +100,7 @@ struct Ft8A8SearchFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (data)
       {

@@ -202,7 +202,7 @@ namespace
   // ── Simulated QSO state machine ─────────────────────────────────────
   //
   // Mirrors DecodiumBridge::autoSequenceStep for FT2 async. Inputs are
-  // the partner's decoded message text; outputs are (nextTx, reportRcvdUpdate).
+  // the partner's decoded message text; outputs are the next TX slot.
   // Fields tracked: dxCall, dxGrid, reportSent, reportRcvd, qsoProgress,
   // nTx73, logAfterOwn73, qsoLogged.
 
@@ -301,16 +301,22 @@ namespace
         if (st.reportSent.isEmpty ()) st.reportSent = QStringLiteral ("-08");
       }
 
+    bool const localSignoffAlreadyArmedOrSent =
+        st.currentTx == 4
+        || st.currentTx == 5
+        || st.nTx73 > 0
+        || st.logAfterOwn73;
+
     // partner signoff 73
     if (p.last == QStringLiteral ("73") && st.qsoProgress >= 4)
       {
-        if (st.nTx73 == 0)
+        if (!localSignoffAlreadyArmedOrSent)
           {
             out << "    [state] partner 73 → send our 73 (TX5)\n";
             st.logAfterOwn73 = true;
             return 5;
           }
-        out << "    [state] partner 73 after our 73 → QSO complete + log\n";
+        out << "    [state] partner 73 after armed/sent signoff → QSO complete + log\n";
         log.valid = true;
         log.call = partner; log.grid = st.dxGrid;
         log.rptSent = st.reportSent; log.rptRcvd = st.reportRcvd;
@@ -342,8 +348,7 @@ namespace
         return 5;
       }
 
-    // partner R+report → we transmit RR73 (TX4).
-    // NOTE: must update reportRcvd here — the bridge currently does NOT.
+    // partner R+report → update received report for the log, then transmit RR73 (TX4).
     if (is_r_report_token (p.last))
       {
         QString const rpt = p.last.mid (1);
@@ -352,10 +357,10 @@ namespace
         return 4;
       }
 
-    // partner plain -NN → we transmit R+report (TX3)
+    // partner plain -NN → we transmit R+our-report-to-them (TX3)
     if (is_report_token (p.last))
       {
-        out << "    [state] plain report " << p.last << " → TX3 (R+report)\n";
+        out << "    [state] plain report " << p.last << " → TX3 (R+sent-report)\n";
         st.reportRcvd = p.last;
         return 3;
       }
@@ -386,9 +391,9 @@ namespace
                                                            ? QStringLiteral ("-08")
                                                            : st.reportSent);
       case 3: return QStringLiteral ("%1 %2 R%3").arg (him, mine,
-                                                       st.reportRcvd.isEmpty ()
-                                                           ? QStringLiteral ("-10")
-                                                           : st.reportRcvd);
+                                                       st.reportSent.isEmpty ()
+                                                           ? QStringLiteral ("-08")
+                                                           : st.reportSent);
       case 4: return QStringLiteral ("%1 %2 RR73").arg (him, mine);
       case 5: return QStringLiteral ("%1 %2 73").arg (him, mine);
       case 6: return QStringLiteral ("CQ %1 JN71").arg (mine);
@@ -400,6 +405,7 @@ namespace
   {
     QString name;
     bool autoCq;
+    bool forbidTxAfterPartner73WithSignoffArmed {false};
     QStringList partnerMessages; // ordered list of partner transmissions
   };
 
@@ -465,7 +471,20 @@ namespace
           }
         ++pass;
 
+        MsgParts beforeStep = parse_msg (recovered, st.myCall.toUpper ());
+        bool const partner73WithSignoffArmed =
+            sc.forbidTxAfterPartner73WithSignoffArmed
+            && beforeStep.last == QStringLiteral ("73")
+            && (st.currentTx == 4 || st.currentTx == 5 || st.nTx73 > 0 || st.logAfterOwn73);
+
         int const nextTx = step_state (st, recovered, out, log);
+        if (partner73WithSignoffArmed && nextTx > 0)
+          {
+            out << "  [FAIL] partner 73 arrived after our signoff was armed; unexpected TX"
+                << nextTx << "\n";
+            ++fail;
+            continue;
+          }
         if (nextTx > 0)
           {
             st.currentTx = nextTx;
@@ -544,9 +563,10 @@ int main (int argc, char* argv[])
       Scenario sc1;
       sc1.name = "Scenario 1 — auto-CQ reception";
       sc1.autoCq = true;
+      sc1.forbidTxAfterPartner73WithSignoffArmed = true;
       sc1.partnerMessages = {
         QStringLiteral ("IW8XOU K1ABC FN42"),   // grid (answer to CQ)
-        QStringLiteral ("IW8XOU K1ABC R-10"),   // R+report (skipping plain report)
+        QStringLiteral ("IW8XOU K1ABC R-10"),   // partner's R+report (skipping plain report)
         QStringLiteral ("IW8XOU K1ABC 73"),     // signoff 73
       };
 

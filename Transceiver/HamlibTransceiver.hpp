@@ -34,11 +34,13 @@ private:
   void do_tune (bool) override;
 
   void do_poll () override;
+  void poll_transmit_telemetry (bool force_signal = false);
+  void schedule_transmit_telemetry_burst ();
 
   bool ptt_on_ = false;
-  bool do_pwr_;
-  bool do_pwr2_;
-  bool do_swr_;
+  bool do_pwr_ = false;
+  bool do_pwr2_ = false;
+  bool do_swr_ = false;
 
   class impl;
   pimpl<impl> m_;

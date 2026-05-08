@@ -31,9 +31,11 @@ Rectangle {
     function syncTxState() {
         if (!engine)
             return
+        var txTargetCall = engine.currentTx === 6 ? "" : engine.dxCall
+        var txTargetGrid = engine.currentTx === 6 ? "" : engine.dxGrid
         worldMap.setTransmitState(!!(engine.transmitting || engine.tuning),
-                                  engine.dxCall,
-                                  engine.dxGrid,
+                                  txTargetCall,
+                                  txTargetGrid,
                                   engine.mode)
     }
 
@@ -186,6 +188,11 @@ Rectangle {
                 root.scheduleRebuild()
         }
         function onDxGridChanged() {
+            root.syncTxState()
+            if (root.visible)
+                root.scheduleRebuild()
+        }
+        function onCurrentTxChanged() {
             root.syncTxState()
             if (root.visible)
                 root.scheduleRebuild()

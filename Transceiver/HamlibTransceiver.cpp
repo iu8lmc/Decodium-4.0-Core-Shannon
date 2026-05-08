@@ -1333,55 +1333,116 @@ void HamlibTransceiver::do_poll ()
      }
    }
 
-  if (ptt_on_) {
-    // update PWR and SWR
-    value_t strength;
-    int rc;
-    if (do_swr_) {
-        rc = rig_get_level (m_->rig_.data (), RIG_VFO_CURR, RIG_LEVEL_SWR, &strength);
-        if (RIG_OK == rc && ptt_on_) {
-          // printf ("SWR %.3f\n",strength.f);
-          if (strength.f >= 1.000)
-          {
-            update_swr (strength.f*100);
-          }
-          else
-          {
-            update_swr (0);
-          }
-        } else {
+  poll_transmit_telemetry (false);
+}
+
+void HamlibTransceiver::poll_transmit_telemetry (bool force_signal)
+{
+  auto * rig = m_->rig_.data ();
+  if (!rig || !rig->caps)
+    {
+      return;
+    }
+
+  bool const tx_active = ptt_on_ || state ().ptt ();
+  if (!tx_active)
+    {
+      update_power (0);
+      update_swr (0);
+      if (force_signal)
+        {
+          update_complete (true);
+        }
+      return;
+    }
+
+  value_t strength {};
+  int rc {RIG_OK};
+  if (do_swr_)
+    {
+      rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_SWR, &strength);
+      if (RIG_OK == rc && tx_active)
+        {
+          update_swr (strength.f >= 1.000 ? static_cast<unsigned int> (strength.f * 100) : 0);
+        }
+      else
+        {
           CAT_TRACE ("rig_get_level RIG_LEVEL_SWR failed with rc:" << rc << "ignoring");
           update_swr (0);
         }
     }
-    if (do_pwr_) {
-      rc = rig_get_level (m_->rig_.data (), RIG_VFO_CURR, RIG_LEVEL_RFPOWER_METER_WATTS, &strength);
-      if (RIG_OK == rc) {
-          update_power (strength.f*1000);
-      } else {
+
+  if (do_pwr_)
+    {
+      rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_RFPOWER_METER_WATTS, &strength);
+      if (RIG_OK == rc)
+        {
+          update_power (static_cast<unsigned int> (strength.f * 1000));
+        }
+      else
+        {
           CAT_TRACE ("rig_get_level RFPOWER_METER_WATTS failed with rc:" << rc << "ignoring");
           update_power (0);
-      }
-    } else if (do_pwr2_) {
-      rc = rig_get_level (m_->rig_.data (), RIG_VFO_CURR, RIG_LEVEL_RFPOWER, &strength);
-      if (RIG_OK == rc) {
-          unsigned int mwpower;
-          rc = rig_power2mW(m_->rig_.data (),&mwpower,strength.f,f,m);
-          if (RIG_OK != rc) {
-            CAT_TRACE ("rig_power2mW failed with rc:" << rc << "ignoring");
-            mwpower=0;
-          }
+        }
+    }
+  else if (do_pwr2_)
+    {
+      rc = rig_get_level (rig, RIG_VFO_CURR, RIG_LEVEL_RFPOWER, &strength);
+      if (RIG_OK == rc)
+        {
+          unsigned int mwpower {0};
+          freq_t const f = state ().tx_frequency () ? state ().tx_frequency () : state ().frequency ();
+          rmode_t const m = m_->map_mode (state ().mode ());
+          rc = rig_power2mW (rig, &mwpower, strength.f, f, m);
+          if (RIG_OK != rc)
+            {
+              CAT_TRACE ("rig_power2mW failed with rc:" << rc << "ignoring");
+              mwpower = 0;
+            }
           update_power (mwpower);
-          // printf ("POWER %.3f %.1f\n",strength.f,mwpower / 1000.);
-      } else {
+        }
+      else
+        {
           CAT_TRACE ("rig_get_level RFPOWER failed with rc:" << rc << "ignoring");
           update_power (0);
-      }
-    } else  update_power (0);
-  } else {
-    update_power (0);
-    update_swr (0);
-  }
+        }
+    }
+  else
+    {
+      update_power (0);
+    }
+
+  if (force_signal)
+    {
+      update_complete (true);
+    }
+}
+
+void HamlibTransceiver::schedule_transmit_telemetry_burst ()
+{
+  if (!do_pwr_ && !do_pwr2_ && !do_swr_)
+    {
+      return;
+    }
+
+  static constexpr int delays_ms[] {120, 350, 700, 1100};
+  for (int const delay_ms : delays_ms)
+    {
+      QTimer::singleShot (delay_ms, this, [this] {
+        try
+          {
+            poll_transmit_telemetry (true);
+          }
+        catch (std::exception const& e)
+          {
+            CAT_TRACE ("early PWR/SWR poll failed:" << e.what () << "ignoring");
+          }
+        catch (...)
+          {
+            CAT_TRACE ("early PWR/SWR poll failed unexpectedly, ignoring");
+          }
+      });
+    }
 }
 
 void HamlibTransceiver::do_ptt (bool on)
@@ -1410,6 +1471,10 @@ void HamlibTransceiver::do_ptt (bool on)
     }
 
   update_PTT (on);
+  if (on)
+    {
+      schedule_transmit_telemetry_burst ();
+    }
 }
 
 // pass in false if any post_action is needed for a rig -- don't know of any as of 2024-04-14

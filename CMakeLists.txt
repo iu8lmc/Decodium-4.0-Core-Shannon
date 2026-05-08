@@ -395,9 +395,6 @@ set (wsjtx_CXXSRCS
   DecodiumPropagationManager.cpp
   DecodiumPropagationManager.h
   DecodiumAudioSink.h
-  engines/Ft2Types.hpp
-  engines/Ft2QsoEngine.hpp
-  engines/Ft2QsoEngine.cpp
   controllers/ActiveStationsModel.cpp
   controllers/ActiveStationsModel.hpp
   DecodiumThemeManager.cpp
@@ -1504,9 +1501,6 @@ add_executable (decodium_qml
   DecodiumPropagationManager.h
   DecodiumLegacyBackend.cpp
   DecodiumLegacyBackend.h
-  engines/Ft2Types.hpp
-  engines/Ft2QsoEngine.hpp
-  engines/Ft2QsoEngine.cpp
   helper_functions.cpp
   helper_functions.h
   controllers/ActiveStationsModel.cpp
@@ -1672,18 +1666,39 @@ add_custom_target (sync_decodium_qml ALL
     "${CMAKE_BINARY_DIR}/qml"
   COMMENT "Syncing QML files to build output"
 )
-add_dependencies (decodium_qml sync_decodium_qml)
+
+add_custom_target (sync_decodium_assets ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+    "${CMAKE_BINARY_DIR}/artwork/maps"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/artwork/maps/earth_2048x1024.jpg"
+    "${CMAKE_BINARY_DIR}/artwork/maps/earth_2048x1024.jpg"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/artwork/maps/world_overlay_2048x1024.png"
+    "${CMAKE_BINARY_DIR}/artwork/maps/world_overlay_2048x1024.png"
+  COMMENT "Syncing Decodium runtime artwork"
+)
+
+add_dependencies (decodium_qml sync_decodium_qml sync_decodium_assets)
 add_custom_target (decodium_app
-  DEPENDS decodium_qml sync_decodium_qml
+  DEPENDS decodium_qml sync_decodium_qml sync_decodium_assets
 )
 add_custom_command (TARGET decodium_qml POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/qml"
     "${CMAKE_BINARY_DIR}/qml"
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+    "$<TARGET_FILE_DIR:decodium_qml>/artwork/maps"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/artwork/maps/earth_2048x1024.jpg"
+    "$<TARGET_FILE_DIR:decodium_qml>/artwork/maps/earth_2048x1024.jpg"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/artwork/maps/world_overlay_2048x1024.png"
+    "$<TARGET_FILE_DIR:decodium_qml>/artwork/maps/world_overlay_2048x1024.png"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/sat.dat"
     "$<TARGET_FILE_DIR:decodium_qml>/sat.dat"
-  COMMENT "Syncing QML files after decodium_qml build"
+  COMMENT "Syncing QML files and artwork after decodium_qml build"
 )
 
 if (APPLE)

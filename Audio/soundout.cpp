@@ -117,22 +117,21 @@ void SoundOutput::restart(QIODevice* source)
     error_ = false;
   }
 
+#if defined(Q_OS_MAC)
+  constexpr int kDefaultTxBufferFrames = 16384;
+#else
+  constexpr int kDefaultTxBufferFrames = 49152;
+#endif
+
   // Buffer sizing: Windows + USB Audio CODEC needs a generous buffer to
-  // prevent underruns mid-TX. Pre-1.0.104 default of 16384 frames (~341 ms
-  // @ 48 kHz) was too tight: the QAudioSink would go idle mid-broadcast,
-  // the partial-idle handler would restart it, and the TX-end watchdog
-  // would force completion truncating ~120ms of the 2.52s TX. Audible as
-  // a "nervous / wobbly" TX. 49152 frames (~1024 ms @ 48 kHz) gives 3x
-  // headroom — same order of magnitude as a single FT2 broadcast minus
-  // watchdog margin, plenty for the audio thread to keep up even under
-  // decoder/GPU contention on the main thread.
+  // prevent underruns mid-TX. macOS keeps the Decodium3-sized default
+  // buffer so FT2 TX attack latency stays close to the legacy behavior.
   if (m_framesBuffered > 0) {
     m_stream->setBufferSize(
         static_cast<qsizetype>(m_stream->format().bytesForFrames(m_framesBuffered)));
   } else {
-    // Default: 49152 frames (~1024 ms @ 48 kHz) — see rationale above.
     m_stream->setBufferSize(
-        static_cast<qsizetype>(m_stream->format().bytesForFrames(49152)));
+        static_cast<qsizetype>(m_stream->format().bytesForFrames(kDefaultTxBufferFrames)));
   }
 
 #if defined(Q_OS_MAC)

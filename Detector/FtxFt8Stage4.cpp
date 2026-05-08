@@ -22,6 +22,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 #include "lib/superfox/qpc/np_qpc.h"
 
 extern "C" uint32_t nhash2 (void const* key, uint64_t length, uint32_t initval);
@@ -724,8 +726,8 @@ struct SuperFoxComplexFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kFt8NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
-        inverse = fftwf_plan_dft_1d (kFt8NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kFt8NMax, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        inverse = decodium::fft_compat::plan_dft_1d (kFt8NMax, data, data, FFTW_BACKWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -733,11 +735,11 @@ struct SuperFoxComplexFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (inverse)
       {
-        fftwf_destroy_plan (inverse);
+        decodium::fft_compat::destroy_plan (inverse);
       }
     if (data)
       {
@@ -774,7 +776,7 @@ struct SuperFoxSyncFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kSuperFoxSyncSamples, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kSuperFoxSyncSamples, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -782,7 +784,7 @@ struct SuperFoxSyncFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (data)
       {
@@ -819,7 +821,7 @@ struct SuperFoxDemodFft
   {
     if (data)
       {
-        forward = fftwf_plan_dft_1d (kSuperFoxDemodNsps, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
+        forward = decodium::fft_compat::plan_dft_1d (kSuperFoxDemodNsps, data, data, FFTW_FORWARD, FFTW_ESTIMATE);
       }
   }
 
@@ -827,7 +829,7 @@ struct SuperFoxDemodFft
   {
     if (forward)
       {
-        fftwf_destroy_plan (forward);
+        decodium::fft_compat::destroy_plan (forward);
       }
     if (data)
       {
@@ -918,18 +920,18 @@ bool superfox_analytic_signal (float const* dd, int npts, std::complex<float>* c
 
   auto* fft_data = reinterpret_cast<fftwf_complex*> (spectrum.data ());
   fftwf_plan const forward =
-      fftwf_plan_dft_1d (npts, fft_data, fft_data, FFTW_FORWARD, FFTW_ESTIMATE);
+      decodium::fft_compat::plan_dft_1d (npts, fft_data, fft_data, FFTW_FORWARD, FFTW_ESTIMATE);
   fftwf_plan const inverse =
-      fftwf_plan_dft_1d (npts, fft_data, fft_data, FFTW_BACKWARD, FFTW_ESTIMATE);
+      decodium::fft_compat::plan_dft_1d (npts, fft_data, fft_data, FFTW_BACKWARD, FFTW_ESTIMATE);
   if (!forward || !inverse)
     {
       if (forward)
         {
-          fftwf_destroy_plan (forward);
+          decodium::fft_compat::destroy_plan (forward);
         }
       if (inverse)
         {
-          fftwf_destroy_plan (inverse);
+          decodium::fft_compat::destroy_plan (inverse);
         }
       return false;
     }
@@ -947,8 +949,8 @@ bool superfox_analytic_signal (float const* dd, int npts, std::complex<float>* c
       c0[static_cast<size_t> (i)] = spectrum[static_cast<size_t> (i)];
     }
 
-  fftwf_destroy_plan (forward);
-  fftwf_destroy_plan (inverse);
+  decodium::fft_compat::destroy_plan (forward);
+  decodium::fft_compat::destroy_plan (inverse);
   return true;
 }
 
@@ -1641,7 +1643,7 @@ bool superfox_qpc_sync (std::complex<float> const* crcvd0, float fsample, float 
         }
     }
 
-  fftwf_plan inverse = fftwf_plan_dft_1d (kSuperFoxSyncNz,
+  fftwf_plan inverse = decodium::fft_compat::plan_dft_1d (kSuperFoxSyncNz,
                                           reinterpret_cast<fftwf_complex*> (c1.data ()),
                                           reinterpret_cast<fftwf_complex*> (c1.data ()),
                                           FFTW_BACKWARD, FFTW_ESTIMATE);
@@ -1650,7 +1652,7 @@ bool superfox_qpc_sync (std::complex<float> const* crcvd0, float fsample, float 
       return false;
     }
   fftwf_execute (inverse);
-  fftwf_destroy_plan (inverse);
+  decodium::fft_compat::destroy_plan (inverse);
 
   std::vector<std::complex<float>> c1sum (static_cast<size_t> (kSuperFoxSyncNz));
   c1sum[0] = c1[0];

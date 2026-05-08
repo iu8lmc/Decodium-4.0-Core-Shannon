@@ -16,6 +16,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 #include "wsjtx_config.h"
 
 extern "C" {
@@ -1415,12 +1417,12 @@ void fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, float w
   int const nh = kFt8FoxNfft / 2;
   std::vector<std::array<float, 2>> spectrum (static_cast<size_t> (nh + 1));
   auto* fft_spectrum = reinterpret_cast<fftwf_complex*> (spectrum.data ());
-  fftwf_plan forward = fftwf_plan_dft_r2c_1d (kFt8FoxNfft, time_domain.data (), fft_spectrum, FFTW_ESTIMATE);
-  fftwf_plan inverse = fftwf_plan_dft_c2r_1d (kFt8FoxNfft, fft_spectrum, time_domain.data (), FFTW_ESTIMATE);
+  fftwf_plan forward = decodium::fft_compat::plan_dft_r2c_1d (kFt8FoxNfft, time_domain.data (), fft_spectrum, FFTW_ESTIMATE);
+  fftwf_plan inverse = decodium::fft_compat::plan_dft_c2r_1d (kFt8FoxNfft, fft_spectrum, time_domain.data (), FFTW_ESTIMATE);
   if (!forward || !inverse)
     {
-      if (forward) fftwf_destroy_plan (forward);
-      if (inverse) fftwf_destroy_plan (inverse);
+      if (forward) decodium::fft_compat::destroy_plan (forward);
+      if (inverse) decodium::fft_compat::destroy_plan (inverse);
       return;
     }
 
@@ -1459,8 +1461,8 @@ void fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, float w
     }
 
   fftwf_execute (inverse);
-  fftwf_destroy_plan (forward);
-  fftwf_destroy_plan (inverse);
+  decodium::fft_compat::destroy_plan (forward);
+  decodium::fft_compat::destroy_plan (inverse);
 
   float const scale = 1.0f / static_cast<float> (kFt8FoxNfft);
   for (int i = 0; i < copy_samples; ++i)
@@ -1486,12 +1488,12 @@ void ft2_fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, flo
   int const nh = kFt2FoxNfft / 2;
   std::vector<std::array<float, 2>> spectrum (static_cast<size_t> (nh + 1));
   auto* fft_spectrum = reinterpret_cast<fftwf_complex*> (spectrum.data ());
-  fftwf_plan forward = fftwf_plan_dft_r2c_1d (kFt2FoxNfft, time_domain.data (), fft_spectrum, FFTW_ESTIMATE);
-  fftwf_plan inverse = fftwf_plan_dft_c2r_1d (kFt2FoxNfft, fft_spectrum, time_domain.data (), FFTW_ESTIMATE);
+  fftwf_plan forward = decodium::fft_compat::plan_dft_r2c_1d (kFt2FoxNfft, time_domain.data (), fft_spectrum, FFTW_ESTIMATE);
+  fftwf_plan inverse = decodium::fft_compat::plan_dft_c2r_1d (kFt2FoxNfft, fft_spectrum, time_domain.data (), FFTW_ESTIMATE);
   if (!forward || !inverse)
     {
-      if (forward) fftwf_destroy_plan (forward);
-      if (inverse) fftwf_destroy_plan (inverse);
+      if (forward) decodium::fft_compat::destroy_plan (forward);
+      if (inverse) decodium::fft_compat::destroy_plan (inverse);
       return;
     }
 
@@ -1531,8 +1533,8 @@ void ft2_fox_bandlimit_inplace (QVector<float>& wave, int nslots, int nfreq, flo
     }
 
   fftwf_execute (inverse);
-  fftwf_destroy_plan (forward);
-  fftwf_destroy_plan (inverse);
+  decodium::fft_compat::destroy_plan (forward);
+  decodium::fft_compat::destroy_plan (inverse);
 
   float const scale = 1.0f / static_cast<float> (kFt2FoxNfft);
   for (int i = 0; i < copy_samples; ++i)

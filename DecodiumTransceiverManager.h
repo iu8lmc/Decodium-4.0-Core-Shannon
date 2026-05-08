@@ -11,6 +11,8 @@
 
 // Forward-declare per nascondere le dipendenze Boost/Hamlib dall'header
 struct DecodiumTransceiverManagerPrivate;
+class QThread;
+class Transceiver;
 
 class DecodiumTransceiverManager : public QObject
 {
@@ -18,6 +20,7 @@ class DecodiumTransceiverManager : public QObject
 
     // ── Connessione base ──────────────────────────────────────────────────
     Q_PROPERTY(bool    connected  READ connected  NOTIFY connectedChanged)
+    Q_PROPERTY(bool    connecting READ connecting NOTIFY connectingChanged)
     Q_PROPERTY(QString rigName    READ rigName    WRITE setRigName    NOTIFY rigNameChanged)
 
     // ── Porta seriale ─────────────────────────────────────────────────────
@@ -72,6 +75,7 @@ public:
 
     // ── Lettura proprietà ─────────────────────────────────────────────────
     bool    connected()    const { return m_connected; }
+    bool    connecting()   const { return m_connecting; }
     QString rigName()      const { return m_rigName; }
     QString serialPort()   const { return m_serialPort; }
     int     baudRate()     const { return m_baudRate; }
@@ -158,6 +162,7 @@ public slots:
 
 signals:
     void connectedChanged();
+    void connectingChanged();
     void rigNameChanged();
     void rigListChanged();
     void serialPortChanged();
@@ -199,6 +204,9 @@ private:
     void updateTelemetry(double powerWatts, double swr);
     void reconnectRigForParameterChange(const QString& reason);
     void scheduleTransientReconnect(const QString& reason);
+    void setConnecting(bool v);
+    void abortConnectingRigAfterTimeout(Transceiver* xcv, QThread* thread,
+                                        const QString& shownReason);
     bool pttSharesCatPort() const;
     bool forceDtrAvailable() const;
     bool forceRtsAvailable() const;

@@ -11,6 +11,7 @@
 #include "Detector/Q65DecodeWorker.hpp"
 #include "Detector/WSPRDecodeWorker.hpp"
 #include "Detector/FortranRuntimeGuard.hpp"
+#include "Detector/FftCompat.hpp"
 #include "Detector/RTTYDetector.hpp"
 #include "Detector/LegacyDspIoHelpers.hpp"
 #include "Modulator/RTTYModulator.hpp"
@@ -3764,7 +3765,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_audioThread.start (m_audioThreadPriority);
 
   auto fname {QDir::toNativeSeparators(m_config.writeable_data_dir ().absoluteFilePath ("decodium_wisdom.dat"))};
-  fftwf_import_wisdom_from_filename (fname.toLocal8Bit ());
+  decodium::fft_compat::import_wisdom_from_filename (fname.toLocal8Bit ());
 
   m_ntx = 6;
   ui->txrb6->setChecked(true);
@@ -4367,7 +4368,7 @@ MainWindow::~MainWindow()
   m_optimizingProgress.hide ();
   m_optimizingProgress.setParent (nullptr);
   auto fname {QDir::toNativeSeparators(m_config.writeable_data_dir ().absoluteFilePath ("decodium_wisdom.dat"))};
-  fftwf_export_wisdom_to_filename (fname.toLocal8Bit ());
+  decodium::fft_compat::export_wisdom_to_filename (fname.toLocal8Bit ());
   m_audioThread.quit ();
   wait_for_thread_with_event_pump (m_audioThread, -1);
   remove_child_from_event_filter (this);

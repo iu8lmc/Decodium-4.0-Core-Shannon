@@ -47,6 +47,7 @@
 #include "SettingsGroup.hpp"
 //#include "TraceFile.hpp"
 #include "DecodiumLogging.hpp"
+#include "Detector/FftCompat.hpp"
 #include "MultiSettings.hpp"
 #include "widgets/mainwindow.h"
 #include "commons.h"
@@ -117,6 +118,8 @@ namespace
 
 int main(int argc, char *argv[])
 {
+  decodium::fft_compat::initialize_planner_thread_safety ();
+
   init_random_seed ();
 
   // make the Qt type magic happen

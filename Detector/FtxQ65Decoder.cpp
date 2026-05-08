@@ -89,11 +89,11 @@ namespace
     {
       if (forward)
         {
-          fftwf_destroy_plan (forward);
+          decodium::fft_compat::destroy_plan (forward);
         }
       if (inverse)
         {
-          fftwf_destroy_plan (inverse);
+          decodium::fft_compat::destroy_plan (inverse);
         }
     }
 
@@ -105,20 +105,20 @@ namespace
         }
       if (forward)
         {
-          fftwf_destroy_plan (forward);
+          decodium::fft_compat::destroy_plan (forward);
           forward = nullptr;
         }
       if (inverse)
         {
-          fftwf_destroy_plan (inverse);
+          decodium::fft_compat::destroy_plan (inverse);
           inverse = nullptr;
         }
       nfft1 = npts;
       nfft2 = npts / 2;
       buffer.assign (static_cast<size_t> (std::max (1, npts)), std::complex<float> {});
       auto* base = reinterpret_cast<fftwf_complex*> (buffer.data ());
-      forward = fftwf_plan_dft_1d (nfft1, base, base, FFTW_FORWARD, FFTW_ESTIMATE);
-      inverse = fftwf_plan_dft_1d (nfft2, base, base, FFTW_BACKWARD, FFTW_ESTIMATE);
+      forward = decodium::fft_compat::plan_dft_1d (nfft1, base, base, FFTW_FORWARD, FFTW_ESTIMATE);
+      inverse = decodium::fft_compat::plan_dft_1d (nfft2, base, base, FFTW_BACKWARD, FFTW_ESTIMATE);
     }
 
     int nfft1 {0};

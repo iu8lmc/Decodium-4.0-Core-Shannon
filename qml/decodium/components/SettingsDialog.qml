@@ -244,6 +244,11 @@ Dialog {
         return bridge.catManager ? bridge.catManager : null
     }
 
+    function catConnectionInProgress() {
+        var controller = activeCatController()
+        return !!(controller && controller.connecting)
+    }
+
     function activeCatPortType() {
         var controller = activeCatController()
         if (!controller || controller.portType === undefined || controller.portType === null)
@@ -609,6 +614,7 @@ Dialog {
     function toggleCatConnection() {
         var controller = activeCatController()
         if (!controller) return
+        if (controller.connecting) return
         if (bridge.catConnected) controller.disconnectRig()
         else controller.connectRig()
     }
@@ -1289,11 +1295,12 @@ Dialog {
                                 delegate: Rectangle {
                                     property string bk: modelData[0]
                                     property bool active: bridge.catBackend === bk
+                                    property bool catBusy: settingsDialog.catConnectionInProgress()
                                     width: 170; height: 30; radius: 6
-                                    color: active ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (bkMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
+                                    color: active ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (catBusy ? Qt.rgba(1,1,1,0.025) : (bkMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent"))
                                     border.color: active ? primaryBlue : glassBorder
-                                    Text { anchors.centerIn: parent; text: modelData[1]; color: active ? primaryBlue : textSecondary; font.pixelSize: 11 }
-                                    MouseArea { id: bkMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    Text { anchors.centerIn: parent; text: modelData[1]; color: active ? primaryBlue : (catBusy ? Qt.rgba(textSecondary.r,textSecondary.g,textSecondary.b,0.55) : textSecondary); font.pixelSize: 11 }
+                                    MouseArea { id: bkMA; anchors.fill: parent; hoverEnabled: true; enabled: !parent.catBusy; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         onClicked: {
                                             bridge.catBackend = bk
                                             if (bk === "tci")
@@ -2034,18 +2041,20 @@ Dialog {
                         RowLayout {
                             Layout.fillWidth: true; Layout.columnSpan: 3; spacing: 10
                             Rectangle {
+                                property bool catBusy: settingsDialog.catConnectionInProgress()
                                 width: 100; height: controlHeight; radius: 4
-                                color: catConnMA.containsMouse ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.3) : bgMedium
-                                border.color: accentGreen
-                                Text { anchors.centerIn: parent; text: qsTr("Connect"); color: accentGreen; font.pixelSize: 12 }
-                                MouseArea { id: catConnMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.connectRig() } }
+                                color: catBusy ? bgMedium : (catConnMA.containsMouse ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.3) : bgMedium)
+                                border.color: catBusy ? glassBorder : accentGreen
+                                Text { anchors.centerIn: parent; text: parent.catBusy ? qsTr("Connecting...") : qsTr("Connect"); color: parent.catBusy ? textSecondary : accentGreen; font.pixelSize: 12 }
+                                MouseArea { id: catConnMA; anchors.fill: parent; hoverEnabled: true; enabled: !parent.catBusy; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.connectRig() } }
                             }
                             Rectangle {
+                                property bool catBusy: settingsDialog.catConnectionInProgress()
                                 width: 100; height: controlHeight; radius: 4
-                                color: catDiscMA.containsMouse ? Qt.rgba(1,0.3,0.3,0.3) : bgMedium
-                                border.color: "#f44336"
-                                Text { anchors.centerIn: parent; text: qsTr("Disconnect"); color: "#f44336"; font.pixelSize: 12 }
-                                MouseArea { id: catDiscMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.disconnectRig() } }
+                                color: catBusy ? bgMedium : (catDiscMA.containsMouse ? Qt.rgba(1,0.3,0.3,0.3) : bgMedium)
+                                border.color: catBusy ? glassBorder : "#f44336"
+                                Text { anchors.centerIn: parent; text: qsTr("Disconnect"); color: parent.catBusy ? textSecondary : "#f44336"; font.pixelSize: 12 }
+                                MouseArea { id: catDiscMA; anchors.fill: parent; hoverEnabled: true; enabled: !parent.catBusy; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: { var controller = settingsDialog.activeCatController(); if (controller) controller.disconnectRig() } }
                             }
                         }
                         Text {
@@ -2639,6 +2648,15 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
+
+                        Text { text: qsTr("Waterfall Calls:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.getSetting("uiWaterfallShowCallsigns", true)
+                            onCheckedChanged: bridge.setSetting("uiWaterfallShowCallsigns", checked)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Mappa e Distanza ──
                         Text { text: qsTr("MAP AND DISTANCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }

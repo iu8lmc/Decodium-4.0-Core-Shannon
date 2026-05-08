@@ -20,6 +20,8 @@
 
 #include <fftw3.h>
 
+#include "Detector/FftCompat.hpp"
+
 // ── Downsam9State destructor ──────────────────────────────────────────────────
 namespace decodium { namespace jt9narrow {
 
@@ -27,7 +29,7 @@ Downsam9State::~Downsam9State () noexcept
 {
   if (plan_r2c)
     {
-      fftwf_destroy_plan (static_cast<fftwf_plan> (plan_r2c));
+      decodium::fft_compat::destroy_plan (static_cast<fftwf_plan> (plan_r2c));
       plan_r2c = nullptr;
     }
 }
@@ -475,7 +477,7 @@ void downsam9_cpp (short const* id2, int npts8, int nsps8,
       st.x1.assign (NFFT1, 0.0f);
       st.c1.assign (NC1, {0.0f, 0.0f});
       st.s.assign  (5000, 0.0f);
-      st.plan_r2c = fftwf_plan_dft_r2c_1d (
+      st.plan_r2c = decodium::fft_compat::plan_dft_r2c_1d (
           NFFT1,
           st.x1.data (),
           reinterpret_cast<fftwf_complex*> (st.c1.data ()),
@@ -532,13 +534,13 @@ void downsam9_cpp (short const* id2, int npts8, int nsps8,
 
   // ── c2c IFFT matching the FFT-compat path; no normalisation ───────────────
   {
-    fftwf_plan p = fftwf_plan_dft_1d (
+    fftwf_plan p = decodium::fft_compat::plan_dft_1d (
         NFFT2,
         reinterpret_cast<fftwf_complex*> (c2),
         reinterpret_cast<fftwf_complex*> (c2),
         FFTW_BACKWARD, FFTW_ESTIMATE);
     fftwf_execute (p);
-    fftwf_destroy_plan (p);
+    decodium::fft_compat::destroy_plan (p);
   }
 
   (void) nsps8; (void) nspsd;
