@@ -16204,53 +16204,14 @@ static QString displayMessageWithCallsignsActorFirst(const QString& message,
                                                      bool isTx,
                                                      const QString& myCall)
 {
-    QString const trimmed = message.trimmed();
-    if (trimmed.isEmpty()) {
-        return trimmed;
-    }
-
-    QStringList words = trimmed.split(QRegularExpression(QStringLiteral("\\s+")),
-                                      Qt::SkipEmptyParts);
-    if (words.size() < 3) {
-        return trimmed;
-    }
-
-    QString const first = normalizeCallToken(words.at(0)).toUpper();
-    QString const second = normalizeCallToken(words.at(1)).toUpper();
-    if (isGridTokenStrict(words.constLast())) {
-        // The locator belongs to the caller in a standard "MYCALL DX GRID" reply.
-        // Swapping the visible calls here makes the grid look attached to MYCALL.
-        return trimmed;
-    }
-    if (first == QStringLiteral("CQ")
-        || first == QStringLiteral("CQDX")
-        || first == QStringLiteral("QRZ")
-        || first == QStringLiteral("DE")
-        || first == QStringLiteral("TEST")) {
-        return trimmed;
-    }
-
-    QString const myFull = normalizeCallToken(myCall).toUpper();
-    QString const myBase = normalizedBaseCall(myFull);
-
-    bool const firstIsMine = tokenMatchesCall(first, myFull, myBase);
-    bool const secondIsMine = tokenMatchesCall(second, myFull, myBase);
-    bool shouldSwap = false;
-    if (isTx) {
-        // Standard outgoing directed payload is "DX MYCALL ..."; display actor-first.
-        shouldSwap = secondIsMine && !firstIsMine && looksLikeCallsignToken(first);
-    } else {
-        // Standard incoming directed payload is "MYCALL DX ..."; display actor-first.
-        shouldSwap = firstIsMine && !secondIsMine && looksLikeCallsignToken(second);
-    }
-
-    if (!shouldSwap) {
-        return trimmed;
-    }
-
-    // Display only: keep the raw message unchanged for TX/autosequence logic.
-    std::swap(words[0], words[1]);
-    return words.join(QLatin1Char(' '));
+    // 1.0.114: rimosso il riordino "actor-first" che invertiva i call solo
+    // su alcuni RX (e non sui TX con grid). Risultato confuso: TX1 e RX2
+    // sembravano avere lo stesso ordine ma significati opposti.
+    // Ora tutti i messaggi sono mostrati nel formato wire WSJT-X canonico:
+    // <recipient> <sender> <payload>. Coerente con jt9, MSHV, JTDX.
+    Q_UNUSED(isTx);
+    Q_UNUSED(myCall);
+    return message.trimmed();
 }
 
 static bool messageHasUnresolvedPeerPlaceholder(const QString& message,
