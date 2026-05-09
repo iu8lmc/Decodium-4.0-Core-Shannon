@@ -1812,6 +1812,20 @@ static bool isDirectedDecodeTerminalToken(QString const& token)
         || isRogerSignalReportToken(upper);
 }
 
+// Sanity gate per callsign — rifiuta i ghost del decoder LDPC.
+// Pattern ITU-R 19.68: prefisso (1-2 lettere | lettera+cifra | cifra 2-9 + lettera)
+// + cifra (0-9) + suffisso (1-4 lettere). Esempi rifiutati: 0Z4SYH, 0L0MYK,
+// L74PVK, 6H9IV5Y0. Esempi accettati: IU8LMC, K1JT, 9A3A, EA5JMN.
+static bool isStrictAmateurCallsign(QString const& token)
+{
+    QString const t = token.trimmed().toUpper();
+    if (t.size() < 3 || t.size() > 7) return false;
+    static const QRegularExpression re(
+        R"(^(?:[A-Z]{1,2}|[A-Z][0-9]|[2-9][A-Z])[0-9][A-Z]{1,4}$)"
+    );
+    return re.match(t).hasMatch();
+}
+
 static bool isDirectedDecodePayloadValid(QStringList const& payload,
                                          bool contestExchangeEnabled,
                                          QString* reason)
@@ -16341,16 +16355,53 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
                 return false;
             }
         }
+        // Sanity gate: il call dopo "CQ" (eventualmente con modifier
+        // tipo "CQ DX K1JT") deve essere un callsign amateur valido.
+        // CQ K1JT FN20 → tokens = [CQ, K1JT, FN20], call=tokens[1]
+        // CQ DX K1JT FN20 → tokens = [CQ, DX, K1JT, FN20], call=tokens[2]
+        if (tokens.size() >= 2) {
+            int callIdx = 1;
+            QString const t1 = tokens.at(1);
+            if (tokens.size() >= 3 && (t1 == QStringLiteral("DX")
+                                       || t1 == QStringLiteral("POTA")
+                                       || t1 == QStringLiteral("SOTA")
+                                       || t1 == QStringLiteral("QRP")
+                                       || t1 == QStringLiteral("TEST"))) {
+                callIdx = 2;
+            }
+            if (callIdx < tokens.size() && !isStrictAmateurCallsign(tokens.at(callIdx))) {
+                if (reason) *reason = QStringLiteral("CQ from invalid callsign (ghost)");
+                return false;
+            }
+        }
         return true;
     }
 
     bool const directedToOrFromMe = tokenIsMine(0) || tokenIsMine(1);
     if (!directedToOrFromMe) {
+        // Per traffico non diretto a noi, gate sui due primi token (DX ME):
+        // entrambi devono essere callsign validi. Cosi' filtra ghost
+        // come "0Z4SYH XYZ123 ..." anche se non ci coinvolgono.
+        if (tokens.size() >= 2
+            && !isStrictAmateurCallsign(tokens.at(0))
+            && !isStrictAmateurCallsign(tokens.at(1))) {
+            if (reason) *reason = QStringLiteral("both source/dest callsigns invalid (ghost)");
+            return false;
+        }
         return true;
     }
 
     if (tokens.size() < 3) {
         if (reason) *reason = QStringLiteral("directed message without payload");
+        return false;
+    }
+
+    // Sanity gate: il PEER (l'altro callsign) deve essere un amateur valido.
+    // Il messaggio e' "<DX> <ME> ...": peer = tokens[0] se ME e' tokens[1],
+    // altrimenti peer = tokens[1].
+    int const peerIdx = tokenIsMine(1) ? 0 : 1;
+    if (!isStrictAmateurCallsign(tokens.at(peerIdx))) {
+        if (reason) *reason = QStringLiteral("directed from/to invalid callsign (ghost)");
         return false;
     }
 
