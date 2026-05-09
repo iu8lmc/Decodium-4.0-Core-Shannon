@@ -1815,10 +1815,28 @@ static bool isDirectedDecodeTerminalToken(QString const& token)
 // Sanity gate per callsign — rifiuta i ghost del decoder LDPC.
 // Pattern ITU-R 19.68: prefisso (1-2 lettere | lettera+cifra | cifra 2-9 + lettera)
 // + cifra (0-9) + suffisso (1-4 lettere). Esempi rifiutati: 0Z4SYH, 0L0MYK,
-// L74PVK, 6H9IV5Y0. Esempi accettati: IU8LMC, K1JT, 9A3A, EA5JMN.
+// L74PVK, 6H9IV5Y0. Esempi accettati: IU8LMC, K1JT, 9A3A, EA5JMN, A29TTX/P.
+// Strippa suffissi portatili comuni (/P /M /MM /AM /A /R /QRP) prima del check.
 static bool isStrictAmateurCallsign(QString const& token)
 {
-    QString const t = token.trimmed().toUpper();
+    QString t = token.trimmed().toUpper();
+    if (t.isEmpty()) return false;
+    // Rimuovi suffisso portatile
+    int const slashIdx = t.indexOf('/');
+    if (slashIdx > 0) {
+        QString const suffix = t.mid(slashIdx + 1);
+        QString const prefix = t.left(slashIdx);
+        // Suffix portatile: P/M/MM/AM/A/R/QRP — nessun digit
+        // Prefix portatile country: es. F/IK8XYZ → tieni IK8XYZ
+        static const QSet<QString> portableSuffixes {
+            "P", "M", "MM", "AM", "A", "R", "QRP", "PM", "MA"
+        };
+        if (portableSuffixes.contains(suffix)) {
+            t = prefix;
+        } else if (portableSuffixes.contains(prefix) || (prefix.size() <= 3 && !prefix.contains(QRegularExpression(R"([0-9])")))) {
+            t = suffix;
+        }
+    }
     if (t.size() < 3 || t.size() > 7) return false;
     static const QRegularExpression re(
         R"(^(?:[A-Z]{1,2}|[A-Z][0-9]|[2-9][A-Z])[0-9][A-Z]{1,4}$)"
@@ -12426,8 +12444,14 @@ void DecodiumBridge::engageDxClusterSpot(const QString& call, int audioFreqHz)
     setDxCall(cleaned);
     setDxGrid(QString {});  // grid non noto, sarà aggiornato dal primo decode
 
-    if (audioFreqHz > 0) {
+    // Validazione: rifiuta freq audio non plausibile (<100Hz). Lo spot
+    // alla freq di dial produce audio=0 che il QML coerciva a 1 (workaround
+    // per PanadapterItem freq<=0); ma 1Hz come tx freq rende TUNE inaudibile.
+    if (audioFreqHz >= 100 && audioFreqHz <= 5000) {
         setTxFrequency(audioFreqHz);
+    } else if (audioFreqHz > 0) {
+        bridgeLog(QStringLiteral("engageDxClusterSpot: audioHz=%1 fuori range [100,5000], txFreq invariata")
+                  .arg(audioFreqHz));
     }
 
     // Forza TX1 (chiamata: <them> <me> <my-grid>)
@@ -14526,6 +14550,12 @@ void DecodiumBridge::loadSettings()
     m_tx6 = s.value("tx6", "").toString();
     m_rxFrequency = s.value("rxFrequency", 1500).toInt();
     m_txFrequency = qBound(0, s.value("txFrequency", s.value("TXFrequency", 1500)).toInt(), 3000);
+    // Sanity: se la txFrequency salvata e' implausibile (<100Hz) — es. corrotta
+    // da un click cluster spot che era troppo vicino alla dial — reset al
+    // default 1500. Risolve "TUNE inaudibile" 1.0.108-1.0.112.
+    if (m_txFrequency < 100) {
+        m_txFrequency = 1500;
+    }
     m_fontScale   = s.value("fontScale", 1.08).toDouble();
     // extra features
     m_alertOnCq        = s.value("alertOnCq",       s.value("alert_CQ", false)).toBool();
@@ -16379,14 +16409,37 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
 
     bool const directedToOrFromMe = tokenIsMine(0) || tokenIsMine(1);
     if (!directedToOrFromMe) {
-        // Per traffico non diretto a noi, gate sui due primi token (DX ME):
-        // entrambi devono essere callsign validi. Cosi' filtra ghost
-        // come "0Z4SYH XYZ123 ..." anche se non ci coinvolgono.
-        if (tokens.size() >= 2
-            && !isStrictAmateurCallsign(tokens.at(0))
-            && !isStrictAmateurCallsign(tokens.at(1))) {
-            if (reason) *reason = QStringLiteral("both source/dest callsigns invalid (ghost)");
-            return false;
+        // Per traffico non diretto a noi, gate stretto: se ALMENO UNO dei
+        // due primi token (DX/ME) non e' un callsign valido, e' ghost.
+        // Il decoder LDPC produce coppie come "ZH7RTG A29TTX/P R KR39":
+        // A29TTX/P passerebbe (handler portatile), ZH7RTG non e' allocato
+        // ma matcha la regex strutturale, quindi entrambi passerebbero.
+        // Per gestire questi casi, in piu' applichiamo blocklist prefissi
+        // ITU non assegnati (osservati nei log come ghost ricorrenti).
+        static const QSet<QString> unallocatedPrefixes {
+            "ZH", "ZK", "ZQ", "ZU", "ZV", "ZX", "ZY", "ZZ",
+            "AN", "AO", "BU", "BV", "FK", "FZ",
+            "0A", "0B", "0C", "0D", "0E", "0F", "0G", "0H", "0I", "0J",
+            "0K", "0L", "0M", "0N", "0O", "0P", "0Q", "0R", "0S", "0T",
+            "0U", "0V", "0W", "0X", "0Y", "0Z",
+            "1A", "1B", "1C", "1D", "1E", "1F", "1G", "1H", "1I", "1J",
+            "1K", "1L", "1M", "1N", "1O", "1P", "1Q", "1R", "1S", "1T",
+            "1U", "1V", "1W", "1X", "1Y", "1Z"
+        };
+        auto const hasGhostPrefix = [&](QString const& callRaw) {
+            QString call = callRaw.trimmed().toUpper();
+            int const slashIdx = call.indexOf('/');
+            if (slashIdx > 0) call = call.left(slashIdx);
+            if (call.size() < 2) return false;
+            return unallocatedPrefixes.contains(call.left(2));
+        };
+        if (tokens.size() >= 2) {
+            bool const t0Bad = !isStrictAmateurCallsign(tokens.at(0)) || hasGhostPrefix(tokens.at(0));
+            bool const t1Bad = !isStrictAmateurCallsign(tokens.at(1)) || hasGhostPrefix(tokens.at(1));
+            if (t0Bad || t1Bad) {
+                if (reason) *reason = QStringLiteral("source or dest callsign invalid/ghost");
+                return false;
+            }
         }
         return true;
     }
@@ -16398,11 +16451,28 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
 
     // Sanity gate: il PEER (l'altro callsign) deve essere un amateur valido.
     // Il messaggio e' "<DX> <ME> ...": peer = tokens[0] se ME e' tokens[1],
-    // altrimenti peer = tokens[1].
+    // altrimenti peer = tokens[1]. Applica anche blocklist prefissi non
+    // assegnati per fermare i ghost LDPC.
     int const peerIdx = tokenIsMine(1) ? 0 : 1;
-    if (!isStrictAmateurCallsign(tokens.at(peerIdx))) {
+    QString const peerToken = tokens.at(peerIdx);
+    if (!isStrictAmateurCallsign(peerToken)) {
         if (reason) *reason = QStringLiteral("directed from/to invalid callsign (ghost)");
         return false;
+    }
+    {
+        QString peer = peerToken.trimmed().toUpper();
+        int const slashIdx = peer.indexOf('/');
+        if (slashIdx > 0) peer = peer.left(slashIdx);
+        static const QSet<QString> unallocatedPrefixes {
+            "ZH", "ZK", "ZQ", "ZU", "ZV", "ZX", "ZY", "ZZ",
+            "AN", "AO", "BU", "BV", "FK", "FZ",
+            "0A","0B","0C","0D","0E","0F","0G","0H","0I","0J","0K","0L","0M","0N","0O","0P","0Q","0R","0S","0T","0U","0V","0W","0X","0Y","0Z",
+            "1A","1B","1C","1D","1E","1F","1G","1H","1I","1J","1K","1L","1M","1N","1O","1P","1Q","1R","1S","1T","1U","1V","1W","1X","1Y","1Z"
+        };
+        if (peer.size() >= 2 && unallocatedPrefixes.contains(peer.left(2))) {
+            if (reason) *reason = QStringLiteral("directed peer has unallocated prefix (ghost)");
+            return false;
+        }
     }
 
     QStringList payload = tokens.mid(2);

@@ -198,9 +198,10 @@ Item {
             if (!fkhz) continue
             var audio = Math.round(fkhz * 1000 - dialHz)
             if (audio < fmin || audio > fmax) continue
+            // Skippa spot troppo vicini alla dial (audio<100Hz): non utili
+            // come target TX e renderebbero TUNE inaudibile se cliccati.
+            if (audio < 100) continue
             seen[call] = true
-            // PanadapterItem rifiuta freq<=0; se cade esattamente a 0, sposta a 1Hz.
-            if (audio <= 0) audio = 1
             out.push({ call: call, freq: audio })
             totalRange++
             if (out.length >= 40) break
