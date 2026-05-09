@@ -2513,22 +2513,33 @@ QSGNode* PanadapterItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     bool const gpuSpectrumGraph = spectrumGraphSupported();
     m_useShaderWaterfall = shaderSupported && m_wfWriteRow > 0;
     if (m_spectrumDirty && !m_bins.isEmpty()) {
+        // Drain UNA riga alla volta per paint = scroll fluido, niente "jump"
+        // di N righe quando il backlog cresce. Se restano altre righe in coda
+        // (m_pendingWaterfallRows), richiediamo un altro update() così il
+        // QSG schedula un nuovo paint nel prossimo frame e scrolliamo
+        // continuamente. Comportamento simile a Decodium 3.0.
         if (m_pendingWaterfallRows.isEmpty()) {
             addWaterfallRow(m_bins, m_minDb, m_maxDb, m_dataFreqMin, m_dataFreqMax);
         } else {
-            QVector<WaterfallFrame> pendingRows;
-            pendingRows.swap(m_pendingWaterfallRows);
-            for (WaterfallFrame const& row : std::as_const(pendingRows)) {
-                addWaterfallRow(row.bins,
-                                row.minDb,
-                                row.maxDb,
-                                row.dataFreqMin,
-                                row.dataFreqMax);
+            WaterfallFrame const row = m_pendingWaterfallRows.takeFirst();
+            addWaterfallRow(row.bins,
+                            row.minDb,
+                            row.maxDb,
+                            row.dataFreqMin,
+                            row.dataFreqMax);
+            if (!m_pendingWaterfallRows.isEmpty()) {
+                // Backlog non vuoto → richiedi un altro paint per drenarlo.
+                // QMetaObject::invokeMethod con queued garantisce che update()
+                // venga chiamato fuori dal threading del scenegraph.
+                QMetaObject::invokeMethod(this, [this]() { update(); }, Qt::QueuedConnection);
             }
         }
         if (!gpuSpectrumGraph)
             renderSpectrum();
-        m_spectrumDirty = false;
+        // Lascia m_spectrumDirty=true se ci sono ancora righe in coda così il
+        // prossimo paint le draina anche senza altre addSpectrumData.
+        if (m_pendingWaterfallRows.isEmpty())
+            m_spectrumDirty = false;
     }
     m_useShaderWaterfall = shaderSupported && m_wfWriteRow > 0;
 

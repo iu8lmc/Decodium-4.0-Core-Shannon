@@ -614,9 +614,12 @@ Item {
             running:        bridge.monitoring
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
-            // 1.0.74 non espone ft2State: mantieni il throttle legato solo al modo FT2.
-            throttleActive: bridge.mode === "FT2"
-            throttleIntervalMs: 200
+            // 1.0.110: throttle disabilitato. Il fix di drain UNA riga per paint
+            // dentro PanadapterItem::updatePaintNode rende il rendering fluido
+            // senza accumulo. Lasciare il throttle attivo causava il "jump" di
+            // N righe ogni 200ms (FT2) tipico di 1.0.105-109.
+            throttleActive: false
+            throttleIntervalMs: 100
             // Carica valori da Settings al primo avvio.
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
 
