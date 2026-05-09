@@ -391,7 +391,7 @@ Window {
 	            var prevPeriod = ""
 	            for (var j = 0; j < filtered.length; ++j) {
 	                var it = filtered[j]
-	                var t = String(it.time || it.utc || "").substring(0, 4)
+	                var t = String(it.time || it.utc || "")
 	                if (prevPeriod && t !== prevPeriod) {
 	                    withSep.push({ isSeparator: true, time: t })
 	                }
@@ -538,7 +538,7 @@ Window {
             var prevPeriod = ""
             for (var n = 0; n < sorted.length; ++n) {
                 var it = sorted[n]
-                var t = String(it.time || it.utc || "").substring(0, 4)
+                var t = String(it.time || it.utc || "")
                 if (prevPeriod && t !== prevPeriod) {
                     withSep.push({ isSeparator: true, time: t })
                 }
