@@ -73,6 +73,26 @@ Window {
     property bool highlight73: bridge.getSetting("Highlight73", true)
     property bool highlightOrange: bridge.getSetting("HighlightOrange", false)
     property bool highlightBlue: bridge.getSetting("HighlightBlue", false)
+    // Decodium 3-style: separatore vuoto tra periodi + ordine inverso
+    property bool decodeShowPeriodSeparator: bridge.getSetting("decodeShowPeriodSeparator", false)
+    property bool decodeNewestFirst: bridge.getSetting("decodeNewestFirst", false)
+    onDecodeShowPeriodSeparatorChanged: {
+        bandActivityModel = filteredDecodeEntries(appEngine.decodeList)
+        rxDecodeModel = currentRxDecodes()
+    }
+    onDecodeNewestFirstChanged: {
+        bandActivityModel = filteredDecodeEntries(appEngine.decodeList)
+        rxDecodeModel = currentRxDecodes()
+    }
+    Connections {
+        target: bridge
+        function onSettingValueChanged(key, value) {
+            if (key === "decodeShowPeriodSeparator")
+                decodeShowPeriodSeparator = value
+            else if (key === "decodeNewestFirst")
+                decodeNewestFirst = value
+        }
+    }
     property bool hideTelemetryOnlyDecodes: Qt.platform.os === "windows"
     property string highlightOrangeCallsigns: bridge.getSetting("HighlightOrangeCallsigns", "")
     property string highlightBlueCallsigns: bridge.getSetting("HighlightBlueCallsigns", "")
@@ -362,6 +382,24 @@ Window {
 	            if (shouldDisplayDecodeEntry(item))
 	                filtered.push(item)
 	        }
+	        // Decodium 3-style: ordine inverso (più recente in alto)
+	        if (decodeNewestFirst)
+	            filtered.reverse()
+	        // Decodium 3-style: riga vuota tra periodi diversi
+	        if (decodeShowPeriodSeparator && filtered.length > 1) {
+	            var withSep = []
+	            var prevPeriod = ""
+	            for (var j = 0; j < filtered.length; ++j) {
+	                var it = filtered[j]
+	                var t = String(it.time || it.utc || "").substring(0, 4)
+	                if (prevPeriod && t !== prevPeriod) {
+	                    withSep.push({ isSeparator: true, time: t })
+	                }
+	                prevPeriod = t
+	                withSep.push(it)
+	            }
+	            return withSep
+	        }
 	        return filtered
 	    }
 
@@ -490,7 +528,26 @@ Window {
 	            for (var k = 0; k < appEngine.decodeList.length; k++)
 	                appendIfNeeded(appEngine.decodeList[k], false)
 	        }
-        return sortedRxDecodes(merged)
+        var sorted = sortedRxDecodes(merged)
+        // Decodium 3-style: ordine inverso (più recente in alto)
+        if (decodeNewestFirst)
+            sorted.reverse()
+        // Decodium 3-style: riga vuota tra periodi diversi
+        if (decodeShowPeriodSeparator && sorted.length > 1) {
+            var withSep = []
+            var prevPeriod = ""
+            for (var n = 0; n < sorted.length; ++n) {
+                var it = sorted[n]
+                var t = String(it.time || it.utc || "").substring(0, 4)
+                if (prevPeriod && t !== prevPeriod) {
+                    withSep.push({ isSeparator: true, time: t })
+                }
+                prevPeriod = t
+                withSep.push(it)
+            }
+            return withSep
+        }
+        return sorted
     }
 
     function formatUtcForDisplay(timeStr) {
@@ -830,10 +887,12 @@ NumberAnimation {
                             }
 
                             delegate: Rectangle {
+                                readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
                                 width: bandActivityList.width
-                                height: 26
+                                height: isPeriodSeparator ? 6 : 26
                                 // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
                                 color: {
+                                    if (isPeriodSeparator) return "transparent"
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
@@ -853,9 +912,11 @@ NumberAnimation {
 
                                 MouseArea {
                                     id: bandDelegateMouseArea
+                                    enabled: !parent.isPeriodSeparator
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     onClicked: {
+                                        if (parent.isPeriodSeparator) return
                                         appEngine.selectDecode(index)
                                         // Set RX frequency to this decode's frequency
                                         appEngine.rxFrequency = parseInt(modelData.freq)
@@ -907,6 +968,7 @@ NumberAnimation {
                                 }
 
                                 RowLayout {
+                                    visible: !parent.isPeriodSeparator
                                     anchors.fill: parent
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
@@ -1289,9 +1351,11 @@ NumberAnimation {
                             }
 
                             delegate: Rectangle {
+                                readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
                                 width: rxFrequencyList.width - 12
-                                height: 24
+                                height: isPeriodSeparator ? 6 : 24
                                 color: {
+                                    if (isPeriodSeparator) return "transparent"
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
@@ -1309,9 +1373,11 @@ NumberAnimation {
 
                                 MouseArea {
                                     id: rxDelegateMouseArea
+                                    enabled: !parent.isPeriodSeparator
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     onDoubleClicked: {
+                                        if (parent.isPeriodSeparator) return
                                         // Set TX and RX frequency to decode frequency
                                         if (!appEngine.holdTxFreq)
                                             appEngine.txFrequency = parseInt(modelData.freq)
@@ -1356,6 +1422,7 @@ NumberAnimation {
                                 }
 
                                 RowLayout {
+                                    visible: !parent.isPeriodSeparator
                                     anchors.fill: parent
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4

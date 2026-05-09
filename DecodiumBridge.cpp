@@ -13792,6 +13792,27 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     };
     bool const directedToMe = tokenIsMine(0) || tokenIsMine(1);
 
+    // 1.0.115: gate self-echo. In FT2 async (audio loopback / virtual cable
+    // setup, o cattiva isolazione TX/RX) il decoder cattura il nostro stesso
+    // TX e lo presenta come decode. Senza questo gate, l'engine interpreta
+    // l'eco come "risposta del partner" e avanza TX2 -> TX3 -> TX4 senza
+    // mai aver ricevuto nulla davvero. Il check: se i primi 2 token (DX, ME)
+    // coincidono coi primi 2 dell'ultimo TX, e' eco. Le risposte vere del
+    // partner hanno l'ordine invertito: tokens=[ME, DX, payload].
+    if (!m_lastTransmittedMessage.isEmpty()) {
+        QStringList lastTxParts = m_lastTransmittedMessage.trimmed().toUpper()
+                                    .split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        if (lastTxParts.size() >= 2 && parts.size() >= 2
+            && normalizeCallToken(parts.at(0)).toUpper()
+                 == normalizeCallToken(lastTxParts.at(0)).toUpper()
+            && normalizeCallToken(parts.at(1)).toUpper()
+                 == normalizeCallToken(lastTxParts.at(1)).toUpper()) {
+            bridgeLog(QStringLiteral("autoSequenceStep: skip self-echo (matches last TX): %1")
+                      .arg(msg));
+            return;
+        }
+    }
+
     // Decodium3/legacy behavior: during FT8/FT4 sync TX, we still have to arm
     // auto-reply as soon as a directed call to us is decoded from our CQ.
     // Keep blocking unrelated/self decodes while TX is still winding down.

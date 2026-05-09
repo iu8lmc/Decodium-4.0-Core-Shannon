@@ -3761,6 +3761,25 @@ Dialog {
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
+                        // ── Decode list display (Decodium 3-style) ──
+                        Text { text: qsTr("DECODE LIST"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Riga vuota tra periodi:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        CheckBox {
+                            checked: bridge.getSetting("decodeShowPeriodSeparator", false)
+                            onCheckedChanged: bridge.setSetting("decodeShowPeriodSeparator", checked)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text { text: qsTr("Più recente in alto:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        CheckBox {
+                            checked: bridge.getSetting("decodeNewestFirst", false)
+                            onCheckedChanged: bridge.setSetting("decodeNewestFirst", checked)
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
                         // ── Highlighting ──
                         Text { text: qsTr("HIGHLIGHTING"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
