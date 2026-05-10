@@ -840,7 +840,8 @@ Window {
         }
         bandActivityTailAnimation.from = bandActivityList.contentY
         bandActivityTailAnimation.to = targetY
-        bandActivityTailAnimation.duration = Math.max(180, Math.min(620, 130 + distance * 0.24))
+        // 1.0.125: tail follow piu' snappy (was 130 + 0.24 * distance, max 620)
+        bandActivityTailAnimation.duration = Math.max(90, Math.min(240, 70 + distance * 0.10))
         bandActivityTailAnimation.start()
     })
 }
@@ -848,7 +849,7 @@ NumberAnimation {
     id: bandActivityTailAnimation
                                 target: bandActivityList
                                 property: "contentY"
-	                                duration: 300
+	                                duration: 160
 	                                easing.type: Easing.OutCubic
 	                                onStopped: bandActivityList.finishTailFollow()
 	                            }
@@ -888,18 +889,12 @@ NumberAnimation {
                                     forceTailFollow()
                                 }
                             }
-	                            add: Transition {
-	                                NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
-	                            }
-	                            addDisplaced: Transition {
-	                                NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
-	                            }
-	                            moveDisplaced: Transition {
-	                                NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
-	                            }
-	                            removeDisplaced: Transition {
-	                                NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic }
-	                            }
+	                            // 1.0.125: rimosse animazioni add/addDisplaced/moveDisplaced/
+	                            // removeDisplaced. Quando arrivano 20+ righe in un colpo
+	                            // (slot FT8 finale o burst FT2 async), 20 fade-in opacity +
+	                            // 20 y-animation 270ms simultanei creavano flicker e jitter.
+	                            // Le righe ora appaiono istantanee nella loro posizione finale;
+	                            // solo il tail-follow (sopra) anima lo scroll, in 160ms.
 
                             ScrollBar.vertical: ScrollBar {
                                 policy: ScrollBar.AsNeeded
@@ -1325,7 +1320,8 @@ NumberAnimation {
         }
         rxFrequencyTailAnimation.from = rxFrequencyList.contentY
         rxFrequencyTailAnimation.to = targetY
-        rxFrequencyTailAnimation.duration = Math.max(180, Math.min(620, 130 + distance * 0.24))
+        // 1.0.125: tail follow piu' snappy (was 130 + 0.24 * distance, max 620)
+        rxFrequencyTailAnimation.duration = Math.max(90, Math.min(240, 70 + distance * 0.10))
         rxFrequencyTailAnimation.start()
     })
 }
@@ -1333,7 +1329,7 @@ NumberAnimation {
     id: rxFrequencyTailAnimation
                                 target: rxFrequencyList
                                 property: "contentY"
-	                                duration: 300
+	                                duration: 160
 	                                easing.type: Easing.OutCubic
 	                                onStopped: rxFrequencyList.finishTailFollow()
 	                            }
@@ -1373,18 +1369,8 @@ NumberAnimation {
                                     forceTailFollow()
                                 }
                             }
-	                            add: Transition {
-	                                NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
-	                            }
-	                            addDisplaced: Transition {
-	                                NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
-	                            }
-	                            moveDisplaced: Transition {
-	                                NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
-	                            }
-	                            removeDisplaced: Transition {
-	                                NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic }
-	                            }
+	                            // 1.0.125: rimosse animazioni add/addDisplaced/moveDisplaced/
+	                            // removeDisplaced (stesso motivo di bandActivityList).
 
                             ScrollBar.vertical: ScrollBar {
                                 policy: ScrollBar.AsNeeded
