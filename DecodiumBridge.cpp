@@ -17512,7 +17512,19 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
             }
         }
         if (gotResponse && !m_transmitting) {
-            checkAndStartPeriodicTx();
+            // FT2 async: il decoder DSP emette decode anche mentre il partner
+            // sta ancora trasmettendo (early decode su sample parziali).
+            // Senza delay, il nostro TX si sovrappone alla coda del partner.
+            // Defer 1500ms dopo decode per dare al partner tempo di finire.
+            if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled) {
+                QTimer::singleShot(1500, this, [this]() {
+                    if (!m_transmitting && !m_tuning && m_txEnabled) {
+                        checkAndStartPeriodicTx();
+                    }
+                });
+            } else {
+                checkAndStartPeriodicTx();
+            }
         }
     }
 

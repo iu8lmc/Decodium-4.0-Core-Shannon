@@ -889,10 +889,10 @@ NumberAnimation {
                             delegate: Rectangle {
                                 readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
                                 width: bandActivityList.width
-                                height: isPeriodSeparator ? 6 : 26
+                                height: isPeriodSeparator ? 10 : 26
                                 // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
                                 color: {
-                                    if (isPeriodSeparator) return "transparent"
+                                    if (isPeriodSeparator) return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.10)
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
@@ -904,11 +904,24 @@ NumberAnimation {
                                            : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
                                 }
                                 border.color: {
+                                    if (isPeriodSeparator) return "transparent"
                                     var wsx = decodeWindow.wsjtxBorderColor(modelData)
                                     return wsx ? wsx : "transparent"
                                 }
-                                border.width: decodeWindow.wsjtxBgColor(modelData) ? 1 : 0
+                                border.width: (!isPeriodSeparator && decodeWindow.wsjtxBgColor(modelData)) ? 1 : 0
                                 radius: 2
+
+                                // Linea visibile centrata nel separatore
+                                Rectangle {
+                                    visible: parent.isPeriodSeparator
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 16
+                                    height: 1
+                                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5)
+                                }
 
                                 MouseArea {
                                     id: bandDelegateMouseArea
@@ -1353,9 +1366,9 @@ NumberAnimation {
                             delegate: Rectangle {
                                 readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
                                 width: rxFrequencyList.width - 12
-                                height: isPeriodSeparator ? 6 : 24
+                                height: isPeriodSeparator ? 10 : 24
                                 color: {
-                                    if (isPeriodSeparator) return "transparent"
+                                    if (isPeriodSeparator) return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.10)
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
@@ -1365,11 +1378,23 @@ NumberAnimation {
                                            : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.1)
                                 }
                                 border.color: {
+                                    if (isPeriodSeparator) return "transparent"
                                     var wsx = decodeWindow.wsjtxBorderColor(modelData)
                                     return wsx ? wsx : "transparent"
                                 }
-                                border.width: decodeWindow.wsjtxBgColor(modelData) ? 1 : 0
+                                border.width: (!isPeriodSeparator && decodeWindow.wsjtxBgColor(modelData)) ? 1 : 0
                                 radius: 2
+
+                                Rectangle {
+                                    visible: parent.isPeriodSeparator
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 16
+                                    height: 1
+                                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5)
+                                }
 
                                 MouseArea {
                                     id: rxDelegateMouseArea
