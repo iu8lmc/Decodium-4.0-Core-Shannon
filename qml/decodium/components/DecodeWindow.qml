@@ -74,7 +74,7 @@ Window {
     property bool highlightOrange: bridge.getSetting("HighlightOrange", false)
     property bool highlightBlue: bridge.getSetting("HighlightBlue", false)
     // Decodium 3-style: separatore vuoto tra periodi + ordine inverso
-    property bool decodeShowPeriodSeparator: bridge.getSetting("decodeShowPeriodSeparator", false)
+    property bool decodeShowPeriodSeparator: bridge.getSetting("decodeShowPeriodSeparator", true)
     property bool decodeNewestFirst: bridge.getSetting("decodeNewestFirst", false)
     onDecodeShowPeriodSeparatorChanged: {
         bandActivityModel = filteredDecodeEntries(appEngine.decodeList)
@@ -386,18 +386,32 @@ Window {
 	        if (decodeNewestFirst)
 	            filtered.reverse()
 	        // Decodium 3-style: riga vuota tra periodi diversi
+	        console.warn("[BAND-FILTER] decodeShowPeriodSeparator=" + decodeShowPeriodSeparator
+	                    + " filtered.length=" + filtered.length)
 	        if (decodeShowPeriodSeparator && filtered.length > 1) {
 	            var withSep = []
 	            var prevPeriod = ""
+	            var prevTs = 0
+	            var sepCount = 0
 	            for (var j = 0; j < filtered.length; ++j) {
 	                var it = filtered[j]
 	                var t = String(it.time || it.utc || "")
-	                if (prevPeriod && t !== prevPeriod) {
-	                    withSep.push({ isSeparator: true, time: t })
+	                var ts = Number(it.timestamp || 0)
+	                var newPeriod = false
+	                if (t.length > 0) {
+	                    if (prevPeriod && t !== prevPeriod) newPeriod = true
+	                } else {
+	                    if (prevTs > 0 && ts > 0 && (ts - prevTs) > 1500) newPeriod = true
 	                }
-	                prevPeriod = t
+	                if (newPeriod) {
+	                    withSep.push({ isSeparator: true, time: t })
+	                    sepCount++
+	                }
+	                if (t.length > 0) prevPeriod = t
+	                if (ts > 0) prevTs = ts
 	                withSep.push(it)
 	            }
+	            console.warn("[BAND-FILTER] inserted " + sepCount + " separators, total rows=" + withSep.length)
 	            return withSep
 	        }
 	        return filtered
@@ -536,13 +550,20 @@ Window {
         if (decodeShowPeriodSeparator && sorted.length > 1) {
             var withSep = []
             var prevPeriod = ""
+            var prevTs = 0
             for (var n = 0; n < sorted.length; ++n) {
                 var it = sorted[n]
                 var t = String(it.time || it.utc || "")
-                if (prevPeriod && t !== prevPeriod) {
-                    withSep.push({ isSeparator: true, time: t })
+                var ts = Number(it.timestamp || 0)
+                var newPeriod = false
+                if (t.length > 0) {
+                    if (prevPeriod && t !== prevPeriod) newPeriod = true
+                } else {
+                    if (prevTs > 0 && ts > 0 && (ts - prevTs) > 1500) newPeriod = true
                 }
-                prevPeriod = t
+                if (newPeriod) withSep.push({ isSeparator: true, time: t })
+                if (t.length > 0) prevPeriod = t
+                if (ts > 0) prevTs = ts
                 withSep.push(it)
             }
             return withSep
@@ -889,10 +910,10 @@ NumberAnimation {
                             delegate: Rectangle {
                                 readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
                                 width: bandActivityList.width
-                                height: isPeriodSeparator ? 10 : 26
+                                height: isPeriodSeparator ? 18 : 26
                                 // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
                                 color: {
-                                    if (isPeriodSeparator) return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.10)
+                                    if (isPeriodSeparator) return Qt.rgba(1, 0.3, 0.3, 0.35)  // ROSSO chiaro evidente
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
@@ -917,10 +938,18 @@ NumberAnimation {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.leftMargin: 16
-                                    anchors.rightMargin: 16
-                                    height: 1
-                                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5)
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    height: 2
+                                    color: "#ff3030"
+                                }
+                                Text {
+                                    visible: parent.isPeriodSeparator
+                                    anchors.centerIn: parent
+                                    text: "── PERIODO ──"
+                                    color: "#ff8080"
+                                    font.pixelSize: 10
+                                    font.bold: true
                                 }
 
                                 MouseArea {
