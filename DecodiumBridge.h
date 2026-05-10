@@ -1584,6 +1584,8 @@ private:
     bool               m_txPlaybackReleasePending {false};
     quint64            m_txPlaybackSerial {0};
     bool               m_txAudioRestartPending {false};
+    bool               m_txAudioPriorityBoosted {false};
+    quint32            m_txAudioPreviousPriorityClass {0};
     qint64             m_audioUnhealthyStartMs {0};
     qint64             m_lastAudioWatchdogRestartMs {0};
     qint64             m_lastAudioWatchdogLogMs {0};
@@ -1982,6 +1984,8 @@ private:
                               const QString& logLabel);
     void suspendNonAudioTxWork(const QString& reason);
     void resumeNonAudioTxWork(const QString& reason);
+    void applyTxAudioSchedulingBoost(const QString& reason);
+    void restoreTxAudioSchedulingBoost(const QString& reason);
     void resumeRxAudioAfterTx(const QString& reason);
     void noteTxPlaybackFinished(const QString& reason, bool error);
     void completeTxPlayback(const QString& reason, bool error = false);

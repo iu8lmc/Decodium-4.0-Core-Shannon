@@ -263,10 +263,10 @@ int HRDTransceiver::do_start ()
         {
           protocol_ = v5;	// try this first (works for v6 too)
           CAT_INFO ("HRD protocol probe v5 starting");
-          hrd_diag (QStringLiteral ("protocol probe v5 start"));
-          send_command ("get context", false, false);
-          CAT_INFO ("HRD protocol probe v5 accepted");
-          hrd_diag (QStringLiteral ("protocol probe v5 accepted"));
+          hrd_diag (QStringLiteral ("protocol probe v5 start command='get id'"));
+          auto probe_id = send_command ("get id", false, false);
+          CAT_INFO ("HRD protocol probe v5 accepted:" << probe_id);
+          hrd_diag (QStringLiteral ("protocol probe v5 accepted id='%1'").arg (hrd_preview (probe_id)));
         }
       catch (error const& e)
         {
@@ -300,10 +300,10 @@ int HRDTransceiver::do_start ()
       try
         {
           CAT_INFO ("HRD protocol probe v4 starting");
-          hrd_diag (QStringLiteral ("protocol probe v4 start"));
-          send_command ("get context", false, false);
-          CAT_INFO ("HRD protocol probe v4 accepted");
-          hrd_diag (QStringLiteral ("protocol probe v4 accepted"));
+          hrd_diag (QStringLiteral ("protocol probe v4 start command='get id'"));
+          auto probe_id = send_command ("get id", false, false);
+          CAT_INFO ("HRD protocol probe v4 accepted:" << probe_id);
+          hrd_diag (QStringLiteral ("protocol probe v4 accepted id='%1'").arg (hrd_preview (probe_id)));
         }
       catch (error const& e)
         {
@@ -370,6 +370,20 @@ int HRDTransceiver::do_start ()
       CAT_ERROR ("no rig found");
       throw error {tr ("Ham Radio Deluxe: no rig found")};
     }
+  auto current_radio_iter = std::find_if (radios_.begin (), radios_.end (), [&current_radio_name] (RadioMap::value_type const& radio)
+                                          {
+                                            return std::get<1> (radio) == current_radio_name;
+                                          });
+  if (current_radio_iter == radios_.end ())
+    {
+      CAT_ERROR ("current HRD radio missing from inventory:" << current_radio_name);
+      hrd_diag (QStringLiteral ("current radio missing from inventory current='%1'").arg (hrd_preview (current_radio_name)));
+      throw error {tr ("Ham Radio Deluxe: rig has disappeared or changed")};
+    }
+  current_radio_ = std::get<0> (*current_radio_iter);
+  hrd_diag (QStringLiteral ("selected radio context id=%1 name='%2'")
+            .arg (current_radio_)
+            .arg (hrd_preview (current_radio_name)));
 
   vfo_count_ = send_command ("get vfo-count").toUInt ();
   HRD_info << "VFO count: " << vfo_count_ << "\n";
@@ -1198,7 +1212,7 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
       QThread::msleep (50);
    }
 
-  if (!recurse && prepend_context)
+  if (!recurse && prepend_context && 0u == current_radio_)
     {
       auto radio_name = send_command ("get radio", current_radio_, true);
       auto radio_iter = std::find_if (radios_.begin (), radios_.end (), [&radio_name] (RadioMap::value_type const& radio)
@@ -1263,6 +1277,12 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
               .arg (cmd)
               };
         }
+      if (log_command)
+        {
+          hrd_diag (QStringLiteral ("#%1 wrote proto=v4 bytes=%2")
+                    .arg (QString::number (sequence))
+                    .arg (message.size ()));
+        }
     }
   else
     {
@@ -1280,6 +1300,12 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
             tr ("Ham Radio Deluxe: failed to write command \"%1\"")
               .arg (cmd)
             };
+        }
+      if (log_command)
+        {
+          hrd_diag (QStringLiteral ("#%1 wrote proto=v5 bytes=%2")
+                    .arg (QString::number (sequence))
+                    .arg (message->size_));
         }
     }
 

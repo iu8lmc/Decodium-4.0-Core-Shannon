@@ -97,6 +97,35 @@ QString configured_cluster_endpoint (QSettings * settings)
     .arg (configured_cluster_host (settings), QString::number (configured_cluster_port (settings)));
 }
 
+QString cluster_login_base_call (QString call)
+{
+  call = call.trimmed ().toUpper ();
+  auto const parts = call.split (QLatin1Char ('/'), Qt::SkipEmptyParts);
+  if (parts.size () > 1)
+    {
+      QString best;
+      for (auto const& part : parts)
+        {
+          bool hasDigit {false};
+          for (auto const ch : part)
+            {
+              if (ch.isDigit ())
+                {
+                  hasDigit = true;
+                  break;
+                }
+            }
+          if (hasDigit && part.size () > best.size ())
+            {
+              best = part;
+            }
+        }
+      call = best.isEmpty () ? parts.first () : best;
+    }
+  call.remove (QRegularExpression (QStringLiteral ("[^A-Z0-9]")));
+  return call.trimmed ().toUpper ();
+}
+
 QString configured_cluster_login (QSettings * settings, QString const& activeMyCall)
 {
   if (settings)
@@ -104,16 +133,16 @@ QString configured_cluster_login (QSettings * settings, QString const& activeMyC
       auto configuredLogin = settings->value (QStringLiteral ("DXClusterViewLogin"), QString {}).toString ().trimmed ().toUpper ();
       if (!configuredLogin.isEmpty ())
         {
-          return configuredLogin;
+          return cluster_login_base_call (configuredLogin);
         }
     }
-  auto login = activeMyCall.trimmed ().toUpper ();
+  auto login = cluster_login_base_call (activeMyCall);
   if (!login.isEmpty ())
     {
       return login;
     }
   if (!settings) return {};
-  return settings->value (QStringLiteral ("MyCall"), QString {}).toString ().trimmed ().toUpper ();
+  return cluster_login_base_call (settings->value (QStringLiteral ("MyCall"), QString {}).toString ());
 }
 
 QString spider_band_argument (QString const& band)

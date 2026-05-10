@@ -233,6 +233,13 @@ QString baseCallForClusterCheck(QString call)
     return call;
 }
 
+QString loginCallForCluster(QString call)
+{
+    call = baseCallForClusterCheck(call);
+    call.remove(QRegularExpression(QStringLiteral("[^A-Z0-9]")));
+    return call.trimmed().toUpper();
+}
+
 bool clusterPayloadShowsSubmittedSpot(QString const& myCall, QString const& dxCall, QByteArray const& payload)
 {
     QString const fullMyCall = myCall.trimmed().toUpper();
@@ -436,11 +443,21 @@ void DecodiumDxCluster::sendLogin()
         return;
     }
 
-    QString const login = m_callsign.trimmed().toUpper();
+    QString const fullCall = m_callsign.trimmed().toUpper();
+    QString const login = loginCallForCluster(fullCall);
+    if (login.isEmpty()) {
+        setLastStatus(tr("Callsign not usable for cluster login: %1").arg(fullCall));
+        emit errorOccurred(tr("Callsign not usable for cluster login: %1").arg(fullCall));
+        return;
+    }
     m_socket->write((login + QStringLiteral("\r\n")).toUtf8());
     m_loginSent = true;
-    setLastStatus(tr("Login sent as %1").arg(login));
-    emit statusUpdate(tr("Login sent (%1).").arg(login));
+    setLastStatus(fullCall == login
+                      ? tr("Login sent as %1").arg(login)
+                      : tr("Login sent as %1 (station %2)").arg(login, fullCall));
+    emit statusUpdate(fullCall == login
+                          ? tr("Login sent (%1).").arg(login)
+                          : tr("Login sent (%1, station %2).").arg(login, fullCall));
 
     // Dopo login, richiedi dump storico via SHOW/DX.
     // dxspider la documentazione ufficiale usa il nome esteso.
@@ -686,7 +703,7 @@ bool DecodiumDxCluster::submitSpotVerified(const QString& dxCall, double freqKhz
         return false;
     }
 
-    QString myCall = m_callsign.trimmed().toUpper();
+    QString myCall = loginCallForCluster(m_callsign);
     if (myCall.isEmpty()) {
         emit errorOccurred(tr("Cannot send spot: callsign not set."));
         return false;
@@ -1256,7 +1273,7 @@ void DecodiumDxCluster::saveSettings()
     s.setValue("DXClusterHost", m_host);
     s.setValue("DXClusterPort", m_port);
     if (!m_callsign.trimmed().isEmpty()) {
-        s.setValue("DXClusterViewLogin", m_callsign.trimmed().toUpper());
+        s.setValue("DXClusterViewLogin", loginCallForCluster(m_callsign));
     }
     s.sync();
 }

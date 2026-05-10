@@ -477,6 +477,12 @@ static QString normalizedAudioDeviceNameForMatch(QString value)
     return normalized;
 }
 
+static bool audioDeviceNameExactMatches(QString const& lhs, QString const& rhs)
+{
+    return !lhs.trimmed().isEmpty()
+        && lhs.trimmed().compare(rhs.trimmed(), Qt::CaseInsensitive) == 0;
+}
+
 static bool audioDeviceNameMatches(QString const& lhs, QString const& rhs)
 {
     QString const rawA = lhs.trimmed();
@@ -2573,11 +2579,13 @@ static QByteArray buildTxPcmBuffer(const QVector<float>& wave48kMono, const QAud
     return pcm;
 }
 
-static qsizetype txAudioBufferBytesForMode(const QAudioFormat& format, const QString& mode, bool tune)
+static qsizetype txAudioBufferBytesForMode(const QAudioFormat& format, const QString& mode,
+                                           bool tune, bool conservative)
 {
     if (!format.isValid()) {
         return 0;
     }
+    static_cast<void>(conservative);
 
     int frames = tune ? 16384 : (mode == QStringLiteral("FT2") ? 8192 : 16384);
 #if defined(Q_OS_WIN)
@@ -2585,6 +2593,9 @@ static qsizetype txAudioBufferBytesForMode(const QAudioFormat& format, const QSt
     // while FT8/FT4 decode/UI work is still settling. Keep FT2 lower to avoid
     // pushing a short 3.75 s payload too far into the slot.
     frames = tune ? 32768 : (mode == QStringLiteral("FT2") ? 12288 : 32768);
+    if (conservative && !tune) {
+        frames = (mode == QStringLiteral("FT2")) ? 16384 : 65536;
+    }
 #elif defined(Q_OS_LINUX)
     // PipeWire/PulseAudio can expose USB radios as stereo profiles and may
     // underrun small pull buffers while the UI/decode threads are active.
@@ -2927,6 +2938,18 @@ static int autoTxDecodeGraceMs(const QString& mode)
     if (normalized == QStringLiteral("FT2"))
         return 250;
     return 500;
+}
+
+static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMaxRetries)
+{
+    QString const normalized = mode.trimmed().toUpper();
+    int modeCap = 3;
+    if (normalized == QStringLiteral("FT4")) {
+        modeCap = 4;
+    } else if (normalized == QStringLiteral("FT2")) {
+        modeCap = 8;
+    }
+    return qBound(1, configuredMaxRetries, modeCap);
 }
 
 static int autoSeqTxRank(int txNum)
@@ -8581,16 +8604,25 @@ static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceF
 {
     auto const outputs = QMediaDevices::audioOutputs();
 
-    if (!name.isEmpty()) {
+    QString const requestedName = name.trimmed();
+    if (!requestedName.isEmpty()) {
         for (const QAudioDevice& d : outputs) {
-            if (audioDeviceNameMatches(d.description(), name)) {
+            if (audioDeviceNameExactMatches(d.description(), requestedName)) {
+                if (requestedDeviceFound) *requestedDeviceFound = true;
+                return d;
+            }
+        }
+        for (const QAudioDevice& d : outputs) {
+            if (audioDeviceNameMatches(d.description(), requestedName)) {
+                bridgeLog(QStringLiteral("findOutputDevice: normalized match requested=[%1] actual=[%2]")
+                              .arg(requestedName, d.description()));
                 if (requestedDeviceFound) *requestedDeviceFound = true;
                 return d;
             }
         }
     }
 
-    if (requestedDeviceFound) *requestedDeviceFound = name.isEmpty();
+    if (requestedDeviceFound) *requestedDeviceFound = requestedName.isEmpty();
     return QMediaDevices::defaultAudioOutput();
 }
 
@@ -8826,6 +8858,74 @@ void DecodiumBridge::resumeNonAudioTxWork(const QString& reason)
     }
 }
 
+void DecodiumBridge::applyTxAudioSchedulingBoost(const QString& reason)
+{
+#if defined(Q_OS_WIN)
+    if (m_txAudioPriorityBoosted) {
+        return;
+    }
+
+    HANDLE const process = GetCurrentProcess();
+    DWORD const previousClass = GetPriorityClass(process);
+    if (previousClass == 0) {
+        bridgeLog(QStringLiteral("TX audio priority boost unavailable (%1): GetPriorityClass error=%2")
+                      .arg(reason)
+                      .arg(static_cast<qulonglong>(GetLastError())));
+        return;
+    }
+
+    DWORD const targetClass =
+        (m_lowCpuModeEnabled || cpuPressureActive())
+            ? HIGH_PRIORITY_CLASS
+            : ABOVE_NORMAL_PRIORITY_CLASS;
+
+    if (previousClass == REALTIME_PRIORITY_CLASS ||
+        previousClass == HIGH_PRIORITY_CLASS ||
+        previousClass == targetClass) {
+        return;
+    }
+
+    if (SetPriorityClass(process, targetClass)) {
+        m_txAudioPreviousPriorityClass = static_cast<quint32>(previousClass);
+        m_txAudioPriorityBoosted = true;
+        bridgeLog(QStringLiteral("TX audio priority boost: %1 -> %2 (%3)")
+                      .arg(static_cast<qulonglong>(previousClass))
+                      .arg(static_cast<qulonglong>(targetClass))
+                      .arg(reason));
+    } else {
+        bridgeLog(QStringLiteral("TX audio priority boost failed (%1): error=%2")
+                      .arg(reason)
+                      .arg(static_cast<qulonglong>(GetLastError())));
+    }
+#else
+    Q_UNUSED(reason)
+#endif
+}
+
+void DecodiumBridge::restoreTxAudioSchedulingBoost(const QString& reason)
+{
+#if defined(Q_OS_WIN)
+    if (!m_txAudioPriorityBoosted || m_txAudioPreviousPriorityClass == 0) {
+        return;
+    }
+
+    DWORD const previousClass = static_cast<DWORD>(m_txAudioPreviousPriorityClass);
+    if (SetPriorityClass(GetCurrentProcess(), previousClass)) {
+        bridgeLog(QStringLiteral("TX audio priority restored: %1 (%2)")
+                      .arg(static_cast<qulonglong>(previousClass))
+                      .arg(reason));
+        m_txAudioPriorityBoosted = false;
+        m_txAudioPreviousPriorityClass = 0;
+    } else {
+        bridgeLog(QStringLiteral("TX audio priority restore failed (%1): error=%2")
+                      .arg(reason)
+                      .arg(static_cast<qulonglong>(GetLastError())));
+    }
+#else
+    Q_UNUSED(reason)
+#endif
+}
+
 void DecodiumBridge::noteTxPlaybackFinished(const QString& reason, bool error)
 {
     int const finishedTx = m_activeTxNumber;
@@ -9041,6 +9141,7 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
         emit transmittingChanged();
     }
 
+    restoreTxAudioSchedulingBoost(reason);
     resumeRxAudioAfterTx(reason);
     resumeNonAudioTxWork(reason);
 
@@ -9270,6 +9371,7 @@ void DecodiumBridge::startTx()
 
         m_transmitting = true;
         emit transmittingChanged();
+        applyTxAudioSchedulingBoost(QStringLiteral("tx-mac"));
         suspendNonAudioTxWork(QStringLiteral("tx-mac"));
 
         // Anti-collisione: ferma l'ingresso audio durante TX per evitare
@@ -9419,6 +9521,7 @@ void DecodiumBridge::startTx()
     quint64 const txSerial = ++m_txPlaybackSerial;
     m_transmitting = true;
     emit transmittingChanged();
+    applyTxAudioSchedulingBoost(QStringLiteral("tx"));
     suspendNonAudioTxWork(QStringLiteral("tx"));
 
     // Anti-collisione: durante TX sync non dobbiamo ricatturare il nostro
@@ -9465,6 +9568,7 @@ void DecodiumBridge::startTx()
             m_txPcmData.clear();
             m_activeTxNumber = 0;
             m_activeTxMessage.clear();
+            restoreTxAudioSchedulingBoost(QStringLiteral("tci-tx-audio-start-failed"));
             resumeRxAudioAfterTx(QStringLiteral("tci-tx-audio-start-failed"));
             resumeNonAudioTxWork(QStringLiteral("tci-tx-audio-start-failed"));
             emit errorMessage(QStringLiteral("Impossibile avviare audio TX TCI"));
@@ -9548,7 +9652,9 @@ void DecodiumBridge::startTx()
 
         m_txAudioSink = new QAudioSink(outDev, outFmt, this);
         m_txAudioSink->setVolume(static_cast<float>(txGainFromSlider(m_txOutputLevel)));
-        qsizetype const txBufferBytes = txAudioBufferBytesForMode(outFmt, m_mode, false);
+        qsizetype const txBufferBytes =
+            txAudioBufferBytesForMode(outFmt, m_mode, false,
+                                      m_lowCpuModeEnabled || cpuPressureActive());
         if (txBufferBytes > 0) {
             m_txAudioSink->setBufferSize(txBufferBytes);
         }
@@ -9624,6 +9730,26 @@ void DecodiumBridge::startTx()
         scheduleSyncTxBoundaryStop(QStringLiteral("pcm"), txSerial);
         QPointer<QAudioSink> const sinkGuard(m_txAudioSink);
         QPointer<QBuffer> const bufferGuard(m_txPcmBuffer);
+        qint64 const audioStartWallMs = QDateTime::currentMSecsSinceEpoch();
+        QTimer::singleShot(5200, this, [this, sinkGuard, bufferGuard, audioStartWallMs, expectedUs]() {
+            if (!m_transmitting || m_tuning || !sinkGuard || sinkGuard != m_txAudioSink) {
+                return;
+            }
+
+            qint64 const wallUs =
+                qMax<qint64>(0, QDateTime::currentMSecsSinceEpoch() - audioStartWallMs) * 1000LL;
+            qint64 const processedUs = sinkGuard->processedUSecs();
+            qint64 const lagUs = wallUs - processedUs;
+            if (lagUs > 350000) {
+                bridgeLog(QStringLiteral("TX audio lag warning: lag=%1ms processed=%2ms wall=%3ms expected=%4ms bufPos=%5/%6")
+                              .arg(lagUs / 1000)
+                              .arg(processedUs / 1000)
+                              .arg(wallUs / 1000)
+                              .arg(expectedUs / 1000)
+                              .arg(bufferGuard ? bufferGuard->pos() : -1)
+                              .arg(bufferGuard ? bufferGuard->size() : -1));
+            }
+        });
         int const watchdogMs = qBound(1500,
                                       static_cast<int>((expectedUs + 999) / 1000) + 1500,
                                       25000);
@@ -9814,6 +9940,7 @@ void DecodiumBridge::stopTx()
         emit transmittingChanged();
         emit statusMessage("TX fermato");
     }
+    restoreTxAudioSchedulingBoost(QStringLiteral("stopTx"));
     resumeRxAudioAfterTx(QStringLiteral("stopTx"));
     resumeNonAudioTxWork(QStringLiteral("stopTx"));
     return;
@@ -9838,6 +9965,7 @@ void DecodiumBridge::stopTx()
         emit transmittingChanged();
         emit statusMessage("TX fermato");
     }
+    restoreTxAudioSchedulingBoost(QStringLiteral("stopTx"));
     resumeRxAudioAfterTx(QStringLiteral("stopTx"));
     resumeNonAudioTxWork(QStringLiteral("stopTx"));
 }
@@ -10059,7 +10187,9 @@ bool DecodiumBridge::launchTuneAudio()
 
     m_txAudioSink = new QAudioSink(outDev, outFmt, this);
     m_txAudioSink->setVolume(static_cast<float>(txGainFromSlider(m_txOutputLevel)));
-    qsizetype const tuneBufferBytes = txAudioBufferBytesForMode(outFmt, QStringLiteral("TUNE"), true);
+    qsizetype const tuneBufferBytes =
+        txAudioBufferBytesForMode(outFmt, QStringLiteral("TUNE"), true,
+                                  m_lowCpuModeEnabled || cpuPressureActive());
     if (tuneBufferBytes > 0) {
         m_txAudioSink->setBufferSize(tuneBufferBytes);
     }
@@ -12844,6 +12974,8 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
         }
         return QString {};
     };
+    bool const incomingDirectedToMe = tokenIsMine(0);
+    bool const outgoingFromMe = tokenIsMine(1);
 
     if (parts[0].compare("CQ", Qt::CaseInsensitive) == 0) {
         // CQ [modifier] CALL GRID
@@ -12880,19 +13012,33 @@ void DecodiumBridge::processDecodeDoubleClick(const QString& message,
             clickedSignoffMessage = isQsoSignoffToken(last);
             if (isGridTokenStrict(last)) {
                 hisGrid = last;
-                newCurrentTx = 2; // ricevuto grid → mandiamo report
+                if (incomingDirectedToMe) newCurrentTx = 2; // ricevuto grid -> mandiamo report
             } else if (last.compare("RR73", Qt::CaseInsensitive) == 0 ||
                        last.compare("RRR",  Qt::CaseInsensitive) == 0) {
-                newCurrentTx = 5; // ricevuto RR73 → mandiamo 73
+                if (incomingDirectedToMe) newCurrentTx = 5; // ricevuto RR73 -> mandiamo 73
             } else if (last.compare("73", Qt::CaseInsensitive) == 0) {
-                newCurrentTx = 6; // QSO finito
+                if (incomingDirectedToMe) newCurrentTx = 6; // QSO finito
             } else if (last.length() >= 2 &&
                        last[0] == 'R' &&
                        (last[1] == '-' || last[1] == '+' || last[1].isDigit())) {
-                newCurrentTx = 4; // ricevuto R+report → mandiamo RR73
+                if (incomingDirectedToMe) newCurrentTx = 4; // ricevuto R+report -> mandiamo RR73
             } else if (last.length() >= 2 &&
                        (last[0] == '-' || last[0] == '+') && last[1].isDigit()) {
-                newCurrentTx = 3; // ricevuto report → mandiamo R + nostro report al DX
+                if (incomingDirectedToMe) newCurrentTx = 3; // ricevuto report -> mandiamo R + nostro report al DX
+            }
+            bool const qsoPayloadWouldAdvance =
+                isGridTokenStrict(last) ||
+                last.compare("RR73", Qt::CaseInsensitive) == 0 ||
+                last.compare("RRR",  Qt::CaseInsensitive) == 0 ||
+                last.compare("73", Qt::CaseInsensitive) == 0 ||
+                (last.length() >= 2 &&
+                 last[0] == 'R' &&
+                 (last[1] == '-' || last[1] == '+' || last[1].isDigit())) ||
+                (last.length() >= 2 &&
+                 (last[0] == '-' || last[0] == '+') && last[1].isDigit());
+            if (qsoPayloadWouldAdvance && !incomingDirectedToMe && !outgoingFromMe) {
+                bridgeLog(QStringLiteral("processDecodeDoubleClick: third-party decode '%1' starts new call -> TX1")
+                              .arg(message.trimmed()));
             }
         }
     }
@@ -14040,14 +14186,13 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         }
 
         if (m_ft2DeferredLogPending) {
-            // 1.0.124: cap retry TX5 deferred a 3 (era m_maxCallerRetries=10).
-            // Stazioni forti spesso non mandano il 73 finale (passano subito al
-            // prossimo QSO del pile-up); 10 retry = ~38s in FT2 / ~150s in FT8
-            // di "stuck" senza poter rispondere ad altri caller. 3 retry =~ 12s.
-            int const signoffCap = std::min(m_maxCallerRetries, 3);
+            // Cap per-mode retry TX5/RR73 deferred by wall-clock intent:
+            // FT8=3 (~45s), FT4=4 (~30s), FT2=8 (~30s).
+            int const signoffCap = deferredSignoffRetryCapForMode(m_mode, m_maxCallerRetries);
             if (m_nTx73 < signoffCap) {
-                bridgeLog(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 count=%2/%3, waiting for final ack")
+                bridgeLog(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 mode=%2 count=%3/%4, waiting for final ack")
                               .arg(m_currentTx)
+                              .arg(m_mode)
                               .arg(m_nTx73)
                               .arg(signoffCap));
                 return false;
@@ -14056,8 +14201,9 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             // Il QSO ha completato lo scambio bidirezionale di report; il 73
             // finale del partner e' optional in FT8/FT2. Non loggare era un bug
             // che faceva perdere QSO validi con stazioni forti / DX rari.
-            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 retry cap %2/%3 -> log anyway, partner left")
+            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 mode=%2 retry cap %3/%4 -> log anyway, partner left")
                                       .arg(m_currentTx)
+                                      .arg(m_mode)
                                       .arg(m_nTx73)
                                       .arg(signoffCap), true);
             return true;

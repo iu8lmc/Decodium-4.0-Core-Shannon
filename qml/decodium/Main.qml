@@ -2346,6 +2346,7 @@ ApplicationWindow {
 
                 // Grouped buttons: Settings, REC, WAV, Log, Macro, Astro, CAT
                 Item {
+                    id: headerUtilityButtons
                     width: 360
                     height: 74
 
@@ -9649,7 +9650,7 @@ NumberAnimation {
 
     // ===== GAP 3 — Pannelli floating draggabili =====
 
-    // TimeSyncPanel — angolo in alto a destra, togglabile da menu
+    // TimeSyncPanel — sotto il blocco Setup/REC/WAV, togglabile da menu
     Item {
         id: timeSyncOverlay
         readonly property int panelMargin: 12
@@ -9717,13 +9718,34 @@ NumberAnimation {
 
             return { valid: false, x: 0, y: 0 }
         }
+        function utilityButtonsSlot() {
+            if (!headerUtilityButtons || !headerUtilityButtons.visible || headerUtilityButtons.width <= 0)
+                return { valid: false, x: 0, y: 0 }
+
+            var mapped = headerUtilityButtons.mapToItem(null, 0, 38)
+            var maxX = Math.max(panelMargin, mainWindow.width - width - panelMargin)
+            var maxY = Math.max(topRailY, mainWindow.height - height - panelMargin)
+            return {
+                valid: true,
+                x: Math.min(Math.max(panelMargin, mapped.x), maxX),
+                y: Math.min(Math.max(topRailY, mapped.y), maxY)
+            }
+        }
         function automaticX() {
+            var utilitySlot = utilityButtonsSlot()
+            if (utilitySlot.valid)
+                return utilitySlot.x
+
             var slot = headerSlot()
             if (slot.valid)
                 return slot.x
             return Math.max(panelMargin, mainWindow.width - width - panelMargin)
         }
         function automaticY() {
+            var utilitySlot = utilityButtonsSlot()
+            if (utilitySlot.valid)
+                return utilitySlot.y
+
             var slot = headerSlot()
             if (slot.valid)
                 return slot.y
