@@ -3012,6 +3012,11 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             << "reason=DECODIUM_DISABLE_GPU_PANADAPTER_FFT";
     }
 
+    // FT2 async smart TX scheduler: ascolta il livello audio per mantenere
+    // un counter di "quiet runs" (campioni consecutivi sotto soglia RMS).
+    connect(this, &DecodiumBridge::audioLevelChanged,
+            this, &DecodiumBridge::onAudioLevelForFt2Gate);
+
     connect(this, &DecodiumBridge::errorMessage, this, [](const QString& msg) {
         DIAG_ERROR(QStringLiteral("[UIERR] non-blocking error: %1")
                        .arg(bridgeDiagnosticOneLine(msg)));
@@ -13486,6 +13491,111 @@ void DecodiumBridge::scheduleDeferredAutoTxAfterTimeSyncDecode(const QString& mo
     });
 }
 
+void DecodiumBridge::onAudioLevelForFt2Gate()
+{
+    if (m_mode != QStringLiteral("FT2") || !m_asyncTxEnabled) {
+        return;
+    }
+    // RMS threshold per "quiet" — empirico, copre noise floor tipico USB CODEC
+    // a guadagno medio. Gating: 3 sample consecutivi sotto soglia ≈ ~300ms.
+    constexpr double kQuietThreshold = 0.005;
+    if (m_audioLevel < kQuietThreshold) {
+        if (m_ft2AsyncAudioQuietRuns < 100) {
+            ++m_ft2AsyncAudioQuietRuns;
+        }
+    } else {
+        m_ft2AsyncAudioQuietRuns = 0;
+    }
+}
+
+void DecodiumBridge::scheduleSmartFt2AsyncTx(const QString& reason)
+{
+    // Sistema integrato anti-collisione FT2 async. Combina 5 strategie
+    // selezionate autonomamente in base allo stato del canale:
+    //  S1 SLOT-EST   stima fine-frame del partner da timestamp primo decode
+    //  S2 RMS-GATE   richiede audio sotto soglia per ~300ms (quiet)
+    //  S3 DECODE-Q   richiede no-new-decode per >400ms
+    //  S4 JITTER     anti-collisione multi-stazione (hash callsign 50-250ms)
+    //  S5 HARD CAP   max 2500ms wait (safety)
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+
+    // S1: Slot estimation — partner ha iniziato TX ~3200ms prima del primo
+    //     decode (DSP early decode arriva ad ~80-90% del frame). Frame dura
+    //     ~3800ms. End = start + 3800. Aggiungi 200ms di safety.
+    qint64 slotDelay = 0;
+    qint64 estimatedPartnerStartMs = 0;
+    qint64 estimatedPartnerEndMs   = 0;
+    if (m_ft2AsyncFirstDecodeMs > 0) {
+        estimatedPartnerStartMs = m_ft2AsyncFirstDecodeMs - 3200;
+        estimatedPartnerEndMs   = estimatedPartnerStartMs + 3800;
+        if (estimatedPartnerEndMs > nowMs) {
+            slotDelay = estimatedPartnerEndMs - nowMs + 200;
+        }
+    }
+
+    // S2: RMS gate
+    bool const rmsQuiet = (m_ft2AsyncAudioQuietRuns >= 3);
+
+    // S3: Decode-quiet
+    qint64 const decodeQuietMs = m_ft2AsyncLastDecodeMs > 0
+        ? (nowMs - m_ft2AsyncLastDecodeMs) : 999999;
+    bool const decodeQuiet = (decodeQuietMs > 400);
+
+    // Decision tree:
+    //  - se slotDelay molto grande (>500ms) usa quello (canale chiaramente occupato)
+    //  - altrimenti aspetta che entrambi i gate (RMS + decode-quiet) siano OK
+    //  - aggiungi jitter
+    qint64 finalDelay = 0;
+    QString strategy;
+    if (slotDelay > 500) {
+        finalDelay = slotDelay;
+        strategy = QStringLiteral("S1-slot-est");
+    } else if (!rmsQuiet || !decodeQuiet) {
+        finalDelay = 100;  // poll
+        strategy = QStringLiteral("S2-S3-poll");
+    } else {
+        // Tutti i gate OK → aggiungi jitter (S4) e go
+        QString const myCall = m_callsign.trimmed();
+        int hashAcc = 0;
+        for (auto c : myCall) hashAcc = (hashAcc * 31 + c.unicode()) & 0xff;
+        int const jitterMs = 50 + (hashAcc % 200);
+        finalDelay = jitterMs;
+        strategy = QStringLiteral("S4-jitter");
+    }
+    if (finalDelay > 2500) finalDelay = 2500;  // S5 cap
+
+    bridgeLog(QStringLiteral("smartFt2Tx [%1]: slotDelay=%2 rmsQuiet=%3 decodeQuiet=%4ms strategy=%5 final=%6ms")
+              .arg(reason)
+              .arg(slotDelay)
+              .arg(rmsQuiet ? 1 : 0)
+              .arg(decodeQuietMs)
+              .arg(strategy)
+              .arg(finalDelay));
+
+    if (finalDelay <= 0) {
+        if (!m_transmitting && !m_tuning && m_txEnabled) {
+            checkAndStartPeriodicTx();
+        }
+        return;
+    }
+    QTimer::singleShot((int)finalDelay, this, [this]() {
+        if (m_transmitting || m_tuning || !m_txEnabled) return;
+        // Re-check gates
+        qint64 const nowMs2 = QDateTime::currentMSecsSinceEpoch();
+        qint64 const decodeQuietMs2 = m_ft2AsyncLastDecodeMs > 0
+            ? (nowMs2 - m_ft2AsyncLastDecodeMs) : 999999;
+        bool const allClear = (m_ft2AsyncAudioQuietRuns >= 3) && (decodeQuietMs2 > 400);
+        if (allClear) {
+            bridgeLog(QStringLiteral("smartFt2Tx: gates clear after wait, TX now (decodeQuiet=%1ms quietRuns=%2)")
+                      .arg(decodeQuietMs2).arg(m_ft2AsyncAudioQuietRuns));
+            checkAndStartPeriodicTx();
+        } else {
+            // Gates ancora non puliti — re-schedule (max 1 retry)
+            scheduleSmartFt2AsyncTx(QStringLiteral("retry"));
+        }
+    });
+}
+
 void DecodiumBridge::checkAndStartPeriodicTx()
 {
     if (m_manualTxHold || !m_monitoring || m_transmitting || m_tuning) return;
@@ -17511,17 +17621,21 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
                 gotResponse = true;
             }
         }
+        // Track timing per smart scheduler FT2 async
+        if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled && !rows.isEmpty()) {
+            qint64 const decodeNowMs = QDateTime::currentMSecsSinceEpoch();
+            // Burst detection: gap > 1500ms = nuovo burst (nuovo frame partner)
+            if (m_ft2AsyncLastDecodeMs == 0
+                || (decodeNowMs - m_ft2AsyncLastDecodeMs) > 1500) {
+                m_ft2AsyncFirstDecodeMs = decodeNowMs;
+            }
+            m_ft2AsyncLastDecodeMs = decodeNowMs;
+        }
         if (gotResponse && !m_transmitting) {
-            // FT2 async: il decoder DSP emette decode anche mentre il partner
-            // sta ancora trasmettendo (early decode su sample parziali).
-            // Senza delay, il nostro TX si sovrappone alla coda del partner.
-            // Defer 1500ms dopo decode per dare al partner tempo di finire.
             if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled) {
-                QTimer::singleShot(1500, this, [this]() {
-                    if (!m_transmitting && !m_tuning && m_txEnabled) {
-                        checkAndStartPeriodicTx();
-                    }
-                });
+                // Sistema integrato anti-collisione: combina slot estimation,
+                // RMS gate, decode-quiet gate, jitter — vedi scheduleSmartFt2AsyncTx
+                scheduleSmartFt2AsyncTx(QStringLiteral("decode-response"));
             } else {
                 checkAndStartPeriodicTx();
             }

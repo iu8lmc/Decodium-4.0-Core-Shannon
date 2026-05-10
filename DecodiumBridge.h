@@ -1474,6 +1474,12 @@ private:
     bool                          m_suppressCatErrors {false};
     RemoteCommandServer*          m_remoteServer {nullptr};
     DecodiumDxCluster*    m_dxCluster     {nullptr};
+    // FT2 async smart TX scheduler (anti-collision)
+    qint64                m_ft2AsyncLastDecodeMs   {0};
+    qint64                m_ft2AsyncFirstDecodeMs  {0};   // start of current decode burst
+    int                   m_ft2AsyncAudioQuietRuns {0};   // consecutive RMS<threshold samples
+    void scheduleSmartFt2AsyncTx(const QString& reason);
+    void onAudioLevelForFt2Gate();
     bool                  m_autoSpotEnabled {false};
     bool                  m_nextLogClusterSpotOverrideValid {false};
     bool                  m_nextLogClusterSpotEnabled {false};
