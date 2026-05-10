@@ -13682,17 +13682,26 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         }
 
         if (m_ft2DeferredLogPending) {
-            if (m_nTx73 < m_maxCallerRetries) {
+            // 1.0.124: cap retry TX5 deferred a 3 (era m_maxCallerRetries=10).
+            // Stazioni forti spesso non mandano il 73 finale (passano subito al
+            // prossimo QSO del pile-up); 10 retry = ~38s in FT2 / ~150s in FT8
+            // di "stuck" senza poter rispondere ad altri caller. 3 retry =~ 12s.
+            int const signoffCap = std::min(m_maxCallerRetries, 3);
+            if (m_nTx73 < signoffCap) {
                 bridgeLog(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 count=%2/%3, waiting for final ack")
                               .arg(m_currentTx)
                               .arg(m_nTx73)
-                              .arg(m_maxCallerRetries));
+                              .arg(signoffCap));
                 return false;
             }
-            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 retry limit %2/%3 -> move on without log")
+            // 1.0.124: al timeout, logga COMUNQUE il QSO (logNow=true).
+            // Il QSO ha completato lo scambio bidirezionale di report; il 73
+            // finale del partner e' optional in FT8/FT2. Non loggare era un bug
+            // che faceva perdere QSO validi con stazioni forti / DX rari.
+            finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 retry cap %2/%3 -> log anyway, partner left")
                                       .arg(m_currentTx)
                                       .arg(m_nTx73)
-                                      .arg(m_maxCallerRetries), false);
+                                      .arg(signoffCap), true);
             return true;
         }
 
@@ -17717,6 +17726,9 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = extractDecodedCallsign(msg, isCQ);
         entry["decodeSessionId"] = static_cast<qulonglong>(m_decodeSessionId);
+        // 1.0.121: timestamp ms epoch per separatore periodi QML in FT2 async
+        // (dove entry["time"] è "" perché nutc==0 e parseFt8Row non lo popola).
+        entry["timestamp"] = static_cast<qulonglong>(QDateTime::currentMSecsSinceEpoch());
         enrichDecodeEntry(entry);
 
         QString const dedupKey = decodeDedupKeyFt2Async(entry.value("time").toString(),
