@@ -55,7 +55,7 @@ protected:
 
 private:
   QString send_command (QString const&, bool prepend_context = true, bool recurse = false);
-  QByteArray read_reply (QString const& command);
+  QByteArray read_reply (QString const& command, quint64 sequence = 0);
   void send_simple_command (QString const&);
   bool write_to_port (char const *, qint64 length);
   int find_button (QRegularExpression const&) const;
@@ -195,6 +195,8 @@ private:
                                 // PTT - used to select rear audio.
 
   bool reversed_;               // True if VFOs are reversed.
+  bool startup_diagnostics_active_ {false};
+  quint64 hrd_command_sequence_ {0};
 };
 
 #endif

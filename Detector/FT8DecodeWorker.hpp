@@ -25,6 +25,7 @@ struct DecodeRequest
   int nfb {0};
   int nzhsym {50};
   int ndepth {1};
+  int threadCount {1};
   float emedelay {0.0f};
   int ncontest {0};
   int nagain {0};

@@ -358,12 +358,15 @@ public:
     }
 
     // Riconosce il modo "nominale" più vicino per una frequenza di dial.
-    // Usato solo per l'auto-selezione iniziale del modo all'avvio.
-    QString detectModeForFrequency(double freqHz) const
+    // Usato per l'auto-selezione iniziale e per seguire le QSY CAT su frequenze assegnate.
+    QString detectModeForFrequency(double freqHz, double overrideMaxOffsetHz = -1.0) const
     {
         if (freqHz <= 0.0) return {};
 
-        double const maxOffsetHz = freqHz >= 50000000.0 ? 1000000.0 : 10000.0;
+        double const defaultMaxOffsetHz = freqHz >= 50000000.0 ? 1000000.0 : 10000.0;
+        double const maxOffsetHz = overrideMaxOffsetHz > 0.0
+            ? overrideMaxOffsetHz
+            : defaultMaxOffsetHz;
         double bestDelta = std::numeric_limits<double>::max();
         QString bestMode;
 

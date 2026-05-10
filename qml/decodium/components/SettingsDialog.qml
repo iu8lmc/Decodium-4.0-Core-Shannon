@@ -3986,6 +3986,23 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
+                        Text { text: qsTr("Low CPU:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.lowCpuModeEnabled
+                            onToggled: bridge.lowCpuModeEnabled = checked
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Profilo per PC lenti: massimo 2 thread FT, waterfall piu' lenta e decode early/deep ridotti.")
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+                        Text {
+                            text: qsTr("Riduce thread FT, refresh waterfall e render QML durante monitor/TX.")
+                            color: textSecondary
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                        }
 
                         // ── Comportamento ──
                         Text { text: qsTr("BEHAVIOR"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }

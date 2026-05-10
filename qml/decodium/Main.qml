@@ -3804,29 +3804,25 @@ ApplicationWindow {
                         }
                     }
 
-                    // Snap on release
-                    Connections {
-                        target: SplitHandle
-                        function onPressedChanged() {
-                            if (!SplitHandle.pressed) {
-                                // Find nearest snap point
-                                var h = waterfallPanel.height
-                                var nearestSnap = h
-                                var minDist = mainVerticalSplit.snapThreshold
+                    SplitHandle.onPressedChanged: {
+                        if (!SplitHandle.pressed) {
+                            // Find nearest snap point
+                            var h = waterfallPanel.height
+                            var nearestSnap = h
+                            var minDist = mainVerticalSplit.snapThreshold
 
-                                for (var i = 0; i < mainVerticalSplit.snapPoints.length; i++) {
-                                    var dist = Math.abs(h - mainVerticalSplit.snapPoints[i])
-                                    if (dist < minDist) {
-                                        minDist = dist
-                                        nearestSnap = mainVerticalSplit.snapPoints[i]
-                                    }
+                            for (var i = 0; i < mainVerticalSplit.snapPoints.length; i++) {
+                                var dist = Math.abs(h - mainVerticalSplit.snapPoints[i])
+                                if (dist < minDist) {
+                                    minDist = dist
+                                    nearestSnap = mainVerticalSplit.snapPoints[i]
                                 }
+                            }
 
-                                // Apply snap with animation
-                                if (nearestSnap !== h) {
-                                    snapAnimation.to = nearestSnap
-                                    snapAnimation.start()
-                                }
+                            // Apply snap with animation
+                            if (nearestSnap !== h) {
+                                snapAnimation.to = nearestSnap
+                                snapAnimation.start()
                             }
                         }
                     }
@@ -4554,12 +4550,9 @@ ApplicationWindow {
                             // Marca il divisore come "spostato a mano" non appena l'utente
                             // inizia a trascinare — disattiva il ri-centramento automatico
                             // al resize della finestra.
-                            Connections {
-                                target: SplitHandle
-                                function onPressedChanged() {
-                                    if (SplitHandle.pressed && typeof period1Panel !== "undefined")
-                                        period1Panel.userDraggedSplit = true
-                                }
+                            SplitHandle.onPressedChanged: {
+                                if (SplitHandle.pressed && typeof period1Panel !== "undefined")
+                                    period1Panel.userDraggedSplit = true
                             }
                         }
 

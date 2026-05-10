@@ -186,6 +186,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool   advTurboFeedbackActive READ advTurboFeedbackActive NOTIFY advTurboFeedbackActiveChanged)
     Q_PROPERTY(bool   advCoherentAvgActive READ advCoherentAvgActive NOTIFY advCoherentAvgActiveChanged)
     Q_PROPERTY(int    ftThreads            READ ftThreads            WRITE setFtThreads NOTIFY ftThreadsChanged)
+    Q_PROPERTY(bool   lowCpuModeEnabled    READ lowCpuModeEnabled    WRITE setLowCpuModeEnabled NOTIFY lowCpuModeEnabledChanged)
 
     // === PSK REPORTER ===
     Q_PROPERTY(bool       pskSearchFound      READ pskSearchFound      NOTIFY pskSearchFoundChanged)
@@ -509,6 +510,8 @@ public:
     int    ftThreads()            const { return m_ftThreads; }
     Q_INVOKABLE void setFtThreads(int v);
     Q_INVOKABLE void cycleFtThreads();
+    bool   lowCpuModeEnabled()    const { return m_lowCpuModeEnabled; }
+    Q_INVOKABLE void setLowCpuModeEnabled(bool enabled);
 
     // PSK Reporter
     bool        pskSearchFound()       const { return m_pskSearchFound; }
@@ -1114,6 +1117,7 @@ signals:
     void neuralScoreChanged();
     void turboIterationsChanged();
     void ftThreadsChanged();
+    void lowCpuModeEnabledChanged();
     void alertOnCqChanged();
     void alertOnMyCallChanged();
     void recordRxEnabledChanged();
@@ -1221,8 +1225,16 @@ private:
     QString startupModeForFrequency(double dialFrequency) const;
     void maybeApplyStartupModeFromRigFrequency(double dialFrequency, bool authoritativeRigFrequency = false);
     void runPostQmlStartupServices();
+    qint64 correctedUtcEpochMs() const;
+    qint64 correctedUtcMsecsSinceStartOfDay() const;
     QString effectiveAdifLogPath() const;
     QString ensureAdifLogPath();
+    bool cpuPressureActive() const;
+    bool cpuPressureSevereActive() const;
+    void noteCpuPressure(const QString& reason, int durationMs = 10000, bool severe = false);
+    int effectiveFtThreadLimit() const;
+    int effectiveSpectrumTimerIntervalMs() const;
+    void applyLowCpuRuntimeProfile(const QString& reason);
     int effectiveDecodeDepth() const;
     int legacyCompatibleDecodeDepthBits() const;
     int legacyDecodeQsoProgress() const;
@@ -1410,6 +1422,9 @@ private:
     double m_rigSwr {0.0};
     double m_processCpuUsage {0.0};
     double m_processGpuUsage {-1.0};
+    qint64 m_cpuPressureUntilMs {0};
+    qint64 m_cpuPressureSevereUntilMs {0};
+    qint64 m_lastCpuPressureLogMs {0};
     quint64 m_lastProcessCpuUsec {0};
     quint64 m_lastProcessGpuTimeNs {0};
     int m_processCpuLogicalCores {1};
@@ -1449,6 +1464,7 @@ private:
     QStringList m_pskSearchBands {"160m","80m","40m","20m","15m","10m"};
     bool        m_pskReporterEnabled {false};
     int         m_ftThreads {3};
+    bool        m_lowCpuModeEnabled {false};
     double m_fontScale {1.08};
     int m_nfa {200}, m_nfb {4000}, m_ndepth {3}, m_ncontest {0};
     bool m_singleDecode {false};
@@ -1519,8 +1535,10 @@ private:
     bool m_ft8EarlyDecode41Sent {false};
     bool m_ft8EarlyDecode47Sent {false};
     QSet<quint64> m_ft8EarlyDecodeSerials;
+    QHash<quint64, quint64> m_decodeSessionBySerial;
     qint64 m_ft4EarlyDecodeSlot {-1};
     bool m_ft4EarlyDecodeSent {false};
+    qint64 m_lastEarlyDecodeSkipLogMs {0};
     QVector<short> m_pendingTimeSyncDecodeAudio;
     qint64 m_pendingTimeSyncDecodeSlot {-1};
     QString m_pendingTimeSyncDecodeMode;
@@ -1564,6 +1582,7 @@ private:
     qint64             m_txPlaybackHoldUntilMs {0};
     qint64             m_txPlaybackHardDeadlineMs {0};
     bool               m_txPlaybackReleasePending {false};
+    quint64            m_txPlaybackSerial {0};
     bool               m_txAudioRestartPending {false};
     qint64             m_audioUnhealthyStartMs {0};
     qint64             m_lastAudioWatchdogRestartMs {0};
@@ -1859,6 +1878,8 @@ private:
     static constexpr int WF_RING_SIZE = 16384;  // ~1.37s a 12kHz, enough for the visual FFT
     short m_wfRing[WF_RING_SIZE] {};
     int   m_wfRingPos {0};
+    int   m_lastWaterfallAudioBufferSize {0};
+    qint64 m_lastFt2AsyncDecodeDispatchMs {0};
     QVector<short> m_spectrumBuf;
     static constexpr int SPECTRUM_FFT_SIZE    = 512;   // legacy WaterfallItem
     static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // visual panadapter (~2.93 Hz/bin @ 12kHz)
@@ -1965,6 +1986,10 @@ private:
     void noteTxPlaybackFinished(const QString& reason, bool error);
     void completeTxPlayback(const QString& reason, bool error = false);
     void finishModulatorIdlePlayback(const QString& reason);
+    bool shouldAlignTxAudioToCurrentSyncSlot() const;
+    qint64 syncTxPcmStartOffsetBytes(const QAudioFormat& format, qint64 pcmSizeBytes,
+                                     int* elapsedMsOut = nullptr) const;
+    void scheduleSyncTxBoundaryStop(const QString& reason, quint64 txSerial);
     QString buildCurrentTxMessage() const;
     bool prepareHoundTxSelectionForStart(const QString& reason);
     QString defaultLogCommentForQso(const QString& mode,

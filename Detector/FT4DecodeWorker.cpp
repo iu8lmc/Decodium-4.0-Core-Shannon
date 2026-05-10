@@ -9,6 +9,9 @@
 #include "Logger.hpp"
 #include "commons.h"
 #include "Detector/FortranRuntimeGuard.hpp"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 extern "C"
 {
   void ftx_ft4_decode_c (short const* iwave, int* nqsoprogress, int* nfqso, int* nfa, int* nfb,
@@ -29,6 +32,16 @@ namespace
   constexpr int kDecodedChars {37};
   constexpr int kFt4StableDspStage {4};
   char constexpr kFt4DspStageEnv[] {"DECODIUM_FT4_CPP_DSP_STAGE"};
+
+  void apply_decode_thread_limit (int threads)
+  {
+#ifdef _OPENMP
+    omp_set_dynamic (0);
+    omp_set_num_threads (std::max (1, std::min (threads, 8)));
+#else
+    (void) threads;
+#endif
+  }
 
   QString format_decode_utc (int nutc)
   {
@@ -158,6 +171,7 @@ FT4DecodeWorker::FT4DecodeWorker (QObject * parent)
 
 void FT4DecodeWorker::decode (DecodeRequest const& request)
 {
+  apply_decode_thread_limit (request.threadCount);
   log_ft4_dsp_rollout_once ();
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
 

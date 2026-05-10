@@ -9,8 +9,10 @@
 #endif
 
 #include <algorithm>
+#include <cstddef>
 #include <QHostAddress>
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QRegularExpression>
 #include <QTcpSocket>
 #include <QThread>
@@ -18,6 +20,7 @@
 #include <QDir>
 
 #include "Network/NetworkServerLookup.hpp"
+#include "DecodiumLogging.hpp"
 #include "qt_helpers.hpp"
 
 namespace
@@ -33,11 +36,87 @@ namespace
   unsigned constexpr hrd_probe_reply_retries {10};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
+  qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
 
   bool is_context_probe (QString const& cmd)
   {
     return 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive);
   }
+
+  QString hrd_protocol_name (int protocol)
+  {
+    switch (protocol)
+      {
+      case 1: return QStringLiteral ("v4");
+      case 2: return QStringLiteral ("v5");
+      default: return QStringLiteral ("none");
+      }
+  }
+
+  QString hrd_socket_state_name (QTcpSocket const * socket)
+  {
+    if (!socket) return QStringLiteral ("null");
+    switch (socket->state ())
+      {
+      case QAbstractSocket::UnconnectedState: return QStringLiteral ("unconnected");
+      case QAbstractSocket::HostLookupState: return QStringLiteral ("lookup");
+      case QAbstractSocket::ConnectingState: return QStringLiteral ("connecting");
+      case QAbstractSocket::ConnectedState: return QStringLiteral ("connected");
+      case QAbstractSocket::BoundState: return QStringLiteral ("bound");
+      case QAbstractSocket::ClosingState: return QStringLiteral ("closing");
+      case QAbstractSocket::ListeningState: return QStringLiteral ("listening");
+      default: return QStringLiteral ("unknown");
+      }
+  }
+
+  QString hrd_preview (QString text, int limit = 180)
+  {
+    text.replace (QLatin1Char ('\r'), QStringLiteral ("\\r"));
+    text.replace (QLatin1Char ('\n'), QStringLiteral ("\\n"));
+    text.replace (QLatin1Char ('\t'), QLatin1Char (' '));
+    while (text.contains (QStringLiteral ("  ")))
+      {
+        text.replace (QStringLiteral ("  "), QLatin1String (" "));
+      }
+    if (text.size () > limit)
+      {
+        text = text.left (limit) + QStringLiteral ("...");
+      }
+    return text;
+  }
+
+  QString hrd_hex_preview (QByteArray const& data, int limit = 32)
+  {
+    QString text = QString::fromLatin1 (data.left (limit).toHex (' '));
+    if (data.size () > limit)
+      {
+        text += QStringLiteral (" ...");
+      }
+    return text;
+  }
+
+  void hrd_diag (QString const& message)
+  {
+    DIAG_CAT (QStringLiteral ("[HRD] ") + message);
+  }
+
+  class ScopedStartupDiagnostics
+  {
+  public:
+    explicit ScopedStartupDiagnostics (bool& active)
+      : active_ {active}
+    {
+      active_ = true;
+    }
+
+    ~ScopedStartupDiagnostics ()
+    {
+      active_ = false;
+    }
+
+  private:
+    bool& active_;
+  };
 }
 
 #include "moc_HRDTransceiver.cpp"
@@ -128,12 +207,23 @@ HRDTransceiver::HRDTransceiver (logger_type * logger
   , ptt_button_ {-1}
   , alt_ptt_button_ {-1}
   , reversed_ {false}
+  , startup_diagnostics_active_ {false}
+  , hrd_command_sequence_ {0}
 {
 }
 
 int HRDTransceiver::do_start ()
 {
   CAT_TRACE ("starting");
+  QElapsedTimer startup_timer;
+  startup_timer.start ();
+  ScopedStartupDiagnostics diagnostics_guard {startup_diagnostics_active_};
+  hrd_command_sequence_ = 0;
+  hrd_diag (QStringLiteral ("startup begin server='%1' usePtt=%2 audioSource=%3")
+            .arg (server_)
+            .arg (use_for_ptt_ ? 1 : 0)
+            .arg (static_cast<int> (audio_source_)));
+
   if (wrapped_) wrapped_->start (0);
 
   auto server_details = network_server_lookup (server_, 7809u);
@@ -145,13 +235,27 @@ int HRDTransceiver::do_start ()
   auto const port = std::get<1> (server_details);
   auto const host_text = host.toString ();
   CAT_INFO ("HRD TCP connecting to" << host_text << port);
+  hrd_diag (QStringLiteral ("tcp connect host=%1 port=%2 state=%3")
+            .arg (host_text)
+            .arg (port)
+            .arg (hrd_socket_state_name (hrd_)));
   hrd_->connectToHost (host, port);
   if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
     {
       CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
+      hrd_diag (QStringLiteral ("tcp connect failed host=%1 port=%2 state=%3 error=%4")
+                .arg (host_text)
+                .arg (port)
+                .arg (hrd_socket_state_name (hrd_))
+                .arg (hrd_->errorString ()));
       throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
     }
   CAT_INFO ("HRD TCP connected to" << host_text << port);
+  hrd_diag (QStringLiteral ("tcp connected host=%1 port=%2 local=%3:%4")
+            .arg (host_text)
+            .arg (port)
+            .arg (hrd_->localAddress ().toString ())
+            .arg (hrd_->localPort ()));
 
   if (none == protocol_)
     {
@@ -159,12 +263,15 @@ int HRDTransceiver::do_start ()
         {
           protocol_ = v5;	// try this first (works for v6 too)
           CAT_INFO ("HRD protocol probe v5 starting");
+          hrd_diag (QStringLiteral ("protocol probe v5 start"));
           send_command ("get context", false, false);
           CAT_INFO ("HRD protocol probe v5 accepted");
+          hrd_diag (QStringLiteral ("protocol probe v5 accepted"));
         }
       catch (error const& e)
         {
           CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
+          hrd_diag (QStringLiteral ("protocol probe v5 failed: %1").arg (QString::fromUtf8 (e.what ())));
           protocol_ = none;
         }
     }
@@ -175,22 +282,33 @@ int HRDTransceiver::do_start ()
 
       protocol_ = v4;		// try again with older protocol
       CAT_INFO ("HRD TCP reconnecting for protocol v4 to" << host_text << port);
+      hrd_diag (QStringLiteral ("tcp reconnect for protocol v4 host=%1 port=%2")
+                .arg (host_text)
+                .arg (port));
       hrd_->connectToHost (host, port);
       if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
         {
           CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
+          hrd_diag (QStringLiteral ("tcp reconnect v4 failed host=%1 port=%2 state=%3 error=%4")
+                    .arg (host_text)
+                    .arg (port)
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (hrd_->errorString ()));
           throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
         }
 
       try
         {
           CAT_INFO ("HRD protocol probe v4 starting");
+          hrd_diag (QStringLiteral ("protocol probe v4 start"));
           send_command ("get context", false, false);
           CAT_INFO ("HRD protocol probe v4 accepted");
+          hrd_diag (QStringLiteral ("protocol probe v4 accepted"));
         }
       catch (error const& e)
         {
           CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
+          hrd_diag (QStringLiteral ("protocol probe v4 failed: %1").arg (QString::fromUtf8 (e.what ())));
           throw;
         }
     }
@@ -221,7 +339,19 @@ int HRDTransceiver::do_start ()
     {
       HRD_info << "\t" << radio << "\n";
       auto entries = radio.trimmed ().split (':', SkipEmptyParts);
+      if (entries.size () < 2)
+        {
+          CAT_ERROR ("malformed HRD radio entry:" << radio);
+          hrd_diag (QStringLiteral ("malformed radio entry raw='%1'").arg (hrd_preview (radio)));
+          continue;
+        }
       radios_.push_back (std::forward_as_tuple (entries[0].toUInt (), entries[1]));
+    }
+  if (radios_.empty ())
+    {
+      CAT_ERROR ("no parseable rig found");
+      hrd_diag (QStringLiteral ("no parseable radio entries"));
+      throw error {tr ("Ham Radio Deluxe: no rig found")};
     }
 
   CAT_TRACE ("radios:-");
@@ -232,6 +362,9 @@ int HRDTransceiver::do_start ()
 
   auto current_radio_name = send_command ("get radio", false, false);
   HRD_info << "Current radio: " << current_radio_name << "\n";
+  hrd_diag (QStringLiteral ("radio inventory count=%1 current='%2'")
+            .arg (static_cast<int> (radios_.size ()))
+            .arg (hrd_preview (current_radio_name)));
   if (current_radio_name.isEmpty ())
     {
       CAT_ERROR ("no rig found");
@@ -386,6 +519,14 @@ int HRDTransceiver::do_start ()
         }
       send_simple_command ("set frequency-hz " + QString::number (f));
     }
+  hrd_diag (QStringLiteral ("startup complete ms=%1 protocol=%2 vfoCount=%3 buttons=%4 dropdowns=%5 sliders=%6 resolution=%7")
+            .arg (startup_timer.elapsed ())
+            .arg (hrd_protocol_name (protocol_))
+            .arg (vfo_count_)
+            .arg (buttons_.size ())
+            .arg (dropdown_names_.size ())
+            .arg (slider_names_.size ())
+            .arg (resolution));
   return resolution;
 }
 
@@ -1045,6 +1186,9 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
 {
   if (!hrd_) return QString {};
 
+  quint64 const sequence = ++hrd_command_sequence_;
+  QElapsedTimer command_timer;
+  command_timer.start ();
   QString result;
 
   if (current_radio_ && prepend_context && vfo_count_ < 2)
@@ -1057,7 +1201,6 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
   if (!recurse && prepend_context)
     {
       auto radio_name = send_command ("get radio", current_radio_, true);
-      qDebug () << "HRDTransceiver::send_command: radio_name:" << radio_name;
       auto radio_iter = std::find_if (radios_.begin (), radios_.end (), [&radio_name] (RadioMap::value_type const& radio)
                                       {
                                         return std::get<1> (radio) == radio_name;
@@ -1075,10 +1218,17 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
     }
 
   auto context = '[' + QString::number (current_radio_) + "] ";
+  auto const wire_command = prepend_context ? context + cmd : cmd;
+  bool const log_command = startup_diagnostics_active_;
 
   if (QTcpSocket::ConnectedState != hrd_->state ())
     {
       CAT_ERROR (cmd << "failed" << hrd_->errorString ());
+      hrd_diag (QStringLiteral ("#%1 socket not connected state=%2 error=%3 cmd='%4'")
+                .arg (QString::number (sequence))
+                .arg (hrd_socket_state_name (hrd_))
+                .arg (hrd_->errorString ())
+                .arg (hrd_preview (wire_command)));
       throw error {
         tr ("Ham Radio Deluxe send command \"%1\" failed %2\n")
           .arg (cmd)
@@ -1086,12 +1236,28 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
           };
     }
 
+  if (log_command)
+    {
+      hrd_diag (QStringLiteral ("#%1 >>> proto=%2 recurse=%3 prepend=%4 pending=%5 cmd='%6'")
+                .arg (QString::number (sequence))
+                .arg (hrd_protocol_name (protocol_))
+                .arg (recurse ? 1 : 0)
+                .arg (prepend_context ? 1 : 0)
+                .arg (hrd_->bytesAvailable ())
+                .arg (hrd_preview (wire_command)));
+    }
+
   if (v4 == protocol_)
     {
-      auto message = ((prepend_context ? context + cmd : cmd) + "\r").toLocal8Bit ();
+      auto message = (wire_command + "\r").toLocal8Bit ();
       if (!write_to_port (message.constData (), message.size ()))
         {
           CAT_ERROR ("failed to write command" << cmd << "to HRD");
+          hrd_diag (QStringLiteral ("#%1 write failed proto=v4 state=%2 error=%3 cmd='%4'")
+                    .arg (QString::number (sequence))
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (hrd_->errorString ())
+                    .arg (hrd_preview (wire_command)));
           throw error {
             tr ("Ham Radio Deluxe: failed to write command \"%1\"")
               .arg (cmd)
@@ -1100,45 +1266,123 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
     }
   else
     {
-      auto string = prepend_context ? context + cmd : cmd;
-      QScopedPointer<HRDMessage> message {new (string) HRDMessage};
+      QScopedPointer<HRDMessage> message {new (wire_command) HRDMessage};
       if (!write_to_port (reinterpret_cast<char const *> (message.data ()), message->size_))
         {
           CAT_ERROR ("failed to write command" << cmd << "to HRD");
+          hrd_diag (QStringLiteral ("#%1 write failed proto=v5 bytes=%2 state=%3 error=%4 cmd='%5'")
+                    .arg (QString::number (sequence))
+                    .arg (message->size_)
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (hrd_->errorString ())
+                    .arg (hrd_preview (wire_command)));
           throw error {
             tr ("Ham Radio Deluxe: failed to write command \"%1\"")
               .arg (cmd)
-              };
+            };
         }
     }
-  auto buffer = read_reply (cmd);
+
+  auto buffer = read_reply (cmd, sequence);
   if (v4 == protocol_)
     {
-      result = QString {buffer}.trimmed ();
+      while (!buffer.contains ('\r') && !buffer.contains ('\n') && buffer.size () < hrd_max_reply_bytes)
+        {
+          if (log_command)
+            {
+              hrd_diag (QStringLiteral ("#%1 partial v4 reply bytes=%2")
+                        .arg (QString::number (sequence))
+                        .arg (buffer.size ()));
+            }
+          buffer += read_reply (cmd, sequence);
+        }
+      if (buffer.size () >= hrd_max_reply_bytes)
+        {
+          CAT_ERROR (cmd << "reply too large");
+          hrd_diag (QStringLiteral ("#%1 v4 reply too large bytes=%2 cmd='%3'")
+                    .arg (QString::number (sequence))
+                    .arg (buffer.size ())
+                    .arg (hrd_preview (wire_command)));
+          throw error {
+            tr ("Ham Radio Deluxe reply to command \"%1\" is too large")
+              .arg (cmd)
+              };
+        }
+      result = QString::fromLocal8Bit (buffer).trimmed ();
     }
   else
     {
-      HRDMessage const * reply {new (buffer) HRDMessage};
-      if (reply->magic_1_value_ != reply->magic_1_ && reply->magic_2_value_ != reply->magic_2_)
+      qsizetype const header_size = static_cast<qsizetype> (offsetof (HRDMessage, payload_));
+      while (buffer.size () < header_size)
         {
-          CAT_ERROR (cmd << "invalid reply");
+          if (log_command)
+            {
+              hrd_diag (QStringLiteral ("#%1 partial v5 header bytes=%2/%3 hex=%4")
+                        .arg (QString::number (sequence))
+                        .arg (buffer.size ())
+                        .arg (header_size)
+                        .arg (hrd_hex_preview (buffer)));
+            }
+          buffer += read_reply (cmd, sequence);
+        }
+
+      HRDMessage const * reply {new (buffer) HRDMessage};
+      if (reply->magic_1_value_ != reply->magic_1_ || reply->magic_2_value_ != reply->magic_2_)
+        {
+          CAT_ERROR (cmd << "invalid reply header");
+          hrd_diag (QStringLiteral ("#%1 invalid v5 header bytes=%2 hex=%3 cmd='%4'")
+                    .arg (QString::number (sequence))
+                    .arg (buffer.size ())
+                    .arg (hrd_hex_preview (buffer))
+                    .arg (hrd_preview (wire_command)));
           throw error {
             tr ("Ham Radio Deluxe sent an invalid reply to our command \"%1\"")
               .arg (cmd)
               };
         }
 
-      // keep reading until expected size arrives
-      while (buffer.size () - offsetof (HRDMessage, size_) < reply->size_)
+      if (reply->size_ < static_cast<quint32> (header_size)
+          || reply->size_ > static_cast<quint32> (hrd_max_reply_bytes))
         {
-          CAT_TRACE (cmd << "reading more reply data");
-          buffer += read_reply (cmd);
+          CAT_ERROR (cmd << "invalid reply size" << reply->size_);
+          hrd_diag (QStringLiteral ("#%1 invalid v5 size=%2 header=%3 max=%4 cmd='%5'")
+                    .arg (QString::number (sequence))
+                    .arg (reply->size_)
+                    .arg (header_size)
+                    .arg (hrd_max_reply_bytes)
+                    .arg (hrd_preview (wire_command)));
+          throw error {
+            tr ("Ham Radio Deluxe sent an invalid reply size to our command \"%1\"")
+              .arg (cmd)
+              };
+        }
+
+      // keep reading until expected size arrives
+      while (buffer.size () < static_cast<qsizetype> (reply->size_))
+        {
+          if (log_command)
+            {
+              hrd_diag (QStringLiteral ("#%1 partial v5 packet bytes=%2/%3")
+                        .arg (QString::number (sequence))
+                        .arg (buffer.size ())
+                        .arg (reply->size_));
+            }
+          buffer += read_reply (cmd, sequence);
           reply = new (buffer) HRDMessage;
         }
 
       result = QString {reply->payload_}; // this is not a memory leak (honest!)
     }
   CAT_TRACE (cmd << " ->" << result);
+  if (log_command || command_timer.elapsed () >= 250)
+    {
+      hrd_diag (QStringLiteral ("#%1 <<< ok ms=%2 proto=%3 bytes=%4 result='%5'")
+                .arg (QString::number (sequence))
+                .arg (command_timer.elapsed ())
+                .arg (hrd_protocol_name (protocol_))
+                .arg (buffer.size ())
+                .arg (hrd_preview (result)));
+    }
   return result;
 }
 
@@ -1158,40 +1402,73 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
   return true;
 }
 
-QByteArray HRDTransceiver::read_reply (QString const& cmd)
+QByteArray HRDTransceiver::read_reply (QString const& cmd, quint64 sequence)
 {
   // HRD can accept the TCP socket before the remote protocol has a reply
   // ready. JTDX/WSJT-X tolerate this on slower Windows installs; keep the
   // initial context probe patient enough to match that behavior without
   // making ordinary CAT polling sluggish.
+  QElapsedTimer total_timer;
+  total_timer.start ();
   bool const context_probe = is_context_probe (cmd);
   int const timeout_ms = context_probe ? hrd_probe_reply_timeout_ms
                                        : hrd_command_reply_timeout_ms;
   unsigned retries = context_probe ? hrd_probe_reply_retries
                                    : hrd_command_reply_retries;
   bool replied {false};
+  unsigned attempt {0};
   while (!replied && retries--)
     {
+      ++attempt;
       replied = hrd_->waitForReadyRead (timeout_ms);
-      if (!replied && hrd_->error () != hrd_->SocketTimeoutError)
+      if (!replied && hrd_->error () != QAbstractSocket::SocketTimeoutError)
         {
           CAT_ERROR (cmd << "failed to reply" << hrd_->errorString ());
+          hrd_diag (QStringLiteral ("#%1 read failed attempt=%2 state=%3 error=%4 cmd='%5'")
+                    .arg (QString::number (sequence))
+                    .arg (attempt)
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (hrd_->errorString ())
+                    .arg (hrd_preview (cmd)));
           throw error {
             tr ("Ham Radio Deluxe failed to reply to command \"%1\" %2\n")
               .arg (cmd)
               .arg (hrd_->errorString ())
               };
         }
+      if (!replied && startup_diagnostics_active_)
+        {
+          hrd_diag (QStringLiteral ("#%1 read timeout attempt=%2 timeoutMs=%3 cmd='%4'")
+                    .arg (QString::number (sequence))
+                    .arg (attempt)
+                    .arg (timeout_ms)
+                    .arg (hrd_preview (cmd)));
+        }
     }
   if (!replied)
     {
       CAT_ERROR (cmd << "retries exhausted, timeoutMs=" << timeout_ms);
+      hrd_diag (QStringLiteral ("#%1 read retries exhausted attempts=%2 timeoutMs=%3 state=%4 cmd='%5'")
+                .arg (QString::number (sequence))
+                .arg (attempt)
+                .arg (timeout_ms)
+                .arg (hrd_socket_state_name (hrd_))
+                .arg (hrd_preview (cmd)));
       throw error {
         tr ("Ham Radio Deluxe retries exhausted sending command \"%1\"")
           .arg (cmd)
           };
     }
-  return hrd_->readAll ();
+  auto const chunk = hrd_->readAll ();
+  if (startup_diagnostics_active_ || total_timer.elapsed () >= 250)
+    {
+      hrd_diag (QStringLiteral ("#%1 read chunk bytes=%2 waitMs=%3 hex=%4")
+                .arg (QString::number (sequence))
+                .arg (chunk.size ())
+                .arg (total_timer.elapsed ())
+                .arg (hrd_hex_preview (chunk)));
+    }
+  return chunk;
 }
 
 void HRDTransceiver::send_simple_command (QString const& command)

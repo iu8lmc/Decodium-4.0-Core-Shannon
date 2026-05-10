@@ -116,4 +116,5 @@ private:
     bool         m_ignoreNextSocketError {false};
     bool         m_manualDisconnect {false};
     QTimer*      m_connectTimeoutTimer {nullptr};
+    QTimer*      m_refreshTimer {nullptr};
 };

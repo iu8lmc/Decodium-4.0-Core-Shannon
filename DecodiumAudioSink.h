@@ -38,6 +38,16 @@ public:
 
     void setSampleCallback(std::function<void(short)> cb) { m_sampleCallback = std::move(cb); }
 
+    void resetDecimationPhase()
+    {
+        if (m_bufferMutex) {
+            QMutexLocker locker(m_bufferMutex);
+            m_dsfCounter = 0;
+        } else {
+            m_dsfCounter = 0;
+        }
+    }
+
     qint64 readData(char* /*data*/, qint64 /*maxSize*/) override { return -1; }
 
     qint64 writeData(const char* data, qint64 maxSize) override

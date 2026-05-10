@@ -226,7 +226,18 @@ static bool previousStartupLogShowsSlowQml()
     if (file.size() > maxBytesToInspect) {
         file.seek(file.size() - maxBytesToInspect);
     }
-    QString const recent = QString::fromLocal8Bit(file.readAll());
+    QString recent = QString::fromLocal8Bit(file.readAll());
+    // Inspect only the previous launch. main() has already logged a fresh
+    // "main() START" for this process, so older watchdog lines must not keep
+    // Windows trapped in safe graphics forever.
+    QString const startMarker = QStringLiteral("main() START");
+    int const currentStart = recent.lastIndexOf(startMarker);
+    if (currentStart > 0) {
+        int const previousStart = recent.lastIndexOf(startMarker, currentStart - 1);
+        recent = previousStart >= 0
+            ? recent.mid(previousStart, currentStart - previousStart)
+            : recent.left(currentStart);
+    }
     if (recent.contains(QRegularExpression(QStringLiteral(
             R"(QML LOAD WATCHDOG: .* still running after ([6-9]\d|[1-9]\d{2,}) s)")))) {
         return true;
@@ -669,11 +680,18 @@ int main(int argc, char* argv[])
         hasCommandLineSwitch(argc, argv, "--safe-graphics")
         || hasCommandLineSwitch(argc, argv, "--disable-gpu")
         || hasCommandLineSwitch(argc, argv, "--software-renderer");
+    bool const pendingGraphicsStartupMarker = QFile::exists(graphicsStartupPendingFlag);
+    bool const previousSlowQmlStartup = previousStartupLogShowsSlowQml();
     bool const autoSafeGraphics =
         !commandLineResetSafeGraphics
         && (QFile::exists(slowQmlStartupFlag)
-            || QFile::exists(graphicsStartupPendingFlag)
-            || previousStartupLogShowsSlowQml());
+            || pendingGraphicsStartupMarker
+            || previousSlowQmlStartup);
+    bool const automaticSafeGraphics =
+        autoSafeGraphics
+        && !envSafeGraphics
+        && !commandLineSafeGraphics
+        && !backendRequestsSoftware;
     bool const safeGraphicsRequested =
         envSafeGraphics || commandLineSafeGraphics || autoSafeGraphics || backendRequestsSoftware;
     if (safeGraphicsRequested) {
@@ -1079,11 +1097,17 @@ int main(int argc, char* argv[])
         logFirstQuickWindowGraphicsApi(engine, "event loop start");
     });
 #ifdef Q_OS_WIN
-    if (!safeGraphicsRequested) {
-        QTimer::singleShot(8000, &app, [graphicsStartupPendingFlag] {
+    if (!safeGraphicsRequested || automaticSafeGraphics) {
+        QTimer::singleShot(8000, &app, [graphicsStartupPendingFlag,
+                                        slowQmlStartupFlag,
+                                        automaticSafeGraphics] {
             if (QFile::exists(graphicsStartupPendingFlag)) {
                 QFile::remove(graphicsStartupPendingFlag);
-                L("Windows hardware graphics startup completed; startup marker cleared");
+                L("Windows graphics startup completed; startup marker cleared");
+            }
+            if (automaticSafeGraphics && QFile::exists(slowQmlStartupFlag)) {
+                QFile::remove(slowQmlStartupFlag);
+                L("Windows automatic safe graphics marker cleared after stable startup");
             }
         });
     }

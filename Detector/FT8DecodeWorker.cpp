@@ -10,6 +10,9 @@
 #include "Logger.hpp"
 #include "commons.h"
 #include "Detector/FortranRuntimeGuard.hpp"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 extern "C"
 {
   void ftx_ft8_stage4_reset_c ();
@@ -35,6 +38,16 @@ namespace
   constexpr int kBitsPerMessage {77};
   constexpr int kDecodedChars {37};
   constexpr int kFt8StableDspStage {4};
+
+  void apply_decode_thread_limit (int threads)
+  {
+#ifdef _OPENMP
+    omp_set_dynamic (0);
+    omp_set_num_threads (std::max (1, std::min (threads, 8)));
+#else
+    (void) threads;
+#endif
+  }
 
   void set_ft8_stage4_cancel (bool cancel)
   {
@@ -171,6 +184,7 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
     {
       return;
     }
+  apply_decode_thread_limit (request.threadCount);
   set_ft8_stage4_cancel (false);
   log_ft8_dsp_rollout_once ();
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};

@@ -10,6 +10,9 @@
 #include "Logger.hpp"
 #include "commons.h"
 #include "Detector/FortranRuntimeGuard.hpp"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 extern "C"
 {
   int ftx_ft2_cpp_dsp_rollout_stage_c ();
@@ -30,6 +33,16 @@ namespace
   constexpr int kDecodedChars {37};
   constexpr int kFt2StableDspStage {7};
   char constexpr kFt2DspStageEnv[] {"DECODIUM_FT2_CPP_DSP_STAGE"};
+
+  void apply_decode_thread_limit (int threads)
+  {
+#ifdef _OPENMP
+    omp_set_dynamic (0);
+    omp_set_num_threads (std::max (1, std::min (threads, 8)));
+#else
+    (void) threads;
+#endif
+  }
 
   QString format_decode_utc (int nutc)
   {
@@ -188,6 +201,7 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
     {
       return;
     }
+  apply_decode_thread_limit (request.threadCount);
   set_ft2_stage7_cancel (false);
   log_ft2_dsp_rollout_once ();
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};
@@ -239,6 +253,7 @@ void FT2DecodeWorker::decode (DecodeRequest const& request)
     {
       return;
     }
+  apply_decode_thread_limit (request.threadCount);
   set_ft2_stage7_cancel (false);
   log_ft2_dsp_rollout_once ();
   QMutexLocker runtime_lock {&decodium::fortran::runtime_mutex ()};

@@ -599,7 +599,7 @@ Item {
                 }
             }
 
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: bridge.lowCpuModeEnabled ? 0 : 100 } }
         }
 
         // ── PanadapterItem — FlexRadio SmartSDR style ─────────────────────
@@ -615,12 +615,10 @@ Item {
             running:        bridge.monitoring
             showTxBrackets: true
             spectrumHeight: waterfallPanel.spectrumHeight
-            // 1.0.110: throttle disabilitato. Il fix di drain UNA riga per paint
-            // dentro PanadapterItem::updatePaintNode rende il rendering fluido
-            // senza accumulo. Lasciare il throttle attivo causava il "jump" di
-            // N righe ogni 200ms (FT2) tipico di 1.0.105-109.
-            throttleActive: false
-            throttleIntervalMs: 100
+            // Low CPU mode riattiva un throttle leggero per contenere il render
+            // QML/RHI sui PC datati. A profilo normale resta fluido a pieno rate.
+            throttleActive: bridge.lowCpuModeEnabled
+            throttleIntervalMs: bridge.lowCpuModeEnabled ? 250 : 100
             // Carica valori da Settings al primo avvio.
             paletteIndex:   Math.max(0, bridge.uiPaletteIndex)
 

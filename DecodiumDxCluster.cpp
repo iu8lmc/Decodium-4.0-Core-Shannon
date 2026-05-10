@@ -362,11 +362,29 @@ void appendUniqueEndpoint(QList<QPair<QString, int>>& endpoints, const QString& 
 DecodiumDxCluster::DecodiumDxCluster(QObject* parent)
     : QObject(parent)
 {
+    m_refreshTimer = new QTimer(this);
+    m_refreshTimer->setInterval(120000);
+    connect(m_refreshTimer, &QTimer::timeout, this, [this]() {
+        if (m_socket && m_socket->state() == QAbstractSocket::ConnectedState) {
+            m_socket->write("SHOW/DX 30\n");
+            m_socket->flush();
+        } else if (m_refreshTimer) {
+            m_refreshTimer->stop();
+        }
+    });
+
     loadSettings();
 }
 
 DecodiumDxCluster::~DecodiumDxCluster()
 {
+    if (m_refreshTimer) {
+        m_refreshTimer->stop();
+    }
+    if (m_connectTimeoutTimer) {
+        m_connectTimeoutTimer->stop();
+    }
+
     // Disconnect cleanly without emitting Qt signals during destruction.
     if (m_socket) {
         m_socket->disconnect();  // disconnect all Qt signal-slot connections
@@ -435,18 +453,10 @@ void DecodiumDxCluster::sendLogin()
             emit statusUpdate(QStringLiteral("Sent SHOW/DX 30 (bytes=%1)").arg(written));
         }
     });
-    // Refresh periodico ogni 2 min.
-    QTimer* refreshTimer = new QTimer(this);
-    refreshTimer->setInterval(120000);
-    connect(refreshTimer, &QTimer::timeout, this, [this, refreshTimer]() {
-        if (m_socket && m_socket->state() == QAbstractSocket::ConnectedState) {
-            m_socket->write("SHOW/DX 30\n");
-            m_socket->flush();
-        } else {
-            refreshTimer->deleteLater();
-        }
-    });
-    refreshTimer->start();
+    // Refresh periodico ogni 2 min: un solo timer per istanza, riusato tra reconnect.
+    if (m_refreshTimer && !m_refreshTimer->isActive()) {
+        m_refreshTimer->start();
+    }
 }
 
 QString DecodiumDxCluster::endpointLabel(const QString& host, int port) const
@@ -607,6 +617,9 @@ void DecodiumDxCluster::disconnectCluster()
     m_connectSequenceActive = false;
     if (m_connectTimeoutTimer) {
         m_connectTimeoutTimer->stop();
+    }
+    if (m_refreshTimer) {
+        m_refreshTimer->stop();
     }
 
     // Politely say goodbye first (best-effort, non-blocking).
@@ -970,6 +983,9 @@ void DecodiumDxCluster::onDisconnected()
 {
     if (m_connectTimeoutTimer) {
         m_connectTimeoutTimer->stop();
+    }
+    if (m_refreshTimer) {
+        m_refreshTimer->stop();
     }
 
     bool const wasConnected = m_connected;
