@@ -1627,8 +1627,16 @@ void PanadapterItem::renderSpectrum()
             QString text = call + " " + QString::number(snr);
             int textW = fm.horizontalAdvance(text);
 
+            // 1.0.131: WSJT-X palette cascade highlight passed from QML
+            // (bridge.decodeHighlightBg) as hex string in "color" field.
+            // Falls back to legacy fixed palette when empty/invalid.
+            QString const highlightHex = d.value("color").toString();
+            QColor const highlight(highlightHex);
+
             QColor col;
-            if (m_labelUseCustomColor) {
+            if (highlight.isValid()) {
+                col = highlight;
+            } else if (m_labelUseCustomColor) {
                 col = m_labelColor;
             } else {
                 col = isCQ ? QColor(0, 230, 100)

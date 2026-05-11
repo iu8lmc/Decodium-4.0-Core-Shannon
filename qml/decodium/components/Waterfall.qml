@@ -131,12 +131,19 @@ Item {
             if (seen[call])
                 continue
             seen[call] = true
+            // 1.0.131: passa hex color WSJT-X palette al pana
+            // (NewDxccBand/NewGrid/NewCqZone ecc.) — il C++ ricade sul
+            // colore fisso isCQ/isMyCall/default se hex è vuoto/invalido.
+            var hex = ""
+            if (bridge && bridge.decodeHighlightBg)
+                hex = bridge.decodeHighlightBg(d) || ""
             labels.push({
                 call: call,
                 freq: freq,
                 snr: parseInt(d.db || "0"),
                 isCQ: d.isCQ || false,
-                isMyCall: d.isMyCall || false
+                isMyCall: d.isMyCall || false,
+                color: hex
             })
         }
         waterfallPanel.spectrumDecodeLabels = labels
