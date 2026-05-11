@@ -1526,25 +1526,31 @@ Item {
 
     // TX Button component
     component TxButton: Button {
+        id: txButton
         property int txNum: 1
         property string label: "TX1"
         property string message: ""
         property bool isSelected: false
         property bool isTransmitting: false
         property bool isCQ: false
+        // 1.0.130: bind a bridge.txDisabledMask per skip toggle
+        readonly property bool isDisabled: bridge && (bridge.txDisabledMask & (1 << (txNum - 1))) !== 0
         signal editRequested(int txNum, string message)
 
         Layout.fillWidth: true
         Layout.preferredHeight: 50
+        opacity: isDisabled ? 0.4 : 1.0
 
         background: Rectangle {
             color: {
+                if (isDisabled) return Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.04)
                 if (isTransmitting) return Qt.alpha(errorRed, 0.4)
                 if (isSelected) return Qt.alpha(primaryBlue, 0.3)
                 if (isCQ) return Qt.alpha(accentGreen, 0.2)
                 return Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
             }
             border.color: {
+                if (isDisabled) return Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.5)
                 if (isTransmitting) return errorRed
                 if (isSelected) return primaryBlue
                 if (isCQ) return accentGreen
@@ -1573,6 +1579,7 @@ Item {
                     }
                     font.pixelSize: 10
                     font.bold: isSelected || isTransmitting
+                    font.strikeout: txButton.isDisabled
                     horizontalAlignment: Text.AlignHCenter
                 }
 
@@ -1582,15 +1589,28 @@ Item {
                     color: isTransmitting ? errorRed : textPrimary
                     font.family: "Monospace"
                     font.pixelSize: 9
+                    font.strikeout: txButton.isDisabled
                     elide: Text.ElideMiddle
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
         }
 
+        ToolTip.visible: hovered
+        ToolTip.delay: 800
+        ToolTip.text: isDisabled
+                          ? qsTr("TX%1 disabilitato (right-click per riattivare)").arg(txNum)
+                          : qsTr("Click: invia subito\nRight-click: salta TX%1 nella sequenza auto\nLong-press: modifica messaggio").arg(txNum)
+
+        // 1.0.130: right-click ora toggla skip; edit messaggio si attiva con long-press
         TapHandler {
             acceptedButtons: Qt.RightButton
-            onTapped: editRequested(txNum, message)
+            onTapped: if (bridge) bridge.setTxDisabled(txNum, !txButton.isDisabled)
+        }
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            longPressThreshold: 600
+            onLongPressed: editRequested(txNum, message)
         }
     }
 }

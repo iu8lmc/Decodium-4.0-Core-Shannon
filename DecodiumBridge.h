@@ -144,6 +144,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool holdTxFreq       READ holdTxFreq       WRITE setHoldTxFreq       NOTIFY holdTxFreqChanged)
     Q_PROPERTY(bool autoCqRepeat     READ autoCqRepeat     WRITE setAutoCqRepeat     NOTIFY autoCqRepeatChanged)
     Q_PROPERTY(int  maxCallerRetries READ maxCallerRetries WRITE setMaxCallerRetries NOTIFY maxCallerRetriesChanged)
+    Q_PROPERTY(int  txDisabledMask   READ txDisabledMask   NOTIFY txDisabledMaskChanged)
     Q_PROPERTY(int  autoCqMaxCycles  READ autoCqMaxCycles  WRITE setAutoCqMaxCycles  NOTIFY autoCqMaxCyclesChanged)
     Q_PROPERTY(int  autoCqPauseSec   READ autoCqPauseSec   WRITE setAutoCqPauseSec   NOTIFY autoCqPauseSecChanged)
     Q_PROPERTY(bool avgDecodeEnabled READ avgDecodeEnabled WRITE setAvgDecodeEnabled NOTIFY avgDecodeEnabledChanged)
@@ -424,6 +425,9 @@ public:
     void setAutoCqRepeat(bool v);
     int  maxCallerRetries()  const { return m_maxCallerRetries; }
     void setMaxCallerRetries(int v) { if (m_maxCallerRetries != v) { m_maxCallerRetries = qBound(1, v, 99); emit maxCallerRetriesChanged(); } }
+    int  txDisabledMask() const { return m_txDisabledMask; }
+    Q_INVOKABLE bool isTxDisabled(int n) const { return n >= 1 && n <= 6 && (m_txDisabledMask & (1 << (n - 1))); }
+    Q_INVOKABLE void setTxDisabled(int n, bool disabled);
     int  autoCqMaxCycles()   const { return m_autoCqMaxCycles; }
     void setAutoCqMaxCycles(int v) { if (m_autoCqMaxCycles != v) { m_autoCqMaxCycles = qBound(0, v, 999); emit autoCqMaxCyclesChanged(); } }
     int  autoCqPauseSec()    const { return m_autoCqPauseSec; }
@@ -999,6 +1003,7 @@ signals:
     void autoSeqChanged();
     void holdTxFreqChanged();
     void txEnabledChanged();
+    void txDisabledMaskChanged();
     void autoCqRepeatChanged();
     void maxCallerRetriesChanged();
     void autoCqMaxCyclesChanged();
@@ -1650,6 +1655,7 @@ private:
     bool    m_quickPeerSignaled {false};
     bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
     int  m_maxCallerRetries {10};  // invii totali per step prima di fermarsi
+    int  m_txDisabledMask {0};     // bitmask: bit N-1 set = TX(N) saltato in auto-seq (1.0.130)
     int  m_autoCqMaxCycles  {0};   // 0 = infinito, >0 = max cicli CQ
     int  m_autoCqPauseSec   {0};   // pausa (s) tra cicli CQ (0 = nessuna pausa)
     int  m_autoCqCycleCount {0};   // contatore cicli CQ corrente

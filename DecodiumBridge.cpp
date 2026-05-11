@@ -7590,6 +7590,22 @@ void DecodiumBridge::setTxEnabled(bool v)
     }
 }
 
+void DecodiumBridge::setTxDisabled(int n, bool disabled)
+{
+    if (n < 1 || n > 6) return;
+    int const bit = (1 << (n - 1));
+    bool const isDisabled = (m_txDisabledMask & bit) != 0;
+    if (isDisabled == disabled) return;
+    if (disabled) m_txDisabledMask |=  bit;
+    else          m_txDisabledMask &= ~bit;
+    bridgeLog(QStringLiteral("setTxDisabled: TX%1 -> %2 (mask=0x%3)")
+                  .arg(n)
+                  .arg(disabled ? QStringLiteral("disabled") : QStringLiteral("enabled"))
+                  .arg(m_txDisabledMask, 0, 16));
+    emit txDisabledMaskChanged();
+    saveSettings();
+}
+
 void DecodiumBridge::setAutoCqRepeat(bool v)
 {
     if (m_autoCqRepeat != v) {
@@ -12410,6 +12426,7 @@ void DecodiumBridge::saveSettings()
     syncAudioDeviceSettingsToLegacyIni();
     s.setValue("rxInputLevel", m_rxInputLevel);
     s.setValue("txOutputLevel", m_txOutputLevel);
+    s.setValue("txDisabledMask", m_txDisabledMask);
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
     s.setValue("ndepth", m_ndepth);
@@ -15037,6 +15054,24 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
                           .arg(m_pendingAutoSeqTxAfterActiveTx));
             return;
         }
+        // 1.0.130: skip TX marcati come disabled (right-click toggle UI).
+        // Caso tipico: TX5 disabled → QSO si chiude subito dopo RR73 senza
+        // aspettare il 73 finale (utile su QSB / pile-up DX).
+        while (nextTx >= 1 && nextTx <= 6 && isTxDisabled(nextTx)) {
+            bridgeLog(QStringLiteral("autoSeq: TX%1 user-disabled, skip").arg(nextTx));
+            if (nextTx == 5) {
+                // Skip TX5 → finalize QSO immediatamente (no 73 finale)
+                finishAutoSequenceQso(
+                    QStringLiteral("autoSeq: TX5 user-disabled -> log immediato"));
+                return;
+            }
+            if (nextTx == 6) {
+                // Skip TX6 (CQ) → ferma auto-seq senza ripartire CQ
+                bridgeLog("autoSeq: TX6 disabled, stop senza rilancio CQ");
+                return;
+            }
+            ++nextTx;  // TX1-TX4: avanza al successivo
+        }
         // Avanza stato QSO
         advanceQsoState(nextTx);
         // Resetta guard FT2: risposta ricevuta → ritrasmetti subito
@@ -15157,6 +15192,7 @@ void DecodiumBridge::loadSettings()
     m_audioOutputChannel = qBound(0, m_audioOutputChannel, 3);
     m_rxInputLevel = qBound(0.0, s.value("rxInputLevel", 50.0).toDouble(), 100.0);
     m_txOutputLevel = qBound(0.0, s.value("txOutputLevel", 0.0).toDouble(), 450.0);
+    m_txDisabledMask = s.value("txDisabledMask", 0).toInt() & 0x3F;  // 6 bit (TX1-TX6)
     m_nfa      = s.value("nfa", 200).toInt();
     m_nfb      = s.value("nfb", 4000).toInt();
     {
