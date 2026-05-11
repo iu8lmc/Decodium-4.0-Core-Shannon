@@ -18170,6 +18170,15 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     entry["isLotw"] = isLotw;
     entry["dxCountry"] = dxCountry;
     entry["dxCallsign"] = rightCall;
+    // 1.0.132: flag per highlight del nominativo inserito nel campo DxCall
+    // (l'utente vuole vedere subito dove sta trasmettendo nel Full Spectrum).
+    {
+        QString const dxCallTrimmed = m_dxCall.trimmed().toUpper();
+        bool const matchesDxCall = !dxCallTrimmed.isEmpty()
+            && ((!rightCall.isEmpty() && rightCall.toUpper() == dxCallTrimmed)
+                || (!fromCall.isEmpty() && fromCall.toUpper() == dxCallTrimmed));
+        entry["matchesDxCall"] = matchesDxCall;
+    }
     entry["dxContinent"] = dxContinent;
     entry["dxPrefix"] = dxPrefix;
     entry["dxCqZone"]  = dxCqZone;

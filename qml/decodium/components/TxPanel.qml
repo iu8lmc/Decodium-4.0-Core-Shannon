@@ -1154,7 +1154,8 @@ Item {
                     message: engine && engine.txMessages.length > 0 ? engine.txMessages[0] : "-- --"
                     isSelected: engine && engine.currentTx === 1
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 1
-                    onClicked: if (engine) engine.sendTx(1)
+                    // 1.0.132: skip mask blocca anche left-click (era solo auto-seq)
+                    onClicked: if (engine && !isDisabled) engine.sendTx(1)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
@@ -1165,7 +1166,7 @@ Item {
                     message: engine && engine.txMessages.length > 1 ? engine.txMessages[1] : "-- --"
                     isSelected: engine && engine.currentTx === 2
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 2
-                    onClicked: if (engine) engine.sendTx(2)
+                    onClicked: if (engine && !isDisabled) engine.sendTx(2)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
@@ -1176,7 +1177,7 @@ Item {
                     message: engine && engine.txMessages.length > 2 ? engine.txMessages[2] : "-- --"
                     isSelected: engine && engine.currentTx === 3
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 3
-                    onClicked: if (engine) engine.sendTx(3)
+                    onClicked: if (engine && !isDisabled) engine.sendTx(3)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
@@ -1187,7 +1188,7 @@ Item {
                     message: engine && engine.txMessages.length > 3 ? engine.txMessages[3] : "-- --"
                     isSelected: engine && engine.currentTx === 4
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 4
-                    onClicked: if (engine) engine.sendTx(4)
+                    onClicked: if (engine && !isDisabled) engine.sendTx(4)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
@@ -1198,7 +1199,7 @@ Item {
                     message: engine && engine.txMessages.length > 4 ? engine.txMessages[4] : "-- --"
                     isSelected: engine && engine.currentTx === 5
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 5
-                    onClicked: if (engine) engine.sendTx(5)
+                    onClicked: if (engine && !isDisabled) engine.sendTx(5)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 
@@ -1210,7 +1211,7 @@ Item {
                     isSelected: engine && engine.currentTx === 6
                     isTransmitting: engine && engine.transmitting && engine.currentTx === 6
                     isCQ: true
-                    onClicked: if (engine) engine.sendTx(6)
+                    onClicked: if (engine && !isDisabled) engine.sendTx(6)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
                 }
 

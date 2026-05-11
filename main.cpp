@@ -126,9 +126,18 @@ int main(int argc, char *argv[])
   Radio::register_types ();
   register_types ();
 
-  // Read optional file to disable highDPI scaling
+  // 1.0.132: read optional file marker to disable Qt6 HighDPI scaling.
+  // Qt6 enables HighDPI scaling by default — AA_EnableHighDpiScaling is
+  // deprecated/no-op. The Settings checkbox "High DPI" (default ON) writes
+  // a "DisableHighDpiScaling" file when toggled OFF; here we honour that by
+  // setting QT_ENABLE_HIGHDPI_SCALING=0 BEFORE creating QApplication, which
+  // is the supported way to force 1:1 rendering on Qt6 (useful on older
+  // CPUs / smaller monitors where users want a more compact UI).
   QFile f("DisableHighDpiScaling");
-  if (!f.exists()) QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  if (f.exists()) {
+      qputenv("QT_ENABLE_HIGHDPI_SCALING", "0");
+      qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "0");
+  }
 
   auto const env = QProcessEnvironment::systemEnvironment ();
 
