@@ -957,6 +957,18 @@ static QDateTime approxUtcDateTimeForDisplayToken(QString const& utcToken)
 
 static qint64 decodeDisplaySortMsecs(QVariantMap const& entry, QDateTime const& nowUtc)
 {
+    // 1.0.139: preferisci entry["timestamp"] ms epoch (sempre popolato in FT2
+    // async, dove entry["time"] è vuoto — vedi commento riga ~18734 e fix
+    // dedup 1.0.136). Se manca, fallback al parsing del campo time. Senza
+    // questa preferenza i decode FT2 async finivano tutti con sortMsecs =
+    // INT_MAX e venivano mescolati a entries con time valido (es. quelle
+    // mirrorate da ALL.TXT legacy) → ordinamento sporadico, vecchie entries
+    // potevano apparire "fresche" in cima alla list visibile.
+    qulonglong const tsMs = entry.value(QStringLiteral("timestamp")).toULongLong();
+    if (tsMs > 0) {
+        return static_cast<qint64>(tsMs);
+    }
+
     QString const normalizedTime = normalizeUtcDisplayToken(entry.value(QStringLiteral("time")).toString());
     int const decodeSeconds = secondsFromUtcDisplayToken(normalizedTime);
     if (decodeSeconds < 0) {
