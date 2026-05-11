@@ -43,6 +43,7 @@ static RoleSpec const kRoleSpecs[] = {
     { DecodeListModel::DxIsNewContinentRole,     "dxIsNewContinent",   "dxIsNewContinent" },
     { DecodeListModel::DxIsNewCallRole,          "dxIsNewCall",        "dxIsNewCall" },
     { DecodeListModel::HighlightBgRole,          "highlightBg",        "highlightBg" },
+    { DecodeListModel::IsHighlightedRole,        "isHighlighted",      "isHighlighted" },
     { DecodeListModel::AptypeRole,               "aptype",             "aptype" },
     { DecodeListModel::ForceRxPaneRole,          "forceRxPane",        "forceRxPane" },
     { DecodeListModel::QualityRole,              "quality",            "quality" },
@@ -128,6 +129,28 @@ void DecodeListModel::setEntries(QVariantList const& newEntries)
     int const newCount = newEntries.size();
     int const oldCount = m_entries.size();
 
+    // 1.0.144: scoped dataChanged — emette dataChanged SOLO per regioni
+    // consecutive di row effettivamente cambiate, invece di "tutto il prefix".
+    // Su FT2 attivo con append-only, normalmente il prefix è invariato →
+    // zero dataChanged emit, solo InsertRows in coda.
+    auto applyPrefixDiff = [this, &newEntries](int prefixEnd) {
+        int regionStart = -1;
+        for (int i = 0; i < prefixEnd; ++i) {
+            QVariantMap const candidate = newEntries.at(i).toMap();
+            bool const changed = (m_entries[i] != candidate);
+            if (changed) {
+                m_entries[i] = candidate;
+                if (regionStart < 0) regionStart = i;
+            } else if (regionStart >= 0) {
+                emit dataChanged(index(regionStart), index(i - 1));
+                regionStart = -1;
+            }
+        }
+        if (regionStart >= 0) {
+            emit dataChanged(index(regionStart), index(prefixEnd - 1));
+        }
+    };
+
     // --- Caso 1: append-only (prefix identico, append in coda) ---
     if (newCount >= oldCount) {
         bool prefixMatches = true;
@@ -139,21 +162,7 @@ void DecodeListModel::setEntries(QVariantList const& newEntries)
             }
         }
         if (prefixMatches) {
-            // Aggiorna in place le entry esistenti (potrebbero avere dati
-            // arricchiti) per propagare cambi via dataChanged.
-            if (oldCount > 0) {
-                bool anyChanged = false;
-                for (int i = 0; i < oldCount; ++i) {
-                    QVariantMap const candidate = newEntries.at(i).toMap();
-                    if (m_entries[i] != candidate) {
-                        m_entries[i] = candidate;
-                        anyChanged = true;
-                    }
-                }
-                if (anyChanged) {
-                    emit dataChanged(index(0), index(oldCount - 1));
-                }
-            }
+            applyPrefixDiff(oldCount);
             if (newCount > oldCount) {
                 beginInsertRows(QModelIndex(), oldCount, newCount - 1);
                 for (int i = oldCount; i < newCount; ++i) {
@@ -179,18 +188,7 @@ void DecodeListModel::setEntries(QVariantList const& newEntries)
             beginRemoveRows(QModelIndex(), newCount, oldCount - 1);
             m_entries.resize(newCount);
             endRemoveRows();
-            // Update eventuali entries arricchite nel prefix
-            bool anyChanged = false;
-            for (int i = 0; i < newCount; ++i) {
-                QVariantMap const candidate = newEntries.at(i).toMap();
-                if (m_entries[i] != candidate) {
-                    m_entries[i] = candidate;
-                    anyChanged = true;
-                }
-            }
-            if (anyChanged && newCount > 0) {
-                emit dataChanged(index(0), index(newCount - 1));
-            }
+            applyPrefixDiff(newCount);
             return;
         }
     }

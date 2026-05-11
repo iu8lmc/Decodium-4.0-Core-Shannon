@@ -18502,6 +18502,18 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     // funzione C++ con lookup DXCC/worked/LotW). CPU/GPU spike confermato
     // dagli utenti dalla 1.0.131 in poi. Adesso il QML legge d.highlightBg.
     entry["highlightBg"] = decodeHighlightBg(entry);
+
+    // 1.0.144: pre-calcola flag aggregato isHighlighted (bold rendering nei
+    // delegate decode). Sostituisce binding QML composto a 5 lookup:
+    //   font.bold: modelData.isTx||isCQ||isMyCall||dxIsNewCountry||dxIsMostWanted
+    // con singolo lookup model.isHighlighted → meno costo per delegate paint
+    // (= meno carico GPU su PC vecchi).
+    bool const isHl = entry.value(QStringLiteral("isTx")).toBool()
+                   || entry.value(QStringLiteral("isCQ")).toBool()
+                   || entry.value(QStringLiteral("isMyCall")).toBool()
+                   || dxIsNewCountry
+                   || entry.value(QStringLiteral("dxIsMostWanted")).toBool();
+    entry["isHighlighted"] = isHl;
 }
 
 void DecodiumBridge::refreshDecodeListDxcc()

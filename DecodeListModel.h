@@ -51,6 +51,7 @@ public:
         DxIsNewContinentRole,
         DxIsNewCallRole,
         HighlightBgRole,
+        IsHighlightedRole,  // 1.0.144: aggregato isTx||isCQ||isMyCall||...
         AptypeRole,
         ForceRxPaneRole,
         QualityRole,

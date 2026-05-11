@@ -1089,8 +1089,8 @@ NumberAnimation {
                                         text: modelData.displayMessage || modelData.message
                                         font.family: "Monospace"
                                         font.pixelSize: 11
-                                        font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
-                                                   modelData.dxIsNewCountry || modelData.dxIsMostWanted
+                                        // 1.0.144: precomputed in C++ (enrichDecodeEntry)
+                                        font.bold: modelData.isHighlighted === true
                                         // Shannon strikethrough per B4
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
@@ -1550,8 +1550,8 @@ NumberAnimation {
                                         text: modelData.displayMessage || modelData.message
                                         font.family: "Monospace"
                                         font.pixelSize: 11
-                                        font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall ||
-                                                   modelData.dxIsNewCountry || modelData.dxIsMostWanted
+                                        // 1.0.144: precomputed in C++ (enrichDecodeEntry)
+                                        font.bold: modelData.isHighlighted === true
                                         font.strikeout: modelData.isB4 && bridge.b4Strikethrough
                                         color: getDxccColor(modelData)
                                         Layout.fillWidth: true
