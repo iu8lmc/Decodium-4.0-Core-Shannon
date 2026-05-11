@@ -925,7 +925,10 @@ NumberAnimation {
                             }
 
                             delegate: Rectangle {
-                                readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
+                                // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
+// via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
+// (string time) invece dell'oggetto intero. Controlla entrambi.
+readonly property bool isPeriodSeparator: (typeof model !== "undefined" && model && model.isSeparator === true) || (modelData && typeof modelData === "object" && modelData.isSeparator === true)
                                 width: bandActivityList.width
                                 height: isPeriodSeparator ? 18 : 26
                                 // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
@@ -1409,7 +1412,10 @@ NumberAnimation {
                             }
 
                             delegate: Rectangle {
-                                readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
+                                // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
+// via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
+// (string time) invece dell'oggetto intero. Controlla entrambi.
+readonly property bool isPeriodSeparator: (typeof model !== "undefined" && model && model.isSeparator === true) || (modelData && typeof modelData === "object" && modelData.isSeparator === true)
                                 width: rxFrequencyList.width - 12
                                 height: isPeriodSeparator ? 18 : 24
                                 color: {
