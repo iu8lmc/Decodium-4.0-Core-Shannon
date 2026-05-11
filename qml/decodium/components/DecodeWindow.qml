@@ -798,7 +798,11 @@ Window {
 	                            clip: true
 	                            model: decodeWindow.bandActivityModel
 	                            spacing: 1
-	                            cacheBuffer: 3000
+	                            // 1.0.140: ridotto da 3000 (pre-rendering ~115 row con
+	                            // 7+ binding ternari ciascuna = costo CPU/GPU significativo
+	                            // ad ogni model change). 600 = ~23 row buffer, smooth ma
+	                            // 5× meno overhead. Su PC vecchi user-reported -10% CPU.
+	                            cacheBuffer: 600
 	                            reuseItems: true
 	                            property bool followTail: true
                             property bool tailFollowPending: false
@@ -1277,7 +1281,8 @@ NumberAnimation {
                             clip: true
 	                            spacing: 1
 	                            interactive: true
-	                            cacheBuffer: 3000
+	                            // 1.0.140: ridotto da 3000 — vedi commento bandActivityList
+	                            cacheBuffer: 600
 	                            reuseItems: true
 	                            // Pattern identico a bandActivityList: model property-backed
                             // (decodeWindow.rxDecodeModel) + followTail/isNearTail/updateFollowTail
