@@ -935,7 +935,7 @@ NumberAnimation {
                                     anchors.right: parent.right
                                     anchors.leftMargin: 8
                                     anchors.rightMargin: 8
-                                    height: 2
+                                    height: 3
                                     color: "#ff3030"
                                 }
                                 Text {
@@ -1381,9 +1381,9 @@ NumberAnimation {
                             delegate: Rectangle {
                                 readonly property bool isPeriodSeparator: modelData && modelData.isSeparator === true
                                 width: rxFrequencyList.width - 12
-                                height: isPeriodSeparator ? 10 : 24
+                                height: isPeriodSeparator ? 18 : 24
                                 color: {
-                                    if (isPeriodSeparator) return Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.10)
+                                    if (isPeriodSeparator) return Qt.rgba(1, 0.3, 0.3, 0.35)
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
@@ -1405,10 +1405,18 @@ NumberAnimation {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.leftMargin: 16
-                                    anchors.rightMargin: 16
-                                    height: 1
-                                    color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.5)
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    height: 3
+                                    color: "#ff3030"
+                                }
+                                Text {
+                                    visible: parent.isPeriodSeparator
+                                    anchors.centerIn: parent
+                                    text: "── PERIODO ──"
+                                    color: "#ff8080"
+                                    font.pixelSize: 10
+                                    font.bold: true
                                 }
 
                                 MouseArea {
