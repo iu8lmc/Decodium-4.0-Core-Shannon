@@ -7385,6 +7385,15 @@ void DecodiumBridge::setTx6(const QString& v) {
 }
 int DecodiumBridge::currentTx() const { return m_currentTx; }
 void DecodiumBridge::setCurrentTx(int v) {
+    // 1.0.134: guard centralizzato per il TX skip mask.
+    // Tutti i path (autoSequenceStep, engageDxClusterSpot, sendTx,
+    // processDecodeDoubleClick) passano qui per cambiare il currentTx,
+    // quindi il check qui blocca anche le attivazioni "manuali"
+    // (click su spot DX cluster, doppio click su decode).
+    if (v >= 1 && v <= 6 && isTxDisabled(v)) {
+        bridgeLog(QStringLiteral("setCurrentTx: TX%1 user-disabled, ignored").arg(v));
+        return;
+    }
     if (m_currentTx!=v) {
         m_currentTx=v;
         emit currentTxChanged();
@@ -7416,6 +7425,28 @@ void DecodiumBridge::setDxCall(const QString& v) {
         // inesistente. Pulizia simmetrica al reset di setDxCall("").
         m_lastTransmittedMessage.clear();
         emit dxCallChanged();
+        // 1.0.134: ri-popola matchesDxCall sulle decode già in lista quando
+        // l'utente cambia DxCall (evita di dover re-decodificare). Il QML
+        // legge SOLO modelData.matchesDxCall — niente funzioni live che
+        // accedono a bridge.dxCall (= regressione 1.0.132 risolta).
+        {
+            QString const dxTrim = m_dxCall.trimmed().toUpper();
+            bool anyChanged = false;
+            for (int i = 0; i < m_decodeList.size(); ++i) {
+                QVariantMap m = m_decodeList[i].toMap();
+                QString const rc = m.value(QStringLiteral("dxCallsign")).toString().toUpper();
+                QString const fc = m.value(QStringLiteral("fromCall")).toString().toUpper();
+                bool const matches = !dxTrim.isEmpty()
+                    && ((!rc.isEmpty() && rc == dxTrim)
+                        || (!fc.isEmpty() && fc == dxTrim));
+                if (m.value(QStringLiteral("matchesDxCall")).toBool() != matches) {
+                    m[QStringLiteral("matchesDxCall")] = matches;
+                    m_decodeList[i] = m;
+                    anyChanged = true;
+                }
+            }
+            if (anyChanged) emit decodeListChanged();
+        }
         if (usingLegacyBackendForTx()) {
             m_legacyBackend->setDxCall(next);
         }
@@ -15055,22 +15086,22 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
             return;
         }
         // 1.0.130: skip TX marcati come disabled (right-click toggle UI).
-        // Caso tipico: TX5 disabled → QSO si chiude subito dopo RR73 senza
-        // aspettare il 73 finale (utile su QSB / pile-up DX).
-        while (nextTx >= 1 && nextTx <= 6 && isTxDisabled(nextTx)) {
-            bridgeLog(QStringLiteral("autoSeq: TX%1 user-disabled, skip").arg(nextTx));
+        // 1.0.134: TX disabled → NON trasmettere (return), no advance arbitrario.
+        // Avanzare TX1→TX2 quando TX1 è disabled significherebbe mandare un
+        // report senza prima aver chiamato il partner: rompe il QSO. Meglio
+        // semplicemente non trasmettere e lasciar passare il periodo.
+        if (nextTx >= 1 && nextTx <= 6 && isTxDisabled(nextTx)) {
+            bridgeLog(QStringLiteral("autoSeq: TX%1 user-disabled, skip transmission")
+                          .arg(nextTx));
             if (nextTx == 5) {
-                // Skip TX5 → finalize QSO immediatamente (no 73 finale)
+                // TX5 disabled → finalize QSO subito (skip 73 finale, comune)
                 finishAutoSequenceQso(
                     QStringLiteral("autoSeq: TX5 user-disabled -> log immediato"));
-                return;
             }
-            if (nextTx == 6) {
-                // Skip TX6 (CQ) → ferma auto-seq senza ripartire CQ
-                bridgeLog("autoSeq: TX6 disabled, stop senza rilancio CQ");
-                return;
-            }
-            ++nextTx;  // TX1-TX4: avanza al successivo
+            // TX1-TX4 + TX6 disabled: semplicemente non trasmette (l'auto-seq
+            // riprenderà al prossimo periodo). Per TX6 questo ferma il
+            // re-arm CQ ciclico (= "non auto-CQ").
+            return;
         }
         // Avanza stato QSO
         advanceQsoState(nextTx);

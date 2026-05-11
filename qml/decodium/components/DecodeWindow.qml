@@ -911,6 +911,10 @@ NumberAnimation {
                                     if (isPeriodSeparator) return Qt.rgba(1, 0.3, 0.3, 0.35)  // ROSSO chiaro evidente
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
+                                    // 1.0.134: match DxCall — oro (Band Activity). Solo flag
+                                    // pre-calcolato C++, niente funzione QML (no regressione).
+                                    if (modelData.matchesDxCall === true)
+                                        return Qt.rgba(1, 0.84, 0, 0.30)
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
                                     if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
                                     if (isAtRxFrequency(modelData.freq, modelData))
@@ -1386,6 +1390,10 @@ NumberAnimation {
                                     if (isPeriodSeparator) return Qt.rgba(1, 0.3, 0.3, 0.35)
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
+                                    // 1.0.134: match DxCall — oro (Signal RX). Solo flag
+                                    // pre-calcolato C++, niente funzione QML.
+                                    if (modelData.matchesDxCall === true)
+                                        return Qt.rgba(1, 0.84, 0, 0.30)
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
                                     if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
                                     return index % 2 === 0
