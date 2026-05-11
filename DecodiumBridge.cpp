@@ -18250,6 +18250,14 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
     entry["dxBearing"] = bearing;
     entry["dxDistance"] = distKm;
     entry["dxGrid"] = dxGridExtracted;
+
+    // 1.0.138: pre-calcola la cascata WSJT-X UNA volta qui, quando il decode
+    // entra. Prima Waterfall.qml::refreshDecodeLabels() chiamava
+    // bridge.decodeHighlightBg(d) per ogni call ad ogni decodeListChanged
+    // signal (FT2 ~5-20Hz × 30 decode max = 150-600 chiamate/sec a una
+    // funzione C++ con lookup DXCC/worked/LotW). CPU/GPU spike confermato
+    // dagli utenti dalla 1.0.131 in poi. Adesso il QML legge d.highlightBg.
+    entry["highlightBg"] = decodeHighlightBg(entry);
 }
 
 void DecodiumBridge::refreshDecodeListDxcc()

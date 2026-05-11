@@ -131,12 +131,10 @@ Item {
             if (seen[call])
                 continue
             seen[call] = true
-            // 1.0.131: passa hex color WSJT-X palette al pana
-            // (NewDxccBand/NewGrid/NewCqZone ecc.) — il C++ ricade sul
-            // colore fisso isCQ/isMyCall/default se hex è vuoto/invalido.
-            var hex = ""
-            if (bridge && bridge.decodeHighlightBg)
-                hex = bridge.decodeHighlightBg(d) || ""
+            // 1.0.138: legge il hex pre-calcolato in enrichDecodeEntry
+            // (era: bridge.decodeHighlightBg(d) per ogni call ad ogni
+            //  decodeListChanged → 150-600 chiamate/sec, alto CPU/GPU).
+            var hex = d.highlightBg || ""
             labels.push({
                 call: call,
                 freq: freq,
