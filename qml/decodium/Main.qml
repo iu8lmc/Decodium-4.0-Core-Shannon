@@ -2098,13 +2098,27 @@ ApplicationWindow {
                             border.width: 1
                         }
 
-                        // UTC Time display
+                        // UTC Time display — click to trigger NTP sync (FT8/FT4 DT alignment)
                         Text {
+                            id: utcTimeLabel
                             text: bridge.utcTime
                             font.pixelSize: 8
                             font.family: "Monospace"
                             font.bold: true
-                            color: accentGreen
+                            color: clockMouseArea.containsMouse
+                                       ? bridge.themeManager.warningColor
+                                       : accentGreen
+
+                            MouseArea {
+                                id: clockMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.syncNtpNow()
+                                ToolTip.visible: containsMouse
+                                ToolTip.delay: 600
+                                ToolTip.text: qsTr("Click: NTP sync immediato per allineare DT (FT8/FT4)")
+                            }
                         }
                     }
 
