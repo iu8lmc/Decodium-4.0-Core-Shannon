@@ -3291,6 +3291,17 @@ void DecodiumBridge::setHideGhostDecodes(bool v)
     rebuildRxDecodeModel();
 }
 
+void DecodiumBridge::setDecodeShowPeriodSeparator(bool v)
+{
+    if (m_decodeShowPeriodSeparator == v) return;
+    m_decodeShowPeriodSeparator = v;
+    bridgeLog(QStringLiteral("setDecodeShowPeriodSeparator: %1")
+        .arg(v ? "ON" : "OFF"));
+    saveSettings();
+    rebuildBandActivityModel();
+    rebuildRxDecodeModel();
+}
+
 bool DecodiumBridge::entryBelongsToCurrentQso(QVariantMap const& entry) const
 {
     if (entry.isEmpty()) return false;
@@ -3318,11 +3329,16 @@ bool DecodiumBridge::entryBelongsToCurrentQso(QVariantMap const& entry) const
 
 void DecodiumBridge::injectPeriodSeparators(QVariantList& filtered) const
 {
-    if (!m_decodeShowPeriodSeparator || filtered.size() <= 1) return;
+    if (!m_decodeShowPeriodSeparator || filtered.size() <= 1) {
+        bridgeLog(QStringLiteral("injectPeriodSeparators skipped: enabled=%1 size=%2")
+            .arg(m_decodeShowPeriodSeparator).arg(filtered.size()));
+        return;
+    }
     QVariantList withSep;
     withSep.reserve(filtered.size() * 11 / 10 + 1);
     QString prevPeriod;
     qint64 prevTs = 0;
+    int sepCount = 0;
     for (QVariant const& v : filtered) {
         QVariantMap const it = v.toMap();
         QString const t = it.value(QStringLiteral("time")).toString();
@@ -3335,14 +3351,20 @@ void DecodiumBridge::injectPeriodSeparators(QVariantList& filtered) const
         }
         if (newPeriod) {
             QVariantMap sep;
+            // 1.0.149: stable key per il diff in DecodeListModel::decodeMatchKey
+            // — usare anche il ts del separator (cambia per ogni period FT2).
             sep.insert(QStringLiteral("isSeparator"), true);
             sep.insert(QStringLiteral("time"), t);
+            sep.insert(QStringLiteral("timestamp"), QVariant::fromValue(static_cast<qulonglong>(ts)));
             withSep.append(sep);
+            ++sepCount;
         }
         if (!t.isEmpty()) prevPeriod = t;
         if (ts > 0) prevTs = ts;
         withSep.append(it);
     }
+    bridgeLog(QStringLiteral("injectPeriodSeparators inserted=%1 rows=%2 -> %3")
+        .arg(sepCount).arg(filtered.size()).arg(withSep.size()));
     filtered = withSep;
 }
 
@@ -12798,6 +12820,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("txOutputLevel", m_txOutputLevel);
     s.setValue("txDisabledMask", m_txDisabledMask);
     s.setValue("hideGhostDecodes", m_hideGhostDecodes);
+    s.setValue("decodeShowPeriodSeparator", m_decodeShowPeriodSeparator);
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
     s.setValue("ndepth", m_ndepth);
@@ -15565,6 +15588,7 @@ void DecodiumBridge::loadSettings()
     m_txOutputLevel = qBound(0.0, s.value("txOutputLevel", 0.0).toDouble(), 450.0);
     m_txDisabledMask = s.value("txDisabledMask", 0).toInt() & 0x3F;  // 6 bit (TX1-TX6)
     m_hideGhostDecodes = s.value("hideGhostDecodes", true).toBool();  // 1.0.145 default ON
+    m_decodeShowPeriodSeparator = s.value("decodeShowPeriodSeparator", true).toBool();
     m_nfa      = s.value("nfa", 200).toInt();
     m_nfb      = s.value("nfb", 4000).toInt();
     {

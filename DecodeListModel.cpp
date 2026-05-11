@@ -110,8 +110,13 @@ QVariantMap DecodeListModel::entry(int index) const
 QString DecodeListModel::decodeMatchKey(QVariantMap const& entry)
 {
     if (entry.value(QStringLiteral("isSeparator")).toBool()) {
-        // i separator non hanno identità stabile: keyed by time se presente
-        return QStringLiteral("sep|") + entry.value(QStringLiteral("time")).toString();
+        // 1.0.149: chiave separator stabile = time + timestamp ms. Per FT2
+        // async time e' vuoto e tutti i separator avevano stessa key "sep|"
+        // -> il diff teneva solo UN separator. Includere il ts li' rende
+        // univoci per period FT2.
+        QString const t = entry.value(QStringLiteral("time")).toString();
+        QString const ts = entry.value(QStringLiteral("timestamp")).toString();
+        return QStringLiteral("sep|") + t + QStringLiteral("|") + ts;
     }
     QString const ts = entry.value(QStringLiteral("timestamp")).toString();
     QString const freq = entry.value(QStringLiteral("freq")).toString();

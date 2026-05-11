@@ -1959,6 +1959,10 @@ private:
 public:
     Q_INVOKABLE bool hideGhostDecodes() const { return m_hideGhostDecodes; }
     Q_INVOKABLE void setHideGhostDecodes(bool v);
+    // 1.0.149: esponi flag period-separator per UI sync (era sempre true
+    // lato C++ ma desincronizzato dalla QSettings letta dal QML).
+    Q_INVOKABLE bool decodeShowPeriodSeparator() const { return m_decodeShowPeriodSeparator; }
+    Q_INVOKABLE void setDecodeShowPeriodSeparator(bool v);
 
 private:
 
