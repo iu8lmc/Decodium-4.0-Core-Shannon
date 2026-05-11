@@ -3239,6 +3239,18 @@ bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
     QString const aptype = entry.value(QStringLiteral("aptype")).toString().trimmed();
     if (!aptype.isEmpty() && db <= -18) return true;
 
+    // 1.0.146: terzo criterio = SNR ≤ -19 + distanza estrema (>10000 km).
+    // Ghost a SNR marginale spesso producono callsign-country mismatch (es.
+    // "JX4KCI G5IOSZ/P NC21" interpretato come England 13495 km, ma 13495
+    // è fantasioso — UK è 1500 km, Jan Mayen 5000 km). Distance/Country
+    // estremi a SNR weak senza B4 sono firma ghost classica.
+    if (db <= -19) {
+        bool distOk = false;
+        double const distKm = entry.value(QStringLiteral("dxDistance"))
+                                  .toDouble(&distOk);
+        if (distOk && distKm > 10000.0) return true;
+    }
+
     return false;
 }
 
