@@ -3139,6 +3139,34 @@ static inline void activeCatSetTxFreq(DecodiumCatManager* n, DecodiumTransceiver
     else h->setRigTxFrequency(hz);
 }
 
+void DecodiumBridge::emitDecodeListChangedThrottled()
+{
+    // Lazy-init del timer al primo uso (after construction OK perché
+    // siamo nel thread principale).
+    if (m_decodeListEmitTimer == nullptr) {
+        m_decodeListEmitTimer = new QTimer(this);
+        m_decodeListEmitTimer->setSingleShot(true);
+        m_decodeListEmitTimer->setInterval(250);  // max 4 emit/sec
+        connect(m_decodeListEmitTimer, &QTimer::timeout, this, [this]() {
+            if (m_decodeListEmitPending) {
+                m_decodeListEmitPending = false;
+                emit decodeListChanged();
+                // Restart per coalescere ulteriori burst
+                m_decodeListEmitTimer->start();
+            }
+        });
+    }
+
+    if (m_decodeListEmitTimer->isActive()) {
+        // Burst in corso: marca pending, sarà emesso al timeout
+        m_decodeListEmitPending = true;
+    } else {
+        // Prima emit della finestra: emit subito + arma cooldown
+        emit decodeListChanged();
+        m_decodeListEmitTimer->start();
+    }
+}
+
 DecodiumBridge::DecodiumBridge(QObject* parent)
     : QObject(parent)
 {
@@ -5406,7 +5434,7 @@ void DecodiumBridge::syncLegacyBackendDecodeList()
                       .arg(mirroredDecodes.size()));
         if (m_decodeList != mirroredDecodes) {
             m_decodeList = mirroredDecodes;
-            emit decodeListChanged();
+            emitDecodeListChangedThrottled();  // 1.0.142: throttle mirror replace-all
         }
     }
 
@@ -18586,7 +18614,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                   .arg(userFiltered)
                   .arg(uiFiltered)
                   .arg(duplicatesSkipped));
-    if (changed) emit decodeListChanged();
+    if (changed) emitDecodeListChangedThrottled();  // 1.0.142: throttle FT8 burst
     if (legacyUiMirrorActive) {
         syncLegacyBackendDecodeList();
     }
@@ -18823,7 +18851,7 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
     }
     if (changed) {
         normalizeDecodeEntriesForDisplay(m_decodeList, 1500, m_mode);
-        emit decodeListChanged();
+        emitDecodeListChangedThrottled();  // 1.0.142: throttle FT2 async (5-20Hz → 4Hz)
     }
     if (bestSnr > -99) setAsyncSnrDb(bestSnr);
     bridgeLog(QStringLiteral("onFt2AsyncDecodeReady summary: raw=%1 accepted=%2 parse_fail=%3 semantic=%4 user_filtered=%5 ui_filtered=%6 dupes=%7")

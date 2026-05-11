@@ -1382,6 +1382,12 @@ private:
     int m_audioOutputChannel {0};
     QVariantList m_decodeList;
     QVariantList m_rxDecodeList;
+    // 1.0.142: throttle per decodeListChanged signal nei path high-frequency
+    // (FT2 async 5-20Hz, FT8 ready bursts, legacy mirror replace). Riduce
+    // rebuild ListView QML da ~20/sec a ~4/sec → fluidità percepita.
+    // I path low-frequency (clear, mode change, DXCC refresh) emettono diretto.
+    QTimer* m_decodeListEmitTimer {nullptr};
+    bool m_decodeListEmitPending {false};
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
@@ -1917,6 +1923,8 @@ private:
     QString extractDecodedCallsign(const QString& msg, bool isCQ) const;
     QString extractDecodedGrid(const QString& msg) const;
     void enrichDecodeEntry(QVariantMap& entry) const;
+    // 1.0.142: throttle helper per decodeListChanged. Vedi commento timer.
+    void emitDecodeListChangedThrottled();
     void refreshDecodeListDxcc();
     QStringList parseFt8Row(const QString& row) const;
     QStringList parseJt65Row(const QString& row) const;
