@@ -884,6 +884,22 @@ static bool isFt2AsyncRecentBurstDuplicate(QVariantMap const& previous,
         return false;
     }
 
+    // 1.0.136: preferisce entry["timestamp"] (ms epoch, sempre popolato in FT2
+    // async — vedi commento alla riga ~18734) rispetto a entry["time"] che
+    // resta vuoto per i decode async (parseFt8Row non lo popola). Prima
+    // questo path falliva sempre: secondsFromUtcDisplayToken("") = -1 →
+    // circularUtcSecondDistance(-1,-1) = INT_MAX → check sempre false →
+    // dedup cross-period mai applicato → loop di CQ identici ogni 3.75s.
+    qulonglong const previousMs = previous.value(QStringLiteral("timestamp")).toULongLong();
+    qulonglong const entryMs = entry.value(QStringLiteral("timestamp")).toULongLong();
+    if (previousMs > 0 && entryMs > 0) {
+        qulonglong const distanceMs = (previousMs > entryMs)
+            ? (previousMs - entryMs)
+            : (entryMs - previousMs);
+        return distanceMs <= static_cast<qulonglong>(maxDistanceSeconds) * 1000ULL;
+    }
+
+    // Fallback per entries vecchie senza timestamp (compat. con sync mode).
     int const previousSeconds = secondsFromUtcDisplayToken(previous.value(QStringLiteral("time")).toString());
     int const entrySeconds = secondsFromUtcDisplayToken(entry.value(QStringLiteral("time")).toString());
     return circularUtcSecondDistance(previousSeconds, entrySeconds) <= maxDistanceSeconds;
