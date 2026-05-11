@@ -17846,6 +17846,14 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
     }
 
     QStringList payload = tokens.mid(2);
+    // 1.0.147: il decoder FT8/FT4/FT2 appende "?" come marker "low-confidence"
+    // (es. "IU8LMC M0NXD -12 ?"). Non e' parte del payload semantico, va
+    // strippato prima della validation - altrimenti two-token payloads come
+    // "-12 ?" vengono rifiutati e il sequencer perde il signal report,
+    // restando bloccato su TX1 fino al successivo decode senza "?".
+    while (!payload.isEmpty() && payload.constLast() == QStringLiteral("?")) {
+        payload.removeLast();
+    }
     return isDirectedDecodePayloadValid(payload, contestDecodeExchangesEnabled(), reason);
 }
 
