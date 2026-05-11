@@ -249,21 +249,7 @@ Window {
     }
 
     // Shannon-compatible coloring (priorità DecodeHighlightingModel)
-    // 1.0.132: helper reattivo. Si rivaluta automaticamente quando
-    // bridge.dxCall cambia (Q_PROPERTY notify), quindi colora anche
-    // decode già nella list dopo che l'utente inserisce il call.
-    function matchesCurrentDxCall(modelData) {
-        if (!bridge) return false
-        var dx = (bridge.dxCall || "").toString().trim().toUpperCase()
-        if (dx.length === 0) return false
-        var rc = (modelData.dxCallsign || "").toString().trim().toUpperCase()
-        var fc = (modelData.fromCall || "").toString().trim().toUpperCase()
-        return rc === dx || fc === dx
-    }
-
     function getDxccColor(modelData) {
-        // 1.0.132: priorità massima al match DxCall (oro, ben visibile)
-        if (matchesCurrentDxCall(modelData)) return "#FFD700"
         var rowHex = wsjtxRowHighlightHex(modelData)
         if (rowHex.length > 0)
             return readableTextOnHighlight(rowHex)
@@ -925,9 +911,6 @@ NumberAnimation {
                                     if (isPeriodSeparator) return Qt.rgba(1, 0.3, 0.3, 0.35)  // ROSSO chiaro evidente
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
-                                    // 1.0.132: match DxCall — oro semitrasparente (Band Activity)
-                                    if (decodeWindow.matchesCurrentDxCall(modelData))
-                                        return Qt.rgba(1, 0.84, 0, 0.30)
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
                                     if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
                                     if (isAtRxFrequency(modelData.freq, modelData))
@@ -1403,9 +1386,6 @@ NumberAnimation {
                                     if (isPeriodSeparator) return Qt.rgba(1, 0.3, 0.3, 0.35)
                                     var wsx = decodeWindow.wsjtxBgColor(modelData)
                                     if (wsx) return wsx
-                                    // 1.0.132: match DxCall — oro semitrasparente (Signal RX)
-                                    if (decodeWindow.matchesCurrentDxCall(modelData))
-                                        return Qt.rgba(1, 0.84, 0, 0.30)
                                     if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
                                     if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
                                     return index % 2 === 0
