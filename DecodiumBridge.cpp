@@ -1,4 +1,5 @@
 #include "DecodiumBridge.h"
+#include "DecodeListModel.h"
 #include "DecodiumLogging.hpp"
 #include "DecodiumAlertManager.h"
 #include "DecodiumDiagnostics.h"
@@ -3139,6 +3140,189 @@ static inline void activeCatSetTxFreq(DecodiumCatManager* n, DecodiumTransceiver
     else h->setRigTxFrequency(hz);
 }
 
+// =====================================================================
+// 1.0.143 fase 2 — replica C++ dei filter QML JS che alimentavano
+// bandActivityModel / rxDecodeModel. Vedi DecodeWindow.qml:
+//   isTelemetryHexToken (linea 328)
+//   isTelemetryOnlyDecodeMessage (linea 337)
+//   shouldDisplayDecodeEntry (linea 383)
+//   filteredDecodeEntries (linea 391)
+//   rxEntryBelongsToCurrentQso (linea 450)
+//   isAtRxFrequency (linea 439)
+//   sortedRxDecodes + rxSortKey (linea 506)
+// =====================================================================
+
+namespace {
+
+bool decodeListModel_isTelemetryHexToken(QString const& token)
+{
+    QString const t = token.toUpper().remove(QRegularExpression("[<>;,]")).trimmed();
+    if (t.size() < 7 || t.size() > 18) return false;
+    bool hasLetter = false;
+    bool hasDigit = false;
+    for (QChar const ch : t) {
+        char const c = ch.toLatin1();
+        if (c >= '0' && c <= '9') hasDigit = true;
+        else if (c >= 'A' && c <= 'F') hasLetter = true;
+        else return false;  // non-hex char
+    }
+    return hasLetter && hasDigit;
+}
+
+bool decodeListModel_isTelemetryOnlyMessage(QString const& message)
+{
+    QStringList const parts = message.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    if (parts.size() != 1) return false;
+    return decodeListModel_isTelemetryHexToken(parts.first());
+}
+
+QString decodeListModel_normalizedBaseCall(QString const& call)
+{
+    QString clean = call.toUpper().remove(QRegularExpression("[<>;,]")).trimmed();
+    if (clean.isEmpty()) return QString();
+    QStringList const parts = clean.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    QString best;
+    for (QString const& p : parts) {
+        if (p.size() > best.size() && p.contains(QRegularExpression("[A-Z]")) &&
+            p.contains(QRegularExpression("[0-9]"))) {
+            best = p;
+        }
+    }
+    return best.isEmpty() ? clean : best;
+}
+
+bool decodeListModel_messageContainsBase(QString const& message, QString const& base)
+{
+    if (base.isEmpty()) return false;
+    QStringList const parts = message.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    for (QString const& p : parts) {
+        if (decodeListModel_normalizedBaseCall(p) == base) return true;
+    }
+    return false;
+}
+
+} // namespace
+
+bool DecodiumBridge::shouldDisplayEntryForBandActivity(QVariantMap const& entry) const
+{
+    if (entry.isEmpty()) return false;
+    if (!m_hideTelemetryOnlyDecodes) return true;
+    QString const msg = entry.value(QStringLiteral("displayMessage")).toString();
+    QString const fallback = entry.value(QStringLiteral("message")).toString();
+    return !decodeListModel_isTelemetryOnlyMessage(msg.isEmpty() ? fallback : msg);
+}
+
+bool DecodiumBridge::entryBelongsToCurrentQso(QVariantMap const& entry) const
+{
+    if (entry.isEmpty()) return false;
+    QString const activeBase = decodeListModel_normalizedBaseCall(m_dxCall);
+    bool const isTx = entry.value(QStringLiteral("isTx")).toBool();
+    if (isTx) return true;  // sempre includere TX nei RX panel
+    QString const myBase = decodeListModel_normalizedBaseCall(m_callsign);
+    QString const message = entry.value(QStringLiteral("message")).toString();
+    bool const myMatch = entry.value(QStringLiteral("isMyCall")).toBool()
+        || decodeListModel_messageContainsBase(message, myBase);
+    if (myMatch) return true;
+    if (activeBase.isEmpty()) {
+        // fallback isAtRxFrequency ±200Hz
+        int const f = entry.value(QStringLiteral("freq")).toString().toInt();
+        if (m_rxFrequency > 0 && std::abs(f - m_rxFrequency) <= 200) return true;
+        return false;
+    }
+    bool const activeMatch = decodeListModel_messageContainsBase(message, activeBase)
+        || decodeListModel_normalizedBaseCall(
+                entry.value(QStringLiteral("fromCall")).toString()) == activeBase
+        || decodeListModel_normalizedBaseCall(
+                entry.value(QStringLiteral("dxCallsign")).toString()) == activeBase;
+    return activeMatch && myMatch;
+}
+
+void DecodiumBridge::injectPeriodSeparators(QVariantList& filtered) const
+{
+    if (!m_decodeShowPeriodSeparator || filtered.size() <= 1) return;
+    QVariantList withSep;
+    withSep.reserve(filtered.size() * 11 / 10 + 1);
+    QString prevPeriod;
+    qint64 prevTs = 0;
+    for (QVariant const& v : filtered) {
+        QVariantMap const it = v.toMap();
+        QString const t = it.value(QStringLiteral("time")).toString();
+        qint64 const ts = static_cast<qint64>(it.value(QStringLiteral("timestamp")).toULongLong());
+        bool newPeriod = false;
+        if (!t.isEmpty()) {
+            if (!prevPeriod.isEmpty() && t != prevPeriod) newPeriod = true;
+        } else {
+            if (prevTs > 0 && ts > 0 && (ts - prevTs) > 1500) newPeriod = true;
+        }
+        if (newPeriod) {
+            QVariantMap sep;
+            sep.insert(QStringLiteral("isSeparator"), true);
+            sep.insert(QStringLiteral("time"), t);
+            withSep.append(sep);
+        }
+        if (!t.isEmpty()) prevPeriod = t;
+        if (ts > 0) prevTs = ts;
+        withSep.append(it);
+    }
+    filtered = withSep;
+}
+
+QVariantList DecodiumBridge::filterEntriesForBandActivity(QVariantList const& source) const
+{
+    QVariantList filtered;
+    filtered.reserve(source.size());
+    for (QVariant const& v : source) {
+        QVariantMap const e = v.toMap();
+        if (shouldDisplayEntryForBandActivity(e)) {
+            filtered.append(e);
+        }
+    }
+    if (m_decodeNewestFirst) std::reverse(filtered.begin(), filtered.end());
+    injectPeriodSeparators(filtered);
+    return filtered;
+}
+
+QVariantList DecodiumBridge::filterEntriesForRxDecode(QVariantList const& source) const
+{
+    QVariantList filtered;
+    filtered.reserve(source.size());
+    for (QVariant const& v : source) {
+        QVariantMap const e = v.toMap();
+        if (!shouldDisplayEntryForBandActivity(e)) continue;  // stesso filter telemetry
+        if (entryBelongsToCurrentQso(e)) {
+            filtered.append(e);
+        }
+    }
+    // Aggiungi entries TX dal m_decodeList (sono già in source visto che è m_decodeList)
+    // Sort per timestamp ms (1.0.139 fix style)
+    std::stable_sort(filtered.begin(), filtered.end(),
+        [](QVariant const& a, QVariant const& b) {
+            qulonglong const ta = a.toMap().value(QStringLiteral("timestamp")).toULongLong();
+            qulonglong const tb = b.toMap().value(QStringLiteral("timestamp")).toULongLong();
+            if (ta != tb) return ta < tb;
+            return false;
+        });
+    injectPeriodSeparators(filtered);
+    return filtered;
+}
+
+void DecodiumBridge::rebuildBandActivityModel()
+{
+    if (!m_bandActivityModel) return;
+    QVariantList const filtered = filterEntriesForBandActivity(m_decodeList);
+    m_bandActivityModel->setEntries(filtered);
+}
+
+void DecodiumBridge::rebuildRxDecodeModel()
+{
+    if (!m_rxDecodeModel) return;
+    // m_rxDecodeList contiene già le entries filtrate per RX pane (vedi
+    // appendRxDecodeEntry). Però filterEntriesForRxDecode applica anche il
+    // filter dxCall/myCall live, quindi usare m_decodeList come source.
+    QVariantList const filtered = filterEntriesForRxDecode(m_decodeList);
+    m_rxDecodeModel->setEntries(filtered);
+}
+
 void DecodiumBridge::emitDecodeListChangedThrottled()
 {
     // Lazy-init del timer al primo uso (after construction OK perché
@@ -3170,6 +3354,26 @@ void DecodiumBridge::emitDecodeListChangedThrottled()
 DecodiumBridge::DecodiumBridge(QObject* parent)
     : QObject(parent)
 {
+    // 1.0.143 fase 2: istanzia i 2 model nativi prima di tutto, così se
+    // qualcuno chiama bandActivityModel()/rxDecodeModel() durante il
+    // resto del costruttore (es. carica setting che invoca slot di
+    // refresh), non riceve nullptr.
+    m_bandActivityModel = new DecodeListModel(this);
+    m_rxDecodeModel = new DecodeListModel(this);
+    // Sync dei model dopo ogni decodeListChanged. Auto-throttled dalla
+    // fase 1 (emitDecodeListChangedThrottled max 4 emit/sec).
+    connect(this, &DecodiumBridge::decodeListChanged, this, [this]() {
+        rebuildBandActivityModel();
+        rebuildRxDecodeModel();
+    });
+    // RX model dipende anche da dxCall / rxFrequency / callsign / mode.
+    connect(this, &DecodiumBridge::dxCallChanged, this,
+            &DecodiumBridge::rebuildRxDecodeModel);
+    connect(this, &DecodiumBridge::rxFrequencyChanged, this,
+            &DecodiumBridge::rebuildRxDecodeModel);
+    connect(this, &DecodiumBridge::callsignChanged, this,
+            &DecodiumBridge::rebuildRxDecodeModel);
+
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_GPU_PANADAPTER_FFT")) {
         m_gpuPanadapterFftAvailable.store(false);
         qWarning().noquote()

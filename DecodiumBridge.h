@@ -63,6 +63,7 @@ namespace decodium {
 }
 
 class RemoteCommandServer;
+class DecodeListModel;  // 1.0.143 fase 2: model nativo per ListView decode
 
 class DecodiumBridge : public QObject
 {
@@ -99,6 +100,11 @@ class DecodiumBridge : public QObject
 
     // === DECODE ===
     Q_PROPERTY(QVariantList decodeList READ decodeList NOTIFY decodeListChanged)
+    // 1.0.143 fase 2: model nativi per le 2 ListView. Sostituiscono i JS-filter
+    // array (filteredDecodeEntries, currentRxDecodes) con QAbstractListModel +
+    // diff incrementale → elimina rebuild totale ad ogni decodeListChanged.
+    Q_PROPERTY(DecodeListModel* bandActivityModel READ bandActivityModel CONSTANT)
+    Q_PROPERTY(DecodeListModel* rxDecodeModel READ rxDecodeModel CONSTANT)
     Q_PROPERTY(QVariantList rxDecodeList READ rxDecodeList NOTIFY rxDecodeListChanged)
     Q_PROPERTY(int periodProgress READ periodProgress NOTIFY periodProgressChanged)
     Q_PROPERTY(QString utcTime READ utcTime NOTIFY utcTimeChanged)
@@ -1388,6 +1394,15 @@ private:
     // I path low-frequency (clear, mode change, DXCC refresh) emettono diretto.
     QTimer* m_decodeListEmitTimer {nullptr};
     bool m_decodeListEmitPending {false};
+    // 1.0.143 fase 2: model nativi per le 2 ListView (Band Activity + Signal RX).
+    // Sostituiscono i JS-filter array di DecodeWindow.qml. Vengono syncati
+    // dal slot di decodeListChanged via setEntries() che applica diff
+    // incrementale (no rebuild totale dei delegate QML).
+    DecodeListModel* m_bandActivityModel {nullptr};
+    DecodeListModel* m_rxDecodeModel {nullptr};
+    bool m_decodeShowPeriodSeparator {true};
+    bool m_decodeNewestFirst {false};
+    bool m_hideTelemetryOnlyDecodes {true};
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
@@ -1925,6 +1940,21 @@ private:
     void enrichDecodeEntry(QVariantMap& entry) const;
     // 1.0.142: throttle helper per decodeListChanged. Vedi commento timer.
     void emitDecodeListChangedThrottled();
+
+    // 1.0.143 fase 2: rebuild dei 2 model nativi dalla m_decodeList.
+    void rebuildBandActivityModel();
+    void rebuildRxDecodeModel();
+    QVariantList filterEntriesForBandActivity(QVariantList const& source) const;
+    QVariantList filterEntriesForRxDecode(QVariantList const& source) const;
+    bool shouldDisplayEntryForBandActivity(QVariantMap const& entry) const;
+    bool entryBelongsToCurrentQso(QVariantMap const& entry) const;
+    void injectPeriodSeparators(QVariantList& filtered) const;
+
+public:
+    DecodeListModel* bandActivityModel() const { return m_bandActivityModel; }
+    DecodeListModel* rxDecodeModel() const { return m_rxDecodeModel; }
+
+private:
     void refreshDecodeListDxcc();
     QStringList parseFt8Row(const QString& row) const;
     QStringList parseJt65Row(const QString& row) const;

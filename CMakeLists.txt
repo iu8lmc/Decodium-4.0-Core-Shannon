@@ -388,6 +388,8 @@ set (wsjtx_CXXSRCS
   main.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodeListModel.cpp
+  DecodeListModel.h
   DecodiumDiagnostics.cpp
   DecodiumDiagnostics.h
   DecodiumLegacyBackend.cpp
@@ -1496,6 +1498,8 @@ add_executable (decodium_qml
   main_qml.cpp
   DecodiumBridge.cpp
   DecodiumBridge.h
+  DecodeListModel.cpp
+  DecodeListModel.h
   DecodiumDiagnostics.cpp
   DecodiumPropagationManager.cpp
   DecodiumPropagationManager.h

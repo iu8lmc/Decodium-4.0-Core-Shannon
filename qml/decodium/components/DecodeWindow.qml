@@ -811,7 +811,10 @@ Window {
                             anchors.fill: parent
                             anchors.margins: 4
 	                            clip: true
-	                            model: decodeWindow.bandActivityModel
+	                            // 1.0.143 fase 2: model nativo C++ (QAbstractListModel)
+	                            // invece di array JS filtrato. Update incrementali
+	                            // (beginInsertRows/dataChanged) eliminano scatti.
+	                            model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodeWindow.bandActivityModel
 	                            spacing: 1
 	                            // 1.0.140: ridotto da 3000 (pre-rendering ~115 row con
 	                            // 7+ binding ternari ciascuna = costo CPU/GPU significativo
@@ -1305,7 +1308,8 @@ NumberAnimation {
                             // (decodeWindow.rxDecodeModel) + followTail/isNearTail/updateFollowTail
                             // basato su contentY/contentHeight. Così Signal RX si comporta
                             // esattamente come Full Spectrum.
-                            model: decodeWindow.rxDecodeModel
+                            // 1.0.143 fase 2: vedi commento bandActivityList sopra.
+                            model: (bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodeWindow.rxDecodeModel
                             property bool followTail: true
                             property bool tailFollowPending: false
 	                            property bool tailFollowQueued: false
