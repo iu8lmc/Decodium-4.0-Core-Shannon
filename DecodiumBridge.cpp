@@ -3206,10 +3206,51 @@ bool decodeListModel_messageContainsBase(QString const& message, QString const& 
 bool DecodiumBridge::shouldDisplayEntryForBandActivity(QVariantMap const& entry) const
 {
     if (entry.isEmpty()) return false;
+    // 1.0.145: prima cosa, filter ghost decode se attivo. Le entries TX e
+    // MyCall non sono mai considerate ghost (sono certe).
+    if (m_hideGhostDecodes && looksLikeGhostDecode(entry)) return false;
     if (!m_hideTelemetryOnlyDecodes) return true;
     QString const msg = entry.value(QStringLiteral("displayMessage")).toString();
     QString const fallback = entry.value(QStringLiteral("message")).toString();
     return !decodeListModel_isTelemetryOnlyMessage(msg.isEmpty() ? fallback : msg);
+}
+
+// 1.0.145: detection ghost decode = decoder false positives a SNR molto bassi.
+// Criteri cumulati (un solo match = ghost):
+//   1. SNR ≤ -22 dB (estremo limite decoder FT, false-positive rate >30%)
+//   2. SNR ≤ -18 dB AND aptype non vuoto (decode aided da prior knowledge;
+//      a basso SNR la AP introduce match testuali plausibili ma fake)
+// Le entry TX, MyCall, e quelle marked dxIsWorked/isB4 sono ESCLUSE dal
+// filter (TX/MyCall sono certi, B4 sono stazioni note di cui abbiamo già
+// log → se SNR è weak è plausibile sia davvero loro).
+bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
+{
+    if (entry.value(QStringLiteral("isTx")).toBool()) return false;
+    if (entry.value(QStringLiteral("isMyCall")).toBool()) return false;
+    if (entry.value(QStringLiteral("isB4")).toBool()) return false;
+    if (entry.value(QStringLiteral("dxIsWorked")).toBool()) return false;
+
+    bool snrOk = false;
+    int const db = entry.value(QStringLiteral("db")).toString().trimmed().toInt(&snrOk);
+    if (!snrOk) return false;  // se SNR non parsa, non considerare ghost
+
+    if (db <= -22) return true;
+
+    QString const aptype = entry.value(QStringLiteral("aptype")).toString().trimmed();
+    if (!aptype.isEmpty() && db <= -18) return true;
+
+    return false;
+}
+
+void DecodiumBridge::setHideGhostDecodes(bool v)
+{
+    if (m_hideGhostDecodes == v) return;
+    m_hideGhostDecodes = v;
+    bridgeLog(QStringLiteral("setHideGhostDecodes: %1").arg(v ? "ON" : "OFF"));
+    saveSettings();
+    // Rigenera i model con la nuova policy di filter.
+    rebuildBandActivityModel();
+    rebuildRxDecodeModel();
 }
 
 bool DecodiumBridge::entryBelongsToCurrentQso(QVariantMap const& entry) const
@@ -12718,6 +12759,7 @@ void DecodiumBridge::saveSettings()
     s.setValue("rxInputLevel", m_rxInputLevel);
     s.setValue("txOutputLevel", m_txOutputLevel);
     s.setValue("txDisabledMask", m_txDisabledMask);
+    s.setValue("hideGhostDecodes", m_hideGhostDecodes);
     s.setValue("nfa", m_nfa);
     s.setValue("nfb", m_nfb);
     s.setValue("ndepth", m_ndepth);
@@ -15484,6 +15526,7 @@ void DecodiumBridge::loadSettings()
     m_rxInputLevel = qBound(0.0, s.value("rxInputLevel", 50.0).toDouble(), 100.0);
     m_txOutputLevel = qBound(0.0, s.value("txOutputLevel", 0.0).toDouble(), 450.0);
     m_txDisabledMask = s.value("txDisabledMask", 0).toInt() & 0x3F;  // 6 bit (TX1-TX6)
+    m_hideGhostDecodes = s.value("hideGhostDecodes", true).toBool();  // 1.0.145 default ON
     m_nfa      = s.value("nfa", 200).toInt();
     m_nfb      = s.value("nfb", 4000).toInt();
     {

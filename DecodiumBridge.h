@@ -1403,6 +1403,10 @@ private:
     bool m_decodeShowPeriodSeparator {true};
     bool m_decodeNewestFirst {false};
     bool m_hideTelemetryOnlyDecodes {true};
+    // 1.0.145: filter "stazioni fantasma" (decoder false positives a SNR
+    // marginali). Default ON — disabilitabile da setting per chi vuole
+    // vedere TUTTO comprese le decode dubbie.
+    bool m_hideGhostDecodes {true};
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
@@ -1949,6 +1953,14 @@ private:
     bool shouldDisplayEntryForBandActivity(QVariantMap const& entry) const;
     bool entryBelongsToCurrentQso(QVariantMap const& entry) const;
     void injectPeriodSeparators(QVariantList& filtered) const;
+    // 1.0.145: detection ghost decode (SNR marginale + AP-aided high-FP-rate).
+    bool looksLikeGhostDecode(QVariantMap const& entry) const;
+
+public:
+    Q_INVOKABLE bool hideGhostDecodes() const { return m_hideGhostDecodes; }
+    Q_INVOKABLE void setHideGhostDecodes(bool v);
+
+private:
 
 public:
     DecodeListModel* bandActivityModel() const { return m_bandActivityModel; }
