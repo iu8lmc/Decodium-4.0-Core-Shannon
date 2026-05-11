@@ -249,6 +249,21 @@ Window {
     }
 
     // Shannon-compatible coloring (priorità DecodeHighlightingModel)
+    // 1.0.141: difesa contro "stazioni fantasma in rosso". A volte una row
+    // riceveva isMyCall=true ma il messaggio shown non contiene davvero il
+    // nostro callsign (causa ipotizzata: ghost decode marginal-SNR oppure
+    // race tra model update). Verifica testuale prima di applicare il colore.
+    function rowReallyIsMyCall(modelData) {
+        if (!modelData || modelData.isMyCall !== true) return false
+        var myCall = String((bridge && bridge.callsign) || "").toUpperCase().trim()
+        if (myCall.length === 0) return true   // niente callsign configurato: trust the flag
+        var msg = String(modelData.message || modelData.displayMessage || "").toUpperCase()
+        // Word-boundary friendly: lo cerco con spazi attorno; il messaggio FT
+        // ha solo spazi come separatori, niente punteggiatura.
+        var padded = " " + msg.replace(/[<>;,]/g, " ").replace(/\//g, " ") + " "
+        return padded.indexOf(" " + myCall + " ") >= 0
+    }
+
     function getDxccColor(modelData) {
         var rowHex = wsjtxRowHighlightHex(modelData)
         if (rowHex.length > 0)
@@ -264,7 +279,7 @@ Window {
             return textHighlight
 
         if (modelData.isTx)     return colorTx
-        if (modelData.isMyCall) return bridge.colorMyCall
+        if (rowReallyIsMyCall(modelData)) return bridge.colorMyCall
         if (modelData.isLotw)   return colorLotw
         if ((modelData.dxCountry && String(modelData.dxCountry).length > 0)
             || modelData.dxIsMostWanted || modelData.dxIsNewCountry || modelData.dxIsNewBand)
@@ -919,7 +934,9 @@ NumberAnimation {
                                     // pre-calcolato C++, niente funzione QML (no regressione).
                                     if (modelData.matchesDxCall === true)
                                         return Qt.rgba(1, 0.84, 0, 0.30)
-                                    if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.25)
+                                    // 1.0.141: difesa contro stazioni "fantasma" rosse
+                                    if (decodeWindow.rowReallyIsMyCall(modelData))
+                                        return Qt.rgba(244/255, 67/255, 54/255, 0.25)
                                     if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12)
                                     if (isAtRxFrequency(modelData.freq, modelData))
                                         return Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2)
@@ -1399,7 +1416,9 @@ NumberAnimation {
                                     // pre-calcolato C++, niente funzione QML.
                                     if (modelData.matchesDxCall === true)
                                         return Qt.rgba(1, 0.84, 0, 0.30)
-                                    if (modelData.isMyCall) return Qt.rgba(244/255, 67/255, 54/255, 0.3)
+                                    // 1.0.141: difesa contro stazioni "fantasma" rosse (Signal RX)
+                                    if (decodeWindow.rowReallyIsMyCall(modelData))
+                                        return Qt.rgba(244/255, 67/255, 54/255, 0.3)
                                     if (modelData.isCQ)     return Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15)
                                     return index % 2 === 0
                                            ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.05)
