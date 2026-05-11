@@ -3226,13 +3226,39 @@ bool DecodiumBridge::shouldDisplayEntryForBandActivity(QVariantMap const& entry)
 bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
 {
     if (entry.value(QStringLiteral("isTx")).toBool()) return false;
-    if (entry.value(QStringLiteral("isMyCall")).toBool()) return false;
     if (entry.value(QStringLiteral("isB4")).toBool()) return false;
     if (entry.value(QStringLiteral("dxIsWorked")).toBool()) return false;
 
     bool snrOk = false;
     int const db = entry.value(QStringLiteral("db")).toString().trimmed().toInt(&snrOk);
     if (!snrOk) return false;  // se SNR non parsa, non considerare ghost
+
+    bool const isMyCall = entry.value(QStringLiteral("isMyCall")).toBool();
+
+    // 1.0.148: il whitelist su isMyCall non e' piu' assoluto. Il decoder LDPC
+    // a SNR debole genera false positive "MYCALL X RPT" plausibili (utente ha
+    // visto "IU8LMC JA3FYC RR73" a -21 dB dal Giappone da una stazione mai
+    // chiamata). Se NON siamo in QSO attivo con quella stazione (= dxCall
+    // attuale), applichiamo un criterio aggressivo: SNR ≤ -14 dB + distanza
+    // intercontinentale (>8000 km) = ghost. QSO attivi (partner == m_dxCall)
+    // restano sempre passanti per non perdere conferme deboli reali.
+    if (isMyCall) {
+        QString const partner = entry.value(QStringLiteral("dxCallsign"))
+                                     .toString().trimmed().toUpper();
+        QString const fromCall = entry.value(QStringLiteral("fromCall"))
+                                      .toString().trimmed().toUpper();
+        QString const dx = m_dxCall.trimmed().toUpper();
+        bool const isActiveQso = !dx.isEmpty()
+            && (partner == dx || fromCall == dx);
+        if (isActiveQso) return false;  // QSO attivo: mai filtrare
+        if (db <= -14) {
+            bool distOk = false;
+            double const distKm = entry.value(QStringLiteral("dxDistance"))
+                                      .toDouble(&distOk);
+            if (distOk && distKm > 8000.0) return true;
+        }
+        return false;  // isMyCall non attivo ma SNR/dist non da ghost
+    }
 
     if (db <= -22) return true;
 
