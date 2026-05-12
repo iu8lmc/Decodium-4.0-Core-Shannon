@@ -15,6 +15,7 @@ Item {
     signal txFrequencySelected(int freq)     // Sinistro = TX
 
     property bool showControls: true
+    property bool controlsExpanded: true
     property int  minFreq: 0
     property int  maxFreq: 3200
     property int  spectrumHeight: 150
@@ -46,12 +47,12 @@ Item {
 
     readonly property var labelColorPresets: [
         { name: "Auto",    color: "#00E6FF", custom: false },
-        { name: "Ciano",   color: "#00E6FF", custom: true  },
-        { name: "Bianco",  color: "#FFFFFF", custom: true  },
-        { name: "Giallo",  color: "#FFE600", custom: true  },
-        { name: "Verde",   color: "#00E664", custom: true  },
+        { name: "Cyan",    color: "#00E6FF", custom: true  },
+        { name: "White",   color: "#FFFFFF", custom: true  },
+        { name: "Yellow",  color: "#FFE600", custom: true  },
+        { name: "Green",   color: "#00E664", custom: true  },
         { name: "Magenta", color: "#FF64FF", custom: true  },
-        { name: "Arancio", color: "#FF9600", custom: true  }
+        { name: "Orange",  color: "#FF9600", custom: true  }
     ]
 
     function applyManualContrast() {
@@ -62,6 +63,7 @@ Item {
 
     function loadPanadapterSettings() {
         restoringSettings = true
+        waterfallPanel.controlsExpanded = bridge.getSetting("uiWaterfallControlsExpanded", true)
         if (bridge.uiSpectrumHeight > 0) waterfallPanel.spectrumHeight = bridge.uiSpectrumHeight
         paletteCombo.currentIndex = Math.max(0, bridge.getSetting("uiPaletteIndex", bridge.uiPaletteIndex))
         autoRangeCheck.checked = bridge.getSetting("uiWaterfallAutoRange", true)
@@ -100,6 +102,14 @@ Item {
         if (!waterfallPanel.showDecodeCallsigns)
             clearDecodeLabels()
         restoringSettings = false
+    }
+
+    function setControlsExpanded(expanded) {
+        if (waterfallPanel.controlsExpanded === expanded)
+            return
+        waterfallPanel.controlsExpanded = expanded
+        bridge.setSetting("uiWaterfallControlsExpanded", expanded)
+        mainWindow.scheduleSave()
     }
 
     function clearDecodeLabels() {
@@ -238,7 +248,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 46
             Layout.bottomMargin: 6
-            color: wfToolbarBg; visible: showControls
+            color: wfToolbarBg; visible: showControls && controlsExpanded
             border.color: wfFrame; border.width: 1
             clip: true
             RowLayout {
@@ -310,7 +320,7 @@ Item {
 
                 Rectangle { width:1; height:14; color:"#333" }
 
-                Text { text: "Colore"; color: wfText; font.pixelSize: 10 }
+                Text { text: "Color"; color: wfText; font.pixelSize: 10 }
                 ComboBox {
                     id: labelColorCombo
                     Layout.preferredWidth: 86
@@ -424,7 +434,7 @@ Item {
                             waterfallPanel.refreshDxClusterSpots()
                         }
                     }
-                    ToolTip.text: "Mostra spot DX Cluster sul waterfall (click = chiama)"
+                    ToolTip.text: "Show DX Cluster spots on the waterfall (click to call)"
                     ToolTip.visible: dxClusterCheck.hovered
                     ToolTip.delay: 400
                     indicator: Rectangle {
@@ -437,6 +447,48 @@ Item {
                 Text { text: "Cluster"; color: dxClusterCheck.checked ? "#FFC800" : textSec; font.pixelSize: 10 }
 
                 Item { Layout.fillWidth: true }
+
+                Rectangle {
+                    id: collapseControlsButton
+                    Layout.preferredWidth: 112
+                    Layout.preferredHeight: 28
+                    Layout.alignment: Qt.AlignVCenter
+                    radius: 6
+                    color: collapseControlsMA.containsMouse
+                           ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.26)
+                           : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.86)
+                    border.color: accentGreen
+                    border.width: collapseControlsMA.containsMouse ? 2 : 1
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Text {
+                            text: qsTr("Hide")
+                            color: accentGreen
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                        Text {
+                            text: "\u25B4"
+                            color: accentGreen
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+                    }
+
+                    MouseArea {
+                        id: collapseControlsMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: waterfallPanel.setControlsExpanded(false)
+                    }
+
+                    ToolTip.visible: collapseControlsMA.containsMouse
+                    ToolTip.delay: 450
+                    ToolTip.text: qsTr("Hide waterfall controls")
+                }
 
                 // Peak Hold toggle
                 CheckBox {
@@ -505,7 +557,7 @@ Item {
         // ── Slider Black / Gain ─────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 22
-            color: wfToolbarBg; visible: showControls
+            color: wfToolbarBg; visible: showControls && controlsExpanded
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
                 Text { text: "Black:"; color: wfSlate; font.pixelSize: 10 }
@@ -1055,13 +1107,60 @@ Item {
                 Text {
                     id: startText
                     anchors.centerIn: parent
-                    text: "Panadapter 4096-bin · SmartSDR style\nClicca MONITOR per avviare"
+                    text: "4096-bin panadapter · SmartSDR style\nClick MONITOR to start"
                     font.pixelSize: 12
                     color: "#B4B4B4"
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
+	        }
+	    }
+
+    Rectangle {
+        id: waterfallControlsToggle
+        visible: waterfallPanel.showControls && !waterfallPanel.controlsExpanded
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 8
+        anchors.rightMargin: 72
+        width: Math.min(136, Math.max(112, parent.width - 88))
+        height: 30
+        z: 200
+        radius: 7
+        color: toggleMouse.containsMouse
+               ? Qt.rgba(accentCyan.r, accentCyan.g, accentCyan.b, 0.30)
+               : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.90)
+        border.color: accentCyan
+        border.width: toggleMouse.containsMouse ? 2 : 1
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 7
+            Text {
+                text: "\u2630"
+                color: accentCyan
+                font.pixelSize: 14
+                font.bold: true
+            }
+            Text {
+                text: qsTr("Show controls")
+                color: accentCyan
+                font.pixelSize: 11
+                font.bold: true
+            }
         }
+
+        MouseArea {
+            id: toggleMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: waterfallPanel.setControlsExpanded(!waterfallPanel.controlsExpanded)
+        }
+
+        ToolTip.visible: toggleMouse.containsMouse
+        ToolTip.delay: 450
+        ToolTip.text: qsTr("Show waterfall controls")
     }
 
     // Sync Bridge → PanadapterItem

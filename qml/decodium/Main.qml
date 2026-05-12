@@ -713,7 +713,7 @@ ApplicationWindow {
             return
         uiLanguage = code
         bridge.setSetting("UILanguage", code)
-        showStatusToast("Lingua impostata: " + uiLanguageName(code) + ". Riavvia Decodium per applicarla.", accentOrange)
+        showStatusToast("Language set to " + uiLanguageName(code) + ". Restart Decodium to apply it.", accentOrange)
     }
     function setDxClusterToolbarVisible(visible) {
         dxClusterToolbarVisible = visible
@@ -863,7 +863,7 @@ ApplicationWindow {
     // WAV file open dialog - single file
     FileDialog {
         id: wavOpenDialog
-        title: "Apri file WAV per decodifica"
+        title: "Open WAV file for decoding"
         nameFilters: ["File WAV (*.wav)"]
         onAccepted: {
             var path = selectedFile.toString()
@@ -880,7 +880,7 @@ ApplicationWindow {
     // WAV folder dialog - batch decode all WAVs in folder
     FolderDialog {
         id: wavFolderDialog
-        title: "Seleziona cartella con file WAV"
+        title: "Select folder with WAV files"
         onAccepted: {
             var path = selectedFolder.toString()
             if (Qt.platform.os === "windows") {
@@ -2117,7 +2117,7 @@ ApplicationWindow {
                                 onClicked: bridge.syncNtpNow()
                                 ToolTip.visible: containsMouse
                                 ToolTip.delay: 600
-                                ToolTip.text: qsTr("Click: NTP sync immediato per allineare DT (FT8/FT4)")
+                                ToolTip.text: qsTr("Click: immediate NTP sync to align DT (FT8/FT4)")
                             }
                         }
                     }
@@ -2668,25 +2668,17 @@ ApplicationWindow {
 	                    readonly property int cardMargins: 10
 	                    readonly property int rowSpacing: 12
 	                    readonly property bool hasInfoColumn: showDigitalClock || showWorldClockCities
-	                    readonly property int infoColumnWidth: showWorldClockCities ? 160 : 126
+	                    readonly property int infoColumnWidth: showWorldClockCities ? 190 : 126
 	                    readonly property int compactWidth: Math.max(74,
 	                        (cardMargins * 2)
 	                        + (showAnalogClock ? analogClockWidth : 0)
 	                        + (showAnalogClock && hasInfoColumn ? rowSpacing : 0)
 	                        + (hasInfoColumn ? infoColumnWidth : 0))
 
-	                    property var timezones: [
-	                        { name: "UTC", zoneId: "UTC" },
-                        { name: "London", zoneId: "Europe/London" },
-                        { name: "Rome", zoneId: "Europe/Rome" },
-                        { name: "Moscow", zoneId: "Europe/Moscow" },
-                        { name: "Dubai", zoneId: "Asia/Dubai" },
-                        { name: "Tokyo", zoneId: "Asia/Tokyo" },
-                        { name: "Sydney", zoneId: "Australia/Sydney" },
-                        { name: "New York", zoneId: "America/New_York" },
-                        { name: "Los Angeles", zoneId: "America/Los_Angeles" }
-                    ]
-                    property int selectedTz: 0
+	                    property string selectedZoneId: String(bridge.getSetting("uiWorldClockZoneId", "UTC") || "UTC")
+	                    property string selectedCityName: String(bridge.getSetting("uiWorldClockCityName", "UTC") || "UTC")
+	                    property string citySearchText: ""
+	                    property var citySearchResults: bridge.worldClockCityOptions("", 24)
 	                    property int hours: 0
 	                    property int minutes: 0
 	                    property int seconds: 0
@@ -2705,6 +2697,7 @@ ApplicationWindow {
 
 	                    Component.onCompleted: {
 	                        ensureVisiblePart()
+	                        refreshCitySearch()
 	                        updateTime()
 	                    }
 
@@ -2738,12 +2731,28 @@ ApplicationWindow {
 	                        bridge.setSetting("uiWorldClockVisible", showWorldClock)
 	                    }
 
-                    function updateTime() {
-                        if (selectedTz < 0 || selectedTz >= timezones.length) {
-                            selectedTz = 0
-                        }
+                    function refreshCitySearch() {
+                        citySearchResults = bridge.worldClockCityOptions(citySearchText, 40)
+                        Qt.callLater(function() {
+                            if (citySearchList)
+                                citySearchList.positionViewAtBeginning()
+                        })
+                    }
 
-                        var snapshot = bridge.worldClockSnapshot(timezones[selectedTz].zoneId)
+                    function selectTimezone(option) {
+                        if (!option || !option.zoneId)
+                            return
+                        selectedZoneId = option.zoneId
+                        selectedCityName = option.name || option.zoneId
+                        bridge.setSetting("uiWorldClockZoneId", selectedZoneId)
+                        bridge.setSetting("uiWorldClockCityName", selectedCityName)
+                        updateTime()
+                        citySearchPopup.close()
+                    }
+
+                    function updateTime() {
+                        var snapshot = bridge.worldClockSnapshot(selectedZoneId)
+                        selectedZoneId = snapshot.timeZoneId || "UTC"
                         hours = snapshot.hours
                         minutes = snapshot.minutes
                         seconds = snapshot.seconds
@@ -2751,8 +2760,17 @@ ApplicationWindow {
                     }
 
                     function nextTimezone() {
-                        selectedTz = (selectedTz + 1) % timezones.length
-                        updateTime()
+                        var defaults = bridge.worldClockCityOptions("", 24)
+                        if (!defaults || defaults.length === 0)
+                            return
+                        var idx = 0
+                        for (var i = 0; i < defaults.length; ++i) {
+                            if (defaults[i].zoneId === selectedZoneId) {
+                                idx = (i + 1) % defaults.length
+                                break
+                            }
+                        }
+                        selectTimezone(defaults[idx])
                     }
 
                     Rectangle {
@@ -2864,39 +2882,212 @@ ApplicationWindow {
 	                                elide: Text.ElideRight
 	                            }
 
-	                            StyledComboBox {
-	                                id: timezoneCombo
+	                            Rectangle {
+	                                id: timezoneSelector
 	                                visible: worldClock.showWorldClockCities
 	                                anchors.left: parent.left
 	                                anchors.right: parent.right
 	                                anchors.top: worldClock.showDigitalClock ? worldClockDateText.bottom : parent.top
 	                                anchors.topMargin: worldClock.showDigitalClock ? 4 : 0
 	                                height: 32
-	                                font.pixelSize: 11
-	                                itemHeight: 34
-	                                popupMinWidth: width
-	                                textHorizontalAlignment: Text.AlignLeft
-	                                topPadding: 4
-	                                bottomPadding: 4
-	                                leftPadding: 12
-	                                rightPadding: 32
-	                                model: worldClock.timezones.map(function(t) { return t.name })
-	                                currentIndex: Math.max(0, worldClock.selectedTz)
-	                                accentColor: secondaryCyan
-	                                textColor: textPrimary
-	                                bgColor: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
-	                                borderColor: glassBorder
-	                                onActivated: {
-	                                    worldClock.selectedTz = currentIndex
-	                                    worldClock.updateTime()
+	                                radius: 6
+	                                color: timezoneSelectorMA.containsMouse || citySearchPopup.opened
+	                                       ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18)
+	                                       : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.92)
+	                                border.color: citySearchPopup.opened ? secondaryCyan : glassBorder
+	                                border.width: citySearchPopup.opened ? 2 : 1
+
+	                                Text {
+	                                    anchors.left: parent.left
+	                                    anchors.right: timezoneArrow.left
+	                                    anchors.verticalCenter: parent.verticalCenter
+	                                    anchors.leftMargin: 12
+	                                    anchors.rightMargin: 6
+	                                    text: worldClock.selectedCityName
+	                                    font.pixelSize: 12
+	                                    color: textPrimary
+	                                    elide: Text.ElideRight
+	                                    verticalAlignment: Text.AlignVCenter
 	                                }
-	                                onCurrentIndexChanged: {
-	                                    if (currentIndex >= 0 && worldClock.selectedTz !== currentIndex) {
-	                                        worldClock.selectedTz = currentIndex
-	                                        worldClock.updateTime()
+
+	                                Text {
+	                                    id: timezoneArrow
+	                                    anchors.right: parent.right
+	                                    anchors.rightMargin: 10
+	                                    anchors.verticalCenter: parent.verticalCenter
+	                                    text: citySearchPopup.opened ? "▲" : "▼"
+	                                    font.pixelSize: 11
+	                                    color: secondaryCyan
+	                                }
+
+	                                MouseArea {
+	                                    id: timezoneSelectorMA
+	                                    anchors.fill: parent
+	                                    hoverEnabled: true
+	                                    cursorShape: Qt.PointingHandCursor
+	                                    onClicked: {
+	                                        worldClock.citySearchText = ""
+	                                        worldClock.refreshCitySearch()
+	                                        citySearchPopup.open()
 	                                    }
 	                                }
 	                            }
+
+			                            Popup {
+			                                id: citySearchPopup
+			                                x: timezoneSelector.x
+			                                y: timezoneSelector.y + timezoneSelector.height + 4
+			                                width: Math.max(timezoneSelector.width, 340)
+			                                property int visibleResultRows: Math.max(1, Math.min(7, worldClock.citySearchResults.length))
+			                                property int preferredHeight: 64 + visibleResultRows * 46 + (worldClock.citySearchResults.length === 0 ? 36 : 8)
+                                            property real availableHeightBelow: {
+                                                var p = timezoneSelector.mapToItem(mainWindow.contentItem, 0, timezoneSelector.height + 4)
+                                                return Math.max(154, mainWindow.height - p.y - 16)
+                                            }
+			                                height: Math.min(420, Math.min(Math.max(154, preferredHeight),
+			                                    availableHeightBelow))
+			                                modal: false
+			                                focus: true
+			                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+			                                padding: 0
+			                                onOpened: {
+                                                worldClock.refreshCitySearch()
+                                                citySearchField.forceActiveFocus()
+                                            }
+
+	                                background: Rectangle {
+	                                    color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
+	                                    border.color: secondaryCyan
+	                                    border.width: 1
+	                                    radius: 8
+	                                }
+
+		                                contentItem: Item {
+		                                    TextField {
+		                                        id: citySearchField
+		                                        anchors.left: parent.left
+		                                        anchors.right: parent.right
+		                                        anchors.top: parent.top
+		                                        anchors.margins: 10
+		                                        height: 34
+		                                        text: worldClock.citySearchText
+		                                        placeholderText: qsTr("Search city...")
+		                                        placeholderTextColor: textSecondary
+	                                        color: textPrimary
+		                                        selectionColor: secondaryCyan
+		                                        selectedTextColor: bgDeep
+		                                        font.pixelSize: 13
+                                                verticalAlignment: TextInput.AlignVCenter
+		                                        background: Rectangle {
+	                                            color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.85)
+	                                            border.color: citySearchField.activeFocus ? secondaryCyan : glassBorder
+	                                            border.width: citySearchField.activeFocus ? 2 : 1
+	                                            radius: 5
+	                                        }
+	                                        onTextChanged: {
+	                                            if (worldClock.citySearchText !== text) {
+	                                                worldClock.citySearchText = text
+	                                                worldClock.refreshCitySearch()
+	                                            }
+	                                        }
+	                                        Keys.onReturnPressed: {
+	                                            if (worldClock.citySearchResults.length > 0)
+	                                                worldClock.selectTimezone(worldClock.citySearchResults[0])
+	                                        }
+	                                    }
+
+		                                    ListView {
+		                                        id: citySearchList
+		                                        anchors.left: parent.left
+		                                        anchors.right: parent.right
+		                                        anchors.top: citySearchField.bottom
+		                                        anchors.bottom: parent.bottom
+		                                        anchors.leftMargin: 8
+		                                        anchors.rightMargin: 8
+		                                        anchors.topMargin: 8
+		                                        anchors.bottomMargin: 8
+		                                        clip: true
+		                                        visible: worldClock.citySearchResults.length > 0
+		                                        model: worldClock.citySearchResults
+		                                        spacing: 2
+		                                        boundsBehavior: Flickable.StopAtBounds
+
+		                                        delegate: Rectangle {
+		                                            width: citySearchList.width
+		                                            height: 42
+		                                            radius: 5
+	                                            color: cityRowMA.containsMouse
+	                                                   ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
+	                                                   : (modelData.zoneId === worldClock.selectedZoneId
+	                                                      ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.14)
+	                                                      : "transparent")
+
+	                                            Column {
+	                                                anchors.left: parent.left
+	                                                anchors.right: parent.right
+	                                                anchors.verticalCenter: parent.verticalCenter
+	                                                anchors.leftMargin: 10
+	                                                anchors.rightMargin: 10
+	                                                spacing: 1
+
+	                                                Text {
+	                                                    width: parent.width
+	                                                    text: modelData.name || ""
+	                                                    color: textPrimary
+	                                                    font.pixelSize: 13
+	                                                    font.bold: modelData.zoneId === worldClock.selectedZoneId
+	                                                    elide: Text.ElideRight
+	                                                }
+
+	                                                Text {
+	                                                    width: parent.width
+	                                                    text: modelData.subtitle || modelData.zoneId || ""
+	                                                    color: textSecondary
+	                                                    font.pixelSize: 10
+	                                                    elide: Text.ElideRight
+	                                                }
+	                                            }
+
+	                                            MouseArea {
+	                                                id: cityRowMA
+	                                                anchors.fill: parent
+	                                                hoverEnabled: true
+	                                                cursorShape: Qt.PointingHandCursor
+	                                                onClicked: worldClock.selectTimezone(modelData)
+	                                            }
+	                                        }
+
+	                                        ScrollBar.vertical: ScrollBar {
+	                                            policy: ScrollBar.AsNeeded
+	                                            width: 8
+		                                        }
+		                                    }
+
+		                                    Rectangle {
+		                                        anchors.left: parent.left
+		                                        anchors.right: parent.right
+		                                        anchors.top: citySearchField.bottom
+		                                        anchors.bottom: parent.bottom
+		                                        anchors.margins: 10
+		                                        anchors.topMargin: 8
+		                                        visible: worldClock.citySearchResults.length === 0
+		                                        radius: 5
+		                                        color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.06)
+		                                        border.color: Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+		                                        border.width: 1
+
+		                                        Text {
+		                                            anchors.centerIn: parent
+		                                            width: parent.width - 20
+		                                            text: worldClock.citySearchText.trim().length === 0 ? qsTr("Type a city name") : qsTr("No matching city")
+		                                            color: textSecondary
+		                                            font.pixelSize: 13
+		                                            horizontalAlignment: Text.AlignHCenter
+		                                            wrapMode: Text.WordWrap
+		                                        }
+		                                    }
+		                                }
+		                            }
 	                        }
 
 	                        MouseArea {
@@ -2923,22 +3114,22 @@ ApplicationWindow {
 	                            }
 
 	                            MenuItem {
-	                                text: (worldClock.showAnalogClock ? "✓ " : "☐ ") + "Orologio analogico"
+	                                text: (worldClock.showAnalogClock ? "✓ " : "☐ ") + qsTr("Analog clock")
 	                                onTriggered: worldClock.setClockPart("analog", !worldClock.showAnalogClock)
 	                            }
 	                            MenuItem {
-	                                text: (worldClock.showDigitalClock ? "✓ " : "☐ ") + "Orologio digitale"
+	                                text: (worldClock.showDigitalClock ? "✓ " : "☐ ") + qsTr("Digital clock")
 	                                onTriggered: worldClock.setClockPart("digital", !worldClock.showDigitalClock)
 	                            }
 	                            MenuItem {
-	                                text: (worldClock.showWorldClockCities ? "✓ " : "☐ ") + "Indicazione citta"
+	                                text: (worldClock.showWorldClockCities ? "✓ " : "☐ ") + qsTr("City labels")
 	                                onTriggered: worldClock.setClockPart("cities", !worldClock.showWorldClockCities)
 	                            }
 	                            MenuSeparator {
 	                                contentItem: Rectangle { implicitHeight: 1; color: glassBorder }
 	                            }
 	                            MenuItem {
-	                                text: "Nascondi orologio"
+	                                text: qsTr("Hide clock")
 	                                onTriggered: worldClock.setClockVisible(false)
 	                            }
 	                        }
@@ -4097,6 +4288,7 @@ ApplicationWindow {
                     property bool hideTelemetryOnlyDecodes: Qt.platform.os === "windows"
                     property var allDecodes: visibleDecodeEntries(bridge.decodeList)
                     property var rxDecodes: currentRxDecodes()
+                    property var clearedRxDecodeKeys: ({})
                     property int decodeListVersion: 0
                     property int rxDecodeListVersion: 0
                     property int lastSyncCount: 0
@@ -4155,14 +4347,46 @@ ApplicationWindow {
 	                        lastSyncCount = decodePanel.visibleDecodeEntries(bridge.decodeList).length
 	                    }
 
-	                    function refreshRxDecodeModel() {
-	                        var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-	                        var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
+	                    function refreshRxDecodeModel(resetCleared) {
+	                        if (resetCleared)
+	                            decodePanel.clearedRxDecodeKeys = ({})
 	                        decodePanel.rxDecodes = decodePanel.currentRxDecodes()
 	                        decodePanel.rxDecodeListVersion++
-	                        if (stickRxTail && rxFrequencyList)
+	                        if (rxFrequencyList)
 	                            rxFrequencyList.forceTailFollow()
-	                        if (stickFloatingRxTail && rxFrequencyFloatingList)
+	                        if (rxFrequencyFloatingList)
+	                            rxFrequencyFloatingList.forceTailFollow()
+	                    }
+
+	                    function rxEntryKey(item) {
+	                        var key = [
+	                            item.utc || item.time || "",
+	                            item.freq || "",
+	                            item.dt || "",
+	                            item.snr || "",
+	                            item.message || "",
+	                            item.isTx === true ? "tx" : "rx"
+	                        ].join("|")
+	                        if (String(item.utc || item.time || "").trim().length === 0 && Number(item.timestamp || 0) > 0)
+	                            key += "|ts=" + String(item.timestamp)
+	                        return key
+	                    }
+
+	                    function clearSignalRxDecodes() {
+	                        var hidden = {}
+	                        for (var i = 0; i < decodePanel.rxDecodes.length; ++i) {
+	                            var item = decodePanel.rxDecodes[i]
+	                            if (!item || item.isSeparator === true)
+	                                continue
+	                            hidden[decodePanel.rxEntryKey(item)] = true
+	                        }
+	                        decodePanel.clearedRxDecodeKeys = hidden
+	                        decodePanel.rxDecodes = []
+	                        decodePanel.rxDecodeListVersion++
+	                        bridge.clearRxDecodes()
+	                        if (rxFrequencyList)
+	                            rxFrequencyList.forceTailFollow()
+	                        if (rxFrequencyFloatingList)
 	                            rxFrequencyFloatingList.forceTailFollow()
 	                    }
 
@@ -4170,46 +4394,44 @@ ApplicationWindow {
 	                    Connections {
                         target: bridge
                         function onDecodeListChanged() {
-                            var stickBandTail = evenPeriodList ? evenPeriodList.isNearTail() : true
-                            var stickFloatingTail = period1FloatingList ? period1FloatingList.isNearTail() : true
-                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.decodeListVersion++
                             var src = decodePanel.visibleDecodeEntries(bridge.decodeList)
                             decodePanel.updateCurrentPeriodDecodeCount(src)
                             decodePanel.allDecodes = src
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
                             decodePanel.rxDecodeListVersion++
-                            if (stickBandTail && evenPeriodList)
+                            if (evenPeriodList)
                                 evenPeriodList.forceTailFollow()
-                            if (stickFloatingTail && period1FloatingList)
+                            if (period1FloatingList)
                                 period1FloatingList.forceTailFollow()
-                            if (stickRxTail && rxFrequencyList)
+                            if (rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-                            if (stickFloatingRxTail && rxFrequencyFloatingList)
+                            if (rxFrequencyFloatingList)
                                 rxFrequencyFloatingList.forceTailFollow()
                         }
                         function onRxDecodeListChanged() {
-                            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
-                            var stickFloatingRxTail = rxFrequencyFloatingList ? rxFrequencyFloatingList.isNearTail() : true
                             decodePanel.rxDecodeListVersion++
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
-                            if (stickRxTail && rxFrequencyList)
+                            if (rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
-	                            if (stickFloatingRxTail && rxFrequencyFloatingList)
+	                            if (rxFrequencyFloatingList)
 	                                rxFrequencyFloatingList.forceTailFollow()
 	                        }
 	                        function onDxCallChanged() {
-	                            decodePanel.refreshRxDecodeModel()
+	                            decodePanel.refreshRxDecodeModel(true)
 	                        }
 	                        function onRxFrequencyChanged() {
-	                            decodePanel.refreshRxDecodeModel()
+	                            decodePanel.refreshRxDecodeModel(true)
 	                        }
 	                    }
 
                     onShowTxMessagesInRxChanged: {
                         decodePanel.rxDecodes = currentRxDecodes()
                         decodePanel.rxDecodeListVersion++
+                        if (rxFrequencyList)
+                            rxFrequencyList.forceTailFollow()
+                        if (rxFrequencyFloatingList)
+                            rxFrequencyFloatingList.forceTailFollow()
                     }
 
                     Timer {
@@ -4245,12 +4467,24 @@ ApplicationWindow {
 
 	                    // Shannon RX frequency filter: ±200Hz OR messaggi per noi
 	                    property int rxBandwidth: 200
-	                    function isAtRxFrequency(freq, md) {
-	                        var f = parseInt(freq)
-	                        var inWindow = Math.abs(f - bridge.rxFrequency) <= rxBandwidth
-	                        var relevant = md && (md.isMyCall || md.isTx)
-	                        return inWindow || relevant
-	                    }
+		                    function isAtRxFrequency(freq, md) {
+		                        var f = parseInt(freq)
+		                        var inWindow = Math.abs(f - bridge.rxFrequency) <= rxBandwidth
+		                        var relevant = !!(md && ((md.isMyCall === true) || (md.isTx === true)))
+		                        return !!(inWindow || relevant)
+		                    }
+
+		                    function decodeEntryBold(md) {
+		                        return !!(md && ((md.isTx === true) ||
+		                                        (md.isCQ === true) ||
+		                                        (md.isMyCall === true) ||
+		                                        (md.dxIsNewCountry === true) ||
+		                                        (md.dxIsMostWanted === true)))
+		                    }
+
+		                    function decodeEntryStrikeout(md) {
+		                        return !!(md && (md.isB4 === true) && (bridge.b4Strikethrough === true))
+		                    }
 
 	                    function messageContainsCallBase(message, base) {
 	                        var wanted = String(base || "").trim().toUpperCase()
@@ -4396,16 +4630,6 @@ ApplicationWindow {
 	                    function currentRxDecodes() {
 	                        var merged = []
 	                        var seen = {}
-	                        function entryKey(item) {
-	                            return [
-	                                item.utc || item.time || "",
-	                                item.freq || "",
-	                                item.dt || "",
-	                                item.snr || "",
-	                                item.message || "",
-	                                item.isTx === true ? "tx" : "rx"
-	                            ].join("|")
-	                        }
 	                        function appendIfNeeded(item, allowTx) {
 	                            if (!item)
 	                                return
@@ -4417,7 +4641,9 @@ ApplicationWindow {
 	                                return
 	                            if (!rxEntryBelongsToCurrentQso(item))
 	                                return
-	                            var key = entryKey(item)
+	                            var key = decodePanel.rxEntryKey(item)
+	                            if (decodePanel.clearedRxDecodeKeys[key])
+	                                return
 	                            if (seen[key])
 	                                return
 	                            seen[key] = true
@@ -5080,13 +5306,11 @@ NumberAnimation {
 	                                            }
 	                                        }
                                         onCountChanged: {
-                                            if (followTail)
-                                                forceTailFollow()
+                                            forceTailFollow()
                                         }
                                         property int _ver: decodePanel.decodeListVersion
                                         on_VerChanged: {
-                                            if (followTail)
-                                                forceTailFollow()
+                                            forceTailFollow()
                                         }
 	                                        add: Transition {
 	                                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
@@ -5179,20 +5403,21 @@ NumberAnimation {
                                                 }
                                             }
 
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 6
-                                                anchors.rightMargin: 6
-                                                spacing: 0
+	                                            RowLayout {
+	                                                visible: !parent.isPeriodSeparator
+	                                                anchors.fill: parent
+	                                                anchors.leftMargin: 6
+	                                                anchors.rightMargin: 6
+	                                                spacing: 0
 
                                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
                                                 Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.dtFreqGapWidth }
-                                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
+                                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: (modelData.isTx === true) || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.freqColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.gapColumnWidth }
-                                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.displayMessage || modelData.message) }
+                                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; Layout.minimumWidth: period1Panel.messageMinWidth; elide: messageElideMode(modelData.displayMessage || modelData.message) }
                                                 Text { visible: period1Panel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.distanceColumnWidth }
                                                 Item {
                                                     visible: mainWindow.showDxccInfo
@@ -5413,7 +5638,7 @@ NumberAnimation {
                                             Text { anchors.centerIn: parent; text: "Clear"; font.pixelSize: 9; color: rxClearMA.containsMouse ? bridge.themeManager.ledRed : textSecondary }
                                             MouseArea {
                                                 id: rxClearMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                                onClicked: bridge.clearRxDecodes()
+                                                onClicked: decodePanel.clearSignalRxDecodes()
                                             }
                                             ToolTip.visible: rxClearMA.containsMouse
                                             ToolTip.text: qsTr("Clear Signal RX")
@@ -5577,14 +5802,12 @@ NumberAnimation {
 	                                            }
 	                                        }
                                         onCountChanged: {
-                                            if (followTail)
-                                                forceTailFollow()
+                                            forceTailFollow()
                                         }
 
                                         property int _ver: decodePanel.rxDecodeListVersion
                                         on_VerChanged: {
-                                            if (followTail)
-                                                forceTailFollow()
+                                            forceTailFollow()
                                         }
                                         model: decodePanel.rxDecodes
 	                                        add: Transition {
@@ -5673,10 +5896,11 @@ NumberAnimation {
                                                 }
                                             }
 
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 4
-                                                anchors.rightMargin: 4
+	                                            RowLayout {
+	                                                visible: !parent.isPeriodSeparator
+	                                                anchors.fill: parent
+	                                                anchors.leftMargin: 4
+	                                                anchors.rightMargin: 4
                                                 spacing: 0
 
                                                 Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
@@ -5684,7 +5908,7 @@ NumberAnimation {
                                                 Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
+                                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
                                                 Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
                                             }
                                         }
@@ -6030,7 +6254,7 @@ NumberAnimation {
                     }
 
                     Text {
-                        text: "Il backend radio legacy ha segnalato un problema."
+                        text: "The legacy radio backend reported a problem."
                         font.pixelSize: 11
                         color: textSecondary
                     }
@@ -6050,7 +6274,7 @@ NumberAnimation {
             }
 
             Button {
-                text: rigErrorDetailsVisible ? "Nascondi dettagli" : "Mostra dettagli"
+                text: rigErrorDetailsVisible ? "Hide details" : "Show details"
                 Layout.alignment: Qt.AlignLeft
                 onClicked: rigErrorDetailsVisible = !rigErrorDetailsVisible
 
@@ -6097,7 +6321,7 @@ NumberAnimation {
             alignment: Qt.AlignRight
 
             Button {
-                text: "Configura radio"
+                text: "Configure radio"
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
@@ -6106,7 +6330,7 @@ NumberAnimation {
             }
 
             Button {
-                text: "Riprova"
+                text: "Retry"
                 DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
                 onClicked: {
                     rigErrorDialog.close()
@@ -6115,7 +6339,7 @@ NumberAnimation {
             }
 
             Button {
-                text: "Chiudi"
+                text: "Close"
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 onClicked: rigErrorDialog.close()
             }
@@ -6335,7 +6559,7 @@ NumberAnimation {
                 warningDialogTitle = prefixMatch[1].trim()
                 warningDialogSummary = prefixMatch[2].trim()
             } else {
-                warningDialogTitle = "Errore"
+                warningDialogTitle = "Error"
                 warningDialogSummary = msg
             }
             warningDialogDetails = ""
@@ -6433,7 +6657,7 @@ NumberAnimation {
                     spacing: 2
 
                     Text {
-                        text: warningDialogTitle.length > 0 ? warningDialogTitle : "Errore"
+                        text: warningDialogTitle.length > 0 ? warningDialogTitle : "Error"
                         font.pixelSize: 18
                         font.bold: true
                         color: accentOrange
@@ -6443,8 +6667,8 @@ NumberAnimation {
                         // Sottotitolo generico solo quando il title è il fallback "Errore";
                         // altrimenti il title è già descrittivo (es. "DX Cluster") e il
                         // sottotitolo statico aggiunge solo rumore.
-                        visible: warningDialogTitle === "" || warningDialogTitle === "Errore"
-                        text: "Decodium ha segnalato un problema non bloccante."
+                        visible: warningDialogTitle === "" || warningDialogTitle === "Error" || warningDialogTitle === "Errore"
+                        text: "Decodium reported a non-blocking problem."
                         font.pixelSize: 11
                         color: textSecondary
                     }
@@ -6465,7 +6689,7 @@ NumberAnimation {
 
             Button {
                 visible: warningDialogDetails.length > 0
-                text: warningDialogDetailsVisible ? "Nascondi dettagli" : "Mostra dettagli"
+                text: warningDialogDetailsVisible ? "Hide details" : "Show details"
                 Layout.alignment: Qt.AlignLeft
                 onClicked: warningDialogDetailsVisible = !warningDialogDetailsVisible
 
@@ -7317,7 +7541,7 @@ NumberAnimation {
     // ===== B11 CABRILLO EXPORT DIALOG =====
     Dialog {
         id: cabrilloDlg
-        title: "Esporta Cabrillo"
+        title: "Export Cabrillo"
         anchors.centerIn: parent
         width: 400
         modal: true
@@ -7329,7 +7553,7 @@ NumberAnimation {
 
         contentItem: Column {
             spacing: 12; padding: 16
-            Text { text: "Percorso file output:"; font.pixelSize: 12; color: textPrimary }
+            Text { text: "Output file path:"; font.pixelSize: 12; color: textPrimary }
             TextField {
                 id: cabrilloPath
                 width: 360
@@ -7346,7 +7570,7 @@ NumberAnimation {
 
         footer: DialogButtonBox {
             Button {
-                text: "Esporta"
+                text: "Export"
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 onClicked: {
                     if (bridge.exportCabrillo(cabrilloPath.text))
@@ -7354,7 +7578,7 @@ NumberAnimation {
                 }
             }
             Button {
-                text: "Annulla"
+                text: "Cancel"
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
             }
         }
@@ -7381,7 +7605,7 @@ NumberAnimation {
             padding: 20
 
             Text {
-                text: "Modalità Watchdog"
+                text: "Watchdog Mode"
                 font.pixelSize: 14
                 font.bold: true
                 color: textPrimary
@@ -7397,13 +7621,13 @@ NumberAnimation {
                 }
                 RadioButton {
                     id: wdTime
-                    text: "Tempo"
+                    text: "Time"
                     checked: bridge.txWatchdogMode === 1
                     onClicked: bridge.txWatchdogMode = 1
                 }
                 RadioButton {
                     id: wdCount
-                    text: "Conteggio"
+                    text: "Count"
                     checked: bridge.txWatchdogMode === 2
                     onClicked: bridge.txWatchdogMode = 2
                 }
@@ -7412,7 +7636,7 @@ NumberAnimation {
             Row {
                 spacing: 10
                 visible: bridge.txWatchdogMode === 1
-                Text { text: "Tempo (min):"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "Time (min):"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                 SpinBox {
                     from: 1; to: 30
                     value: bridge.txWatchdogTime
@@ -7433,7 +7657,7 @@ NumberAnimation {
         }
 
         footer: DialogButtonBox {
-            Button { text: "Chiudi"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+            Button { text: "Close"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
         }
     }
 
@@ -7458,7 +7682,7 @@ NumberAnimation {
             padding: 20
 
             Text {
-                text: "Tipo Contest"
+                text: "Contest Type"
                 font.pixelSize: 14
                 font.bold: true
                 color: textPrimary
@@ -7484,14 +7708,14 @@ NumberAnimation {
                 width: 300
                 text: bridge.contestExchange
                 onTextChanged: bridge.contestExchange = text
-                placeholderText: "Es: 599 001"
+                placeholderText: "Example: 599 001"
                 visible: bridge.contestType > 0
             }
 
             Row {
                 spacing: 10
                 visible: bridge.contestType > 0
-                Text { text: "Numero Seriale:"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "Serial Number:"; color: textPrimary; anchors.verticalCenter: parent.verticalCenter }
                 SpinBox {
                     from: 1; to: 9999
                     value: bridge.contestNumber
@@ -7501,7 +7725,7 @@ NumberAnimation {
         }
 
         footer: DialogButtonBox {
-            Button { text: "Chiudi"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+            Button { text: "Close"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
         }
     }
 
@@ -7526,43 +7750,43 @@ NumberAnimation {
             padding: 20
 
             Text {
-                text: "TRASMISSIONE"
+                text: "TRANSMISSION"
                 font.pixelSize: 14
                 font.bold: true
                 color: accentOrange
             }
-            Text { text: "F1 - F7: Seleziona TX1 - TX7"; font.pixelSize: 12; color: textPrimary }
+            Text { text: "F1 - F7: Select TX1 - TX7"; font.pixelSize: 12; color: textPrimary }
             Text { text: "F9: Toggle RX Only First/Second"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Escape: Halt (Stop TX immediato)"; font.pixelSize: 12; color: textPrimary }
+            Text { text: "Escape: Halt (immediate TX stop)"; font.pixelSize: 12; color: textPrimary }
 
             Rectangle { height: 1; width: parent.width - 40; color: glassBorder }
 
             Text {
-                text: "CONTROLLI (Ctrl+)"
+                text: "CONTROLS (Ctrl+)"
                 font.pixelSize: 14
                 font.bold: true
                 color: secondaryCyan
             }
             Text { text: "Ctrl+A: Toggle Auto Sequence"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Ctrl+G: Genera tutti i messaggi TX"; font.pixelSize: 12; color: textPrimary }
+            Text { text: "Ctrl+G: Generate all TX messages"; font.pixelSize: 12; color: textPrimary }
             Text { text: "Ctrl+Z: Toggle ZAP mode"; font.pixelSize: 12; color: textPrimary }
 
             Rectangle { height: 1; width: parent.width - 40; color: glassBorder }
 
             Text {
-                text: "AZIONI (Alt+)"
+                text: "ACTIONS (Alt+)"
                 font.pixelSize: 14
                 font.bold: true
                 color: successGreen
             }
-            Text { text: "Alt+L: Log QSO corrente"; font.pixelSize: 12; color: textPrimary }
-            Text { text: "Alt+M: Clear lista decode (Monitor)"; font.pixelSize: 12; color: textPrimary }
+            Text { text: "Alt+L: Log current QSO"; font.pixelSize: 12; color: textPrimary }
+            Text { text: "Alt+M: Clear decode list (Monitor)"; font.pixelSize: 12; color: textPrimary }
             Text { text: "Alt+S: Stop TX"; font.pixelSize: 12; color: textPrimary }
         }
 
         footer: DialogButtonBox {
             Button {
-                text: "Chiudi"
+                text: "Close"
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
             }
         }
@@ -8978,13 +9202,11 @@ NumberAnimation {
 	                            }
 	                        }
                         onCountChanged: {
-                            if (followTail)
-                                forceTailFollow()
+                            forceTailFollow()
                         }
                         property int _ver: decodePanel.decodeListVersion
                         on_VerChanged: {
-                            if (followTail)
-                                forceTailFollow()
+                            forceTailFollow()
                         }
 	                        add: Transition {
 	                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
@@ -9004,40 +9226,55 @@ NumberAnimation {
                             width: 8
                         }
 
-                        delegate: Rectangle {
-	                            width: parent ? parent.width : 100
-                            height: Math.round(24 * fs)
-	                            radius: 3
-	                            property var highlightFill: mainWindow.decodeHighlightFill(modelData)
-	                            property var highlightBorder: mainWindow.decodeHighlightBorder(modelData)
-	                            color: highlightFill ? highlightFill :
-	                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
-	                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
-                            border.color: highlightBorder ? highlightBorder : "transparent"
-                            border.width: highlightFill ? 1 : 0
+	                        delegate: Rectangle {
+		                            width: parent ? parent.width : 100
+	                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
+	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
+		                            radius: 3
+		                            property var highlightFill: isPeriodSeparator ? null : mainWindow.decodeHighlightFill(modelData)
+		                            property var highlightBorder: isPeriodSeparator ? null : mainWindow.decodeHighlightBorder(modelData)
+		                            color: isPeriodSeparator ? "transparent" :
+		                                   highlightFill ? highlightFill :
+		                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
+		                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
+	                            border.color: !isPeriodSeparator && highlightBorder ? highlightBorder : "transparent"
+	                            border.width: !isPeriodSeparator && highlightFill ? 1 : 0
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 4
-	                                spacing: 0
+	                            Rectangle {
+	                                visible: parent.isPeriodSeparator
+	                                anchors.verticalCenter: parent.verticalCenter
+	                                anchors.left: parent.left
+	                                anchors.right: parent.right
+	                                anchors.leftMargin: 12
+	                                anchors.rightMargin: 12
+	                                height: 1
+	                                color: Qt.rgba(0.85, 0.25, 0.25, 0.55)
+	                            }
+
+	                            RowLayout {
+	                                visible: !parent.isPeriodSeparator
+	                                anchors.fill: parent
+	                                anchors.margins: 4
+		                                spacing: 0
 	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
 	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
 	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.dtFreqGapWidth }
-	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: modelData.isTx || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
+	                                Text { text: modelData.freq || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? bridge.themeManager.successColor : secondaryCyan; font.bold: (modelData.isTx === true) || decodePanel.isAtRxFrequency(modelData.freq || "0", modelData); horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.freqColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.gapColumnWidth }
-	                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
+	                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: mainWindow.fullSpectrumTextColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
 	                                Text { visible: period1FloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.distanceColumnWidth }
 	                                Text { visible: mainWindow.showDxccInfo; text: modelData.dxCountry || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); fontSizeMode: Text.HorizontalFit; minimumPixelSize: Math.max(8, Math.round(mainWindow.decodedTextFontPixelSize * fs * 0.65)); maximumLineCount: 1; color: modelData.dxCountry ? bridge.colorDXEntity : textSecondary; horizontalAlignment: Text.AlignRight; elide: Text.ElideNone; Layout.preferredWidth: period1FloatingWindow.dxccColumnWidth }
 	                                Text { visible: mainWindow.showDxccInfo; text: formatBearingDegrees(modelData.dxBearing); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: secondaryCyan; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.azColumnWidth }
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onDoubleClicked: { if (!modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
-                            }
-                        }
+	                            MouseArea {
+	                                enabled: !parent.isPeriodSeparator
+	                                anchors.fill: parent
+	                                onDoubleClicked: { if (!parent.isPeriodSeparator && !modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
+	                            }
+	                        }
                     }
                 }
             }
@@ -9248,7 +9485,7 @@ NumberAnimation {
 	                                    anchors.fill: parent
 	                                    hoverEnabled: true
 	                                    cursorShape: Qt.PointingHandCursor
-	                                    onClicked: bridge.clearRxDecodes()
+	                                    onClicked: decodePanel.clearSignalRxDecodes()
 	                                }
 	                            }
 
@@ -9424,13 +9661,11 @@ NumberAnimation {
 	                            }
 	                        }
 	                        onCountChanged: {
-                            if (followTail)
-                                forceTailFollow()
+                            forceTailFollow()
                         }
                         property int _ver: decodePanel.rxDecodeListVersion
 	                        on_VerChanged: {
-                            if (followTail)
-                                forceTailFollow()
+                            forceTailFollow()
                         }
                         model: decodePanel.rxDecodes
 	                        add: Transition {
@@ -9451,30 +9686,45 @@ NumberAnimation {
                             width: 8
                         }
 
-                        delegate: Rectangle {
-                            width: parent ? parent.width - 8 : 100
-                            height: Math.round(24 * fs)
-                            radius: 3
-                            color: modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05)
+	                        delegate: Rectangle {
+	                            width: parent ? parent.width - 8 : 100
+	                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
+	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
+	                            radius: 3
+	                            color: isPeriodSeparator ? "transparent" :
+	                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05)
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 4
-	                                spacing: 0
+	                            Rectangle {
+	                                visible: parent.isPeriodSeparator
+	                                anchors.verticalCenter: parent.verticalCenter
+	                                anchors.left: parent.left
+	                                anchors.right: parent.right
+	                                anchors.leftMargin: 12
+	                                anchors.rightMargin: 12
+	                                height: 1
+	                                color: Qt.rgba(0.85, 0.25, 0.25, 0.55)
+	                            }
+
+	                            RowLayout {
+	                                visible: !parent.isPeriodSeparator
+	                                anchors.fill: parent
+	                                anchors.margins: 4
+		                                spacing: 0
 	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
 	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
 	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.dbDtGapWidth }
 	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
 	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }
-	                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: modelData.isTx || modelData.isCQ || modelData.isMyCall || (modelData.dxIsNewCountry === true) || (modelData.dxIsMostWanted === true); font.strikeout: modelData.isB4 && bridge.b4Strikethrough; color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
+	                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
 	                                Text { visible: rxFreqFloatingWindow.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.distanceColumnWidth }
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onDoubleClicked: { if (!modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
-                            }
-                        }
+	                            MouseArea {
+	                                enabled: !parent.isPeriodSeparator
+	                                anchors.fill: parent
+	                                onDoubleClicked: { if (!parent.isPeriodSeparator && !modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
+	                            }
+	                        }
                     }
                 }
             }
@@ -9811,10 +10061,41 @@ NumberAnimation {
         id: timeSyncOverlay
         readonly property int panelMargin: 12
         readonly property int topRailY: 10
+        property bool userPositioned: !!bridge.getSetting("uiTimeSyncPanelUserPositioned", false)
+        property real savedX: Number(bridge.getSetting("uiTimeSyncPanelX", -1))
+        property real savedY: Number(bridge.getSetting("uiTimeSyncPanelY", -1))
         readonly property bool headerWrapped: headerFlow.height > 110
         readonly property bool headerRightRailOccupied: headerFlow.childrenRect.x + headerFlow.childrenRect.width
                                                    > mainWindow.width - width - panelMargin * 2
         readonly property bool dockInsideHeader: headerWrapped || headerRightRailOccupied
+        function boundedX(value) {
+            return Math.round(Math.min(Math.max(0, Number(value) || 0),
+                                       Math.max(0, mainWindow.width - width)))
+        }
+        function boundedY(value) {
+            return Math.round(Math.min(Math.max(0, Number(value) || 0),
+                                       Math.max(0, mainWindow.height - height)))
+        }
+        function savePosition() {
+            userPositioned = true
+            savedX = boundedX(x)
+            savedY = boundedY(y)
+            x = savedX
+            y = savedY
+            bridge.setSetting("uiTimeSyncPanelUserPositioned", true)
+            bridge.setSetting("uiTimeSyncPanelX", savedX)
+            bridge.setSetting("uiTimeSyncPanelY", savedY)
+        }
+        function clampSavedPosition() {
+            if (!userPositioned)
+                return
+            savedX = boundedX(savedX)
+            savedY = boundedY(savedY)
+            x = savedX
+            y = savedY
+            bridge.setSetting("uiTimeSyncPanelX", savedX)
+            bridge.setSetting("uiTimeSyncPanelY", savedY)
+        }
         function headerRows() {
             var rows = []
             var children = headerFlow.children
@@ -9909,25 +10190,35 @@ NumberAnimation {
         }
         visible: timeSyncPanelVisible
         z: 200
-        x: automaticX()
-        y: Math.min(Math.max(topRailY, automaticY()),
-                    Math.max(topRailY, mainWindow.height - height - panelMargin))
+        x: userPositioned ? boundedX(savedX) : automaticX()
+        y: userPositioned
+           ? boundedY(savedY)
+           : Math.min(Math.max(topRailY, automaticY()),
+                      Math.max(topRailY, mainWindow.height - height - panelMargin))
         width: Math.min(360, Math.max(280, mainWindow.width - panelMargin * 2))
         height: timeSyncLoader.item ? timeSyncLoader.item.implicitHeight : 28
-
-        MouseArea {
-            anchors.fill: parent
-            drag.target: timeSyncOverlay
-            drag.axis: Drag.XAndYAxis
-            drag.minimumX: 0; drag.maximumX: Math.max(0, mainWindow.width - timeSyncOverlay.width)
-            drag.minimumY: 0; drag.maximumY: Math.max(0, mainWindow.height - timeSyncOverlay.height)
-        }
+        onWidthChanged: Qt.callLater(clampSavedPosition)
+        onHeightChanged: Qt.callLater(clampSavedPosition)
 
         Loader {
             id: timeSyncLoader
             anchors.fill: parent
             active: timeSyncPanelVisible
             source: "../panels/TimeSyncPanel.qml"
+            onLoaded: {
+                if (item) {
+                    item.dragTarget = timeSyncOverlay
+                    item.showCloseButton = true
+                }
+            }
+        }
+
+        Connections {
+            target: timeSyncLoader.item
+            ignoreUnknownSignals: true
+            function onCloseRequested() {
+                timeSyncPanelVisible = false
+            }
         }
     }
 

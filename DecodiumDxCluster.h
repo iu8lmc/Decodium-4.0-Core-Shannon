@@ -86,6 +86,7 @@ private slots:
 private:
     void        ensureSocket();
     void        sendLogin();
+    void        scheduleReconnect(const QString& reason);
     bool        tryNextConnectionCandidate(const QString& failureReason);
     QList<QPair<QString, int>> buildConnectionCandidates(const QString& host, int port) const;
     QString     endpointLabel(const QString& host, int port) const;
@@ -117,4 +118,5 @@ private:
     bool         m_manualDisconnect {false};
     QTimer*      m_connectTimeoutTimer {nullptr};
     QTimer*      m_refreshTimer {nullptr};
+    QTimer*      m_reconnectTimer {nullptr};
 };

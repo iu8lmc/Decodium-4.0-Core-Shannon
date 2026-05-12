@@ -20,6 +20,8 @@ int const kPrimaryClusterPort = 8000;
 QString const kSecondaryClusterHost {QStringLiteral("iq8do.aricaserta.it")};
 int const kSecondaryClusterPort = 7300;
 int const kConnectTimeoutMs = 8000;
+int const kReconnectDelayMs = 10000;
+qsizetype const kMaxRxBufferChars = 65536;
 
 void beginConfiguredSettingsGroup(QSettings& settings)
 {
@@ -380,6 +382,25 @@ DecodiumDxCluster::DecodiumDxCluster(QObject* parent)
         }
     });
 
+    m_reconnectTimer = new QTimer(this);
+    m_reconnectTimer->setSingleShot(true);
+    m_reconnectTimer->setInterval(kReconnectDelayMs);
+    connect(m_reconnectTimer, &QTimer::timeout, this, [this]() {
+        if (m_manualDisconnect || m_connected || m_connectSequenceActive) {
+            return;
+        }
+        if (m_socket && m_socket->state() != QAbstractSocket::UnconnectedState) {
+            return;
+        }
+        if (m_callsign.trimmed().isEmpty()) {
+            setLastStatus(tr("Disconnected: callsign missing, auto-reconnect skipped."));
+            emit statusUpdate(tr("DX Cluster auto-reconnect skipped: callsign missing."));
+            return;
+        }
+        emit statusUpdate(tr("DX Cluster auto-reconnect starting."));
+        connectCluster();
+    });
+
     loadSettings();
 }
 
@@ -390,6 +411,9 @@ DecodiumDxCluster::~DecodiumDxCluster()
     }
     if (m_connectTimeoutTimer) {
         m_connectTimeoutTimer->stop();
+    }
+    if (m_reconnectTimer) {
+        m_reconnectTimer->stop();
     }
 
     // Disconnect cleanly without emitting Qt signals during destruction.
@@ -474,6 +498,23 @@ void DecodiumDxCluster::sendLogin()
     if (m_refreshTimer && !m_refreshTimer->isActive()) {
         m_refreshTimer->start();
     }
+}
+
+void DecodiumDxCluster::scheduleReconnect(const QString& reason)
+{
+    if (m_manualDisconnect || m_callsign.trimmed().isEmpty()) {
+        return;
+    }
+    if (!m_reconnectTimer || m_reconnectTimer->isActive()) {
+        return;
+    }
+
+    QString const detail = reason.trimmed().isEmpty() ? tr("connection closed") : reason.trimmed();
+    setLastStatus(tr("Disconnected: %1. Reconnecting in %2 s...")
+                      .arg(detail, QString::number(kReconnectDelayMs / 1000)));
+    emit statusUpdate(tr("DX Cluster disconnected: %1. Reconnecting in %2 s...")
+                          .arg(detail, QString::number(kReconnectDelayMs / 1000)));
+    m_reconnectTimer->start();
 }
 
 QString DecodiumDxCluster::endpointLabel(const QString& host, int port) const
@@ -566,6 +607,10 @@ bool DecodiumDxCluster::tryNextConnectionCandidate(const QString& failureReason)
 
 void DecodiumDxCluster::connectCluster()
 {
+    if (m_reconnectTimer) {
+        m_reconnectTimer->stop();
+    }
+
     if (m_socket && m_socket->state() != QAbstractSocket::UnconnectedState) {
         setLastStatus(tr("Already connected or connecting."));
         emit statusUpdate(tr("Already connected or connecting."));
@@ -637,6 +682,9 @@ void DecodiumDxCluster::disconnectCluster()
     }
     if (m_refreshTimer) {
         m_refreshTimer->stop();
+    }
+    if (m_reconnectTimer) {
+        m_reconnectTimer->stop();
     }
 
     // Politely say goodbye first (best-effort, non-blocking).
@@ -987,12 +1035,15 @@ void DecodiumDxCluster::onConnected()
     if (m_connectTimeoutTimer) {
         m_connectTimeoutTimer->stop();
     }
+    if (m_reconnectTimer) {
+        m_reconnectTimer->stop();
+    }
     m_connectSequenceActive = false;
     m_connected = true;
     emit connectedChanged();
-    setLastStatus(tr("Connesso a %1, attendo il prompt di login…")
+    setLastStatus(tr("Connected to %1, waiting for login prompt...")
                       .arg(endpointLabel(m_activeHost, m_activePort)));
-    emit statusUpdate(tr("Connected to %1. Waiting for login prompt…")
+    emit statusUpdate(tr("Connected to %1. Waiting for login prompt...")
                           .arg(endpointLabel(m_activeHost, m_activePort)));
 }
 
@@ -1017,12 +1068,17 @@ void DecodiumDxCluster::onDisconnected()
         return;
     }
 
+    bool const willReconnect = !m_manualDisconnect && wasConnected;
     if (m_manualDisconnect) {
         m_manualDisconnect = false;
+    } else if (willReconnect) {
+        scheduleReconnect(tr("remote host closed the connection"));
     }
 
-    setLastStatus(tr("Disconnected"));
-    emit statusUpdate(tr("Disconnected from DX cluster."));
+    if (!willReconnect) {
+        setLastStatus(tr("Disconnected"));
+        emit statusUpdate(tr("Disconnected from DX cluster."));
+    }
 }
 
 void DecodiumDxCluster::onReadyRead()
@@ -1031,6 +1087,10 @@ void DecodiumDxCluster::onReadyRead()
 
     // Append all available bytes to the receive buffer.
     m_rxBuf += QString::fromUtf8(m_socket->readAll());
+    if (m_rxBuf.size() > kMaxRxBufferChars) {
+        m_rxBuf = m_rxBuf.right(kMaxRxBufferChars);
+        emit statusUpdate(tr("DX Cluster receive buffer was trimmed after an unterminated server response."));
+    }
 
     if (!m_loginSent && bufferContainsClusterPrompt(m_rxBuf)) {
         sendLogin();
@@ -1083,7 +1143,13 @@ void DecodiumDxCluster::onError(QAbstractSocket::SocketError socketError)
     if (wasConnected) {
         emit connectedChanged();
     }
-    setLastStatus(tr("Error: %1").arg(msg));
+    bool const willReconnect = wasConnected && !m_manualDisconnect;
+    if (willReconnect) {
+        scheduleReconnect(msg);
+    }
+    if (!willReconnect) {
+        setLastStatus(tr("Error: %1").arg(msg));
+    }
     emit errorOccurred(tr("Socket error: %1").arg(msg));
 }
 

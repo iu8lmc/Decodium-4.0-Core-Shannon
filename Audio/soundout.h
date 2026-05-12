@@ -26,7 +26,7 @@ public:
   SoundOutput()
     : m_pumpTimer{this}
     , m_framesBuffered{0}
-    , m_volume{1.0}
+    , m_volume{0.9}
     , error_{false}
   {
     m_pumpTimer.setInterval(5);

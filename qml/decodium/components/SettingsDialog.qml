@@ -748,7 +748,7 @@ Dialog {
     FolderDialog {
         id: directoryPickerDialog
         property string settingKey: ""
-        title: settingKey === "AzElDirectory" ? "Seleziona directory AzEl" : "Seleziona directory salvataggio"
+        title: settingKey === "AzElDirectory" ? "Select AzEl directory" : "Select save directory"
         onAccepted: {
             var path = settingsDialog.folderUrlToLocalDirectory(selectedFolder)
             if (settingKey === "" || path === "")
@@ -2741,7 +2741,7 @@ Dialog {
                         Text { text: qsTr("DECODE LIST DISPLAY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: qsTr("Riga colorata tra periodi:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        Text { text: qsTr("Colored period separator:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
                         CheckBox {
                             // 1.0.149: bind diretto al Q_INVOKABLE C++ invece che
                             // alla QSettings raw — cosi' il toggle aggiorna anche
@@ -2755,7 +2755,7 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Text { text: qsTr("Più recente in alto:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        Text { text: qsTr("Newest first:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
                         CheckBox {
                             checked: bridge.getSetting("decodeNewestFirst", false)
                             onCheckedChanged: bridge.setSetting("decodeNewestFirst", checked)
@@ -3998,12 +3998,12 @@ Dialog {
                             checked: bridge.lowCpuModeEnabled
                             onToggled: bridge.lowCpuModeEnabled = checked
                             ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Profilo per PC lenti: massimo 2 thread FT, waterfall piu' lenta e decode early/deep ridotti.")
+                            ToolTip.text: qsTr("Profile for slow PCs: up to 2 FT threads, slower waterfall, reduced early/deep decoding.")
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
                         Text {
-                            text: qsTr("Riduce thread FT, refresh waterfall e render QML durante monitor/TX.")
+                            text: qsTr("Reduces FT threads, waterfall refresh, and QML rendering during monitor/TX.")
                             color: textSecondary
                             font.pixelSize: 11
                             wrapMode: Text.Wrap
@@ -4708,19 +4708,26 @@ Dialog {
                         Text { text: qsTr("TERRITORY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: qsTr("Territory 1:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Territory1",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        Text { text: qsTr("Europe:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField { text: bridge.getSetting("Territory1",""); placeholderText: qsTr("EU / Europe"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory1", text) }
-                        Text { text: qsTr("Territory 2:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Territory2",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        Text { text: qsTr("Africa:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField { text: bridge.getSetting("Territory2",""); placeholderText: qsTr("AF / Africa"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory2", text) }
 
-                        Text { text: qsTr("Territory 3:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Territory3",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        Text { text: qsTr("Oceania:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField { text: bridge.getSetting("Territory3",""); placeholderText: qsTr("OC / Oceania"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory3", text) }
-                        Text { text: qsTr("Territory 4:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        TextField { text: bridge.getSetting("Territory4",""); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        Text { text: qsTr("Asia:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField { text: bridge.getSetting("Territory4",""); placeholderText: qsTr("AS / Asia"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
                             onTextChanged: bridge.setSetting("Territory4", text) }
+
+                        Text { text: qsTr("North America:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField { text: bridge.getSetting("Territory5",""); placeholderText: qsTr("NA / North America"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Territory5", text) }
+                        Text { text: qsTr("South America:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 120 }
+                        TextField { text: bridge.getSetting("Territory6",""); placeholderText: qsTr("SA / South America"); Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; color: textPrimary; font.pixelSize: controlFontSize; background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                            onTextChanged: bridge.setSetting("Territory6", text) }
 
                         // ── Opzioni Filtro ──
                         Text { text: qsTr("FILTER OPTIONS"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }

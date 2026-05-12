@@ -20,6 +20,7 @@
 #include "widgets/itoneAndicw.h"
 #include "widgets/FoxWaveGuard.hpp"
 #include "Network/NetworkServerLookup.hpp"
+#include "PrecisionTime.hpp"
 #include "moc_TCITransceiver.cpp"
 
 #include <QStandardPaths>
@@ -2016,8 +2017,8 @@ void TCITransceiver::arm_wait_timer (QTimer * timer, int ms, char const * contex
 void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, double framesPerSymbol,
                                         double frequency, double toneSpacing, bool synchronize, bool fastMode, double dBSNR, double TRperiod)
 {
-  // Time according to this computer which becomes our base time
-  qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
+  // Use Decodium's NTP-corrected clock so TCI starts on the same slot clock as local audio.
+  qint64 ms0 = ntpCorrectedCurrentMSecsSinceEpoch() % 86400000;
   if (kVerboseTciConsoleTrace) qDebug() << "ModStart" << QDateTime::QDateTime::currentDateTimeUtc().toString("hh:mm:ss.sss");
   unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
   if (m_state != Idle) {
@@ -2055,7 +2056,7 @@ void TCITransceiver::do_modulator_start (QString mode, unsigned symbolsLength, d
   if((mode=="FT8" and m_nsps==1920) or (mode=="FST4" and m_nsps==720)) delay_ms=500;  //FT8, FST4-15
   if((mode=="FT8" and m_nsps==1024)) delay_ms=400;            //SuperFox Qary Polar Code transmission
   if(mode=="Q65" and m_nsps<=3600) delay_ms=500;              //Q65-15 and Q65-30
-  if(mode=="FT4") delay_ms=300;                               //FT4
+  if(mode=="FT4") delay_ms=500;                               //FT4, match JTDX lead-in
   if(mode=="FT2") delay_ms=100;                               //FT2 async: minimal delay
 
   // noise generator parameters
@@ -2112,7 +2113,9 @@ quint16 TCITransceiver::readAudioData (float * data, qint32 maxSize, qreal txAtt
   }
   if(maxSize==0) return 0;
 
-  qreal newVolume = pow(2.22222 * (45 - txAtten) * 0.01,2);
+  qreal newVolume = qBound<qreal>(0.0,
+                                  0.9 * pow(2.22222 * (45 - txAtten) * 0.01, 2),
+                                  0.9);
   //TCI_VERBOSE_PRINTF("txAtten is %f and newVolume is %f\n",txAtten, newVolume);
 
   qint64 numFrames (maxSize/bytesPerFrame);

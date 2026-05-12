@@ -59,6 +59,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QDateTime>
+#include <QHash>
 #include <QSet>
 #include <QSettings>
 #include <QNetworkInterface>
@@ -2157,6 +2158,20 @@ static QString decodeMirrorEntryKey(QVariantMap const& entry)
            (entry.value("isTx").toBool() ? QStringLiteral("1") : QStringLiteral("0"));
 }
 
+static QString decodeRxClearEntryKey(QVariantMap const& entry)
+{
+    QString key = decodeMirrorEntryKey(entry);
+    QString const time = entry.value(QStringLiteral("time")).toString().trimmed();
+    if (time.isEmpty()) {
+        qulonglong const timestamp =
+            entry.value(QStringLiteral("timestamp")).toULongLong();
+        if (timestamp > 0) {
+            key += QStringLiteral("|ts=") + QString::number(timestamp);
+        }
+    }
+    return key;
+}
+
 static QString currentTxVisualTimeToken(QString const& mode)
 {
     QString const upperMode = mode.trimmed().toUpper();
@@ -2386,11 +2401,37 @@ static bool messageCarries73PayloadForCall(QString const& message,
 
 static QString audioFormatToString(const QAudioFormat& fmt)
 {
+    if (!fmt.isValid()) {
+        return QStringLiteral("invalid");
+    }
     return QString("rate=%1 ch=%2 fmt=%3 bytes=%4")
         .arg(fmt.sampleRate())
         .arg(fmt.channelCount())
         .arg(sampleFormatName(fmt.sampleFormat()))
         .arg(fmt.bytesPerFrame());
+}
+
+static QString audioStateToString(QAudio::State state)
+{
+    switch (state) {
+    case QAudio::ActiveState: return QStringLiteral("ActiveState");
+    case QAudio::SuspendedState: return QStringLiteral("SuspendedState");
+    case QAudio::StoppedState: return QStringLiteral("StoppedState");
+    case QAudio::IdleState: return QStringLiteral("IdleState");
+    }
+    return QStringLiteral("UnknownState(%1)").arg(static_cast<int>(state));
+}
+
+static QString audioErrorToString(QAudio::Error error)
+{
+    switch (error) {
+    case QAudio::NoError: return QStringLiteral("NoError");
+    case QAudio::OpenError: return QStringLiteral("OpenError");
+    case QAudio::IOError: return QStringLiteral("IOError");
+    case QAudio::UnderrunError: return QStringLiteral("UnderrunError");
+    case QAudio::FatalError: return QStringLiteral("FatalError");
+    }
+    return QStringLiteral("UnknownError(%1)").arg(static_cast<int>(error));
 }
 
 static QAudioFormat makeAudioFormat(int sampleRate, int channelCount, QAudioFormat::SampleFormat sampleFormat)
@@ -2498,6 +2539,8 @@ static qreal txAttenuationFromSlider(double outputLevel)
     return qBound<qreal>(0.0, static_cast<qreal>(outputLevel / 10.0), 45.0);
 }
 
+static constexpr qreal kTxAudioHeadroomGain = 0.9;
+
 static float rxInputGainFromLevel(double inputLevel)
 {
     double const bounded = qBound(0.0, inputLevel, 100.0);
@@ -2509,7 +2552,24 @@ static float rxInputGainFromLevel(double inputLevel)
 
 static qreal txGainFromSlider(double outputLevel)
 {
-    return static_cast<qreal>(std::pow(10.0, -txAttenuationFromSlider(outputLevel) / 20.0));
+    return static_cast<qreal>(kTxAudioHeadroomGain
+                              * std::pow(10.0, -txAttenuationFromSlider(outputLevel) / 20.0));
+}
+
+static int txSyncLeadInMsForMode(const QString& mode)
+{
+    QString const normalized = mode.trimmed().toUpper();
+    if (normalized == QStringLiteral("FT8") || normalized == QStringLiteral("FT4")) {
+        return 500;
+    }
+    if (normalized == QStringLiteral("FT2")) {
+#if defined(Q_OS_LINUX)
+        return 0;
+#else
+        return 300;
+#endif
+    }
+    return 0;
 }
 
 static int legacyTxAttenuationFromLevel(double outputLevel)
@@ -2847,6 +2907,15 @@ static QString txWaveMetricsSummary(QVector<float> const& wave)
         .arg(avgAbs, 0, 'f', 6)
         .arg(nonzero)
         .arg(wave.size());
+}
+
+static double txWavePeak(QVector<float> const& wave)
+{
+    double peak = 0.0;
+    for (float const sample : wave) {
+        peak = std::max(peak, std::abs(static_cast<double>(sample)));
+    }
+    return peak;
 }
 
 static QVector<float> buildTxWaveformForMessage(QString const& mode,
@@ -3395,6 +3464,8 @@ QVariantList DecodiumBridge::filterEntriesForRxDecode(QVariantList const& source
     for (QVariant const& v : source) {
         QVariantMap const e = v.toMap();
         if (!shouldDisplayEntryForBandActivity(e)) continue;  // stesso filter telemetry
+        QString const key = decodeRxClearEntryKey(e);
+        if (!key.isEmpty() && m_clearedRxDecodeKeys.contains(key)) continue;
         if (entryBelongsToCurrentQso(e)) {
             filtered.append(e);
         }
@@ -3473,12 +3544,18 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         rebuildRxDecodeModel();
     });
     // RX model dipende anche da dxCall / rxFrequency / callsign / mode.
-    connect(this, &DecodiumBridge::dxCallChanged, this,
-            &DecodiumBridge::rebuildRxDecodeModel);
-    connect(this, &DecodiumBridge::rxFrequencyChanged, this,
-            &DecodiumBridge::rebuildRxDecodeModel);
-    connect(this, &DecodiumBridge::callsignChanged, this,
-            &DecodiumBridge::rebuildRxDecodeModel);
+    connect(this, &DecodiumBridge::dxCallChanged, this, [this]() {
+        m_clearedRxDecodeKeys.clear();
+        rebuildRxDecodeModel();
+    });
+    connect(this, &DecodiumBridge::rxFrequencyChanged, this, [this]() {
+        m_clearedRxDecodeKeys.clear();
+        rebuildRxDecodeModel();
+    });
+    connect(this, &DecodiumBridge::callsignChanged, this, [this]() {
+        m_clearedRxDecodeKeys.clear();
+        rebuildRxDecodeModel();
+    });
 
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_GPU_PANADAPTER_FFT")) {
         m_gpuPanadapterFftAvailable.store(false);
@@ -4017,6 +4094,28 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             }
 
             if (c) {
+                auto pushTciStartupFrequency = [this]() {
+                    if (m_catBackend != QStringLiteral("tci")
+                        || !m_hamlibCat
+                        || !m_hamlibCat->connected()
+                        || m_frequency <= 0.0) {
+                        return;
+                    }
+
+                    double const targetHz = m_frequency;
+                    bridgeLog(QStringLiteral("TCI startup CAT sync: pushing Decodium frequency %1 Hz to SDR")
+                                  .arg(QString::number(targetHz, 'f', 0)));
+                    requestRigFrequencyFromBridge(targetHz, QStringLiteral("tci-startup-frequency"));
+                };
+
+                if (m_catBackend == QStringLiteral("tci")) {
+                    pushTciStartupFrequency();
+                    static constexpr int kTciStartupFrequencyPushRetryMs[] = {150, 450, 1000, 2000};
+                    for (int const delayMs : kTciStartupFrequencyPushRetryMs) {
+                        QTimer::singleShot(delayMs, this, pushTciStartupFrequency);
+                    }
+                }
+
                 if (backend == QStringLiteral("hamlib")
                     && m_catBackend == QStringLiteral("tci")
                     && m_monitoring
@@ -4309,8 +4408,12 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         }
     });
     connect(m_soundOutput, &SoundOutput::error, this, [this](const QString& msg) {
-        bridgeLog("SoundOutput error: " + msg);
-        emit errorMessage("Audio TX: " + msg);
+        QString text = msg.trimmed();
+        if (!text.startsWith(QStringLiteral("Audio "), Qt::CaseInsensitive)) {
+            text = QStringLiteral("Audio TX: ") + text;
+        }
+        bridgeLog("SoundOutput error: " + text);
+        emit errorMessage(text);
     });
     connect(m_soundOutput, &SoundOutput::status, this, [](const QString& msg) {
         bridgeLog("SoundOutput: " + msg);
@@ -4777,6 +4880,7 @@ void DecodiumBridge::syncLegacyBackendDialogState()
     m_legacyBackend->setTxFirst(houndTxSlotLock ? false : (m_txPeriod != 0));
     m_legacyBackend->setRxFrequency(m_rxFrequency);
     m_legacyBackend->setTxFrequency(m_txFrequency);
+    m_legacyBackend->setHoldTxFreq(m_holdTxFreq);
     m_legacyBackend->setDxCall(m_dxCall);
     m_legacyBackend->setDxGrid(m_dxGrid);
     m_legacyBackend->setTxMessage(1, m_tx1);
@@ -5140,7 +5244,9 @@ void DecodiumBridge::syncLegacyBackendState()
             emit txEnabledChanged();
         }
     }
-    updateBool(m_holdTxFreq, m_legacyBackend->holdTxFreq(), [this]() { emit holdTxFreqChanged(); });
+    if (m_legacyBackend->holdTxFreq() != m_holdTxFreq) {
+        m_legacyBackend->setHoldTxFreq(m_holdTxFreq);
+    }
 
     bool legacyRigFrequencyAuthoritative = false;
     if (m_legacyBackend->rigControlEnabled()) {
@@ -5424,6 +5530,7 @@ void DecodiumBridge::clearDecodeWindowsForModeChange(const QString& previousMode
         m_legacyClearedRxMirrorKeys.clear();
     }
 
+    m_clearedRxDecodeKeys.clear();
     m_decodeList.clear();
     m_rxDecodeList.clear();
     clearRemoteActivityCache(true);
@@ -6102,6 +6209,10 @@ void DecodiumBridge::appendRxDecodeEntry(const QVariantMap& entry)
         return;
     }
 
+    QString const clearKey = decodeRxClearEntryKey(entry);
+    if (!clearKey.isEmpty() && m_clearedRxDecodeKeys.contains(clearKey)) {
+        return;
+    }
     QString const key = decodeMirrorEntryKey(entry);
 
     for (const QVariant& existingValue : std::as_const(m_rxDecodeList)) {
@@ -6134,6 +6245,10 @@ void DecodiumBridge::rebuildRxDecodeList()
             return;
         }
 
+        QString const clearKey = decodeRxClearEntryKey(entry);
+        if (!clearKey.isEmpty() && m_clearedRxDecodeKeys.contains(clearKey)) {
+            return;
+        }
         QString const key = decodeMirrorEntryKey(entry);
         if (seen.contains(key)) {
             return;
@@ -7452,6 +7567,8 @@ void DecodiumBridge::setRxFrequency(int f)
         if (!usingLegacyBackendForTx()) {
             rebuildRxDecodeList();
         }
+        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        s.setValue(QStringLiteral("rxFrequency"), m_rxFrequency);
     }
 }
 
@@ -7467,6 +7584,9 @@ void DecodiumBridge::setTxFrequency(int f)
         if (legacyBackendAvailable()) {
             m_legacyBackend->setTxFrequency(f);
         }
+        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        s.setValue(QStringLiteral("txFrequency"), m_txFrequency);
+        s.setValue(QStringLiteral("TXFrequency"), m_txFrequency);
         syncActiveCatTxSplitFrequency(QStringLiteral("tx-audio-change"));
         scheduleTxAudioPrecompute();
     }
@@ -7918,6 +8038,10 @@ void DecodiumBridge::setHoldTxFreq(bool v)
         if (m_legacyBackend) {
             m_legacyBackend->setHoldTxFreq(v);
         }
+        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        s.setValue(QStringLiteral("HoldTxFreq"), m_holdTxFreq);
+        s.setValue(QStringLiteral("holdTxFreq"), m_holdTxFreq);
+        s.sync();
     }
 }
 
@@ -8406,17 +8530,21 @@ bool DecodiumBridge::startBridgeAudioForLegacyDigitalTx(const QString& reason)
                                &wave, &preparedPcm, &preparedFmt, &preparedDev,
                                &prepareError)) {
         QString const errorText = prepareError.isEmpty()
-            ? QStringLiteral("Generazione audio TX fallita")
+            ? QStringLiteral("Audio TX: generazione waveform fallita")
             : prepareError;
         bridgeLog(QStringLiteral("legacyBridgeTxAudio prepare failed (%1): %2 msg=[%3]")
                       .arg(reason, errorText, msg.trimmed()));
-        emit errorMessage(errorText);
+        emit errorMessage(errorText.startsWith(QStringLiteral("Audio "), Qt::CaseInsensitive)
+                          ? errorText
+                          : QStringLiteral("Audio TX: %1 | modo=%2 freqAudio=%3 Hz msg=\"%4\"")
+                                .arg(errorText, m_mode, QString::number(txAudioFrequency), msg.trimmed()));
         return false;
     }
     if (wave.isEmpty()) {
         bridgeLog(QStringLiteral("legacyBridgeTxAudio refused empty wave (%1) msg=[%2]")
                       .arg(reason, msg.trimmed()));
-        emit errorMessage(QStringLiteral("Generazione audio TX fallita"));
+        emit errorMessage(QStringLiteral("Audio TX: waveform vuota dopo generazione | modo=%1 freqAudio=%2 Hz msg=\"%3\"")
+                              .arg(m_mode, QString::number(txAudioFrequency), msg.trimmed()));
         return false;
     }
 
@@ -8434,7 +8562,11 @@ bool DecodiumBridge::startBridgeAudioForLegacyDigitalTx(const QString& reason)
     if (pcm.isEmpty()) {
         bridgeLog(QStringLiteral("legacyBridgeTxAudio PCM build failed (%1): fmt=%2 msg=[%3]")
                       .arg(reason, audioFormatToString(pcmFmt), msg.trimmed()));
-        emit errorMessage(QStringLiteral("Formato audio TX non supportato dal device selezionato"));
+        emit errorMessage(QStringLiteral("Audio TX: impossibile costruire PCM per il device selezionato | device=\"%1\" formato=%2 canale=%3 msg=\"%4\"")
+                              .arg(outDev.description(),
+                                   audioFormatToString(pcmFmt),
+                                   QString::number(m_audioOutputChannel),
+                                   msg.trimmed()));
         return false;
     }
     updateSoundOutputDevice();
@@ -9206,7 +9338,16 @@ bool DecodiumBridge::ensureTxAudioPrepared(const QString& msg, int txAudioFreque
         pcm = buildTxPcmBuffer(wave, format, boundedAudioChannel(m_audioOutputChannel));
         if (pcm.isEmpty()) {
             if (errorOut) {
-                *errorOut = QStringLiteral("Formato audio TX non supportato dal device selezionato");
+                *errorOut = QStringLiteral(
+                    "Audio TX: impossibile costruire PCM per il device selezionato | "
+                    "device=\"%1\" formato=%2 canale=%3 modo=%4 freqAudio=%5 Hz msg=\"%6\"")
+                    .arg(device.description().isEmpty() ? QStringLiteral("<default output>")
+                                                        : device.description(),
+                         audioFormatToString(format),
+                         QString::number(m_audioOutputChannel),
+                         mode,
+                         QString::number(txAudioFrequency),
+                         message);
             }
             invalidateTxAudioCache();
             return false;
@@ -9384,6 +9525,193 @@ bool DecodiumBridge::shouldAlignTxAudioToCurrentSyncSlot() const
         || (normalized == QStringLiteral("FT2") && !m_asyncTxEnabled);
 }
 
+void DecodiumBridge::resetTxAudioTelemetry(quint64 txSerial, qint64 audioStartWallMs, qint64 expectedUs,
+                                           int slotElapsedMs, int leadInMs, int payloadDelayMs,
+                                           qint64 pcmBytes, qsizetype sinkBufferSize,
+                                           double wavePeak, double effectiveGain)
+{
+    m_txAudioTelemetrySerial = txSerial;
+    m_txAudioTelemetryStartWallMs = audioStartWallMs;
+    m_txAudioTelemetryLastWallMs = audioStartWallMs;
+    m_txAudioTelemetryLastProcessedUs = 0;
+    m_txAudioTelemetryExpectedUs = expectedUs;
+    m_txAudioTelemetryMaxLagMs = 0;
+    m_txAudioTelemetryMaxStallMs = 0;
+    m_txAudioTelemetryLastWarningMs = 0;
+    m_txAudioTelemetrySlotElapsedMs = slotElapsedMs;
+    m_txAudioTelemetryLeadInMs = leadInMs;
+    m_txAudioTelemetryPayloadDelayMs = payloadDelayMs;
+    m_txAudioTelemetryPcmBytes = pcmBytes;
+    m_txAudioTelemetrySinkBufferSize = sinkBufferSize;
+    m_txAudioTelemetryWavePeak = wavePeak;
+    m_txAudioTelemetryGain = effectiveGain;
+    m_txAudioTelemetryStallCount = 0;
+    m_txAudioTelemetryErrorCount = 0;
+    m_txAudioTelemetryIdleCount = 0;
+    m_txAudioTelemetryUnderrunCount = 0;
+}
+
+void DecodiumBridge::scheduleTxAudioTelemetryProbe(quint64 txSerial)
+{
+    if (!m_txAudioSink || txSerial != m_txPlaybackSerial) {
+        return;
+    }
+
+    QPointer<QAudioSink> const sinkGuard(m_txAudioSink);
+    QPointer<QBuffer> const bufferGuard(m_txPcmBuffer);
+    QTimer::singleShot(250, this, [this, txSerial, sinkGuard, bufferGuard]() {
+        if (!m_transmitting
+            || m_tuning
+            || txSerial != m_txPlaybackSerial
+            || txSerial != m_txAudioTelemetrySerial
+            || !sinkGuard
+            || sinkGuard != m_txAudioSink) {
+            return;
+        }
+
+        qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+        qint64 const wallMs = qMax<qint64>(0, nowMs - m_txAudioTelemetryStartWallMs);
+        qint64 const processedUs = sinkGuard->processedUSecs();
+        qint64 const processedMs = qMax<qint64>(0, processedUs / 1000);
+        qint64 const lagMs = wallMs - processedMs;
+        m_txAudioTelemetryMaxLagMs = qMax(m_txAudioTelemetryMaxLagMs, lagMs);
+
+        qint64 const deltaWallMs = m_txAudioTelemetryLastWallMs > 0
+            ? qMax<qint64>(0, nowMs - m_txAudioTelemetryLastWallMs)
+            : qint64(0);
+        qint64 const deltaProcessedMs =
+            qMax<qint64>(0, (processedUs - m_txAudioTelemetryLastProcessedUs) / 1000);
+        qint64 const stallMs = qMax<qint64>(0, deltaWallMs - deltaProcessedMs);
+
+        QAudio::State const state = sinkGuard->state();
+        QAudio::Error const err = sinkGuard->error();
+        bool const bufferIncomplete = bufferGuard && !bufferGuard->atEnd();
+        bool const inPlaybackWindow =
+            wallMs > 650
+            && wallMs < (m_txAudioTelemetryExpectedUs / 1000) + 750;
+        bool const processedStalled =
+            inPlaybackWindow
+            && bufferIncomplete
+            && state == QAudio::ActiveState
+            && deltaWallMs >= 220
+            && deltaProcessedMs < qMin<qint64>(qint64(80), deltaWallMs / 3);
+        bool const sinkBadState =
+            inPlaybackWindow
+            && bufferIncomplete
+            && (state == QAudio::IdleState || state == QAudio::StoppedState);
+        bool const sinkError = err != QAudio::NoError;
+
+        if (processedStalled) {
+            ++m_txAudioTelemetryStallCount;
+            m_txAudioTelemetryMaxStallMs = qMax(m_txAudioTelemetryMaxStallMs, stallMs);
+        }
+        if (sinkError) {
+            ++m_txAudioTelemetryErrorCount;
+        }
+        if (sinkBadState) {
+            ++m_txAudioTelemetryIdleCount;
+        }
+        if (err == QAudio::UnderrunError) {
+            ++m_txAudioTelemetryUnderrunCount;
+        }
+
+        bool const shouldLog =
+            processedStalled
+            || sinkBadState
+            || sinkError
+            || (inPlaybackWindow && lagMs > 900);
+        if (shouldLog && nowMs - m_txAudioTelemetryLastWarningMs > 700) {
+            m_txAudioTelemetryLastWarningMs = nowMs;
+            bridgeLog(QStringLiteral("TX audio telemetry warning: serial=%1 mode=%2 TX=%3 state=%4 err=%5 wall=%6ms processed=%7ms dWall=%8ms dProcessed=%9ms lag=%10ms stall=%11ms bytesFree=%12 bufferSize=%13 pcm=%14/%15 slotElapsed=%16ms leadIn=%17ms payloadDelay=%18ms peak=%19 gain=%20 cpuPressure=%21 lowCpu=%22 msg=[%23]")
+                          .arg(txSerial)
+                          .arg(m_mode)
+                          .arg(m_activeTxNumber)
+                          .arg(static_cast<int>(state))
+                          .arg(static_cast<int>(err))
+                          .arg(wallMs)
+                          .arg(processedMs)
+                          .arg(deltaWallMs)
+                          .arg(deltaProcessedMs)
+                          .arg(lagMs)
+                          .arg(stallMs)
+                          .arg(static_cast<qlonglong>(sinkGuard->bytesFree()))
+                          .arg(static_cast<qlonglong>(sinkGuard->bufferSize()))
+                          .arg(bufferGuard ? bufferGuard->pos() : -1)
+                          .arg(bufferGuard ? bufferGuard->size() : -1)
+                          .arg(m_txAudioTelemetrySlotElapsedMs)
+                          .arg(m_txAudioTelemetryLeadInMs)
+                          .arg(m_txAudioTelemetryPayloadDelayMs)
+                          .arg(m_txAudioTelemetryWavePeak, 0, 'f', 6)
+                          .arg(m_txAudioTelemetryGain, 0, 'f', 4)
+                          .arg(cpuPressureActive() ? 1 : 0)
+                          .arg(m_lowCpuModeEnabled ? 1 : 0)
+                          .arg(m_activeTxMessage));
+        }
+
+        m_txAudioTelemetryLastWallMs = nowMs;
+        m_txAudioTelemetryLastProcessedUs = processedUs;
+
+        bool const keepProbing =
+            m_transmitting
+            && !m_tuning
+            && txSerial == m_txPlaybackSerial
+            && wallMs < (m_txAudioTelemetryExpectedUs / 1000) + 2500;
+        if (keepProbing) {
+            scheduleTxAudioTelemetryProbe(txSerial);
+        }
+    });
+}
+
+void DecodiumBridge::logTxAudioTelemetrySummary(const QString& reason)
+{
+    if (m_txAudioTelemetrySerial == 0) {
+        return;
+    }
+
+    qint64 processedUs = -1;
+    int state = -1;
+    int err = -1;
+    qint64 bytesFree = -1;
+    qsizetype sinkBufferSize = -1;
+    if (m_txAudioSink) {
+        processedUs = m_txAudioSink->processedUSecs();
+        state = static_cast<int>(m_txAudioSink->state());
+        err = static_cast<int>(m_txAudioSink->error());
+        bytesFree = m_txAudioSink->bytesFree();
+        sinkBufferSize = m_txAudioSink->bufferSize();
+    }
+
+    bridgeLog(QStringLiteral("TX audio telemetry summary: serial=%1 reason=%2 mode=%3 TX=%4 processed=%5ms expected=%6ms maxLag=%7ms maxStall=%8ms stalls=%9 errors=%10 idle=%11 underrun=%12 state=%13 err=%14 bytesFree=%15 bufferSize=%16 configuredBuffer=%17 pcm=%18/%19 pcmBytes=%20 slotElapsed=%21ms leadIn=%22ms payloadDelay=%23ms peak=%24 gain=%25 msg=[%26]")
+                  .arg(m_txAudioTelemetrySerial)
+                  .arg(reason)
+                  .arg(m_mode)
+                  .arg(m_activeTxNumber)
+                  .arg(processedUs >= 0 ? processedUs / 1000 : -1)
+                  .arg(m_txAudioTelemetryExpectedUs / 1000)
+                  .arg(m_txAudioTelemetryMaxLagMs)
+                  .arg(m_txAudioTelemetryMaxStallMs)
+                  .arg(m_txAudioTelemetryStallCount)
+                  .arg(m_txAudioTelemetryErrorCount)
+                  .arg(m_txAudioTelemetryIdleCount)
+                  .arg(m_txAudioTelemetryUnderrunCount)
+                  .arg(state)
+                  .arg(err)
+                  .arg(static_cast<qlonglong>(bytesFree))
+                  .arg(static_cast<qlonglong>(sinkBufferSize))
+                  .arg(static_cast<qlonglong>(m_txAudioTelemetrySinkBufferSize))
+                  .arg(m_txPcmBuffer ? m_txPcmBuffer->pos() : -1)
+                  .arg(m_txPcmBuffer ? m_txPcmBuffer->size() : -1)
+                  .arg(m_txAudioTelemetryPcmBytes)
+                  .arg(m_txAudioTelemetrySlotElapsedMs)
+                  .arg(m_txAudioTelemetryLeadInMs)
+                  .arg(m_txAudioTelemetryPayloadDelayMs)
+                  .arg(m_txAudioTelemetryWavePeak, 0, 'f', 6)
+                  .arg(m_txAudioTelemetryGain, 0, 'f', 4)
+                  .arg(m_activeTxMessage));
+
+    m_txAudioTelemetrySerial = 0;
+}
+
 qint64 DecodiumBridge::syncTxPcmStartOffsetBytes(const QAudioFormat& format,
                                                  qint64 pcmSizeBytes,
                                                  int* elapsedMsOut) const
@@ -9413,9 +9741,15 @@ qint64 DecodiumBridge::syncTxPcmStartOffsetBytes(const QAudioFormat& format,
         return 0;
     }
 
+    int const leadInMs = txSyncLeadInMsForMode(m_mode);
+    int const payloadElapsedMs = elapsedMs - leadInMs;
+    if (payloadElapsedMs <= 0) {
+        return 0;
+    }
+
     qint64 const frameBytes = qMax<qint64>(1, format.bytesPerFrame());
     qint64 const offsetFrames =
-        (static_cast<qint64>(elapsedMs) * static_cast<qint64>(format.sampleRate())) / 1000;
+        (static_cast<qint64>(payloadElapsedMs) * static_cast<qint64>(format.sampleRate())) / 1000;
     qint64 offsetBytes = offsetFrames * frameBytes;
     offsetBytes -= offsetBytes % frameBytes;
     if (offsetBytes >= pcmSizeBytes) {
@@ -9520,6 +9854,7 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     m_txPlaybackHoldUntilMs = 0;
     m_txPlaybackHardDeadlineMs = 0;
     m_txAudioRestartPending = false;
+    logTxAudioTelemetrySummary(reason);
     bool const wasBridgeLegacyTx = m_bridgeAudioLegacyTxActive;
     m_bridgeAudioLegacyTxActive = false;
 
@@ -9584,7 +9919,13 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
 
     if (wasTransmitting) {
         if (error) {
-            emit errorMessage("Errore audio TX sul device selezionato");
+            emit errorMessage(QStringLiteral("Audio TX: playback terminato con errore | reason=%1 device=\"%2\" tx=%3 msg=\"%4\"")
+                                  .arg(reason,
+                                       m_audioOutputDevice.trimmed().isEmpty()
+                                           ? QStringLiteral("<default output>")
+                                           : m_audioOutputDevice.trimmed(),
+                                       QString::number(finishedTx),
+                                       m_activeTxMessage.trimmed()));
         } else {
             emit statusMessage("TX completato");
         }
@@ -9715,9 +10056,12 @@ void DecodiumBridge::startTx()
                                &wave, &preparedPcm, &preparedFmt, &preparedDev,
                                &prepareError)) {
         QString const errorText = prepareError.isEmpty()
-            ? QStringLiteral("Generazione audio TX fallita")
+            ? QStringLiteral("Audio TX: generazione waveform fallita")
             : prepareError;
-        emit errorMessage(errorText);
+        emit errorMessage(errorText.startsWith(QStringLiteral("Audio "), Qt::CaseInsensitive)
+                          ? errorText
+                          : QStringLiteral("Audio TX: %1 | modo=%2 freqAudio=%3 Hz msg=\"%4\"")
+                                .arg(errorText, m_mode, QString::number(txAudioFrequency), msg.trimmed()));
         bridgeLog("startTx: TX audio prepare failed: " + errorText + " msg=[" + msg + "]");
         return;
     }
@@ -9830,6 +10174,11 @@ void DecodiumBridge::startTx()
         m_txPlaybackHardDeadlineMs = nowMs + txPlaybackMs + 5000;
         m_txPlaybackReleasePending = false;
         m_txAudioRestartPending = false;
+        int const macPeriodMs = periodMsForMode(m_mode);
+        int const macSlotElapsedMs = macPeriodMs > 0
+            ? static_cast<int>(correctedUtcEpochMs() % static_cast<qint64>(macPeriodMs))
+            : -1;
+        int const macLeadInMs = txSyncLeadInMsForMode(m_mode);
         bridgeLog(QStringLiteral("startTx(mac): playback hold %1 ms for %2 samples")
                       .arg(txPlaybackMs + 300)
                       .arg(wave.size()));
@@ -9844,6 +10193,10 @@ void DecodiumBridge::startTx()
                   " fmt=" + audioFormatToString(outFmt) +
                   " channel=" + QString::number(static_cast<int>(outChannel)) +
                   " attn=" + QString::number(attenuationDb, 'f', 2) +
+                  " gain=" + QString::number(txGainFromSlider(m_txOutputLevel), 'f', 4) +
+                  " slot_elapsed=" + QString::number(macSlotElapsedMs) + "ms" +
+                  " lead_in=" + QString::number(macLeadInMs) + "ms" +
+                  " peak=" + QString::number(txWavePeak(wave), 'f', 6) +
                   " samples=" + QString::number(wave.size()));
 
         emit statusMessage("TX: " + msg.trimmed());
@@ -9864,7 +10217,12 @@ void DecodiumBridge::startTx()
         }
         if (!outFmt.isValid() || m_txPcmData.isEmpty()) {
             bridgeLog("startTx: prepared PCM buffer invalid for " + audioFormatToString(outFmt));
-            emit errorMessage("Formato audio TX non supportato dal device selezionato");
+            emit errorMessage(QStringLiteral("Audio TX: PCM preparato non valido | device=\"%1\" formato=%2 bytes=%3 canale=%4 msg=\"%5\"")
+                                  .arg(outDev.description(),
+                                       audioFormatToString(outFmt),
+                                       QString::number(m_txPcmData.size()),
+                                       QString::number(m_audioOutputChannel),
+                                       msg.trimmed()));
             return;
         }
     } else {
@@ -9984,7 +10342,14 @@ void DecodiumBridge::startTx()
             restoreTxAudioSchedulingBoost(QStringLiteral("tci-tx-audio-start-failed"));
             resumeRxAudioAfterTx(QStringLiteral("tci-tx-audio-start-failed"));
             resumeNonAudioTxWork(QStringLiteral("tci-tx-audio-start-failed"));
-            emit errorMessage(QStringLiteral("Impossibile avviare audio TX TCI"));
+            emit errorMessage(QStringLiteral(
+                "Audio TX TCI: impossibile avviare lo stream audio verso il transceiver | "
+                "backend=%1 catConnected=%2 modo=%3 freqAudio=%4 Hz msg=\"%5\"")
+                .arg(m_catBackend,
+                     m_catConnected ? QStringLiteral("true") : QStringLiteral("false"),
+                     m_mode,
+                     QString::number(txAudioFrequency),
+                     msg.trimmed()));
             return;
         }
 
@@ -10009,10 +10374,19 @@ void DecodiumBridge::startTx()
                                if (m_transmitting && usingTciAudioInput())
                                    completeTxPlayback(QStringLiteral("tci-watchdog"));
                            });
-        bridgeLog(QStringLiteral("startTx TCI audio: mode=%1 msg=%2 samples=%3 hold=%4ms")
+        int const tciPeriodMs = periodMsForMode(m_mode);
+        int const tciSlotElapsedMs = tciPeriodMs > 0
+            ? static_cast<int>(correctedUtcEpochMs() % static_cast<qint64>(tciPeriodMs))
+            : -1;
+        int const tciLeadInMs = txSyncLeadInMsForMode(m_mode);
+        bridgeLog(QStringLiteral("startTx TCI audio: mode=%1 msg=%2 samples=%3 hold=%4ms slot_elapsed=%5ms lead_in=%6ms peak=%7 gain=%8")
                       .arg(m_mode, msg.trimmed())
                       .arg(wave.size())
-                      .arg(txPlaybackMs + 300));
+                      .arg(txPlaybackMs + 300)
+                      .arg(tciSlotElapsedMs)
+                      .arg(tciLeadInMs)
+                      .arg(txWavePeak(wave), 0, 'f', 6)
+                      .arg(txGainFromSlider(m_txOutputLevel), 0, 'f', 4));
         emit statusMessage("TX TCI: " + msg.trimmed());
         return;
     }
@@ -10054,17 +10428,29 @@ void DecodiumBridge::startTx()
         int syncElapsedMs = -1;
         qint64 const syncOffsetBytes =
             syncTxPcmStartOffsetBytes(outFmt, m_txPcmBuffer->size(), &syncElapsedMs);
+        int const leadInMs = txSyncLeadInMsForMode(m_mode);
+        int const payloadDelayMs =
+            (shouldAlignTxAudioToCurrentSyncSlot()
+             && syncElapsedMs >= 0
+             && leadInMs > 0
+             && syncElapsedMs < leadInMs)
+            ? leadInMs - syncElapsedMs
+            : 0;
         if (syncOffsetBytes > 0) {
             m_txPcmBuffer->seek(syncOffsetBytes);
-            bridgeLog(QStringLiteral("startTx sync PCM offset: mode=%1 elapsed=%2ms offset=%3/%4 bytes")
+            bridgeLog(QStringLiteral("startTx sync PCM offset: mode=%1 elapsed=%2ms lead_in=%3ms offset=%4/%5 bytes")
                           .arg(m_mode)
                           .arg(syncElapsedMs)
+                          .arg(leadInMs)
                           .arg(syncOffsetBytes)
                           .arg(m_txPcmBuffer->size()));
         }
 
         m_txAudioSink = new QAudioSink(outDev, outFmt, this);
-        m_txAudioSink->setVolume(static_cast<float>(txGainFromSlider(m_txOutputLevel)));
+        qreal const effectiveGain = txGainFromSlider(m_txOutputLevel);
+        double const wavePeak = txWavePeak(wave);
+        qint64 const pcmBytes = m_txPcmData.size();
+        m_txAudioSink->setVolume(static_cast<float>(effectiveGain));
         qsizetype const txBufferBytes =
             txAudioBufferBytesForMode(outFmt, m_mode, false,
                                       m_lowCpuModeEnabled || cpuPressureActive());
@@ -10073,7 +10459,7 @@ void DecodiumBridge::startTx()
         }
         bridgeLog(QStringLiteral("startTx audio sink: %1 buffer=%2 channel=%3")
                       .arg(audioFormatToString(outFmt))
-                      .arg(txBufferBytes)
+                      .arg(static_cast<qlonglong>(txBufferBytes))
                       .arg(m_audioOutputChannel));
         qint64 const remainingBytes = qMax<qint64>(0, m_txPcmBuffer->size() - m_txPcmBuffer->pos());
         qint64 const frameBytes = qMax<qint64>(1, outFmt.bytesPerFrame());
@@ -10101,30 +10487,22 @@ void DecodiumBridge::startTx()
             if (st == QAudio::IdleState) {
                 bool const bufferIncomplete = m_txPcmBuffer && !m_txPcmBuffer->atEnd();
                 if (bufferIncomplete) {
-                    if (!m_txAudioRestartPending) {
-                        m_txAudioRestartPending = true;
-                        qint64 const pos = m_txPcmBuffer->pos();
-                        qint64 const size = m_txPcmBuffer->size();
-                        m_txPlaybackHoldUntilMs = qMax(m_txPlaybackHoldUntilMs,
-                                                       QDateTime::currentMSecsSinceEpoch() + 300);
-                        bridgeLog(QStringLiteral("TX QAudioSink partial idle: buffer incomplete pos=%1/%2, waiting/restarting")
-                                      .arg(pos)
-                                      .arg(size));
-                        QTimer::singleShot(30, this, [this]() {
-                            m_txAudioRestartPending = false;
-                            if (!m_transmitting || !m_txAudioSink || !m_txPcmBuffer || m_txPcmBuffer->atEnd()) {
-                                return;
-                            }
-                            QAudio::State const state = m_txAudioSink->state();
-                            if (state == QAudio::IdleState || state == QAudio::StoppedState) {
-                                bridgeLog(QStringLiteral("TX QAudioSink partial idle restart: bufPos=%1/%2")
-                                              .arg(m_txPcmBuffer->pos())
-                                              .arg(m_txPcmBuffer->size()));
-                                m_txAudioSink->stop();
-                                m_txAudioSink->start(m_txPcmBuffer);
-                            }
-                        });
+                    ++m_txAudioTelemetryIdleCount;
+                    if (m_txAudioSink && m_txAudioSink->error() == QAudio::UnderrunError) {
+                        ++m_txAudioTelemetryUnderrunCount;
                     }
+                    qint64 const pos = m_txPcmBuffer->pos();
+                    qint64 const size = m_txPcmBuffer->size();
+                    m_txPlaybackHoldUntilMs = qMax(m_txPlaybackHoldUntilMs,
+                                                   QDateTime::currentMSecsSinceEpoch() + 300);
+                    bridgeLog(QStringLiteral("TX QAudioSink partial idle: buffer incomplete pos=%1/%2, no restart; telemetry only")
+                                  .arg(pos)
+                                  .arg(size));
+                    QTimer::singleShot(250, this, [this]() {
+                        if (m_transmitting && m_txPcmBuffer && !m_txPcmBuffer->atEnd()) {
+                            completeTxPlayback(QStringLiteral("partial-idle"));
+                        }
+                    });
                     return;
                 }
                 // GitHub ptt0Timer: 200ms delay prima di abbassare PTT.
@@ -10135,80 +10513,121 @@ void DecodiumBridge::startTx()
                 });
             } else if (st == QAudio::StoppedState && m_txAudioSink &&
                        m_txAudioSink->error() != QAudio::NoError && m_transmitting) {
+                ++m_txAudioTelemetryErrorCount;
+                if (m_txAudioSink->error() == QAudio::UnderrunError) {
+                    ++m_txAudioTelemetryUnderrunCount;
+                }
                 completeTxPlayback(QStringLiteral("audio-error"), true);
             }
         });
 
-        m_txAudioSink->start(m_txPcmBuffer);
-        scheduleSyncTxBoundaryStop(QStringLiteral("pcm"), txSerial);
-        QPointer<QAudioSink> const sinkGuard(m_txAudioSink);
-        QPointer<QBuffer> const bufferGuard(m_txPcmBuffer);
-        qint64 const audioStartWallMs = QDateTime::currentMSecsSinceEpoch();
-        QTimer::singleShot(5200, this, [this, sinkGuard, bufferGuard, audioStartWallMs, expectedUs]() {
-            if (!m_transmitting || m_tuning || !sinkGuard || sinkGuard != m_txAudioSink) {
+        auto startSink = [this, txSerial, expectedUs, txPlaybackMs, syncElapsedMs,
+                          leadInMs, payloadDelayMs, pcmBytes, txBufferBytes,
+                          wavePeak, effectiveGain, outDev, outFmt, msg, wave]() {
+            if (!m_transmitting || m_tuning || !m_txAudioSink || !m_txPcmBuffer) {
+                bridgeLog(QStringLiteral("startTx audio sink start skipped: TX inactive or sink missing"));
                 return;
             }
 
-            qint64 const wallUs =
-                qMax<qint64>(0, QDateTime::currentMSecsSinceEpoch() - audioStartWallMs) * 1000LL;
-            qint64 const processedUs = sinkGuard->processedUSecs();
-            qint64 const lagUs = wallUs - processedUs;
-            if (lagUs > 350000) {
-                bridgeLog(QStringLiteral("TX audio lag warning: lag=%1ms processed=%2ms wall=%3ms expected=%4ms bufPos=%5/%6")
-                              .arg(lagUs / 1000)
-                              .arg(processedUs / 1000)
-                              .arg(wallUs / 1000)
-                              .arg(expectedUs / 1000)
-                              .arg(bufferGuard ? bufferGuard->pos() : -1)
-                              .arg(bufferGuard ? bufferGuard->size() : -1));
-            }
-        });
-        int const watchdogMs = qBound(1500,
-                                      static_cast<int>((expectedUs + 999) / 1000) + 1500,
-                                      25000);
-        QTimer::singleShot(watchdogMs, this, [this, sinkGuard, bufferGuard, expectedUs]() {
-            if (!m_transmitting || m_tuning || !sinkGuard || sinkGuard != m_txAudioSink) {
-                return;
-            }
+            qint64 const audioStartWallMs = QDateTime::currentMSecsSinceEpoch();
+            m_txPlaybackHoldUntilMs = audioStartWallMs + txPlaybackMs + 300;
+            m_txPlaybackHardDeadlineMs = audioStartWallMs + txPlaybackMs + 5000;
+            m_txPlaybackReleasePending = false;
+            m_txAudioRestartPending = false;
 
-            qint64 const processedUs = sinkGuard->processedUSecs();
-            qint64 const bufferPos = bufferGuard ? bufferGuard->pos() : -1;
-            qint64 const bufferSize = bufferGuard ? bufferGuard->size() : -1;
-            bool const consumed =
-                !bufferGuard ||
-                bufferGuard->atEnd() ||
-                processedUs >= qMax<qint64>(0, expectedUs - 250000);
+            resetTxAudioTelemetry(txSerial, audioStartWallMs, expectedUs,
+                                  syncElapsedMs, leadInMs, payloadDelayMs,
+                                  pcmBytes, m_txAudioSink->bufferSize(),
+                                  wavePeak, effectiveGain);
+            m_txAudioSink->start(m_txPcmBuffer);
+            scheduleTxAudioTelemetryProbe(txSerial);
+            scheduleSyncTxBoundaryStop(QStringLiteral("pcm"), txSerial);
 
-            if (!consumed) {
-                bridgeLog("TX QAudioSink watchdog: still active, buffer not consumed processed=" +
+            QPointer<QAudioSink> const sinkGuard(m_txAudioSink);
+            QPointer<QBuffer> const bufferGuard(m_txPcmBuffer);
+            QTimer::singleShot(5200, this, [this, sinkGuard, bufferGuard, audioStartWallMs, expectedUs]() {
+                if (!m_transmitting || m_tuning || !sinkGuard || sinkGuard != m_txAudioSink) {
+                    return;
+                }
+
+                qint64 const wallUs =
+                    qMax<qint64>(0, QDateTime::currentMSecsSinceEpoch() - audioStartWallMs) * 1000LL;
+                qint64 const processedUs = sinkGuard->processedUSecs();
+                qint64 const lagUs = wallUs - processedUs;
+                if (lagUs > 350000) {
+                    bridgeLog(QStringLiteral("TX audio lag warning: lag=%1ms processed=%2ms wall=%3ms expected=%4ms bufPos=%5/%6")
+                                  .arg(lagUs / 1000)
+                                  .arg(processedUs / 1000)
+                                  .arg(wallUs / 1000)
+                                  .arg(expectedUs / 1000)
+                                  .arg(bufferGuard ? bufferGuard->pos() : -1)
+                                  .arg(bufferGuard ? bufferGuard->size() : -1));
+                }
+            });
+
+            int const watchdogMs = qBound(1500,
+                                          static_cast<int>((expectedUs + 999) / 1000) + 1500,
+                                          25000);
+            QTimer::singleShot(watchdogMs, this, [this, sinkGuard, bufferGuard, expectedUs]() {
+                if (!m_transmitting || m_tuning || !sinkGuard || sinkGuard != m_txAudioSink) {
+                    return;
+                }
+
+                qint64 const processedUs = sinkGuard->processedUSecs();
+                qint64 const bufferPos = bufferGuard ? bufferGuard->pos() : -1;
+                qint64 const bufferSize = bufferGuard ? bufferGuard->size() : -1;
+                bool const consumed =
+                    !bufferGuard ||
+                    bufferGuard->atEnd() ||
+                    processedUs >= qMax<qint64>(0, expectedUs - 250000);
+
+                if (!consumed) {
+                    bridgeLog("TX QAudioSink watchdog: still active, buffer not consumed processed=" +
+                              QString::number(processedUs) + "us expected=" +
+                              QString::number(expectedUs) + "us bufPos=" +
+                              QString::number(bufferPos) + "/" + QString::number(bufferSize));
+                    return;
+                }
+
+                bridgeLog("TX QAudioSink watchdog forcing completion: processed=" +
                           QString::number(processedUs) + "us expected=" +
                           QString::number(expectedUs) + "us bufPos=" +
                           QString::number(bufferPos) + "/" + QString::number(bufferSize));
-                return;
-            }
+                completeTxPlayback(QStringLiteral("watchdog"));
+            });
 
-            bridgeLog("TX QAudioSink watchdog forcing completion: processed=" +
-                      QString::number(processedUs) + "us expected=" +
-                      QString::number(expectedUs) + "us bufPos=" +
-                      QString::number(bufferPos) + "/" + QString::number(bufferSize));
-            completeTxPlayback(QStringLiteral("watchdog"));
-        });
+            bridgeLog("startTx launchAudio: mode=" + m_mode + " msg=" + msg.trimmed() +
+                      " samples=" + QString::number(wave.size()) +
+                      " pcm_bytes=" + QString::number(m_txPcmData.size()) +
+                      " pcm_pos=" + QString::number(m_txPcmBuffer ? m_txPcmBuffer->pos() : -1) +
+                      " slot_elapsed=" + QString::number(syncElapsedMs) + "ms" +
+                      " lead_in=" + QString::number(leadInMs) + "ms" +
+                      " payload_delay=" + QString::number(payloadDelayMs) + "ms" +
+                      " dev=" + outDev.description() +
+                      " fmt=" + audioFormatToString(outFmt) +
+                      " buf=" + QString::number(m_txAudioSink->bufferSize()) +
+                      " configured_buf=" + QString::number(static_cast<qlonglong>(txBufferBytes)) +
+                      " out_channel=" + QString::number(m_audioOutputChannel) +
+                      " tx_level=" + QString::number(m_txOutputLevel, 'f', 1) +
+                      " peak=" + QString::number(wavePeak, 'f', 6) +
+                      " gain=" + QString::number(effectiveGain, 'f', 4) +
+                      " TX=" + QString::number(m_currentTx) +
+                      " retry=" + QString::number(m_txRetryCount) +
+                      " nTx73=" + QString::number(m_nTx73) +
+                      " sink_state=" + QString::number(static_cast<int>(m_txAudioSink->state())) +
+                      " sink_err=" + QString::number(static_cast<int>(m_txAudioSink->error())));
+        };
 
-        bridgeLog("startTx launchAudio: mode=" + m_mode + " msg=" + msg.trimmed() +
-                  " samples=" + QString::number(wave.size()) +
-                  " pcm_bytes=" + QString::number(m_txPcmData.size()) +
-                  " pcm_pos=" + QString::number(m_txPcmBuffer ? m_txPcmBuffer->pos() : -1) +
-                  " dev=" + outDev.description() +
-                  " fmt=" + audioFormatToString(outFmt) +
-                  " buf=" + QString::number(m_txAudioSink->bufferSize()) +
-                  " out_channel=" + QString::number(m_audioOutputChannel) +
-                  " tx_level=" + QString::number(m_txOutputLevel, 'f', 1) +
-                  " gain=" + QString::number(txGainFromSlider(m_txOutputLevel), 'f', 4) +
-                  " TX=" + QString::number(m_currentTx) +
-                  " retry=" + QString::number(m_txRetryCount) +
-                  " nTx73=" + QString::number(m_nTx73) +
-                  " sink_state=" + QString::number(static_cast<int>(m_txAudioSink->state())) +
-                  " sink_err=" + QString::number(static_cast<int>(m_txAudioSink->error())));
+        if (payloadDelayMs > 0) {
+            bridgeLog(QStringLiteral("startTx payload lead-in delay: mode=%1 elapsed=%2ms lead_in=%3ms delay=%4ms")
+                          .arg(m_mode)
+                          .arg(syncElapsedMs)
+                          .arg(leadInMs)
+                          .arg(payloadDelayMs));
+            QTimer::singleShot(payloadDelayMs, this, startSink);
+        } else {
+            startSink();
+        }
     };
 
     if (ptt1DelayMs > 0) {
@@ -10543,6 +10962,8 @@ void DecodiumBridge::startTune()
     }
     m_tuneTimer->start();
 
+    const double freq = effectiveTxAudioFrequencyHz() > 0 ? effectiveTxAudioFrequencyHz() : 1500.0;
+
     if (!launchTuneAudio()) {
         if (m_tuneTimer) m_tuneTimer->stop();
         if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend))
@@ -10550,11 +10971,17 @@ void DecodiumBridge::startTune()
         m_tuning = false;
         emit tuningChanged();
         resumeNonAudioTxWork(QStringLiteral("tune-start-failed"));
-        emit errorMessage("Impossibile avviare l'audio TUNE");
+        emit errorMessage(QStringLiteral(
+            "Audio TUNE: impossibile avviare il tono | deviceRichiesto=\"%1\" "
+            "freq=%2 Hz livelloTX=%3 canale=%4")
+            .arg(m_audioOutputDevice.trimmed().isEmpty() ? QStringLiteral("<default output>")
+                                                         : m_audioOutputDevice.trimmed(),
+                 QString::number(freq, 'f', 1),
+                 QString::number(m_txOutputLevel, 'f', 1),
+                 QString::number(m_audioOutputChannel)));
         return;
     }
 
-    const double freq = effectiveTxAudioFrequencyHz() > 0 ? effectiveTxAudioFrequencyHz() : 1500.0;
     bridgeLog("startTune push: freq=" + QString::number(freq) + " dev=" + m_audioOutputDevice);
     emit statusMessage("TUNE: " + QString::number(static_cast<int>(freq)) + " Hz");
 }
@@ -10610,12 +11037,28 @@ bool DecodiumBridge::launchTuneAudio()
                   .arg(audioFormatToString(outFmt))
                   .arg(tuneBufferBytes)
                   .arg(m_audioOutputChannel));
-    connect(m_txAudioSink, &QAudioSink::stateChanged, this, [this](QAudio::State st) {
+    QString const outDevDescription = outDev.description().isEmpty()
+        ? QStringLiteral("<default output>")
+        : outDev.description();
+    QString const outFmtDescription = audioFormatToString(outFmt);
+    connect(m_txAudioSink, &QAudioSink::stateChanged, this,
+            [this, outDevDescription, outFmtDescription, freq](QAudio::State st) {
         if (st == QAudio::StoppedState && m_txAudioSink &&
             m_txAudioSink->error() != QAudio::NoError && m_tuning) {
-            bridgeLog("TUNE audio stopped with error, dropping PTT");
+            QAudio::Error const sinkError = m_txAudioSink->error();
+            QAudio::State const sinkState = m_txAudioSink->state();
+            bridgeLog(QStringLiteral("TUNE audio stopped with error, dropping PTT: %1 state=%2")
+                          .arg(audioErrorToString(sinkError), audioStateToString(sinkState)));
+            emit errorMessage(QStringLiteral(
+                "Audio TUNE: sink fermato con errore | device=\"%1\" formato=%2 "
+                "state=%3 qt-error=%4 freq=%5 Hz livelloTX=%6")
+                .arg(outDevDescription,
+                     outFmtDescription,
+                     audioStateToString(sinkState),
+                     audioErrorToString(sinkError),
+                     QString::number(freq, 'f', 1),
+                     QString::number(m_txOutputLevel, 'f', 1)));
             stopTune();
-            emit errorMessage("Errore audio TUNE sul device selezionato");
         }
     });
     m_txAudioSink->start(m_txPcmBuffer);
@@ -10823,6 +11266,7 @@ void DecodiumBridge::clearDecodeList()
         m_legacyAllTxtConsumedPath = info.exists() ? info.absoluteFilePath() : path;
         m_legacyAllTxtConsumedSize = info.exists() ? info.size() : -1;
     }
+    m_clearedRxDecodeKeys.clear();
     m_decodeList.clear();
     clearRemoteActivityCache(true);
     emit decodeListChanged();
@@ -10833,6 +11277,22 @@ void DecodiumBridge::clearDecodeList()
 
 void DecodiumBridge::clearRxDecodes()
 {
+    auto rememberClearedRxEntry = [this](QVariantMap const& entry) {
+        if (!entryBelongsToCurrentQso(entry)) {
+            return;
+        }
+        QString const key = decodeRxClearEntryKey(entry);
+        if (!key.isEmpty()) {
+            m_clearedRxDecodeKeys.insert(key);
+        }
+    };
+    for (QVariant const& value : std::as_const(m_rxDecodeList)) {
+        rememberClearedRxEntry(value.toMap());
+    }
+    for (QVariant const& value : std::as_const(m_decodeList)) {
+        rememberClearedRxEntry(value.toMap());
+    }
+
     if (usingLegacyBackendForTx()) {
         m_legacyBackend->clearRxFrequency();
         m_legacyRxFrequencyRevision = -1;
@@ -10847,6 +11307,7 @@ void DecodiumBridge::clearRxDecodes()
         }
     }
     m_rxDecodeList.clear();
+    rebuildRxDecodeModel();
     emit rxDecodeListChanged();
 }
 
@@ -10940,6 +11401,168 @@ QVariantMap DecodiumBridge::worldClockSnapshot(const QString& timeZoneId) const
     snapshot.insert(QStringLiteral("offsetSeconds"), zone.offsetFromUtc(zonedNow));
     snapshot.insert(QStringLiteral("timeZoneId"), QString::fromUtf8(zone.id()));
     return snapshot;
+}
+
+QVariantList DecodiumBridge::worldClockCityOptions(const QString& query, int limit) const
+{
+    struct CityOption {
+        QString name;
+        QString zoneId;
+        QString subtitle;
+        QString searchText;
+        int score {1000};
+    };
+
+	auto normalize = [](QString text) {
+	    QString const decomposed = text.normalized(QString::NormalizationForm_D);
+	    QString stripped;
+	    stripped.reserve(decomposed.size());
+	    for (QChar const ch : decomposed) {
+	        QChar::Category const category = ch.category();
+	        if (category == QChar::Mark_NonSpacing
+	            || category == QChar::Mark_SpacingCombining
+	            || category == QChar::Mark_Enclosing) {
+	            continue;
+	        }
+	        stripped.append(ch);
+	    }
+
+	    static QRegularExpression const nonAlnum(QStringLiteral("[^a-z0-9]+"));
+	    return stripped.toLower()
+	        .replace(nonAlnum, QStringLiteral(" "))
+	        .simplified();
+	};
+
+    auto cityNameForZone = [](QString const& zoneId) {
+        if (zoneId == QStringLiteral("UTC")) {
+            return QStringLiteral("UTC");
+        }
+        QString city = zoneId.section(QLatin1Char('/'), -1).replace(QLatin1Char('_'), QLatin1Char(' '));
+        static const QHash<QString, QString> displayAliases {
+            {QStringLiteral("Europe/Rome"), QStringLiteral("Roma")},
+        };
+        return displayAliases.value(zoneId, city);
+    };
+
+    auto aliasesForZone = [](QString const& zoneId) {
+        static const QHash<QString, QStringList> aliases {
+            {QStringLiteral("Europe/Rome"), {QStringLiteral("Roma"), QStringLiteral("Rome")}},
+            {QStringLiteral("Europe/London"), {QStringLiteral("Londra"), QStringLiteral("London")}},
+            {QStringLiteral("Europe/Paris"), {QStringLiteral("Parigi"), QStringLiteral("Paris")}},
+            {QStringLiteral("Europe/Berlin"), {QStringLiteral("Berlino"), QStringLiteral("Berlin")}},
+            {QStringLiteral("Europe/Moscow"), {QStringLiteral("Mosca"), QStringLiteral("Moscow")}},
+            {QStringLiteral("Europe/Athens"), {QStringLiteral("Atene"), QStringLiteral("Athens")}},
+            {QStringLiteral("Europe/Lisbon"), {QStringLiteral("Lisbona"), QStringLiteral("Lisbon")}},
+            {QStringLiteral("Asia/Tokyo"), {QStringLiteral("Tokyo"), QStringLiteral("Tokio")}},
+            {QStringLiteral("Africa/Cairo"), {QStringLiteral("Cairo"), QStringLiteral("Il Cairo")}},
+        };
+        return aliases.value(zoneId);
+    };
+
+    auto offsetLabel = [](QTimeZone const& zone) {
+        if (zone == QTimeZone::utc()) {
+            return QStringLiteral("UTC+00:00");
+        }
+        int const offset = zone.offsetFromUtc(QDateTime::currentDateTimeUtc());
+        int const absOffset = std::abs(offset);
+        return QStringLiteral("UTC%1%2:%3")
+            .arg(offset >= 0 ? QLatin1Char('+') : QLatin1Char('-'))
+            .arg(absOffset / 3600, 2, 10, QLatin1Char('0'))
+            .arg((absOffset % 3600) / 60, 2, 10, QLatin1Char('0'));
+    };
+
+    QString const q = normalize(query);
+    int const maxResults = qBound(1, limit, 200);
+    static const QStringList defaultZones {
+        QStringLiteral("UTC"),
+        QStringLiteral("Europe/London"),
+        QStringLiteral("Europe/Rome"),
+        QStringLiteral("Europe/Moscow"),
+        QStringLiteral("Asia/Dubai"),
+        QStringLiteral("Asia/Tokyo"),
+        QStringLiteral("Australia/Sydney"),
+        QStringLiteral("America/New_York"),
+        QStringLiteral("America/Los_Angeles"),
+    };
+
+    QVector<CityOption> matches;
+    auto appendOption = [&](QString const& zoneId, int defaultScore) {
+        QTimeZone zone = zoneId == QStringLiteral("UTC")
+            ? QTimeZone::utc()
+            : QTimeZone(zoneId.toUtf8());
+        if (!zone.isValid()) {
+            return;
+        }
+
+        QString const name = cityNameForZone(zoneId);
+        QStringList terms {name, zoneId};
+        terms.append(aliasesForZone(zoneId));
+        QString const searchText = normalize(terms.join(QLatin1Char(' ')));
+
+        int score = defaultScore;
+        if (!q.isEmpty()) {
+            if (normalize(name).startsWith(q)) {
+                score = 0;
+            } else if (searchText.startsWith(q)) {
+                score = 5;
+            } else if (searchText.contains(QLatin1Char(' ') + q)) {
+                score = 10;
+            } else if (searchText.contains(q)) {
+                score = 30;
+            } else {
+                return;
+            }
+        }
+
+        CityOption option;
+        option.name = name;
+        option.zoneId = zoneId;
+        option.subtitle = QStringLiteral("%1 · %2").arg(offsetLabel(zone), zoneId);
+        option.searchText = searchText;
+        option.score = score;
+        matches.append(option);
+    };
+
+    if (q.isEmpty()) {
+        int score = 0;
+        for (QString const& zoneId : defaultZones) {
+            appendOption(zoneId, score++);
+        }
+    } else {
+        appendOption(QStringLiteral("UTC"), 0);
+        for (QByteArray const& id : QTimeZone::availableTimeZoneIds()) {
+            QString const zoneId = QString::fromUtf8(id);
+            if (zoneId == QStringLiteral("UTC")) {
+                continue;
+            }
+            appendOption(zoneId, 100);
+        }
+    }
+
+    std::sort(matches.begin(), matches.end(), [](CityOption const& a, CityOption const& b) {
+        if (a.score != b.score) {
+            return a.score < b.score;
+        }
+        return QString::localeAwareCompare(a.name, b.name) < 0;
+    });
+
+    QVariantList out;
+    QSet<QString> seen;
+    for (CityOption const& option : std::as_const(matches)) {
+        if (seen.contains(option.zoneId)) {
+            continue;
+        }
+        seen.insert(option.zoneId);
+        QVariantMap item;
+        item.insert(QStringLiteral("name"), option.name);
+        item.insert(QStringLiteral("zoneId"), option.zoneId);
+        item.insert(QStringLiteral("subtitle"), option.subtitle);
+        out.append(item);
+        if (out.size() >= maxResults) {
+            break;
+        }
+    }
+    return out;
 }
 
 // ── catBackend switch ─────────────────────────────────────────────────────────
@@ -12845,6 +13468,9 @@ void DecodiumBridge::saveSettings()
     s.remove("tx5");
     s.setValue("rxFrequency", m_rxFrequency);
     s.setValue("txFrequency", m_txFrequency);
+    s.setValue("TXFrequency", m_txFrequency);
+    s.setValue("HoldTxFreq", m_holdTxFreq);
+    s.setValue("holdTxFreq", m_holdTxFreq);
     s.setValue("fontScale", m_fontScale);
     // extra features
     s.setValue("alertOnCq",       m_alertOnCq);
@@ -15649,6 +16275,8 @@ void DecodiumBridge::loadSettings()
     m_tx6 = s.value("tx6", "").toString();
     m_rxFrequency = s.value("rxFrequency", 1500).toInt();
     m_txFrequency = qBound(0, s.value("txFrequency", s.value("TXFrequency", 1500)).toInt(), 3000);
+    m_holdTxFreq = s.value(QStringLiteral("HoldTxFreq"),
+                           s.value(QStringLiteral("holdTxFreq"), false)).toBool();
     // Sanity: se la txFrequency salvata e' implausibile (<100Hz) — es. corrotta
     // da un click cluster spot che era troppo vicino alla dial — reset al
     // default 1500. Risolve "TUNE inaudibile" 1.0.108-1.0.112.
@@ -15895,6 +16523,7 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
     emit modeChanged();
     emit rxFrequencyChanged();
     emit txFrequencyChanged();
+    emit holdTxFreqChanged();
     emit rxInputLevelChanged();
     emit txOutputLevelChanged();
     emit audioInputDevicesChanged();
@@ -17550,7 +18179,7 @@ static DecodeUserFilterConfig readDecodeUserFilterConfig(const DecodiumBridge& b
     filters.blacklistTerms = decodeFilterTerms(bridge, QStringLiteral("Blacklist"), 12);
     filters.whitelistTerms = decodeFilterTerms(bridge, QStringLiteral("Whitelist"), 12);
     filters.passTerms = decodeFilterTerms(bridge, QStringLiteral("Pass"), 12);
-    filters.territoryTerms = decodeFilterTerms(bridge, QStringLiteral("Territory"), 4);
+    filters.territoryTerms = decodeFilterTerms(bridge, QStringLiteral("Territory"), 6);
     return filters;
 }
 
@@ -17672,6 +18301,67 @@ static QString normalizedDecodeFilterTerritoryName(QString country)
     return country.toUpper();
 }
 
+static QStringList decodeFilterTerritoryAliases(QString territory)
+{
+    territory = normalizedDecodeFilterTerritoryName(territory).simplified();
+    territory.replace(QLatin1Char('-'), QLatin1Char(' '));
+    territory.replace(QLatin1Char('_'), QLatin1Char(' '));
+
+    QStringList aliases;
+    auto addAlias = [&aliases](QString value) {
+        value = value.trimmed().toUpper();
+        if (!value.isEmpty() && !aliases.contains(value)) {
+            aliases.append(value);
+        }
+    };
+
+    addAlias(territory);
+
+    if (territory == QStringLiteral("EU") || territory == QStringLiteral("EUROPE") || territory == QStringLiteral("EUROPA")) {
+        addAlias(QStringLiteral("EU"));
+        addAlias(QStringLiteral("EUROPE"));
+        addAlias(QStringLiteral("EUROPA"));
+    } else if (territory == QStringLiteral("AF") || territory == QStringLiteral("AFRICA")) {
+        addAlias(QStringLiteral("AF"));
+        addAlias(QStringLiteral("AFRICA"));
+    } else if (territory == QStringLiteral("OC") || territory == QStringLiteral("OCEANIA")) {
+        addAlias(QStringLiteral("OC"));
+        addAlias(QStringLiteral("OCEANIA"));
+    } else if (territory == QStringLiteral("AS") || territory == QStringLiteral("ASIA")) {
+        addAlias(QStringLiteral("AS"));
+        addAlias(QStringLiteral("ASIA"));
+    } else if (territory == QStringLiteral("NA")
+               || territory == QStringLiteral("N AMERICA")
+               || territory == QStringLiteral("N. AMERICA")
+               || territory == QStringLiteral("NORTH AMERICA")) {
+        addAlias(QStringLiteral("NA"));
+        addAlias(QStringLiteral("NORTH AMERICA"));
+        addAlias(QStringLiteral("N. AMERICA"));
+    } else if (territory == QStringLiteral("SA")
+               || territory == QStringLiteral("S AMERICA")
+               || territory == QStringLiteral("S. AMERICA")
+               || territory == QStringLiteral("SOUTH AMERICA")) {
+        addAlias(QStringLiteral("SA"));
+        addAlias(QStringLiteral("SOUTH AMERICA"));
+        addAlias(QStringLiteral("S. AMERICA"));
+    }
+
+    return aliases;
+}
+
+static bool decodeFilterTerritoryCandidateMatches(QString candidate, QString territory)
+{
+    candidate = normalizedDecodeFilterTerritoryName(candidate).simplified();
+    territory = normalizedDecodeFilterTerritoryName(territory).simplified();
+    if (candidate.isEmpty() || territory.isEmpty()) {
+        return false;
+    }
+    if (territory.size() <= 2) {
+        return candidate == territory || candidate.startsWith(territory + QLatin1Char(' '));
+    }
+    return candidate.contains(territory);
+}
+
 static bool decodeFilterEntryMatchesTerritory(const QVariantMap& entry,
                                               const QStringList& territories)
 {
@@ -17695,9 +18385,15 @@ static bool decodeFilterEntryMatchesTerritory(const QVariantMap& entry,
     }
     candidates.removeDuplicates();
 
+    QStringList territoryAliases;
+    for (QString const& territory : territories) {
+        territoryAliases.append(decodeFilterTerritoryAliases(territory));
+    }
+    territoryAliases.removeDuplicates();
+
     for (QString const& candidate : candidates) {
-        for (QString const& territory : territories) {
-            if (candidate.contains(territory)) {
+        for (QString const& territory : territoryAliases) {
+            if (decodeFilterTerritoryCandidateMatches(candidate, territory)) {
                 return true;
             }
         }
@@ -19624,12 +20320,20 @@ void DecodiumBridge::onSpectrumTimer()
             qint64 minPanadapterIntervalMs = directVisualFastFeed ? 33 : 125;
             if (m_lowCpuModeEnabled) {
                 minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 250);
-            }
-            if (cpuPressureActive()) {
+            } else if (cpuPressureSevereActive()) {
                 minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 250);
+            } else if (cpuPressureActive()) {
+                minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs,
+                                                       directVisualFastFeed ? 100 : 180);
             }
-            if (cpuPressureSevereActive()) {
-                minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 500);
+            if ((cpuPressureActive() || cpuPressureSevereActive())
+                && nowMs - m_lastPanadapterPressureLogMs > 5000) {
+                m_lastPanadapterPressureLogMs = nowMs;
+                bridgeLog(QStringLiteral("panadapter pressure throttle: interval=%1ms direct_visual=%2 severe=%3 low_cpu=%4")
+                              .arg(minPanadapterIntervalMs)
+                              .arg(directVisualFastFeed ? 1 : 0)
+                              .arg(cpuPressureSevereActive() ? 1 : 0)
+                              .arg(m_lowCpuModeEnabled ? 1 : 0));
             }
             if (m_lastPanadapterFrameMs > 0
                 && nowMs - m_lastPanadapterFrameMs < minPanadapterIntervalMs) {
@@ -20204,10 +20908,18 @@ void DecodiumBridge::startAudioCapture()
     if (!m_soundInput) {
         m_soundInput = new SoundInput(this);
         connect(m_soundInput, &SoundInput::error, this, [this](const QString& msg) {
-            emit errorMessage("Audio: " + msg);
+            QString text = msg.trimmed();
+            if (!text.startsWith(QStringLiteral("Audio "), Qt::CaseInsensitive)) {
+                text = QStringLiteral("Audio RX: ") + text;
+            }
+            emit errorMessage(text);
         });
         connect(m_soundInput, &SoundInput::status, this, [this](const QString& msg) {
-            emit statusMessage("Audio: " + msg);
+            QString text = msg.trimmed();
+            if (!text.startsWith(QStringLiteral("Audio "), Qt::CaseInsensitive)) {
+                text = QStringLiteral("Audio RX: ") + text;
+            }
+            emit statusMessage(text);
         });
     }
 

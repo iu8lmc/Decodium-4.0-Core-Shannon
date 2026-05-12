@@ -21,22 +21,22 @@ Dialog {
 
     // Modello colori — ordine WSJT-X (priorità decrescente, salvo CQ/B4 in coda)
     property var colorModel: [
-        { label: "Messaggio Trasmesso",   prop: "colorTxMessage",        defaultColor: "#FFFF00" },
-        { label: "Mio Nominativo",        prop: "colorMyCall",           defaultColor: "#FF5555" },
-        { label: "Nuovo DXCC in Banda",   prop: "colorNewDxccBand",      defaultColor: "#F8AAD0" },
-        { label: "Nuovo DXCC",            prop: "colorNewDxcc",          defaultColor: "#FF00FF" },
-        { label: "Nuovo Continente Banda",prop: "colorNewContinentBand", defaultColor: "#F5B7C7" },
-        { label: "Nuovo Continente",      prop: "colorNewContinent",     defaultColor: "#E91E63" },
-        { label: "Nuova Zona CQ Banda",   prop: "colorNewCqZoneBand",    defaultColor: "#F5DDA0" },
-        { label: "Nuova Zona CQ",         prop: "colorNewCqZone",        defaultColor: "#F0A030" },
-        { label: "Nuova Zona ITU Banda",  prop: "colorNewItuZoneBand",   defaultColor: "#D4E89F" },
-        { label: "Nuova Zona ITU",        prop: "colorNewItuZone",       defaultColor: "#9ACD32" },
-        { label: "Nuova Griglia Banda",   prop: "colorNewGridBand",      defaultColor: "#FFCAA0" },
-        { label: "Nuova Griglia",         prop: "colorNewGrid",          defaultColor: "#FF8C00" },
-        { label: "Nuovo Nominativo Banda",prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
-        { label: "Nuovo Nominativo",      prop: "colorNewCall",          defaultColor: "#00E0E0" },
-        { label: "Utente LoTW",           prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
-        { label: "CQ nel messaggio",      prop: "colorCQ",               defaultColor: "#33FF33" },
+        { label: "Transmitted Message",   prop: "colorTxMessage",        defaultColor: "#FFFF00" },
+        { label: "My Callsign",           prop: "colorMyCall",           defaultColor: "#FF5555" },
+        { label: "New DXCC on Band",      prop: "colorNewDxccBand",      defaultColor: "#F8AAD0" },
+        { label: "New DXCC",              prop: "colorNewDxcc",          defaultColor: "#FF00FF" },
+        { label: "New Continent on Band", prop: "colorNewContinentBand", defaultColor: "#F5B7C7" },
+        { label: "New Continent",         prop: "colorNewContinent",     defaultColor: "#E91E63" },
+        { label: "New CQ Zone on Band",   prop: "colorNewCqZoneBand",    defaultColor: "#F5DDA0" },
+        { label: "New CQ Zone",           prop: "colorNewCqZone",        defaultColor: "#F0A030" },
+        { label: "New ITU Zone on Band",  prop: "colorNewItuZoneBand",   defaultColor: "#D4E89F" },
+        { label: "New ITU Zone",          prop: "colorNewItuZone",       defaultColor: "#9ACD32" },
+        { label: "New Grid on Band",      prop: "colorNewGridBand",      defaultColor: "#FFCAA0" },
+        { label: "New Grid",              prop: "colorNewGrid",          defaultColor: "#FF8C00" },
+        { label: "New Callsign on Band",  prop: "colorNewCallBand",      defaultColor: "#B5E8E8" },
+        { label: "New Callsign",          prop: "colorNewCall",          defaultColor: "#00E0E0" },
+        { label: "LoTW User",             prop: "colorLotwUser",         defaultColor: "#FFFFFF" },
+        { label: "CQ in Message",         prop: "colorCQ",               defaultColor: "#33FF33" },
         { label: "DX Entity",             prop: "colorDXEntity",         defaultColor: "#FFAA33" },
         { label: "73 / RR73",             prop: "color73",               defaultColor: "#5599FF" },
         { label: "B4 (Worked)",           prop: "colorB4",               defaultColor: "#888888" }
@@ -145,7 +145,7 @@ Dialog {
     // Color picker sub-dialog
     Dialog {
         id: colorPickerDialog
-        title: "Scegli Colore"
+        title: "Choose Color"
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         width: 280
@@ -166,7 +166,7 @@ Dialog {
             padding: 12
 
             Text {
-                text: "Colore esadecimale (#RRGGBB):"
+                text: "Hex color (#RRGGBB):"
                 font.family: "Consolas"
                 font.pixelSize: 11
                 color: "#B0BEC5"
@@ -187,7 +187,7 @@ Dialog {
                 color: "#ECEFF1"
             }
 
-            // Anteprima
+            // Preview
             Rectangle {
                 width: 240; height: 32; radius: 4
                 color: colorPickerInput.text.match(/^#[0-9A-Fa-f]{6}$/)
@@ -197,7 +197,7 @@ Dialog {
 
                 Text {
                     anchors.centerIn: parent
-                    text: colorPickerInput.text.match(/^#[0-9A-Fa-f]{6}$/) ? "" : "colore non valido"
+                    text: colorPickerInput.text.match(/^#[0-9A-Fa-f]{6}$/) ? "" : "invalid color"
                     color: "#f44336"; font.pixelSize: 10
                 }
             }

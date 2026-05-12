@@ -18,6 +18,7 @@
 //#include "widgets/mainwindow.h" // TODO: G4WJS - break this dependency //w3sz tci
 #include "Audio/soundout.h"
 #include "commons.h"
+#include "PrecisionTime.hpp"
 
 #include "moc_Modulator.cpp"
 
@@ -144,8 +145,8 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
       framesPerSymbol = 288.0;
       toneSpacing = -2.0;
     }
-// Time according to this computer which becomes our base time
-  qint64 ms0 = QDateTime::currentMSecsSinceEpoch() % 86400000;
+// Time according to the same NTP-corrected clock used by the rest of Decodium.
+  qint64 ms0 = ntpCorrectedCurrentMSecsSinceEpoch() % 86400000;
   unsigned mstr = ms0 % int(1000.0*m_period); // ms into the nominal Tx start time
 
   if(m_state != Idle) stop();
@@ -203,7 +204,7 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
   if((mode=="FT8" and m_nsps==1920) or (mode=="FST4" and m_nsps==720)) delay_ms=500;  //FT8, FST4-15
   if((mode=="FT8" and m_nsps==1024)) delay_ms=400;            //SuperFox Qary Polar Code transmission
   if(mode=="Q65" and m_nsps<=3600) delay_ms=500;              //Q65-15 and Q65-30
-  if(mode=="FT4") delay_ms=300;                               //FT4
+  if(mode=="FT4") delay_ms=500;                               //FT4, match JTDX lead-in
   if(mode=="FT2") {
 #if defined(Q_OS_LINUX)
     delay_ms=0;                                               //Linux FT2: start payload immediately after PTT
@@ -229,20 +230,15 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
         {
           if(delay_ms > mstr) m_silentFrames = (delay_ms - mstr) * m_frameRate / 1000;
 
-          // FT2 is short enough that some rigs/macOS audio paths can key PTT
-          // before the data audio becomes usable. Hold the payload back a bit
-          // longer to guarantee a small lead-in after PTT.
+          // Short precomputed payloads need a stable PTT/audio lead-in before
+          // the first data symbol. FT4 uses the same 500 ms lead-in as JTDX.
           if (ft2_precomputed_wave || ft4_precomputed_wave)
             {
-              unsigned lead_in_ms = 450;
+              unsigned lead_in_ms = ft4_precomputed_wave ? 500 : 450;
 #if defined(Q_OS_LINUX)
               if (ft2_precomputed_wave)
                 {
                   lead_in_ms = 0;                              //Linux FT2: no extra lead-in, payload should start immediately
-                }
-              else if (ft4_precomputed_wave)
-                {
-                  lead_in_ms = 300;
                 }
 #endif
               m_silentFrames = qMax<qint64> (m_silentFrames, (lead_in_ms * m_frameRate) / 1000);
@@ -264,12 +260,13 @@ void Modulator::start (QString mode, unsigned symbolsLength, double framesPerSym
   if (m_ft2PrecomputedWave || m_ft4PrecomputedWave)
     {
       auto const tag = precomputed_debug_tag (m_modeName);
-      append_modulator_debug (QString {"%1modStart snapPeak:%2 samples:%3 silent:%4 mstr:%5 period:%6"}
+      append_modulator_debug (QString {"%1modStart snapPeak:%2 samples:%3 silent:%4 mstr:%5 delay:%6 period:%7 clock:ntp"}
                                   .arg (tag)
                                   .arg (vector_peak (m_waveSnapshot), 0, 'f', 6)
                                   .arg (m_waveSnapshot.size ())
                                   .arg (m_silentFrames)
                                   .arg (mstr)
+                                  .arg (delay_ms)
                                   .arg (m_period, 0, 'f', 2));
     }
 
@@ -378,7 +375,7 @@ qint64 Modulator::readData (char * data, qint64 maxSize)
         if(m_TRperiod==3.0) slowCwId=false;
         bool fastCwId=false;
         static bool bCwId=false;
-        qint64 ms = QDateTime::currentMSecsSinceEpoch();
+        qint64 ms = ntpCorrectedCurrentMSecsSinceEpoch();
         float tsec=0.001*(ms % int(1000*m_TRperiod));
         if(m_bFastMode and (m_icw[0]>0) and (tsec > (m_TRperiod-5.0))) fastCwId=true;
         if(!m_bFastMode) m_nspd=2560;                 // 22.5 WPM

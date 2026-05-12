@@ -767,6 +767,8 @@ public slots:
     Q_INVOKABLE void setTxAudioFreqFromClick(int f) { setTxFrequency(f); }
     Q_INVOKABLE void setRxAudioFreqFromClick(int f) { setRxFrequency(f); }
     Q_INVOKABLE QVariantMap worldClockSnapshot(const QString& timeZoneId) const;
+    Q_INVOKABLE QVariantList worldClockCityOptions(const QString& query = QString(),
+                                                   int limit = 40) const;
 
     // DX Cluster
     Q_INVOKABLE void connectDxCluster();
@@ -1614,6 +1616,25 @@ private:
     bool               m_txPlaybackReleasePending {false};
     quint64            m_txPlaybackSerial {0};
     bool               m_txAudioRestartPending {false};
+    quint64            m_txAudioTelemetrySerial {0};
+    qint64             m_txAudioTelemetryStartWallMs {0};
+    qint64             m_txAudioTelemetryLastWallMs {0};
+    qint64             m_txAudioTelemetryLastProcessedUs {0};
+    qint64             m_txAudioTelemetryExpectedUs {0};
+    qint64             m_txAudioTelemetryMaxLagMs {0};
+    qint64             m_txAudioTelemetryMaxStallMs {0};
+    qint64             m_txAudioTelemetryLastWarningMs {0};
+    int                m_txAudioTelemetrySlotElapsedMs {-1};
+    int                m_txAudioTelemetryLeadInMs {0};
+    int                m_txAudioTelemetryPayloadDelayMs {0};
+    qint64             m_txAudioTelemetryPcmBytes {0};
+    qsizetype          m_txAudioTelemetrySinkBufferSize {-1};
+    double             m_txAudioTelemetryWavePeak {0.0};
+    double             m_txAudioTelemetryGain {0.0};
+    int                m_txAudioTelemetryStallCount {0};
+    int                m_txAudioTelemetryErrorCount {0};
+    int                m_txAudioTelemetryIdleCount {0};
+    int                m_txAudioTelemetryUnderrunCount {0};
     bool               m_txAudioPriorityBoosted {false};
     quint32            m_txAudioPreviousPriorityClass {0};
     qint64             m_audioUnhealthyStartMs {0};
@@ -1660,6 +1681,7 @@ private:
     bool m_legacyStateRefreshBurstQueued {false};
     QSet<QString> m_legacyModeChangeClearedDecodeKeys;
     QSet<QString> m_legacyClearedRxMirrorKeys;
+    QSet<QString> m_clearedRxDecodeKeys;
 
     // === GitHub TxController clone ===
     int  m_nTx73            {0};   // completed 73/RR73 transmissions in current QSO
@@ -1918,6 +1940,7 @@ private:
     static constexpr int PANADAPTER_FFT_SIZE  = 4096;  // visual panadapter (~2.93 Hz/bin @ 12kHz)
     QVector<float> m_lastPanadapterData;   // ultimo spettro valido (evita fasce nere)
     qint64 m_lastPanadapterFrameMs {0};     // throttle visual FFT so decode keeps priority
+    qint64 m_lastPanadapterPressureLogMs {0};
     qint64 m_lastSpectrumRecoveryMs {0};
     qint64 m_lastLegacyPcmSampleMs {0};
     float m_lastPanMinDb {0.f};
@@ -2057,6 +2080,12 @@ private:
     qint64 syncTxPcmStartOffsetBytes(const QAudioFormat& format, qint64 pcmSizeBytes,
                                      int* elapsedMsOut = nullptr) const;
     void scheduleSyncTxBoundaryStop(const QString& reason, quint64 txSerial);
+    void resetTxAudioTelemetry(quint64 txSerial, qint64 audioStartWallMs, qint64 expectedUs,
+                               int slotElapsedMs, int leadInMs, int payloadDelayMs,
+                               qint64 pcmBytes, qsizetype sinkBufferSize,
+                               double wavePeak, double effectiveGain);
+    void scheduleTxAudioTelemetryProbe(quint64 txSerial);
+    void logTxAudioTelemetrySummary(const QString& reason);
     QString buildCurrentTxMessage() const;
     bool prepareHoundTxSelectionForStart(const QString& reason);
     QString defaultLogCommentForQso(const QString& mode,

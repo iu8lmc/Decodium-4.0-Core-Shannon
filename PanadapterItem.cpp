@@ -531,6 +531,7 @@ struct PanadapterItem::GpuFftState
     int sampleCapacity = 0;
     int outputCapacity = 0;
     bool readbackPending = false;
+    qint64 readbackPendingSinceMs = 0;
     bool loggedActive = false;
     bool loggedReadbackStats = false;
 
@@ -555,6 +556,7 @@ struct PanadapterItem::GpuFftState
         sampleCapacity = 0;
         outputCapacity = 0;
         readbackPending = false;
+        readbackPendingSinceMs = 0;
     }
 };
 #else
@@ -1265,6 +1267,10 @@ bool PanadapterItem::addPcmFrame(const QVector<float>& samples,
                 << "[PANDBG] Panadapter visual FFT GPU path rejected"
                 << "reason=" << reason;
             m_loggedGpuFftRejected = true;
+        }
+        if (reason == QStringLiteral("no QQuickWindow yet")
+            || reason == QStringLiteral("no QSGRendererInterface")) {
+            return true;
         }
         return false;
     }
@@ -2133,14 +2139,31 @@ void PanadapterItem::recordGpuFftCompute()
 {
 #if defined(DECODIUM_QT_RHI_TEXTURE_UPLOAD) && defined(DECODIUM_GPU_PANADAPTER_FFT_QSB)
     PcmFrame frame;
+    QString readbackTimeoutReason;
     {
         QMutexLocker lock(&m_mutex);
-        if (!m_hasPendingPcmFrame || m_gpuFftFailed)
+        if (m_gpuFft && m_gpuFft->readbackPending) {
+            qint64 const pendingSince = m_gpuFft->readbackPendingSinceMs;
+            qint64 const pendingAgeMs = pendingSince > 0 ? monotonicMs() - pendingSince : 0;
+            if (pendingAgeMs > 1500) {
+                readbackTimeoutReason =
+                    QStringLiteral("GPU FFT readback timeout after %1 ms").arg(pendingAgeMs);
+            } else {
+                return;
+            }
+        }
+        if (!readbackTimeoutReason.isEmpty()) {
+            m_hasPendingPcmFrame = false;
+        } else if (!m_hasPendingPcmFrame || m_gpuFftFailed) {
             return;
-        if (m_gpuFft && m_gpuFft->readbackPending)
-            return;
-        frame = m_pendingPcmFrame;
-        m_hasPendingPcmFrame = false;
+        } else {
+            frame = m_pendingPcmFrame;
+            m_hasPendingPcmFrame = false;
+        }
+    }
+    if (!readbackTimeoutReason.isEmpty()) {
+        failGpuFft(readbackTimeoutReason);
+        return;
     }
 
     QQuickWindow* win = window();
@@ -2325,8 +2348,13 @@ void PanadapterItem::recordGpuFftCompute()
         delete readback;
         if (!guard)
             return;
-        if (guard->m_gpuFft)
-            guard->m_gpuFft->readbackPending = false;
+        {
+            QMutexLocker lock(&guard->m_mutex);
+            if (guard->m_gpuFft) {
+                guard->m_gpuFft->readbackPending = false;
+                guard->m_gpuFft->readbackPendingSinceMs = 0;
+            }
+        }
         if (data.size() < nBins * static_cast<int>(sizeof(float))) {
             QMetaObject::invokeMethod(guard, [guard]() {
                 if (guard)
@@ -2451,6 +2479,7 @@ void PanadapterItem::recordGpuFftCompute()
     cb->dispatch((nBins + 63) / 64, 1, 1);
     cb->endComputePass(readbackBatch);
     m_gpuFft->readbackPending = true;
+    m_gpuFft->readbackPendingSinceMs = monotonicMs();
 
     if (!m_gpuFft->loggedActive) {
         qInfo().noquote()

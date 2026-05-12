@@ -6,11 +6,11 @@ RequestExecutionLevel admin
 !include "x64.nsh"
 
 !define APP_NAME "Decodium"
-!define APP_VERSION "1.0.127"
+!define APP_VERSION "1.0.157"
 !define APP_PUBLISHER "IU8LMC"
 !define APP_EXE "decodium.exe"
 !define STAGE_DIR "C:\Users\racca\CodexLocalBuilds\Decodium-installer-stage"
-!define OUTPUT_EXE "C:\Users\racca\Desktop\Decodium_1.0.127_Setup_x64.exe"
+!define OUTPUT_EXE "C:\Users\racca\Desktop\Decodium_1.0.157_Setup_x64.exe"
 
 Name "${APP_NAME} ${APP_VERSION}"
 OutFile "${OUTPUT_EXE}"
@@ -18,7 +18,7 @@ InstallDir "$PROGRAMFILES64\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_PUBLISHER}\${APP_NAME}" "InstallPath"
 BrandingText "Decodium4"
 
-VIProductVersion "1.0.127.0"
+VIProductVersion "1.0.157.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey "FileDescription" "Decodium4 Setup"

@@ -33,14 +33,15 @@ namespace
   int constexpr hrd_connect_timeout_ms {5000};
   int constexpr hrd_write_timeout_ms {1500};
   int constexpr hrd_probe_reply_timeout_ms {1000};
-  unsigned constexpr hrd_probe_reply_retries {10};
+  unsigned constexpr hrd_probe_reply_retries {60};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
   qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
 
-  bool is_context_probe (QString const& cmd)
+  bool is_startup_probe (QString const& cmd)
   {
-    return 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive);
+    return 0 == cmd.compare (QStringLiteral ("get id"), Qt::CaseInsensitive)
+        || 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive);
   }
 
   QString hrd_protocol_name (int protocol)
@@ -1432,14 +1433,14 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd, quint64 sequence)
 {
   // HRD can accept the TCP socket before the remote protocol has a reply
   // ready. JTDX/WSJT-X tolerate this on slower Windows installs; keep the
-  // initial context probe patient enough to match that behavior without
+  // initial protocol probe patient enough to match that behavior without
   // making ordinary CAT polling sluggish.
   QElapsedTimer total_timer;
   total_timer.start ();
-  bool const context_probe = is_context_probe (cmd);
-  int const timeout_ms = context_probe ? hrd_probe_reply_timeout_ms
+  bool const startup_probe = is_startup_probe (cmd);
+  int const timeout_ms = startup_probe ? hrd_probe_reply_timeout_ms
                                        : hrd_command_reply_timeout_ms;
-  unsigned retries = context_probe ? hrd_probe_reply_retries
+  unsigned retries = startup_probe ? hrd_probe_reply_retries
                                    : hrd_command_reply_retries;
   bool replied {false};
   unsigned attempt {0};
@@ -1464,20 +1465,47 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd, quint64 sequence)
         }
       if (!replied && startup_diagnostics_active_)
         {
-          hrd_diag (QStringLiteral ("#%1 read timeout attempt=%2 timeoutMs=%3 cmd='%4'")
+          auto const elapsed_ms = total_timer.elapsed ();
+          auto const pending_bytes = hrd_ ? hrd_->bytesAvailable () : qint64 {0};
+          hrd_diag (QStringLiteral ("#%1 startup blocked command='%2' attempt=%3 timeoutMs=%4 elapsedMs=%5 state=%6 pendingBytes=%7 startupProbe=%8")
+                    .arg (QString::number (sequence))
+                    .arg (hrd_preview (cmd))
+                    .arg (attempt)
+                    .arg (timeout_ms)
+                    .arg (elapsed_ms)
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (pending_bytes)
+                    .arg (startup_probe ? 1 : 0));
+          hrd_diag (QStringLiteral ("#%1 read timeout attempt=%2 timeoutMs=%3 elapsedMs=%4 startupProbe=%5 cmd='%6'")
                     .arg (QString::number (sequence))
                     .arg (attempt)
                     .arg (timeout_ms)
+                    .arg (elapsed_ms)
+                    .arg (startup_probe ? 1 : 0)
                     .arg (hrd_preview (cmd)));
         }
     }
   if (!replied)
     {
       CAT_ERROR (cmd << "retries exhausted, timeoutMs=" << timeout_ms);
-      hrd_diag (QStringLiteral ("#%1 read retries exhausted attempts=%2 timeoutMs=%3 state=%4 cmd='%5'")
+      if (startup_diagnostics_active_)
+        {
+          hrd_diag (QStringLiteral ("#%1 startup blocked command final='%2' attempts=%3 timeoutMs=%4 totalMs=%5 state=%6 pendingBytes=%7 startupProbe=%8")
+                    .arg (QString::number (sequence))
+                    .arg (hrd_preview (cmd))
+                    .arg (attempt)
+                    .arg (timeout_ms)
+                    .arg (total_timer.elapsed ())
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (hrd_ ? hrd_->bytesAvailable () : qint64 {0})
+                    .arg (startup_probe ? 1 : 0));
+        }
+      hrd_diag (QStringLiteral ("#%1 read retries exhausted attempts=%2 timeoutMs=%3 elapsedMs=%4 startupProbe=%5 state=%6 cmd='%7'")
                 .arg (QString::number (sequence))
                 .arg (attempt)
                 .arg (timeout_ms)
+                .arg (total_timer.elapsed ())
+                .arg (startup_probe ? 1 : 0)
                 .arg (hrd_socket_state_name (hrd_))
                 .arg (hrd_preview (cmd)));
       throw error {

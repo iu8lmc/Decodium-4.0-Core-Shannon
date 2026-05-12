@@ -9,6 +9,10 @@ Rectangle {
     border.width: 1
     radius: 6
 
+    signal closeRequested()
+
+    property var dragTarget: null
+    property bool showCloseButton: false
     property bool expanded: false
     readonly property bool dtMetricsActive: {
         var mode = (bridge.mode || "").toString().toUpperCase()
@@ -42,9 +46,15 @@ Rectangle {
             spacing: 6
 
             Text {
-                text: expanded ? "▼" : "▶"
+                text: timeSyncPanel.expanded ? "▼" : "▶"
                 font.pixelSize: 9
                 color: "#90CAF9"
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: timeSyncPanel.expanded = !timeSyncPanel.expanded
+                }
             }
 
             Text {
@@ -53,9 +63,52 @@ Rectangle {
                 font.pixelSize: 10
                 font.bold: true
                 color: "#B0BEC5"
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: timeSyncPanel.dragTarget ? Qt.SizeAllCursor : Qt.PointingHandCursor
+                    drag.target: timeSyncPanel.dragTarget
+                    drag.axis: Drag.XAndYAxis
+                    drag.minimumX: 0
+                    drag.minimumY: 0
+                    drag.maximumX: timeSyncPanel.dragTarget && timeSyncPanel.dragTarget.parent
+                                   ? Math.max(0, timeSyncPanel.dragTarget.parent.width - timeSyncPanel.dragTarget.width)
+                                   : 0
+                    drag.maximumY: timeSyncPanel.dragTarget && timeSyncPanel.dragTarget.parent
+                                   ? Math.max(0, timeSyncPanel.dragTarget.parent.height - timeSyncPanel.dragTarget.height)
+                                   : 0
+                    onClicked: timeSyncPanel.expanded = !timeSyncPanel.expanded
+                    onReleased: {
+                        if (timeSyncPanel.dragTarget && timeSyncPanel.dragTarget.savePosition)
+                            timeSyncPanel.dragTarget.savePosition()
+                    }
+                }
             }
 
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 20
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: timeSyncPanel.dragTarget ? Qt.SizeAllCursor : Qt.PointingHandCursor
+                    drag.target: timeSyncPanel.dragTarget
+                    drag.axis: Drag.XAndYAxis
+                    drag.minimumX: 0
+                    drag.minimumY: 0
+                    drag.maximumX: timeSyncPanel.dragTarget && timeSyncPanel.dragTarget.parent
+                                   ? Math.max(0, timeSyncPanel.dragTarget.parent.width - timeSyncPanel.dragTarget.width)
+                                   : 0
+                    drag.maximumY: timeSyncPanel.dragTarget && timeSyncPanel.dragTarget.parent
+                                   ? Math.max(0, timeSyncPanel.dragTarget.parent.height - timeSyncPanel.dragTarget.height)
+                                   : 0
+                    onClicked: timeSyncPanel.expanded = !timeSyncPanel.expanded
+                    onReleased: {
+                        if (timeSyncPanel.dragTarget && timeSyncPanel.dragTarget.savePosition)
+                            timeSyncPanel.dragTarget.savePosition()
+                    }
+                }
+            }
 
             // UTC Clock
             Text {
@@ -69,7 +122,9 @@ Rectangle {
 
             // NTP status dot
             Rectangle {
-                width: 7; height: 7; radius: 3.5
+                Layout.preferredWidth: 7
+                Layout.preferredHeight: 7
+                radius: 3.5
                 color: {
                     if (!bridge.ntpEnabled) return "#78909C"
                     if (!bridge.ntpSynced) return "#FF9800"
@@ -81,17 +136,38 @@ Rectangle {
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            MouseArea {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                onClicked: timeSyncPanel.expanded = !timeSyncPanel.expanded
+            Rectangle {
+                visible: timeSyncPanel.showCloseButton
+                Layout.preferredWidth: 20
+                Layout.preferredHeight: 20
+                radius: 4
+                color: closeMouse.containsMouse
+                       ? Qt.rgba(244 / 255, 67 / 255, 54 / 255, 0.24)
+                       : Qt.rgba(255, 255, 255, 0.04)
+                border.color: closeMouse.containsMouse ? "#f44336" : Qt.rgba(255, 255, 255, 0.16)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "✕"
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: closeMouse.containsMouse ? "#f44336" : "#B0BEC5"
+                }
+
+                MouseArea {
+                    id: closeMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: timeSyncPanel.closeRequested()
+                }
             }
         }
 
         // Expanded content
         GridLayout {
             id: gridContent
-            visible: expanded
+            visible: timeSyncPanel.expanded
             columns: 2
             columnSpacing: 16
             rowSpacing: 4
@@ -240,12 +316,4 @@ Rectangle {
         onTriggered: utcClock.text = Qt.formatDateTime(timeSyncPanel.correctedUtcNow(), "HH:mm:ss.z") + " UTC"
     }
 
-    // Click header to expand
-    MouseArea {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: headerRow.implicitHeight + 8
-        onClicked: timeSyncPanel.expanded = !timeSyncPanel.expanded
-    }
 }

@@ -128,7 +128,7 @@ Dialog {
             background: Rectangle { color: "transparent" }
 
             Repeater {
-                model: ["About", "Storia", "Contatti", "Guida", "Link"]
+                model: ["About", "History", "Contacts", "Guide", "Links"]
 
                 TabButton {
                     text: modelData
@@ -294,7 +294,7 @@ Dialog {
                 }
             }
 
-            // ===== TAB 1: STORIA =====
+            // ===== TAB 1: HISTORY =====
             ScrollView {
                 clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -307,7 +307,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "LA STORIA DI DECODIUM"
+                        text: "DECODIUM HISTORY"
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -316,13 +316,13 @@ Dialog {
                     // Timeline
                     Repeater {
                         model: [
-                            { year: "2018", title: "WSJT-X / Predecessori", desc: "LZ2HV (Christo) sviluppa un decoder multi-mode per FT8, JT65 e altri modi digitali basato su WSJT-X di K1JT. Nasce il supporto per decodifica multi-stream." },
-                            { year: "2020", title: "Decoder Multi-Mode", desc: "Evoluzione con supporto per nuovi modi come FT4 e Q65. La community cresce e contribuisce all'ecosistema WSJT." },
-                            { year: "2024", title: "Fork Qt6", desc: "IU8LMC inizia il porting a Qt6 con interfaccia moderna QML. Nasce il progetto Decodium con UI glass-morphism." },
-                            { year: "2025", title: "Decodium 1.0", desc: "Prima release pubblica con Neural Sync, Coherent Averaging, interfaccia moderna, CAT control integrato e PSK Reporter." },
-                            { year: "2025", title: "Decodium 1.5", desc: "Release con miglioramenti decoder, nuova UI, gestione macro, finestra astronomica." },
-                            { year: "2026", title: "Decodium 2.0", desc: "Versione ottimizzata per computer datati: bitshift, memcpy, magnitude squared. Fix CAT Yaesu con DTR/RTS." },
-                            { year: "2026", title: "Decodium 4.0 Core Shannon", desc: "Refactoring architetturale completo. Nuova UI modulare, integrazione PSK Reporter, Cloudlog, DX Cluster live, ADIF, LotW. Named after Claude Shannon, padre della teoria dell'informazione." }
+                            { year: "2018", title: "WSJT-X / Predecessors", desc: "LZ2HV (Christo) develops a multi-mode decoder for FT8, JT65, and other digital modes based on K1JT's WSJT-X. Multi-stream decoding support is introduced." },
+                            { year: "2020", title: "Multi-Mode Decoder", desc: "Evolution with support for newer modes such as FT4 and Q65. The community grows and contributes to the WSJT ecosystem." },
+                            { year: "2024", title: "Qt6 Fork", desc: "IU8LMC starts the Qt6 port with a modern QML interface. The Decodium project is born with a glass-morphism UI." },
+                            { year: "2025", title: "Decodium 1.0", desc: "First public release with Neural Sync, Coherent Averaging, modern UI, integrated CAT control, and PSK Reporter." },
+                            { year: "2025", title: "Decodium 1.5", desc: "Release with decoder improvements, new UI, macro management, and the astronomy window." },
+                            { year: "2026", title: "Decodium 2.0", desc: "Version optimized for older computers: bitshift, memcpy, and magnitude-squared optimizations. Yaesu CAT fix with DTR/RTS." },
+                            { year: "2026", title: "Decodium 4.0 Core Shannon", desc: "Complete architectural refactor. New modular UI, PSK Reporter, Cloudlog, live DX Cluster, ADIF, and LotW integration. Named after Claude Shannon, father of information theory." }
                         ]
 
                         Rectangle {
@@ -390,7 +390,7 @@ Dialog {
                 }
             }
 
-            // ===== TAB 2: CONTATTI =====
+            // ===== TAB 2: CONTACTS =====
             ScrollView {
                 clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -403,7 +403,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "CONTATTI & FEEDBACK"
+                        text: "CONTACTS & FEEDBACK"
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -425,7 +425,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Sviluppatore: IU8LMC"
+                                text: "Developer: IU8LMC"
                                 font.pixelSize: 14
                                 color: textPrimary
                             }
@@ -458,7 +458,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Sviluppatore: 9H1SR"
+                                text: "Developer: 9H1SR"
                                 font.pixelSize: 14
                                 color: textPrimary
                             }
@@ -510,7 +510,7 @@ Dialog {
 
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "INVIA FEEDBACK"
+                                text: "SEND FEEDBACK"
                                 font.pixelSize: 14
                                 font.bold: true
                                 color: accentOrange
@@ -521,7 +521,7 @@ Dialog {
                                 spacing: 5
 
                                 Text {
-                                    text: "Oggetto"
+                                    text: "Subject"
                                     color: textSecondary
                                     font.pixelSize: 11
                                 }
@@ -548,7 +548,7 @@ Dialog {
                                 spacing: 5
 
                                 Text {
-                                    text: "Messaggio, suggerimento o segnalazione bug"
+                                    text: "Message, suggestion, or bug report"
                                     color: textSecondary
                                     font.pixelSize: 11
                                 }
@@ -574,7 +574,7 @@ Dialog {
 
                             Button {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: "Invia Feedback"
+                                text: "Send Feedback"
                                 font.pixelSize: 12
 
                                 background: Rectangle {
@@ -608,7 +608,7 @@ Dialog {
                 }
             }
 
-            // ===== TAB 3: GUIDA =====
+            // ===== TAB 3: GUIDE =====
             ScrollView {
                 clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -621,7 +621,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "GUIDA RAPIDA"
+                        text: "QUICK GUIDE"
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -653,12 +653,12 @@ Dialog {
 
                             Repeater {
                                 model: [
-                                    "1. Configura il tuo callsign e grid in Settings > Station",
-                                    "2. Seleziona dispositivi audio in Settings > Audio",
-                                    "3. Configura CAT control per la tua radio (opzionale)",
-                                    "4. Seleziona modo (FT8, FT4, etc.) e banda",
-                                    "5. Clicca Monitor per iniziare a decodificare",
-                                    "6. Doppio click su un decode per rispondere"
+                                    "1. Configure your callsign and grid in Settings > Station",
+                                    "2. Select audio devices in Settings > Audio",
+                                    "3. Configure CAT control for your radio (optional)",
+                                    "4. Select mode (FT8, FT4, etc.) and band",
+                                    "5. Click Monitor to start decoding",
+                                    "6. Double-click a decode to reply"
                                 ]
 
                                 Text {
@@ -688,7 +688,7 @@ Dialog {
                             spacing: 8
 
                             Text {
-                                text: "SHORTCUTS TASTIERA"
+                                text: "KEYBOARD SHORTCUTS"
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: accentOrange
@@ -706,9 +706,9 @@ Dialog {
                                         { key: "F3", action: "Auto Sequence" },
                                         { key: "F4", action: "Log QSO" },
                                         { key: "ESC", action: "Halt TX" },
-                                        { key: "Ctrl+S", action: "Apri Settings" },
-                                        { key: "Ctrl+L", action: "Apri Log" },
-                                        { key: "Ctrl+M", action: "Apri Macro" }
+                                        { key: "Ctrl+S", action: "Open Settings" },
+                                        { key: "Ctrl+L", action: "Open Log" },
+                                        { key: "Ctrl+M", action: "Open Macro" }
                                     ]
 
                                     RowLayout {
@@ -759,7 +759,7 @@ Dialog {
                             spacing: 10
 
                             Text {
-                                text: "TIPS OPERATIVI"
+                                text: "OPERATING TIPS"
                                 font.pixelSize: 13
                                 font.bold: true
                                 color: primaryBlue
@@ -767,11 +767,11 @@ Dialog {
 
                             Repeater {
                                 model: [
-                                    "Usa Deep Search per segnali deboli (sotto -20dB)",
-                                    "Attiva AP Decode per migliorare la decodifica",
-                                    "Neural Sync aiuta con segnali al limite",
-                                    "MAM (Multi-Answer) per contest e pileup",
-                                    "Mantieni TX power sotto 60% per evitare ALC"
+                                    "Use Deep Search for weak signals (below -20 dB)",
+                                    "Enable AP Decode to improve decoding",
+                                    "Neural Sync helps with marginal signals",
+                                    "MAM (Multi-Answer) for contests and pileups",
+                                    "Keep TX power below 60% to avoid ALC"
                                 ]
 
                                 Text {
@@ -800,7 +800,7 @@ Dialog {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "LINK UTILI"
+                        text: "USEFUL LINKS"
                         font.pixelSize: 16
                         font.bold: true
                         color: secondaryCyan
@@ -815,14 +815,14 @@ Dialog {
 
                         Repeater {
                             model: [
-                                { name: "PSK Reporter", url: "https://pskreporter.info", desc: "Mappa propagazione real-time" },
-                                { name: "QRZ.com", url: "https://www.qrz.com", desc: "Database callsign mondiale" },
+                                { name: "PSK Reporter", url: "https://pskreporter.info", desc: "Real-time propagation map" },
+                                { name: "QRZ.com", url: "https://www.qrz.com", desc: "Worldwide callsign database" },
                                 { name: "LOTW", url: "https://lotw.arrl.org", desc: "Logbook of The World ARRL" },
-                                { name: "Club Log", url: "https://clublog.org", desc: "Log online e statistiche" },
-                                { name: "WSJT-X", url: "https://wsjt.sourceforge.io", desc: "Software originale K1JT" },
-                                { name: "Hamlib", url: "https://hamlib.github.io", desc: "Libreria CAT control" },
+                                { name: "Club Log", url: "https://clublog.org", desc: "Online log and statistics" },
+                                { name: "WSJT-X", url: "https://wsjt.sourceforge.io", desc: "Original K1JT software" },
+                                { name: "Hamlib", url: "https://hamlib.github.io", desc: "CAT control library" },
                                 { name: "DX Summit", url: "https://dxsummit.fi", desc: "DX Cluster spots" },
-                                { name: "VOACAP", url: "https://www.voacap.com", desc: "Previsioni propagazione HF" }
+                                { name: "VOACAP", url: "https://www.voacap.com", desc: "HF propagation forecasts" }
                             ]
 
                             Rectangle {

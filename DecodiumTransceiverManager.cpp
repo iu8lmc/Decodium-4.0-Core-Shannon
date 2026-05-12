@@ -24,6 +24,8 @@
 
 namespace
 {
+constexpr int kHrdStartupWatchdogMs = 75000;
+
 // Estrae il nome di una porta COM (es. "COM5") dal blob di errore hamlib
 // che può contenere path tipo "\\.\COM5" o "/dev/ttyUSB0".
 QString extractPortNameFromReason(QString const& reason)
@@ -48,14 +50,15 @@ QString extractPortNameFromReason(QString const& reason)
 // rileva e la sostituisce con un testo piu' comprensibile.
 QString sanitizeHamlibFailure(QString const& reason)
 {
-    bool const hrdContextTimeout =
-        reason.contains(QStringLiteral("get context"), Qt::CaseInsensitive)
+    bool const hrdProtocolTimeout =
+        (reason.contains(QStringLiteral("get id"), Qt::CaseInsensitive)
+         || reason.contains(QStringLiteral("get context"), Qt::CaseInsensitive))
         && (reason.contains(QStringLiteral("retries exhausted"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("ritenta esaurito"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("failed to reply"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("non risponde"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("timed out"), Qt::CaseInsensitive));
-    if (hrdContextTimeout) {
+    if (hrdProtocolTimeout) {
         return QObject::tr(
             "Ham Radio Deluxe accetta la connessione TCP, ma non risponde al protocollo HRD. "
             "Verifica che HRD Rig Control sia avviato, che la radio sia gia' connessa in HRD "
@@ -694,7 +697,9 @@ void DecodiumTransceiverManager::abortConnectingRigAfterTimeout(Transceiver* xcv
         << "[CATDBG] Connect watchdog abort"
         << "rig=" << m_rigName
         << "portType=" << m_portType
-        << "network=" << m_networkPort;
+        << "network=" << m_networkPort
+        << "elapsedMs=" << (m_connectAttemptTimer.isValid() ? m_connectAttemptTimer.elapsed() : -1)
+        << "shownReason=" << shownReason;
 
     d->transceiver = nullptr;
     if (d->xcvThread == thread) {
@@ -1431,8 +1436,13 @@ void DecodiumTransceiverManager::connectRig()
 
     if (isHamRadioDeluxeRig(params.rig_name)) {
         QString const shownReason = sanitizeHamlibFailure(
-            QStringLiteral("Ham Radio Deluxe retries exhausted sending command \"get context\""));
-        QTimer::singleShot(25000, this, [this, xcv, thread, shownReason]() {
+            QStringLiteral("Ham Radio Deluxe retries exhausted sending command \"get id\""));
+        qInfo().noquote()
+            << "[CATDBG] HRD startup watchdog armed"
+            << "timeoutMs=" << kHrdStartupWatchdogMs
+            << "network=" << m_networkPort
+            << "initialProbe=get id";
+        QTimer::singleShot(kHrdStartupWatchdogMs, this, [this, xcv, thread, shownReason]() {
             abortConnectingRigAfterTimeout(xcv, thread, shownReason);
         });
     }

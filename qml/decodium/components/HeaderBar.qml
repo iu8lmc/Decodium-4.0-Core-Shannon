@@ -345,19 +345,9 @@ Rectangle {
             Layout.preferredWidth: 180
             Layout.preferredHeight: 44
 
-            // Timezone data
-            property var timezones: [
-                { name: "UTC", zoneId: "UTC" },
-                { name: "London", zoneId: "Europe/London" },
-                { name: "Rome", zoneId: "Europe/Rome" },
-                { name: "Moscow", zoneId: "Europe/Moscow" },
-                { name: "Dubai", zoneId: "Asia/Dubai" },
-                { name: "Tokyo", zoneId: "Asia/Tokyo" },
-                { name: "Sydney", zoneId: "Australia/Sydney" },
-                { name: "New York", zoneId: "America/New_York" },
-                { name: "Los Angeles", zoneId: "America/Los_Angeles" }
-            ]
-            property int selectedTz: 0
+            property var timezones: bridge ? bridge.worldClockCityOptions("", 9) : [{ name: "UTC", zoneId: "UTC" }]
+            property string selectedZoneId: String(bridge.getSetting("uiWorldClockZoneId", "UTC") || "UTC")
+            property string selectedCityName: String(bridge.getSetting("uiWorldClockCityName", "UTC") || "UTC")
             property int hours: 0
             property int minutes: 0
             property int seconds: 0
@@ -369,22 +359,47 @@ Rectangle {
                 onTriggered: worldClock.updateTime()
             }
 
-            Component.onCompleted: updateTime()
+            Component.onCompleted: {
+                refreshTimezones()
+                updateTime()
+            }
+
+            function refreshTimezones() {
+                timezones = bridge ? bridge.worldClockCityOptions("", 9) : [{ name: "UTC", zoneId: "UTC" }]
+            }
+
+            function selectTimezone(option) {
+                if (!option || !option.zoneId)
+                    return
+
+                selectedZoneId = option.zoneId
+                selectedCityName = option.name || option.zoneId
+                bridge.setSetting("uiWorldClockZoneId", selectedZoneId)
+                bridge.setSetting("uiWorldClockCityName", selectedCityName)
+                updateTime()
+            }
 
             function updateTime() {
-                if (selectedTz < 0 || selectedTz >= timezones.length) {
-                    selectedTz = 0
-                }
-
-                var snapshot = bridge.worldClockSnapshot(timezones[selectedTz].zoneId)
+                var snapshot = bridge.worldClockSnapshot(selectedZoneId)
+                selectedZoneId = snapshot.timeZoneId || "UTC"
                 hours = snapshot.hours
                 minutes = snapshot.minutes
                 seconds = snapshot.seconds
             }
 
             function nextTimezone() {
-                selectedTz = (selectedTz + 1) % timezones.length
-                updateTime()
+                refreshTimezones()
+                if (!timezones || timezones.length === 0)
+                    return
+
+                var idx = 0
+                for (var i = 0; i < timezones.length; ++i) {
+                    if (timezones[i].zoneId === selectedZoneId) {
+                        idx = (i + 1) % timezones.length
+                        break
+                    }
+                }
+                selectTimezone(timezones[idx])
             }
 
             Rectangle {
@@ -480,7 +495,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: worldClock.timezones[worldClock.selectedTz].name + " ▼"
+                            text: worldClock.selectedCityName + " ▼"
                             font.pixelSize: 10
                             color: secondaryCyan
                         }

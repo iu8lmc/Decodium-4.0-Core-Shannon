@@ -15,28 +15,81 @@
 
 #include "moc_soundin.cpp"
 
+namespace
+{
+QString audioStateName(QAudio::State state)
+{
+  switch (state)
+    {
+    case QAudio::ActiveState: return QStringLiteral("ActiveState");
+    case QAudio::SuspendedState: return QStringLiteral("SuspendedState");
+    case QAudio::StoppedState: return QStringLiteral("StoppedState");
+    case QAudio::IdleState: return QStringLiteral("IdleState");
+    }
+  return QStringLiteral("UnknownState(%1)").arg(static_cast<int>(state));
+}
+
+QString audioErrorName(QAudio::Error error)
+{
+  switch (error)
+    {
+    case QAudio::NoError: return QStringLiteral("NoError");
+    case QAudio::OpenError: return QStringLiteral("OpenError");
+    case QAudio::IOError: return QStringLiteral("IOError");
+    case QAudio::UnderrunError: return QStringLiteral("UnderrunError");
+    case QAudio::FatalError: return QStringLiteral("FatalError");
+    }
+  return QStringLiteral("UnknownError(%1)").arg(static_cast<int>(error));
+}
+
+QString inputChannelName(int channel)
+{
+  return AudioDevice::toString(static_cast<AudioDevice::Channel>(qBound(0, channel, 3)));
+}
+
+QString inputFormatSummary(QAudioFormat const& format)
+{
+  if (!format.isValid())
+    {
+      return QStringLiteral("invalid-format");
+    }
+  return QStringLiteral("%1 Hz, %2 ch, sample=%3, bytes/frame=%4")
+      .arg(format.sampleRate())
+      .arg(format.channelCount())
+      .arg(static_cast<int>(format.sampleFormat()))
+      .arg(format.bytesPerFrame());
+}
+}
+
 bool SoundInput::checkStream ()
 {
   bool result (false);
   if (m_stream)
     {
+      QString const context = QStringLiteral("device=\"%1\", requested=%2, selected-channel=%3, state=%4, qt-error=%5")
+          .arg(m_deviceDescription.isEmpty() ? QStringLiteral("<default input>") : m_deviceDescription,
+               inputFormatSummary(m_stream->format()),
+               inputChannelName(m_channelSelector),
+               audioStateName(m_stream->state()),
+               audioErrorName(m_stream->error()));
       switch (m_stream->error ())
         {
         case QAudio::OpenError:
-          Q_EMIT error (tr ("An error opening the audio input device has occurred."));
+          Q_EMIT error (tr ("Audio RX input open error: Qt could not open the selected input device. %1").arg(context));
           break;
 
         case QAudio::IOError:
-          Q_EMIT error (tr ("An error occurred during read from the audio input device."));
+          Q_EMIT error (tr ("Audio RX input read error: Qt reported an I/O failure while reading samples. %1").arg(context));
           break;
 
         case QAudio::FatalError:
-          Q_EMIT error (tr ("Non-recoverable error, audio input device not usable at this time."));
+          Q_EMIT error (tr ("Audio RX input fatal error: the selected input device is not usable now. %1").arg(context));
           break;
 
         case QAudio::UnderrunError:
           // Soft-fail on underrun, but do not silently ignore it.
           qWarning () << "SoundInput underrun detected on" << QSysInfo::prettyProductName ();
+          Q_EMIT status (tr ("Audio RX input underrun: capture fell behind but will continue. %1").arg(context));
           if (m_stream)
             {
               m_stream->reset ();
@@ -111,12 +164,20 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
     }
 
   stop ();
+  m_deviceDescription = device.description();
+  m_sampleRate = format.sampleRate();
+  m_channelCount = format.channelCount();
+  m_channelSelector = static_cast<int>(channel);
 
   qDebug() << "SoundInput::start ch=" << format.channelCount() << "rate=" << format.sampleRate() << "dev=" << device.description();
   if (!device.isFormatSupported (format))
     {
       qDebug() << "SoundInput: FORMAT NOT SUPPORTED";
-      Q_EMIT error (tr ("Requested input audio format is not supported on device."));
+      Q_EMIT error (tr ("Audio RX format unsupported: device=\"%1\" does not accept requested=%2; preferred=%3; selected-channel=%4")
+                    .arg(device.description(),
+                         inputFormatSummary(format),
+                         inputFormatSummary(device.preferredFormat()),
+                         inputChannelName(static_cast<int>(channel))));
       return;
     }
 
@@ -129,10 +190,6 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
 
   m_sink->setInputGainLinear (m_inputGain);
   m_stream->setVolume (1.0f);
-  m_deviceDescription = device.description();
-  m_sampleRate = format.sampleRate();
-  m_channelCount = format.channelCount();
-  m_channelSelector = static_cast<int>(channel);
   m_expectedSuspend_ = false;
   m_haveReportedState_ = false;
   m_lastStatusMessage.clear ();
@@ -154,7 +211,10 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
     }
   else
     {
-      Q_EMIT error (tr ("Failed to initialize audio sink device"));
+      Q_EMIT error (tr ("Audio RX sink initialization failed: input device=\"%1\", requested=%2, selected-channel=%3")
+                    .arg(m_deviceDescription,
+                         inputFormatSummary(format),
+                         inputChannelName(m_channelSelector)));
     }
 }
 
@@ -258,7 +318,10 @@ void SoundInput::handleStateChanged (QAudio::State newState)
     case QAudio::StoppedState:
       if (!checkStream ())
         {
-          emitStatusIfChanged (tr ("Error"), newState);
+          emitStatusIfChanged (tr ("Audio RX input stopped with error: device=\"%1\", state=%2")
+                               .arg(m_deviceDescription.isEmpty() ? QStringLiteral("<default input>") : m_deviceDescription,
+                                    audioStateName(newState)),
+                               newState);
         }
       else
         {

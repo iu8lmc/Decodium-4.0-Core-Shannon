@@ -67,7 +67,7 @@ Dialog {
         Text {
             Layout.leftMargin: 12
             Layout.topMargin: 8
-            text: "Banda corrente: " + currentBand + "  •  Modo: " + currentMode
+            text: "Current band: " + currentBand + "  •  Mode: " + currentMode
             font.family: "Consolas"
             font.pixelSize: 11
             color: "#90A4AE"
@@ -75,7 +75,7 @@ Dialog {
 
         Text {
             Layout.leftMargin: 12
-            text: "FREQUENZE SUGGERITE"
+            text: "SUGGESTED FREQUENCIES"
             font.family: "Consolas"
             font.pixelSize: 10
             font.letterSpacing: 2
@@ -161,11 +161,11 @@ Dialog {
             }
         }
 
-        // Pulsante chiudi
+        // Close button
         Button {
             Layout.alignment: Qt.AlignHCenter
             Layout.bottomMargin: 8
-            text: "Chiudi"
+            text: "Close"
             onClicked: qsyDialog.close()
             background: Rectangle {
                 color: parent.hovered ? Qt.rgba(0, 0.74, 0.84, 0.2) : Qt.rgba(1,1,1,0.05)

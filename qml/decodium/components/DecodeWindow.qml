@@ -100,40 +100,38 @@ Window {
     // reset del layout ListView che si verifica con function-call model
     // (new array reference ad ogni invocazione → contentY azzerato).
     property var rxDecodeModel: []
+    property var clearedRxDecodeKeys: ({})
 
 	    Connections {
 	        target: appEngine
 	        function onDecodeListChanged() {
-            var stickBandTail = bandActivityList ? bandActivityList.isNearTail() : true
-            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
             decodeWindow.bandActivityModel = filteredDecodeEntries(appEngine.decodeList)
             decodeWindow.decodeListVersion++
             decodeWindow.rxDecodeModel = currentRxDecodes()
             decodeWindow.rxDecodeListVersion++
-            if (stickBandTail && bandActivityList)
+            if (bandActivityList)
                 bandActivityList.forceTailFollow()
-            if (stickRxTail && rxFrequencyList)
+            if (rxFrequencyList)
                 rxFrequencyList.forceTailFollow()
         }
         function onRxDecodeListChanged() {
-            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
             decodeWindow.rxDecodeModel = currentRxDecodes()
             decodeWindow.rxDecodeListVersion++
-	            if (stickRxTail && rxFrequencyList)
+	            if (rxFrequencyList)
 	                rxFrequencyList.forceTailFollow()
 	        }
 	        function onDxCallChanged() {
-	            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+	            decodeWindow.clearedRxDecodeKeys = ({})
 	            decodeWindow.rxDecodeModel = currentRxDecodes()
 	            decodeWindow.rxDecodeListVersion++
-	            if (stickRxTail && rxFrequencyList)
+	            if (rxFrequencyList)
 	                rxFrequencyList.forceTailFollow()
 	        }
 	        function onRxFrequencyChanged() {
-	            var stickRxTail = rxFrequencyList ? rxFrequencyList.isNearTail() : true
+	            decodeWindow.clearedRxDecodeKeys = ({})
 	            decodeWindow.rxDecodeModel = currentRxDecodes()
 	            decodeWindow.rxDecodeListVersion++
-	            if (stickRxTail && rxFrequencyList)
+	            if (rxFrequencyList)
 	                rxFrequencyList.forceTailFollow()
 	        }
 	    }
@@ -142,6 +140,8 @@ Window {
     onShowTxMessagesInRxChanged: {
         rxDecodeModel = currentRxDecodes()
         rxDecodeListVersion++
+        if (rxFrequencyList)
+            rxFrequencyList.forceTailFollow()
     }
     Component.onCompleted: {
         rxDecodeModel = currentRxDecodes()
@@ -518,19 +518,39 @@ Window {
 	        return out
 	    }
 
+	    function rxEntryKey(item) {
+	        var key = [
+	            item.utc || item.time || "",
+	            item.freq || "",
+	            item.dt || "",
+	            item.snr || "",
+	            item.message || "",
+	            item.isTx === true ? "tx" : "rx"
+	        ].join("|")
+	        if (String(item.utc || item.time || "").trim().length === 0 && Number(item.timestamp || 0) > 0)
+	            key += "|ts=" + String(item.timestamp)
+	        return key
+	    }
+
+	    function clearSignalRxDecodes() {
+	        var hidden = {}
+	        for (var i = 0; i < decodeWindow.rxDecodeModel.length; ++i) {
+	            var item = decodeWindow.rxDecodeModel[i]
+	            if (!item || item.isSeparator === true)
+	                continue
+	            hidden[decodeWindow.rxEntryKey(item)] = true
+	        }
+	        decodeWindow.clearedRxDecodeKeys = hidden
+	        decodeWindow.rxDecodeModel = []
+	        decodeWindow.rxDecodeListVersion++
+	        appEngine.clearRxDecodes()
+	        if (rxFrequencyList)
+	            rxFrequencyList.forceTailFollow()
+	    }
+
 	    function currentRxDecodes() {
 	        var merged = []
 	        var seen = {}
-	        function entryKey(item) {
-	            return [
-	                item.utc || item.time || "",
-	                item.freq || "",
-	                item.dt || "",
-	                item.snr || "",
-	                item.message || "",
-	                item.isTx === true ? "tx" : "rx"
-	            ].join("|")
-	        }
 	        function appendIfNeeded(item, allowTx) {
 	            if (!item)
 	                return
@@ -542,7 +562,9 @@ Window {
 	                return
 	            if (!rxEntryBelongsToCurrentQso(item))
 	                return
-	            var key = entryKey(item)
+	            var key = decodeWindow.rxEntryKey(item)
+	            if (decodeWindow.clearedRxDecodeKeys[key])
+	                return
 	            if (seen[key])
 	                return
 	            seen[key] = true
@@ -907,9 +929,7 @@ NumberAnimation {
 	                                }
 	                            }
                             onCountChanged: {
-                                if (followTail) {
-                                    forceTailFollow()
-                                }
+                                forceTailFollow()
                             }
 	                            // 1.0.125: rimosse animazioni add/addDisplaced/moveDisplaced/
 	                            // removeDisplaced. Quando arrivano 20+ righe in un colpo
@@ -1238,7 +1258,7 @@ Component.onCompleted: {
                                 flat: true
                                 implicitHeight: 24
                                 implicitWidth: 50
-                                onClicked: appEngine.clearRxDecodes()
+                                onClicked: decodeWindow.clearSignalRxDecodes()
 
                                 contentItem: Text {
                                     text: parent.text
@@ -1419,9 +1439,7 @@ NumberAnimation {
 	                                }
 	                            }
                             onCountChanged: {
-                                if (followTail) {
-                                    forceTailFollow()
-                                }
+                                forceTailFollow()
                             }
 	                            // 1.0.125: rimosse animazioni add/addDisplaced/moveDisplaced/
 	                            // removeDisplaced (stesso motivo di bandActivityList).

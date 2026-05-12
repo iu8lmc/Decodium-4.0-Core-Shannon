@@ -10,14 +10,42 @@
 
 namespace
 {
+constexpr qreal kSoundOutputHeadroomGain = 0.9;
+
 QString formatSummary(QAudioFormat const& format)
 {
+  if (!format.isValid()) {
+    return QStringLiteral("invalid-format");
+  }
   return QStringLiteral("rate=%1 ch=%2 sample=%3 bytes=%4 cfg=%5")
       .arg(format.sampleRate())
       .arg(format.channelCount())
       .arg(static_cast<int>(format.sampleFormat()))
       .arg(format.bytesPerFrame())
       .arg(static_cast<quint32>(format.channelConfig()));
+}
+
+QString audioStateName(QAudio::State state)
+{
+  switch (state) {
+  case QAudio::ActiveState: return QStringLiteral("ActiveState");
+  case QAudio::SuspendedState: return QStringLiteral("SuspendedState");
+  case QAudio::StoppedState: return QStringLiteral("StoppedState");
+  case QAudio::IdleState: return QStringLiteral("IdleState");
+  }
+  return QStringLiteral("UnknownState(%1)").arg(static_cast<int>(state));
+}
+
+QString audioErrorName(QAudio::Error error)
+{
+  switch (error) {
+  case QAudio::NoError: return QStringLiteral("NoError");
+  case QAudio::OpenError: return QStringLiteral("OpenError");
+  case QAudio::IOError: return QStringLiteral("IOError");
+  case QAudio::UnderrunError: return QStringLiteral("UnderrunError");
+  case QAudio::FatalError: return QStringLiteral("FatalError");
+  }
+  return QStringLiteral("UnknownError(%1)").arg(static_cast<int>(error));
 }
 }
 
@@ -26,20 +54,27 @@ bool SoundOutput::checkStream() const
   bool result {false};
   Q_ASSERT_X(m_stream, "SoundOutput", "programming error");
   if (m_stream) {
+    QString const context = QStringLiteral("device=\"%1\", format=%2, state=%3, qt-error=%4, buffer=%5, bytes-free=%6")
+        .arg(m_device.description().isEmpty() ? QStringLiteral("<default output>") : m_device.description(),
+             formatSummary(m_stream->format()),
+             audioStateName(m_stream->state()),
+             audioErrorName(m_stream->error()))
+        .arg(m_stream->bufferSize())
+        .arg(m_stream->bytesFree());
     switch (m_stream->error()) {
     case QAudio::OpenError:
-      Q_EMIT error(tr("An error opening the audio output device has occurred."));
+      Q_EMIT error(tr("Audio TX output open error: Qt could not open the selected output device. %1").arg(context));
       break;
     case QAudio::IOError:
-      Q_EMIT error(tr("An error occurred during write to the audio output device."));
+      Q_EMIT error(tr("Audio TX output write error: Qt reported an I/O failure while writing samples. %1").arg(context));
       break;
     case QAudio::UnderrunError:
       // Keep underruns non-fatal and report status.
-      Q_EMIT status(tr("Audio output underrun"));
+      Q_EMIT status(tr("Audio TX output underrun: the audio sink fell behind but will continue. %1").arg(context));
       result = true;
       break;
     case QAudio::FatalError:
-      Q_EMIT error(tr("Non-recoverable error, audio output device not usable at this time."));
+      Q_EMIT error(tr("Audio TX output fatal error: the selected output device is not usable now. %1").arg(context));
       break;
     case QAudio::NoError:
       result = true;
@@ -84,7 +119,10 @@ void SoundOutput::restart(QIODevice* source)
                       .arg(m_device.description()));
 
     if (!format.isValid()) {
-      Q_EMIT error(tr("Requested output audio format is not valid."));
+      Q_EMIT error(tr("Audio TX format invalid: device=\"%1\", requested=%2, preferred=%3")
+                   .arg(m_device.description(),
+                        formatSummary(format),
+                        formatSummary(preferred)));
       return;
     }
     if (!m_device.isFormatSupported(format)) {
@@ -110,7 +148,7 @@ void SoundOutput::restart(QIODevice* source)
   if (!m_stream) {
     if (!error_) {
       error_ = true;
-      Q_EMIT error(tr("No audio output device configured."));
+      Q_EMIT error(tr("Audio TX output device is not configured: select an output device in Settings > Audio."));
     }
     return;
   } else {
@@ -138,7 +176,11 @@ void SoundOutput::restart(QIODevice* source)
   m_sourceDevice = source;
   m_streamDevice = m_stream->start();
   if (!m_streamDevice) {
-    Q_EMIT error(tr("Unable to open the Qt audio sink device for writing."));
+    Q_EMIT error(tr("Audio TX output start failed: Qt did not return a writable sink device. device=\"%1\", format=%2, state=%3, qt-error=%4")
+                 .arg(m_device.description(),
+                      formatSummary(m_stream->format()),
+                      audioStateName(m_stream->state()),
+                      audioErrorName(m_stream->error())));
     return;
   }
   pumpAudio();
@@ -212,14 +254,14 @@ qreal SoundOutput::attenuation() const
 void SoundOutput::setAttenuation(qreal a)
 {
   Q_ASSERT(0. <= a && a <= 999.);
-  m_volume = qPow(10.0, -a / 20.0);
+  m_volume = kSoundOutputHeadroomGain * qPow(10.0, -a / 20.0);
   if (m_stream)
     m_stream->setVolume(static_cast<float>(m_volume));
 }
 
 void SoundOutput::resetAttenuation()
 {
-  m_volume = 1.;
+  m_volume = kSoundOutputHeadroomGain;
   if (m_stream)
     m_stream->setVolume(static_cast<float>(m_volume));
 }
@@ -246,7 +288,11 @@ void SoundOutput::pumpAudio()
       const qint64 written = m_streamDevice->write(m_pendingWrite.constData(), writable);
       if (written < 0) {
         m_pumpTimer.stop();
-        Q_EMIT error(tr("An error occurred during write to the audio output device."));
+        Q_EMIT error(tr("Audio TX output write error: Qt rejected buffered audio data. device=\"%1\", format=%2, state=%3, qt-error=%4")
+                     .arg(m_device.description(),
+                          formatSummary(m_stream->format()),
+                          audioStateName(m_stream->state()),
+                          audioErrorName(m_stream->error())));
         return;
       }
 
@@ -276,7 +322,8 @@ void SoundOutput::pumpAudio()
     const qint64 read = m_sourceDevice->read(chunk.data(), request);
     if (read < 0) {
       m_pumpTimer.stop();
-      Q_EMIT error(tr("An error occurred during write to the audio output device."));
+      Q_EMIT error(tr("Audio TX source read error: Decodium could not read generated TX audio before writing it. device=\"%1\", format=%2")
+                   .arg(m_device.description(), formatSummary(m_stream->format())));
       return;
     }
 
@@ -292,7 +339,11 @@ void SoundOutput::pumpAudio()
     const qint64 written = m_streamDevice->write(chunk.constData(), chunk.size());
     if (written < 0) {
       m_pumpTimer.stop();
-      Q_EMIT error(tr("An error occurred during write to the audio output device."));
+      Q_EMIT error(tr("Audio TX output write error: Qt rejected generated TX audio data. device=\"%1\", format=%2, state=%3, qt-error=%4")
+                   .arg(m_device.description(),
+                        formatSummary(m_stream->format()),
+                        audioStateName(m_stream->state()),
+                        audioErrorName(m_stream->error())));
       return;
     }
 
@@ -319,7 +370,9 @@ void SoundOutput::handleStateChanged(QAudio::State newState)
     break;
   case QAudio::StoppedState:
     if (!checkStream())
-      Q_EMIT status(tr("Error"));
+      Q_EMIT status(tr("Audio TX output stopped with error: device=\"%1\", state=%2")
+                    .arg(m_device.description().isEmpty() ? QStringLiteral("<default output>") : m_device.description(),
+                         audioStateName(newState)));
     else
       Q_EMIT status(tr("Stopped"));
     break;
