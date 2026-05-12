@@ -4223,7 +4223,41 @@ ApplicationWindow {
 	                            if (shouldDisplayDecodeEntry(item))
 	                                filtered.push(item)
 	                        }
-	                        return filtered
+	                        return injectSeparatorsJS(filtered)
+	                    }
+
+	                    // 1.0.154: il decodePanel di Main.qml usa modelli JS
+	                    // (allDecodes, rxDecodes), separati dal C++ injectPeriodSeparators
+	                    // (che alimenta solo bridge.bandActivityModel / DecodeWindow flottante).
+	                    // Inject JS-side per le liste viste dal pannello principale.
+	                    function injectSeparatorsJS(filtered) {
+	                        if (!filtered || filtered.length <= 1)
+	                            return filtered
+	                        var enabled = true
+	                        if (bridge && bridge.decodeShowPeriodSeparator)
+	                            enabled = bridge.decodeShowPeriodSeparator()
+	                        if (!enabled)
+	                            return filtered
+	                        var withSep = []
+	                        var prevPeriod = ""
+	                        var prevTs = 0
+	                        for (var i = 0; i < filtered.length; ++i) {
+	                            var it = filtered[i]
+	                            var t = String(it.time || it.utc || "")
+	                            var ts = Number(it.timestamp || 0)
+	                            var newPeriod = false
+	                            if (t.length > 0) {
+	                                if (prevPeriod && t !== prevPeriod) newPeriod = true
+	                            } else {
+	                                if (prevTs > 0 && ts > 0 && (ts - prevTs) > 1500) newPeriod = true
+	                            }
+	                            if (newPeriod)
+	                                withSep.push({ isSeparator: true, time: t, timestamp: ts })
+	                            if (t.length > 0) prevPeriod = t
+	                            if (ts > 0) prevTs = ts
+	                            withSep.push(it)
+	                        }
+	                        return withSep
 	                    }
 
 	                    function currentQsoPartnerBase() {
@@ -4340,7 +4374,7 @@ ApplicationWindow {
 	                            for (var k = 0; k < bridge.decodeList.length; k++)
 	                                appendIfNeeded(bridge.decodeList[k], false)
 	                        }
-                        return sortedRxDecodes(merged)
+                        return injectSeparatorsJS(sortedRxDecodes(merged))
                     }
 
                     function formatUtcForDisplay(timeStr) {
@@ -5016,11 +5050,14 @@ NumberAnimation {
                                         }
 
                                         delegate: Rectangle {
+                                            // 1.0.154: render separator del period (modello injecta isSeparator dummy entries)
+                                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
                                             width: evenPeriodList.width
-                                            height: Math.round(26 * fs)
-	                                            property var highlightFill: mainWindow.decodeHighlightFill(modelData)
-	                                            property var highlightBorder: mainWindow.decodeHighlightBorder(modelData)
-	                                            color: highlightFill ? highlightFill :
+                                            height: isPeriodSeparator ? Math.round(18 * fs) : Math.round(26 * fs)
+	                                            property var highlightFill: isPeriodSeparator ? null : mainWindow.decodeHighlightFill(modelData)
+	                                            property var highlightBorder: isPeriodSeparator ? null : mainWindow.decodeHighlightBorder(modelData)
+	                                            color: isPeriodSeparator ? Qt.rgba(1, 0.3, 0.3, 0.35) :
+	                                                   highlightFill ? highlightFill :
 	                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
 	                                                   decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? Qt.rgba(76/255, 175/255, 80/255, 0.2) :
 	                                                   index % 2 === 0 ? Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.02) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
@@ -5028,11 +5065,33 @@ NumberAnimation {
                                             border.width: highlightFill ? 1 : 0
                                             radius: 2
 
+                                            // Linea rossa visibile centrata + label "PERIODO"
+                                            Rectangle {
+                                                visible: parent.isPeriodSeparator
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                height: 3
+                                                color: "#ff3030"
+                                            }
+                                            Text {
+                                                visible: parent.isPeriodSeparator
+                                                anchors.centerIn: parent
+                                                text: "── PERIODO ──"
+                                                color: "#ff8080"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                            }
+
                                             MouseArea {
+                                                enabled: !parent.isPeriodSeparator
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                                 onClicked: function(mouse) {
+                                                    if (parent.isPeriodSeparator) return
                                                     if (modelData.isTx) return
                                                     if (mouse.button === Qt.LeftButton) {
                                                         // Sinistro = imposta TX freq
@@ -5044,11 +5103,13 @@ NumberAnimation {
                                                     }
                                                 }
                                                 onDoubleClicked: function(mouse) {
+                                                    if (parent.isPeriodSeparator) return
                                                     if (!modelData.isTx && mouse.button === Qt.LeftButton)
                                                         decodePanel.handleDecodeDoubleClick(modelData)
                                                 }
                                                 // IU8LMC: Show tooltip on hover
                                                 onContainsMouseChanged: {
+                                                    if (parent.isPeriodSeparator) { dxccTooltipVisible = false; return }
                                                     if (containsMouse) {
                                                         dxccTooltipText = getDxccTooltipText(modelData)
                                                         var pos = mapToGlobal(mouseX, mouseY)
@@ -5496,19 +5557,43 @@ NumberAnimation {
                                         }
 
                                         delegate: Rectangle {
+                                            // 1.0.154: render separator del period anche nel pannello RX
+                                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
                                             width: rxFrequencyList.width - 8
-                                            height: Math.round(26 * fs)
-                                            color: modelData.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.3) :
+                                            height: isPeriodSeparator ? Math.round(18 * fs) : Math.round(26 * fs)
+                                            color: isPeriodSeparator ? Qt.rgba(1, 0.3, 0.3, 0.35) :
+                                                   modelData.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.3) :
                                                    modelData.isMyCall ? Qt.rgba(244/255, 67/255, 54/255, 0.3) :
                                                    modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
                                                    index % 2 === 0 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.08) : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
                                             radius: 2
 
+                                            Rectangle {
+                                                visible: parent.isPeriodSeparator
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                height: 3
+                                                color: "#ff3030"
+                                            }
+                                            Text {
+                                                visible: parent.isPeriodSeparator
+                                                anchors.centerIn: parent
+                                                text: "── PERIODO ──"
+                                                color: "#ff8080"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                            }
+
                                             MouseArea {
+                                                enabled: !parent.isPeriodSeparator
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                                 onClicked: function(mouse) {
+                                                    if (parent.isPeriodSeparator) return
                                                     if (modelData.isTx) return
                                                     if (mouse.button === Qt.LeftButton) {
                                                         // Sinistro = imposta TX freq
@@ -5520,11 +5605,13 @@ NumberAnimation {
                                                     }
                                                 }
                                                 onDoubleClicked: function(mouse) {
+                                                    if (parent.isPeriodSeparator) return
                                                     if (!modelData.isTx && mouse.button === Qt.LeftButton)
                                                         decodePanel.handleDecodeDoubleClick(modelData)
                                                 }
                                                 // IU8LMC: Show DXCC tooltip on hover
                                                 onContainsMouseChanged: {
+                                                    if (parent.isPeriodSeparator) { dxccTooltipVisible = false; return }
                                                     if (containsMouse && modelData.dxCountry && modelData.dxCountry !== "") {
                                                         dxccTooltipText = getDxccTooltipText(modelData)
                                                         var pos = mapToGlobal(mouseX, mouseY)
