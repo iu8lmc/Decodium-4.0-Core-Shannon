@@ -24,6 +24,7 @@
 #include <QString>
 
 class NtpClient;
+class HttpsTimeSource;
 
 class DecoSyncTime : public QObject
 {
@@ -57,6 +58,11 @@ public:
     // tutta la chiamateria sara' passata via DecoSyncTime API.
     NtpClient* legacyNtpClient() const { return m_ntp; }
 
+    // Fase 2 — source HTTPS Date. Disponibile read-only per il QML / monitor.
+    Q_INVOKABLE bool   httpsSynced()    const;
+    Q_INVOKABLE double httpsOffsetMs()  const;
+    Q_INVOKABLE int    httpsLastCount() const;
+
 public Q_SLOTS:
     void syncNow();
 
@@ -67,8 +73,13 @@ Q_SIGNALS:
     void errorOccurred(QString const& errorMsg);
 
 private:
-    NtpClient* m_ntp {nullptr};
-    bool       m_enabled {true};  // Fase 1: default ON (era OFF nel NtpClient)
+    void recomputeCombinedOffset(QString const& reason);
+
+    NtpClient*       m_ntp {nullptr};
+    HttpsTimeSource* m_https {nullptr};
+    bool             m_enabled {true};  // default ON
+    bool             m_lastEmittedSynced {false};
+    double           m_lastEmittedOffsetMs {0.0};
 };
 
 #endif  // DECO_SYNC_TIME_HPP__
