@@ -50,6 +50,8 @@ class Modulator;
 class QAudioSink;
 class QBuffer;
 class NtpClient;
+class DecoSyncTime;
+Q_DECLARE_OPAQUE_POINTER(DecoSyncTime*)
 class QDialog;
 namespace decodium {
   namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
@@ -326,6 +328,9 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString driftSeverity            READ driftSeverity            NOTIFY soundcardDriftChanged)
 
     // === A3 — TIME SYNC ===
+    // 1.0.159 — DecoSyncTime fase 1: nuovo servizio centrale, espone API
+    // wallclockMs() unificato al QML.
+    Q_PROPERTY(DecoSyncTime* decoSyncTime READ decoSyncTime CONSTANT)
     Q_PROPERTY(bool   ntpEnabled     READ ntpEnabled     NOTIFY ntpEnabledChanged)
     Q_PROPERTY(double ntpOffsetMs    READ ntpOffsetMs    NOTIFY ntpOffsetMsChanged)
     Q_PROPERTY(bool   ntpSynced      READ ntpSynced      NOTIFY ntpSyncedChanged)
@@ -701,6 +706,7 @@ public:
     }
 
     // A3 — Time Sync
+    DecoSyncTime* decoSyncTime() const { return m_decoSyncTime; }
     bool   ntpEnabled()      const { return m_ntpEnabled; }
     double ntpOffsetMs()     const { return m_ntpOffsetMs; }
     bool   ntpSynced()       const { return m_ntpSynced; }
@@ -1868,6 +1874,10 @@ private:
     QElapsedTimer m_driftClock;
 
     // A3 — Time sync state
+    // 1.0.159 — DecoSyncTime fase 1: wrapper centrale che possiede il NtpClient
+    // interno. m_ntpClient rimane puntatore al NtpClient interno per backward
+    // compat con tutto il codice esistente. Default ON.
+    DecoSyncTime* m_decoSyncTime {nullptr};
     NtpClient* m_ntpClient      {nullptr};
     bool   m_ntpEnabled         {false};
     QString m_ntpCustomServer;

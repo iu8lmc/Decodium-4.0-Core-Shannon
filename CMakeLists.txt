@@ -299,6 +299,7 @@ set (wsjt_qt_CXXSRCS
   logbook/Multiplier.cpp
   Network/NetworkAccessManager.cpp
   Network/NtpClient.cpp
+  Network/DecoSyncTime.cpp
   widgets/LazyFillComboBox.cpp
   widgets/CheckableItemComboBox.cpp
   widgets/BandComboBox.cpp

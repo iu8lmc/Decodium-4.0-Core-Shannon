@@ -1,0 +1,74 @@
+// -*- Mode: C++ -*-
+//
+// DecoSyncTime (Fase 1): servizio centrale di time sync per Decodium.
+//
+// In Fase 1 wrappa il NtpClient esistente per garantire backward-compat
+// con tutto il codice del bridge, ma:
+//   - default ENABLED (NtpClient era OFF di default)
+//   - espone wallclockMs() come API centrale che sara' il single point of
+//     truth per tutti i timestamp (consumer migrati gradualmente)
+//   - struttura ready per aggiungere fonti aggiuntive nelle fasi
+//     successive: HTTPS Date, RoughTime, Cloudflare time, decoder-based
+//     self-calibration.
+//
+// Fasi successive previste:
+//   Fase 2  Source HTTPS Date in parallelo a NTP (Google/Cloudflare HEAD)
+//   Fase 3  Kalman filter su offset + drift rate (compensa drift del PC)
+//   Fase 4  Self-calibration dai decode FT8/FT4 ricevuti
+//   Fase 5  UI panel con plot offset/drift + quality per source
+
+#ifndef DECO_SYNC_TIME_HPP__
+#define DECO_SYNC_TIME_HPP__
+
+#include <QObject>
+#include <QString>
+
+class NtpClient;
+
+class DecoSyncTime : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool   enabled READ enabled NOTIFY enabledChanged)
+    Q_PROPERTY(bool   synced  READ synced  NOTIFY syncedChanged)
+    Q_PROPERTY(double offsetMs READ offsetMs NOTIFY offsetUpdated)
+
+public:
+    explicit DecoSyncTime(QObject *parent = nullptr);
+    ~DecoSyncTime() override;
+
+    bool   enabled() const { return m_enabled; }
+    bool   synced()  const;
+    double offsetMs() const;
+    int    lastServerCount() const;
+
+    void setEnabled(bool on);
+    void setCustomServer(QString const& server);
+    void setRefreshInterval(int ms);
+    void setMaxRtt(double ms);
+    void setInitialOffset(double offsetMs);
+
+    // API centrale del time sync: timestamp ms epoch corretto dell'offset
+    // misurato dal sistema. Tutti i consumer (decoder, sequencer, logger)
+    // dovrebbero usare questa invece di QDateTime::currentMSecsSinceEpoch().
+    Q_INVOKABLE qint64 wallclockMs() const;
+
+    // Accesso al NtpClient interno per la migrazione graduale del codice
+    // bridge legacy che ha riferimenti diretti. Verra' rimosso una volta
+    // tutta la chiamateria sara' passata via DecoSyncTime API.
+    NtpClient* legacyNtpClient() const { return m_ntp; }
+
+public Q_SLOTS:
+    void syncNow();
+
+Q_SIGNALS:
+    void enabledChanged();
+    void syncedChanged(bool synced, QString const& statusText);
+    void offsetUpdated(double offsetMs);
+    void errorOccurred(QString const& errorMsg);
+
+private:
+    NtpClient* m_ntp {nullptr};
+    bool       m_enabled {true};  // Fase 1: default ON (era OFF nel NtpClient)
+};
+
+#endif  // DECO_SYNC_TIME_HPP__

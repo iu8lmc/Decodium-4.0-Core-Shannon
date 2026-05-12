@@ -12,6 +12,7 @@
 #include "Network/DecodiumCloudlogLite.h"
 #include "Network/DecodiumWsprUploader.h"
 #include "Network/NtpClient.hpp"
+#include "Network/DecoSyncTime.hpp"
 #include "Network/RemoteCommandServer.hpp"
 #include "PrecisionTime.hpp"
 #include "SecureSettings.hpp"
@@ -3760,7 +3761,11 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     });
     m_activeStations  = new ActiveStationsModel(this);
     m_alertManager    = new DecodiumAlertManager(this);
-    m_ntpClient       = new NtpClient(this);
+    // 1.0.159 — DecoSyncTime fase 1: wrapper centrale time-sync. Possiede
+    // un NtpClient interno (per ora unica source). Default ENABLED; il
+    // caricamento delle settings successivo puo' sovrascrivere.
+    m_decoSyncTime    = new DecoSyncTime(this);
+    m_ntpClient       = m_decoSyncTime->legacyNtpClient();
     connect(m_ntpClient, &NtpClient::offsetUpdated, this, [this](double offsetMs) {
         if (qFuzzyCompare(m_ntpOffsetMs + 1.0, offsetMs + 1.0)) {
             return;
@@ -7294,7 +7299,20 @@ void DecodiumBridge::applyNtpSettings()
 {
     QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
 
-    bool const enabled = s.value(QStringLiteral("NTPEnabled"), false).toBool();
+    // 1.0.159 — DecoSyncTime fase 1: priorita' alla nuova chiave
+    // DecoSyncTimeEnabled (default ON). Se l'utente NON ha mai toccato il
+    // setting, parte abilitato. Backward compat: se NTPEnabled e' stato
+    // toccato esplicitamente in passato (legacy), continua a rispettarlo
+    // per non sovrascrivere preferenze utente.
+    bool const decoSyncEnabledExplicit = s.contains(QStringLiteral("DecoSyncTimeEnabled"));
+    bool const ntpEnabledExplicit      = s.contains(QStringLiteral("NTPEnabled"));
+    bool enabled = true;  // default ON
+    if (decoSyncEnabledExplicit) {
+        enabled = s.value(QStringLiteral("DecoSyncTimeEnabled"), true).toBool();
+    } else if (ntpEnabledExplicit) {
+        enabled = s.value(QStringLiteral("NTPEnabled"), false).toBool();
+    }
+    if (m_decoSyncTime) m_decoSyncTime->setEnabled(enabled);
     QString const customServer =
         s.value(QStringLiteral("NTPCustomServer"), QString()).toString().trimmed();
     double const storedOffset = s.value(QStringLiteral("NTPOffset_ms"), 0.0).toDouble();
