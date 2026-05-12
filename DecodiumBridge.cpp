@@ -3302,6 +3302,11 @@ void DecodiumBridge::setDecodeShowPeriodSeparator(bool v)
     rebuildRxDecodeModel();
 }
 
+void DecodiumBridge::qmlDebugLog(QString const& msg) const
+{
+    bridgeLog(QStringLiteral("[QML] %1").arg(msg));
+}
+
 bool DecodiumBridge::entryBelongsToCurrentQso(QVariantMap const& entry) const
 {
     if (entry.isEmpty()) return false;

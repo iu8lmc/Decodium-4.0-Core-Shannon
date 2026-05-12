@@ -1963,6 +1963,9 @@ public:
     // lato C++ ma desincronizzato dalla QSettings letta dal QML).
     Q_INVOKABLE bool decodeShowPeriodSeparator() const { return m_decodeShowPeriodSeparator; }
     Q_INVOKABLE void setDecodeShowPeriodSeparator(bool v);
+    // 1.0.152: log dal QML al decodium_diagnostic.log (console.warn QML
+    // non viene catturato dal handler bridgeLog).
+    Q_INVOKABLE void qmlDebugLog(QString const& msg) const;
 
 private:
 

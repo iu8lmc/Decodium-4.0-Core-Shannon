@@ -928,16 +928,21 @@ NumberAnimation {
                                 // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
 // via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
 // (string time) invece dell'oggetto intero. Controlla entrambi.
-// 1.0.151: log diagnostico per capire perche' isSeparator non viene riconosciuto.
+// 1.0.152: log diagnostico via bridge.qmlDebugLog → decodium_diagnostic.log
 readonly property bool isPeriodSeparator: !!(model && model.isSeparator) || !!(modelData && typeof modelData === "object" && modelData.isSeparator)
 Component.onCompleted: {
     var mIsSep = (model !== undefined && model !== null) ? model.isSeparator : "model-undef"
     var mdType = typeof modelData
     var mdIsSep = (modelData !== undefined && modelData !== null && typeof modelData === "object") ? modelData.isSeparator : "md-not-obj"
-    if (isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
-        console.warn("[SEPDBG] idx=" + index + " isPeriodSeparator=" + isPeriodSeparator
-            + " model.isSep=" + mIsSep + " modelData.type=" + mdType
-            + " modelData.isSep=" + mdIsSep)
+    // Solo log per i primi 5 row + ogni row che pare un separator.
+    if (index < 5 || isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
+        if (bridge && bridge.qmlDebugLog) {
+            bridge.qmlDebugLog("SEPDBG idx=" + index
+                + " isPeriodSeparator=" + isPeriodSeparator
+                + " model.isSep=" + mIsSep
+                + " modelData.type=" + mdType
+                + " modelData.isSep=" + mdIsSep)
+        }
     }
 }
                                 width: bandActivityList.width
@@ -1426,16 +1431,21 @@ NumberAnimation {
                                 // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
 // via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
 // (string time) invece dell'oggetto intero. Controlla entrambi.
-// 1.0.151: log diagnostico per capire perche' isSeparator non viene riconosciuto.
+// 1.0.152: log diagnostico via bridge.qmlDebugLog → decodium_diagnostic.log
 readonly property bool isPeriodSeparator: !!(model && model.isSeparator) || !!(modelData && typeof modelData === "object" && modelData.isSeparator)
 Component.onCompleted: {
     var mIsSep = (model !== undefined && model !== null) ? model.isSeparator : "model-undef"
     var mdType = typeof modelData
     var mdIsSep = (modelData !== undefined && modelData !== null && typeof modelData === "object") ? modelData.isSeparator : "md-not-obj"
-    if (isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
-        console.warn("[SEPDBG] idx=" + index + " isPeriodSeparator=" + isPeriodSeparator
-            + " model.isSep=" + mIsSep + " modelData.type=" + mdType
-            + " modelData.isSep=" + mdIsSep)
+    // Solo log per i primi 5 row + ogni row che pare un separator.
+    if (index < 5 || isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
+        if (bridge && bridge.qmlDebugLog) {
+            bridge.qmlDebugLog("SEPDBG idx=" + index
+                + " isPeriodSeparator=" + isPeriodSeparator
+                + " model.isSep=" + mIsSep
+                + " modelData.type=" + mdType
+                + " modelData.isSep=" + mdIsSep)
+        }
     }
 }
                                 width: rxFrequencyList.width - 12
