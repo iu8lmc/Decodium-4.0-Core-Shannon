@@ -1255,7 +1255,9 @@ private:
     QString legacyAllTxtPath() const;
     void appendLegacyAllTxtDecodeLine(const QVariantMap& entry) const;
     bool contestDecodeExchangesEnabled() const;
-    bool shouldAcceptDecodedMessage(const QString& message, QString* reason = nullptr) const;
+    bool shouldAcceptDecodedMessage(const QString& message,
+                                    QString* reason = nullptr,
+                                    bool allowUnresolvedPlaceholder = false) const;
     bool tryStartWaitPounceFromEntry(const QVariantMap& entry,
                                      const QVariantList& previousEntries,
                                      const QString& source);
@@ -1641,6 +1643,15 @@ private:
     qint64             m_lastAudioWatchdogRestartMs {0};
     qint64             m_lastAudioWatchdogLogMs {0};
     qint64             m_audioWatchdogIgnoreUntilMs {0};
+    qint64             m_audioOverdriveStartMs {0};
+    qint64             m_lastAudioOverdriveWarningMs {0};
+    qint64             m_lastZeroDecodeAudioWarningMs {0};
+    qint64             m_lastAudioHealthMs {0};
+    double             m_lastAudioHealthRms {0.0};
+    double             m_lastAudioHealthPeak {0.0};
+    int                m_lastAudioHealthClippedSamples {0};
+    int                m_lastAudioHealthSamples {0};
+    int                m_zeroRawDecodeStreak {0};
     QBuffer*           m_txPcmBuffer  {nullptr};
     QByteArray         m_txPcmData;
     struct TxAudioCache {

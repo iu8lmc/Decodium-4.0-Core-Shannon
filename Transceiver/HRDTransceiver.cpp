@@ -34,6 +34,7 @@ namespace
   int constexpr hrd_write_timeout_ms {1500};
   int constexpr hrd_probe_reply_timeout_ms {1000};
   unsigned constexpr hrd_probe_reply_retries {60};
+  int constexpr hrd_startup_protocol_silent_timeout_ms {3000};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
   qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
@@ -1462,6 +1463,31 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd, quint64 sequence)
               .arg (cmd)
               .arg (hrd_->errorString ())
               };
+        }
+      if (!replied && startup_probe)
+        {
+          auto const elapsed_ms = total_timer.elapsed ();
+          auto const pending_bytes = hrd_ ? hrd_->bytesAvailable () : qint64 {0};
+          if (0 == pending_bytes && elapsed_ms >= hrd_startup_protocol_silent_timeout_ms)
+            {
+              CAT_ERROR ("HRD TCP accepted, protocol silent, reconnecting");
+              hrd_diag (QStringLiteral ("#%1 TCP accepted, protocol silent, reconnecting command='%2' attempt=%3 elapsedMs=%4 timeoutMs=%5 state=%6 protocol=%7")
+                        .arg (QString::number (sequence))
+                        .arg (hrd_preview (cmd))
+                        .arg (attempt)
+                        .arg (elapsed_ms)
+                        .arg (timeout_ms)
+                        .arg (hrd_socket_state_name (hrd_))
+                        .arg (hrd_protocol_name (protocol_)));
+              if (hrd_)
+                {
+                  hrd_->abort ();
+                }
+              throw error {
+                tr ("Ham Radio Deluxe TCP accepted, protocol silent while probing command \"%1\"")
+                  .arg (cmd)
+                  };
+            }
         }
       if (!replied && startup_diagnostics_active_)
         {

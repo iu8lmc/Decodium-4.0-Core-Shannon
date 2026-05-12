@@ -50,14 +50,18 @@ QString extractPortNameFromReason(QString const& reason)
 // rileva e la sostituisce con un testo piu' comprensibile.
 QString sanitizeHamlibFailure(QString const& reason)
 {
+    bool const hrdProtocolSilent =
+        reason.contains(QStringLiteral("protocol silent"), Qt::CaseInsensitive);
     bool const hrdProtocolTimeout =
-        (reason.contains(QStringLiteral("get id"), Qt::CaseInsensitive)
+        (hrdProtocolSilent
+         || reason.contains(QStringLiteral("get id"), Qt::CaseInsensitive)
          || reason.contains(QStringLiteral("get context"), Qt::CaseInsensitive))
         && (reason.contains(QStringLiteral("retries exhausted"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("ritenta esaurito"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("failed to reply"), Qt::CaseInsensitive)
             || reason.contains(QStringLiteral("non risponde"), Qt::CaseInsensitive)
-            || reason.contains(QStringLiteral("timed out"), Qt::CaseInsensitive));
+            || reason.contains(QStringLiteral("timed out"), Qt::CaseInsensitive)
+            || hrdProtocolSilent);
     if (hrdProtocolTimeout) {
         return QObject::tr(
             "Ham Radio Deluxe accetta la connessione TCP, ma non risponde al protocollo HRD. "

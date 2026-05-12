@@ -1965,6 +1965,82 @@ static bool isStrictAmateurCallsign(QString const& token)
     return re.match(t).hasMatch();
 }
 
+static bool isSpecialEventStyleCallsign(QString const& token)
+{
+    QString t = normalizeCallToken(token).trimmed().toUpper();
+    if (t.isEmpty() || isPlaceholderCallToken(t)) {
+        return false;
+    }
+
+    QString const base = Radio::base_callsign(t).trimmed().toUpper();
+    if (base.size() < 4 || base.size() > 10) {
+        return false;
+    }
+
+    bool hasLetter = false;
+    bool hasDigit = false;
+    bool digitSeen = false;
+    bool hasLetterBeforeDigit = false;
+    bool hasLetterAfterDigit = false;
+    bool allHex = true;
+    int digitCount = 0;
+    for (QChar const& ch : base) {
+        if (ch.isLetter()) {
+            hasLetter = true;
+            if (!digitSeen) {
+                hasLetterBeforeDigit = true;
+            } else {
+                hasLetterAfterDigit = true;
+            }
+            if (ch < QLatin1Char('A') || ch > QLatin1Char('F')) {
+                allHex = false;
+            }
+        } else if (ch.isDigit()) {
+            hasDigit = true;
+            digitSeen = true;
+            ++digitCount;
+        } else {
+            return false;
+        }
+    }
+
+    if (!hasLetter || !hasDigit || digitCount < 2
+        || !hasLetterBeforeDigit || !hasLetterAfterDigit) {
+        return false;
+    }
+    if (allHex && base.size() >= 7) {
+        return false;
+    }
+    return Radio::is_callsign(base);
+}
+
+static bool isPlausibleDecodedCallsign(QString const& token)
+{
+    return isStrictAmateurCallsign(token)
+        || isSpecialEventStyleCallsign(token);
+}
+
+static bool hasHighConfidenceGhostPrefix(QString const& callRaw)
+{
+    QString call = callRaw.trimmed().toUpper();
+    int const slashIdx = call.indexOf('/');
+    if (slashIdx > 0) call = call.left(slashIdx);
+    if (call.size() < 2) return false;
+
+    QString const prefix2 = call.left(2);
+    if (prefix2.at(0) == QLatin1Char('0')) {
+        return true;
+    }
+    if (prefix2.at(0) == QLatin1Char('1') && prefix2 != QStringLiteral("1A")) {
+        return true;
+    }
+
+    static const QSet<QString> impossiblePrefixes {
+        "ZH", "ZQ"
+    };
+    return impossiblePrefixes.contains(prefix2);
+}
+
 static bool isDirectedDecodePayloadValid(QStringList const& payload,
                                          bool contestExchangeEnabled,
                                          QString* reason)
@@ -15850,6 +15926,36 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     bool const partnerFinalAck =
         partnerAnySignoff && !partnerSignoffNeedsOwn73;
 
+    if (m_transmitting
+        && m_mode == QStringLiteral("FT2")
+        && m_asyncTxEnabled
+        && m_pendingAutoSeqTxAfterActiveTx > 0) {
+        int incomingTx = 0;
+        if (partnerAnySignoff) {
+            incomingTx = 5;
+        } else if (isRogerSignalReportToken(last)) {
+            incomingTx = 4;
+        } else if (last.compare(QStringLiteral("TU"), Qt::CaseInsensitive) == 0
+                   && parts.size() >= 4
+                   && isPlainSignalReportToken(parts.at(parts.size() - 2))) {
+            incomingTx = 4;
+        } else if (isPlainSignalReportToken(last)) {
+            incomingTx = 3;
+        } else if (isGridTokenStrict(last)) {
+            incomingTx = 2;
+        }
+
+        if (incomingTx > 0
+            && autoSeqTxRank(incomingTx) < autoSeqTxRank(m_pendingAutoSeqTxAfterActiveTx)) {
+            bridgeLog(QStringLiteral("autoSeq: ignore stale TX%1 payload while TX%2 is active; pending TX%3 wins: %4")
+                          .arg(incomingTx)
+                          .arg(m_currentTx)
+                          .arg(m_pendingAutoSeqTxAfterActiveTx)
+                          .arg(msg));
+            return;
+        }
+    }
+
     bool const localSignoffStageActive =
         localSignoffStateForMessagePartner
         || ((m_ft2DeferredLogPending || m_logAfterOwn73)
@@ -16871,17 +16977,12 @@ int DecodiumBridge::effectiveDecodeDepth() const
         depth = 4;
     }
 
-    if (m_lowCpuModeEnabled || cpuPressureActive()) {
+    if (m_lowCpuModeEnabled) {
         QString const normalizedMode = m_mode.trimmed().toUpper();
         if (normalizedMode == QStringLiteral("FT8")
             || normalizedMode == QStringLiteral("FT4")
             || normalizedMode == QStringLiteral("FT2")) {
             depth = qMin(depth, 2);
-        }
-        if (cpuPressureSevereActive()
-            && (normalizedMode == QStringLiteral("FT4")
-                || normalizedMode == QStringLiteral("FT2"))) {
-            depth = qMin(depth, 1);
         }
     }
     return depth;
@@ -16890,7 +16991,7 @@ int DecodiumBridge::effectiveDecodeDepth() const
 int DecodiumBridge::legacyCompatibleDecodeDepthBits() const
 {
     int const eff = effectiveDecodeDepth();
-    bool const pressure = cpuPressureActive() || m_lowCpuModeEnabled;
+    bool const pressure = m_lowCpuModeEnabled;
     int const bits = modernDepthToLegacyBits(eff,
                                              pressure ? false : m_avgDecodeEnabled,
                                              pressure ? false : m_deepSearchEnabled);
@@ -16904,10 +17005,10 @@ int DecodiumBridge::legacyDecodeQsoProgress() const
 
 int DecodiumBridge::legacyDecodeCqHint() const
 {
-    if (m_filterCqOnly) {
-        return 1;
-    }
-
+    // CQ Only is a presentation/user filter in Decodium4.  Passing it down as
+    // lapcqonly makes the FT decoder run a narrower AP/CQ plan and can reduce
+    // raw decode yield compared with JTDX/WSJT-X, especially after downgrades
+    // where the persisted CQ-only flag remains enabled.
     return 0;
 }
 
@@ -18478,7 +18579,9 @@ bool DecodiumBridge::contestDecodeExchangesEnabled() const
         || getSetting(QStringLiteral("ContestingOnly"), false).toBool();
 }
 
-bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString* reason) const
+bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message,
+                                                QString* reason,
+                                                bool allowUnresolvedPlaceholder) const
 {
     QString const myCallUpper = m_callsign.trimmed().toUpper();
     QString const myBaseUpper = normalizedBaseCall(myCallUpper);
@@ -18520,7 +18623,7 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
                                        || t1 == QStringLiteral("TEST"))) {
                 callIdx = 2;
             }
-            if (callIdx < tokens.size() && !isStrictAmateurCallsign(tokens.at(callIdx))) {
+            if (callIdx < tokens.size() && !isPlausibleDecodedCallsign(tokens.at(callIdx))) {
                 if (reason) *reason = QStringLiteral("CQ from invalid callsign (ghost)");
                 return false;
             }
@@ -18529,34 +18632,31 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
     }
 
     bool const directedToOrFromMe = tokenIsMine(0) || tokenIsMine(1);
+    if (allowUnresolvedPlaceholder
+        && !directedToOrFromMe
+        && tokens.size() >= 2
+        && (isPlaceholderCallToken(tokens.at(0)) || isPlaceholderCallToken(tokens.at(1)))) {
+        int const realCallIdx = isPlaceholderCallToken(tokens.at(0)) ? 1 : 0;
+        if (realCallIdx < tokens.size()
+            && isPlausibleDecodedCallsign(tokens.at(realCallIdx))
+            && !hasHighConfidenceGhostPrefix(tokens.at(realCallIdx))) {
+            return true;
+        }
+    }
+
     if (!directedToOrFromMe) {
         // Per traffico non diretto a noi, gate stretto: se ALMENO UNO dei
-        // due primi token (DX/ME) non e' un callsign valido, e' ghost.
+        // due primi token (DX/ME) non e' un callsign plausibile, e' ghost.
         // Il decoder LDPC produce coppie come "ZH7RTG A29TTX/P R KR39":
         // A29TTX/P passerebbe (handler portatile), ZH7RTG non e' allocato
-        // ma matcha la regex strutturale, quindi entrambi passerebbero.
-        // Per gestire questi casi, in piu' applichiamo blocklist prefissi
-        // ITU non assegnati (osservati nei log come ghost ricorrenti).
-        static const QSet<QString> unallocatedPrefixes {
-            "ZH", "ZK", "ZQ", "ZU", "ZV", "ZX", "ZY", "ZZ",
-            "AN", "AO", "BU", "BV", "FK", "FZ",
-            "0A", "0B", "0C", "0D", "0E", "0F", "0G", "0H", "0I", "0J",
-            "0K", "0L", "0M", "0N", "0O", "0P", "0Q", "0R", "0S", "0T",
-            "0U", "0V", "0W", "0X", "0Y", "0Z",
-            "1A", "1B", "1C", "1D", "1E", "1F", "1G", "1H", "1I", "1J",
-            "1K", "1L", "1M", "1N", "1O", "1P", "1Q", "1R", "1S", "1T",
-            "1U", "1V", "1W", "1X", "1Y", "1Z"
-        };
-        auto const hasGhostPrefix = [&](QString const& callRaw) {
-            QString call = callRaw.trimmed().toUpper();
-            int const slashIdx = call.indexOf('/');
-            if (slashIdx > 0) call = call.left(slashIdx);
-            if (call.size() < 2) return false;
-            return unallocatedPrefixes.contains(call.left(2));
-        };
+        // ma matcha la regex strutturale, quindi entrambi passerebbero. Qui
+        // restiamo conservativi solo sui prefissi impossibili ad alta fiducia:
+        // una blocklist ampia tagliava call special-event reali (es. AO...).
         if (tokens.size() >= 2) {
-            bool const t0Bad = !isStrictAmateurCallsign(tokens.at(0)) || hasGhostPrefix(tokens.at(0));
-            bool const t1Bad = !isStrictAmateurCallsign(tokens.at(1)) || hasGhostPrefix(tokens.at(1));
+            bool const t0Bad = !isPlausibleDecodedCallsign(tokens.at(0))
+                || hasHighConfidenceGhostPrefix(tokens.at(0));
+            bool const t1Bad = !isPlausibleDecodedCallsign(tokens.at(1))
+                || hasHighConfidenceGhostPrefix(tokens.at(1));
             if (t0Bad || t1Bad) {
                 if (reason) *reason = QStringLiteral("source or dest callsign invalid/ghost");
                 return false;
@@ -18570,30 +18670,19 @@ bool DecodiumBridge::shouldAcceptDecodedMessage(const QString& message, QString*
         return false;
     }
 
-    // Sanity gate: il PEER (l'altro callsign) deve essere un amateur valido.
+    // Sanity gate: il PEER (l'altro callsign) deve essere un amateur plausibile.
     // Il messaggio e' "<DX> <ME> ...": peer = tokens[0] se ME e' tokens[1],
-    // altrimenti peer = tokens[1]. Applica anche blocklist prefissi non
-    // assegnati per fermare i ghost LDPC.
+    // altrimenti peer = tokens[1]. Applica anche il blocco sui prefissi
+    // impossibili ad alta fiducia per fermare i ghost LDPC.
     int const peerIdx = tokenIsMine(1) ? 0 : 1;
     QString const peerToken = tokens.at(peerIdx);
-    if (!isStrictAmateurCallsign(peerToken)) {
+    if (!isPlausibleDecodedCallsign(peerToken)) {
         if (reason) *reason = QStringLiteral("directed from/to invalid callsign (ghost)");
         return false;
     }
-    {
-        QString peer = peerToken.trimmed().toUpper();
-        int const slashIdx = peer.indexOf('/');
-        if (slashIdx > 0) peer = peer.left(slashIdx);
-        static const QSet<QString> unallocatedPrefixes {
-            "ZH", "ZK", "ZQ", "ZU", "ZV", "ZX", "ZY", "ZZ",
-            "AN", "AO", "BU", "BV", "FK", "FZ",
-            "0A","0B","0C","0D","0E","0F","0G","0H","0I","0J","0K","0L","0M","0N","0O","0P","0Q","0R","0S","0T","0U","0V","0W","0X","0Y","0Z",
-            "1A","1B","1C","1D","1E","1F","1G","1H","1I","1J","1K","1L","1M","1N","1O","1P","1Q","1R","1S","1T","1U","1V","1W","1X","1Y","1Z"
-        };
-        if (peer.size() >= 2 && unallocatedPrefixes.contains(peer.left(2))) {
-            if (reason) *reason = QStringLiteral("directed peer has unallocated prefix (ghost)");
-            return false;
-        }
+    if (hasHighConfidenceGhostPrefix(peerToken)) {
+        if (reason) *reason = QStringLiteral("directed peer has impossible prefix (ghost)");
+        return false;
     }
 
     QStringList payload = tokens.mid(2);
@@ -19434,6 +19523,8 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     int semanticFiltered = 0;
     int userFiltered = 0;
     int uiFiltered = 0;
+    int cqOnlyFiltered = 0;
+    int myCallOnlyFiltered = 0;
     int duplicatesSkipped = 0;
     int accepted = 0;
     DecodeUserFilterConfig const userFilterConfig = readDecodeUserFilterConfig(*this);
@@ -19458,7 +19549,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
 
         QString semanticRejectReason;
-        if (!shouldAcceptDecodedMessage(f[4], &semanticRejectReason)) {
+        if (!shouldAcceptDecodedMessage(f[4], &semanticRejectReason, true)) {
             bridgeLog(QStringLiteral("semantic decode filter: %1 mode=%2 msg='%3'")
                           .arg(semanticRejectReason, decodeMode.isEmpty() ? m_mode : decodeMode, f[4]));
             ++semanticFiltered;
@@ -19478,6 +19569,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         // Calcola proprietà derivate
         QString msg     = f[4];
         bool isCQ       = msg.startsWith("CQ ", Qt::CaseInsensitive) || msg == "CQ";
+        bool const hasUnresolvedPlaceholder = msg.contains(QStringLiteral("<...>"));
         QString const myCallUpper = m_callsign.trimmed().toUpper();
         QString const myBaseUpper = normalizedBaseCall(myCallUpper);
         bool isMyCall   = messageContainsCallToken(msg, myCallUpper, myBaseUpper);
@@ -19497,6 +19589,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         entry["isCQ"]    = isCQ;
         entry["isMyCall"] = isMyCall;
         entry["fromCall"] = fromCall;
+        entry["hasUnresolvedPeer"] = hasUnresolvedPlaceholder;
         entry["decodeSessionId"] = static_cast<qulonglong>(m_decodeSessionId);
         enrichDecodeEntry(entry);
         QString userFilterReason;
@@ -19506,14 +19599,22 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             ++userFiltered;
             continue;
         }
-        maybeEnqueueMamCallerFromDecode(f);
-        maybeQueuePskReporterSpot(entry, msg, isCQ, f[7], f[1], entry.value("mode").toString());
+        if (!hasUnresolvedPlaceholder) {
+            maybeEnqueueMamCallerFromDecode(f);
+            maybeQueuePskReporterSpot(entry, msg, isCQ, f[7], f[1], entry.value("mode").toString());
+        }
 
         bool const filteredByCqOnly = m_filterCqOnly && !isCQ;
         bool const filteredByMyCallOnly = m_filterMyCallOnly && !isMyCall;
         if (filteredByCqOnly || filteredByMyCallOnly) {
             if (!legacyUiMirrorActive && filteredByCqOnly && !filteredByMyCallOnly) {
                 appendRxDecodeEntry(entry);
+            }
+            if (filteredByCqOnly) {
+                ++cqOnlyFiltered;
+            }
+            if (filteredByMyCallOnly) {
+                ++myCallOnlyFiltered;
             }
             ++uiFiltered;
             continue;
@@ -19547,10 +19648,12 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             }
         }
 
-        tryStartWaitPounceFromEntry(entry, m_decodeList, QStringLiteral("ft8"));
+        if (!hasUnresolvedPlaceholder) {
+            tryStartWaitPounceFromEntry(entry, m_decodeList, QStringLiteral("ft8"));
+        }
 
         // B9 — Feed ActiveStationsModel: extract callsign from CQ messages
-        if (isCQ && m_activeStations) {
+        if (isCQ && !hasUnresolvedPlaceholder && m_activeStations) {
             QString dxGridExtracted = entry.value("dxGrid").toString();
             if (!fromCall.isEmpty()) {
                 int freqHz = f[7].toInt();
@@ -19640,7 +19743,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
     }
 
-    bridgeLog(QStringLiteral("onFt8DecodeReady summary: raw=%1 accepted=%2 parse_fail=%3 guardrail=%4 semantic=%5 user_filtered=%6 ui_filtered=%7 dupes=%8")
+    bridgeLog(QStringLiteral("onFt8DecodeReady summary: raw=%1 accepted=%2 parse_fail=%3 guardrail=%4 semantic=%5 user_filtered=%6 ui_filtered=%7 cq_only=%8 mycall_only=%9 dupes=%10")
                   .arg(rows.size())
                   .arg(accepted)
                   .arg(parseFailures)
@@ -19648,7 +19751,32 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                   .arg(semanticFiltered)
                   .arg(userFiltered)
                   .arg(uiFiltered)
+                  .arg(cqOnlyFiltered)
+                  .arg(myCallOnlyFiltered)
                   .arg(duplicatesSkipped));
+    if (rows.isEmpty()) {
+        ++m_zeroRawDecodeStreak;
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const bool recentAudioHealth = m_lastAudioHealthMs > 0 && now - m_lastAudioHealthMs <= 3000;
+        const bool overdrivenAudio =
+            recentAudioHealth
+            && m_lastAudioHealthPeak >= 0.98
+            && m_lastAudioHealthRms >= 0.35;
+        if (m_zeroRawDecodeStreak >= 4
+            && overdrivenAudio
+            && now - m_lastZeroDecodeAudioWarningMs >= 15000) {
+            bridgeLog(QStringLiteral("Decode warning: zero raw FT rows while RX audio is overdriven streak=%1 rms=%2 peak=%3 clipped=%4/%5")
+                          .arg(m_zeroRawDecodeStreak)
+                          .arg(m_lastAudioHealthRms, 0, 'g', 4)
+                          .arg(m_lastAudioHealthPeak, 0, 'g', 4)
+                          .arg(m_lastAudioHealthClippedSamples)
+                          .arg(m_lastAudioHealthSamples));
+            emit statusMessage(QStringLiteral("Nessuna decodifica: audio RX saturo/clippato"));
+            m_lastZeroDecodeAudioWarningMs = now;
+        }
+    } else {
+        m_zeroRawDecodeStreak = 0;
+    }
     if (changed) emitDecodeListChangedThrottled();  // 1.0.142: throttle FT8 burst
     if (legacyUiMirrorActive) {
         syncLegacyBackendDecodeList();
@@ -20209,7 +20337,11 @@ void DecodiumBridge::onPeriodTimer()
         m_periodProgress = 0;
         emit periodProgressChanged();
         if (timeSyncMode) {
-            static constexpr qint64 kTimeSyncDecodeSettleMs = 1750;
+            qint64 const kTimeSyncDecodeSettleMs =
+                (modeSnapshot == QStringLiteral("FT8")
+                 || modeSnapshot == QStringLiteral("FT4"))
+                    ? qint64 {3500}
+                    : qint64 {1750};
             dispatchTimeSyncDecodeWhenReady(completedUtcSlot, modeSnapshot, m_periodTimerSessionId,
                                             nowMs + kTimeSyncDecodeSettleMs);
         } else {
@@ -20931,17 +21063,22 @@ void DecodiumBridge::startAudioCapture()
     // downSampleFactor: SoundInput requests sample rate = 12000 * factor from
     // the driver.  Use 1 if the device natively supports 12 kHz; use 4 for
     // the common 48 kHz USB codec (e.g. Kenwood TS-590S USB Audio CODEC).
-    // framesPerBuffer: 4096 frames per QAudioInput notification period.
+    // Windows Qt Multimedia can drop RX samples when the UI/graphics thread
+    // stalls and the input buffer is only a few milliseconds deep.  JTDX/WSJT-X
+    // use a much roomier audio queue; keep Decodium's RX buffer similarly
+    // forgiving so FT4/FT8 final windows keep their full 12 kHz sample count.
     const unsigned downSampleFactor = 4; // assumes 48 kHz source
+    const int rxFramesPerBuffer = 32768; // ~680 ms at 48 kHz, before decimation.
     bridgeLog("SoundInput::start device=" + selectedDevice.description() +
               " channel=" + QString::number((int)channel) +
-              " dsf=" + QString::number(downSampleFactor));
+              " dsf=" + QString::number(downSampleFactor) +
+              " frames=" + QString::number(rxFramesPerBuffer));
     m_audioUnhealthyStartMs = 0;
     m_audioWatchdogIgnoreUntilMs = QDateTime::currentMSecsSinceEpoch() + 5000;
     if (m_audioSink) {
         m_audioSink->resetDecimationPhase();
     }
-    m_soundInput->start(selectedDevice, 4096, m_audioSink, downSampleFactor, channel);
+    m_soundInput->start(selectedDevice, rxFramesPerBuffer, m_audioSink, downSampleFactor, channel);
     m_soundInput->setInputGain(rxInputGainFromLevel(m_rxInputLevel));
 
     emit statusMessage("Audio capture avviato: " + selectedDevice.description());
@@ -20982,15 +21119,23 @@ void DecodiumBridge::handleAudioHealth(double rms,
     const bool captureActive = (m_soundInput != nullptr) || m_tciAudioCaptureActive;
     if (!m_monitoring || !captureActive || samples <= 0) {
         m_audioUnhealthyStartMs = 0;
+        m_audioOverdriveStartMs = 0;
         return;
     }
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    m_lastAudioHealthMs = now;
+    m_lastAudioHealthRms = rms;
+    m_lastAudioHealthPeak = peak;
+    m_lastAudioHealthClippedSamples = clippedSamples;
+    m_lastAudioHealthSamples = samples;
+
     if (now < m_audioWatchdogIgnoreUntilMs
         || m_transmitting
         || m_tuning
         || m_rxAudioSuspendedForTx) {
         m_audioUnhealthyStartMs = 0;
+        m_audioOverdriveStartMs = 0;
         return;
     }
 
@@ -21002,6 +21147,10 @@ void DecodiumBridge::handleAudioHealth(double rms,
     constexpr double kSquareMinRms = 0.08;
     constexpr double kSquareMinPeak = 0.08;
     constexpr double kSquareMaxCrestFactor = 1.12;
+    constexpr double kOverdrivePeak = 0.98;
+    constexpr double kOverdriveRms = 0.35;
+    constexpr qint64 kOverdriveWarnMs = 3000;
+    constexpr qint64 kOverdriveLogCooldownMs = 10000;
     constexpr qint64 kUnhealthyMs = 8000;
     constexpr qint64 kRestartCooldownMs = 45000;
     constexpr qint64 kLogCooldownMs = 10000;
@@ -21019,6 +21168,33 @@ void DecodiumBridge::handleAudioHealth(double rms,
         && rms >= kSquareMinRms
         && peak >= kSquareMinPeak
         && crestFactor <= kSquareMaxCrestFactor;
+    const bool overdrivenBlock =
+        samples >= 64
+        && peak >= kOverdrivePeak
+        && rms >= kOverdriveRms;
+
+    if (overdrivenBlock) {
+        if (m_audioOverdriveStartMs == 0) {
+            m_audioOverdriveStartMs = now;
+        }
+        const qint64 overdriveForMs = now - m_audioOverdriveStartMs;
+        if (overdriveForMs >= kOverdriveWarnMs
+            && now - m_lastAudioOverdriveWarningMs >= kOverdriveLogCooldownMs) {
+            bridgeLog(QStringLiteral("Audio warning: overdriven RX audio rms=%1 peak=%2 crest=%3 range=%4 clipped=%5/%6 rxLevel=%7 overdrive_ms=%8")
+                          .arg(rms, 0, 'g', 4)
+                          .arg(peak, 0, 'g', 4)
+                          .arg(crestFactor, 0, 'g', 4)
+                          .arg(dynamicRange)
+                          .arg(clippedSamples)
+                          .arg(samples)
+                          .arg(m_rxInputLevel, 0, 'f', 1)
+                          .arg(overdriveForMs));
+            emit statusMessage(QStringLiteral("Audio RX troppo alto/clippato: abbassa livello Windows/rig o RX Input"));
+            m_lastAudioOverdriveWarningMs = now;
+        }
+    } else {
+        m_audioOverdriveStartMs = 0;
+    }
 
     if (!flatBlock && !clippedBlock && !squareLikeBlock) {
         m_audioUnhealthyStartMs = 0;
@@ -21284,13 +21460,17 @@ void DecodiumBridge::dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot,
 
     QVector<short> finalAudio = m_pendingTimeSyncDecodeAudio;
     int borrowedSamples = 0;
+    int currentSamplesAfterBorrow = 0;
     if (targetSamples > 0 && finalAudio.size() < targetSamples) {
         int const needed = targetSamples - finalAudio.size();
         QMutexLocker locker(&m_audioBufferMutex);
         borrowedSamples = qMin(needed, m_audioBuffer.size());
         if (borrowedSamples > 0) {
             finalAudio += m_audioBuffer.mid(0, borrowedSamples);
+            m_audioBuffer = m_audioBuffer.mid(borrowedSamples);
+            m_audioBuffer.reserve(targetSamples);
         }
+        currentSamplesAfterBorrow = m_audioBuffer.size();
     }
     if (targetSamples > 0 && finalAudio.size() > targetSamples) {
         finalAudio.resize(targetSamples);
@@ -21304,11 +21484,12 @@ void DecodiumBridge::dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot,
                       .arg(borrowedSamples)
                       .arg(completedUtcSlot));
     } else if (targetSamples > 0) {
-        bridgeLog(QStringLiteral("time-sync decode dispatch: mode=%1 samples=%2 target=%3 borrowed=%4 slot=%5")
+        bridgeLog(QStringLiteral("time-sync decode dispatch: mode=%1 samples=%2 target=%3 borrowed=%4 remaining=%5 slot=%6")
                       .arg(modeSnapshot)
                       .arg(finalAudio.size())
                       .arg(targetSamples)
                       .arg(borrowedSamples)
+                      .arg(currentSamplesAfterBorrow)
                       .arg(completedUtcSlot));
     }
 
@@ -21738,7 +21919,6 @@ void DecodiumBridge::feedAudioToDecoder(qint64 completedUtcSlot)
         bool const runDeepFollowup =
             !txAudioActive
             && !txStartPending
-            && !cpuPressureActive()
             && !m_lowCpuModeEnabled
             && (decodeDepth > fastDepth || m_ft8ApEnabled);
         bridgeLog("FT8 final fast pass: serial=" + QString::number(serial) +
