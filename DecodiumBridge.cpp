@@ -18888,6 +18888,11 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
 
         if (!legacyUiMirrorActive) {
+            // 1.0.155: hard cap 200 — al raggiungimento cancella e ricomincia.
+            if (m_decodeList.size() >= 200) {
+                m_decodeList.clear();
+                m_rxDecodeList.clear();
+            }
             m_decodeList.append(QVariant(entry));
             appendRxDecodeEntry(entry);
             appendLegacyAllTxtDecodeLine(entry);
@@ -19177,6 +19182,11 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
 
         tryStartWaitPounceFromEntry(entry, m_decodeList, QStringLiteral("ft2-async"));
 
+        // 1.0.155: hard cap 200 — al raggiungimento cancella e ricomincia.
+        if (m_decodeList.size() >= 200) {
+            m_decodeList.clear();
+            m_rxDecodeList.clear();
+        }
         m_decodeList.append(QVariant(entry));
         appendRxDecodeEntry(entry);
         appendLegacyAllTxtDecodeLine(entry);
@@ -19376,6 +19386,11 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
                                p.value("message").toString()) == dedupKey) { isDupe=true; break; }
           } if (isDupe) continue; }
         tryStartWaitPounceFromEntry(entry, m_decodeList, QStringLiteral("legacy-jt"));
+        // 1.0.155: hard cap 200 — al raggiungimento cancella e ricomincia.
+        if (m_decodeList.size() >= 200) {
+            m_decodeList.clear();
+            m_rxDecodeList.clear();
+        }
         m_decodeList.append(QVariant(entry));
         appendRxDecodeEntry(entry);
         changed = true;

@@ -5050,13 +5050,13 @@ NumberAnimation {
                                         }
 
                                         delegate: Rectangle {
-                                            // 1.0.154: render separator del period (modello injecta isSeparator dummy entries)
+                                            // 1.0.155: separator meno invasivo — riga sottile, no label.
                                             readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
                                             width: evenPeriodList.width
-                                            height: isPeriodSeparator ? Math.round(18 * fs) : Math.round(26 * fs)
+                                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
 	                                            property var highlightFill: isPeriodSeparator ? null : mainWindow.decodeHighlightFill(modelData)
 	                                            property var highlightBorder: isPeriodSeparator ? null : mainWindow.decodeHighlightBorder(modelData)
-	                                            color: isPeriodSeparator ? Qt.rgba(1, 0.3, 0.3, 0.35) :
+	                                            color: isPeriodSeparator ? "transparent" :
 	                                                   highlightFill ? highlightFill :
 	                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
 	                                                   decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? Qt.rgba(76/255, 175/255, 80/255, 0.2) :
@@ -5065,24 +5065,16 @@ NumberAnimation {
                                             border.width: highlightFill ? 1 : 0
                                             radius: 2
 
-                                            // Linea rossa visibile centrata + label "PERIODO"
+                                            // Linea sottile discreta (1px, rosso scuro)
                                             Rectangle {
                                                 visible: parent.isPeriodSeparator
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 anchors.left: parent.left
                                                 anchors.right: parent.right
-                                                anchors.leftMargin: 8
-                                                anchors.rightMargin: 8
-                                                height: 3
-                                                color: "#ff3030"
-                                            }
-                                            Text {
-                                                visible: parent.isPeriodSeparator
-                                                anchors.centerIn: parent
-                                                text: "── PERIODO ──"
-                                                color: "#ff8080"
-                                                font.pixelSize: 10
-                                                font.bold: true
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                height: 1
+                                                color: Qt.rgba(0.85, 0.25, 0.25, 0.55)
                                             }
 
                                             MouseArea {
@@ -5557,11 +5549,11 @@ NumberAnimation {
                                         }
 
                                         delegate: Rectangle {
-                                            // 1.0.154: render separator del period anche nel pannello RX
+                                            // 1.0.155: separator meno invasivo nel pannello RX
                                             readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
                                             width: rxFrequencyList.width - 8
-                                            height: isPeriodSeparator ? Math.round(18 * fs) : Math.round(26 * fs)
-                                            color: isPeriodSeparator ? Qt.rgba(1, 0.3, 0.3, 0.35) :
+                                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
+                                            color: isPeriodSeparator ? "transparent" :
                                                    modelData.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.3) :
                                                    modelData.isMyCall ? Qt.rgba(244/255, 67/255, 54/255, 0.3) :
                                                    modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
@@ -5573,18 +5565,10 @@ NumberAnimation {
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 anchors.left: parent.left
                                                 anchors.right: parent.right
-                                                anchors.leftMargin: 8
-                                                anchors.rightMargin: 8
-                                                height: 3
-                                                color: "#ff3030"
-                                            }
-                                            Text {
-                                                visible: parent.isPeriodSeparator
-                                                anchors.centerIn: parent
-                                                text: "── PERIODO ──"
-                                                color: "#ff8080"
-                                                font.pixelSize: 10
-                                                font.bold: true
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                height: 1
+                                                color: Qt.rgba(0.85, 0.25, 0.25, 0.55)
                                             }
 
                                             MouseArea {
