@@ -928,21 +928,26 @@ NumberAnimation {
                                 // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
 // via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
 // (string time) invece dell'oggetto intero. Controlla entrambi.
-// 1.0.152: log diagnostico via bridge.qmlDebugLog → decodium_diagnostic.log
-readonly property bool isPeriodSeparator: !!(model && model.isSeparator) || !!(modelData && typeof modelData === "object" && modelData.isSeparator)
+// 1.0.153: per QAbstractListModel multi-role, i ruoli QML sono esposti
+// come context property scoped (es. `isSeparator`, `time`) — accesso
+// diretto senza prefisso model./modelData.
+readonly property bool isPeriodSeparator: {
+    // Provo tutti i 3 pattern Qt6 di accesso al ruolo:
+    if (typeof isSeparator !== "undefined" && isSeparator) return true
+    if (model && model.isSeparator) return true
+    if (modelData && typeof modelData === "object" && modelData.isSeparator) return true
+    return false
+}
 Component.onCompleted: {
-    var mIsSep = (model !== undefined && model !== null) ? model.isSeparator : "model-undef"
+    if (!bridge || !bridge.qmlDebugLog) return
+    var scopedSep = (typeof isSeparator !== "undefined") ? isSeparator : "ctx-undef"
+    var modelSep = (typeof model !== "undefined" && model !== null) ? model.isSeparator : "model-undef"
     var mdType = typeof modelData
-    var mdIsSep = (modelData !== undefined && modelData !== null && typeof modelData === "object") ? modelData.isSeparator : "md-not-obj"
-    // Solo log per i primi 5 row + ogni row che pare un separator.
-    if (index < 5 || isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
-        if (bridge && bridge.qmlDebugLog) {
-            bridge.qmlDebugLog("SEPDBG idx=" + index
-                + " isPeriodSeparator=" + isPeriodSeparator
-                + " model.isSep=" + mIsSep
-                + " modelData.type=" + mdType
-                + " modelData.isSep=" + mdIsSep)
-        }
+    var mdSep = (typeof modelData === "object" && modelData) ? modelData.isSeparator : "md-not-obj"
+    if (index < 3 || isPeriodSeparator || scopedSep === true || modelSep === true) {
+        bridge.qmlDebugLog("SEPDBG idx=" + index + " isPeriodSeparator=" + isPeriodSeparator
+            + " scoped.isSep=" + scopedSep + " model.isSep=" + modelSep
+            + " mdType=" + mdType + " md.isSep=" + mdSep)
     }
 }
                                 width: bandActivityList.width
@@ -1431,21 +1436,26 @@ NumberAnimation {
                                 // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
 // via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
 // (string time) invece dell'oggetto intero. Controlla entrambi.
-// 1.0.152: log diagnostico via bridge.qmlDebugLog → decodium_diagnostic.log
-readonly property bool isPeriodSeparator: !!(model && model.isSeparator) || !!(modelData && typeof modelData === "object" && modelData.isSeparator)
+// 1.0.153: per QAbstractListModel multi-role, i ruoli QML sono esposti
+// come context property scoped (es. `isSeparator`, `time`) — accesso
+// diretto senza prefisso model./modelData.
+readonly property bool isPeriodSeparator: {
+    // Provo tutti i 3 pattern Qt6 di accesso al ruolo:
+    if (typeof isSeparator !== "undefined" && isSeparator) return true
+    if (model && model.isSeparator) return true
+    if (modelData && typeof modelData === "object" && modelData.isSeparator) return true
+    return false
+}
 Component.onCompleted: {
-    var mIsSep = (model !== undefined && model !== null) ? model.isSeparator : "model-undef"
+    if (!bridge || !bridge.qmlDebugLog) return
+    var scopedSep = (typeof isSeparator !== "undefined") ? isSeparator : "ctx-undef"
+    var modelSep = (typeof model !== "undefined" && model !== null) ? model.isSeparator : "model-undef"
     var mdType = typeof modelData
-    var mdIsSep = (modelData !== undefined && modelData !== null && typeof modelData === "object") ? modelData.isSeparator : "md-not-obj"
-    // Solo log per i primi 5 row + ogni row che pare un separator.
-    if (index < 5 || isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
-        if (bridge && bridge.qmlDebugLog) {
-            bridge.qmlDebugLog("SEPDBG idx=" + index
-                + " isPeriodSeparator=" + isPeriodSeparator
-                + " model.isSep=" + mIsSep
-                + " modelData.type=" + mdType
-                + " modelData.isSep=" + mdIsSep)
-        }
+    var mdSep = (typeof modelData === "object" && modelData) ? modelData.isSeparator : "md-not-obj"
+    if (index < 3 || isPeriodSeparator || scopedSep === true || modelSep === true) {
+        bridge.qmlDebugLog("SEPDBG idx=" + index + " isPeriodSeparator=" + isPeriodSeparator
+            + " scoped.isSep=" + scopedSep + " model.isSep=" + modelSep
+            + " mdType=" + mdType + " md.isSep=" + mdSep)
     }
 }
                                 width: rxFrequencyList.width - 12
