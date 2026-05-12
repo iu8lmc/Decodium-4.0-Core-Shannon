@@ -300,6 +300,7 @@ set (wsjt_qt_CXXSRCS
   Network/NetworkAccessManager.cpp
   Network/NtpClient.cpp
   Network/HttpsTimeSource.cpp
+  Network/DecoSyncKalman.cpp
   Network/DecoSyncTime.cpp
   widgets/LazyFillComboBox.cpp
   widgets/CheckableItemComboBox.cpp

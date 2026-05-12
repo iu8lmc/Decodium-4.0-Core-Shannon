@@ -22,6 +22,9 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
+
+#include "DecoSyncKalman.hpp"
 
 class NtpClient;
 class HttpsTimeSource;
@@ -63,6 +66,11 @@ public:
     Q_INVOKABLE double httpsOffsetMs()  const;
     Q_INVOKABLE int    httpsLastCount() const;
 
+    // Fase 3 — Kalman filter offset+drift. Espone stato filtrato.
+    Q_INVOKABLE double kalmanOffsetMs()      const { return m_kalman.offsetMs(); }
+    Q_INVOKABLE double kalmanDriftMsPerSec() const { return m_kalman.driftMsPerSec(); }
+    Q_INVOKABLE bool   kalmanHasLock()       const { return m_kalman.hasLock(); }
+
 public Q_SLOTS:
     void syncNow();
 
@@ -74,9 +82,14 @@ Q_SIGNALS:
 
 private:
     void recomputeCombinedOffset(QString const& reason);
+    void ingestKalmanSample(double offsetMs, double rttMs, char const* source);
+    void onKalmanTick();
 
     NtpClient*       m_ntp {nullptr};
     HttpsTimeSource* m_https {nullptr};
+    DecoSyncKalman   m_kalman;
+    QTimer           m_kalmanTickTimer;
+    qint64           m_kalmanLastTickMs {0};
     bool             m_enabled {true};  // default ON
     bool             m_lastEmittedSynced {false};
     double           m_lastEmittedOffsetMs {0.0};

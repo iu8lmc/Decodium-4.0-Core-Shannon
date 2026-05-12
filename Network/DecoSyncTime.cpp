@@ -5,6 +5,7 @@
 
 #include <QDateTime>
 
+#include <algorithm>
 #include <cmath>
 
 DecoSyncTime::DecoSyncTime(QObject *parent)
@@ -12,10 +13,14 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
     , m_ntp(new NtpClient(this))
     , m_https(new HttpsTimeSource(this))
 {
-    // Fase 2: NTP UDP e HTTPS Date girano IN PARALLELO. La combinazione
-    // privilegia NTP quando synced (offset piu' preciso, RTT misurabile),
-    // altrimenti cade su HTTPS che funziona anche dietro firewall.
-    connect(m_ntp, &NtpClient::offsetUpdated, this, [this](double) {
+    // Fase 2+3: NTP UDP, HTTPS Date e Kalman filter girano IN PARALLELO.
+    // I sample da NTP e HTTPS vengono ingeriti nel Kalman che produce
+    // l'offset finale predicted con compensazione drift PC.
+    connect(m_ntp, &NtpClient::offsetUpdated, this, [this](double offsetMs) {
+        // NTP RTT non e' direttamente esposto, ma il NtpClient gia' fa
+        // sue filtering median+cluster; stimiamo varianza bassa.
+        // Tipico residual jitter ~5 ms su sample filtrato.
+        ingestKalmanSample(offsetMs, /*rttMs*/ 10.0, "ntp");
         recomputeCombinedOffset(QStringLiteral("ntp offset"));
     });
     connect(m_ntp, &NtpClient::syncStatusChanged, this,
@@ -26,7 +31,10 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
     connect(m_ntp, &NtpClient::errorOccurred, this, &DecoSyncTime::errorOccurred);
 
     connect(m_https, &HttpsTimeSource::offsetUpdated, this,
-        [this](double, double, int) {
+        [this](double offsetMs, double rttMs, int) {
+            // HTTPS Date risoluzione 1s + RTT half-asym error.
+            // Varianza tipica ~ (rtt/2)^2 + (500ms)^2 (risoluzione + jitter)
+            ingestKalmanSample(offsetMs, rttMs, "https");
             recomputeCombinedOffset(QStringLiteral("https offset"));
         });
     connect(m_https, &HttpsTimeSource::syncStatusChanged, this,
@@ -35,6 +43,13 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
         });
     connect(m_https, &HttpsTimeSource::errorOccurred, this,
         &DecoSyncTime::errorOccurred);
+
+    // Kalman tick 1 Hz: anche senza nuovi sample, propaga lo stato cosi'
+    // che l'offset cresca/decresca seguendo il drift stimato.
+    m_kalmanTickTimer.setInterval(1000);
+    connect(&m_kalmanTickTimer, &QTimer::timeout, this, &DecoSyncTime::onKalmanTick);
+    m_kalmanLastTickMs = QDateTime::currentMSecsSinceEpoch();
+    m_kalmanTickTimer.start();
 
     // Default ENABLED; il consumer (DecodiumBridge) chiama setEnabled con
     // il valore della QSettings; default ON su nuova install.
@@ -46,6 +61,11 @@ DecoSyncTime::~DecoSyncTime() = default;
 
 bool DecoSyncTime::synced() const
 {
+    // Fase 3: Kalman lock e' sufficient — significa che abbiamo gia' ricevuto
+    // almeno un sample buono e stiamo propagando lo stato. Anche se NTP/HTTPS
+    // perdono sync temporaneamente (rete down), il sync logico si mantiene
+    // finche' il drift estimato resta dentro tolerance.
+    if (m_kalman.hasLock()) return true;
     if (m_ntp && m_ntp->isSynced()) return true;
     if (m_https && m_https->isSynced()) return true;
     return false;
@@ -53,7 +73,11 @@ bool DecoSyncTime::synced() const
 
 double DecoSyncTime::offsetMs() const
 {
-    // Combinatore: preferisce NTP se synced (piu' preciso), altrimenti HTTPS.
+    // Fase 3: se il Kalman ha lock, e' la source autoritativa (combina NTP
+    // + HTTPS + drift PC compensato). Altrimenti fallback a NTP/HTTPS raw.
+    if (m_kalman.hasLock()) {
+        return m_kalman.offsetMs();
+    }
     if (m_ntp && m_ntp->isSynced()) {
         return m_ntp->offsetMs();
     }
@@ -121,6 +145,42 @@ void DecoSyncTime::syncNow()
 {
     if (m_ntp) m_ntp->syncNow();
     if (m_https) m_https->syncNow();
+}
+
+void DecoSyncTime::ingestKalmanSample(double offsetMs, double rttMs, char const* source)
+{
+    Q_UNUSED(source)
+    // Varianza measurement: combinazione di RTT/2 (half-roundtrip uncertainty)
+    // e jitter floor. NTP: ~10 ms RTT effettivo dopo cluster filtering;
+    // HTTPS: ~rtt reale + 500ms (header risoluzione 1s ~ +/- 500ms).
+    double const halfRtt = std::max(1.0, rttMs / 2.0);
+    double measurementVar = halfRtt * halfRtt;
+    // Su HTTPS aggiungiamo la quantizzazione del Date header (1s = +/- 500ms).
+    // Identifichiamo via il magnitude di rttMs: NTP filtered passa varianza
+    // direttamente (rttMs=10 default), HTTPS passa il vero rtt (>=20ms).
+    if (rttMs > 50.0) {
+        measurementVar += 250000.0;  // (500ms)^2
+    }
+    m_kalman.update(offsetMs, measurementVar);
+}
+
+void DecoSyncTime::onKalmanTick()
+{
+    qint64 const now = QDateTime::currentMSecsSinceEpoch();
+    if (m_kalmanLastTickMs == 0) {
+        m_kalmanLastTickMs = now;
+        return;
+    }
+    double const dtSec = static_cast<double>(now - m_kalmanLastTickMs) / 1000.0;
+    m_kalmanLastTickMs = now;
+    if (dtSec <= 0.0 || dtSec > 60.0) return;  // skip ticks anomali
+    m_kalman.predict(dtSec);
+    // Tick propaga lo stato; se Kalman ha lock, lo stato cambia secondo il
+    // drift, quindi notifichiamo il consumer cosi' l'offset effettivo
+    // visibile riflette il drift compensation in real time.
+    if (m_kalman.hasLock()) {
+        recomputeCombinedOffset(QStringLiteral("kalman tick"));
+    }
 }
 
 void DecoSyncTime::recomputeCombinedOffset(QString const& reason)
