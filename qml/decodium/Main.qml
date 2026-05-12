@@ -3101,6 +3101,64 @@ ApplicationWindow {
                     }
                 }
 
+                // 1.0.156: Live Map restore button
+                Rectangle {
+                    width: 74
+                    height: 74
+                    radius: 8
+                    visible: liveMapMinimized
+                    color: liveMapRestoreMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3) : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.9)
+                    border.color: liveMapRestoreMA.containsMouse ? secondaryCyan : glassBorder
+                    border.width: liveMapRestoreMA.containsMouse ? 2 : 1
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "🗺️"
+                            font.pixelSize: 24
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Live Map"
+                            font.pixelSize: 10
+                            font.bold: true
+                            color: secondaryCyan
+                        }
+                    }
+
+                    MouseArea {
+                        id: liveMapRestoreMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            mainWindow.liveMapMinimized = false
+                            if (mainWindow.liveMapDetached && liveMapFloatingWindow) {
+                                liveMapFloatingWindow.show()
+                                liveMapFloatingWindow.visibility = Window.Windowed
+                                liveMapFloatingWindow.raise()
+                                liveMapFloatingWindow.requestActivate()
+                            } else {
+                                mainWindow.liveMapPanelVisible = true
+                                bridge.setSetting("WorldMapDisplayed", true)
+                            }
+                        }
+                    }
+
+                    ToolTip.visible: liveMapRestoreMA.containsMouse
+                    ToolTip.text: qsTr("Restore Live Map")
+                    ToolTip.delay: 500
+
+                    SequentialAnimation on opacity {
+                        running: liveMapMinimized
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.7; duration: 800 }
+                        NumberAnimation { to: 1.0; duration: 800 }
+                    }
+                }
+
                 // DX Cluster toggle button
                 Rectangle {
                     visible: dxClusterToolbarVisible
@@ -8543,6 +8601,19 @@ NumberAnimation {
         onClosing: function(close) {
             mainWindow.dockLiveMapPanel()
             close.accepted = true
+        }
+
+        // 1.0.156: traccia minimize/restore via OS chrome — quando l'utente
+        // minimizza la finestra flottante, marca liveMapMinimized=true così
+        // appare il pulsante "Restore Live Map" nella barra centrale.
+        onVisibilityChanged: function(visibility) {
+            if (visibility === Window.Minimized) {
+                mainWindow.liveMapMinimized = true
+            } else if (visibility === Window.Windowed
+                       || visibility === Window.Maximized
+                       || visibility === Window.FullScreen) {
+                mainWindow.liveMapMinimized = false
+            }
         }
 
         Rectangle {

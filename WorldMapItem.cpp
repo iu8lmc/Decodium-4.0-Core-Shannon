@@ -18,6 +18,12 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
     setAntialiasing(true);
     setImplicitWidth(340);
     setImplicitHeight(220);
+    // 1.0.156: cap della texture interna a 1280x720. Su TV 4K la mappa
+    // era lentissima perche' QPainter ridipinge l'intera area ad ogni
+    // repaint (kWorldMapRepaintMs = 60ms). Adesso il widget rendera'
+    // sempre in 1280x720, scalato via GPU alla dimensione effettiva —
+    // costo costante indipendente da quanto e' grande la finestra.
+    setTextureSize(QSize(1280, 720));
 
     connect(&m_widget, &WorldMapWidget::contactClicked,
             this, &WorldMapItem::contactClicked);
