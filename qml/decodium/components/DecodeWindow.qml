@@ -928,7 +928,18 @@ NumberAnimation {
                                 // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
 // via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
 // (string time) invece dell'oggetto intero. Controlla entrambi.
-readonly property bool isPeriodSeparator: (typeof model !== "undefined" && model && model.isSeparator === true) || (modelData && typeof modelData === "object" && modelData.isSeparator === true)
+// 1.0.151: log diagnostico per capire perche' isSeparator non viene riconosciuto.
+readonly property bool isPeriodSeparator: !!(model && model.isSeparator) || !!(modelData && typeof modelData === "object" && modelData.isSeparator)
+Component.onCompleted: {
+    var mIsSep = (model !== undefined && model !== null) ? model.isSeparator : "model-undef"
+    var mdType = typeof modelData
+    var mdIsSep = (modelData !== undefined && modelData !== null && typeof modelData === "object") ? modelData.isSeparator : "md-not-obj"
+    if (isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
+        console.warn("[SEPDBG] idx=" + index + " isPeriodSeparator=" + isPeriodSeparator
+            + " model.isSep=" + mIsSep + " modelData.type=" + mdType
+            + " modelData.isSep=" + mdIsSep)
+    }
+}
                                 width: bandActivityList.width
                                 height: isPeriodSeparator ? 18 : 26
                                 // Cascata WSJT-X prioritaria; fallback ai vecchi tinte/zebra.
@@ -1415,7 +1426,18 @@ NumberAnimation {
                                 // 1.0.150: defensive — Qt6 con QAbstractListModel multi-role espone i ruoli
 // via attached `model.X` (garantito); `modelData` puo' essere il primo ruolo
 // (string time) invece dell'oggetto intero. Controlla entrambi.
-readonly property bool isPeriodSeparator: (typeof model !== "undefined" && model && model.isSeparator === true) || (modelData && typeof modelData === "object" && modelData.isSeparator === true)
+// 1.0.151: log diagnostico per capire perche' isSeparator non viene riconosciuto.
+readonly property bool isPeriodSeparator: !!(model && model.isSeparator) || !!(modelData && typeof modelData === "object" && modelData.isSeparator)
+Component.onCompleted: {
+    var mIsSep = (model !== undefined && model !== null) ? model.isSeparator : "model-undef"
+    var mdType = typeof modelData
+    var mdIsSep = (modelData !== undefined && modelData !== null && typeof modelData === "object") ? modelData.isSeparator : "md-not-obj"
+    if (isPeriodSeparator || mIsSep === true || (typeof modelData === "object" && modelData && modelData.isSeparator === true)) {
+        console.warn("[SEPDBG] idx=" + index + " isPeriodSeparator=" + isPeriodSeparator
+            + " model.isSep=" + mIsSep + " modelData.type=" + mdType
+            + " modelData.isSep=" + mdIsSep)
+    }
+}
                                 width: rxFrequencyList.width - 12
                                 height: isPeriodSeparator ? 18 : 24
                                 color: {
