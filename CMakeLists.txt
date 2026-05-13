@@ -1504,6 +1504,8 @@ add_executable (decodium_qml
   DecodiumBridge.h
   DecodeListModel.cpp
   DecodeListModel.h
+  Web/DecodiumWebServer.cpp
+  Web/DecodiumWebServer.hpp
   DecodiumDiagnostics.cpp
   DecodiumPropagationManager.cpp
   DecodiumPropagationManager.h

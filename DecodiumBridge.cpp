@@ -13,6 +13,7 @@
 #include "Network/DecodiumWsprUploader.h"
 #include "Network/NtpClient.hpp"
 #include "Network/DecoSyncTime.hpp"
+#include "Web/DecodiumWebServer.hpp"
 #include "Network/RemoteCommandServer.hpp"
 #include "PrecisionTime.hpp"
 #include "SecureSettings.hpp"
@@ -3451,6 +3452,38 @@ void DecodiumBridge::setDecodeShowPeriodSeparator(bool v)
 void DecodiumBridge::qmlDebugLog(QString const& msg) const
 {
     bridgeLog(QStringLiteral("[QML] %1").arg(msg));
+}
+
+bool DecodiumBridge::startWebServer(int port)
+{
+    if (!m_webServer) {
+        m_webServer = new DecodiumWebServer(this, this);
+        connect(m_webServer, &DecodiumWebServer::errorOccurred, this,
+            [this](QString const& msg) { bridgeLog(QStringLiteral("WebServer: ") + msg); });
+    }
+    bool const ok = m_webServer->start(static_cast<quint16>(qBound(1024, port, 65535)));
+    if (ok) {
+        bridgeLog(QStringLiteral("WebServer started at %1").arg(m_webServer->accessUrl()));
+    }
+    return ok;
+}
+
+void DecodiumBridge::stopWebServer()
+{
+    if (m_webServer) {
+        m_webServer->stop();
+        bridgeLog(QStringLiteral("WebServer stopped"));
+    }
+}
+
+bool DecodiumBridge::webServerRunning() const
+{
+    return m_webServer && m_webServer->isRunning();
+}
+
+QString DecodiumBridge::webServerUrl() const
+{
+    return m_webServer ? m_webServer->accessUrl() : QString();
 }
 
 bool DecodiumBridge::entryBelongsToCurrentQso(QVariantMap const& entry) const

@@ -51,6 +51,7 @@ class QAudioSink;
 class QBuffer;
 class NtpClient;
 class DecoSyncTime;
+class DecodiumWebServer;
 Q_DECLARE_OPAQUE_POINTER(DecoSyncTime*)
 class QDialog;
 namespace decodium {
@@ -1878,6 +1879,7 @@ private:
     // interno. m_ntpClient rimane puntatore al NtpClient interno per backward
     // compat con tutto il codice esistente. Default ON.
     DecoSyncTime* m_decoSyncTime {nullptr};
+    DecodiumWebServer* m_webServer {nullptr};
     NtpClient* m_ntpClient      {nullptr};
     bool   m_ntpEnabled         {false};
     QString m_ntpCustomServer;
@@ -2009,6 +2011,12 @@ public:
     // lato C++ ma desincronizzato dalla QSettings letta dal QML).
     Q_INVOKABLE bool decodeShowPeriodSeparator() const { return m_decodeShowPeriodSeparator; }
     Q_INVOKABLE void setDecodeShowPeriodSeparator(bool v);
+
+    // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
+    Q_INVOKABLE bool    startWebServer(int port = 8080);
+    Q_INVOKABLE void    stopWebServer();
+    Q_INVOKABLE bool    webServerRunning() const;
+    Q_INVOKABLE QString webServerUrl() const;
     // 1.0.152: log dal QML al decodium_diagnostic.log (console.warn QML
     // non viene catturato dal handler bridgeLog).
     Q_INVOKABLE void qmlDebugLog(QString const& msg) const;
