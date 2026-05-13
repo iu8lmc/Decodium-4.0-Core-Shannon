@@ -23,9 +23,12 @@
 #include <QTcpServer>
 #include <QString>
 #include <QPointer>
+#include <QVector>
 
 class DecodiumBridge;
 class QTcpSocket;
+class QWebSocketServer;
+class QWebSocket;
 
 class DecodiumWebServer : public QObject
 {
@@ -46,14 +49,24 @@ public:
     // Ritorna stringa vuota se non running o se non riesce a determinare un IP.
     QString accessUrl() const;
 
+    // Fase 2 — WebSocket push real-time. Quando il bridge emette
+    // decodeListChanged o rxFrequencyChanged etc, broadcastiamo il
+    // delta a tutti i client connessi (event "state" o "decodes").
+    void broadcastStateUpdate();
+    void broadcastDecodesUpdate();
+    int  connectedClients() const;
+
 Q_SIGNALS:
     void runningChanged(bool running);
     void errorOccurred(QString const& msg);
+    void clientCountChanged(int count);
 
 private Q_SLOTS:
     void onNewConnection();
     void onReadyRead();
     void onDisconnected();
+    void onWebSocketConnected();
+    void onWebSocketDisconnected();
 
 private:
     void handleRequest(QTcpSocket* socket, QString const& method,
@@ -68,9 +81,12 @@ private:
                            QByteArray const& body,
                            bool keepAlive = false) const;
 
-    DecodiumBridge*       m_bridge {nullptr};
-    QPointer<QTcpServer>  m_server;
-    quint16               m_port {0};
+    DecodiumBridge*           m_bridge {nullptr};
+    QPointer<QTcpServer>      m_server;
+    quint16                   m_port {0};
+    // Fase 2: WebSocket server (porta = m_port + 1, default 8081)
+    QPointer<QWebSocketServer> m_wsServer;
+    QVector<QWebSocket*>       m_wsClients;
 };
 
 #endif  // DECODIUM_WEB_SERVER_HPP__

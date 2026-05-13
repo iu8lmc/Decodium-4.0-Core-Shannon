@@ -2737,8 +2737,54 @@ Dialog {
                         columns: 4; columnSpacing: 10; rowSpacing: 8
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
 
+                        // ── Remote Web Server (PWA per iPad/mobile) ──
+                        Text { text: qsTr("REMOTE WEB SERVER (iPad / mobile PWA)"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Abilita Web Server:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        CheckBox {
+                            id: webServerToggle
+                            checked: bridge.webServerRunning()
+                            onCheckedChanged: {
+                                if (checked) {
+                                    var port = parseInt(webServerPortField.text) || 8080
+                                    bridge.startWebServer(port)
+                                    bridge.setSetting("WebServerEnabled", true)
+                                    bridge.setSetting("WebServerPort", port)
+                                } else {
+                                    bridge.stopWebServer()
+                                    bridge.setSetting("WebServerEnabled", false)
+                                }
+                                webServerUrlLabel.text = bridge.webServerUrl() || "(non attivo)"
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
+                        Text { text: qsTr("Porta TCP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        TextField {
+                            id: webServerPortField
+                            text: String(bridge.getSetting("WebServerPort", 8080))
+                            Layout.preferredWidth: 80
+                            validator: IntValidator { bottom: 1024; top: 65535 }
+                            color: textPrimary
+                            background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 3 }
+                            onEditingFinished: bridge.setSetting("WebServerPort", parseInt(text) || 8080)
+                        }
+
+                        Text { text: qsTr("URL accesso:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }
+                        Text {
+                            id: webServerUrlLabel
+                            text: bridge.webServerUrl() || "(non attivo)"
+                            color: bridge.webServerRunning() ? accentGreen : textSecondary
+                            font.pixelSize: 12
+                            font.family: "Consolas, monospace"
+                            Layout.columnSpan: 3
+                            Layout.fillWidth: true
+                        }
+
                         // ── Decode list display (Decodium 3-style) ──
-                        Text { text: qsTr("DECODE LIST DISPLAY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
+                        Text { text: qsTr("DECODE LIST DISPLAY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 12 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         Text { text: qsTr("Colored period separator:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 160 }

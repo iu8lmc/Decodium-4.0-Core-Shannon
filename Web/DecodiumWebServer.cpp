@@ -10,6 +10,8 @@
 #include <QNetworkInterface>
 #include <QTcpSocket>
 #include <QVariantMap>
+#include <QWebSocketServer>
+#include <QWebSocket>
 
 namespace
 {
@@ -66,12 +68,35 @@ bool DecodiumWebServer::start(quint16 port)
         return false;
     }
     m_port = port;
+
+    // Fase 2 — WebSocket server sulla porta successiva per push real-time.
+    m_wsServer = new QWebSocketServer(QStringLiteral("Decodium WS"),
+                                       QWebSocketServer::NonSecureMode, this);
+    if (m_wsServer->listen(QHostAddress::Any, quint16(port + 1))) {
+        connect(m_wsServer, &QWebSocketServer::newConnection,
+                this, &DecodiumWebServer::onWebSocketConnected);
+    } else {
+        emit errorOccurred(QStringLiteral("WS listen failed on port %1: %2")
+                               .arg(port + 1).arg(m_wsServer->errorString()));
+        m_wsServer->deleteLater();
+        m_wsServer = nullptr;
+    }
+
     emit runningChanged(true);
     return true;
 }
 
 void DecodiumWebServer::stop()
 {
+    if (m_wsServer) {
+        for (QWebSocket* ws : m_wsClients) {
+            if (ws) { ws->close(); ws->deleteLater(); }
+        }
+        m_wsClients.clear();
+        m_wsServer->close();
+        m_wsServer->deleteLater();
+        m_wsServer = nullptr;
+    }
     if (m_server) {
         m_server->close();
         m_server->deleteLater();
@@ -81,6 +106,74 @@ void DecodiumWebServer::stop()
         m_port = 0;
         emit runningChanged(false);
     }
+}
+
+void DecodiumWebServer::onWebSocketConnected()
+{
+    if (!m_wsServer) return;
+    while (m_wsServer->hasPendingConnections()) {
+        QWebSocket* ws = m_wsServer->nextPendingConnection();
+        if (!ws) continue;
+        connect(ws, &QWebSocket::disconnected,
+                this, &DecodiumWebServer::onWebSocketDisconnected);
+        m_wsClients.append(ws);
+        // Snapshot iniziale: invia state + decodes appena connesso.
+        QJsonObject env;
+        env[QStringLiteral("type")] = QStringLiteral("state");
+        env[QStringLiteral("payload")] =
+            QJsonDocument::fromJson(buildStateJson()).object();
+        ws->sendTextMessage(QString::fromUtf8(
+            QJsonDocument(env).toJson(QJsonDocument::Compact)));
+        QJsonObject env2;
+        env2[QStringLiteral("type")] = QStringLiteral("decodes");
+        env2[QStringLiteral("payload")] =
+            QJsonDocument::fromJson(buildDecodesJson()).object();
+        ws->sendTextMessage(QString::fromUtf8(
+            QJsonDocument(env2).toJson(QJsonDocument::Compact)));
+        emit clientCountChanged(m_wsClients.size());
+    }
+}
+
+void DecodiumWebServer::onWebSocketDisconnected()
+{
+    QWebSocket* ws = qobject_cast<QWebSocket*>(sender());
+    if (!ws) return;
+    m_wsClients.removeAll(ws);
+    ws->deleteLater();
+    emit clientCountChanged(m_wsClients.size());
+}
+
+void DecodiumWebServer::broadcastStateUpdate()
+{
+    if (m_wsClients.isEmpty()) return;
+    QJsonObject env;
+    env[QStringLiteral("type")] = QStringLiteral("state");
+    env[QStringLiteral("payload")] =
+        QJsonDocument::fromJson(buildStateJson()).object();
+    QString const msg = QString::fromUtf8(
+        QJsonDocument(env).toJson(QJsonDocument::Compact));
+    for (QWebSocket* ws : m_wsClients) {
+        if (ws && ws->isValid()) ws->sendTextMessage(msg);
+    }
+}
+
+void DecodiumWebServer::broadcastDecodesUpdate()
+{
+    if (m_wsClients.isEmpty()) return;
+    QJsonObject env;
+    env[QStringLiteral("type")] = QStringLiteral("decodes");
+    env[QStringLiteral("payload")] =
+        QJsonDocument::fromJson(buildDecodesJson()).object();
+    QString const msg = QString::fromUtf8(
+        QJsonDocument(env).toJson(QJsonDocument::Compact));
+    for (QWebSocket* ws : m_wsClients) {
+        if (ws && ws->isValid()) ws->sendTextMessage(msg);
+    }
+}
+
+int DecodiumWebServer::connectedClients() const
+{
+    return m_wsClients.size();
 }
 
 bool DecodiumWebServer::isRunning() const
@@ -347,50 +440,88 @@ td.country { color: var(--txt-dim); }
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-async function poll() {
+let pollTimer = null;
+let ws = null;
+let wsLastMsgMs = 0;
+
+function renderState(s) {
+  $("error").style.display = "none";
+  $("callsign").textContent = s.callsign || "—";
+  $("mode").textContent     = s.mode || "—";
+  const dialKHz = (s.dialFrequency / 1000).toFixed(3);
+  $("dial").textContent  = dialKHz + " kHz";
+  $("rxfreq").textContent = "RX " + s.rxFrequency + " Hz";
+  $("ntp").style.display = s.ntpSynced ? "inline" : "none";
+  if (s.ntpSynced) $("ntp").textContent = "NTP " + s.ntpOffsetMs.toFixed(0) + "ms";
+  $("tx").style.display = s.transmitting ? "inline" : "none";
+  $("count").textContent = s.decodesCount + " dec";
+}
+function renderDecodes(payload) {
+  const tbody = $("decodes");
+  const rows = [];
+  const list = (payload.decodes || []).slice(-100).reverse();
+  for (const e of list) {
+    let cls = "";
+    if (e.isTx) cls = "tx";
+    else if (e.isMyCall) cls = "mycall";
+    else if (e.isCQ) cls = "cq";
+    const distStr = e.dxDistance > 0 ? Math.round(e.dxDistance) : "";
+    rows.push(`<tr class="${cls}">
+      <td>${e.time}</td>
+      <td>${e.db}</td>
+      <td>${e.dt}</td>
+      <td>${e.freq}</td>
+      <td class="msg">${escapeHtml(e.message)}</td>
+      <td class="country">${escapeHtml(e.dxCountry||"")}</td>
+      <td class="dist">${distStr}</td>
+    </tr>`);
+  }
+  tbody.innerHTML = rows.join("");
+}
+async function pollOnce() {
   try {
     const t0 = Date.now();
     const [s, d] = await Promise.all([
       fetch("/api/state").then(r => r.json()),
       fetch("/api/decodes").then(r => r.json())
     ]);
-    $("error").style.display = "none";
-    $("callsign").textContent = s.callsign || "—";
-    $("mode").textContent     = s.mode || "—";
-    const dialKHz = (s.dialFrequency / 1000).toFixed(3);
-    $("dial").textContent  = dialKHz + " kHz";
-    $("rxfreq").textContent = "RX " + s.rxFrequency + " Hz";
-    $("ntp").style.display = s.ntpSynced ? "inline" : "none";
-    if (s.ntpSynced) $("ntp").textContent = "NTP " + s.ntpOffsetMs.toFixed(0) + "ms";
-    $("tx").style.display = s.transmitting ? "inline" : "none";
-    $("count").textContent = s.decodesCount + " dec";
-    const lag = Date.now() - t0;
-    $("lag").textContent = lag + " ms";
-
-    const tbody = $("decodes");
-    const rows = [];
-    // Mostra in ordine inverso (piu' recente in alto), max 100 visibili
-    const list = (d.decodes || []).slice(-100).reverse();
-    for (const e of list) {
-      let cls = "";
-      if (e.isTx) cls = "tx";
-      else if (e.isMyCall) cls = "mycall";
-      else if (e.isCQ) cls = "cq";
-      const distStr = e.dxDistance > 0 ? Math.round(e.dxDistance) : "";
-      rows.push(`<tr class="${cls}">
-        <td>${e.time}</td>
-        <td>${e.db}</td>
-        <td>${e.dt}</td>
-        <td>${e.freq}</td>
-        <td class="msg">${escapeHtml(e.message)}</td>
-        <td class="country">${escapeHtml(e.dxCountry||"")}</td>
-        <td class="dist">${distStr}</td>
-      </tr>`);
-    }
-    tbody.innerHTML = rows.join("");
+    renderState(s);
+    renderDecodes(d);
+    $("lag").textContent = (Date.now() - t0) + " ms (poll)";
   } catch (err) {
     $("error").style.display = "block";
     $("error").textContent = "Connessione persa: " + err.message;
+  }
+}
+function startPolling() {
+  if (pollTimer) return;
+  pollOnce();
+  pollTimer = setInterval(pollOnce, 2000);
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+function connectWS() {
+  try {
+    const wsUrl = "ws://" + location.hostname + ":" + (parseInt(location.port||80)+1) + "/";
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      stopPolling();
+      $("lag").textContent = "live (ws)";
+    };
+    ws.onmessage = (ev) => {
+      wsLastMsgMs = Date.now();
+      try {
+        const env = JSON.parse(ev.data);
+        if (env.type === "state") renderState(env.payload);
+        else if (env.type === "decodes") renderDecodes(env.payload);
+      } catch (e) { /* ignore parse err */ }
+    };
+    ws.onclose = () => { ws = null; startPolling(); setTimeout(connectWS, 5000); };
+    ws.onerror = () => { try { ws.close(); } catch(e){} };
+  } catch (e) {
+    startPolling();
+    setTimeout(connectWS, 5000);
   }
 }
 function escapeHtml(s) {
@@ -398,8 +529,14 @@ function escapeHtml(s) {
     "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
   }[c]));
 }
-poll();
-setInterval(poll, 2000);
+// All'avvio prova WS prima; fallback polling automatico se WS fallisce.
+connectWS();
+// Watchdog: se nessun WS message per 10s, forza polling.
+setInterval(() => {
+  if (ws && (Date.now() - wsLastMsgMs > 10000)) {
+    try { ws.close(); } catch(e){}
+  }
+}, 5000);
 </script>
 </body>
 </html>

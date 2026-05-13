@@ -3460,6 +3460,21 @@ bool DecodiumBridge::startWebServer(int port)
         m_webServer = new DecodiumWebServer(this, this);
         connect(m_webServer, &DecodiumWebServer::errorOccurred, this,
             [this](QString const& msg) { bridgeLog(QStringLiteral("WebServer: ") + msg); });
+        connect(m_webServer, &DecodiumWebServer::clientCountChanged, this,
+            [this](int n) { bridgeLog(QStringLiteral("WebServer clients=%1").arg(n)); });
+        // 1.0.168 fase 2: push real-time via WebSocket.
+        connect(this, &DecodiumBridge::decodeListChanged, m_webServer,
+                &DecodiumWebServer::broadcastDecodesUpdate);
+        connect(this, &DecodiumBridge::modeChanged, m_webServer,
+                &DecodiumWebServer::broadcastStateUpdate);
+        connect(this, &DecodiumBridge::rxFrequencyChanged, m_webServer,
+                &DecodiumWebServer::broadcastStateUpdate);
+        connect(this, &DecodiumBridge::transmittingChanged, m_webServer,
+                &DecodiumWebServer::broadcastStateUpdate);
+        connect(this, &DecodiumBridge::ntpSyncedChanged, m_webServer,
+                &DecodiumWebServer::broadcastStateUpdate);
+        connect(this, &DecodiumBridge::dxCallChanged, m_webServer,
+                &DecodiumWebServer::broadcastStateUpdate);
     }
     bool const ok = m_webServer->start(static_cast<quint16>(qBound(1024, port, 65535)));
     if (ok) {
@@ -16407,6 +16422,14 @@ void DecodiumBridge::loadSettings()
     m_txDisabledMask = s.value("txDisabledMask", 0).toInt() & 0x3F;  // 6 bit (TX1-TX6)
     m_hideGhostDecodes = s.value("hideGhostDecodes", true).toBool();  // 1.0.145 default ON
     m_decodeShowPeriodSeparator = s.value("decodeShowPeriodSeparator", true).toBool();
+    // 1.0.168 — auto-start web server da settings
+    bool const webServerEnabled = s.value("WebServerEnabled", false).toBool();
+    int const webServerPort = s.value("WebServerPort", 8080).toInt();
+    if (webServerEnabled) {
+        QTimer::singleShot(2000, this, [this, webServerPort]() {
+            startWebServer(webServerPort);
+        });
+    }
     m_nfa      = s.value("nfa", 200).toInt();
     m_nfb      = s.value("nfb", 4000).toInt();
     {
