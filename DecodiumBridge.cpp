@@ -20603,6 +20603,8 @@ void DecodiumBridge::onPeriodTimer()
     // scattare pochi ms prima del boundary: usare anche m_periodTicksMax per
     // questi modi produceva un decode completo e subito dopo un frammento
     // da ~3000 campioni. Il counter resta fallback solo per modi non sync.
+    qint64 const slotsAdvanced =
+        (m_lastPeriodSlot >= 0) ? (utcSlot - m_lastPeriodSlot) : 0;
     bool const utcBoundaryCrossed =
         (m_lastPeriodSlot >= 0) && (utcSlot != m_lastPeriodSlot);
     bool const tickCounterExpired = !timeSyncMode && (m_periodTicks >= m_periodTicksMax);
@@ -20611,13 +20613,32 @@ void DecodiumBridge::onPeriodTimer()
         // boundary sia quello di transizione vera.
         m_lastPeriodSlot = utcSlot;
     }
+    if (utcBoundaryCrossed && timeSyncMode && slotsAdvanced < 0) {
+        bridgeLog(QStringLiteral("period timer UTC slot moved backwards: mode=%1 last=%2 now=%3, resetting RX accumulation")
+                      .arg(modeSnapshot)
+                      .arg(m_lastPeriodSlot)
+                      .arg(utcSlot));
+        resetRxPeriodAccumulation(true);
+        m_lastPeriodSlot = utcSlot;
+        return;
+    }
     if (utcBoundaryCrossed || tickCounterExpired) {
         qint64 const completedUtcSlot =
             (periodMs > 0)
                 ? ((utcBoundaryCrossed && m_lastPeriodSlot >= 0)
-                       ? m_lastPeriodSlot
+                       ? ((timeSyncMode && slotsAdvanced > 1)
+                              ? qMax<qint64>(0, utcSlot - 1)
+                              : m_lastPeriodSlot)
                        : qMax<qint64>(0, utcSlot - 1))
                 : -1;
+        if (timeSyncMode && utcBoundaryCrossed && slotsAdvanced > 1) {
+            bridgeLog(QStringLiteral("period timer lag: mode=%1 skippedSlots=%2 last=%3 now=%4 decodingLatestCompleteSlot=%5")
+                          .arg(modeSnapshot)
+                          .arg(slotsAdvanced - 1)
+                          .arg(m_lastPeriodSlot)
+                          .arg(utcSlot)
+                          .arg(completedUtcSlot));
+        }
         m_lastPeriodSlot = utcSlot;
         m_periodTicks = 0;
         m_periodProgress = 0;
@@ -21726,9 +21747,34 @@ void DecodiumBridge::dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot,
 
         QMutexLocker locker(&m_audioBufferMutex);
         if (targetSamples > 0 && m_audioBuffer.size() > targetSamples) {
-            m_pendingTimeSyncDecodeAudio = m_audioBuffer.mid(0, targetSamples);
-            m_audioBuffer = m_audioBuffer.mid(targetSamples);
+            int const bufferSamples = m_audioBuffer.size();
+            int const periodMs = periodMsForMode(modeSnapshot);
+            qint64 const nowMs = correctedUtcEpochMs();
+            int const msInSlot = (periodMs > 0)
+                                     ? static_cast<int>(nowMs % static_cast<qint64>(periodMs))
+                                     : 0;
+            int const excessSamples = qMax(0, bufferSamples - targetSamples);
+            int const estimatedCurrentSlotSamples =
+                qBound(0, static_cast<int>((static_cast<qint64>(msInSlot) * SAMPLE_RATE + 999) / 1000),
+                       targetSamples);
+            int const currentSlotSamplesToKeep =
+                qMin(excessSamples, estimatedCurrentSlotSamples);
+            int const windowEnd = bufferSamples - currentSlotSamplesToKeep;
+            int const windowStart = qMax(0, windowEnd - targetSamples);
+
+            m_pendingTimeSyncDecodeAudio = m_audioBuffer.mid(windowStart, targetSamples);
+            m_audioBuffer = m_audioBuffer.mid(windowEnd);
             m_audioBuffer.reserve(targetSamples);
+            if (windowStart > 0 || currentSlotSamplesToKeep > 0) {
+                bridgeLog(QStringLiteral("time-sync decode aligned buffered audio: mode=%1 buffer=%2 target=%3 droppedOld=%4 keptCurrent=%5 msInSlot=%6 slot=%7")
+                              .arg(modeSnapshot)
+                              .arg(bufferSamples)
+                              .arg(targetSamples)
+                              .arg(windowStart)
+                              .arg(currentSlotSamplesToKeep)
+                              .arg(msInSlot)
+                              .arg(completedUtcSlot));
+            }
         } else {
             m_pendingTimeSyncDecodeAudio = m_audioBuffer;
             m_audioBuffer.clear();
@@ -21743,7 +21789,7 @@ void DecodiumBridge::dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot,
     }
     int const pendingSamples = m_pendingTimeSyncDecodeAudio.size();
     int const combinedSamples = pendingSamples + qMax(0, currentSlotSamples);
-    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    qint64 const nowMs = correctedUtcEpochMs();
     if (targetSamples > 0 && combinedSamples < targetSamples && nowMs < deadlineMs) {
         int const missingSamples = targetSamples - combinedSamples;
         int const waitMs = qBound(20, (missingSamples * 1000 + SAMPLE_RATE - 1) / SAMPLE_RATE, 125);

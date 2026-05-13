@@ -34,7 +34,9 @@ namespace
   int constexpr hrd_write_timeout_ms {1500};
   int constexpr hrd_probe_reply_timeout_ms {1000};
   unsigned constexpr hrd_probe_reply_retries {60};
-  int constexpr hrd_startup_protocol_silent_timeout_ms {3000};
+  int constexpr hrd_startup_protocol_silent_timeout_ms {15000};
+  int constexpr hrd_startup_command_reply_timeout_ms {2000};
+  unsigned constexpr hrd_startup_command_reply_retries {8};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
   qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
@@ -95,6 +97,11 @@ namespace
         text += QStringLiteral (" ...");
       }
     return text;
+  }
+
+  QString hrd_normalized_radio_name (QString text)
+  {
+    return text.trimmed ().simplified ().toCaseFolded ();
   }
 
   void hrd_diag (QString const& message)
@@ -261,19 +268,30 @@ int HRDTransceiver::do_start ()
 
   if (none == protocol_)
     {
-      try
+      protocol_ = v5;	// try this first (works for v6 too)
+      bool accepted {false};
+      for (auto const& probe_command : {QStringLiteral ("get id"), QStringLiteral ("get context")})
         {
-          protocol_ = v5;	// try this first (works for v6 too)
           CAT_INFO ("HRD protocol probe v5 starting");
-          hrd_diag (QStringLiteral ("protocol probe v5 start command='get id'"));
-          auto probe_id = send_command ("get id", false, false);
-          CAT_INFO ("HRD protocol probe v5 accepted:" << probe_id);
-          hrd_diag (QStringLiteral ("protocol probe v5 accepted id='%1'").arg (hrd_preview (probe_id)));
+          hrd_diag (QStringLiteral ("protocol probe v5 start command='%1'").arg (probe_command));
+          try
+            {
+              auto probe_id = send_command (probe_command, false, false);
+              CAT_INFO ("HRD protocol probe v5 accepted:" << probe_id);
+              hrd_diag (QStringLiteral ("protocol probe v5 accepted command='%1' reply='%2'")
+                        .arg (probe_command, hrd_preview (probe_id)));
+              accepted = true;
+              break;
+            }
+          catch (error const& e)
+            {
+              CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
+              hrd_diag (QStringLiteral ("protocol probe v5 failed command='%1': %2")
+                        .arg (probe_command, QString::fromUtf8 (e.what ())));
+            }
         }
-      catch (error const& e)
+      if (!accepted)
         {
-          CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
-          hrd_diag (QStringLiteral ("protocol probe v5 failed: %1").arg (QString::fromUtf8 (e.what ())));
           protocol_ = none;
         }
     }
@@ -299,19 +317,34 @@ int HRDTransceiver::do_start ()
           throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
         }
 
-      try
+      bool accepted {false};
+      QString last_error;
+      for (auto const& probe_command : {QStringLiteral ("get id"), QStringLiteral ("get context")})
         {
           CAT_INFO ("HRD protocol probe v4 starting");
-          hrd_diag (QStringLiteral ("protocol probe v4 start command='get id'"));
-          auto probe_id = send_command ("get id", false, false);
-          CAT_INFO ("HRD protocol probe v4 accepted:" << probe_id);
-          hrd_diag (QStringLiteral ("protocol probe v4 accepted id='%1'").arg (hrd_preview (probe_id)));
+          hrd_diag (QStringLiteral ("protocol probe v4 start command='%1'").arg (probe_command));
+          try
+            {
+              auto probe_id = send_command (probe_command, false, false);
+              CAT_INFO ("HRD protocol probe v4 accepted:" << probe_id);
+              hrd_diag (QStringLiteral ("protocol probe v4 accepted command='%1' reply='%2'")
+                        .arg (probe_command, hrd_preview (probe_id)));
+              accepted = true;
+              break;
+            }
+          catch (error const& e)
+            {
+              last_error = QString::fromUtf8 (e.what ());
+              CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
+              hrd_diag (QStringLiteral ("protocol probe v4 failed command='%1': %2")
+                        .arg (probe_command, last_error));
+            }
         }
-      catch (error const& e)
+      if (!accepted)
         {
-          CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
-          hrd_diag (QStringLiteral ("protocol probe v4 failed: %1").arg (QString::fromUtf8 (e.what ())));
-          throw;
+          throw error {last_error.isEmpty ()
+                         ? tr ("Ham Radio Deluxe failed protocol probe using get id/get context")
+                         : last_error};
         }
     }
 
@@ -378,9 +411,20 @@ int HRDTransceiver::do_start ()
                                           });
   if (current_radio_iter == radios_.end ())
     {
+      auto const normalized_current = hrd_normalized_radio_name (current_radio_name);
+      current_radio_iter = std::find_if (radios_.begin (), radios_.end (), [&normalized_current] (RadioMap::value_type const& radio)
+                                         {
+                                           return hrd_normalized_radio_name (std::get<1> (radio)) == normalized_current;
+                                         });
+    }
+  if (current_radio_iter == radios_.end ())
+    {
       CAT_ERROR ("current HRD radio missing from inventory:" << current_radio_name);
-      hrd_diag (QStringLiteral ("current radio missing from inventory current='%1'").arg (hrd_preview (current_radio_name)));
-      throw error {tr ("Ham Radio Deluxe: rig has disappeared or changed")};
+      current_radio_iter = radios_.begin ();
+      hrd_diag (QStringLiteral ("current radio missing from inventory current='%1'; using first inventory context id=%2 name='%3'")
+                .arg (hrd_preview (current_radio_name))
+                .arg (std::get<0> (*current_radio_iter))
+                .arg (hrd_preview (std::get<1> (*current_radio_iter))));
     }
   current_radio_ = std::get<0> (*current_radio_iter);
   hrd_diag (QStringLiteral ("selected radio context id=%1 name='%2'")
@@ -1440,9 +1484,11 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd, quint64 sequence)
   total_timer.start ();
   bool const startup_probe = is_startup_probe (cmd);
   int const timeout_ms = startup_probe ? hrd_probe_reply_timeout_ms
-                                       : hrd_command_reply_timeout_ms;
+                                       : (startup_diagnostics_active_ ? hrd_startup_command_reply_timeout_ms
+                                                                      : hrd_command_reply_timeout_ms);
   unsigned retries = startup_probe ? hrd_probe_reply_retries
-                                   : hrd_command_reply_retries;
+                                   : (startup_diagnostics_active_ ? hrd_startup_command_reply_retries
+                                                                  : hrd_command_reply_retries);
   bool replied {false};
   unsigned attempt {0};
   while (!replied && retries--)

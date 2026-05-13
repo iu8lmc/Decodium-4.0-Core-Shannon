@@ -1399,6 +1399,8 @@ generate_version_info (wsjtx_VERSION_RESOURCES
 add_executable (wsjtx MACOSX_BUNDLE
   ${wsjtx_CXXSRCS}
   ${wsjtx_GENUISRCS}
+  Web/DecodiumWebServer.cpp
+  Web/DecodiumWebServer.hpp
   ${WSJTX_ICON_FILE}
   ${wsjtx_RESOURCES_RCC}
   ${wsjtx_VERSION_RESOURCES}
@@ -1436,7 +1438,7 @@ if (${OPENMP_FOUND} AND NOT APPLE)
       )
     endif ()
 endif ()
-target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
+target_link_libraries (wsjtx Qt6::SerialPort Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Network Qt6::WebSockets wsjt_qtmm ${FFTW3_LIBRARIES} ${LIBM_LIBRARIES})
 target_compile_options (wsjtx PRIVATE -Wno-deprecated-declarations)
 link_wsjtx_cycle_group (wsjtx wsjt_qt wsjt_cxx wsjt_fort)
 

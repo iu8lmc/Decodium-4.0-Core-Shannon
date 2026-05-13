@@ -1349,13 +1349,17 @@ void DecodiumTransceiverManager::connectRig()
             qint64 const elapsedMs = m_connectAttemptTimer.isValid()
                 ? m_connectAttemptTimer.elapsed()
                 : -1;
-            if (elapsedMs >= 20000 || elapsedMs < 0) {
+            int const staleConnectThresholdMs = isHamRadioDeluxeRig(m_rigName)
+                ? kHrdStartupWatchdogMs
+                : 20000;
+            if (elapsedMs >= staleConnectThresholdMs || elapsedMs < 0) {
                 qWarning().noquote()
                     << "[CATDBG] Stale connect attempt reset"
                     << "rig=" << m_rigName
                     << "portType=" << m_portType
                     << "network=" << m_networkPort
-                    << "elapsedMs=" << elapsedMs;
+                    << "elapsedMs=" << elapsedMs
+                    << "thresholdMs=" << staleConnectThresholdMs;
                 emit statusUpdate(QStringLiteral("Connessione a %1 scaduta, riavvio tentativo...")
                                   .arg(m_rigName));
                 disconnectRig();
