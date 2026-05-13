@@ -28,6 +28,7 @@
 
 class NtpClient;
 class HttpsTimeSource;
+class DecoSyncSelfCal;
 
 class DecoSyncTime : public QObject
 {
@@ -71,6 +72,15 @@ public:
     Q_INVOKABLE double kalmanDriftMsPerSec() const { return m_kalman.driftMsPerSec(); }
     Q_INVOKABLE bool   kalmanHasLock()       const { return m_kalman.hasLock(); }
 
+    // Fase 4 — self-calibration dai decode FT8/FT4/FT2. Il bridge chiama
+    // reportDecodeDt() per ogni decode validato; quando una finestra di
+    // periodo si chiude con abbastanza sample, viene ingerito un sample
+    // nel Kalman con varianza derivata da MAD.
+    void reportDecodeDt(double dtSec, int snrDb);
+    void setSelfCalPeriodMs(int ms);
+    Q_INVOKABLE int    selfCalPendingCount() const;
+    Q_INVOKABLE double selfCalLastOffsetMs() const;
+
 public Q_SLOTS:
     void syncNow();
 
@@ -87,6 +97,7 @@ private:
 
     NtpClient*       m_ntp {nullptr};
     HttpsTimeSource* m_https {nullptr};
+    DecoSyncSelfCal* m_selfCal {nullptr};
     DecoSyncKalman   m_kalman;
     QTimer           m_kalmanTickTimer;
     qint64           m_kalmanLastTickMs {0};

@@ -301,6 +301,7 @@ set (wsjt_qt_CXXSRCS
   Network/NtpClient.cpp
   Network/HttpsTimeSource.cpp
   Network/DecoSyncKalman.cpp
+  Network/DecoSyncSelfCal.cpp
   Network/DecoSyncTime.cpp
   widgets/LazyFillComboBox.cpp
   widgets/CheckableItemComboBox.cpp

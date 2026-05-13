@@ -7363,19 +7363,28 @@ void DecodiumBridge::configureNtpClientForMode(const QString& mode)
     }
 
     QString const normalized = mode.trimmed().toUpper();
+    int selfCalPeriodMs = 15000;
     if (normalized == QStringLiteral("FT2")) {
         m_ntpClient->setRefreshInterval(60000);
         m_ntpClient->setMaxRtt(55.0);
+        selfCalPeriodMs = 2500;   // FT2 async ~2.5s slot
     } else if (normalized == QStringLiteral("FT4")) {
         m_ntpClient->setRefreshInterval(60000);
         m_ntpClient->setMaxRtt(65.0);
+        selfCalPeriodMs = 7500;   // FT4 7.5s period
     } else if (normalized == QStringLiteral("FT8")) {
         m_ntpClient->setRefreshInterval(60000);
         m_ntpClient->setMaxRtt(60.0);
+        selfCalPeriodMs = 15000;  // FT8 15s period
     } else {
         m_ntpClient->setRefreshInterval(300000);
         m_ntpClient->setMaxRtt(250.0);
+        selfCalPeriodMs = 15000;
     }
+    // 1.0.162 — DecoSyncTime fase 4: configura il self-cal con il period
+    // appropriato per il mode corrente. Il bridge feeda dt via addDecodeDt
+    // per ogni decode appended.
+    if (m_decoSyncTime) m_decoSyncTime->setSelfCalPeriodMs(selfCalPeriodMs);
 }
 
 void DecodiumBridge::resetStartupTransientQsoState()
@@ -19713,6 +19722,13 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             m_decodeList.append(QVariant(entry));
             appendRxDecodeEntry(entry);
             appendLegacyAllTxtDecodeLine(entry);
+            // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
+            if (m_decoSyncTime && !entry.value("isTx").toBool()) {
+                bool dtOk = false, snrOk = false;
+                double const dt = entry.value("dt").toString().toDouble(&dtOk);
+                int const db = entry.value("db").toString().toInt(&snrOk);
+                if (dtOk && snrOk) m_decoSyncTime->reportDecodeDt(dt, db);
+            }
             changed = true;
         }
         ++accepted;
@@ -20032,6 +20048,13 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         m_decodeList.append(QVariant(entry));
         appendRxDecodeEntry(entry);
         appendLegacyAllTxtDecodeLine(entry);
+        // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
+        if (m_decoSyncTime && !entry.value("isTx").toBool()) {
+            bool dtOk = false, snrOk = false;
+            double const dt = entry.value("dt").toString().toDouble(&dtOk);
+            int const db = entry.value("db").toString().toInt(&snrOk);
+            if (dtOk && snrOk) m_decoSyncTime->reportDecodeDt(dt, db);
+        }
         changed = true;
         ++accepted;
     }
@@ -20235,6 +20258,13 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
         }
         m_decodeList.append(QVariant(entry));
         appendRxDecodeEntry(entry);
+        // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
+        if (m_decoSyncTime && !entry.value("isTx").toBool()) {
+            bool dtOk2 = false, snrOk2 = false;
+            double const dt2 = entry.value("dt").toString().toDouble(&dtOk2);
+            int const db2 = entry.value("db").toString().toInt(&snrOk2);
+            if (dtOk2 && snrOk2) m_decoSyncTime->reportDecodeDt(dt2, db2);
+        }
         changed = true;
 
         maybePlayDecodeAlert(isCQ, isMyCall);

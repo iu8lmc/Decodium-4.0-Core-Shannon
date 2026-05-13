@@ -2,6 +2,7 @@
 #include "DecoSyncTime.hpp"
 #include "NtpClient.hpp"
 #include "HttpsTimeSource.hpp"
+#include "DecoSyncSelfCal.hpp"
 
 #include <QDateTime>
 
@@ -12,7 +13,20 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
     : QObject(parent)
     , m_ntp(new NtpClient(this))
     , m_https(new HttpsTimeSource(this))
+    , m_selfCal(new DecoSyncSelfCal(this))
 {
+    // Fase 4: self-cal dai decode amateur. Quando una finestra di periodo
+    // chiude con N+ sample, ingeriamo l'offset stimato come measurement
+    // Kalman con varianza alta (decoder dt accuracy ~150ms).
+    connect(m_selfCal, &DecoSyncSelfCal::offsetEstimateUpdated, this,
+        [this](double offsetMs, double varianceMs2, int sampleCount) {
+            Q_UNUSED(sampleCount)
+            // Self-cal misura skew NETTO rispetto al correct time, NON
+            // additivo al Kalman offset corrente. Convertiamo in
+            // "measurement assoluto": m_kalman vede z = offsetMs.
+            m_kalman.update(offsetMs, std::max(1.0, varianceMs2));
+            recomputeCombinedOffset(QStringLiteral("selfcal"));
+        });
     // Fase 2+3: NTP UDP, HTTPS Date e Kalman filter girano IN PARALLELO.
     // I sample da NTP e HTTPS vengono ingeriti nel Kalman che produce
     // l'offset finale predicted con compensazione drift PC.
@@ -55,6 +69,7 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
     // il valore della QSettings; default ON su nuova install.
     m_ntp->setEnabled(true);
     m_https->setEnabled(true);
+    m_selfCal->setEnabled(true);
 }
 
 DecoSyncTime::~DecoSyncTime() = default;
@@ -105,8 +120,29 @@ void DecoSyncTime::setEnabled(bool on)
     m_enabled = on;
     if (m_ntp) m_ntp->setEnabled(on);
     if (m_https) m_https->setEnabled(on);
+    if (m_selfCal) m_selfCal->setEnabled(on);
     emit enabledChanged();
     recomputeCombinedOffset(on ? QStringLiteral("enabled") : QStringLiteral("disabled"));
+}
+
+void DecoSyncTime::reportDecodeDt(double dtSec, int snrDb)
+{
+    if (m_selfCal) m_selfCal->addDecodeDt(dtSec, snrDb);
+}
+
+void DecoSyncTime::setSelfCalPeriodMs(int ms)
+{
+    if (m_selfCal) m_selfCal->setPeriodMs(ms);
+}
+
+int DecoSyncTime::selfCalPendingCount() const
+{
+    return m_selfCal ? m_selfCal->pendingSampleCount() : 0;
+}
+
+double DecoSyncTime::selfCalLastOffsetMs() const
+{
+    return m_selfCal ? m_selfCal->lastEmittedOffsetMs() : 0.0;
 }
 
 void DecoSyncTime::setCustomServer(QString const& server)
