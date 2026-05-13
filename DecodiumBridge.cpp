@@ -21116,7 +21116,14 @@ void DecodiumBridge::startAudioCapture()
     // use a much roomier audio queue; keep Decodium's RX buffer similarly
     // forgiving so FT4/FT8 final windows keep their full 12 kHz sample count.
     const unsigned downSampleFactor = 4; // assumes 48 kHz source
-    const int rxFramesPerBuffer = 32768; // ~680 ms at 48 kHz, before decimation.
+    // 1.0.165 — Salvatore in 1.0.158 ha alzato rxFramesPerBuffer da 4096 a
+    // 32768. Su Windows+WASAPI questo causa "RX sordo dopo TX": Qt6 dopo
+    // suspend()/resume() su uno stream con buffer >~256ms non riavvia i
+    // pull callback, lo stream resta in IdleState permanente. Risultato:
+    // niente sample arrivano al sink → Full Spectrum nero + decoder muto.
+    // Rolling back a 8192 (~170ms) — buffer sufficiente per FT4/FT8 final
+    // windows ma sotto la soglia di breakage di Qt-WASAPI.
+    const int rxFramesPerBuffer = 8192; // ~170 ms at 48 kHz, before decimation.
     bridgeLog("SoundInput::start device=" + selectedDevice.description() +
               " channel=" + QString::number((int)channel) +
               " dsf=" + QString::number(downSampleFactor) +
