@@ -197,6 +197,21 @@ Rectangle {
             if (root.visible)
                 root.scheduleRebuild()
         }
+        function onTxEnabledChanged() {
+            root.syncTxState()
+            if (root.visible)
+                root.scheduleRebuild()
+        }
+        function onQsoProgressChanged() {
+            root.syncTxState()
+            if (root.visible)
+                root.scheduleRebuild()
+        }
+        function onAutoCqRepeatChanged() {
+            root.syncTxState()
+            if (root.visible)
+                root.scheduleRebuild()
+        }
         function onModeChanged() {
             root.syncTxState()
             if (root.visible)

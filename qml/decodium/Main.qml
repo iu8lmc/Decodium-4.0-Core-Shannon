@@ -4654,10 +4654,6 @@ ApplicationWindow {
                                 appendIfNeeded(bridge.rxDecodeList[j], true)
 	                            }
                         }
-	                        if (bridge.decodeList) {
-	                            for (var k = 0; k < bridge.decodeList.length; k++)
-	                                appendIfNeeded(bridge.decodeList[k], false)
-	                        }
                         return injectSeparatorsJS(sortedRxDecodes(merged))
                     }
 
