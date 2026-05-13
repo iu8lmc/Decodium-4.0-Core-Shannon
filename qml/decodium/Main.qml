@@ -7507,6 +7507,21 @@ NumberAnimation {
             }
 	        }
 
+        MenuItem {
+            // 1.0.164 fase 5: monitor DecoSyncTime
+            text: "⏱  " + qsTr("DecoSyncTime Monitor")
+            onTriggered: mainWindow.openDecoSyncMonitor()
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text; font.pixelSize: 12
+                color: textSecondary
+                leftPadding: 10
+            }
+        }
+
 	        MenuItem {
 	            text: (dxClusterPanelVisible ? "✓ " : "☐ ") + qsTr("DX Cluster Panel")
 	            onTriggered: dxClusterPanelVisible = !dxClusterPanelVisible
@@ -10342,6 +10357,31 @@ NumberAnimation {
         x: Math.max(0, mainWindow.width - width - 12)
         y: 60
         onCloseRequested: dxClusterPanelVisible = false
+    }
+
+    // ── DecoSyncTime Monitor floating window ─────────────────────────────
+    // 1.0.164 fase 5: pannello monitoring per tutti i source time sync.
+    Window {
+        id: decoSyncMonitorWindow
+        width: 480
+        height: 380
+        minimumWidth: 360
+        minimumHeight: 260
+        visible: false
+        flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+             | Qt.WindowCloseButtonHint
+        title: "DecoSyncTime Monitor"
+        color: "transparent"
+
+        DecoSyncPanel {
+            anchors.fill: parent
+        }
+    }
+
+    function openDecoSyncMonitor() {
+        decoSyncMonitorWindow.show()
+        decoSyncMonitorWindow.raise()
+        decoSyncMonitorWindow.requestActivate()
     }
 
     // ── Splash Screen Decodium 4.0 Core Shannon ─────────────────────────────
