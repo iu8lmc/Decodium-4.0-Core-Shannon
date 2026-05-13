@@ -102,6 +102,20 @@ Window {
     property var rxDecodeModel: []
     property var clearedRxDecodeKeys: ({})
 
+    function bandActivityCount() {
+        void(decodeWindow.decodeListVersion)
+        if (bridge && bridge.bandActivityModel)
+            return bridge.bandActivityModel.count()
+        return decodeWindow.bandActivityModel.length
+    }
+
+    function signalRxCount() {
+        void(decodeWindow.rxDecodeListVersion)
+        if (bridge && bridge.rxDecodeModel)
+            return bridge.rxDecodeModel.count()
+        return decodeWindow.rxDecodeModel.length
+    }
+
 	    Connections {
 	        target: appEngine
 	        function onDecodeListChanged() {
@@ -575,10 +589,6 @@ Window {
                 appendIfNeeded(appEngine.rxDecodeList[j], true)
 	            }
         }
-	        if (appEngine.decodeList) {
-	            for (var k = 0; k < appEngine.decodeList.length; k++)
-	                appendIfNeeded(appEngine.decodeList[k], false)
-	        }
         var sorted = sortedRxDecodes(merged)
         // Decodium 3-style: ordine inverso (più recente in alto)
         if (decodeNewestFirst)
@@ -700,7 +710,7 @@ Window {
                             Item { Layout.fillWidth: true }
 
                             Text {
-                                text: decodeWindow.bandActivityModel.length + " decodes"
+                                text: decodeWindow.bandActivityCount() + " decodes"
                                 font.pixelSize: 11
                                 color: textSecondary
                             }
@@ -1187,7 +1197,7 @@ Component.onCompleted: {
                             font.pixelSize: 12
                             color: textSecondary
                             horizontalAlignment: Text.AlignHCenter
-                            visible: decodeWindow.bandActivityModel.length === 0
+                            visible: decodeWindow.bandActivityCount() === 0
                         }
                     }
                 }
@@ -1245,8 +1255,7 @@ Component.onCompleted: {
                             // RX Frequency count
                             Text {
                                 text: {
-                                    void(decodeWindow.rxDecodeListVersion)
-                                    return currentRxDecodes().length + " msgs"
+                                    return decodeWindow.signalRxCount() + " msgs"
                                 }
                                 font.pixelSize: 11
                                 color: textSecondary

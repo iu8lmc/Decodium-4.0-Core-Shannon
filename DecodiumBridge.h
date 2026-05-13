@@ -26,6 +26,7 @@
 #include "DecodiumCatManager.h"
 #include "DecodiumOmniRigManager.h"
 #include "DecodiumTransceiverManager.h"
+#include "Network/DecoSyncTime.hpp"
 
 class ActiveStationsModel;
 class DecodiumAlertManager;
@@ -50,8 +51,6 @@ class Modulator;
 class QAudioSink;
 class QBuffer;
 class NtpClient;
-class DecoSyncTime;
-Q_DECLARE_OPAQUE_POINTER(DecoSyncTime*)
 class QDialog;
 namespace decodium {
   namespace ft8     { class FT8DecodeWorker;       struct DecodeRequest; }
@@ -1716,6 +1715,9 @@ private:
     bool    m_logAfterOwn73 {false};
     bool    m_ft2DeferredLogPending {false};
     int     m_pendingAutoSeqTxAfterActiveTx {0};
+    QString m_pendingAutoSeqPartnerBase;
+    QString m_pendingAutoSeqMessage;
+    QString m_pendingAutoSeqMode;
     bool    m_quickPeerSignaled {false};
     bool    m_qsoLogged {false};   // flag anti-doppio log per QSO corrente
     int  m_maxCallerRetries {10};  // invii totali per step prima di fermarsi
@@ -2110,6 +2112,7 @@ private:
     void scheduleTxAudioTelemetryProbe(quint64 txSerial);
     void logTxAudioTelemetrySummary(const QString& reason);
     QString buildCurrentTxMessage() const;
+    bool repairOrRejectStalePartnerTxMessage(QString& message, const QString& reason);
     bool prepareHoundTxSelectionForStart(const QString& reason);
     QString defaultLogCommentForQso(const QString& mode,
                                     const QString& rstSent,

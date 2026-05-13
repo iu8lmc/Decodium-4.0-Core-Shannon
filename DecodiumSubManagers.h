@@ -363,7 +363,10 @@ public:
     {
         if (freqHz <= 0.0) return {};
 
-        double const defaultMaxOffsetHz = freqHz >= 50000000.0 ? 1000000.0 : 10000.0;
+        // Auto-mode deve riconoscere solo le frequenze nominali, non sequestrare
+        // QSY manuali vicine a una sub-banda. Esempio: 14.085 MHz puo' essere
+        // usata in FT8 da una DXpedition anche se e' vicina alla nominale FT2.
+        double const defaultMaxOffsetHz = freqHz >= 50000000.0 ? 1500.0 : 500.0;
         double const maxOffsetHz = overrideMaxOffsetHz > 0.0
             ? overrideMaxOffsetHz
             : defaultMaxOffsetHz;
