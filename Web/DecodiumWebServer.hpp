@@ -67,6 +67,7 @@ private Q_SLOTS:
     void onDisconnected();
     void onWebSocketConnected();
     void onWebSocketDisconnected();
+    void onWebSocketTextMessage(QString const& msg);
 
 private:
     void handleRequest(QTcpSocket* socket, QString const& method,

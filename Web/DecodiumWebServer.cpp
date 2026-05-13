@@ -116,6 +116,9 @@ void DecodiumWebServer::onWebSocketConnected()
         if (!ws) continue;
         connect(ws, &QWebSocket::disconnected,
                 this, &DecodiumWebServer::onWebSocketDisconnected);
+        // 1.0.171 fase 4: comandi remoti dal client (iPad/mobile)
+        connect(ws, &QWebSocket::textMessageReceived,
+                this, &DecodiumWebServer::onWebSocketTextMessage);
         m_wsClients.append(ws);
         // Snapshot iniziale: invia state + decodes appena connesso.
         QJsonObject env;
@@ -174,6 +177,59 @@ void DecodiumWebServer::broadcastDecodesUpdate()
 int DecodiumWebServer::connectedClients() const
 {
     return m_wsClients.size();
+}
+
+void DecodiumWebServer::onWebSocketTextMessage(QString const& msg)
+{
+    // Fase 4 — comandi remoti TX/RX dal client (iPad PWA).
+    // Protocollo: {type:"cmd", action:"<name>", payload:{...}}
+    // Whitelist di azioni: rifiuto qualsiasi altra cosa per safety.
+    if (!m_bridge) return;
+    QJsonParseError err{};
+    QJsonDocument const doc = QJsonDocument::fromJson(msg.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        emit errorOccurred(QStringLiteral("WS cmd parse: %1").arg(err.errorString()));
+        return;
+    }
+    QJsonObject const env = doc.object();
+    if (env.value(QStringLiteral("type")).toString() != QStringLiteral("cmd")) return;
+
+    QString const action = env.value(QStringLiteral("action")).toString();
+    QJsonObject const payload = env.value(QStringLiteral("payload")).toObject();
+
+    // Audit log: ogni comando remoto e' loggato.
+    // (qInfo finisce nel decodium_diagnostic.log via message handler)
+    qInfo().noquote() << "[WS] cmd from client action=" << action
+                      << "payload=" << QJsonDocument(payload).toJson(QJsonDocument::Compact);
+
+    if (action == QStringLiteral("setRxFreq")) {
+        int const hz = payload.value(QStringLiteral("hz")).toInt(0);
+        if (hz > 0) m_bridge->setRxFrequency(hz);
+    } else if (action == QStringLiteral("setTxFreq")) {
+        int const hz = payload.value(QStringLiteral("hz")).toInt(0);
+        if (hz > 0) m_bridge->setTxFrequency(hz);
+    } else if (action == QStringLiteral("setDxCall")) {
+        QString const call = payload.value(QStringLiteral("call")).toString().trimmed();
+        m_bridge->setDxCall(call);
+    } else if (action == QStringLiteral("setMonitoring")) {
+        bool const on = payload.value(QStringLiteral("on")).toBool();
+        m_bridge->setMonitoring(on);
+    } else if (action == QStringLiteral("syncNtpNow")) {
+        m_bridge->syncNtpNow();
+    } else if (action == QStringLiteral("requestState")) {
+        // Client requests snapshot — utile dopo reconnect
+        QJsonObject envOut;
+        envOut[QStringLiteral("type")] = QStringLiteral("state");
+        envOut[QStringLiteral("payload")] =
+            QJsonDocument::fromJson(buildStateJson()).object();
+        QWebSocket* sender_ws = qobject_cast<QWebSocket*>(sender());
+        if (sender_ws && sender_ws->isValid()) {
+            sender_ws->sendTextMessage(QString::fromUtf8(
+                QJsonDocument(envOut).toJson(QJsonDocument::Compact)));
+        }
+    } else {
+        emit errorOccurred(QStringLiteral("WS unknown action: %1").arg(action));
+    }
 }
 
 bool DecodiumWebServer::isRunning() const
@@ -439,12 +495,37 @@ th {
   font-weight: 600; font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-tr.cq td { background: rgba(70,196,110,0.06); }
-tr.mycall td { background: rgba(224,69,69,0.10); }
+tr.cq td { background: rgba(70,196,110,0.06); cursor: pointer; }
+tr.mycall td { background: rgba(224,69,69,0.10); cursor: pointer; }
 tr.tx td { background: rgba(245,166,35,0.12); }
+tr:not(.tx) td { cursor: pointer; }
+tr:not(.tx):hover td { background: rgba(58,142,220,0.18); }
 td.msg { font-family: "SF Mono","Consolas",monospace; font-weight: 600; }
 td.country { color: var(--txt-dim); }
 .error { padding: 24px; color: var(--red); text-align: center; }
+/* Footer controls bar */
+footer {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+  background: rgba(14,16,20,0.96);
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  -webkit-backdrop-filter: blur(8px);
+}
+footer button {
+  background: rgba(58,142,220,0.18); color: var(--txt);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; font-weight: 600;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+footer button:hover { background: rgba(58,142,220,0.32); }
+footer button:active { background: rgba(58,142,220,0.5); }
+footer button.danger { background: rgba(224,69,69,0.2); border-color: rgba(224,69,69,0.5); }
+footer button.danger:hover { background: rgba(224,69,69,0.35); }
+footer button.success { background: rgba(70,196,110,0.2); border-color: rgba(70,196,110,0.5); }
+footer .spacer { flex: 1; }
+footer .dxcall { color: var(--amber); font-weight: 700; padding: 4px 8px; }
+main { padding-bottom: 60px; } /* leave space for footer */
 @media (max-width: 600px) {
   th.country, td.country, th.dist, td.dist { display: none; }
 }
@@ -475,6 +556,13 @@ td.country { color: var(--txt-dim); }
   </table>
   <div id="error" class="error" style="display:none"></div>
 </main>
+<footer>
+  <button id="btnMonitor">Monitor ON/OFF</button>
+  <button id="btnSync">⏱ Sync</button>
+  <span class="dxcall" id="dxcallShow">DX: —</span>
+  <span class="spacer"></span>
+  <button id="btnClear" class="danger">Clear DX</button>
+</footer>
 <script>
 const $ = (id) => document.getElementById(id);
 let pollTimer = null;
@@ -492,6 +580,24 @@ function renderState(s) {
   if (s.ntpSynced) $("ntp").textContent = "NTP " + s.ntpOffsetMs.toFixed(0) + "ms";
   $("tx").style.display = s.transmitting ? "inline" : "none";
   $("count").textContent = s.decodesCount + " dec";
+  $("dxcallShow").textContent = "DX: " + (s.dxCall || "—");
+}
+// Command sender. Tutti i client commands passano da qui.
+function sendCmd(action, payload) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: "cmd", action: action, payload: payload || {}}));
+  } else {
+    alert("WebSocket non connesso — riprova fra un attimo");
+  }
+}
+// Click su row decode → set RX freq + DX call. Solo non-TX.
+function decodeRowClick(e) {
+  const row = e.target.closest("tr");
+  if (!row || row.classList.contains("tx")) return;
+  const freq = parseInt(row.dataset.freq) || 0;
+  const dx = row.dataset.dxcall || "";
+  if (freq > 0) sendCmd("setRxFreq", {hz: freq});
+  if (dx) sendCmd("setDxCall", {call: dx});
 }
 function renderDecodes(payload) {
   const tbody = $("decodes");
@@ -503,7 +609,7 @@ function renderDecodes(payload) {
     else if (e.isMyCall) cls = "mycall";
     else if (e.isCQ) cls = "cq";
     const distStr = e.dxDistance > 0 ? Math.round(e.dxDistance) : "";
-    rows.push(`<tr class="${cls}">
+    rows.push(`<tr class="${cls}" data-freq="${e.freq}" data-dxcall="${escapeHtml(e.dxCallsign||"")}">
       <td>${e.time}</td>
       <td>${e.db}</td>
       <td>${e.dt}</td>
@@ -574,6 +680,17 @@ setInterval(() => {
     try { ws.close(); } catch(e){}
   }
 }, 5000);
+// Wire footer buttons + delegated click on decode rows.
+document.getElementById("decodes").addEventListener("click", decodeRowClick);
+document.getElementById("btnMonitor").addEventListener("click", () => {
+  // toggle: leggi state attuale dalla pillola TX (se TX visible è monitor=on+transmitting)
+  // più semplice: chiediamo state poi togglare.
+  fetch("/api/state").then(r=>r.json()).then(s => {
+    sendCmd("setMonitoring", {on: !s.monitoring});
+  });
+});
+document.getElementById("btnSync").addEventListener("click", () => sendCmd("syncNtpNow", {}));
+document.getElementById("btnClear").addEventListener("click", () => sendCmd("setDxCall", {call: ""}));
 </script>
 </body>
 </html>
