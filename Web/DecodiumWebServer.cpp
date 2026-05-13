@@ -239,6 +239,17 @@ void DecodiumWebServer::onWebSocketTextMessage(QString const& msg)
         m_bridge->setMonitoring(on);
     } else if (action == QStringLiteral("syncNtpNow")) {
         m_bridge->syncNtpNow();
+    } else if (action == QStringLiteral("sendTx")) {
+        // 1.0.173 fase 5 PWA — invia il messaggio TX slot 1..6 dal remote.
+        int const slot = payload.value(QStringLiteral("slot")).toInt(0);
+        if (slot >= 1 && slot <= 6) m_bridge->sendTx(slot);
+    } else if (action == QStringLiteral("halt")) {
+        // Stop TX immediato dal remote (panic button).
+        m_bridge->halt();
+    } else if (action == QStringLiteral("startTx")) {
+        m_bridge->startTx();
+    } else if (action == QStringLiteral("stopTx")) {
+        m_bridge->stopTx();
     } else if (action == QStringLiteral("requestState")) {
         // Client requests snapshot — utile dopo reconnect
         QJsonObject envOut;
@@ -391,6 +402,12 @@ QByteArray DecodiumWebServer::buildStateJson() const
     root[QStringLiteral("decodesCount")] = m_bridge->decodeList().size();
     root[QStringLiteral("serverTimeMs")] =
         static_cast<double>(QDateTime::currentMSecsSinceEpoch());
+    // 1.0.173 fase 5 PWA — TX1..TX5 messaggi correnti per remote tx panel
+    QJsonArray txMsgs;
+    for (int i = 1; i <= 5; ++i) {
+        txMsgs.append(m_bridge->txMessage(i));
+    }
+    root[QStringLiteral("txMessages")] = txMsgs;
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
@@ -548,9 +565,64 @@ footer button.danger:hover { background: rgba(224,69,69,0.35); }
 footer button.success { background: rgba(70,196,110,0.2); border-color: rgba(70,196,110,0.5); }
 footer .spacer { flex: 1; }
 footer .dxcall { color: var(--amber); font-weight: 700; padding: 4px 8px; }
-main { padding-bottom: 60px; } /* leave space for footer */
+main { padding-bottom: 200px; } /* leave space for footer + TX panel + activity */
+/* 1.0.173 fase 5 — TX panel sopra il footer */
+.txpanel {
+  position: fixed; bottom: 50px; left: 0; right: 0; z-index: 15;
+  background: rgba(14,16,20,0.96);
+  border-top: 1px solid var(--border);
+  padding: 6px 8px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  -webkit-backdrop-filter: blur(8px);
+}
+.txpanel button.txbtn {
+  background: rgba(58,142,220,0.18); color: var(--txt);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; font-size: 11px; font-weight: 600;
+  text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 38px;
+  font-family: "SF Mono","Consolas",monospace;
+  overflow: hidden;
+}
+.txpanel button.txbtn .label {
+  font-size: 10px; color: var(--accent); font-weight: 700;
+  font-family: -apple-system,sans-serif;
+}
+.txpanel button.txbtn .msg {
+  font-size: 11px; color: var(--txt);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.txpanel button.txbtn:active { background: rgba(58,142,220,0.5); }
+.txpanel button.txbtn.disabled { opacity: 0.35; }
+.txpanel button.haltbtn {
+  background: rgba(224,69,69,0.25); color: #ffdada;
+  border: 1px solid rgba(224,69,69,0.6); border-radius: 6px;
+  padding: 6px 8px; font-size: 12px; font-weight: 700;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  min-height: 38px;
+}
+.txpanel button.haltbtn:active { background: rgba(224,69,69,0.55); }
+/* Activity strip — mini "waterfall" client-side da decode recenti */
+.activity-wrap {
+  position: sticky; top: 48px; z-index: 9;
+  background: var(--bg-card);
+  border-bottom: 1px solid rgba(154,164,175,0.10);
+  padding: 4px 8px 2px;
+}
+.activity-wrap .axislbl {
+  font-size: 9px; color: var(--txt-dim);
+  display: flex; justify-content: space-between;
+  font-family: "SF Mono","Consolas",monospace;
+}
+#activity {
+  width: 100%; height: 40px; display: block;
+  background: #06080b; border-radius: 3px;
+}
 @media (max-width: 600px) {
   th.country, td.country, th.dist, td.dist { display: none; }
+  .txpanel { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
 </head>
@@ -568,6 +640,12 @@ main { padding-bottom: 60px; } /* leave space for footer */
   </div>
 </header>
 <main>
+  <div class="activity-wrap">
+    <canvas id="activity" width="800" height="40"></canvas>
+    <div class="axislbl">
+      <span>200 Hz</span><span>1500 Hz</span><span>3000 Hz</span>
+    </div>
+  </div>
   <table>
     <thead>
       <tr>
@@ -579,6 +657,14 @@ main { padding-bottom: 60px; } /* leave space for footer */
   </table>
   <div id="error" class="error" style="display:none"></div>
 </main>
+<div class="txpanel" id="txpanel">
+  <button class="txbtn" data-slot="1"><span class="label">TX1</span><span class="msg" id="txm1">—</span></button>
+  <button class="txbtn" data-slot="2"><span class="label">TX2</span><span class="msg" id="txm2">—</span></button>
+  <button class="txbtn" data-slot="3"><span class="label">TX3</span><span class="msg" id="txm3">—</span></button>
+  <button class="txbtn" data-slot="4"><span class="label">TX4</span><span class="msg" id="txm4">—</span></button>
+  <button class="txbtn" data-slot="5"><span class="label">TX5</span><span class="msg" id="txm5">—</span></button>
+  <button class="haltbtn" id="btnHalt">HALT</button>
+</div>
 <footer>
   <button id="btnMonitor">Monitor ON/OFF</button>
   <button id="btnSync">⏱ Sync</button>
@@ -604,6 +690,16 @@ function renderState(s) {
   $("tx").style.display = s.transmitting ? "inline" : "none";
   $("count").textContent = s.decodesCount + " dec";
   $("dxcallShow").textContent = "DX: " + (s.dxCall || "—");
+  // 1.0.173 fase 5 — popola TX1..TX5 con messaggi correnti
+  const txm = s.txMessages || [];
+  for (let i = 1; i <= 5; ++i) {
+    const el = $("txm"+i);
+    if (!el) continue;
+    const text = (txm[i-1] || "").trim();
+    el.textContent = text || "(vuoto)";
+    const btn = el.closest("button");
+    if (btn) btn.classList.toggle("disabled", !text);
+  }
 }
 // Command sender. Tutti i client commands passano da qui.
 function sendCmd(action, payload) {
@@ -625,7 +721,8 @@ function decodeRowClick(e) {
 function renderDecodes(payload) {
   const tbody = $("decodes");
   const rows = [];
-  const list = (payload.decodes || []).slice(-100).reverse();
+  const fullList = (payload.decodes || []);
+  const list = fullList.slice(-100).reverse();
   for (const e of list) {
     let cls = "";
     if (e.isTx) cls = "tx";
@@ -643,6 +740,40 @@ function renderDecodes(payload) {
     </tr>`);
   }
   tbody.innerHTML = rows.join("");
+  // 1.0.173 fase 5 — activity strip: gli ultimi ~80 decode come dot
+  // su asse audio freq (200-3000Hz). SNR -> opacità.
+  drawActivity(fullList.slice(-80));
+}
+// Activity strip: client-side mini "waterfall" derivato dai decode.
+// Asse X = audio Hz (200..3000), opacità = SNR (clamp -24..+10).
+function drawActivity(list) {
+  const cnv = $("activity");
+  if (!cnv) return;
+  const ctx = cnv.getContext("2d");
+  const w = cnv.width, h = cnv.height;
+  ctx.fillStyle = "#06080b";
+  ctx.fillRect(0, 0, w, h);
+  // Griglia: ogni 500 Hz da 500..3000
+  ctx.strokeStyle = "rgba(154,164,175,0.08)";
+  ctx.lineWidth = 1;
+  for (let f = 500; f <= 3000; f += 500) {
+    const x = ((f - 200) / 2800) * w;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  // Decode dots
+  for (const e of list) {
+    const hz = parseInt(e.freq); if (!hz || hz < 200 || hz > 3000) continue;
+    const snr = parseInt(e.db);
+    const x = ((hz - 200) / 2800) * w;
+    const norm = Math.max(0, Math.min(1, (snr + 24) / 34));  // -24..+10 -> 0..1
+    const y = h - norm * (h - 4) - 2;
+    let color;
+    if (e.isMyCall)   color = `rgba(224,69,69,${0.6 + norm*0.4})`;
+    else if (e.isCQ)  color = `rgba(70,196,110,${0.5 + norm*0.5})`;
+    else              color = `rgba(58,142,220,${0.35 + norm*0.55})`;
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
 }
 async function pollOnce() {
   try {
@@ -714,6 +845,19 @@ document.getElementById("btnMonitor").addEventListener("click", () => {
 });
 document.getElementById("btnSync").addEventListener("click", () => sendCmd("syncNtpNow", {}));
 document.getElementById("btnClear").addEventListener("click", () => sendCmd("setDxCall", {call: ""}));
+// 1.0.173 fase 5 — TX1..TX5 + HALT. Conferma click per evitare TX accidentali.
+document.getElementById("txpanel").addEventListener("click", (e) => {
+  const btn = e.target.closest("button.txbtn");
+  if (!btn) return;
+  const slot = parseInt(btn.dataset.slot);
+  if (!slot) return;
+  const msg = btn.querySelector(".msg").textContent || "";
+  if (!confirm("Trasmettere TX" + slot + "?\n\"" + msg + "\"")) return;
+  sendCmd("sendTx", {slot: slot});
+});
+document.getElementById("btnHalt").addEventListener("click", () => {
+  sendCmd("halt", {});
+});
 </script>
 </body>
 </html>
