@@ -828,6 +828,43 @@ Item {
                     return "#00c8ff"
                 }
 
+                // 1.0.175 — Cache del label model con throttle 4 Hz.
+                // Su banda affollata (FT2 async 5-10 decode/sec) il sort+pack
+                // di decodeLabelModel() veniva chiamato troppo spesso, in
+                // competizione col paint del waterfall → label che saltano
+                // frame e si "accavallano". Cachiamo il risultato e
+                // refreshiamo al massimo 4 volte al secondo.
+                property var cachedDecodeLabelModel: []
+
+                Timer {
+                    id: decodeLabelRefreshTimer
+                    interval: 250
+                    repeat: false
+                    onTriggered: {
+                        spectrumGpuOverlay.cachedDecodeLabelModel =
+                            spectrumGpuOverlay.decodeLabelModel()
+                    }
+                }
+
+                Connections {
+                    target: waterfallPanel
+                    function onSpectrumDecodeLabelsChanged() {
+                        if (!decodeLabelRefreshTimer.running)
+                            decodeLabelRefreshTimer.start()
+                    }
+                    function onShowDecodeCallsignsChanged() {
+                        if (!decodeLabelRefreshTimer.running)
+                            decodeLabelRefreshTimer.start()
+                    }
+                }
+
+                onWidthChanged:  { if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start() }
+                onHeightChanged: { if (!decodeLabelRefreshTimer.running) decodeLabelRefreshTimer.start() }
+
+                Component.onCompleted: {
+                    cachedDecodeLabelModel = decodeLabelModel()
+                }
+
                 function decodeLabelModel() {
                     if (!waterfallPanel.showDecodeCallsigns)
                         return []
@@ -969,7 +1006,7 @@ Item {
                 }
 
                 Repeater {
-                    model: spectrumGpuOverlay.decodeLabelModel()
+                    model: spectrumGpuOverlay.cachedDecodeLabelModel
                     Item {
                         width: spectrumGpuOverlay.width
                         height: spectrumGpuOverlay.height

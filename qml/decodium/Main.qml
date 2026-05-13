@@ -4190,24 +4190,44 @@ ApplicationWindow {
                         color: "transparent"
 
 
-                        Waterfall {
-                            id: waterfallDisplayEmbedded
+                        Loader {
+                            id: waterfallEmbeddedLoader
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             anchors.margins: 4
                             visible: !waterfallDetached
-                            showControls: true
-                            minFreq: 0
-                            maxFreq: 3200
-                            spectrumHeight: 150
+                            active: !waterfallDetached
+                            // 1.0.175 — Carica off-thread come gia' fa il
+                            // detached (Loader asynchronous:true a r.8304),
+                            // per evitare stallo del main thread sul mount
+                            // del PanadapterItem QQuickItem.
+                            asynchronous: true
+                            sourceComponent: waterfallEmbeddedComponent
+                        }
 
-                            onFrequencySelected: function(freq) {
-                                bridge.rxFrequency = freq      // tasto destro = RX
-                            }
-                            onTxFrequencySelected: function(freq) {
-                                bridge.txFrequency = freq      // tasto sinistro = TX
+                        Component {
+                            id: waterfallEmbeddedComponent
+
+                            Waterfall {
+                                id: waterfallDisplayEmbedded
+                                anchors.fill: parent
+                                visible: !waterfallDetached
+                                showControls: true
+                                minFreq: 0
+                                maxFreq: 3200
+                                spectrumHeight: 150
+                                // 1.0.175 — Isola il render su FBO separata.
+                                layer.enabled: true
+                                layer.smooth: true
+
+                                onFrequencySelected: function(freq) {
+                                    bridge.rxFrequency = freq      // tasto destro = RX
+                                }
+                                onTxFrequencySelected: function(freq) {
+                                    bridge.txFrequency = freq      // tasto sinistro = TX
+                                }
                             }
                         }
 
