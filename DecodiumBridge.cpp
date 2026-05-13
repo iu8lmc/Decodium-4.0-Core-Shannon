@@ -3116,7 +3116,8 @@ static int autoTxDecodeGraceMs(const QString& mode)
     return 500;
 }
 
-static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMaxRetries)
+static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMaxRetries,
+                                           int partnerSnrDb = 127, bool conservative = false)
 {
     QString const normalized = mode.trimmed().toUpper();
     int modeCap = 3;
@@ -3125,7 +3126,17 @@ static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMax
     } else if (normalized == QStringLiteral("FT2")) {
         modeCap = 8;
     }
-    return qBound(1, configuredMaxRetries, modeCap);
+    // 1.0.174 — extra retries per partner debole (QSB-aware).
+    // SNR < -10 dB aggiunge fino a +4 retry, scalando linearmente:
+    // -10→0, -12→1, -14→2, -16→3, -18+→4.
+    // Conservative mode aggiunge +2 base.
+    int extra = 0;
+    if (partnerSnrDb != 127 && partnerSnrDb < -10) {
+        extra = qBound(0, (-partnerSnrDb - 10) / 2, 4);
+    }
+    if (conservative) extra += 2;
+    modeCap += extra;
+    return qBound(1, configuredMaxRetries + extra, modeCap);
 }
 
 static int autoSeqTxRank(int txNum)
@@ -3407,10 +3418,25 @@ bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
         return false;  // isMyCall non attivo ma SNR/dist non da ghost
     }
 
-    if (db <= -22) return true;
+    // 1.0.174 — Ghost filter SNR-adattivo per propagazione scarsa.
+    // Se il partner del decode coincide con m_dxCall (QSO attivo) OPPURE
+    // Conservative mode e' ON, abbassa la soglia ghost a -24 dB invece di
+    // -22 (la AP-aided rimane piu' severa: -20 invece di -18). Questo evita
+    // di scartare partner deboli in QSB che lampeggiano sotto -22.
+    QString const partner = entry.value(QStringLiteral("dxCallsign"))
+                                 .toString().trimmed().toUpper();
+    QString const fromCall = entry.value(QStringLiteral("fromCall"))
+                                  .toString().trimmed().toUpper();
+    QString const dx = m_dxCall.trimmed().toUpper();
+    bool const isPartnerOfActiveQso = !dx.isEmpty()
+        && (partner == dx || fromCall == dx);
+    bool const relaxThreshold = isPartnerOfActiveQso || m_ft2Conservative;
+    int const ghostSnr   = relaxThreshold ? -24 : -22;
+    int const ghostApSnr = relaxThreshold ? -20 : -18;
 
+    if (db <= ghostSnr) return true;
     QString const aptype = entry.value(QStringLiteral("aptype")).toString().trimmed();
-    if (!aptype.isEmpty() && db <= -18) return true;
+    if (!aptype.isEmpty() && db <= ghostApSnr) return true;
 
     // 1.0.146: terzo criterio = SNR ≤ -19 + distanza estrema (>10000 km).
     // Ghost a SNR marginale spesso producono callsign-country mismatch (es.
@@ -3436,6 +3462,20 @@ void DecodiumBridge::setHideGhostDecodes(bool v)
     // Rigenera i model con la nuova policy di filter.
     rebuildBandActivityModel();
     rebuildRxDecodeModel();
+}
+
+// 1.0.174 — FT2 Weak-Signal Pack master flag setter.
+// Ghost filter rilassato (-24 dB), retry cap esteso, same-step wait
+// adattivo. Persistito su QSettings; il valore viene riletto da loadSettings()
+// al prossimo avvio.
+void DecodiumBridge::setFt2Conservative(bool v)
+{
+    if (m_ft2Conservative == v) return;
+    m_ft2Conservative = v;
+    QSettings settings;
+    settings.setValue(QStringLiteral("Ft2Conservative"), v);
+    emit ft2ConservativeChanged();
+    bridgeLog(QStringLiteral("[FT2WS] Conservative mode %1").arg(v ? "ON" : "OFF"));
 }
 
 void DecodiumBridge::setDecodeShowPeriodSeparator(bool v)
@@ -8096,6 +8136,10 @@ void DecodiumBridge::setDxCall(const QString& v) {
     }
     if (m_dxCall != next) {
         m_dxCall = next;
+        // 1.0.174 — Reset SNR tracking partner: il vecchio valore non e' piu'
+        // significativo. Verra' ri-popolato dal prossimo decode del nuovo
+        // partner in autoSequenceStep. 127 = sentinel "no data".
+        m_currentPartnerSnrDb = 127;
         QString const activeQueueCall = normalizedBaseCall(next);
         if (!activeQueueCall.isEmpty()) {
             clearWorldMapClosedQso(next);
@@ -15478,7 +15522,9 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         if (m_ft2DeferredLogPending) {
             // Cap per-mode retry TX5/RR73 deferred by wall-clock intent:
             // FT8=3 (~45s), FT4=4 (~30s), FT2=8 (~30s).
-            int const signoffCap = deferredSignoffRetryCapForMode(m_mode, m_maxCallerRetries);
+            // 1.0.174 — passa partner SNR e Conservative flag per cap adattivo
+            int const signoffCap = deferredSignoffRetryCapForMode(m_mode, m_maxCallerRetries,
+                                                                   m_currentPartnerSnrDb, m_ft2Conservative);
             if (m_nTx73 < signoffCap) {
                 bridgeLog(QStringLiteral("checkAndStartPeriodicTx: deferred signoff TX%1 mode=%2 count=%3/%4, waiting for final ack")
                               .arg(m_currentTx)
@@ -15556,8 +15602,21 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         if (m_asyncLastTxEndMs > 0) {
             qint64 elapsed = msNow - m_asyncLastTxEndMs;
             if (elapsed < 200) return;  // PTT debounce
-            // Retry guard: se stiamo per rimandare lo stesso step, aspetta 1 periodo
-            if (m_currentTx == m_lastNtx && elapsed < periodMsForMode(m_mode)) return;
+            // 1.0.174 — Retry guard SNR-adattivo:
+            //   SNR > -8 dB  → 0.5 periodi (partner forte, retry rapido)
+            //   SNR -8..-15  → 1.0 periodi (default)
+            //   SNR < -15    → 1.5 periodi (QSB tolerant)
+            //   Conservative ON → minimo 1.0 periodi, weak-signal scala a 1.5
+            qint64 const periodMs = periodMsForMode(m_mode);
+            double waitFactor = 1.0;
+            if (!m_ft2Conservative && m_currentPartnerSnrDb != 127
+                && m_currentPartnerSnrDb > -8) {
+                waitFactor = 0.5;
+            } else if (m_currentPartnerSnrDb != 127 && m_currentPartnerSnrDb < -15) {
+                waitFactor = 1.5;
+            }
+            qint64 const waitMs = static_cast<qint64>(periodMs * waitFactor);
+            if (m_currentTx == m_lastNtx && elapsed < waitMs) return;
         }
     }
 
@@ -15797,6 +15856,20 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
     }
     QString const messagePartner = fallbackDirectedPartner.isEmpty() ? from : fallbackDirectedPartner;
     QString const messagePartnerBase = Radio::base_callsign(messagePartner).trimmed().toUpper();
+    // 1.0.174 — Aggiorna SNR del partner corrente. Usato da ghost filter
+    // e retry cap/wait adattivi (FT2 weak-signal pack). Memoria singolo
+    // valore (no storage costoso); 127 = sentinel "no data".
+    if (!m_dxCall.isEmpty() && !messagePartnerBase.isEmpty()) {
+        QString const dxUp = m_dxCall.trimmed().toUpper();
+        QString const dxBase = Radio::base_callsign(dxUp).trimmed().toUpper();
+        if (messagePartnerBase == dxBase || messagePartnerBase == dxUp) {
+            bool snrOk = false;
+            int const snrVal = f[1].trimmed().toInt(&snrOk);
+            if (snrOk) {
+                m_currentPartnerSnrDb = snrVal;
+            }
+        }
+    }
     QString const currentTxPayloadAtAutoSeq = buildCurrentTxMessage().trimmed();
     bool const currentPayloadMentionsMessagePartner =
         !messagePartnerBase.isEmpty()
@@ -16514,6 +16587,8 @@ void DecodiumBridge::loadSettings()
     m_txDisabledMask = s.value("txDisabledMask", 0).toInt() & 0x3F;  // 6 bit (TX1-TX6)
     m_hideGhostDecodes = s.value("hideGhostDecodes", true).toBool();  // 1.0.145 default ON
     m_decodeShowPeriodSeparator = s.value("decodeShowPeriodSeparator", true).toBool();
+    // 1.0.174 — FT2 Weak-Signal Pack: master flag (default OFF, opt-in)
+    m_ft2Conservative = s.value(QStringLiteral("Ft2Conservative"), false).toBool();
     // 1.0.168 — auto-start web server da settings
     bool const webServerEnabled = s.value("WebServerEnabled", false).toBool();
     int const webServerPort = s.value("WebServerPort", 8080).toInt();
