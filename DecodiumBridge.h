@@ -349,6 +349,9 @@ class DecodiumBridge : public QObject
     // === B9 — ACTIVE STATIONS MODEL ===
     Q_PROPERTY(QObject* activeStations READ activeStations CONSTANT)
 
+    // 1.0.174 — FT2 Weak-Signal Pack master flag
+    Q_PROPERTY(bool ft2Conservative READ ft2Conservative WRITE setFt2Conservative NOTIFY ft2ConservativeChanged)
+
 public:
     explicit DecodiumBridge(QObject* parent = nullptr);
     ~DecodiumBridge();
@@ -1029,6 +1032,7 @@ signals:
     void txPeriodChanged();
     void alt12EnabledChanged();
     void asyncTxEnabledChanged();
+    void ft2ConservativeChanged();  // 1.0.174 — FT2 Weak-Signal Pack
     void dualCarrierEnabledChanged();
     void quickQsoEnabledChanged();
     void settingValueChanged(QString key, QVariant value);
@@ -1419,6 +1423,11 @@ private:
     // marginali). Default ON — disabilitabile da setting per chi vuole
     // vedere TUTTO comprese le decode dubbie.
     bool m_hideGhostDecodes {true};
+    // 1.0.174 — FT2 weak-signal pack master flag (opt-in, default OFF).
+    bool m_ft2Conservative {false};
+    // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
+    // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
+    int  m_currentPartnerSnrDb {127};
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
@@ -2015,6 +2024,12 @@ public:
     // lato C++ ma desincronizzato dalla QSettings letta dal QML).
     Q_INVOKABLE bool decodeShowPeriodSeparator() const { return m_decodeShowPeriodSeparator; }
     Q_INVOKABLE void setDecodeShowPeriodSeparator(bool v);
+
+    // 1.0.174 — FT2 weak-signal pack: master flag "Conservative" che attiva
+    // ghost filter rilassato (-24 dB), retry cap esteso, same-step wait
+    // adattivo. Opt-in via Settings; default OFF.
+    Q_INVOKABLE bool ft2Conservative() const { return m_ft2Conservative; }
+    Q_INVOKABLE void setFt2Conservative(bool v);
 
     // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
     Q_INVOKABLE bool    startWebServer(int port = 8080);

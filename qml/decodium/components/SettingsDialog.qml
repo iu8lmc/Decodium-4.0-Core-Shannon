@@ -2397,6 +2397,25 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
+
+                        // Conservative FT2 (weak-signal mode) — opt-in tuning
+                        // anti-QSB: ghost filter rilassato, retry cap esteso SNR-
+                        // adattivo, same-step wait piu' permissivo per partner
+                        // marginali. Default OFF: comportamento standard FT2.
+                        Text { text: qsTr("Conservative FT2 (weak-signal mode):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        CheckBox {
+                            id: ft2ConservativeCheck
+                            checked: bridge ? bridge.ft2Conservative : false
+                            onCheckedChanged: {
+                                if (bridge) bridge.setFt2Conservative(checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Tuning anti-QSB: ghost filter -24 dB invece di -22, retry cap esteso SNR-adattivo (+2..+4 extra), same-step wait rilassato per partner deboli. Default OFF — attivalo se hai partner DX deboli o propagazione marginale.")
+                        }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Watchdog ──
