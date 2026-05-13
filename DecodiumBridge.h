@@ -1883,6 +1883,8 @@ private:
     QString m_ntpCustomServer;
     double m_ntpOffsetMs    {0.0};
     bool   m_ntpSynced      {false};
+    qint64 m_lastTxEndMs    {0};      // 1.0.166 hold-off NTP rearm post-TX
+    qint64 m_lastNtpRearmMs {0};      // 1.0.166 debounce NTP rearm
     double m_avgDt          {0.0};
     double m_decodeLatencyMs{0.0};
     QHash<quint64, qint64> m_decodeStartMsBySerial;

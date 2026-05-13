@@ -3779,8 +3779,27 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             && m_monitoring
             && isTimeSyncDecodeMode(m_mode)
             && std::abs(offsetMs - previousOffsetMs) >= 50.0) {
-            quint64 const sessionId = ++m_periodTimerSessionId;
-            armPeriodTimerForCurrentMode(sessionId, QStringLiteral("NTP offset update"));
+            // 1.0.166 — hold-off post-TX: il PTT release causa jitter NTP
+            // transitorio. Senza guard, ogni rearm chiama
+            // resetRxPeriodAccumulation() che svuota m_audioBuffer e setta
+            // m_lastPeriodSlot=-1 → decoder muto fino a stabilizzazione
+            // (a volte mai). DecoSyncTime fasi 2-4 hanno aumentato la
+            // frequenza degli offsetUpdated emit, peggiorando il problema.
+            qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+            bool const recentlyTx = (m_lastTxEndMs > 0)
+                                    && (nowMs - m_lastTxEndMs < 5000);
+            bool const recentlyRearmed = (m_lastNtpRearmMs > 0)
+                                         && (nowMs - m_lastNtpRearmMs < 30000);
+            if (recentlyTx || recentlyRearmed) {
+                bridgeLog(QStringLiteral("NTP offset update suppressed: %1ms (recentTx=%2 recentRearm=%3)")
+                              .arg(QString::number(offsetMs - previousOffsetMs, 'f', 1),
+                                   recentlyTx ? "1" : "0",
+                                   recentlyRearmed ? "1" : "0"));
+            } else {
+                m_lastNtpRearmMs = nowMs;
+                quint64 const sessionId = ++m_periodTimerSessionId;
+                armPeriodTimerForCurrentMode(sessionId, QStringLiteral("NTP offset update"));
+            }
         }
     });
     connect(m_ntpClient, &NtpClient::syncStatusChanged, this, [this](bool synced, const QString& statusText) {
@@ -9133,6 +9152,8 @@ void DecodiumBridge::resumeRxAudioAfterTx(const QString& reason)
 {
     const bool wasSuspended = m_rxAudioSuspendedForTx;
     m_rxAudioSuspendedForTx = false;
+    // 1.0.166 — marca timestamp fine TX per hold-off NTP rearm
+    m_lastTxEndMs = QDateTime::currentMSecsSinceEpoch();
 
     if (!m_monitoring
         && !(m_monitorRequested && usingLegacyBackendForTx() && !useModernSpectrumFeedWithLegacy())) {
@@ -21521,9 +21542,16 @@ void DecodiumBridge::dispatchTimeSyncDecodeWhenReady(qint64 completedUtcSlot,
         QMutexLocker locker(&m_audioBufferMutex);
         borrowedSamples = qMin(needed, m_audioBuffer.size());
         if (borrowedSamples > 0) {
+            // 1.0.166 — rollback al comportamento 1.0.157: borrow = PEEK,
+            // non TAKE. Salvatore in 1.0.158 ha introdotto le 2 righe
+            // sotto (mid+reserve) che drenavano i sample dal buffer dopo
+            // averli copiati. Risultato: dopo TX (con m_audioBuffer
+            // appena clearato e che si sta riempiendo), il primo slot
+            // post-TX borrow="quasi tutto", strip → m_audioBuffer vuoto
+            // → slot successivo trova ancora niente → decoder muto per
+            // tutta la sessione, mentre il Panadapter usa m_asyncAudio
+            // separato e mostra segnali. Diagnosticato via multi-agent.
             finalAudio += m_audioBuffer.mid(0, borrowedSamples);
-            m_audioBuffer = m_audioBuffer.mid(borrowedSamples);
-            m_audioBuffer.reserve(targetSamples);
         }
         currentSamplesAfterBorrow = m_audioBuffer.size();
     }
