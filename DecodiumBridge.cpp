@@ -3459,9 +3459,9 @@ bool DecodiumBridge::startWebServer(int port)
     if (!m_webServer) {
         m_webServer = new DecodiumWebServer(this, this);
         connect(m_webServer, &DecodiumWebServer::errorOccurred, this,
-            [this](QString const& msg) { bridgeLog(QStringLiteral("WebServer: ") + msg); });
+            [](QString const& msg) { bridgeLog(QStringLiteral("WebServer: ") + msg); });
         connect(m_webServer, &DecodiumWebServer::clientCountChanged, this,
-            [this](int n) { bridgeLog(QStringLiteral("WebServer clients=%1").arg(n)); });
+            [](int n) { bridgeLog(QStringLiteral("WebServer clients=%1").arg(n)); });
         // 1.0.168 fase 2: push real-time via WebSocket.
         connect(this, &DecodiumBridge::decodeListChanged, m_webServer,
                 &DecodiumWebServer::broadcastDecodesUpdate);
@@ -17121,7 +17121,7 @@ int DecodiumBridge::effectiveSpectrumTimerIntervalMs() const
 {
     QSettings s("Decodium", "Decodium3");
     int const configured = qBound(10, s.value(QStringLiteral("spectrumInterval"), 20).toInt(), 500);
-    return m_lowCpuModeEnabled ? qMax(configured, 250) : configured;
+    return m_lowCpuModeEnabled ? qMax(configured, 500) : configured;
 }
 
 void DecodiumBridge::applyLowCpuRuntimeProfile(const QString& reason)
@@ -20244,9 +20244,16 @@ void DecodiumBridge::onAsyncDecodeTimer()
 {
     if (m_mode != "FT2" || !m_monitoring || m_asyncDecodePending) return;
     qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
-    if ((cpuPressureActive() || m_lowCpuModeEnabled)
+    int minAsyncDecodeIntervalMs = 0;
+    if (m_lowCpuModeEnabled) {
+        minAsyncDecodeIntervalMs = cpuPressureSevereActive() ? 2000
+                                 : (cpuPressureActive() ? 1500 : 1000);
+    } else if (cpuPressureActive()) {
+        minAsyncDecodeIntervalMs = cpuPressureSevereActive() ? 700 : 350;
+    }
+    if (minAsyncDecodeIntervalMs > 0
         && m_lastFt2AsyncDecodeDispatchMs > 0
-        && nowMs - m_lastFt2AsyncDecodeDispatchMs < (cpuPressureSevereActive() ? 700 : (m_lowCpuModeEnabled ? 500 : 350))) {
+        && nowMs - m_lastFt2AsyncDecodeDispatchMs < minAsyncDecodeIntervalMs) {
         return;
     }
     // Snapshot atomico unico: il callback audio (writer) può incrementare
@@ -20655,7 +20662,9 @@ void DecodiumBridge::onSpectrumTimer()
                 && (!usingLegacyBackendForTx() || !m_legacyPcmSpectrumFeed);
             qint64 minPanadapterIntervalMs = directVisualFastFeed ? 33 : 125;
             if (m_lowCpuModeEnabled) {
-                minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 250);
+                minPanadapterIntervalMs = qMax<qint64>(
+                    minPanadapterIntervalMs,
+                    cpuPressureSevereActive() ? 750 : (cpuPressureActive() ? 600 : 500));
             } else if (cpuPressureSevereActive()) {
                 minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 250);
             } else if (cpuPressureActive()) {
