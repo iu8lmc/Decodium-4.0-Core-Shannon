@@ -2139,31 +2139,36 @@ void PanadapterItem::recordGpuFftCompute()
 {
 #if defined(DECODIUM_QT_RHI_TEXTURE_UPLOAD) && defined(DECODIUM_GPU_PANADAPTER_FFT_QSB)
     PcmFrame frame;
-    QString readbackTimeoutReason;
+    bool resetTimeout = false;
+    qint64 timeoutAgeMs = 0;
     {
         QMutexLocker lock(&m_mutex);
         if (m_gpuFft && m_gpuFft->readbackPending) {
             qint64 const pendingSince = m_gpuFft->readbackPendingSinceMs;
             qint64 const pendingAgeMs = pendingSince > 0 ? monotonicMs() - pendingSince : 0;
+            // 1.0.163 — durante TX il render loop e' bloccato dal sink audio,
+            // quindi la readback rimane pending finche' il TX finisce.
+            // PRIMA chiamava failGpuFft() che disabilita PERMANENTEMENTE il
+            // GPU FFT → Full Spectrum nero dopo TX. Adesso solo resetta lo
+            // stato e prosegue col prossimo frame.
             if (pendingAgeMs > 1500) {
-                readbackTimeoutReason =
-                    QStringLiteral("GPU FFT readback timeout after %1 ms").arg(pendingAgeMs);
+                m_gpuFft->readbackPending = false;
+                m_gpuFft->readbackPendingSinceMs = 0;
+                resetTimeout = true;
+                timeoutAgeMs = pendingAgeMs;
             } else {
                 return;
             }
         }
-        if (!readbackTimeoutReason.isEmpty()) {
-            m_hasPendingPcmFrame = false;
-        } else if (!m_hasPendingPcmFrame || m_gpuFftFailed) {
+        if (!m_hasPendingPcmFrame || m_gpuFftFailed) {
             return;
-        } else {
-            frame = m_pendingPcmFrame;
-            m_hasPendingPcmFrame = false;
         }
+        frame = m_pendingPcmFrame;
+        m_hasPendingPcmFrame = false;
     }
-    if (!readbackTimeoutReason.isEmpty()) {
-        failGpuFft(readbackTimeoutReason);
-        return;
+    if (resetTimeout) {
+        qInfo().noquote() << "[PANDBG] GPU FFT readback timeout reset after"
+                          << timeoutAgeMs << "ms (likely TX render pause); pipeline continues";
     }
 
     QQuickWindow* win = window();
