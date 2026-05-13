@@ -41,7 +41,42 @@ namespace
 DecodiumWebServer::DecodiumWebServer(DecodiumBridge* bridge, QObject* parent)
     : QObject(parent)
     , m_bridge(bridge)
-{}
+{
+    // 1.0.172 — coalesce broadcast burst (es. FT2 async che emette
+    // decodeListChanged 5-10x/sec). Massimo 4 broadcast/sec.
+    m_broadcastCoalesceTimer.setSingleShot(true);
+    m_broadcastCoalesceTimer.setInterval(250);
+    connect(&m_broadcastCoalesceTimer, &QTimer::timeout, this, [this]() {
+        if (m_pendingStateBroadcast) {
+            m_pendingStateBroadcast = false;
+            if (!m_wsClients.isEmpty()) {
+                QJsonObject env;
+                env[QStringLiteral("type")] = QStringLiteral("state");
+                env[QStringLiteral("payload")] =
+                    QJsonDocument::fromJson(buildStateJson()).object();
+                QString const msg = QString::fromUtf8(
+                    QJsonDocument(env).toJson(QJsonDocument::Compact));
+                for (QWebSocket* ws : m_wsClients) {
+                    if (ws && ws->isValid()) ws->sendTextMessage(msg);
+                }
+            }
+        }
+        if (m_pendingDecodesBroadcast) {
+            m_pendingDecodesBroadcast = false;
+            if (!m_wsClients.isEmpty()) {
+                QJsonObject env;
+                env[QStringLiteral("type")] = QStringLiteral("decodes");
+                env[QStringLiteral("payload")] =
+                    QJsonDocument::fromJson(buildDecodesJson()).object();
+                QString const msg = QString::fromUtf8(
+                    QJsonDocument(env).toJson(QJsonDocument::Compact));
+                for (QWebSocket* ws : m_wsClients) {
+                    if (ws && ws->isValid()) ws->sendTextMessage(msg);
+                }
+            }
+        }
+    });
+}
 
 DecodiumWebServer::~DecodiumWebServer()
 {
@@ -148,30 +183,18 @@ void DecodiumWebServer::onWebSocketDisconnected()
 
 void DecodiumWebServer::broadcastStateUpdate()
 {
+    // 1.0.172 — coalesce: schedula un broadcast entro 250ms. Cosi'
+    // burst di N signal nella stessa finestra emettono UN solo broadcast.
     if (m_wsClients.isEmpty()) return;
-    QJsonObject env;
-    env[QStringLiteral("type")] = QStringLiteral("state");
-    env[QStringLiteral("payload")] =
-        QJsonDocument::fromJson(buildStateJson()).object();
-    QString const msg = QString::fromUtf8(
-        QJsonDocument(env).toJson(QJsonDocument::Compact));
-    for (QWebSocket* ws : m_wsClients) {
-        if (ws && ws->isValid()) ws->sendTextMessage(msg);
-    }
+    m_pendingStateBroadcast = true;
+    if (!m_broadcastCoalesceTimer.isActive()) m_broadcastCoalesceTimer.start();
 }
 
 void DecodiumWebServer::broadcastDecodesUpdate()
 {
     if (m_wsClients.isEmpty()) return;
-    QJsonObject env;
-    env[QStringLiteral("type")] = QStringLiteral("decodes");
-    env[QStringLiteral("payload")] =
-        QJsonDocument::fromJson(buildDecodesJson()).object();
-    QString const msg = QString::fromUtf8(
-        QJsonDocument(env).toJson(QJsonDocument::Compact));
-    for (QWebSocket* ws : m_wsClients) {
-        if (ws && ws->isValid()) ws->sendTextMessage(msg);
-    }
+    m_pendingDecodesBroadcast = true;
+    if (!m_broadcastCoalesceTimer.isActive()) m_broadcastCoalesceTimer.start();
 }
 
 int DecodiumWebServer::connectedClients() const

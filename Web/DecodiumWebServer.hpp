@@ -24,6 +24,7 @@
 #include <QString>
 #include <QPointer>
 #include <QVector>
+#include <QTimer>
 
 class DecodiumBridge;
 class QTcpSocket;
@@ -88,6 +89,10 @@ private:
     // Fase 2: WebSocket server (porta = m_port + 1, default 8081)
     QPointer<QWebSocketServer> m_wsServer;
     QVector<QWebSocket*>       m_wsClients;
+    // 1.0.172 — coalesce broadcast a 250ms (max 4/sec) per ridurre CPU
+    QTimer m_broadcastCoalesceTimer;
+    bool   m_pendingDecodesBroadcast {false};
+    bool   m_pendingStateBroadcast {false};
 };
 
 #endif  // DECODIUM_WEB_SERVER_HPP__

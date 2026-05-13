@@ -60,7 +60,10 @@ DecoSyncTime::DecoSyncTime(QObject *parent)
 
     // Kalman tick 1 Hz: anche senza nuovi sample, propaga lo stato cosi'
     // che l'offset cresca/decresca seguendo il drift stimato.
-    m_kalmanTickTimer.setInterval(1000);
+    // 1.0.172 — Kalman tick 2s invece di 1s. Per CPU su PC vecchi: il
+    // predict step ogni 2s e' piu' che sufficiente per la stabilita'
+    // dell'offset (drift PC tipico < 10ms/min = sub-pixel).
+    m_kalmanTickTimer.setInterval(2000);
     connect(&m_kalmanTickTimer, &QTimer::timeout, this, &DecoSyncTime::onKalmanTick);
     m_kalmanLastTickMs = QDateTime::currentMSecsSinceEpoch();
     m_kalmanTickTimer.start();
@@ -226,8 +229,12 @@ void DecoSyncTime::recomputeCombinedOffset(QString const& reason)
     double const nowOffset = offsetMs();
 
     bool const syncedChanged = (nowSynced != m_lastEmittedSynced);
+    // 1.0.172 — soglia emit alzata da 0.5 a 5 ms. Riduce signal flooding
+    // verso il QML su PC vecchi (1 emit ogni 2s di tick × cambi minimi
+    // del Kalman → 20-40 signal/min inutili). Sotto i 5 ms l'offset
+    // visibile e' invariato per l'utente FT8/FT4.
     bool const offsetChanged =
-        std::abs(nowOffset - m_lastEmittedOffsetMs) >= 0.5
+        std::abs(nowOffset - m_lastEmittedOffsetMs) >= 5.0
         || (syncedChanged && nowSynced);
 
     if (syncedChanged) {
