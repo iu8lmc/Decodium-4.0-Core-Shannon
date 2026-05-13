@@ -2783,6 +2783,32 @@ Dialog {
                             Layout.fillWidth: true
                         }
 
+                        Text { text: qsTr(""); Layout.preferredWidth: 160 }
+                        Button {
+                            // 1.0.170 fase 3 PWA: apri QR code in browser locale
+                            text: "📱 Apri QR per iPad"
+                            enabled: bridge.webServerRunning()
+                            Layout.columnSpan: 3
+                            onClicked: {
+                                var url = bridge.webServerUrl()
+                                if (url) Qt.openUrlExternally(url + "qr")
+                            }
+                            background: Rectangle {
+                                color: parent.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.3)
+                                                     : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
+                                border.color: primaryBlue
+                                border.width: 1
+                                radius: 4
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.enabled ? textPrimary : textSecondary
+                                font.pixelSize: 12; font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
                         // ── Decode list display (Decodium 3-style) ──
                         Text { text: qsTr("DECODE LIST DISPLAY"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 12 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }

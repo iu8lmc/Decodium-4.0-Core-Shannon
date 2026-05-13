@@ -242,6 +242,43 @@ void DecodiumWebServer::handleRequest(QTcpSocket* socket, QString const& method,
 
     if (path == QStringLiteral("/") || path == QStringLiteral("/index.html")) {
         writeHttpResponse(socket, 200, "text/html; charset=utf-8", buildIndexHtml());
+    } else if (path == QStringLiteral("/qr")) {
+        // 1.0.170 fase 3 PWA — pagina QR per scan da iPad
+        QString const url = accessUrl();
+        QByteArray simpleQrHtml;
+        simpleQrHtml += "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"utf-8\">"
+               "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+               "<title>Decodium QR</title>"
+               "<style>body{margin:0;padding:24px;background:#0e1014;color:#e8edf2;"
+               "font-family:-apple-system,sans-serif;text-align:center;}"
+               ".card{background:#161a21;border:1px solid rgba(58,142,220,0.5);"
+               "border-radius:12px;padding:24px;max-width:380px;margin:24px auto;}"
+               "h1{color:#3a8edc;font-size:18px;margin:0 0 16px;}"
+               ".qr{margin:16px auto;background:white;padding:12px;width:300px;height:300px;display:flex;align-items:center;justify-content:center;}"
+               ".qr canvas{width:280px;height:280px;}"
+               ".url{font-family:Consolas,monospace;font-size:13px;color:#9aa4af;"
+               "word-break:break-all;margin:12px 0;}"
+               "p{color:#9aa4af;font-size:13px;line-height:1.5;}"
+               "</style></head><body>"
+               "<div class=\"card\">"
+               "<h1>Scansiona da iPad / iPhone</h1>"
+               "<div class=\"qr\"><canvas id=\"qrcanvas\" width=\"280\" height=\"280\"></canvas></div>";
+        simpleQrHtml += "<div class=\"url\">" + url.toUtf8() + "</div>";
+        simpleQrHtml += "<p>Apri la fotocamera iOS e inquadra il QR. Tocca il banner per aprire Decodium Remote in Safari, poi <b>Condividi &rarr; Aggiungi a Home Screen</b> per la PWA standalone.</p>"
+               "</div>"
+               "<script src=\"https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js\"></script>"
+               "<script>"
+               "var url='" + url.toUtf8() + "';"
+               "var qr=qrcode(0,'L');qr.addData(url);qr.make();"
+               "var cnv=document.getElementById('qrcanvas');"
+               "var ctx=cnv.getContext('2d');"
+               "var n=qr.getModuleCount();var sz=280/n;"
+               "ctx.fillStyle='white';ctx.fillRect(0,0,280,280);"
+               "ctx.fillStyle='black';"
+               "for(var r=0;r<n;r++)for(var c=0;c<n;c++)"
+               "if(qr.isDark(r,c))ctx.fillRect(Math.floor(c*sz),Math.floor(r*sz),Math.ceil(sz),Math.ceil(sz));"
+               "</script></body></html>";
+        writeHttpResponse(socket, 200, "text/html; charset=utf-8", simpleQrHtml);
     } else if (path == QStringLiteral("/api/state")) {
         writeHttpResponse(socket, 200, "application/json; charset=utf-8", buildStateJson());
     } else if (path == QStringLiteral("/api/decodes")) {
