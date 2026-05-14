@@ -84,6 +84,49 @@ qint64 monotonicMs()
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+qint64 gpuFftReadbackTimeoutMs()
+{
+#if defined(Q_OS_MACOS)
+    return 500;
+#else
+    return 1500;
+#endif
+}
+
+qint64 gpuFftSlowReadbackMs()
+{
+    int const envValue = qEnvironmentVariableIntValue("DECODIUM_GPU_PANADAPTER_SLOW_READBACK_MS");
+    if (envValue > 0)
+        return envValue;
+#if defined(Q_OS_MACOS)
+    return 120;
+#else
+    return 300;
+#endif
+}
+
+int gpuFftSlowReadbackLimit()
+{
+    int const envValue = qEnvironmentVariableIntValue("DECODIUM_GPU_PANADAPTER_SLOW_READBACK_LIMIT");
+    return envValue > 0 ? qBound(1, envValue, 20) : 3;
+}
+
+int gpuFftTimeoutLimit()
+{
+    int const envValue = qEnvironmentVariableIntValue("DECODIUM_GPU_PANADAPTER_TIMEOUT_LIMIT");
+    return envValue > 0 ? qBound(1, envValue, 20) : 2;
+}
+
+int waterfallHistoryRowsForVisibleHeight(int visibleRows)
+{
+    if (visibleRows <= 0)
+        return 0;
+    static constexpr int kMinHistoryRows = 256;
+    static constexpr int kHistoryRowsStep = 64;
+    int const rows = qMax(kMinHistoryRows, visibleRows);
+    return ((rows + kHistoryRowsStep - 1) / kHistoryRowsStep) * kHistoryRowsStep;
+}
+
 QSGNode* sceneGraphChildAt(QSGNode* parent, int index)
 {
     if (!parent || index < 0)
@@ -532,6 +575,7 @@ struct PanadapterItem::GpuFftState
     int outputCapacity = 0;
     bool readbackPending = false;
     qint64 readbackPendingSinceMs = 0;
+    quint64 readbackSerial = 0;
     bool loggedActive = false;
     bool loggedReadbackStats = false;
 
@@ -557,6 +601,7 @@ struct PanadapterItem::GpuFftState
         outputCapacity = 0;
         readbackPending = false;
         readbackPendingSinceMs = 0;
+        ++readbackSerial;
     }
 };
 #else
@@ -1002,6 +1047,7 @@ void PanadapterItem::rebuildImages(int w, int h)
     // L'altezza spettro usa al massimo tutta l'altezza disponibile
     int specH = qMin(m_spectrumH, qMax(1, h - 1));
     int wfH   = qMax(0, h - specH);
+    int const wfHistoryH = waterfallHistoryRowsForVisibleHeight(wfH);
 
     // Crea sempre lo spectrum image (richiede solo w > 0)
     if (m_spectrumImage.isNull() ||
@@ -1012,16 +1058,19 @@ void PanadapterItem::rebuildImages(int w, int h)
     }
 
 
-    // Crea il waterfall image solo se c'è spazio
+    // Crea il waterfall image solo se c'è spazio. La profondità storica è
+    // stabilizzata a scaglioni: l'altezza visibile QML può variare di pochi
+    // pixel durante layout/resize, ma la texture GPU non deve essere ricreata
+    // a ogni oscillazione.
     if (wfH > 0) {
         if (m_waterfallImage.isNull() ||
             m_waterfallImage.width() != w ||
-            m_waterfallImage.height() != wfH) {
-            m_waterfallImage = QImage(w, wfH, QImage::Format_RGB32);
+            m_waterfallImage.height() != wfHistoryH) {
+            m_waterfallImage = QImage(w, wfHistoryH, QImage::Format_RGB32);
             m_waterfallImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
             m_waterfallDisplayImage = QImage(w, wfH, QImage::Format_RGB32);
             m_waterfallDisplayImage.fill(m_paletteIndex == 11 ? QColor(255, 255, 255) : QColor(0, 0, 0));
-            m_waterfallIntensityImage = QImage(w, wfH, QImage::Format_Grayscale8);
+            m_waterfallIntensityImage = QImage(w, wfHistoryH, QImage::Format_Grayscale8);
             m_waterfallIntensityImage.fill(0);
             m_waterfallIntensityDisplayImage = QImage(w, wfH, QImage::Format_Grayscale8);
             m_waterfallIntensityDisplayImage.fill(0);
@@ -1065,19 +1114,21 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
     QMutexLocker lock(&m_mutex);
     if (dbValues.isEmpty()) return;
 
-    bool const gpuFftRecentlyFed =
-        m_lastGpuFftFrameMs > 0
-        && !m_gpuFftFailed
-        && monotonicMs() - m_lastGpuFftFrameMs < 1500;
-    if (gpuFftRecentlyFed
-        && m_gpuFftUiBinsExpected > 0
+    qint64 const nowMs = monotonicMs();
+    bool const gpuFftOwnsSpectrum =
+        !m_gpuFftFailed
+        && m_gpuFftUiBinsExpected > 0;
+    if (gpuFftOwnsSpectrum
         && dbValues.size() != m_gpuFftUiBinsExpected) {
         if (!m_loggedMismatchedSpectrumSuppressed) {
+            qint64 const lastGpuReadbackAgeMs =
+                m_lastGpuFftReadbackMs > 0 ? nowMs - m_lastGpuFftReadbackMs : -1;
             qInfo().noquote()
                 << "[PANDBG] Panadapter mismatched spectrum suppressed"
-                << "reason=GPU_FFT_feed_active"
+                << "reason=GPU_FFT_active_resolution_lock"
                 << "bins=" << dbValues.size()
-                << "expected_bins=" << m_gpuFftUiBinsExpected;
+                << "expected_bins=" << m_gpuFftUiBinsExpected
+                << "last_gpu_readback_ms_ago=" << lastGpuReadbackAgeMs;
             m_loggedMismatchedSpectrumSuppressed = true;
         }
         return;
@@ -1182,16 +1233,20 @@ void PanadapterItem::addSpectrumDataNorm(const QVector<float>& normValues)
 {
     {
         QMutexLocker lock(&m_mutex);
-        bool const gpuFftRecentlyFed =
-            m_lastGpuFftFrameMs > 0
-            && !m_gpuFftFailed
-            && monotonicMs() - m_lastGpuFftFrameMs < 1500;
-        if (gpuFftRecentlyFed) {
+        qint64 const nowMs = monotonicMs();
+        bool const gpuFftOwnsSpectrum =
+            !m_gpuFftFailed
+            && m_gpuFftUiBinsExpected > 0;
+        if (gpuFftOwnsSpectrum) {
             if (!m_loggedLegacySpectrumSuppressed) {
+                qint64 const lastGpuReadbackAgeMs =
+                    m_lastGpuFftReadbackMs > 0 ? nowMs - m_lastGpuFftReadbackMs : -1;
                 qInfo().noquote()
                     << "[PANDBG] Panadapter legacy normalized spectrum suppressed"
-                    << "reason=GPU_FFT_feed_active"
-                    << "legacy_bins=" << normValues.size();
+                    << "reason=GPU_FFT_active_resolution_lock"
+                    << "legacy_bins=" << normValues.size()
+                    << "expected_bins=" << m_gpuFftUiBinsExpected
+                    << "last_gpu_readback_ms_ago=" << lastGpuReadbackAgeMs;
                 m_loggedLegacySpectrumSuppressed = true;
             }
             return;
@@ -2123,8 +2178,16 @@ void PanadapterItem::failGpuFft(const QString& reason)
         m_gpuFftFailureReason = reason;
         m_hasPendingPcmFrame = false;
         m_lastGpuFftFrameMs = 0;
+        m_lastGpuFftReadbackMs = 0;
         m_gpuFftUiBinsExpected = 0;
         m_gpuFftInvalidReadbacks = 0;
+        m_gpuFftReadbackTimeouts = 0;
+        m_gpuFftSlowReadbacks = 0;
+        if (m_gpuFft) {
+            m_gpuFft->readbackPending = false;
+            m_gpuFft->readbackPendingSinceMs = 0;
+            ++m_gpuFft->readbackSerial;
+        }
     }
     qWarning().noquote()
         << "[PANDBG] Panadapter visual FFT GPU path unavailable"
@@ -2141,6 +2204,8 @@ void PanadapterItem::recordGpuFftCompute()
     PcmFrame frame;
     bool resetTimeout = false;
     qint64 timeoutAgeMs = 0;
+    bool disableGpuFft = false;
+    QString disableReason;
     {
         QMutexLocker lock(&m_mutex);
         if (m_gpuFft && m_gpuFft->readbackPending) {
@@ -2151,24 +2216,53 @@ void PanadapterItem::recordGpuFftCompute()
             // PRIMA chiamava failGpuFft() che disabilita PERMANENTEMENTE il
             // GPU FFT → Full Spectrum nero dopo TX. Adesso solo resetta lo
             // stato e prosegue col prossimo frame.
-            if (pendingAgeMs > 1500) {
-                m_gpuFft->readbackPending = false;
-                m_gpuFft->readbackPendingSinceMs = 0;
-                resetTimeout = true;
-                timeoutAgeMs = pendingAgeMs;
+            qint64 const timeoutMs = gpuFftReadbackTimeoutMs();
+            if (pendingAgeMs > timeoutMs) {
+                int const timeoutCount = ++m_gpuFftReadbackTimeouts;
+                if (timeoutCount >= gpuFftTimeoutLimit()) {
+                    disableGpuFft = true;
+                    disableReason = QStringLiteral("Metal GPU FFT readback timeout count=%1 age=%2ms threshold=%3ms")
+                        .arg(timeoutCount)
+                        .arg(pendingAgeMs)
+                        .arg(timeoutMs);
+                    m_hasPendingPcmFrame = false;
+                } else {
+                    m_gpuFft->readbackPending = false;
+                    m_gpuFft->readbackPendingSinceMs = 0;
+                    ++m_gpuFft->readbackSerial;
+                    resetTimeout = true;
+                    timeoutAgeMs = pendingAgeMs;
+                }
             } else {
                 return;
             }
         }
-        if (!m_hasPendingPcmFrame || m_gpuFftFailed) {
+        if (disableGpuFft) {
+            // Lascia il lock prima di emettere il fallback: failGpuFft()
+            // aggiorna gli stessi stati e notifica il bridge.
+        } else if (!m_hasPendingPcmFrame || m_gpuFftFailed) {
             return;
+        } else {
+            frame = m_pendingPcmFrame;
+            m_hasPendingPcmFrame = false;
         }
-        frame = m_pendingPcmFrame;
-        m_hasPendingPcmFrame = false;
+    }
+    if (disableGpuFft) {
+        failGpuFft(disableReason);
+        return;
     }
     if (resetTimeout) {
-        qInfo().noquote() << "[PANDBG] GPU FFT readback timeout reset after"
-                          << timeoutAgeMs << "ms (likely TX render pause); pipeline continues";
+        qint64 const nowMs = monotonicMs();
+        bool const shouldLogTimeout = m_lastGpuFftTimeoutLogMs == 0
+            || nowMs - m_lastGpuFftTimeoutLogMs > 5000;
+        if (shouldLogTimeout)
+            m_lastGpuFftTimeoutLogMs = nowMs;
+        if (shouldLogTimeout) {
+            qInfo().noquote() << "[PANDBG] GPU FFT readback timeout reset after"
+                              << timeoutAgeMs << "ms"
+                              << "threshold=" << gpuFftReadbackTimeoutMs()
+                              << "(visual frame dropped; pipeline continues)";
+        }
     }
 
     QQuickWindow* win = window();
@@ -2339,10 +2433,14 @@ void PanadapterItem::recordGpuFftCompute()
                                 sizeof(GpuFftParams),
                                 &params);
 
+    quint64 const readbackSerial = ++m_gpuFft->readbackSerial;
+    qint64 const readbackSubmitMs = monotonicMs();
     auto* readback = new DecodiumRhiBufferReadbackResult;
     QPointer<PanadapterItem> guard(this);
     readback->completed = [guard,
                            readback,
+                           readbackSerial,
+                           readbackSubmitMs,
                            nBins,
                            sourceBins,
                            inputPeak = frame.samplePeak,
@@ -2353,11 +2451,42 @@ void PanadapterItem::recordGpuFftCompute()
         delete readback;
         if (!guard)
             return;
+        qint64 const readbackAgeMs = readbackSubmitMs > 0
+            ? monotonicMs() - readbackSubmitMs
+            : 0;
+        QString disableAfterFrameReason;
         {
             QMutexLocker lock(&guard->m_mutex);
-            if (guard->m_gpuFft) {
-                guard->m_gpuFft->readbackPending = false;
-                guard->m_gpuFft->readbackPendingSinceMs = 0;
+            if (!guard->m_gpuFft || guard->m_gpuFft->readbackSerial != readbackSerial) {
+                return;
+            }
+            guard->m_gpuFft->readbackPending = false;
+            guard->m_gpuFft->readbackPendingSinceMs = 0;
+            qint64 const slowThresholdMs = gpuFftSlowReadbackMs();
+            if (readbackAgeMs > slowThresholdMs) {
+                int const slowCount = ++guard->m_gpuFftSlowReadbacks;
+                qint64 const nowMs = monotonicMs();
+                bool const shouldLogSlow = guard->m_lastGpuFftSlowLogMs == 0
+                    || nowMs - guard->m_lastGpuFftSlowLogMs > 5000;
+                if (shouldLogSlow) {
+                    guard->m_lastGpuFftSlowLogMs = nowMs;
+                    qInfo().noquote()
+                        << "[PANDBG] Panadapter visual FFT GPU readback slow"
+                        << "age_ms=" << readbackAgeMs
+                        << "threshold=" << slowThresholdMs
+                        << "count=" << slowCount
+                        << "limit=" << gpuFftSlowReadbackLimit();
+                }
+                if (slowCount >= gpuFftSlowReadbackLimit()) {
+                    disableAfterFrameReason =
+                        QStringLiteral("Metal GPU FFT readback too slow count=%1 age=%2ms threshold=%3ms")
+                            .arg(slowCount)
+                            .arg(readbackAgeMs)
+                            .arg(slowThresholdMs);
+                }
+            } else {
+                guard->m_gpuFftSlowReadbacks = 0;
+                guard->m_gpuFftReadbackTimeouts = 0;
             }
         }
         if (data.size() < nBins * static_cast<int>(sizeof(float))) {
@@ -2438,6 +2567,7 @@ void PanadapterItem::recordGpuFftCompute()
         {
             QMutexLocker lock(&guard->m_mutex);
             guard->m_lastGpuFftFrameMs = monotonicMs();
+            guard->m_lastGpuFftReadbackMs = guard->m_lastGpuFftFrameMs;
         }
 
         QVector<float> spectrumValues;
@@ -2465,10 +2595,13 @@ void PanadapterItem::recordGpuFftCompute()
                                    minDb,
                                    maxDb,
                                    freqMinHz,
-                                   freqMaxHz]() mutable {
+                                   freqMaxHz,
+                                   disableAfterFrameReason]() mutable {
             if (!guard)
                 return;
             guard->addSpectrumData(values, minDb, maxDb, freqMinHz, freqMaxHz);
+            if (!disableAfterFrameReason.isEmpty())
+                guard->failGpuFft(disableAfterFrameReason);
         }, Qt::QueuedConnection);
     };
 

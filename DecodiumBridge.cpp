@@ -43,6 +43,9 @@
 #include "Decoder/decodedtext.h"
 #include "DecodiumAudioSink.h"
 #include "Radio.hpp"
+#include "models/Bands.hpp"
+#include "models/FrequencyList.hpp"
+#include "models/StationList.hpp"
 #include "revision_utils.hpp"
 
 #include <QClipboard>
@@ -5349,6 +5352,7 @@ void DecodiumBridge::migrateActiveMonitoringToLegacyBackend()
 void DecodiumBridge::applyDirectVisualAudioCaptureMode(const QString& reason)
 {
     bool const directVisual = useModernSpectrumFeedWithLegacy();
+    applyLowCpuRuntimeProfile(QStringLiteral("direct-visual-%1").arg(reason));
 
     if (!usingLegacyBackendForTx()) {
         m_lastPanadapterFrameMs = QDateTime::currentMSecsSinceEpoch() - 1000;
@@ -12605,6 +12609,690 @@ void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
     }
 }
 
+namespace
+{
+using WorkingFrequencyItem = FrequencyList_v2_101::Item;
+using WorkingFrequencyItems = FrequencyList_v2_101::FrequencyItems;
+constexpr quint32 kQrgMagic = 0xadbccbdb;
+constexpr quint32 kQrgVersion = 101;
+constexpr quint32 kQrgVersion100 = 100;
+
+WorkingFrequencyItems workingFrequencyItemsFromSetting(const QVariant& value)
+{
+    if (!value.isValid()) {
+        return {};
+    }
+    return value.value<WorkingFrequencyItems>();
+}
+
+void sortWorkingFrequencyItems(WorkingFrequencyItems& items)
+{
+    std::stable_sort(items.begin(), items.end(), [](WorkingFrequencyItem const& lhs,
+                                                    WorkingFrequencyItem const& rhs) {
+        if (lhs.frequency_ != rhs.frequency_) return lhs.frequency_ < rhs.frequency_;
+        if (lhs.region_ != rhs.region_) return lhs.region_ < rhs.region_;
+        return lhs.mode_ < rhs.mode_;
+    });
+}
+
+void ensureDefaultWorkingFrequencies(WorkingFrequencyItems& items)
+{
+    Bands bands;
+    FrequencyList_v2_101 defaults {&bands};
+    defaults.reset_to_defaults();
+    if (items.isEmpty()) {
+        items = defaults.frequency_list();
+    } else {
+        bool hasFt2 = false;
+        for (WorkingFrequencyItem const& item : std::as_const(items)) {
+            if (item.mode_ == Modes::FT2) {
+                hasFt2 = true;
+                break;
+            }
+        }
+        if (!hasFt2) {
+            for (WorkingFrequencyItem const& item : defaults.frequency_list()) {
+                if (item.mode_ == Modes::FT2) {
+                    items << item;
+                }
+            }
+        }
+    }
+    sortWorkingFrequencyItems(items);
+}
+
+QDateTime parseFrequencyDateTime(QString value, bool* ok)
+{
+    value = value.trimmed();
+    if (value.isEmpty()) {
+        if (ok) *ok = true;
+        return {};
+    }
+    QDateTime dt = QDateTime::fromString(value, Qt::ISODate);
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(value, QStringLiteral("yyyy-MM-dd HH:mm"));
+    }
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(value, QStringLiteral("yyyy-MM-dd hh:mm"));
+    }
+    if (ok) *ok = dt.isValid();
+    return dt;
+}
+
+Radio::Frequency parseFrequencyHzValue(const QVariant& value, bool* ok)
+{
+    QString text = value.toString().trimmed();
+    text.replace(QLatin1Char(','), QLatin1Char('.'));
+    bool explicitHz = text.contains(QStringLiteral("hz"), Qt::CaseInsensitive)
+                      && !text.contains(QStringLiteral("mhz"), Qt::CaseInsensitive);
+    bool explicitMHz = text.contains(QStringLiteral("mhz"), Qt::CaseInsensitive);
+    static QRegularExpression const numberRe(QStringLiteral("[-+]?\\d+(?:\\.\\d+)?"));
+    QRegularExpressionMatch const match = numberRe.match(text);
+    if (!match.hasMatch()) {
+        if (ok) *ok = false;
+        return 0;
+    }
+    bool numberOk = false;
+    double numeric = match.captured(0).toDouble(&numberOk);
+    if (!numberOk || numeric <= 0.0) {
+        if (ok) *ok = false;
+        return 0;
+    }
+    double hz = 0.0;
+    if (explicitMHz || (!explicitHz && numeric < 1000000.0)) {
+        hz = numeric * 1000000.0;
+    } else {
+        hz = numeric;
+    }
+    if (hz <= 0.0 || hz > static_cast<double>(std::numeric_limits<Radio::Frequency>::max())) {
+        if (ok) *ok = false;
+        return 0;
+    }
+    if (ok) *ok = true;
+    return static_cast<Radio::Frequency>(std::llround(hz));
+}
+
+Radio::FrequencyDelta parseFrequencyOffsetHzValue(const QVariant& value, bool* ok)
+{
+    QString text = value.toString().trimmed();
+    text.replace(QLatin1Char(','), QLatin1Char('.'));
+    if (text.isEmpty()) {
+        if (ok) *ok = true;
+        return 0;
+    }
+    bool explicitHz = text.contains(QStringLiteral("hz"), Qt::CaseInsensitive)
+                      && !text.contains(QStringLiteral("mhz"), Qt::CaseInsensitive);
+    bool explicitMHz = text.contains(QStringLiteral("mhz"), Qt::CaseInsensitive);
+    static QRegularExpression const numberRe(QStringLiteral("[-+]?\\d+(?:\\.\\d+)?"));
+    QRegularExpressionMatch const match = numberRe.match(text);
+    if (!match.hasMatch()) {
+        if (ok) *ok = false;
+        return 0;
+    }
+    bool numberOk = false;
+    double numeric = match.captured(0).toDouble(&numberOk);
+    if (!numberOk) {
+        if (ok) *ok = false;
+        return 0;
+    }
+    double hz = 0.0;
+    if (explicitMHz || (!explicitHz && std::abs(numeric) < 1000000.0)) {
+        hz = numeric * 1000000.0;
+    } else {
+        hz = numeric;
+    }
+    if (ok) *ok = true;
+    return static_cast<Radio::FrequencyDelta>(std::llround(hz));
+}
+
+void enforcePreferredWorkingFrequency(WorkingFrequencyItems& items, int preferredIndex)
+{
+    if (preferredIndex < 0 || preferredIndex >= items.size() || !items[preferredIndex].preferred_) {
+        return;
+    }
+    Bands bands;
+    QString const band = bands.find(items[preferredIndex].frequency_);
+    if (band.isEmpty()) {
+        return;
+    }
+    for (int i = 0; i < items.size(); ++i) {
+        if (i == preferredIndex) {
+            continue;
+        }
+        if (items[i].mode_ == items[preferredIndex].mode_
+            && items[i].region_ == items[preferredIndex].region_
+            && bands.find(items[i].frequency_) == band) {
+            items[i].preferred_ = false;
+        }
+    }
+}
+
+WorkingFrequencyItem workingFrequencyItemFromFields(const QString& region,
+                                                    const QString& mode,
+                                                    const QVariant& frequency,
+                                                    const QString& description,
+                                                    const QString& startTime,
+                                                    const QString& endTime,
+                                                    bool preferred,
+                                                    bool* ok,
+                                                    QString* error)
+{
+    bool frequencyOk = false;
+    Radio::Frequency const frequencyHz = parseFrequencyHzValue(frequency, &frequencyOk);
+    bool startOk = false;
+    bool endOk = false;
+    QDateTime const start = parseFrequencyDateTime(startTime, &startOk);
+    QDateTime const end = parseFrequencyDateTime(endTime, &endOk);
+    WorkingFrequencyItem item {
+        frequencyHz,
+        Modes::value(mode.trimmed()),
+        IARURegions::value(region.trimmed()),
+        description.trimmed(),
+        QString(),
+        start,
+        end,
+        preferred
+    };
+    bool const sane = frequencyOk && startOk && endOk && item.isSane();
+    if (ok) {
+        *ok = sane;
+    }
+    if (!sane && error) {
+        if (!frequencyOk) {
+            *error = QObject::tr("Invalid frequency");
+        } else if (!startOk || !endOk) {
+            *error = QObject::tr("Invalid date/time. Use ISO format or yyyy-MM-dd HH:mm.");
+        } else {
+            *error = QObject::tr("Invalid frequency row");
+        }
+    }
+    return item;
+}
+
+QString frequencyDisplayString(Radio::Frequency frequencyHz)
+{
+    Bands bands;
+    QString const band = bands.find(frequencyHz);
+    return Radio::pretty_frequency_MHz_string(frequencyHz)
+        + QStringLiteral(" MHz (")
+        + (band.isEmpty() ? QStringLiteral("OOB") : band)
+        + QLatin1Char(')');
+}
+
+WorkingFrequencyItems readWorkingFrequenciesFile(const QString& path, QString* error)
+{
+    QFile file {path};
+    if (!file.open(QFile::ReadOnly)) {
+        if (error) {
+            *error = QObject::tr("Cannot open frequency file: %1").arg(file.errorString());
+        }
+        return {};
+    }
+
+    if (path.endsWith(QStringLiteral(".qrg.json"), Qt::CaseInsensitive)) {
+        try {
+            WorkingFrequencyItems items = FrequencyList_v2_101::from_json_file(&file);
+            sortWorkingFrequencyItems(items);
+            return items;
+        } catch (ReadFileException const& ex) {
+            if (error) {
+                *error = ex.message_;
+            }
+            return {};
+        }
+    }
+
+    QDataStream in {&file};
+    quint32 magic = 0;
+    quint32 version = 0;
+    in >> magic;
+    if (magic != kQrgMagic) {
+        if (error) {
+            *error = QObject::tr("Not a valid frequencies file: incorrect file magic");
+        }
+        return {};
+    }
+    in >> version;
+    if (version > kQrgVersion) {
+        if (error) {
+            *error = QObject::tr("Not a valid frequencies file: version is too new");
+        }
+        return {};
+    }
+
+    WorkingFrequencyItems items;
+    if (version == kQrgVersion100) {
+        FrequencyList_v2::FrequencyItems oldItems;
+        in >> oldItems;
+        for (auto const& item : std::as_const(oldItems)) {
+            items << WorkingFrequencyItem {item.frequency_, item.mode_, item.region_,
+                                           QString(), QString(), QDateTime(), QDateTime(), false};
+        }
+    } else {
+        in >> items;
+    }
+
+    if (in.status() != QDataStream::Ok || !in.atEnd()) {
+        if (error) {
+            *error = QObject::tr("Not a valid frequencies file: contents corrupt");
+        }
+        return {};
+    }
+
+    WorkingFrequencyItems saneItems;
+    for (WorkingFrequencyItem const& item : std::as_const(items)) {
+        if (item.isSane()) {
+            saneItems << item;
+        }
+    }
+    sortWorkingFrequencyItems(saneItems);
+    return saneItems;
+}
+
+}
+
+QVariantList DecodiumBridge::workingFrequencyRows() const
+{
+    WorkingFrequencyItems items =
+        workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+    if (items.isEmpty()) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+    }
+    ensureDefaultWorkingFrequencies(items);
+
+    QVariantList rows;
+    rows.reserve(items.size());
+    for (int i = 0; i < items.size(); ++i) {
+        WorkingFrequencyItem const& item = items.at(i);
+        Bands bands;
+        QString const band = bands.find(item.frequency_);
+        QVariantMap row;
+        row.insert(QStringLiteral("index"), i);
+        row.insert(QStringLiteral("region"), IARURegions::name(item.region_));
+        row.insert(QStringLiteral("mode"), Modes::name(item.mode_));
+        row.insert(QStringLiteral("frequencyHz"), QVariant::fromValue<qlonglong>(item.frequency_));
+        row.insert(QStringLiteral("frequencyMHz"),
+                   QString::number(static_cast<double>(item.frequency_) / 1000000.0, 'f', 6));
+        row.insert(QStringLiteral("frequency"), frequencyDisplayString(item.frequency_));
+        row.insert(QStringLiteral("band"), band.isEmpty() ? QStringLiteral("OOB") : band);
+        row.insert(QStringLiteral("preferred"), item.preferred_);
+        row.insert(QStringLiteral("description"), item.description_);
+        row.insert(QStringLiteral("startTime"), item.start_time_.isValid() && !item.start_time_.isNull()
+                   ? item.start_time_.toString(Qt::ISODate) : QString());
+        row.insert(QStringLiteral("endTime"), item.end_time_.isValid() && !item.end_time_.isNull()
+                   ? item.end_time_.toString(Qt::ISODate) : QString());
+        rows << row;
+    }
+    return rows;
+}
+
+QStringList DecodiumBridge::frequencyRegionOptions() const
+{
+    QStringList regions;
+    for (int i = 0; i < IARURegions::SENTINAL; ++i) {
+        regions << QString::fromLatin1(IARURegions::name(static_cast<IARURegions::Region>(i)));
+    }
+    return regions;
+}
+
+QStringList DecodiumBridge::frequencyModeOptions() const
+{
+    QStringList modes;
+    for (int i = 0; i < Modes::MODES_END_SENTINAL_AND_COUNT; ++i) {
+        modes << QString::fromLatin1(Modes::name(static_cast<Modes::Mode>(i)));
+    }
+    return modes;
+}
+
+QStringList DecodiumBridge::frequencyBandOptions() const
+{
+    Bands bands;
+    QStringList names;
+    for (QString const& band : bands) {
+        names << band;
+    }
+    return names;
+}
+
+bool DecodiumBridge::addWorkingFrequencyRow(const QString& region,
+                                            const QString& mode,
+                                            const QVariant& frequency,
+                                            const QString& description,
+                                            const QString& startTime,
+                                            const QString& endTime,
+                                            bool preferred)
+{
+    WorkingFrequencyItems items =
+        workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+    if (items.isEmpty()) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+    }
+    ensureDefaultWorkingFrequencies(items);
+    bool ok = false;
+    QString error;
+    WorkingFrequencyItem item = workingFrequencyItemFromFields(region, mode, frequency, description,
+                                                               startTime, endTime, preferred, &ok, &error);
+    if (!ok) {
+        emit errorMessage(error);
+        return false;
+    }
+    items << item;
+    if (item.preferred_) {
+        enforcePreferredWorkingFrequency(items, items.size() - 1);
+    }
+    sortWorkingFrequencyItems(items);
+    syncSettingToLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit settingValueChanged(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit statusMessage(QStringLiteral("Working frequency added: %1 %2").arg(Modes::name(item.mode_), frequencyDisplayString(item.frequency_)));
+    return true;
+}
+
+bool DecodiumBridge::updateWorkingFrequencyRow(int index,
+                                               const QString& region,
+                                               const QString& mode,
+                                               const QVariant& frequency,
+                                               const QString& description,
+                                               const QString& startTime,
+                                               const QString& endTime,
+                                               bool preferred)
+{
+    WorkingFrequencyItems items =
+        workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+    if (items.isEmpty()) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+    }
+    ensureDefaultWorkingFrequencies(items);
+    if (index < 0 || index >= items.size()) {
+        emit errorMessage(QStringLiteral("Invalid working frequency selection"));
+        return false;
+    }
+    bool ok = false;
+    QString error;
+    WorkingFrequencyItem item = workingFrequencyItemFromFields(region, mode, frequency, description,
+                                                               startTime, endTime, preferred, &ok, &error);
+    if (!ok) {
+        emit errorMessage(error);
+        return false;
+    }
+    items[index] = item;
+    if (item.preferred_) {
+        enforcePreferredWorkingFrequency(items, index);
+    }
+    sortWorkingFrequencyItems(items);
+    syncSettingToLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit settingValueChanged(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit statusMessage(QStringLiteral("Working frequency updated: %1 %2").arg(Modes::name(item.mode_), frequencyDisplayString(item.frequency_)));
+    return true;
+}
+
+bool DecodiumBridge::deleteWorkingFrequencyRow(int index)
+{
+    WorkingFrequencyItems items =
+        workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+    if (items.isEmpty()) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+    }
+    ensureDefaultWorkingFrequencies(items);
+    if (index < 0 || index >= items.size()) {
+        emit errorMessage(QStringLiteral("Invalid working frequency selection"));
+        return false;
+    }
+    WorkingFrequencyItem const removed = items.takeAt(index);
+    syncSettingToLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit settingValueChanged(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit statusMessage(QStringLiteral("Working frequency deleted: %1 %2").arg(Modes::name(removed.mode_), frequencyDisplayString(removed.frequency_)));
+    return true;
+}
+
+bool DecodiumBridge::setWorkingFrequencyPreferred(int index, bool preferred)
+{
+    WorkingFrequencyItems items =
+        workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+    if (items.isEmpty()) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+    }
+    ensureDefaultWorkingFrequencies(items);
+    if (index < 0 || index >= items.size()) {
+        emit errorMessage(QStringLiteral("Invalid working frequency selection"));
+        return false;
+    }
+    items[index].preferred_ = preferred;
+    if (preferred) {
+        enforcePreferredWorkingFrequency(items, index);
+    }
+    sortWorkingFrequencyItems(items);
+    syncSettingToLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit settingValueChanged(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    return true;
+}
+
+void DecodiumBridge::resetWorkingFrequenciesToDefaults()
+{
+    Bands bands;
+    FrequencyList_v2_101 defaults {&bands};
+    defaults.reset_to_defaults();
+    WorkingFrequencyItems items = defaults.frequency_list();
+    sortWorkingFrequencyItems(items);
+    syncSettingToLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit settingValueChanged(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit statusMessage(QStringLiteral("Working frequencies reset to defaults"));
+}
+
+bool DecodiumBridge::loadWorkingFrequenciesFile(const QString& path, bool merge)
+{
+    QString error;
+    WorkingFrequencyItems loaded = readWorkingFrequenciesFile(path, &error);
+    if (loaded.isEmpty()) {
+        emit errorMessage(error.isEmpty() ? QStringLiteral("No valid working frequencies found") : error);
+        return false;
+    }
+
+    WorkingFrequencyItems items;
+    if (merge) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+        if (items.isEmpty()) {
+            items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+        }
+        ensureDefaultWorkingFrequencies(items);
+        Bands bands;
+        FrequencyList_v2_101 model {&bands};
+        model.frequency_list(items);
+        model.frequency_list_merge(loaded);
+        items = model.frequency_list();
+    } else {
+        items = loaded;
+    }
+
+    sortWorkingFrequencyItems(items);
+    syncSettingToLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit settingValueChanged(QStringLiteral("FrequenciesForRegionModes_v2"), QVariant::fromValue(items));
+    emit statusMessage(merge
+                       ? QStringLiteral("Working frequencies merged from %1").arg(QFileInfo(path).fileName())
+                       : QStringLiteral("Working frequencies loaded from %1").arg(QFileInfo(path).fileName()));
+    return true;
+}
+
+bool DecodiumBridge::saveWorkingFrequenciesFile(const QString& path)
+{
+    WorkingFrequencyItems items =
+        workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes_v2")));
+    if (items.isEmpty()) {
+        items = workingFrequencyItemsFromSetting(readSettingFromLegacyIni(QStringLiteral("FrequenciesForRegionModes")));
+    }
+    ensureDefaultWorkingFrequencies(items);
+
+    QFile file {path};
+    if (!file.open(QFile::WriteOnly | QFile::Truncate)) {
+        emit errorMessage(QStringLiteral("Cannot save frequency file: %1").arg(file.errorString()));
+        return false;
+    }
+
+    if (path.endsWith(QStringLiteral(".qrg.json"), Qt::CaseInsensitive)) {
+        Bands bands;
+        FrequencyList_v2_101 model {&bands};
+        model.to_json_file(&file,
+                           QStringLiteral("0x%1").arg(QString::number(kQrgMagic, 16).toUpper()),
+                           QStringLiteral("0x%1").arg(QString::number(kQrgVersion, 16).toUpper()),
+                           items);
+    } else {
+        QDataStream out {&file};
+        out << kQrgMagic << kQrgVersion << items;
+        if (out.status() != QDataStream::Ok) {
+            emit errorMessage(QStringLiteral("Cannot save frequency file: write failed"));
+            return false;
+        }
+    }
+
+    emit statusMessage(QStringLiteral("Working frequencies saved to %1").arg(QFileInfo(path).fileName()));
+    return true;
+}
+
+QVariantList DecodiumBridge::stationFrequencyRows() const
+{
+    QVariant const raw = readSettingFromLegacyIni(QStringLiteral("stations"));
+    StationList::Stations stations = raw.isValid() ? raw.value<StationList::Stations>() : StationList::Stations {};
+
+    Bands bands;
+    std::stable_sort(stations.begin(), stations.end(), [&bands](StationList::Station const& lhs,
+                                                                StationList::Station const& rhs) {
+        int const lhsBand = bands.find(lhs.band_name_);
+        int const rhsBand = bands.find(rhs.band_name_);
+        if (lhsBand != rhsBand) return lhsBand < rhsBand;
+        return lhs.band_name_ < rhs.band_name_;
+    });
+
+    QVariantList rows;
+    rows.reserve(stations.size());
+    for (int i = 0; i < stations.size(); ++i) {
+        StationList::Station const& station = stations.at(i);
+        QVariantMap row;
+        row.insert(QStringLiteral("index"), i);
+        row.insert(QStringLiteral("band"), station.band_name_);
+        row.insert(QStringLiteral("offsetHz"), QVariant::fromValue<qlonglong>(station.offset_));
+        row.insert(QStringLiteral("offsetMHz"),
+                   QString::number(static_cast<double>(station.offset_) / 1000000.0, 'f', 6));
+        row.insert(QStringLiteral("offset"), Radio::pretty_frequency_MHz_string(station.offset_) + QStringLiteral(" MHz"));
+        row.insert(QStringLiteral("antenna"), station.antenna_description_);
+        rows << row;
+    }
+    return rows;
+}
+
+bool DecodiumBridge::addStationFrequencyRow(const QString& band,
+                                            const QVariant& offset,
+                                            const QString& antennaDescription)
+{
+    QString const cleanBand = band.trimmed();
+    Bands bands;
+    if (bands.find(cleanBand) < 0) {
+        emit errorMessage(QStringLiteral("Invalid band for station information"));
+        return false;
+    }
+    bool offsetOk = false;
+    Radio::FrequencyDelta const offsetHz = parseFrequencyOffsetHzValue(offset, &offsetOk);
+    if (!offsetOk) {
+        emit errorMessage(QStringLiteral("Invalid band offset"));
+        return false;
+    }
+    QVariant const raw = readSettingFromLegacyIni(QStringLiteral("stations"));
+    StationList::Stations stations = raw.isValid() ? raw.value<StationList::Stations>() : StationList::Stations {};
+    stations << StationList::Station {cleanBand, offsetHz, antennaDescription.trimmed()};
+    syncSettingToLegacyIni(QStringLiteral("stations"), QVariant::fromValue(stations));
+    emit settingValueChanged(QStringLiteral("stations"), QVariant::fromValue(stations));
+    emit statusMessage(QStringLiteral("Station information added for %1").arg(cleanBand));
+    return true;
+}
+
+bool DecodiumBridge::updateStationFrequencyRow(int index,
+                                               const QString& band,
+                                               const QVariant& offset,
+                                               const QString& antennaDescription)
+{
+    QString const cleanBand = band.trimmed();
+    Bands bands;
+    if (bands.find(cleanBand) < 0) {
+        emit errorMessage(QStringLiteral("Invalid band for station information"));
+        return false;
+    }
+    bool offsetOk = false;
+    Radio::FrequencyDelta const offsetHz = parseFrequencyOffsetHzValue(offset, &offsetOk);
+    if (!offsetOk) {
+        emit errorMessage(QStringLiteral("Invalid band offset"));
+        return false;
+    }
+    QVariant const raw = readSettingFromLegacyIni(QStringLiteral("stations"));
+    StationList::Stations stations = raw.isValid() ? raw.value<StationList::Stations>() : StationList::Stations {};
+    Bands sortBands;
+    std::stable_sort(stations.begin(), stations.end(), [&sortBands](StationList::Station const& lhs,
+                                                                    StationList::Station const& rhs) {
+        int const lhsBand = sortBands.find(lhs.band_name_);
+        int const rhsBand = sortBands.find(rhs.band_name_);
+        if (lhsBand != rhsBand) return lhsBand < rhsBand;
+        return lhs.band_name_ < rhs.band_name_;
+    });
+    if (index < 0 || index >= stations.size()) {
+        emit errorMessage(QStringLiteral("Invalid station information selection"));
+        return false;
+    }
+    stations[index] = StationList::Station {cleanBand, offsetHz, antennaDescription.trimmed()};
+    syncSettingToLegacyIni(QStringLiteral("stations"), QVariant::fromValue(stations));
+    emit settingValueChanged(QStringLiteral("stations"), QVariant::fromValue(stations));
+    emit statusMessage(QStringLiteral("Station information updated for %1").arg(cleanBand));
+    return true;
+}
+
+bool DecodiumBridge::deleteStationFrequencyRow(int index)
+{
+    QVariant const raw = readSettingFromLegacyIni(QStringLiteral("stations"));
+    StationList::Stations stations = raw.isValid() ? raw.value<StationList::Stations>() : StationList::Stations {};
+    Bands bands;
+    std::stable_sort(stations.begin(), stations.end(), [&bands](StationList::Station const& lhs,
+                                                                StationList::Station const& rhs) {
+        int const lhsBand = bands.find(lhs.band_name_);
+        int const rhsBand = bands.find(rhs.band_name_);
+        if (lhsBand != rhsBand) return lhsBand < rhsBand;
+        return lhs.band_name_ < rhs.band_name_;
+    });
+    if (index < 0 || index >= stations.size()) {
+        emit errorMessage(QStringLiteral("Invalid station information selection"));
+        return false;
+    }
+    QString const removedBand = stations.at(index).band_name_;
+    stations.removeAt(index);
+    syncSettingToLegacyIni(QStringLiteral("stations"), QVariant::fromValue(stations));
+    emit settingValueChanged(QStringLiteral("stations"), QVariant::fromValue(stations));
+    emit statusMessage(QStringLiteral("Station information deleted for %1").arg(removedBand));
+    return true;
+}
+
+double DecodiumBridge::frequencyCalibrationSlopePpm() const
+{
+    bool ok = false;
+    double const value = readSettingFromLegacyIni(QStringLiteral("CalibrationSlopePPM")).toDouble(&ok);
+    return ok ? qBound(-200.0, value, 200.0) : 0.0;
+}
+
+double DecodiumBridge::frequencyCalibrationInterceptHz() const
+{
+    bool ok = false;
+    double const value = readSettingFromLegacyIni(QStringLiteral("CalibrationIntercept")).toDouble(&ok);
+    return ok ? qBound(-1000.0, value, 1000.0) : 0.0;
+}
+
+void DecodiumBridge::setFrequencyCalibrationSlopePpm(double value)
+{
+    value = qBound(-200.0, value, 200.0);
+    syncSettingToLegacyIni(QStringLiteral("CalibrationSlopePPM"), value);
+    emit settingValueChanged(QStringLiteral("CalibrationSlopePPM"), value);
+}
+
+void DecodiumBridge::setFrequencyCalibrationInterceptHz(double value)
+{
+    value = qBound(-1000.0, value, 1000.0);
+    syncSettingToLegacyIni(QStringLiteral("CalibrationIntercept"), value);
+    emit settingValueChanged(QStringLiteral("CalibrationIntercept"), value);
+}
+
 QStringList DecodiumBridge::satelliteOptions() const
 {
     QStringList options {QString()};
@@ -17371,7 +18059,13 @@ int DecodiumBridge::effectiveSpectrumTimerIntervalMs() const
 {
     QSettings s("Decodium", "Decodium3");
     int const configured = qBound(10, s.value(QStringLiteral("spectrumInterval"), 20).toInt(), 500);
-    return m_lowCpuModeEnabled ? qMax(configured, 500) : configured;
+    if (m_lowCpuModeEnabled) {
+        return qMax(configured, 500);
+    }
+    if (useModernSpectrumFeedWithLegacy()) {
+        return qMin(configured, 33);
+    }
+    return configured;
 }
 
 void DecodiumBridge::applyLowCpuRuntimeProfile(const QString& reason)
@@ -20981,20 +21675,20 @@ void DecodiumBridge::onSpectrumTimer()
                 minPanadapterIntervalMs = qMax<qint64>(
                     minPanadapterIntervalMs,
                     cpuPressureSevereActive() ? 750 : (cpuPressureActive() ? 600 : 500));
-            } else if (cpuPressureSevereActive()) {
+            } else if (cpuPressureSevereActive() && !directVisualFastFeed) {
                 minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 250);
-            } else if (cpuPressureActive()) {
-                minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs,
-                                                       directVisualFastFeed ? 100 : 180);
+            } else if (cpuPressureActive() && !directVisualFastFeed) {
+                minPanadapterIntervalMs = qMax<qint64>(minPanadapterIntervalMs, 180);
             }
             if ((cpuPressureActive() || cpuPressureSevereActive())
                 && nowMs - m_lastPanadapterPressureLogMs > 5000) {
                 m_lastPanadapterPressureLogMs = nowMs;
-                bridgeLog(QStringLiteral("panadapter pressure throttle: interval=%1ms direct_visual=%2 severe=%3 low_cpu=%4")
+                bridgeLog(QStringLiteral("panadapter pressure throttle: interval=%1ms direct_visual=%2 severe=%3 low_cpu=%4 spectrum_timer=%5")
                               .arg(minPanadapterIntervalMs)
                               .arg(directVisualFastFeed ? 1 : 0)
                               .arg(cpuPressureSevereActive() ? 1 : 0)
-                              .arg(m_lowCpuModeEnabled ? 1 : 0));
+                              .arg(m_lowCpuModeEnabled ? 1 : 0)
+                              .arg(m_spectrumTimer ? m_spectrumTimer->interval() : -1));
             }
             if (m_lastPanadapterFrameMs > 0
                 && nowMs - m_lastPanadapterFrameMs < minPanadapterIntervalMs) {

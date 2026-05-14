@@ -350,9 +350,14 @@ private:
     bool  m_loggedGpuFftInputStats = false;
     bool  m_loggedGpuFftWarmupSkip = false;
     int   m_gpuFftInvalidReadbacks = 0;
+    int   m_gpuFftReadbackTimeouts = 0;
+    int   m_gpuFftSlowReadbacks = 0;
+    qint64 m_lastGpuFftSlowLogMs = 0;
     bool  m_loggedLegacySpectrumSuppressed = false;
     bool  m_loggedMismatchedSpectrumSuppressed = false;
     qint64 m_lastGpuFftFrameMs = 0;
+    qint64 m_lastGpuFftReadbackMs = 0;
+    qint64 m_lastGpuFftTimeoutLogMs = 0;
     int   m_gpuFftUiBinsExpected = 0;
     struct GpuFftState;
     GpuFftState* m_gpuFft = nullptr;
