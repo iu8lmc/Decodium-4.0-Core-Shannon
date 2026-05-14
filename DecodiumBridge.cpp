@@ -3478,6 +3478,55 @@ void DecodiumBridge::setFt2Conservative(bool v)
     bridgeLog(QStringLiteral("[FT2WS] Conservative mode %1").arg(v ? "ON" : "OFF"));
 }
 
+// 1.0.179 — Smooth Decode Flow setter. Persistito su QSettings come
+// "Decoder/SmoothDecodeFlow"; se disattivato a meta' rilascio la coda
+// residua viene flushata immediatamente nel model.
+void DecodiumBridge::setSmoothDecodeFlow(bool v)
+{
+    if (m_smoothDecodeFlow == v) return;
+    m_smoothDecodeFlow = v;
+    QSettings().setValue(QStringLiteral("Decoder/SmoothDecodeFlow"), v);
+    emit smoothDecodeFlowChanged();
+    bridgeLog(QStringLiteral("[SmoothFlow] %1").arg(v ? "ON" : "OFF"));
+    // Se disattivato a meta' rilascio, flush immediato della queue residua.
+    if (!v && !m_pendingDecodeReleaseQueue.isEmpty()) {
+        for (auto const& entry : std::as_const(m_pendingDecodeReleaseQueue)) {
+            m_decodeList.append(QVariant(entry));
+        }
+        m_pendingDecodeReleaseQueue.clear();
+        if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+        emitDecodeListChangedThrottled();
+    }
+}
+
+// 1.0.179 — Helper: append silenzioso (no emit) di un decode map nel modello
+// flat. Usato dal path "legacy" di onFt8DecodeReady quando smooth flow OFF.
+void DecodiumBridge::appendDecodeMapToList(QVariantMap const& entry)
+{
+    m_decodeList.append(QVariant(entry));
+}
+
+// 1.0.179 — Drain timer slot: estrae 1-2 entry dalla queue smooth e le
+// appende al modello, poi emit throttled. Si auto-ferma quando la coda
+// e' vuota.
+void DecodiumBridge::drainDecodeReleaseQueue()
+{
+    if (m_pendingDecodeReleaseQueue.isEmpty()) {
+        if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+        return;
+    }
+    int const take = qMin(m_decodeReleaseChunkSize,
+                          m_pendingDecodeReleaseQueue.size());
+    for (int i = 0; i < take; ++i) {
+        m_decodeList.append(QVariant(m_pendingDecodeReleaseQueue.first()));
+        m_pendingDecodeReleaseQueue.removeFirst();
+    }
+    emitDecodeListChangedThrottled();
+    if (m_pendingDecodeReleaseQueue.isEmpty() && m_decodeReleaseTimer) {
+        m_decodeReleaseTimer->stop();
+    }
+}
+
 void DecodiumBridge::setDecodeShowPeriodSeparator(bool v)
 {
     if (m_decodeShowPeriodSeparator == v) return;
@@ -4563,6 +4612,20 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     m_asyncDecodeTimer->setInterval(100);
     connect(m_asyncDecodeTimer, &QTimer::timeout, this, &DecodiumBridge::onAsyncDecodeTimer);
 
+    // 1.0.179 — Smooth Decode Flow scheduler: spalma il rilascio dei decode
+    // FT8/FT4 dal batch (15-30 row insieme) in stream progressivo. Spread
+    // target ~3s entro il periodo successivo. Default ON, auto-fallback su
+    // UI stall (>500ms negli ultimi 5s).
+    m_decodeReleaseTimer = new QTimer(this);
+    m_decodeReleaseTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_decodeReleaseTimer, &QTimer::timeout,
+            this, &DecodiumBridge::drainDecodeReleaseQueue);
+    {
+        QSettings s;
+        m_smoothDecodeFlow = s.value(QStringLiteral("Decoder/SmoothDecodeFlow"),
+                                     true).toBool();
+    }
+
     m_legacyStateTimer = new QTimer(this);
     m_legacyStateTimer->setInterval(250);
     connect(m_legacyStateTimer, &QTimer::timeout, this, &DecodiumBridge::syncLegacyBackendState);
@@ -4646,6 +4709,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 DecodiumBridge::~DecodiumBridge()
 {
     beginDecodeCallbackShutdown();
+    // 1.0.179 — Smooth Decode Flow: ferma drain timer e svuota coda prima
+    // di teardown per evitare timer callback su this in distruzione.
+    if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+    m_pendingDecodeReleaseQueue.clear();
     stopRx();
     teardownAudioCapture();
     // Ferma TX/Tune prima di distruggere tutto
@@ -7684,6 +7751,10 @@ QString DecodiumBridge::mode() const { return m_mode; }
 
 void DecodiumBridge::setMode(const QString& v) {
     if (m_mode != v) {
+        // 1.0.179 — Smooth Decode Flow: cambio mode invalida la coda
+        // residua (per evitare merge cross-mode); reset + stop timer.
+        if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+        m_pendingDecodeReleaseQueue.clear();
         QString const previousMode = m_mode;
         bool const monitorWasActive = m_monitoring;
         bool const monitorShouldStayActive = monitorWasActive || m_monitorRequested;
@@ -8542,6 +8613,20 @@ void DecodiumBridge::updateProcessGpuUsage()
     emit processGpuUsageChanged();
 }
 
+// 1.0.179 — Ritorna true se negli ultimi windowMs c'e' stato uno stall
+// (gap) >= thresholdMs. Riusa il pressure tracker esistente: se
+// m_cpuPressureUntilMs e' nel futuro entro windowMs, c'era pressure
+// recente. Conservative: meglio fallback eccessivo che decode block.
+bool DecodiumBridge::isUiStallActive(int thresholdMs, int windowMs) const
+{
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_cpuPressureUntilMs > nowMs - windowMs && m_cpuPressureUntilMs > 0) {
+        Q_UNUSED(thresholdMs);  // thresholdMs gia' implicito nella detection
+        return true;
+    }
+    return false;
+}
+
 void DecodiumBridge::updateUiStallDiagnostics()
 {
     if (!m_uiStallClock.isValid()) {
@@ -9212,6 +9297,9 @@ void DecodiumBridge::startRx()
 void DecodiumBridge::stopRx()
 {
     bridgeLog("stopRx() called");
+    // 1.0.179 — Smooth Decode Flow: stop RX invalida la coda residua.
+    if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+    m_pendingDecodeReleaseQueue.clear();
     bool const monitorWasRequested = m_monitorRequested;
     m_monitorRequested = false;
     if (!m_monitoring) {
@@ -11563,6 +11651,9 @@ void DecodiumBridge::clearDecodeList()
     }
     m_clearedRxDecodeKeys.clear();
     m_decodeList.clear();
+    // 1.0.179 — Smooth Decode Flow: reset coda + ferma drain timer.
+    if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+    m_pendingDecodeReleaseQueue.clear();
     clearRemoteActivityCache(true);
     emit decodeListChanged();
     if (m_activeStations) {
@@ -19806,6 +19897,27 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     int duplicatesSkipped = 0;
     int accepted = 0;
     DecodeUserFilterConfig const userFilterConfig = readDecodeUserFilterConfig(*this);
+
+    // 1.0.179 — Smooth Decode Flow scheduler. Se attivo + auto-fallback OK +
+    // batch grande (>5) + non FT2 (gia' streaming via async), spalma il
+    // rilascio. Altrimenti path legacy (batch flush + emit).
+    const bool useSmoothFlow = m_smoothDecodeFlow
+        && rows.size() > 5
+        && m_mode != QStringLiteral("FT2")
+        && !isUiStallActive(500, 5000);
+    if (useSmoothFlow) {
+        // Flush residuo dello slot precedente (no merge tra serial diversi).
+        if (!m_pendingDecodeReleaseQueue.isEmpty()
+            && m_lastReleaseSerial != static_cast<qint64>(serial)) {
+            for (auto const& e : std::as_const(m_pendingDecodeReleaseQueue)) {
+                m_decodeList.append(QVariant(e));
+            }
+            m_pendingDecodeReleaseQueue.clear();
+            emitDecodeListChangedThrottled();
+        }
+        m_lastReleaseSerial = static_cast<qint64>(serial);
+    }
+
     for (const auto& row : rows) {
         // parseFt8Row returns: [time, snr, dt, df, message, aptype, quality, freq]
         QStringList f = parseFt8Row(row);
@@ -19965,7 +20077,13 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
         }
 
         if (!legacyUiMirrorActive) {
-            m_decodeList.append(QVariant(entry));
+            // 1.0.179 — Smooth Decode Flow: se attivo, accoda in release
+            // queue invece di append-and-emit. Altrimenti path legacy.
+            if (useSmoothFlow) {
+                m_pendingDecodeReleaseQueue.append(entry);
+            } else {
+                m_decodeList.append(QVariant(entry));
+            }
             appendRxDecodeEntry(entry);
             appendLegacyAllTxtDecodeLine(entry);
             // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
@@ -20057,7 +20175,21 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
     } else {
         m_zeroRawDecodeStreak = 0;
     }
-    if (changed) emitDecodeListChangedThrottled();  // 1.0.142: throttle FT8 burst
+    // 1.0.179 — Smooth Decode Flow: se la queue smooth ha entry, arma il
+    // drain timer con interval adattivo. Spread target ~periodMs-2s entro
+    // [1500..3000]ms, intervallo per row in [80..200]ms, chunk=2 oltre 25.
+    if (useSmoothFlow && !m_pendingDecodeReleaseQueue.isEmpty()) {
+        int const n = m_pendingDecodeReleaseQueue.size();
+        int const periodMs = periodMsForMode(m_mode);
+        int const spreadMs = qBound(1500, periodMs - 2000, 3000);
+        int const intervalMs = qBound(80, spreadMs / qMax(1, n), 200);
+        m_decodeReleaseChunkSize = (n > 25) ? 2 : 1;
+        if (m_decodeReleaseTimer) m_decodeReleaseTimer->start(intervalMs);
+        bridgeLog(QStringLiteral("[SmoothFlow] queue=%1 chunk=%2 interval=%3ms")
+                      .arg(n).arg(m_decodeReleaseChunkSize).arg(intervalMs));
+    } else if (changed) {
+        emitDecodeListChangedThrottled();  // 1.0.142: throttle FT8 burst
+    }
     if (legacyUiMirrorActive) {
         syncLegacyBackendDecodeList();
     }

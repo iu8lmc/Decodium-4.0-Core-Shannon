@@ -948,6 +948,22 @@ NumberAnimation {
 	                            // Le righe ora appaiono istantanee nella loro posizione finale;
 	                            // solo il tail-follow (sopra) anima lo scroll, in 160ms.
 
+                            // 1.0.179 — Smooth Decode Flow opt-in. Lo scheduler C++ spalma
+                            // il rilascio a chunk 1-2 row con interval 80-200ms, quindi le
+                            // transitions add/addDisplaced sono SAFE (no piu' 20 fade
+                            // simultanei). Attive solo se bridge.smoothDecodeFlow === true.
+                            // NO move/remove transitions: causerebbero jitter su clear/sort.
+                            add: Transition {
+                                enabled: bridge ? bridge.smoothDecodeFlow : false
+                                NumberAnimation { property: "opacity"; from: 0.0; to: 1.0
+                                                  duration: 100; easing.type: Easing.OutQuad }
+                            }
+                            addDisplaced: Transition {
+                                enabled: bridge ? bridge.smoothDecodeFlow : false
+                                NumberAnimation { properties: "y"; duration: 100
+                                                  easing.type: Easing.OutQuad }
+                            }
+
                             ScrollBar.vertical: ScrollBar {
                                 policy: ScrollBar.AsNeeded
                                 interactive: true
@@ -1452,6 +1468,22 @@ NumberAnimation {
                             }
 	                            // 1.0.125: rimosse animazioni add/addDisplaced/moveDisplaced/
 	                            // removeDisplaced (stesso motivo di bandActivityList).
+
+                            // 1.0.179 — Smooth Decode Flow opt-in. Lo scheduler C++ spalma
+                            // il rilascio a chunk 1-2 row con interval 80-200ms, quindi le
+                            // transitions add/addDisplaced sono SAFE (no piu' 20 fade
+                            // simultanei). Attive solo se bridge.smoothDecodeFlow === true.
+                            // NO move/remove transitions: causerebbero jitter su clear/sort.
+                            add: Transition {
+                                enabled: bridge ? bridge.smoothDecodeFlow : false
+                                NumberAnimation { property: "opacity"; from: 0.0; to: 1.0
+                                                  duration: 100; easing.type: Easing.OutQuad }
+                            }
+                            addDisplaced: Transition {
+                                enabled: bridge ? bridge.smoothDecodeFlow : false
+                                NumberAnimation { properties: "y"; duration: 100
+                                                  easing.type: Easing.OutQuad }
+                            }
 
                             ScrollBar.vertical: ScrollBar {
                                 policy: ScrollBar.AsNeeded

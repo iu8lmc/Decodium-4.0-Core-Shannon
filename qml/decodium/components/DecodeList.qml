@@ -231,5 +231,20 @@ Item {
                 }
             }
         }
+
+        // 1.0.179 — Smooth Decode Flow opt-in. Lo scheduler C++ spalma il
+        // rilascio a chunk 1-2 row con interval 80-200ms, quindi le transitions
+        // add/addDisplaced sono SAFE (no piu' 20 fade simultanei come in 1.0.125).
+        // Attive solo se bridge.smoothDecodeFlow === true.
+        add: Transition {
+            enabled: bridge ? bridge.smoothDecodeFlow : false
+            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0
+                              duration: 100; easing.type: Easing.OutQuad }
+        }
+        addDisplaced: Transition {
+            enabled: bridge ? bridge.smoothDecodeFlow : false
+            NumberAnimation { properties: "y"; duration: 100
+                              easing.type: Easing.OutQuad }
+        }
     }
 }

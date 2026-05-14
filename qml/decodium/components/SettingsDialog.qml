@@ -2418,6 +2418,26 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
+                        // Smooth decode flow (streaming progressivo FT8/FT4)
+                        // — spalma i decode dal batch a streaming continuo
+                        // stile WSJT-X live. Auto-fallback se UI stall.
+                        // Default ON; disattiva se vedi rallentamenti.
+                        Text { text: qsTr("Smooth decode flow:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        CheckBox {
+                            id: smoothDecodeFlowCheck
+                            checked: bridge ? bridge.smoothDecodeFlow : true
+                            onCheckedChanged: {
+                                if (bridge) bridge.setSmoothDecodeFlow(checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Spalma i decode FT8/FT4 dal batch finale del periodo a streaming continuo con fade animato (~100ms per row). FT2 async resta invariato (gia' streaming). Default ON; auto-fallback se rileva UI stall su PC modesti. Disattiva per comportamento batch legacy.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
                         // ── Watchdog ──
                         Text { text: qsTr("WATCHDOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }

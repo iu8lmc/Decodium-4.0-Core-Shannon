@@ -352,6 +352,9 @@ class DecodiumBridge : public QObject
     // 1.0.174 — FT2 Weak-Signal Pack master flag
     Q_PROPERTY(bool ft2Conservative READ ft2Conservative WRITE setFt2Conservative NOTIFY ft2ConservativeChanged)
 
+    // 1.0.179 — Smooth Decode Flow scheduler
+    Q_PROPERTY(bool smoothDecodeFlow READ smoothDecodeFlow WRITE setSmoothDecodeFlow NOTIFY smoothDecodeFlowChanged)
+
 public:
     explicit DecodiumBridge(QObject* parent = nullptr);
     ~DecodiumBridge();
@@ -1033,6 +1036,7 @@ signals:
     void alt12EnabledChanged();
     void asyncTxEnabledChanged();
     void ft2ConservativeChanged();  // 1.0.174 — FT2 Weak-Signal Pack
+    void smoothDecodeFlowChanged();  // 1.0.179 — Smooth Decode Flow
     void dualCarrierEnabledChanged();
     void quickQsoEnabledChanged();
     void settingValueChanged(QString key, QVariant value);
@@ -1185,6 +1189,7 @@ signals:
     void uiDecodeWinHeightChanged();
 
 private slots:
+    void drainDecodeReleaseQueue();  // 1.0.179 — Smooth Decode Flow drain
     void onFt8DecodeReady(quint64 serial, QStringList rows);
     void onFt2DecodeReady(quint64 serial, QStringList rows);
     void onFt2AsyncDecodeReady(QStringList rows);   // path async 100ms
@@ -1425,6 +1430,12 @@ private:
     bool m_hideGhostDecodes {true};
     // 1.0.174 — FT2 weak-signal pack master flag (opt-in, default OFF).
     bool m_ft2Conservative {false};
+    // 1.0.179 — Smooth Decode Flow scheduler state
+    bool                  m_smoothDecodeFlow {true};
+    QVector<QVariantMap>  m_pendingDecodeReleaseQueue;
+    QTimer*               m_decodeReleaseTimer {nullptr};
+    int                   m_decodeReleaseChunkSize {1};
+    qint64                m_lastReleaseSerial {-1};
     // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
     // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
     int  m_currentPartnerSnrDb {127};
@@ -2031,6 +2042,12 @@ public:
     Q_INVOKABLE bool ft2Conservative() const { return m_ft2Conservative; }
     Q_INVOKABLE void setFt2Conservative(bool v);
 
+    // 1.0.179 — Smooth Decode Flow scheduler: spalma il rilascio dei decode
+    // FT8/FT4 dal batch (15-30 row insieme) in stream progressivo con
+    // interval adattivo. Default ON, auto-fallback su UI stall.
+    Q_INVOKABLE bool smoothDecodeFlow() const { return m_smoothDecodeFlow; }
+    Q_INVOKABLE void setSmoothDecodeFlow(bool v);
+
     // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
     Q_INVOKABLE bool    startWebServer(int port = 8080);
     Q_INVOKABLE void    stopWebServer();
@@ -2047,6 +2064,10 @@ public:
     DecodeListModel* rxDecodeModel() const { return m_rxDecodeModel; }
 
 private:
+    // 1.0.179 — Smooth Decode Flow helpers
+    bool isUiStallActive(int thresholdMs, int windowMs) const;
+    void appendDecodeMapToList(QVariantMap const& entry);
+
     void refreshDecodeListDxcc();
     QStringList parseFt8Row(const QString& row) const;
     QStringList parseJt65Row(const QString& row) const;
