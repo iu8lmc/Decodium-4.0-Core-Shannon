@@ -2462,70 +2462,6 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
-                        // ── UI MODERN (1.0.180 UI Revolution) ──
-                        Text { text: qsTr("UI MODERN"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
-                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
-
-                        // 1.0.180 — Quality preset: gate per effetti visivi pesanti.
-                        Text { text: qsTr("UI Quality preset:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        ComboBox {
-                            id: uiQualityCombo
-                            Layout.preferredWidth: 180
-                            Layout.columnSpan: 1
-                            model: ["Low", "Medium", "High"]
-                            currentIndex: {
-                                if (!bridge) return 1
-                                const q = bridge.uiQuality
-                                return q === "Low" ? 0 : (q === "High" ? 2 : 1)
-                            }
-                            onActivated: {
-                                if (bridge) bridge.setUiQuality(model[currentIndex])
-                            }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Low = nessun effetto (PC modesti). Medium = ombre leggere + Animator. High = MultiEffect shadow + tutte le animazioni. Default Medium.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.180 — Style (richiede restart)
-                        Text { text: qsTr("UI Style (restart):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        ComboBox {
-                            id: uiStyleCombo
-                            Layout.preferredWidth: 180
-                            Layout.columnSpan: 1
-                            model: ["Default", "FluentWinUI3", "Material", "Universal", "Fusion", "Basic", "Imagine"]
-                            currentIndex: {
-                                if (!bridge) return 0
-                                return Math.max(0, model.indexOf(bridge.uiStyle))
-                            }
-                            onActivated: {
-                                if (bridge) bridge.setUiStyle(model[currentIndex])
-                            }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Selettore stile QML Quick Controls. FluentWinUI3 ha aspetto Windows 11 nativo ma non supporta SplitView/StackView (fallback automatico). Richiede restart Decodium.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
-                        // 1.0.180 — Frameless pop-out
-                        Text { text: qsTr("Frameless pop-out:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: framelessPopoutsCheck
-                            checked: bridge ? bridge.uiFramelessPopouts : false
-                            onCheckedChanged: {
-                                if (bridge) bridge.setUiFramelessPopouts(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Le finestre pop-out (Waterfall, Period1, DecoSync) diventano frameless con drag tramite il bordo. Estetica Windows 11. Default OFF. Richiede chiusura+riapertura della finestra.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
-
                         // ── Watchdog ──
                         Text { text: qsTr("WATCHDOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
@@ -2678,6 +2614,70 @@ Dialog {
                         }
                         // riga vuota per riempire le 4 colonne
                         Item { Layout.columnSpan: 2; Layout.preferredHeight: controlHeight }
+
+                        // ── UI MODERN (1.0.180 UI Revolution, spostato in tab Display in 1.0.181) ──
+                        Text { text: qsTr("UI MODERN"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        // 1.0.180 — Quality preset: gate per effetti visivi pesanti.
+                        Text { text: qsTr("UI Quality preset:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        ComboBox {
+                            id: uiQualityCombo
+                            Layout.preferredWidth: 180
+                            Layout.columnSpan: 1
+                            model: ["Low", "Medium", "High"]
+                            currentIndex: {
+                                if (!bridge) return 1
+                                const q = bridge.uiQuality
+                                return q === "Low" ? 0 : (q === "High" ? 2 : 1)
+                            }
+                            onActivated: {
+                                if (bridge) bridge.setUiQuality(model[currentIndex])
+                            }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Low = nessun effetto (PC modesti). Medium = ombre leggere + Animator. High = MultiEffect shadow + tutte le animazioni. Default Medium.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // 1.0.180 — Style (richiede restart)
+                        Text { text: qsTr("UI Style (restart):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        ComboBox {
+                            id: uiStyleCombo
+                            Layout.preferredWidth: 180
+                            Layout.columnSpan: 1
+                            model: ["Default", "FluentWinUI3", "Material", "Universal", "Fusion", "Basic", "Imagine"]
+                            currentIndex: {
+                                if (!bridge) return 0
+                                return Math.max(0, model.indexOf(bridge.uiStyle))
+                            }
+                            onActivated: {
+                                if (bridge) bridge.setUiStyle(model[currentIndex])
+                            }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Selettore stile QML Quick Controls. FluentWinUI3 ha aspetto Windows 11 nativo ma non supporta SplitView/StackView (fallback automatico). Richiede restart Decodium.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // 1.0.180 — Frameless pop-out
+                        Text { text: qsTr("Frameless pop-out:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        CheckBox {
+                            id: framelessPopoutsCheck
+                            checked: bridge ? bridge.uiFramelessPopouts : false
+                            onCheckedChanged: {
+                                if (bridge) bridge.setUiFramelessPopouts(checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Le finestre pop-out (Waterfall, Period1, DecoSync) diventano frameless con drag tramite il bordo. Estetica Windows 11. Default OFF. Richiede chiusura+riapertura della finestra.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Font ──
                         Text { text: qsTr("FONT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
