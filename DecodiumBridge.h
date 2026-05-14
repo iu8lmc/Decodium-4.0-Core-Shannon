@@ -1452,6 +1452,21 @@ private:
     // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
     // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
     int  m_currentPartnerSnrDb {127};
+    // 1.0.186 — FT2 Weak-Signal Pack F: partner-memory cache. Salva
+    // (call, txNum, qsoProgress, snr, lastSeenMs) per ricomparsa partner
+    // entro finestra. Opt-in sotto m_ft2Conservative. Solo FT2.
+    struct PartnerMemoryEntry {
+        QString callUpper;
+        int     lastTxNum  {0};       // 1..6
+        int     qsoProgress {0};      // 1..5
+        int     lastSnrDb  {127};     // 127 = no data
+        qint64  lastSeenMs {0};
+        QString lastTxPayload;
+    };
+    QHash<QString, PartnerMemoryEntry> m_partnerMemory;
+    qint64 m_partnerMemoryLastPruneMs {0};
+    static constexpr qint64 kPartnerMemoryWindowMs  = 4LL * 7500LL;   // 4 periodi FT2 = 30s
+    static constexpr qint64 kPartnerMemoryPruneMs   = 8LL * 7500LL;   // 60s
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
@@ -2088,6 +2103,11 @@ private:
     // 1.0.179 — Smooth Decode Flow helpers
     bool isUiStallActive(int thresholdMs, int windowMs) const;
     void appendDecodeMapToList(QVariantMap const& entry);
+
+    // 1.0.186 — Partner memory helpers (FT2 Weak-Signal Pack F)
+    void rememberPartnerState();           // chiamato dopo advanceQsoState/startTx
+    bool tryResumeFromPartnerMemory(QString const& newDxCall);
+    void prunePartnerMemoryIfDue();        // chiamato periodicamente
 
     void refreshDecodeListDxcc();
     QStringList parseFt8Row(const QString& row) const;

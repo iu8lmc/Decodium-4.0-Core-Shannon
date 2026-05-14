@@ -3478,6 +3478,95 @@ void DecodiumBridge::setFt2Conservative(bool v)
     bridgeLog(QStringLiteral("[FT2WS] Conservative mode %1").arg(v ? "ON" : "OFF"));
 }
 
+// 1.0.186 — FT2 Weak-Signal Pack F: partner-memory helpers
+void DecodiumBridge::rememberPartnerState()
+{
+    // 1.0.186 — Salva lo stato corrente del QSO con m_dxCall nella cache
+    // partner-memory. Chiamato dopo advanceQsoState e startTx, gated su
+    // Conservative + FT2 + partner non vuoto + qsoProgress > 1 (oltre il CQ).
+    if (!m_ft2Conservative) return;
+    if (m_mode != QStringLiteral("FT2")) return;
+    QString const dx = m_dxCall.trimmed().toUpper();
+    if (dx.isEmpty()) return;
+    if (m_qsoProgress <= 1) return;  // CQ o idle, niente da ricordare
+
+    PartnerMemoryEntry& entry = m_partnerMemory[dx];
+    entry.callUpper     = dx;
+    entry.lastTxNum     = m_currentTx;
+    entry.qsoProgress   = m_qsoProgress;
+    entry.lastSnrDb     = m_currentPartnerSnrDb;
+    entry.lastSeenMs    = QDateTime::currentMSecsSinceEpoch();
+    entry.lastTxPayload = m_lastTransmittedMessage;
+}
+
+bool DecodiumBridge::tryResumeFromPartnerMemory(QString const& newDxCall)
+{
+    // 1.0.186 — Se il nuovo dxCall ha entry recente in partner-memory,
+    // ripristina (m_qsoProgress, m_currentTx, m_currentPartnerSnrDb).
+    // Ritorna true se ha fatto resume, false altrimenti.
+    if (!m_ft2Conservative) return false;
+    if (m_mode != QStringLiteral("FT2")) return false;
+    QString const dx = newDxCall.trimmed().toUpper();
+    if (dx.isEmpty()) return false;
+
+    auto it = m_partnerMemory.constFind(dx);
+    if (it == m_partnerMemory.constEnd()) return false;
+
+    qint64 const now = QDateTime::currentMSecsSinceEpoch();
+    qint64 const ageMs = now - it->lastSeenMs;
+    if (ageMs > kPartnerMemoryWindowMs) {
+        // Troppo vecchio, rimuovi per pulizia
+        m_partnerMemory.remove(dx);
+        return false;
+    }
+
+    // Recupera stato. NON tocchiamo m_dxCall (lo fa il chiamante).
+    int const resumedTxNum    = it->lastTxNum;
+    int const resumedProgress = it->qsoProgress;
+    int const resumedSnr      = it->lastSnrDb;
+    if (resumedProgress > 1) {
+        m_qsoProgress = resumedProgress;
+        emit qsoProgressChanged();
+    }
+    if (resumedTxNum >= 1 && resumedTxNum <= 6) {
+        // setCurrentTx mantiene il TX slot precedente (riprendi da dove eravamo)
+        setCurrentTx(resumedTxNum);
+    }
+    if (resumedSnr != 127) {
+        m_currentPartnerSnrDb = resumedSnr;
+    }
+    bridgeLog(QStringLiteral("[FT2WS] Partner-memory resume: %1 txNum=%2 progress=%3 "
+                             "snr=%4 age=%5s")
+                  .arg(dx)
+                  .arg(resumedTxNum)
+                  .arg(resumedProgress)
+                  .arg(resumedSnr)
+                  .arg(ageMs / 1000));
+    return true;
+}
+
+void DecodiumBridge::prunePartnerMemoryIfDue()
+{
+    // 1.0.186 — Cleanup entry stale ogni ~30s per evitare growth illimitata.
+    qint64 const now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_partnerMemoryLastPruneMs < kPartnerMemoryWindowMs) return;
+    m_partnerMemoryLastPruneMs = now;
+
+    int removed = 0;
+    for (auto it = m_partnerMemory.begin(); it != m_partnerMemory.end(); ) {
+        if (now - it->lastSeenMs > kPartnerMemoryPruneMs) {
+            it = m_partnerMemory.erase(it);
+            ++removed;
+        } else {
+            ++it;
+        }
+    }
+    if (removed > 0) {
+        bridgeLog(QStringLiteral("[FT2WS] Partner-memory pruned: %1 stale entries (kept %2)")
+                      .arg(removed).arg(m_partnerMemory.size()));
+    }
+}
+
 // 1.0.179 — Smooth Decode Flow setter. Persistito su QSettings come
 // "Decoder/SmoothDecodeFlow"; se disattivato a meta' rilascio la coda
 // residua viene flushata immediatamente nel model.
@@ -8286,10 +8375,15 @@ void DecodiumBridge::setDxCall(const QString& v) {
     }
     if (m_dxCall != next) {
         m_dxCall = next;
-        // 1.0.174 — Reset SNR tracking partner: il vecchio valore non e' piu'
-        // significativo. Verra' ri-popolato dal prossimo decode del nuovo
-        // partner in autoSequenceStep. 127 = sentinel "no data".
-        m_currentPartnerSnrDb = 127;
+        // 1.0.186 FT2WS-F — Partner memory: tenta resume PRIMA di resettare
+        // m_currentPartnerSnrDb a 127. Se il nuovo partner e' nella cache
+        // recente (<=30s), recupera (txNum, qsoProgress, snr) e logga.
+        bool const resumedFromMemory = !next.isEmpty()
+            && tryResumeFromPartnerMemory(next);
+        // 1.0.174 — Reset SNR tracking partner se NON abbiamo resume.
+        if (!resumedFromMemory) {
+            m_currentPartnerSnrDb = 127;
+        }
         QString const activeQueueCall = normalizedBaseCall(next);
         if (!activeQueueCall.isEmpty()) {
             clearWorldMapClosedQso(next);
@@ -11094,6 +11188,8 @@ void DecodiumBridge::startTx()
     }
 
     emit statusMessage("TX: " + msg.trimmed());
+    // 1.0.186 FT2WS-F — refresh partner-memory dopo invio TX diretto
+    rememberPartnerState();
 }
 
 void DecodiumBridge::sendTx(int n)
@@ -15413,6 +15509,10 @@ void DecodiumBridge::advanceQsoState(int txNum)
     m_txWatchdogTicks = 0;  // reset watchdog ad ogni avanzamento di stato
     bridgeLog("advanceQsoState: TX" + QString::number(txNum) +
               " → progress=" + QString::number(progress));
+    // 1.0.186 FT2WS-F — salva stato del QSO corrente con m_dxCall in
+    // partner-memory. Gated su Conservative + FT2 internamente.
+    rememberPartnerState();
+    prunePartnerMemoryIfDue();
 }
 
 bool DecodiumBridge::shouldDeferAutoTxUntilTimeSyncDecode(const QString& modeSnapshot) const
