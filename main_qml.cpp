@@ -584,21 +584,13 @@ int main(int argc, char* argv[])
     L("legacy metatypes OK");
 
     // 1.0.180 — UI Revolution: stile QML Quick Controls selezionabile via QSettings.
-    // Deve essere chiamato PRIMA della creazione di QGuiApplication per essere
-    // valido. FluentWinUI3 = aspetto Windows 11 nativo (Qt 6.7+). Fallback al
-    // default Material se invalid / non specificato.
-    {
-        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
-        QString const styleName = s.value(QStringLiteral("UI/Style"),
-                                          QStringLiteral("Material")).toString();
-        if (styleName.compare(QStringLiteral("Default"), Qt::CaseInsensitive) == 0) {
-            qInfo() << "[UI] QML style: <Qt default> (no override)";
-        } else {
-            QQuickStyle::setStyle(styleName);
-            qInfo() << "[UI] QML style:" << styleName;
-        }
-    }
-    L("QQuickStyle OK");
+    // 1.0.183 — FIX bug: usare lo stesso scope QSettings di DecodiumBridge
+    // (IU8LMC/Decodium) altrimenti main_qml.cpp legge da un registry path
+    // diverso (Decodium/Decodium3) e ignora le scelte dell'utente.
+    // QQuickStyle::setStyle deve essere chiamato PRIMA di engine.load() ma
+    // PUO' essere chiamato DOPO QApplication: lo spostiamo dopo cosi'
+    // QSettings() default usa OrganizationName+ApplicationName corretti.
+    // FluentWinUI3 = aspetto Windows 11 nativo (Qt 6.7+).
 
     // 1.0.180 — Per-monitor DPI v2 esplicito (gia' default Qt 6 ma chiaro)
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
@@ -803,6 +795,26 @@ int main(int argc, char* argv[])
     QGuiApplication::setDesktopFileName(QStringLiteral("IU8LMC.Decodium4"));
     scheduleWindowsTaskbarIconRefresh(&app, appIcon);
 #endif
+
+    // 1.0.183 — Lettura UI/Style DOPO QApplication cosi' QSettings() default
+    // usa OrganizationName "IU8LMC" + ApplicationName "Decodium" — lo stesso
+    // scope di DecodiumBridge::setUiStyle(). PRIMA della 1.0.183 usavamo
+    // QSettings("Decodium","Decodium3") che leggeva un registry path diverso
+    // e il setter del bridge non era mai visto, fallback a "Material" sempre.
+    // QQuickStyle::setStyle DEVE essere chiamato PRIMA di engine.load(),
+    // qui siamo molto prima quindi OK.
+    {
+        QSettings s;  // default scope: IU8LMC / Decodium
+        QString const styleName = s.value(QStringLiteral("UI/Style"),
+                                          QStringLiteral("Default")).toString();
+        if (styleName.compare(QStringLiteral("Default"), Qt::CaseInsensitive) == 0) {
+            qInfo() << "[UI] QML style: <Qt default> (no override)";
+        } else {
+            QQuickStyle::setStyle(styleName);
+            qInfo() << "[UI] QML style:" << styleName;
+        }
+        L(QStringLiteral("QQuickStyle resolved: %1").arg(styleName).toUtf8().constData());
+    }
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("\nDecodium 4.0 Core Shannon: Digital Modes for Weak Signal Communications in Amateur Radio"));
