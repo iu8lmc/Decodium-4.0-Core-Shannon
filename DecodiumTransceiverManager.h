@@ -69,6 +69,7 @@ class DecodiumTransceiverManager : public QObject
     Q_PROPERTY(bool catAutoConnect READ catAutoConnect WRITE setCatAutoConnect NOTIFY catAutoConnectChanged)
     Q_PROPERTY(bool audioAutoStart READ audioAutoStart WRITE setAudioAutoStart NOTIFY audioAutoStartChanged)
     Q_PROPERTY(bool tciAudioEnabled READ tciAudioEnabled WRITE setTciAudioEnabled NOTIFY tciAudioEnabledChanged)
+    Q_PROPERTY(bool hrdStrictRadioMatch READ hrdStrictRadioMatch WRITE setHrdStrictRadioMatch NOTIFY hrdStrictRadioMatchChanged)
 
 public:
     explicit DecodiumTransceiverManager(QObject* parent = nullptr);
@@ -113,6 +114,7 @@ public:
     bool catAutoConnect() const { return m_catAutoConnect; }
     bool audioAutoStart() const { return m_audioAutoStart; }
     bool tciAudioEnabled() const { return m_tciAudioEnabled; }
+    bool hrdStrictRadioMatch() const { return m_hrdStrictRadioMatch; }
 
     // ── Scrittura proprietà ───────────────────────────────────────────────
     void setRigName(const QString&);
@@ -135,6 +137,7 @@ public:
     void setCatAutoConnect(bool v)        { if (m_catAutoConnect != v){ m_catAutoConnect = v; emit catAutoConnectChanged(); } }
     void setAudioAutoStart(bool v)        { if (m_audioAutoStart != v){ m_audioAutoStart = v; emit audioAutoStartChanged(); } }
     void setTciAudioEnabled(bool v);
+    void setHrdStrictRadioMatch(bool v)   { if (m_hrdStrictRadioMatch != v){ m_hrdStrictRadioMatch = v; emit hrdStrictRadioMatchChanged(); } }
 
     // ── Comandi QML-invokable ─────────────────────────────────────────────
     // Compatibilita' con DecodiumCatManager: VOX e' audio-only.
@@ -194,6 +197,7 @@ signals:
     void catAutoConnectChanged();
     void audioAutoStartChanged();
     void tciAudioEnabledChanged();
+    void hrdStrictRadioMatchChanged();
     void errorOccurred(const QString& msg);
     void statusUpdate(const QString& msg);
     void tciPcmSamplesReady(const QVector<short>& samples);
@@ -246,6 +250,7 @@ private:
     bool    m_catAutoConnect {false};
     bool    m_audioAutoStart {false};
     bool    m_tciAudioEnabled {true};
+    bool    m_hrdStrictRadioMatch {true};
     int     m_transientCatRetryCount {0};
     bool    m_transientCatReconnectPending {false};
     QElapsedTimer m_connectAttemptTimer;

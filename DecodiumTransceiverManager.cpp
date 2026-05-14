@@ -642,6 +642,7 @@ DecodiumTransceiverManager::DecodiumTransceiverManager(QObject* parent)
     connect(this, &DecodiumTransceiverManager::catAutoConnectChanged, this, scheduleSave);
     connect(this, &DecodiumTransceiverManager::audioAutoStartChanged, this, scheduleSave);
     connect(this, &DecodiumTransceiverManager::splitModeChanged,      this, scheduleSave);
+    connect(this, &DecodiumTransceiverManager::hrdStrictRadioMatchChanged, this, scheduleSave);
 }
 
 DecodiumTransceiverManager::~DecodiumTransceiverManager()
@@ -1893,6 +1894,7 @@ void DecodiumTransceiverManager::saveSettings()
     s.setValue("catAutoConnect", m_catAutoConnect);
     s.setValue("audioAutoStart", m_audioAutoStart);
     s.setValue("tciAudioEnabled", m_tciAudioEnabled);
+    s.setValue("hrdStrictRadioMatch", m_hrdStrictRadioMatch);
     s.endGroup();
 }
 
@@ -1923,6 +1925,7 @@ void DecodiumTransceiverManager::loadSettings()
     m_pollInterval = qBound(1, secondsPart > 0 ? secondsPart : rawPollInterval, 99);
     m_catAutoConnect = get("catAutoConnect", m_catAutoConnect).toBool();
     m_audioAutoStart = get("audioAutoStart", m_audioAutoStart).toBool();
+    m_hrdStrictRadioMatch = get("hrdStrictRadioMatch", m_hrdStrictRadioMatch).toBool();
     bool const legacyTciAudioFlag = (rawPollInterval & tci__audio) == tci__audio;
     m_tciAudioEnabled = get("tciAudioEnabled", m_tciAudioEnabled || legacyTciAudioFlag).toBool();
     // setRigName DOPO gli altri per aggiornare portType correttamente

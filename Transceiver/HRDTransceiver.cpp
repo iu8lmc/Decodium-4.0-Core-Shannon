@@ -18,6 +18,7 @@
 #include <QThread>
 #include <QStandardPaths>
 #include <QDir>
+#include <QSettings>
 
 #include "Network/NetworkServerLookup.hpp"
 #include "DecodiumLogging.hpp"
@@ -420,8 +421,22 @@ int HRDTransceiver::do_start ()
   if (current_radio_iter == radios_.end ())
     {
       CAT_ERROR ("current HRD radio missing from inventory:" << current_radio_name);
+      // Strict match (default true, restored in 1.0.184): refuse the silent fallback to
+      // the first inventory radio introduced in 1.0.176 upstream (b1b2ec9). When the
+      // configured radio is no longer current in HRD, fail loudly instead of driving a
+      // different rig without telling the user.
+      QSettings strictSettings (QStringLiteral ("Decodium"), QStringLiteral ("Decodium3"));
+      strictSettings.beginGroup (QStringLiteral ("Transceiver"));
+      bool const strict_radio_match = strictSettings.value (QStringLiteral ("hrdStrictRadioMatch"), true).toBool ();
+      strictSettings.endGroup ();
+      if (strict_radio_match)
+        {
+          hrd_diag (QStringLiteral ("current radio missing from inventory current='%1'; strict match enabled, aborting")
+                    .arg (hrd_preview (current_radio_name)));
+          throw error {tr ("Ham Radio Deluxe: rig has disappeared or changed")};
+        }
       current_radio_iter = radios_.begin ();
-      hrd_diag (QStringLiteral ("current radio missing from inventory current='%1'; using first inventory context id=%2 name='%3'")
+      hrd_diag (QStringLiteral ("current radio missing from inventory current='%1'; strict match disabled, using first inventory context id=%2 name='%3'")
                 .arg (hrd_preview (current_radio_name))
                 .arg (std::get<0> (*current_radio_iter))
                 .arg (hrd_preview (std::get<1> (*current_radio_iter))));

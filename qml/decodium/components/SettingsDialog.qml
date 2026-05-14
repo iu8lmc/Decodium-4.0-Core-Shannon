@@ -1700,6 +1700,35 @@ Dialog {
                         }
 
                         Text {
+                            visible: bridge.catManager && bridge.catManager.rigName === "Ham Radio Deluxe"
+                            text: qsTr("HRD Radio:")
+                            color: textSecondary
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 100
+                        }
+                        CheckBox {
+                            id: hrdStrictRadioMatchCheck
+                            visible: bridge.catManager && bridge.catManager.rigName === "Ham Radio Deluxe"
+                            checked: bridge.catManager ? bridge.catManager.hrdStrictRadioMatch : true
+                            text: qsTr("Strict match (abort if configured radio is not current in HRD)")
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 3
+                            onCheckedChanged: {
+                                if (bridge.catManager && bridge.catManager.hrdStrictRadioMatch !== checked) {
+                                    bridge.catManager.hrdStrictRadioMatch = checked
+                                    settingsDialog.scheduleCatPersist()
+                                }
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: textPrimary
+                                font.pixelSize: 12
+                                leftPadding: 26
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        Text {
                             visible: settingsDialog.usesTciControls()
                             text: qsTr("TCI Host:Port:")
                             color: textSecondary
