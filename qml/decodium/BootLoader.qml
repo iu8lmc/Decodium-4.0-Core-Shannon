@@ -151,7 +151,11 @@ ApplicationWindow {
         BusyIndicator {
             anchors.horizontalCenter: parent.horizontalCenter
             running: bootWindow.mainLoadStatus === Component.Loading && !bootWindow.startupTimedOut
-            Material.accent: "#ff7814"
+            // 1.0.184 — RIMOSSO Material.accent (non esiste come attached
+            // property sotto FluentWinUI3/Universal/Basic) — causava
+            // "Non-existent attached object" → rootObjects empty → CRASH al
+            // boot quando l'utente sceglieva uno stile non-Material in 1.0.183.
+            // Per colorare accent in modo style-agnostic usare contentItem custom.
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
