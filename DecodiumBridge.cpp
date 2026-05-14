@@ -8553,15 +8553,20 @@ void DecodiumBridge::updateUiStallDiagnostics()
     qint64 const nowMonoMs = m_uiStallClock.elapsed();
     qint64 const gapMs = m_lastUiStallTickMs > 0 ? nowMonoMs - m_lastUiStallTickMs : 0;
     m_lastUiStallTickMs = nowMonoMs;
-    if (gapMs < 260) {
+    // 1.0.178 — Relax UI stall thresholds: il valore 360/700/10000 era
+    // troppo aggressivo su PC modesti, attivava cpuPressureActive
+    // cronicamente strozzando FT8 early predecode e FT2 async dispatch.
+    // Nuove soglie 600ms (was 360) / 1100ms severe (was 700) / 4s window
+    // (was 10000) lasciano respirare il pipeline decode su short stall.
+    if (gapMs < 360) {
         return;
     }
 
     qint64 const nowWallMs = QDateTime::currentMSecsSinceEpoch();
-    if ((m_monitoring || m_transmitting || m_tuning) && gapMs >= 360) {
+    if ((m_monitoring || m_transmitting || m_tuning) && gapMs >= 600) {
         noteCpuPressure(QStringLiteral("UI stall %1ms").arg(gapMs),
-                        10000,
-                        gapMs >= 700);
+                        4000,
+                        gapMs >= 1100);
     }
 
     if (nowWallMs - m_lastUiStallLogMs < 500) {
@@ -20321,10 +20326,14 @@ void DecodiumBridge::onAsyncDecodeTimer()
     qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
     int minAsyncDecodeIntervalMs = 0;
     if (m_lowCpuModeEnabled) {
+        // Low CPU esplicito: throttle aggressivo voluto dall'utente
         minAsyncDecodeIntervalMs = cpuPressureSevereActive() ? 2000
                                  : (cpuPressureActive() ? 1500 : 1000);
-    } else if (cpuPressureActive()) {
-        minAsyncDecodeIntervalMs = cpuPressureSevereActive() ? 700 : 350;
+    } else if (cpuPressureSevereActive()) {
+        // 1.0.178 — Solo severe pressure throttla in modo significativo;
+        // mild pressure ora NON applica throttle (era 350ms, troppo
+        // aggressivo, FT2 perdeva 90% dispatch su PC modesti).
+        minAsyncDecodeIntervalMs = 500;
     }
     if (minAsyncDecodeIntervalMs > 0
         && m_lastFt2AsyncDecodeDispatchMs > 0
@@ -21959,14 +21968,19 @@ void DecodiumBridge::maybeDispatchFt8EarlyDecode(qint64 utcSlot, int msInSlot, i
         return;
     }
 
-    if (cpuPressureActive() || m_lowCpuModeEnabled) {
+    // 1.0.178 — Skip solo su severe pressure OR esplicito lowCpuMode.
+    // Prima skipparvamo anche su mild pressure (UI stall 600-1099ms) → utenti
+    // perdevano le passate FT8 early predecode (nzhsym=41/47, ~50% yield) su
+    // qualsiasi PC modesto con UI stall ricorrente. Mild pressure ora passa,
+    // sarà il decodeDepth/threadLimit a calare automaticamente.
+    if (m_lowCpuModeEnabled || cpuPressureSevereActive()) {
         if (mark41) m_ft8EarlyDecode41Sent = true;
         if (mark47) m_ft8EarlyDecode47Sent = true;
         qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
         if (nowMs - m_lastEarlyDecodeSkipLogMs > 2000) {
             m_lastEarlyDecodeSkipLogMs = nowMs;
             bridgeLog(QStringLiteral("FT8 early predecode skipped: %1 nzhsym=%2")
-                          .arg(m_lowCpuModeEnabled ? QStringLiteral("Low CPU mode") : QStringLiteral("CPU pressure"))
+                          .arg(m_lowCpuModeEnabled ? QStringLiteral("Low CPU mode") : QStringLiteral("severe CPU pressure"))
                           .arg(nzhsym));
         }
         return;

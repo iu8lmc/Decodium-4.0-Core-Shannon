@@ -4218,9 +4218,12 @@ ApplicationWindow {
                                 minFreq: 0
                                 maxFreq: 3200
                                 spectrumHeight: 150
-                                // 1.0.175 — Isola il render su FBO separata.
-                                layer.enabled: true
-                                layer.smooth: true
+                                // 1.0.178 — Rimosso layer.enabled FBO (1.0.175):
+                                // su PC modesti aggiungeva overhead GPU + sync
+                                // barriers → UI stall > 600ms → cpuPressure
+                                // → FT8 early predecode skip → no decode.
+                                // Loader async (sopra) + label throttle 4Hz
+                                // (Waterfall.qml) restano in place.
 
                                 onFrequencySelected: function(freq) {
                                     bridge.rxFrequency = freq      // tasto destro = RX
