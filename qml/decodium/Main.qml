@@ -601,6 +601,12 @@ ApplicationWindow {
     property bool waterfallDetached: false
     property bool waterfallMinimized: false
 
+    // 1.0.180 — Dock state machine unified: invece di booleano flat
+    // (waterfallDetached), abbiamo uno stato esplicito che permette
+    // animazioni di transizione future.
+    property string waterfallDockState: waterfallDetached ? "detached" : "embedded"
+    // Valori: "embedded", "detaching", "detached", "embedding"
+
     // Window detached and minimized states
     property bool logWindowDetached: false
     property bool logWindowMinimized: false
@@ -4065,6 +4071,39 @@ ApplicationWindow {
                             border.color: parent.parent.nearSnapPoint ? "#00ffff" : "transparent"
                             border.width: 1
                             opacity: 0.5
+                        }
+                    }
+
+                    // 1.0.180 — Snap chip magnetico: mostra altezza corrente
+                    // del Waterfall con glow visivo quando vicino a snap point.
+                    Rectangle {
+                        id: snapChip
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottomMargin: 8
+                        visible: parent.SplitHandle.hovered || parent.SplitHandle.pressed
+                                 || parent.nearSnapPoint
+                        width: chipText.implicitWidth + 16
+                        height: 18
+                        radius: 9
+                        color: parent.nearSnapPoint
+                               ? Qt.rgba(0, 0.9, 0.9, 0.85)
+                               : Qt.rgba(0.1, 0.1, 0.15, 0.85)
+                        border.color: parent.nearSnapPoint ? "#00ffff" : "#505070"
+                        border.width: 1
+                        // Glow when near snap
+                        OpacityAnimator on opacity {
+                            running: snapChip.parent.nearSnapPoint
+                            from: 0.7; to: 1.0; duration: 250
+                            loops: Animation.Infinite
+                        }
+                        Text {
+                            id: chipText
+                            anchors.centerIn: parent
+                            color: snapChip.parent.nearSnapPoint ? "#001a1a" : "#cccccc"
+                            font.pixelSize: 10
+                            font.bold: true
+                            text: Math.round(waterfallPanel.height) + "px"
                         }
                     }
 
@@ -7834,14 +7873,41 @@ NumberAnimation {
         minimumWidth: 600
         minimumHeight: 300
         visible: false
-        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        // 1.0.180 — Frameless opzionale via bridge.uiFramelessPopouts
+        flags: (bridge && bridge.uiFramelessPopouts)
+               ? (Qt.Window | Qt.FramelessWindowHint)
+               : (Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         title: "Waterfall - Decodium"
         color: "transparent"
+
+        // 1.0.180 — Drag handle per Frameless windows: usa native window
+        // manager (DragHandler.startSystemMove non blocca main thread).
+        DragHandler {
+            id: waterfallDragHandler
+            target: null
+            enabled: bridge ? bridge.uiFramelessPopouts : false
+            onActiveChanged: {
+                if (active) waterfallWindow.startSystemMove()
+            }
+        }
 
         // Position to right of main window initially
         x: mainWindow.x + mainWindow.width + 20
         y: mainWindow.y + 50
-        Component.onCompleted: mainWindow.restoreFloatingWindowState(waterfallWindow, "waterfallWindow", "waterfallDetached", "waterfallMinimized")
+
+        // 1.0.180 — Async restore della geometria con delay 150ms.
+        // Riduce stall startup su multi-monitor / DPI scaling complesso.
+        Timer {
+            id: waterfallWindowRestoreTimer
+            interval: 150
+            running: false
+            repeat: false
+            onTriggered: {
+                mainWindow.restoreFloatingWindowState(waterfallWindow, "waterfallWindow", "waterfallDetached", "waterfallMinimized")
+            }
+        }
+
+        Component.onCompleted: waterfallWindowRestoreTimer.start()
         onXChanged: mainWindow.scheduleWindowStateSave()
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
@@ -8910,9 +8976,23 @@ NumberAnimation {
         minimumWidth: 350
         minimumHeight: 250
         visible: false
-	        flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+	        // 1.0.180 — Frameless opzionale via bridge.uiFramelessPopouts
+	        flags: (bridge && bridge.uiFramelessPopouts)
+	               ? (Qt.Window | Qt.FramelessWindowHint)
+	               : (Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 		        title: "Full Spectrum - Decodium"
 	        color: "transparent"
+
+	        // 1.0.180 — Drag handle per Frameless windows: usa native window
+	        // manager (DragHandler.startSystemMove non blocca main thread).
+	        DragHandler {
+	            id: period1FloatingDragHandler
+	            target: null
+	            enabled: bridge ? bridge.uiFramelessPopouts : false
+	            onActiveChanged: {
+	                if (active) period1FloatingWindow.startSystemMove()
+	            }
+	        }
 	        readonly property bool compactColumns: width < 560
 	        readonly property int utcColumnWidth: compactColumns ? 66 : 84
 	        readonly property int dbColumnWidth: compactColumns ? 34 : 38
@@ -8927,7 +9007,19 @@ NumberAnimation {
 
 	        x: mainWindow.x + 100
         y: mainWindow.y + 150
-        Component.onCompleted: mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
+        // 1.0.180 — Async restore della geometria con delay 150ms.
+        // Riduce stall startup su multi-monitor / DPI scaling complesso.
+        Timer {
+            id: period1FloatingWindowRestoreTimer
+            interval: 150
+            running: false
+            repeat: false
+            onTriggered: {
+                mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
+            }
+        }
+
+        Component.onCompleted: period1FloatingWindowRestoreTimer.start()
         onXChanged: mainWindow.scheduleWindowStateSave()
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()

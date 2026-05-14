@@ -355,6 +355,11 @@ class DecodiumBridge : public QObject
     // 1.0.179 — Smooth Decode Flow scheduler
     Q_PROPERTY(bool smoothDecodeFlow READ smoothDecodeFlow WRITE setSmoothDecodeFlow NOTIFY smoothDecodeFlowChanged)
 
+    // 1.0.180 — UI Revolution: gate per effetti UI moderni
+    Q_PROPERTY(QString uiQuality READ uiQuality WRITE setUiQuality NOTIFY uiQualityChanged)
+    Q_PROPERTY(bool uiFramelessPopouts READ uiFramelessPopouts WRITE setUiFramelessPopouts NOTIFY uiFramelessPopoutsChanged)
+    Q_PROPERTY(QString uiStyle READ uiStyle WRITE setUiStyle NOTIFY uiStyleChanged)
+
 public:
     explicit DecodiumBridge(QObject* parent = nullptr);
     ~DecodiumBridge();
@@ -1037,6 +1042,10 @@ signals:
     void asyncTxEnabledChanged();
     void ft2ConservativeChanged();  // 1.0.174 — FT2 Weak-Signal Pack
     void smoothDecodeFlowChanged();  // 1.0.179 — Smooth Decode Flow
+    // 1.0.180
+    void uiQualityChanged();
+    void uiFramelessPopoutsChanged();
+    void uiStyleChanged();
     void dualCarrierEnabledChanged();
     void quickQsoEnabledChanged();
     void settingValueChanged(QString key, QVariant value);
@@ -1436,6 +1445,10 @@ private:
     QTimer*               m_decodeReleaseTimer {nullptr};
     int                   m_decodeReleaseChunkSize {1};
     qint64                m_lastReleaseSerial {-1};
+    // 1.0.180
+    QString m_uiQuality {QStringLiteral("Medium")};       // Low | Medium | High
+    bool    m_uiFramelessPopouts {false};
+    QString m_uiStyle {QStringLiteral("Default")};        // Default | FluentWinUI3 | Material | Universal
     // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
     // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
     int  m_currentPartnerSnrDb {127};
@@ -2047,6 +2060,14 @@ public:
     // interval adattivo. Default ON, auto-fallback su UI stall.
     Q_INVOKABLE bool smoothDecodeFlow() const { return m_smoothDecodeFlow; }
     Q_INVOKABLE void setSmoothDecodeFlow(bool v);
+
+    // 1.0.180 — UI Revolution
+    Q_INVOKABLE QString uiQuality() const { return m_uiQuality; }
+    Q_INVOKABLE void    setUiQuality(QString const& v);
+    Q_INVOKABLE bool    uiFramelessPopouts() const { return m_uiFramelessPopouts; }
+    Q_INVOKABLE void    setUiFramelessPopouts(bool v);
+    Q_INVOKABLE QString uiStyle() const { return m_uiStyle; }
+    Q_INVOKABLE void    setUiStyle(QString const& v);
 
     // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
     Q_INVOKABLE bool    startWebServer(int port = 8080);

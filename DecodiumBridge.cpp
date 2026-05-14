@@ -3499,6 +3499,47 @@ void DecodiumBridge::setSmoothDecodeFlow(bool v)
     }
 }
 
+// 1.0.180 — UI Revolution: setter per uiQuality (Low/Medium/High).
+// Persistito su QSettings "UI/Quality". Restart richiesto per alcune
+// componenti che leggono il valore solo a init (es. ShaderEffect chain).
+void DecodiumBridge::setUiQuality(QString const& v)
+{
+    QString const norm = v.trimmed();
+    if (norm != QStringLiteral("Low") && norm != QStringLiteral("Medium")
+        && norm != QStringLiteral("High")) return;
+    if (m_uiQuality == norm) return;
+    m_uiQuality = norm;
+    QSettings().setValue(QStringLiteral("UI/Quality"), norm);
+    emit uiQualityChanged();
+    bridgeLog(QStringLiteral("[UI] Quality = %1").arg(norm));
+}
+
+// 1.0.180 — UI Revolution: setter per uiFramelessPopouts (Spectrum/Waterfall
+// in modalita' detached senza decorazione frame OS). Persistito su QSettings.
+void DecodiumBridge::setUiFramelessPopouts(bool v)
+{
+    if (m_uiFramelessPopouts == v) return;
+    m_uiFramelessPopouts = v;
+    QSettings().setValue(QStringLiteral("UI/FramelessPopouts"), v);
+    emit uiFramelessPopoutsChanged();
+    bridgeLog(QStringLiteral("[UI] FramelessPopouts = %1").arg(v ? "ON" : "OFF"));
+}
+
+// 1.0.180 — UI Revolution: setter per uiStyle (selettore stile QML).
+// Persistito su QSettings "UI/Style"; richiede restart per applicare il
+// QQuickStyle::setStyle a freddo all'avvio successivo.
+void DecodiumBridge::setUiStyle(QString const& v)
+{
+    QString const norm = v.trimmed();
+    static QStringList const valid = { "Default", "FluentWinUI3", "Material", "Universal", "Fusion", "Basic", "Imagine" };
+    if (!valid.contains(norm)) return;
+    if (m_uiStyle == norm) return;
+    m_uiStyle = norm;
+    QSettings().setValue(QStringLiteral("UI/Style"), norm);
+    emit uiStyleChanged();
+    bridgeLog(QStringLiteral("[UI] Style = %1 (restart richiesto)").arg(norm));
+}
+
 // 1.0.179 — Helper: append silenzioso (no emit) di un decode map nel modello
 // flat. Usato dal path "legacy" di onFt8DecodeReady quando smooth flow OFF.
 void DecodiumBridge::appendDecodeMapToList(QVariantMap const& entry)
@@ -4624,6 +4665,18 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         QSettings s;
         m_smoothDecodeFlow = s.value(QStringLiteral("Decoder/SmoothDecodeFlow"),
                                      true).toBool();
+    }
+
+    // 1.0.180 — Carica preferenze UI da QSettings
+    {
+        QSettings s;
+        m_uiQuality          = s.value(QStringLiteral("UI/Quality"), "Medium").toString();
+        m_uiFramelessPopouts = s.value(QStringLiteral("UI/FramelessPopouts"), false).toBool();
+        m_uiStyle            = s.value(QStringLiteral("UI/Style"), "Default").toString();
+        bridgeLog(QStringLiteral("[UI] Init Quality=%1 FramelessPopouts=%2 Style=%3")
+                  .arg(m_uiQuality)
+                  .arg(m_uiFramelessPopouts ? "ON" : "OFF")
+                  .arg(m_uiStyle));
     }
 
     m_legacyStateTimer = new QTimer(this);

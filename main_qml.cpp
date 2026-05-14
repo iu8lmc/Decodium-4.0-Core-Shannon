@@ -14,6 +14,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickGraphicsConfiguration>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -582,8 +583,26 @@ int main(int argc, char* argv[])
     registerLegacySettingsStreamTypes();
     L("legacy metatypes OK");
 
-    QQuickStyle::setStyle("Material");
+    // 1.0.180 — UI Revolution: stile QML Quick Controls selezionabile via QSettings.
+    // Deve essere chiamato PRIMA della creazione di QGuiApplication per essere
+    // valido. FluentWinUI3 = aspetto Windows 11 nativo (Qt 6.7+). Fallback al
+    // default Material se invalid / non specificato.
+    {
+        QSettings s(QStringLiteral("Decodium"), QStringLiteral("Decodium3"));
+        QString const styleName = s.value(QStringLiteral("UI/Style"),
+                                          QStringLiteral("Material")).toString();
+        if (styleName.compare(QStringLiteral("Default"), Qt::CaseInsensitive) == 0) {
+            qInfo() << "[UI] QML style: <Qt default> (no override)";
+        } else {
+            QQuickStyle::setStyle(styleName);
+            qInfo() << "[UI] QML style:" << styleName;
+        }
+    }
     L("QQuickStyle OK");
+
+    // 1.0.180 — Per-monitor DPI v2 esplicito (gia' default Qt 6 ma chiaro)
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 
 #if !defined(Q_OS_WIN)
     if (qEnvironmentVariableIsSet("DECODIUM_GRAPHICS_BACKEND")
@@ -717,8 +736,15 @@ int main(int argc, char* argv[])
         backendMessage += qgetenv("QSG_RHI_BACKEND");
         L(backendMessage.constData());
     } else {
-        qputenv("QSG_RHI_BACKEND", "d3d11");
-        L("Qt Quick graphics backend defaulted to D3D11");
+        // 1.0.180 — Su Windows, suggerisce RHI D3D12 (Qt 6.6+) come backend
+        // grafico per ridurre overhead driver vs OpenGL legacy. Override
+        // utente: la presenza di QSG_RHI_BACKEND nell'environment prevale
+        // (gestito dal ramo else-if sopra).
+        if (qEnvironmentVariableIsEmpty("QSG_RHI_BACKEND")) {
+            qputenv("QSG_RHI_BACKEND", "d3d12");
+            qInfo() << "[UI] RHI backend hint: d3d12";
+            L("Qt Quick graphics backend defaulted to D3D12");
+        }
     }
     setWindowsAppUserModelId();
 #endif
@@ -726,6 +752,16 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
+
+    // 1.0.180 — Pipeline cache shader: build path here, apply via objectCreated
+    // (setGraphicsConfiguration is an instance method on QQuickWindow, must be
+    // called before the scene graph initialises — objectCreated is the right hook).
+    QString const pipelineCacheFile = []() -> QString {
+        QString const dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        QDir().mkpath(dir);
+        return dir + QStringLiteral("/qsg_pipeline_cache.bin");
+    }();
+    L(("Pipeline cache path: " + pipelineCacheFile.toLocal8Bit()).constData());
     ensureLegacySqliteDatabase();
     L((QByteArray("Qt version: ") + qVersion()).constData());
     L((QByteArray("OS: ") + QSysInfo::prettyProductName().toLocal8Bit()
@@ -993,6 +1029,20 @@ int main(int argc, char* argv[])
             qCritical("QML FAILED to create object from: %s", qPrintable(url.toString()));
         } else {
             qDebug("QML object created OK from: %s", qPrintable(url.toString()));
+        }
+    });
+
+    // 1.0.180 — Apply pipeline cache to each QQuickWindow before scene graph init.
+    // setGraphicsConfiguration is an instance method; objectCreated fires before
+    // the scene graph starts, so this is the correct hook per Qt docs.
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app,
+                     [&pipelineCacheFile](QObject *obj, const QUrl &) {
+        if (auto *win = qobject_cast<QQuickWindow *>(obj)) {
+            QQuickGraphicsConfiguration gc;
+            gc.setPipelineCacheSaveFile(pipelineCacheFile);
+            gc.setPipelineCacheLoadFile(pipelineCacheFile);
+            win->setGraphicsConfiguration(gc);
+            qInfo() << "[UI] Pipeline cache applied to window:" << pipelineCacheFile;
         }
     });
 
