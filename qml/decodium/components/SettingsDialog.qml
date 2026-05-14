@@ -2676,10 +2676,17 @@ Dialog {
                             id: uiStyleCombo
                             Layout.preferredWidth: 180
                             Layout.columnSpan: 1
-                            model: ["Default", "FluentWinUI3", "Material", "Universal", "Fusion", "Basic", "Imagine"]
+                            // 1.0.185 — Whitelist 4 stili customizable. "Default" rimosso
+                            // dal model: era un alias confondente perche' su Windows con
+                            // Qt 6.11 risolveva al native style non-customizable (warning
+                            // massivi + UI degradata). Material e' la prima voce, baseline
+                            // visiva storica Decodium (default fino al 1.0.179).
+                            model: ["Material", "FluentWinUI3", "Universal", "Fusion"]
                             currentIndex: {
                                 if (!bridge) return 0
-                                return Math.max(0, model.indexOf(bridge.uiStyle))
+                                // Default e' alias per Material, mostra Material
+                                let idx = model.indexOf(bridge.uiStyle)
+                                return idx < 0 ? 0 : idx
                             }
                             onActivated: {
                                 if (bridge) bridge.setUiStyle(model[currentIndex])
@@ -2687,7 +2694,13 @@ Dialog {
                             hoverEnabled: true
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
-                            ToolTip.text: qsTr("Selettore stile QML Quick Controls. FluentWinUI3 ha aspetto Windows 11 nativo ma non supporta SplitView/StackView (fallback automatico). Richiede restart Decodium.")
+                            ToolTip.text: qsTr(
+                                "Stile QML Quick Controls (richiede restart):\n" +
+                                "• Material (consigliato) — Google Material 3, customizable, default storico Decodium\n" +
+                                "• FluentWinUI3 — Windows 11 nativo (Mica/acrylic). Fallback automatico per SplitView/StackView.\n" +
+                                "• Universal — Microsoft Universal (WinPhone-style)\n" +
+                                "• Fusion — cross-platform desktop neutro"
+                            )
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 

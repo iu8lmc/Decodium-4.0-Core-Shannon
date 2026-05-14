@@ -3531,7 +3531,12 @@ void DecodiumBridge::setUiFramelessPopouts(bool v)
 void DecodiumBridge::setUiStyle(QString const& v)
 {
     QString const norm = v.trimmed();
-    static QStringList const valid = { "Default", "FluentWinUI3", "Material", "Universal", "Fusion", "Basic", "Imagine" };
+    // 1.0.185 — Whitelist stili ridotta a 5. Imagine rimosso (binding loop
+    // ScrollBar/Button + asset webp mancanti); Basic rimosso (problemi
+    // cosmetici minori). Migrazione automatica nel costruttore.
+    // 1.0.185 — "Default" rimosso dalla whitelist del setter: e' un alias gestito
+    // alla lettura (vedi costruttore) -> il setter non deve accettarlo come valore.
+    static QStringList const valid = { "FluentWinUI3", "Material", "Universal", "Fusion" };
     if (!valid.contains(norm)) return;
     if (m_uiStyle == norm) return;
     m_uiStyle = norm;
@@ -4672,7 +4677,28 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         QSettings s;
         m_uiQuality          = s.value(QStringLiteral("UI/Quality"), "Medium").toString();
         m_uiFramelessPopouts = s.value(QStringLiteral("UI/FramelessPopouts"), false).toBool();
-        m_uiStyle            = s.value(QStringLiteral("UI/Style"), "Default").toString();
+        m_uiStyle            = s.value(QStringLiteral("UI/Style"), "Material").toString();
+
+        // 1.0.185 — Migrazione: alias "Default" -> "Material" + fallback per stili
+        // deprecati (Imagine, Basic) o sconosciuti. Material e' baseline customizable.
+        // Motivo alias: su Windows con Qt 6.11 il fallback Qt nativo risolve al
+        // Windows Native style che NON permette customization di background/
+        // contentItem/indicator (Decodium fa molte customizations -> warning
+        // massivi + UI degradata).
+        static QStringList const supportedStyles = {
+            QStringLiteral("FluentWinUI3"),
+            QStringLiteral("Material"),
+            QStringLiteral("Universal"),
+            QStringLiteral("Fusion")
+        };
+        if (m_uiStyle.compare(QStringLiteral("Default"), Qt::CaseInsensitive) == 0
+            || !supportedStyles.contains(m_uiStyle)) {
+            bridgeLog(QStringLiteral("[UI] Style \"%1\" migrato a \"Material\" "
+                                     "(Default su Windows risolve a native non-customizable)").arg(m_uiStyle));
+            m_uiStyle = QStringLiteral("Material");
+            s.setValue(QStringLiteral("UI/Style"), m_uiStyle);
+        }
+
         bridgeLog(QStringLiteral("[UI] Init Quality=%1 FramelessPopouts=%2 Style=%3")
                   .arg(m_uiQuality)
                   .arg(m_uiFramelessPopouts ? "ON" : "OFF")

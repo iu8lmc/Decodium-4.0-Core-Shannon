@@ -807,13 +807,34 @@ int main(int argc, char* argv[])
         QSettings s;  // default scope: IU8LMC / Decodium
         QString const styleName = s.value(QStringLiteral("UI/Style"),
                                           QStringLiteral("Default")).toString();
-        if (styleName.compare(QStringLiteral("Default"), Qt::CaseInsensitive) == 0) {
-            qInfo() << "[UI] QML style: <Qt default> (no override)";
-        } else {
-            QQuickStyle::setStyle(styleName);
-            qInfo() << "[UI] QML style:" << styleName;
+
+        // 1.0.185 — Whitelist stili supportati. Imagine e Basic rimossi (binding
+        // loop / asset mancanti). "Default" diventa alias per "Material": motivo
+        // e' che su Windows con Qt 6.11 il fallback Qt nativo risolve al Windows
+        // Native style che NON permette customization di background/contentItem/
+        // indicator (Decodium fa molte customizations -> warning massivi + UI
+        // degradata). Material e' l'unico stile customizable che Decodium aspetta
+        // come baseline visiva storica (default fino al 1.0.179). Quindi ora
+        // SEMPRE QQuickStyle::setStyle viene chiamato, mai lasciato a Qt fallback.
+        static QStringList const supportedStyles = {
+            QStringLiteral("FluentWinUI3"),
+            QStringLiteral("Material"),
+            QStringLiteral("Universal"),
+            QStringLiteral("Fusion")
+        };
+        QString effectiveStyle = styleName;
+        if (effectiveStyle.compare(QStringLiteral("Default"), Qt::CaseInsensitive) == 0
+            || !supportedStyles.contains(effectiveStyle)) {
+            if (!supportedStyles.contains(effectiveStyle)
+                && effectiveStyle.compare(QStringLiteral("Default"), Qt::CaseInsensitive) != 0) {
+                qWarning() << "[UI] Style not in whitelist:" << effectiveStyle
+                           << "-> fallback to Material";
+            }
+            effectiveStyle = QStringLiteral("Material");
         }
-        L(QStringLiteral("QQuickStyle resolved: %1").arg(styleName).toUtf8().constData());
+        QQuickStyle::setStyle(effectiveStyle);
+        qInfo() << "[UI] QML style:" << effectiveStyle;
+        L(QStringLiteral("QQuickStyle resolved: %1").arg(effectiveStyle).toUtf8().constData());
     }
 
     QCommandLineParser parser;
