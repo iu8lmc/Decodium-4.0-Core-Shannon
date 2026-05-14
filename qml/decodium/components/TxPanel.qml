@@ -515,34 +515,32 @@ Item {
                             }
                         }
 
-                        Rectangle {
+                        // 1.0.182 \u2014 Button QQC2-native restyle
+                        Button {
+                            id: autoSeqBtn2
                             width: txPanel.toolbarButtonWidth
                             height: txPanel.toolbarButtonHeight
-                            radius: 5
-                            color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                            border.color: autoSeqBtn2.checked ? primaryBlue : glassBorder
-                            border.width: autoSeqBtn2.checked ? 2 : 1
-
-                            Button {
-                                id: autoSeqBtn2
-                                anchors.fill: parent
-                                checkable: true
-                                checked: engine ? engine.autoSeq : false
-                                padding: 0
-                                onCheckedChanged: if (engine) engine.autoSeq = checked
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "SEQ"
-                                    glyph: "\u21BB"
-                                    foreground: autoSeqBtn2.checked ? primaryBlue : textSecondary
-                                    glyphSize: txPanel.toolbarGlyphSize
-                                    labelSize: txPanel.toolbarLabelSize
-                                    boldLabel: autoSeqBtn2.checked
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("Auto Sequence")
-                                ToolTip.delay: 500
+                            checkable: true
+                            checked: engine ? engine.autoSeq : false
+                            padding: 0
+                            onCheckedChanged: if (engine) engine.autoSeq = checked
+                            background: Rectangle {
+                                radius: 5
+                                color: autoSeqBtn2.checked ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                                border.color: autoSeqBtn2.checked ? primaryBlue : glassBorder
+                                border.width: autoSeqBtn2.checked ? 2 : 1
                             }
+                            contentItem: ToolbarButtonContent {
+                                label: "SEQ"
+                                glyph: "\u21BB"
+                                foreground: autoSeqBtn2.checked ? primaryBlue : textSecondary
+                                glyphSize: txPanel.toolbarGlyphSize
+                                labelSize: txPanel.toolbarLabelSize
+                                boldLabel: autoSeqBtn2.checked
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Auto Sequence")
+                            ToolTip.delay: 500
                         }
 
                         Rectangle {
@@ -575,44 +573,42 @@ Item {
                             }
                         }
 
-                        Rectangle {
+                        // 1.0.182 \u2014 Button QQC2-native restyle
+                        Button {
+                            id: txEnableBtn
+                            property bool txActive: engine ? engine.txEnabled : false
                             width: txPanel.toolbarButtonWidth
                             height: txPanel.toolbarButtonHeight
-                            radius: 5
-                            color: txEnableBtn.txActive ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                            border.color: txEnableBtn.txActive ? errorRed : glassBorder
-                            border.width: txEnableBtn.txActive ? 2 : 1
-
-                            Button {
-                                id: txEnableBtn
-                                property bool txActive: engine ? engine.txEnabled : false
-                                anchors.fill: parent
-                                padding: 0
-                                onClicked: {
-                                    if (!engine) {
-                                        return
-                                    }
-                                    if (!engine.txEnabled) {
-                                        engine.txEnabled = true
-                                    } else if (engine.autoCqRepeat) {
-                                        return
-                                    } else {
-                                        engine.haltWithReason("qml-tx-enable-toggle")
-                                    }
+                            padding: 0
+                            onClicked: {
+                                if (!engine) {
+                                    return
                                 }
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "TX"
-                                    glyph: "\u25B2"
-                                    foreground: txEnableBtn.txActive ? errorRed : textSecondary
-                                    glyphSize: txPanel.toolbarGlyphSize
-                                    labelSize: txPanel.toolbarLabelSize
-                                    boldLabel: true
+                                if (!engine.txEnabled) {
+                                    engine.txEnabled = true
+                                } else if (engine.autoCqRepeat) {
+                                    return
+                                } else {
+                                    engine.haltWithReason("qml-tx-enable-toggle")
                                 }
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("Enable TX")
-                                ToolTip.delay: 500
                             }
+                            background: Rectangle {
+                                radius: 5
+                                color: txEnableBtn.txActive ? Qt.rgba(244/255, 67/255, 54/255, 0.2) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                                border.color: txEnableBtn.txActive ? errorRed : glassBorder
+                                border.width: txEnableBtn.txActive ? 2 : 1
+                            }
+                            contentItem: ToolbarButtonContent {
+                                label: "TX"
+                                glyph: "\u25B2"
+                                foreground: txEnableBtn.txActive ? errorRed : textSecondary
+                                glyphSize: txPanel.toolbarGlyphSize
+                                labelSize: txPanel.toolbarLabelSize
+                                boldLabel: true
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Enable TX")
+                            ToolTip.delay: 500
                         }
 
                         Rectangle {
@@ -649,69 +645,65 @@ Item {
                             }
                         }
 
-                        Rectangle {
+                        // 1.0.182 — Button QQC2-native restyle
+                        Button {
+                            id: autoCqButton
                             width: txPanel.toolbarWideButtonWidth
                             height: txPanel.toolbarButtonHeight
-                            radius: 5
-                            color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
-                            border.color: engine && engine.autoCqRepeat ? successGreen : Qt.alpha(textPrimary, 0.2)
-                            border.width: engine && engine.autoCqRepeat ? 2 : 1
+                            padding: 0
+                            background: Rectangle {
+                                radius: 5
+                                color: engine && engine.autoCqRepeat ? Qt.alpha(successGreen, 0.3) : Qt.alpha(textPrimary, 0.05)
+                                border.color: engine && engine.autoCqRepeat ? successGreen : Qt.alpha(textPrimary, 0.2)
+                                border.width: engine && engine.autoCqRepeat ? 2 : 1
+                            }
+                            contentItem: ToolbarButtonContent {
+                                label: "ACQ"
+                                glyph: "⟳"
+                                foreground: engine && engine.autoCqRepeat ? successGreen : textPrimary
+                                glyphSize: txPanel.toolbarGlyphSize
+                                labelSize: txPanel.toolbarLabelSize
+                                boldLabel: engine && engine.autoCqRepeat
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Auto CQ Repeat\nCall CQ automatically until a reply is received")
+                            ToolTip.delay: 500
 
-                            Button {
-                                id: autoCqButton
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "ACQ"
-                                    glyph: "⟳"
-                                    foreground: engine && engine.autoCqRepeat ? successGreen : textPrimary
-                                    glyphSize: txPanel.toolbarGlyphSize
-                                    labelSize: txPanel.toolbarLabelSize
-                                    boldLabel: engine && engine.autoCqRepeat
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("Auto CQ Repeat\nCall CQ automatically until a reply is received")
-                                ToolTip.delay: 500
-
-                                onClicked: {
-                                    if (engine) {
-                                        if (!engine.autoSeq && !engine.autoCqRepeat)
-                                            engine.autoSeq = true
-                                        engine.autoCqRepeat = !engine.autoCqRepeat
-                                    }
+                            onClicked: {
+                                if (engine) {
+                                    if (!engine.autoSeq && !engine.autoCqRepeat)
+                                        engine.autoSeq = true
+                                    engine.autoCqRepeat = !engine.autoCqRepeat
                                 }
                             }
                         }
 
-                        Rectangle {
+                        // 1.0.182 \u2014 Button QQC2-native restyle
+                        Button {
+                            id: txPhaseButton
                             width: txPanel.toolbarWideButtonWidth
                             height: txPanel.toolbarButtonHeight
-                            radius: 5
                             visible: engine && engine.mode !== "FT2"
-                            color: engine && engine.txPeriod === 1 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.28)
-                                                                   : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
-                            border.color: engine && engine.txPeriod === 1 ? primaryBlue : glassBorder
-                            border.width: engine && engine.txPeriod === 1 ? 2 : 1
-
-                            Button {
-                                id: txPhaseButton
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: engine && engine.txPeriod === 1 ? "1ST" : "2ND"
-                                    glyph: engine && engine.txPeriod === 1 ? "\u2460" : "\u2461"
-                                    foreground: engine && engine.txPeriod === 1 ? primaryBlue : textPrimary
-                                    glyphSize: txPanel.toolbarGlyphSize
-                                    labelSize: txPanel.toolbarLabelSize
-                                    boldLabel: true
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("TX slot\n1st: :00/:30\n2nd: :15/:45")
-                                ToolTip.delay: 500
-                                onClicked: if (engine) engine.txPeriod = engine.txPeriod === 1 ? 0 : 1
+                            padding: 0
+                            background: Rectangle {
+                                radius: 5
+                                color: engine && engine.txPeriod === 1 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.28)
+                                                                       : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.1)
+                                border.color: engine && engine.txPeriod === 1 ? primaryBlue : glassBorder
+                                border.width: engine && engine.txPeriod === 1 ? 2 : 1
                             }
+                            contentItem: ToolbarButtonContent {
+                                label: engine && engine.txPeriod === 1 ? "1ST" : "2ND"
+                                glyph: engine && engine.txPeriod === 1 ? "\u2460" : "\u2461"
+                                foreground: engine && engine.txPeriod === 1 ? primaryBlue : textPrimary
+                                glyphSize: txPanel.toolbarGlyphSize
+                                labelSize: txPanel.toolbarLabelSize
+                                boldLabel: true
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("TX slot\n1st: :00/:30\n2nd: :15/:45")
+                            ToolTip.delay: 500
+                            onClicked: if (engine) engine.txPeriod = engine.txPeriod === 1 ? 0 : 1
                         }
 
                         Rectangle {
@@ -744,38 +736,36 @@ Item {
                             }
                         }
 
-                        Rectangle {
+                        // 1.0.182 \u2014 Button QQC2-native restyle
+                        Button {
+                            id: tuneButton
+                            property bool isTuning: engine && engine.tuning
                             width: txPanel.toolbarWideButtonWidth
                             height: txPanel.toolbarButtonHeight
-                            radius: 5
-                            color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
-                            border.color: warningOrange
-                            border.width: tuneButton.isTuning ? 2 : 1
-
-                            Button {
-                                id: tuneButton
-                                anchors.fill: parent
-                                property bool isTuning: engine && engine.tuning
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: tuneButton.isTuning ? "STOP" : "TUNE"
-                                    glyph: "\u266B"
-                                    foreground: warningOrange
-                                    glyphSize: txPanel.toolbarGlyphSize
-                                    labelSize: txPanel.toolbarLabelSize
-                                    boldLabel: true
-                                }
-                                onClicked: {
-                                    if (engine) {
-                                        if (engine.tuning) engine.stopTune()
-                                        else engine.startTune()
-                                    }
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("Tune")
-                                ToolTip.delay: 500
+                            padding: 0
+                            background: Rectangle {
+                                radius: 5
+                                color: tuneButton.isTuning ? Qt.alpha(warningOrange, 0.5) : Qt.alpha(warningOrange, 0.2)
+                                border.color: warningOrange
+                                border.width: tuneButton.isTuning ? 2 : 1
                             }
+                            contentItem: ToolbarButtonContent {
+                                label: tuneButton.isTuning ? "STOP" : "TUNE"
+                                glyph: "\u266B"
+                                foreground: warningOrange
+                                glyphSize: txPanel.toolbarGlyphSize
+                                labelSize: txPanel.toolbarLabelSize
+                                boldLabel: true
+                            }
+                            onClicked: {
+                                if (engine) {
+                                    if (engine.tuning) engine.stopTune()
+                                    else engine.startTune()
+                                }
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Tune")
+                            ToolTip.delay: 500
                         }
 
                         Rectangle {
@@ -806,34 +796,32 @@ Item {
                             }
                         }
 
-                        Rectangle {
+                        // 1.0.182 \u2014 Button QQC2-native restyle
+                        Button {
+                            id: haltButton
                             width: txPanel.toolbarWideButtonWidth
                             height: txPanel.toolbarButtonHeight
-                            radius: 5
-                            color: haltButton.hovered || (engine && engine.transmitting)
-                                   ? Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.92)
-                                   : Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.78)
-                            border.color: Qt.lighter(errorRed, 1.2)
-                            border.width: engine && engine.transmitting ? 2 : 1
-
-                            Button {
-                                id: haltButton
-                                anchors.fill: parent
-                                padding: 0
-                                background: Rectangle { color: "transparent" }
-                                contentItem: ToolbarButtonContent {
-                                    label: "HALT"
-                                    glyph: "\u25A0"
-                                    foreground: "#FFF8F6"
-                                    glyphSize: txPanel.toolbarGlyphSize
-                                    labelSize: txPanel.toolbarLabelSize
-                                    boldLabel: true
-                                }
-                                onClicked: if (engine) engine.haltWithReason("qml-halt-button")
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTr("Halt TX")
-                                ToolTip.delay: 500
+                            padding: 0
+                            background: Rectangle {
+                                radius: 5
+                                color: haltButton.hovered || (engine && engine.transmitting)
+                                       ? Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.92)
+                                       : Qt.rgba(errorRed.r, errorRed.g, errorRed.b, 0.78)
+                                border.color: Qt.lighter(errorRed, 1.2)
+                                border.width: engine && engine.transmitting ? 2 : 1
                             }
+                            contentItem: ToolbarButtonContent {
+                                label: "HALT"
+                                glyph: "\u25A0"
+                                foreground: "#FFF8F6"
+                                glyphSize: txPanel.toolbarGlyphSize
+                                labelSize: txPanel.toolbarLabelSize
+                                boldLabel: true
+                            }
+                            onClicked: if (engine) engine.haltWithReason("qml-halt-button")
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Halt TX")
+                            ToolTip.delay: 500
                         }
 
                         AsyncModeWidget {

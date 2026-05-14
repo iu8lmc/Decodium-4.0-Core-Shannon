@@ -232,19 +232,22 @@ Item {
             }
         }
 
-        // 1.0.179 — Smooth Decode Flow opt-in. Lo scheduler C++ spalma il
-        // rilascio a chunk 1-2 row con interval 80-200ms, quindi le transitions
-        // add/addDisplaced sono SAFE (no piu' 20 fade simultanei come in 1.0.125).
-        // Attive solo se bridge.smoothDecodeFlow === true.
+        // 1.0.179/1.0.182 — Smooth Decode Flow opt-in. Lo scheduler C++ spalma
+        // il rilascio a chunk 1-2 row con interval 80-200ms, quindi le
+        // transitions add/addDisplaced sono SAFE (no piu' 20 fade simultanei
+        // come in 1.0.125). Attive solo se bridge.smoothDecodeFlow.
+        // 1.0.182 UI Visual Boost: usiamo OpacityAnimator + YAnimator (render
+        // thread) invece di NumberAnimation (main thread). Cosi' il fade resta
+        // fluido anche durante stall del main thread (CPU pressure decode).
+        // Doppio gate: anche bridge.uiQuality !== "Low" per skip su PC modesti.
         add: Transition {
-            enabled: bridge ? bridge.smoothDecodeFlow : false
-            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0
+            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+            OpacityAnimator { from: 0.0; to: 1.0
                               duration: 100; easing.type: Easing.OutQuad }
         }
         addDisplaced: Transition {
-            enabled: bridge ? bridge.smoothDecodeFlow : false
-            NumberAnimation { properties: "y"; duration: 100
-                              easing.type: Easing.OutQuad }
+            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+            YAnimator { duration: 100; easing.type: Easing.OutQuad }
         }
     }
 }

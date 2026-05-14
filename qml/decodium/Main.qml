@@ -1311,6 +1311,22 @@ ApplicationWindow {
         }
     }
 
+    // 1.0.182 — UI Visual Boost: gradient sottile theme-aware sul background
+    // ApplicationWindow root. Gated su bridge.uiQuality !== "Low" per
+    // risparmiare GPU su PC modesti. Effetto "vetro" coerente con i Glass
+    // panel esistenti. Usa palette themeManager.
+    Rectangle {
+        id: appBackgroundGradient
+        anchors.fill: parent
+        z: -100  // sotto a TUTTO
+        visible: bridge && bridge.uiQuality !== "Low"
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: (bridge && bridge.themeManager && bridge.themeManager.isLightTheme) ? Qt.lighter(bgDeep, 1.08) : Qt.darker(bgDeep, 1.20) }
+            GradientStop { position: 0.5; color: bgDeep }
+            GradientStop { position: 1.0; color: (bridge && bridge.themeManager && bridge.themeManager.isLightTheme) ? Qt.darker(bgDeep, 1.05) : Qt.darker(bgDeep, 1.10) }
+        }
+    }
+
     // ========== SPLASH SCREEN ==========
     Rectangle {
         id: splashOverlay
