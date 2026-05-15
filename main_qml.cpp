@@ -87,6 +87,10 @@ static void L(const char* msg) {
 
 static std::atomic_bool g_shuttingDown {false};
 
+#ifdef Q_OS_WIN
+static std::atomic_bool g_windowsD3d12DeviceFailed {false};
+#endif
+
 static void writeStartupLogLine(const QByteArray& logPath, const QByteArray& msg)
 {
     FILE* f = fopen(logPath.constData(), "a");
@@ -296,6 +300,44 @@ static void writeSlowQmlStartupFlag(const QByteArray& flagPath, const QByteArray
     flagFile.write("\n");
 }
 
+static QByteArray readSmallTextFile(const QString& path, qint64 maxBytes = 4096)
+{
+    QFile file {path};
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+
+    return file.read(maxBytes);
+}
+
+static QByteArray graphicsStartupFlagBackend(const QString& path)
+{
+    QByteArray const content = readSmallTextFile(path).trimmed().toLower();
+    for (QByteArray const& line : content.split('\n')) {
+        QByteArray trimmed = line.trimmed();
+        if (trimmed.startsWith("backend="))
+            return trimmed.mid(int(sizeof("backend=") - 1)).trimmed();
+    }
+    return {};
+}
+
+static void writeWindowsGraphicsStartupFlag(const QString& flagPath,
+                                            const QByteArray& backend,
+                                            const QByteArray& reason)
+{
+    QFile flagFile {flagPath};
+    if (!flagFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return;
+
+    if (!backend.isEmpty()) {
+        flagFile.write("backend=");
+        flagFile.write(backend);
+        flagFile.write("\n");
+    }
+    flagFile.write("reason=");
+    flagFile.write(reason);
+    flagFile.write("\n");
+}
+
 static void removeFileIfExists(const QString& path)
 {
     if (QFile::exists(path))
@@ -492,6 +534,17 @@ static void qtMsgHandler(QtMsgType, const QMessageLogContext&, const QString& ms
     if (msg.contains("Main window closing - shutting down application")) {
         g_shuttingDown.store(true, std::memory_order_relaxed);
     }
+#ifdef Q_OS_WIN
+    if (msg.contains(QStringLiteral("Failed to create D3D12 device"), Qt::CaseInsensitive)
+        || (msg.contains(QStringLiteral("D3D12"), Qt::CaseInsensitive)
+            && msg.contains(QStringLiteral("0x887a0004"), Qt::CaseInsensitive))) {
+        g_windowsD3d12DeviceFailed.store(true, std::memory_order_relaxed);
+        writeWindowsGraphicsStartupFlag(
+            graphicsStartupPendingFlagPath(),
+            QByteArrayLiteral("d3d12"),
+            QByteArrayLiteral("D3D12 device creation failed; retry with D3D11 hardware on next launch"));
+    }
+#endif
     if (g_shuttingDown.load(std::memory_order_relaxed) && isIgnorableShutdownQmlMessage(msg))
         return;
     L(msg.toLocal8Bit().constData());
@@ -692,11 +745,31 @@ int main(int argc, char* argv[])
         || hasCommandLineSwitch(argc, argv, "--disable-gpu")
         || hasCommandLineSwitch(argc, argv, "--software-renderer");
     bool const pendingGraphicsStartupMarker = QFile::exists(graphicsStartupPendingFlag);
+    QByteArray const pendingGraphicsBackend =
+        pendingGraphicsStartupMarker ? graphicsStartupFlagBackend(graphicsStartupPendingFlag) : QByteArray {};
+    bool const pendingGraphicsWasD3d11 =
+        pendingGraphicsBackend == QByteArrayLiteral("d3d11");
+    bool const explicitGraphicsBackend =
+        !decodiumGraphicsBackend.isEmpty()
+        || !requestedRhiBackend.isEmpty()
+        || !requestedQuickBackend.isEmpty();
+    bool const slowQmlStartupMarker = QFile::exists(slowQmlStartupFlag);
     bool const previousSlowQmlStartup = previousStartupLogShowsSlowQml();
+    bool const automaticD3d11Fallback =
+        !commandLineResetSafeGraphics
+        && !pendingGraphicsWasD3d11
+        && (pendingGraphicsStartupMarker
+            || slowQmlStartupMarker
+            || previousSlowQmlStartup)
+        && !envSafeGraphics
+        && !commandLineSafeGraphics
+        && !backendRequestsSoftware
+        && !explicitGraphicsBackend;
     bool const autoSafeGraphics =
         !commandLineResetSafeGraphics
-        && (QFile::exists(slowQmlStartupFlag)
-            || pendingGraphicsStartupMarker
+        && !automaticD3d11Fallback
+        && (slowQmlStartupMarker
+            || (pendingGraphicsStartupMarker && pendingGraphicsWasD3d11)
             || previousSlowQmlStartup);
     bool const automaticSafeGraphics =
         autoSafeGraphics
@@ -723,6 +796,15 @@ int main(int argc, char* argv[])
         } else {
             L("Qt Quick safe graphics enabled: D3D11 WARP software renderer");
         }
+    } else if (automaticD3d11Fallback) {
+        qputenv("QSG_RHI_BACKEND", "d3d11");
+        qunsetenv("QSG_RHI_PREFER_SOFTWARE_RENDERER");
+        if (requestedQuickBackend.isEmpty() && qgetenv("QT_OPENGL").trimmed().toLower() == "software") {
+            qunsetenv("QT_OPENGL");
+        }
+        L(("Qt Quick graphics auto-fallback after previous D3D12 startup/device problem: "
+           "using D3D11 hardware renderer; marker="
+           + graphicsStartupPendingFlag.toLocal8Bit()).constData());
     } else if (qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
         QByteArray backendMessage("Qt Quick graphics backend from environment: ");
         backendMessage += qgetenv("QSG_RHI_BACKEND");
@@ -1102,9 +1184,21 @@ int main(int argc, char* argv[])
 #ifdef Q_OS_WIN
     slowQmlStartupFlagBytes = slowQmlStartupFlag.toLocal8Bit();
     if (!safeGraphicsRequested) {
-        QByteArray const pendingReason(
-            "Windows hardware graphics startup did not complete; use safe graphics on next launch");
-        writeSlowQmlStartupFlag(graphicsStartupPendingFlag.toLocal8Bit(), pendingReason);
+        QByteArray pendingBackend = qEnvironmentVariableIsSet("QSG_RHI_BACKEND")
+            ? qgetenv("QSG_RHI_BACKEND").trimmed().toLower()
+            : QByteArrayLiteral("auto");
+        QByteArray pendingReason;
+        if (pendingBackend == QByteArrayLiteral("d3d11")) {
+            pendingReason = QByteArrayLiteral(
+                "Windows D3D11 hardware graphics startup did not complete; use safe graphics on next launch");
+        } else if (pendingBackend == QByteArrayLiteral("d3d12")) {
+            pendingReason = QByteArrayLiteral(
+                "Windows D3D12 hardware graphics startup did not complete; retry with D3D11 hardware on next launch");
+        } else {
+            pendingReason = QByteArrayLiteral(
+                "Windows hardware graphics startup did not complete; retry with D3D11 hardware on next launch");
+        }
+        writeWindowsGraphicsStartupFlag(graphicsStartupPendingFlag, pendingBackend, pendingReason);
         L(("Windows hardware graphics startup marker written: "
            + graphicsStartupPendingFlag.toLocal8Bit()).constData());
     }
@@ -1188,17 +1282,26 @@ int main(int argc, char* argv[])
         logFirstQuickWindowGraphicsApi(engine, "event loop start");
     });
 #ifdef Q_OS_WIN
-    if (!safeGraphicsRequested || automaticSafeGraphics) {
+    if (!safeGraphicsRequested || automaticSafeGraphics || automaticD3d11Fallback) {
         QTimer::singleShot(8000, &app, [graphicsStartupPendingFlag,
                                         slowQmlStartupFlag,
-                                        automaticSafeGraphics] {
+                                        automaticSafeGraphics,
+                                        automaticD3d11Fallback] {
             if (QFile::exists(graphicsStartupPendingFlag)) {
-                QFile::remove(graphicsStartupPendingFlag);
-                L("Windows graphics startup completed; startup marker cleared");
+                if (g_windowsD3d12DeviceFailed.load(std::memory_order_relaxed)) {
+                    L("Windows D3D12 device failure observed; keeping graphics startup marker for D3D11 fallback on next launch");
+                } else {
+                    QFile::remove(graphicsStartupPendingFlag);
+                    L("Windows graphics startup completed; startup marker cleared");
+                }
             }
             if (automaticSafeGraphics && QFile::exists(slowQmlStartupFlag)) {
                 QFile::remove(slowQmlStartupFlag);
                 L("Windows automatic safe graphics marker cleared after stable startup");
+            }
+            if (automaticD3d11Fallback && QFile::exists(slowQmlStartupFlag)) {
+                QFile::remove(slowQmlStartupFlag);
+                L("Windows automatic D3D11 fallback startup stable; slow-startup marker cleared");
             }
         });
     }
