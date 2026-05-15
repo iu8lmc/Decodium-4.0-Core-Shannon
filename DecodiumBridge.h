@@ -951,6 +951,10 @@ public:
     // slope+intercept alla frequenza prima di scriverla al rig. Fast path
     // se entrambi 0 (return hz invariata).
     double applyFrequencyCalibration(double hz) const;
+    // 1.0.194 — Station Frequency Offset apply: per-band offset (additivo)
+    // dalle Station Frequencies (antenna offsets, sub-band correction).
+    // Ritorna 0 se la freq e' OOB o se non c'e' record per quella banda.
+    double stationOffsetForFrequencyHz(double hz) const;
     Q_INVOKABLE QVariantMap pendingLogQsoPreview() const;
     Q_INVOKABLE QStringList satelliteOptions() const;
     Q_INVOKABLE QStringList satModeOptions() const;

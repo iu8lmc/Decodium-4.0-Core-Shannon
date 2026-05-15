@@ -13564,25 +13564,50 @@ void DecodiumBridge::setFrequencyCalibrationInterceptHz(double value)
     emit settingValueChanged(QStringLiteral("CalibrationIntercept"), value);
 }
 
-// 1.0.192 — Completamento Frequency Calibration: applica linearmente
-// la correzione di drift conoscuto del rig. Formula:
-//   hz_corrected = hz + slope_ppm * hz * 1e-6 + intercept_Hz
-// Skip se entrambi 0 (no-op overhead minimo, fast path).
-// Log esplicito se applicato per audit/diagnostic.
+// 1.0.194 — Station Frequency Offset apply: per-band offset (additivo)
+// dalle Station Frequencies (antenna offsets, sub-band correction).
+// Lookup banda da freq via Bands::find, poi cerca record matching nella
+// tabella `stations` (QSettings legacy ini). 0 se OOB o no match.
+double DecodiumBridge::stationOffsetForFrequencyHz(double hz) const
+{
+    Bands bands;
+    QString const bandName = bands.find(static_cast<Radio::Frequency>(hz));
+    if (bandName.isEmpty()) return 0.0;
+    QVariant const raw = readSettingFromLegacyIni(QStringLiteral("stations"));
+    if (!raw.isValid()) return 0.0;
+    StationList::Stations const stations = raw.value<StationList::Stations>();
+    for (StationList::Station const& s : stations) {
+        if (s.band_name_ == bandName) {
+            return static_cast<double>(s.offset_);
+        }
+    }
+    return 0.0;
+}
+
+// 1.0.192/194 — Completamento Frequency Calibration + Station Offset chain:
+//   step 1: applica per-band station offset (antenna/sub-band correction)
+//   step 2: applica global slope+intercept (drift conoscuto rig)
+// Formula finale:
+//   hz_corrected = (hz + station_offset_for_band(hz))
+//                + slope_ppm * (hz + station_offset) * 1e-6 + intercept_Hz
+// Skip path se tutto 0 (no-op overhead minimo).
 double DecodiumBridge::applyFrequencyCalibration(double hz) const
 {
     double const slope = frequencyCalibrationSlopePpm();
     double const intercept = frequencyCalibrationInterceptHz();
-    if (qFuzzyIsNull(slope) && qFuzzyIsNull(intercept)) {
+    double const stationOffset = stationOffsetForFrequencyHz(hz);
+    if (qFuzzyIsNull(slope) && qFuzzyIsNull(intercept) && qFuzzyIsNull(stationOffset)) {
         return hz;
     }
-    double const corrected = hz + slope * hz * 1e-6 + intercept;
+    double const withStation = hz + stationOffset;
+    double const corrected = withStation + slope * withStation * 1e-6 + intercept;
     // Log solo se delta significativo (>0.5 Hz) per evitare spam su slope ~0
     if (qAbs(corrected - hz) > 0.5) {
-        bridgeLog(QStringLiteral("[CAT-CAL] slope=%1ppm intercept=%2Hz: "
-                                 "requested=%3 → corrected=%4 (delta=%5Hz)")
+        bridgeLog(QStringLiteral("[CAT-CAL] slope=%1ppm intercept=%2Hz "
+                                 "stationOffset=%3Hz: requested=%4 → corrected=%5 (delta=%6Hz)")
                       .arg(slope, 0, 'f', 3)
                       .arg(intercept, 0, 'f', 1)
+                      .arg(stationOffset, 0, 'f', 1)
                       .arg(hz, 0, 'f', 1)
                       .arg(corrected, 0, 'f', 1)
                       .arg(corrected - hz, 0, 'f', 2));
