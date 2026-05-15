@@ -236,7 +236,11 @@ int HRDTransceiver::do_start ()
 
   if (wrapped_) wrapped_->start (0);
 
-  auto server_details = network_server_lookup (server_, 7809u);
+  // HRD's TCP server on Windows is normally IPv4-only even when "localhost"
+  // resolves to ::1 first. Keep this aligned with the diagnostic probe and
+  // DXLab, otherwise Decodium can try a healthy HRD install through the wrong
+  // loopback family.
+  auto server_details = network_server_lookup (server_, 7809u, QHostAddress::LocalHost, QAbstractSocket::IPv4Protocol);
   if (!hrd_)
     {
       hrd_ = new QTcpSocket {this}; // QObject takes ownership
@@ -1471,7 +1475,14 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
           reply = new (buffer) HRDMessage;
         }
 
-      result = QString {reply->payload_}; // this is not a memory leak (honest!)
+      auto const payload_bytes = static_cast<qsizetype> (reply->size_) - header_size;
+      auto const payload_chars = payload_bytes / static_cast<qsizetype> (sizeof (QChar));
+      qsizetype text_chars {0};
+      while (text_chars < payload_chars && !reply->payload_[text_chars].isNull ())
+        {
+          ++text_chars;
+        }
+      result = QString {reply->payload_, text_chars}; // this is not a memory leak (honest!)
     }
   CAT_TRACE (cmd << " ->" << result);
   if (log_command || command_timer.elapsed () >= 250)

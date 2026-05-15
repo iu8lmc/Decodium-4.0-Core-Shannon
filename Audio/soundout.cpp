@@ -67,8 +67,17 @@ void deleteStreamAfterCoreAudioCallbacks(QAudioSink *stream, QString const& reas
 
   QObject *context = QCoreApplication::instance();
   if (!context) {
+#if defined(Q_OS_MAC)
+    stream->setVolume(0.0f);
+    qInfo() << "TX SoundOutput CoreAudio sink parked without app context:"
+            << reason
+            << "state=" << audioStateName(stream->state())
+            << "error=" << audioErrorName(stream->error());
+    return;
+#else
     delete stream;
     return;
+#endif
   }
 
   QPointer<QAudioSink> guard(stream);
@@ -290,10 +299,8 @@ void SoundOutput::retireStream(QString const& reason)
   stream->disconnect();
 
   if (deferCoreAudioSinkDelete()) {
-    if (stream->state() != QAudio::StoppedState) {
-      stream->suspend();
-    }
-    Q_EMIT status(QStringLiteral("TX SoundOutput CoreAudio sink retired: %1").arg(reason));
+    stream->setVolume(0.0f);
+    Q_EMIT status(QStringLiteral("TX SoundOutput CoreAudio sink retired without immediate stop: %1").arg(reason));
     deleteStreamAfterCoreAudioCallbacks(stream, reason);
     return;
   }

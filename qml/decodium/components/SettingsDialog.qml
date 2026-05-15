@@ -51,6 +51,9 @@ Dialog {
     property var frequencyBandOptions: bridge.frequencyBandOptions()
     property int selectedWorkingFrequencyIndex: -1
     property int selectedStationFrequencyIndex: -1
+    property string qrzLogbookTestStatus: ""
+    property bool qrzLogbookTestIsError: false
+    property bool qrzLogbookTestBusy: false
 
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
@@ -102,6 +105,20 @@ Dialog {
         promptToLogCheck.checked = promptMode
         autoLogCheck.checked = autoMode
         loggingChecksUpdating = false
+    }
+
+    function updateQrzLogbookTestStatus(msg, isError) {
+        var text = String(msg || "")
+        var lower = text.toLowerCase()
+        if (lower.indexOf("qrz logbook:") !== 0)
+            return false
+
+        qrzLogbookTestStatus = text.replace(/^QRZ Logbook:\s*/i, "")
+        qrzLogbookTestIsError = isError
+        qrzLogbookTestBusy = !isError
+                && (lower.indexOf("test in corso") >= 0
+                    || lower.indexOf("testing") >= 0)
+        return true
     }
 
     function refreshFrequencySettings() {
@@ -387,6 +404,8 @@ Dialog {
         function onStatusMessage(msg) {
             var text = String(msg || "")
             var lower = text.toLowerCase()
+            if (settingsDialog.updateQrzLogbookTestStatus(text, false))
+                return
             if (lower.indexOf("cty.dat") >= 0 || lower.indexOf("call3.txt") >= 0) {
                 dataDownloadStatus = text
                 dataDownloadIsError = false
@@ -395,6 +414,8 @@ Dialog {
         function onErrorMessage(msg) {
             var text = String(msg || "")
             var lower = text.toLowerCase()
+            if (settingsDialog.updateQrzLogbookTestStatus(text, true))
+                return
             if (lower.indexOf("cty.dat") >= 0 || lower.indexOf("call3.txt") >= 0) {
                 dataDownloadStatus = text
                 dataDownloadIsError = true
@@ -3773,24 +3794,51 @@ Dialog {
                             text: bridge.qrzLogbookApiKey; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
                             color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
                             background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
-                            onTextChanged: bridge.qrzLogbookApiKey = text
+                            onTextChanged: {
+                                bridge.qrzLogbookApiKey = text
+                                settingsDialog.qrzLogbookTestStatus = ""
+                                settingsDialog.qrzLogbookTestIsError = false
+                                settingsDialog.qrzLogbookTestBusy = false
+                            }
                         }
 
                         Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
                         Rectangle {
                             width: 110; height: controlHeight; radius: 4
-                            color: qrzTestMA.containsMouse ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.2) : bgMedium
-                            border.color: secondaryCyan
-                            Text { anchors.centerIn: parent; text: qsTr("Test"); color: secondaryCyan; font.pixelSize: 12 }
+                            opacity: settingsDialog.qrzLogbookTestBusy ? 0.75 : 1
+                            color: qrzTestMA.containsMouse && !settingsDialog.qrzLogbookTestBusy ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.2) : bgMedium
+                            border.color: settingsDialog.qrzLogbookTestBusy ? textSecondary : secondaryCyan
+                            Text {
+                                anchors.centerIn: parent
+                                text: settingsDialog.qrzLogbookTestBusy ? qsTr("Testing...") : qsTr("Test")
+                                color: settingsDialog.qrzLogbookTestBusy ? textSecondary : secondaryCyan
+                                font.pixelSize: 12
+                            }
                             MouseArea {
                                 id: qrzTestMA
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: bridge.testQrzLogbookApi()
+                                enabled: !settingsDialog.qrzLogbookTestBusy
+                                onClicked: {
+                                    settingsDialog.qrzLogbookTestBusy = true
+                                    settingsDialog.qrzLogbookTestIsError = false
+                                    settingsDialog.qrzLogbookTestStatus = qsTr("Testing QRZ API key...")
+                                    bridge.testQrzLogbookApi()
+                                }
                             }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                        Text {
+                            text: settingsDialog.qrzLogbookTestStatus
+                            visible: text.length > 0
+                            color: settingsDialog.qrzLogbookTestIsError ? "#ff5252" : (settingsDialog.qrzLogbookTestBusy ? textSecondary : accentGreen)
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                            verticalAlignment: Text.AlignVCenter
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 2
+                            Layout.preferredHeight: Math.max(controlHeight, implicitHeight)
+                        }
 
                         // ── LotW ──
                         Text { text: qsTr("LOTW"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }

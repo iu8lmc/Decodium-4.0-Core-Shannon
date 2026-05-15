@@ -196,6 +196,18 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
     if (deferCoreAudioSinkDelete()) {
         QObject *context = QCoreApplication::instance();
         if (!context) {
+#if defined(Q_OS_MAC)
+            sink->setVolume(0.0f);
+            if (buffer) {
+                buffer->close();
+                delete buffer;
+            }
+            bridgeLog(QStringLiteral("TX CoreAudio sink parked without app context: reason=%1 state=%2 err=%3")
+                          .arg(reason)
+                          .arg(audioStateToString(sink->state()))
+                          .arg(audioErrorToString(sink->error())));
+            return;
+#else
             if (sink->state() != QAudio::StoppedState) {
                 sink->stop();
             }
@@ -205,6 +217,7 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
                 delete buffer;
             }
             return;
+#endif
         }
         QPointer<QAudioSink> sinkGuard(sink);
         QPointer<QBuffer> bufferGuard(buffer);
@@ -213,14 +226,12 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
             buffer->setParent(nullptr);
         }
 
-        if (sink->state() != QAudio::StoppedState) {
-            sink->suspend();
-        }
+        sink->setVolume(0.0f);
         if (buffer) {
             buffer->close();
         }
 
-        bridgeLog(QStringLiteral("TX CoreAudio sink retired without immediate stop: reason=%1").arg(reason));
+        bridgeLog(QStringLiteral("TX CoreAudio sink retired without immediate stop/suspend: reason=%1").arg(reason));
         QTimer::singleShot(30000, context, [sinkGuard, bufferGuard, reason]() {
             if (sinkGuard) {
                 sinkGuard->disconnect();
@@ -26493,6 +26504,7 @@ void DecodiumBridge::testQrzLogbookApi()
         return;
     }
     m_qrzLogbook->setApiKey(m_qrzLogbookApiKey);
+    emit statusMessage(QStringLiteral("QRZ Logbook: test in corso..."));
     m_qrzLogbook->testApi();
 }
 
