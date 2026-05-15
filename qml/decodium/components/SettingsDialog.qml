@@ -4280,7 +4280,27 @@ Dialog {
                                 background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
                                 onEditingFinished: text = settingsDialog.commitFrequencyIntercept(text)
                             }
-                            Text { text: qsTr("Hz"); color: textSecondary; font.pixelSize: 12; Layout.fillWidth: true; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                            Text { text: qsTr("Hz"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 22; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                            // 1.0.192 — Reset button per Frequency Calibration (slope=0, intercept=0)
+                            Button {
+                                id: frequencyCalibrationResetButton
+                                text: qsTr("Reset")
+                                implicitHeight: controlHeight
+                                Layout.fillWidth: true
+                                onClicked: {
+                                    if (!bridge) return
+                                    bridge.setFrequencyCalibrationSlopePpm(0.0)
+                                    bridge.setFrequencyCalibrationInterceptHz(0.0)
+                                    frequencySlopeField.text = Number(0).toFixed(5)
+                                    frequencyInterceptField.text = Number(0).toFixed(2)
+                                }
+                                background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                                contentItem: Text { text: parent.text; color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                hoverEnabled: true
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 400
+                                ToolTip.text: qsTr("Azzera la calibrazione (slope=0, intercept=0). La frequenza viene scritta al rig senza correzione (fast path).")
+                            }
                         }
 
                         RowLayout {

@@ -947,6 +947,10 @@ public:
     Q_INVOKABLE double frequencyCalibrationInterceptHz() const;
     Q_INVOKABLE void setFrequencyCalibrationSlopePpm(double value);
     Q_INVOKABLE void setFrequencyCalibrationInterceptHz(double value);
+    // 1.0.192 — Completamento Frequency Calibration di Salvatore: applica
+    // slope+intercept alla frequenza prima di scriverla al rig. Fast path
+    // se entrambi 0 (return hz invariata).
+    double applyFrequencyCalibration(double hz) const;
     Q_INVOKABLE QVariantMap pendingLogQsoPreview() const;
     Q_INVOKABLE QStringList satelliteOptions() const;
     Q_INVOKABLE QStringList satModeOptions() const;

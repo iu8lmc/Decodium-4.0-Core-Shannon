@@ -4927,6 +4927,20 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
                   .arg(m_spectrumFpsCap));
     }
 
+    // 1.0.192 — Log Frequency Calibration al boot: l'utente vede subito se
+    // la correzione e' attiva o no. Se entrambi 0, formula no-op (fast path).
+    {
+        double const slope = frequencyCalibrationSlopePpm();
+        double const intercept = frequencyCalibrationInterceptHz();
+        bool const active = !qFuzzyIsNull(slope) || !qFuzzyIsNull(intercept);
+        bridgeLog(QStringLiteral("[CAT-CAL] Init slope=%1ppm intercept=%2Hz active=%3 "
+                                 "(esempio su 14.074 MHz: correction=%4Hz)")
+                      .arg(slope, 0, 'f', 5)
+                      .arg(intercept, 0, 'f', 2)
+                      .arg(active ? "YES" : "no")
+                      .arg(14074000.0 * slope * 1e-6 + intercept, 0, 'f', 2));
+    }
+
     m_legacyStateTimer = new QTimer(this);
     m_legacyStateTimer->setInterval(250);
     connect(m_legacyStateTimer, &QTimer::timeout, this, &DecodiumBridge::syncLegacyBackendState);
@@ -7511,7 +7525,10 @@ void DecodiumBridge::requestRigFrequencyFromBridge(double hz, const QString& rea
         return;
     }
 
-    activeCatSetFreq(m_nativeCat, m_hamlibCat, m_catBackend, hz, m_omniRigCat, m_legacyBackend);
+    // 1.0.192 — applica Frequency Calibration prima di scrivere al rig.
+    // Compensa drift conoscuto: hz_corrected = hz + slope_ppm*hz*1e-6 + intercept_Hz.
+    double const dialHz = applyFrequencyCalibration(hz);
+    activeCatSetFreq(m_nativeCat, m_hamlibCat, m_catBackend, dialHz, m_omniRigCat, m_legacyBackend);
     syncActiveCatTxSplitFrequency(reason + QStringLiteral("/dial"));
     bridgeLog(QStringLiteral("CAT local QSY requested by %1: %2 Hz via %3")
                   .arg(reason,
@@ -7596,7 +7613,9 @@ void DecodiumBridge::syncActiveCatTxSplitFrequency(const QString& reason)
     }
 
     double const txDialHz = catSplitTxDialFrequencyHz();
-    activeCatSetTxFreq(m_nativeCat, m_hamlibCat, m_catBackend, txDialHz, m_omniRigCat);
+    // 1.0.192 — applica Frequency Calibration anche al TX dial (split mode)
+    double const txDialCalibrated = applyFrequencyCalibration(txDialHz);
+    activeCatSetTxFreq(m_nativeCat, m_hamlibCat, m_catBackend, txDialCalibrated, m_omniRigCat);
 
     QString const splitMode = m_hamlibCat->splitMode().trimmed().toLower();
     if (txDialHz > 0.0) {
@@ -13543,6 +13562,32 @@ void DecodiumBridge::setFrequencyCalibrationInterceptHz(double value)
     value = qBound(-1000.0, value, 1000.0);
     syncSettingToLegacyIni(QStringLiteral("CalibrationIntercept"), value);
     emit settingValueChanged(QStringLiteral("CalibrationIntercept"), value);
+}
+
+// 1.0.192 — Completamento Frequency Calibration: applica linearmente
+// la correzione di drift conoscuto del rig. Formula:
+//   hz_corrected = hz + slope_ppm * hz * 1e-6 + intercept_Hz
+// Skip se entrambi 0 (no-op overhead minimo, fast path).
+// Log esplicito se applicato per audit/diagnostic.
+double DecodiumBridge::applyFrequencyCalibration(double hz) const
+{
+    double const slope = frequencyCalibrationSlopePpm();
+    double const intercept = frequencyCalibrationInterceptHz();
+    if (qFuzzyIsNull(slope) && qFuzzyIsNull(intercept)) {
+        return hz;
+    }
+    double const corrected = hz + slope * hz * 1e-6 + intercept;
+    // Log solo se delta significativo (>0.5 Hz) per evitare spam su slope ~0
+    if (qAbs(corrected - hz) > 0.5) {
+        bridgeLog(QStringLiteral("[CAT-CAL] slope=%1ppm intercept=%2Hz: "
+                                 "requested=%3 → corrected=%4 (delta=%5Hz)")
+                      .arg(slope, 0, 'f', 3)
+                      .arg(intercept, 0, 'f', 1)
+                      .arg(hz, 0, 'f', 1)
+                      .arg(corrected, 0, 'f', 1)
+                      .arg(corrected - hz, 0, 'f', 2));
+    }
+    return corrected;
 }
 
 QStringList DecodiumBridge::satelliteOptions() const
