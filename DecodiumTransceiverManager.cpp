@@ -1450,7 +1450,7 @@ void DecodiumTransceiverManager::connectRig()
             << "[CATDBG] HRD startup watchdog armed"
             << "timeoutMs=" << kHrdStartupWatchdogMs
             << "network=" << m_networkPort
-            << "initialProbe=get id";
+            << "initialProbe=get context/get id";
         QTimer::singleShot(kHrdStartupWatchdogMs, this, [this, xcv, thread, shownReason]() {
             abortConnectingRigAfterTimeout(xcv, thread, shownReason);
         });

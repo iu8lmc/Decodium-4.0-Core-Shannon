@@ -47,7 +47,8 @@ namespace
 
   bool is_startup_probe (QString const& cmd)
   {
-    return 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive);
+    return 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive)
+      || 0 == cmd.compare (QStringLiteral ("get id"), Qt::CaseInsensitive);
   }
 
   QString hrd_protocol_name (int protocol)
@@ -245,8 +246,17 @@ int HRDTransceiver::do_start ()
     {
       hrd_ = new QTcpSocket {this}; // QObject takes ownership
     }
-  auto const host = std::get<0> (server_details);
+  auto host = std::get<0> (server_details);
   auto const port = std::get<1> (server_details);
+  auto const normalized_server = server_.trimmed ();
+  bool const localhost_requested =
+    normalized_server.compare (QStringLiteral ("localhost"), Qt::CaseInsensitive) == 0
+    || normalized_server.startsWith (QStringLiteral ("localhost:"), Qt::CaseInsensitive);
+  if (localhost_requested && host == QHostAddress::LocalHostIPv6)
+    {
+      hrd_diag (QStringLiteral ("localhost resolved to IPv6 loopback; using IPv4 loopback for HRD compatibility"));
+      host = QHostAddress::LocalHost;
+    }
   auto const host_text = host.toString ();
   CAT_INFO ("HRD TCP connecting to" << host_text << port);
   hrd_diag (QStringLiteral ("tcp connect host=%1 port=%2 state=%3")
@@ -273,75 +283,96 @@ int HRDTransceiver::do_start ()
 
   if (none == protocol_)
     {
-      protocol_ = v5;	// try this first (works for v6 too)
-      auto const probe_command = QStringLiteral ("get context");
-      CAT_INFO ("HRD protocol probe v5 starting");
-      hrd_diag (QStringLiteral ("protocol probe v5 start command='%1'").arg (probe_command));
-      try
-        {
-          auto context = send_command (probe_command, false, false);
-          CAT_INFO ("HRD protocol probe v5 accepted:" << context);
-          hrd_diag (QStringLiteral ("protocol probe v5 accepted command='%1' reply='%2'")
-                    .arg (probe_command, hrd_preview (context)));
-        }
-      catch (error const& e)
-        {
-          CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
-          hrd_diag (QStringLiteral ("protocol probe v5 failed command='%1': %2")
-                    .arg (probe_command, QString::fromUtf8 (e.what ())));
-          if (hrd_)
-            {
-              hrd_->abort ();
-            }
-          protocol_ = none;
-        }
-    }
-
-  if (none == protocol_)
-    {
-      hrd_->abort ();
-
-      protocol_ = v4;		// try again with older protocol
-      CAT_INFO ("HRD TCP reconnecting for protocol v4 to" << host_text << port);
-      hrd_diag (QStringLiteral ("tcp reconnect for protocol v4 host=%1 port=%2")
-                .arg (host_text)
-                .arg (port));
-      hrd_->connectToHost (host, port);
-      if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
-        {
-          CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
-          hrd_diag (QStringLiteral ("tcp reconnect v4 failed host=%1 port=%2 state=%3 error=%4")
-                    .arg (host_text)
-                    .arg (port)
-                    .arg (hrd_socket_state_name (hrd_))
-                    .arg (hrd_->errorString ()));
-          throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
-        }
-
       QString last_error;
-      auto const probe_command = QStringLiteral ("get context");
-      CAT_INFO ("HRD protocol probe v4 starting");
-      hrd_diag (QStringLiteral ("protocol probe v4 start command='%1'").arg (probe_command));
-      try
+
+      auto reconnect_probe_socket = [&] (QString const& protocol_name, QString const& probe_command) -> bool
+      {
+        if (hrd_)
+          {
+            hrd_->abort ();
+          }
+
+        CAT_INFO ("HRD TCP reconnecting for protocol probe" << protocol_name << probe_command << "to" << host_text << port);
+        hrd_diag (QStringLiteral ("tcp reconnect for protocol %1 command='%2' host=%3 port=%4")
+                  .arg (protocol_name)
+                  .arg (probe_command)
+                  .arg (host_text)
+                  .arg (port));
+        hrd_->connectToHost (host, port);
+        if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
+          {
+            last_error = tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ();
+            CAT_ERROR ("failed to connect:" << hrd_->errorString ());
+            hrd_diag (QStringLiteral ("tcp reconnect %1 failed host=%2 port=%3 state=%4 error=%5")
+                      .arg (protocol_name)
+                      .arg (host_text)
+                      .arg (port)
+                      .arg (hrd_socket_state_name (hrd_))
+                      .arg (hrd_->errorString ()));
+            return false;
+          }
+
+        hrd_diag (QStringLiteral ("tcp connected for probe %1 command='%2' host=%3 port=%4 local=%5:%6")
+                  .arg (protocol_name)
+                  .arg (probe_command)
+                  .arg (host_text)
+                  .arg (port)
+                  .arg (hrd_->localAddress ().toString ())
+                  .arg (hrd_->localPort ()));
+        return true;
+      };
+
+      auto try_probe = [&] (auto protocol, QString const& protocol_name, QString const& probe_command, bool reuse_existing_socket) -> bool
+      {
+        if (!reuse_existing_socket && !reconnect_probe_socket (protocol_name, probe_command))
+          {
+            protocol_ = none;
+            return false;
+          }
+
+        protocol_ = protocol;
+        CAT_INFO ("HRD protocol probe" << protocol_name << "starting command" << probe_command);
+        hrd_diag (QStringLiteral ("protocol probe %1 start command='%2'")
+                  .arg (protocol_name)
+                  .arg (probe_command));
+
+        try
+          {
+            auto reply = send_command (probe_command, false, false);
+            CAT_INFO ("HRD protocol probe" << protocol_name << "accepted:" << reply);
+            hrd_diag (QStringLiteral ("protocol probe %1 accepted command='%2' reply='%3'")
+                      .arg (protocol_name)
+                      .arg (probe_command)
+                      .arg (hrd_preview (reply)));
+            return true;
+          }
+        catch (error const& e)
+          {
+            last_error = QString::fromUtf8 (e.what ());
+            CAT_ERROR ("HRD protocol probe" << protocol_name << "failed:" << e.what ());
+            hrd_diag (QStringLiteral ("protocol probe %1 failed command='%2': %3")
+                      .arg (protocol_name)
+                      .arg (probe_command)
+                      .arg (last_error));
+            if (hrd_)
+              {
+                hrd_->abort ();
+              }
+            protocol_ = none;
+            return false;
+          }
+      };
+
+      bool const protocol_detected =
+        try_probe (v5, QStringLiteral ("v5"), QStringLiteral ("get context"), true)
+        || try_probe (v5, QStringLiteral ("v5"), QStringLiteral ("get id"), false)
+        || try_probe (v4, QStringLiteral ("v4"), QStringLiteral ("get context"), false)
+        || try_probe (v4, QStringLiteral ("v4"), QStringLiteral ("get id"), false);
+
+      if (!protocol_detected)
         {
-          auto context = send_command (probe_command, false, false);
-          CAT_INFO ("HRD protocol probe v4 accepted:" << context);
-          hrd_diag (QStringLiteral ("protocol probe v4 accepted command='%1' reply='%2'")
-                    .arg (probe_command, hrd_preview (context)));
-        }
-      catch (error const& e)
-        {
-          last_error = QString::fromUtf8 (e.what ());
-          CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
-          hrd_diag (QStringLiteral ("protocol probe v4 failed command='%1': %2")
-                    .arg (probe_command, last_error));
-          if (hrd_)
-            {
-              hrd_->abort ();
-            }
-          protocol_ = none;
           throw error {last_error.isEmpty ()
-                         ? tr ("Ham Radio Deluxe failed protocol probe using get context")
+                         ? tr ("Ham Radio Deluxe failed protocol probe using get context or get id")
                          : last_error};
         }
     }

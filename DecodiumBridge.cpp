@@ -156,6 +156,9 @@ static QString audioFormatForLog(const QAudioFormat& format)
         .arg(static_cast<int>(format.sampleFormat()));
 }
 
+static QString audioStateToString(QAudio::State state);
+static QString audioErrorToString(QAudio::Error error);
+
 static bool deferCoreAudioSinkDelete()
 {
 #if defined(Q_OS_MAC)
@@ -210,20 +213,33 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
         }
 
         if (sink->state() != QAudio::StoppedState) {
-            sink->stop();
+            sink->suspend();
+        }
+        if (buffer) {
+            buffer->close();
         }
 
-        bridgeLog(QStringLiteral("TX CoreAudio sink retired with deferred delete: reason=%1").arg(reason));
-        QTimer::singleShot(5000, context, [sinkGuard, bufferGuard, reason]() {
+        bridgeLog(QStringLiteral("TX CoreAudio sink retired without immediate stop: reason=%1").arg(reason));
+        QTimer::singleShot(30000, context, [sinkGuard, bufferGuard, reason]() {
             if (sinkGuard) {
                 sinkGuard->disconnect();
-                sinkGuard->deleteLater();
+                if (sinkGuard->state() == QAudio::StoppedState) {
+                    sinkGuard->deleteLater();
+                    if (bufferGuard) {
+                        bufferGuard->deleteLater();
+                    }
+                    bridgeLog(QStringLiteral("TX CoreAudio sink deferred delete released: reason=%1").arg(reason));
+                    return;
+                }
+                bridgeLog(QStringLiteral("TX CoreAudio sink parked to avoid Qt stopAudioUnit crash: reason=%1 state=%2 err=%3")
+                              .arg(reason)
+                              .arg(audioStateToString(sinkGuard->state()))
+                              .arg(audioErrorToString(sinkGuard->error())));
+                return;
             }
             if (bufferGuard) {
-                bufferGuard->close();
                 bufferGuard->deleteLater();
             }
-            bridgeLog(QStringLiteral("TX CoreAudio sink deferred delete released: reason=%1").arg(reason));
         });
         return;
     }
@@ -3436,6 +3452,7 @@ static int autoTxDecodeGraceMs(const QString& mode)
 static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMaxRetries,
                                            int partnerSnrDb = 127, bool conservative = false)
 {
+    Q_UNUSED(configuredMaxRetries)
     QString const normalized = mode.trimmed().toUpper();
     int modeCap = 3;
     if (normalized == QStringLiteral("FT4")) {
@@ -3453,7 +3470,10 @@ static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMax
     }
     if (conservative) extra += 2;
     modeCap += extra;
-    return qBound(1, configuredMaxRetries + extra, modeCap);
+    // The caller retry setting controls report-step retries, not the final
+    // RR73/73 wait. A low value here made AutoCQ leave the QSO after the first
+    // RR73, before the partner's final 73 could arrive.
+    return modeCap;
 }
 
 static int autoSeqTxRank(int txNum)
@@ -5633,11 +5653,29 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                 this, &DecodiumBridge::onLegacyAudioSamples);
         connect(m_legacyBackend, &DecodiumLegacyBackend::warningRaised,
                 this, [this](QString const& title, QString const& summary, QString const& details) {
-            // Quando il CAT nativo gestisce il rig, i warning Hamlib del legacy backend
-            // sono falsi positivi (es. conflitto porta COM). Li sopprimiamo.
+            // Quando il CAT nativo gestisce il rig, solo i warning legacy
+            // realmente legati a rig/Hamlib/seriale sono falsi positivi.
+            // Gli altri warning, come log QSO non registrabile, devono arrivare
+            // alla shell QML.
             if (m_catBackend == QStringLiteral("native")) {
-                bridgeLog("Legacy warning suppressed (native CAT active): " + summary);
-                return;
+                QString const lower = (title + QLatin1Char(' ') + summary + QLatin1Char(' ') + details).toLower();
+                bool const catLike =
+                    lower.startsWith(QStringLiteral("cat"))
+                    || lower.contains(QStringLiteral(" cat"))
+                    || lower.contains(QStringLiteral("[cat"))
+                    || lower.contains(QStringLiteral("cat:"))
+                    || lower.contains(QStringLiteral("cat/"));
+                bool const rigWarning =
+                    lower.contains(QStringLiteral("hamlib"))
+                    || catLike
+                    || lower.contains(QStringLiteral("rig"))
+                    || lower.contains(QStringLiteral("serial"))
+                    || lower.contains(QStringLiteral("com "))
+                    || lower.contains(QStringLiteral("timed out"));
+                if (rigWarning) {
+                    bridgeLog("Legacy warning suppressed (native CAT active): " + summary);
+                    return;
+                }
             }
             emit warningRaised(title, summary, details);
         });
@@ -17132,6 +17170,22 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             return false;
         }
 
+        bool const autoCqDeferredSignoffMode =
+            m_mode == QStringLiteral("FT2")
+            || m_mode == QStringLiteral("FT4")
+            || m_mode == QStringLiteral("FT8");
+        if (m_autoCqRepeat
+            && autoCqDeferredSignoffMode
+            && !m_logAfterOwn73
+            && !m_ft2DeferredLogPending) {
+            m_ft2DeferredLogPending = true;
+            capturePendingAutoLogSnapshot();
+            bridgeLog(QStringLiteral("checkAndStartPeriodicTx: repaired deferred signoff wait for AutoCQ TX%1 mode=%2 count=%3")
+                          .arg(m_currentTx)
+                          .arg(m_mode)
+                          .arg(m_nTx73));
+        }
+
         if (m_logAfterOwn73) {
             finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: completed own 73 → QSO complete"), true);
             return true;
@@ -23102,6 +23156,11 @@ void DecodiumBridge::startAudioCapture()
     // Rolling back a 8192 (~170ms) — buffer sufficiente per FT4/FT8 final
     // windows ma sotto la soglia di breakage di Qt-WASAPI.
     const int rxFramesPerBuffer = 8192; // ~170 ms at 48 kHz, before decimation.
+    if (m_soundInput && m_soundInput->isActiveFor(selectedDevice, downSampleFactor, channel)) {
+        m_soundInput->setInputGain(rxInputGainFromLevel(m_rxInputLevel));
+        return;
+    }
+
     bridgeLog("SoundInput::start device=" + selectedDevice.description() +
               " channel=" + QString::number((int)channel) +
               " dsf=" + QString::number(downSampleFactor) +

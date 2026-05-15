@@ -6670,7 +6670,11 @@ NumberAnimation {
             // i warning effettivamente legati a CAT/Hamlib/serial.
             if (bridge.catBackend === "native") {
                 var lower = (String(title) + " " + String(summary) + " " + String(details)).toLowerCase()
-                if (lower.indexOf("hamlib") >= 0 || lower.indexOf("cat") >= 0 ||
+                var catLike = lower.indexOf("cat ") >= 0 || lower.indexOf("cat:") >= 0 ||
+                    lower.indexOf("cat[") >= 0 || lower.indexOf("[cat") >= 0 ||
+                    lower.indexOf(" cat") >= 0 || lower.indexOf("cat/") >= 0 ||
+                    lower.substr(0, 3) === "cat"
+                if (lower.indexOf("hamlib") >= 0 || catLike ||
                     lower.indexOf("rig") >= 0 || lower.indexOf("serial") >= 0 ||
                     lower.indexOf("com ") >= 0 || lower.indexOf("timed out") >= 0)
                     return
@@ -6707,33 +6711,38 @@ NumberAnimation {
     Dialog {
         id: warningDialog
         modal: true
-        width: 560
+        width: Math.max(360, Math.min(parent ? parent.width - 48 : 560, 620))
         anchors.centerIn: parent
         closePolicy: Popup.NoAutoClose
         title: warningDialogTitle
+        padding: 18
+
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.44)
+        }
 
         background: Rectangle {
             color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.98)
             border.color: accentOrange
             border.width: 1
-            radius: 14
+            radius: 8
         }
 
         header: Rectangle {
-            height: 62
+            height: 58
             color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.96)
-            radius: 14
+            radius: 8
 
             Row {
                 anchors.fill: parent
-                anchors.leftMargin: 18
-                anchors.rightMargin: 18
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
                 spacing: 12
 
                 Rectangle {
-                    width: 34
-                    height: 34
-                    radius: 17
+                    width: 32
+                    height: 32
+                    radius: 16
                     anchors.verticalCenter: parent.verticalCenter
                     color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.18)
                     border.color: accentOrange
@@ -6742,7 +6751,7 @@ NumberAnimation {
                     Text {
                         anchors.centerIn: parent
                         text: "!"
-                        font.pixelSize: 18
+                        font.pixelSize: 17
                         font.bold: true
                         color: accentOrange
                     }
@@ -6754,9 +6763,11 @@ NumberAnimation {
 
                     Text {
                         text: warningDialogTitle.length > 0 ? warningDialogTitle : "Error"
-                        font.pixelSize: 18
+                        font.pixelSize: 17
                         font.bold: true
                         color: accentOrange
+                        elide: Text.ElideRight
+                        width: Math.max(180, warningDialog.width - 96)
                     }
 
                     Text {
@@ -6767,6 +6778,8 @@ NumberAnimation {
                         text: "Decodium reported a non-blocking problem."
                         font.pixelSize: 11
                         color: textSecondary
+                        elide: Text.ElideRight
+                        width: Math.max(180, warningDialog.width - 96)
                     }
                 }
             }
@@ -6830,11 +6843,34 @@ NumberAnimation {
 
         footer: DialogButtonBox {
             alignment: Qt.AlignRight
+            background: Rectangle {
+                color: Qt.rgba(bgMedium.r, bgMedium.g, bgMedium.b, 0.72)
+                radius: 8
+            }
 
             Button {
                 text: "OK"
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 onClicked: warningDialog.close()
+
+                contentItem: Text {
+                    text: parent.text
+                    color: textPrimary
+                    font.pixelSize: 13
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    implicitWidth: 112
+                    implicitHeight: 38
+                    color: parent.hovered ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.22)
+                                          : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.12)
+                    border.color: secondaryCyan
+                    border.width: 1
+                    radius: 8
+                }
             }
         }
     }

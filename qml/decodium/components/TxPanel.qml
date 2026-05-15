@@ -28,6 +28,7 @@ Item {
     property var logSatModeChoices: [""]
     property int editingTxNum: 0
     property string editingTxError: ""
+    readonly property real compactTxButtonWidth: Math.max(88, Math.min(180, (width - 44) / 6))
 
     function refreshLogPreview() {
         var preview = engine && engine.pendingLogQsoPreview ? engine.pendingLogQsoPreview() : ({})
@@ -1133,7 +1134,12 @@ Item {
             // TX Buttons row
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: 4
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                }
 
                 // TX1 - Answer CQ (Grid)
                 TxButton {
@@ -1201,6 +1207,11 @@ Item {
                     isCQ: true
                     onClicked: if (engine && !isDisabled) engine.sendTx(6)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
 
             }
@@ -1526,8 +1537,11 @@ Item {
         readonly property bool isDisabled: bridge && (bridge.txDisabledMask & (1 << (txNum - 1))) !== 0
         signal editRequested(int txNum, string message)
 
-        Layout.fillWidth: true
-        Layout.preferredHeight: 50
+        Layout.fillWidth: false
+        Layout.preferredWidth: txPanel.compactTxButtonWidth
+        Layout.maximumWidth: 180
+        Layout.minimumWidth: 88
+        Layout.preferredHeight: 34
         opacity: isDisabled ? 0.4 : 1.0
 
         background: Rectangle {
@@ -1554,8 +1568,8 @@ Item {
         contentItem: Item {
             Column {
                 anchors.centerIn: parent
-                width: parent.width - 10
-                spacing: 2
+                width: parent.width - 8
+                spacing: 0
 
                 Text {
                     width: parent.width
@@ -1566,7 +1580,7 @@ Item {
                         if (isCQ) return accentGreen
                         return textSecondary
                     }
-                    font.pixelSize: 10
+                    font.pixelSize: 9
                     font.bold: isSelected || isTransmitting
                     font.strikeout: txButton.isDisabled
                     horizontalAlignment: Text.AlignHCenter
@@ -1577,7 +1591,7 @@ Item {
                     text: message
                     color: isTransmitting ? errorRed : textPrimary
                     font.family: "Monospace"
-                    font.pixelSize: 9
+                    font.pixelSize: 8
                     font.strikeout: txButton.isDisabled
                     elide: Text.ElideMiddle
                     horizontalAlignment: Text.AlignHCenter

@@ -59,6 +59,53 @@ QString inputFormatSummary(QAudioFormat const& format)
       .arg(static_cast<int>(format.sampleFormat()))
       .arg(format.bytesPerFrame());
 }
+
+QAudioFormat makeInputFormat(QAudioDevice const& device,
+                             unsigned downSampleFactor,
+                             AudioDevice::Channel channel,
+                             bool *usingStereoForMono = nullptr)
+{
+  if (usingStereoForMono)
+    {
+      *usingStereoForMono = false;
+    }
+
+  QAudioFormat format;
+  format.setChannelCount (AudioDevice::Mono == channel ? 1 : 2);
+  format.setSampleRate (12000 * downSampleFactor);
+  format.setSampleFormat (QAudioFormat::Int16);
+
+  if (channel == AudioDevice::Mono)
+    {
+      QAudioFormat stereoFormat {format};
+      stereoFormat.setChannelCount (2);
+      if (device.isFormatSupported (stereoFormat))
+        {
+          // Capture stereo and let AudioDevice select the requested hardware
+          // channel. This avoids Qt/OS mono downmixing.
+          format = stereoFormat;
+          if (usingStereoForMono)
+            {
+              *usingStereoForMono = true;
+            }
+        }
+    }
+
+  return format;
+}
+}
+
+bool SoundInput::isActiveFor (QAudioDevice const& device,
+                              unsigned downSampleFactor,
+                              AudioDevice::Channel channel) const
+{
+  QAudioFormat const format = makeInputFormat(device, downSampleFactor, channel);
+  return m_stream
+      && m_stream->state () == QAudio::ActiveState
+      && m_deviceDescription == device.description()
+      && m_sampleRate == format.sampleRate()
+      && m_channelCount == format.channelCount()
+      && m_channelSelector == static_cast<int>(channel);
 }
 
 bool SoundInput::checkStream ()
@@ -127,24 +174,8 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
 
   m_sink = sink;
 
-  // Qt6: QAudioFormat setup — no codec/sampleType/sampleSize/byteOrder
-  QAudioFormat format;
-  format.setChannelCount (AudioDevice::Mono == channel ? 1 : 2);
-  format.setSampleRate (12000 * downSampleFactor);
-  format.setSampleFormat (QAudioFormat::Int16);
-
-  if (channel == AudioDevice::Mono)
-    {
-      QAudioFormat stereoFormat {format};
-      stereoFormat.setChannelCount (2);
-      if (device.isFormatSupported (stereoFormat))
-        {
-          // Capture stereo and let AudioDevice select the requested hardware
-          // channel. This avoids Qt/OS mono downmixing.
-          format = stereoFormat;
-          qDebug() << "SoundInput: using stereo capture for mono input selection";
-        }
-    }
+  bool usingStereoForMono = false;
+  QAudioFormat const format = makeInputFormat(device, downSampleFactor, channel, &usingStereoForMono);
 
   if (m_stream
       && m_stream->state () == QAudio::ActiveState
@@ -154,10 +185,37 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
       && m_channelCount == format.channelCount()
       && m_channelSelector == static_cast<int>(channel))
     {
-      qDebug() << "SoundInput: start skipped, stream already active for"
-               << m_deviceDescription
-               << "rate=" << m_sampleRate
-               << "channels=" << m_channelCount;
+      qint64 const now_ms = QDateTime::currentMSecsSinceEpoch ();
+      QString const duplicateKey = QStringLiteral("%1|%2|%3|%4")
+          .arg(m_deviceDescription)
+          .arg(m_sampleRate)
+          .arg(m_channelCount)
+          .arg(m_channelSelector);
+      bool const keyChanged = duplicateKey != m_lastDuplicateStartKey;
+      bool const shouldLogDuplicate =
+          keyChanged
+          || m_lastDuplicateStartLogMs < 0
+          || now_ms - m_lastDuplicateStartLogMs >= 60000;
+      if (shouldLogDuplicate)
+        {
+          QString suffix;
+          if (m_suppressedDuplicateStartLogs > 0)
+            {
+              suffix = QStringLiteral("suppressed=%1").arg(m_suppressedDuplicateStartLogs);
+            }
+          qDebug() << "SoundInput: start skipped, stream already active for"
+                   << m_deviceDescription
+                   << "rate=" << m_sampleRate
+                   << "channels=" << m_channelCount
+                   << suffix;
+          m_lastDuplicateStartKey = duplicateKey;
+          m_lastDuplicateStartLogMs = now_ms;
+          m_suppressedDuplicateStartLogs = 0;
+        }
+      else
+        {
+          ++m_suppressedDuplicateStartLogs;
+        }
       cummulative_lost_usec_ = std::numeric_limits<qint64>::min ();
       m_sink->setInputGainLinear (m_inputGain);
       return;
@@ -168,7 +226,14 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   m_sampleRate = format.sampleRate();
   m_channelCount = format.channelCount();
   m_channelSelector = static_cast<int>(channel);
+  m_lastDuplicateStartKey.clear ();
+  m_lastDuplicateStartLogMs = -1;
+  m_suppressedDuplicateStartLogs = 0;
 
+  if (usingStereoForMono)
+    {
+      qDebug() << "SoundInput: using stereo capture for mono input selection";
+    }
   qDebug() << "SoundInput::start ch=" << format.channelCount() << "rate=" << format.sampleRate() << "dev=" << device.description();
   if (!device.isFormatSupported (format))
     {
@@ -431,6 +496,9 @@ void SoundInput::stop()
   m_haveReportedState_ = false;
   m_lastDebugStateLogMs = -1;
   m_suppressedDebugStateLogs = 0;
+  m_lastDuplicateStartKey.clear ();
+  m_lastDuplicateStartLogMs = -1;
+  m_suppressedDuplicateStartLogs = 0;
 }
 
 SoundInput::~SoundInput ()
