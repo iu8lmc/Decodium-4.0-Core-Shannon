@@ -3514,6 +3514,32 @@ void DecodiumBridge::setUiQuality(QString const& v)
     bridgeLog(QStringLiteral("[UI] Quality = %1").arg(norm));
 }
 
+// 1.0.186 — Full Spectrum auto-detach: pop-out di period1 per isolare il
+// scene-graph dei ListView decode dal Main (Pasquale-pattern). Default ON
+// per migliorare fluidita' su PC modesti. Persistito su QSettings.
+void DecodiumBridge::setAutoDetachFullSpectrum(bool v)
+{
+    if (m_autoDetachFullSpectrum == v) return;
+    m_autoDetachFullSpectrum = v;
+    QSettings().setValue(QStringLiteral("UI/AutoDetachFullSpectrum"), v);
+    emit autoDetachFullSpectrumChanged();
+    bridgeLog(QStringLiteral("[UI] AutoDetachFullSpectrum = %1").arg(v ? "ON" : "OFF"));
+}
+
+// 1.0.186 — Cap FPS panadapter (15/20/30). Default 20 quando integrato,
+// usabile a 30 quando detached (Window separata con render thread isolato).
+// Persistito su QSettings; letto da m_minPanadapterIntervalMs path.
+void DecodiumBridge::setSpectrumFpsCap(int v)
+{
+    int const clamped = (v <= 15) ? 15 : (v >= 30) ? 30 : 20;
+    if (m_spectrumFpsCap == clamped) return;
+    m_spectrumFpsCap = clamped;
+    QSettings().setValue(QStringLiteral("UI/SpectrumFpsCap"), clamped);
+    emit spectrumFpsCapChanged();
+    bridgeLog(QStringLiteral("[UI] SpectrumFpsCap = %1 fps (interval=%2 ms)")
+                  .arg(clamped).arg(1000 / clamped));
+}
+
 // 1.0.180 — UI Revolution: setter per uiFramelessPopouts (Spectrum/Waterfall
 // in modalita' detached senza decorazione frame OS). Persistito su QSettings.
 void DecodiumBridge::setUiFramelessPopouts(bool v)
@@ -4699,10 +4725,19 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             s.setValue(QStringLiteral("UI/Style"), m_uiStyle);
         }
 
-        bridgeLog(QStringLiteral("[UI] Init Quality=%1 FramelessPopouts=%2 Style=%3")
+        // 1.0.186 — Full Spectrum auto-detach + Spectrum FPS cap
+        m_autoDetachFullSpectrum = s.value(
+            QStringLiteral("UI/AutoDetachFullSpectrum"), true).toBool();
+        int const fpsRaw = s.value(QStringLiteral("UI/SpectrumFpsCap"), 20).toInt();
+        m_spectrumFpsCap = (fpsRaw <= 15) ? 15 : (fpsRaw >= 30) ? 30 : 20;
+
+        bridgeLog(QStringLiteral("[UI] Init Quality=%1 FramelessPopouts=%2 Style=%3 "
+                                 "AutoDetachFullSpectrum=%4 SpectrumFpsCap=%5")
                   .arg(m_uiQuality)
                   .arg(m_uiFramelessPopouts ? "ON" : "OFF")
-                  .arg(m_uiStyle));
+                  .arg(m_uiStyle)
+                  .arg(m_autoDetachFullSpectrum ? "ON" : "OFF")
+                  .arg(m_spectrumFpsCap));
     }
 
     m_legacyStateTimer = new QTimer(this);
@@ -8727,6 +8762,29 @@ void DecodiumBridge::updateUiStallDiagnostics()
     }
 
     qint64 const nowWallMs = QDateTime::currentMSecsSinceEpoch();
+
+    // 1.0.186 — Adaptive short-stall tracker. Stall corti (360-599ms) singoli
+    // sono benigni, ma 4+ in 5s indicano pressione cumulativa sul main thread
+    // (es. drag handle SplitView + drain ListView + texture upload). Scatta
+    // cpuPressure mild anche senza superare la soglia singola 600ms.
+    if (m_monitoring || m_transmitting || m_tuning) {
+        if (gapMs >= 360 && gapMs < 600) {
+            m_recentShortStalls.append(nowWallMs);
+            qint64 const windowMs = 5000;
+            while (!m_recentShortStalls.isEmpty()
+                   && m_recentShortStalls.first() < nowWallMs - windowMs) {
+                m_recentShortStalls.removeFirst();
+            }
+            if (m_recentShortStalls.size() >= 4) {
+                noteCpuPressure(QStringLiteral("UI short-stall burst %1 in 5s")
+                                    .arg(m_recentShortStalls.size()),
+                                4000,
+                                false);
+                m_recentShortStalls.clear();  // evita re-trigger immediato
+            }
+        }
+    }
+
     if ((m_monitoring || m_transmitting || m_tuning) && gapMs >= 600) {
         noteCpuPressure(QStringLiteral("UI stall %1ms").arg(gapMs),
                         4000,
@@ -20976,7 +21034,12 @@ void DecodiumBridge::onSpectrumTimer()
             bool const directVisualFastFeed =
                 useModernSpectrumFeedWithLegacy()
                 && (!usingLegacyBackendForTx() || !m_legacyPcmSpectrumFeed);
-            qint64 minPanadapterIntervalMs = directVisualFastFeed ? 33 : 125;
+            // 1.0.186 — FPS cap configurabile (15/20/30 fps). Default 20 fps
+            // (50ms interval) bilancia fluidita' UI con frame budget main thread.
+            // Era hardcoded 33ms (~30 fps) → su PC modesti causava stall.
+            int const fpsCap = qBound(15, m_spectrumFpsCap, 30);
+            qint64 const cappedIntervalMs = 1000 / fpsCap;
+            qint64 minPanadapterIntervalMs = directVisualFastFeed ? cappedIntervalMs : 125;
             if (m_lowCpuModeEnabled) {
                 minPanadapterIntervalMs = qMax<qint64>(
                     minPanadapterIntervalMs,

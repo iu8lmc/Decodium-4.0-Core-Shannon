@@ -2721,6 +2721,48 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
+                        // 1.0.186 — Auto-detach Full Spectrum (Pasquale-pattern)
+                        Text { text: qsTr("Detach Full Spectrum:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        CheckBox {
+                            id: autoDetachFullSpectrumCheck
+                            checked: bridge ? bridge.autoDetachFullSpectrum : true
+                            onCheckedChanged: {
+                                if (bridge) bridge.setAutoDetachFullSpectrum(checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("All'avvio apre il Full Spectrum (Band Activity) in finestra separata, isolando il render thread del Main dalle animazioni ListView. Riduce stall su PC modesti. Default ON. Richiede restart.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // 1.0.186 — Spectrum FPS cap (15/20/30)
+                        Text { text: qsTr("Spectrum FPS cap:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        ComboBox {
+                            id: spectrumFpsCombo
+                            Layout.preferredWidth: 120
+                            model: ["15 fps", "20 fps", "30 fps"]
+                            currentIndex: {
+                                if (!bridge) return 1
+                                const cap = bridge.spectrumFpsCap
+                                if (cap <= 15) return 0
+                                if (cap >= 30) return 2
+                                return 1
+                            }
+                            onActivated: {
+                                if (!bridge) return
+                                const map = [15, 20, 30]
+                                bridge.setSpectrumFpsCap(map[currentIndex])
+                            }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Frame rate massimo del waterfall/panadapter integrato. 15=PC modesti, 20=default bilanciato, 30=hardware moderno. Quando Full Spectrum è detached il render thread separato regge i 30 fps senza impatto sul decode.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
                         // ── Font ──
                         Text { text: qsTr("FONT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }

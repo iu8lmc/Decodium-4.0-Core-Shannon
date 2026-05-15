@@ -359,6 +359,12 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString uiQuality READ uiQuality WRITE setUiQuality NOTIFY uiQualityChanged)
     Q_PROPERTY(bool uiFramelessPopouts READ uiFramelessPopouts WRITE setUiFramelessPopouts NOTIFY uiFramelessPopoutsChanged)
     Q_PROPERTY(QString uiStyle READ uiStyle WRITE setUiStyle NOTIFY uiStyleChanged)
+    // 1.0.186 — Full Spectrum auto-detach: pop-out di default per isolare il
+    // scene-graph del Waterfall e degli ListView period1/period2 dal Main,
+    // ottenendo render thread separato (Pasquale-pattern).
+    Q_PROPERTY(bool autoDetachFullSpectrum READ autoDetachFullSpectrum WRITE setAutoDetachFullSpectrum NOTIFY autoDetachFullSpectrumChanged)
+    // 1.0.186 — Cap FPS panadapter (15/20/30); default 20 integrato/30 detached
+    Q_PROPERTY(int spectrumFpsCap READ spectrumFpsCap WRITE setSpectrumFpsCap NOTIFY spectrumFpsCapChanged)
 
 public:
     explicit DecodiumBridge(QObject* parent = nullptr);
@@ -1044,6 +1050,8 @@ signals:
     void smoothDecodeFlowChanged();  // 1.0.179 — Smooth Decode Flow
     // 1.0.180
     void uiQualityChanged();
+    void autoDetachFullSpectrumChanged();
+    void spectrumFpsCapChanged();
     void uiFramelessPopoutsChanged();
     void uiStyleChanged();
     void dualCarrierEnabledChanged();
@@ -1449,6 +1457,13 @@ private:
     QString m_uiQuality {QStringLiteral("Medium")};       // Low | Medium | High
     bool    m_uiFramelessPopouts {false};
     QString m_uiStyle {QStringLiteral("Default")};        // Default | FluentWinUI3 | Material | Universal
+    // 1.0.186 — Full Spectrum auto-detach + spectrum FPS cap
+    bool m_autoDetachFullSpectrum {true};                 // default ON: pop-out per isolation
+    int  m_spectrumFpsCap {20};                           // 15 | 20 | 30 (FPS panadapter)
+    // 1.0.186 — Ring buffer timestamps dei "short stall" (gapMs >= 300 ma < 600),
+    // per scattare cpuPressure anche su raffiche di stall corti consecutivi
+    // che non superano la soglia 600ms ma cumulativamente strozzano il decode.
+    QVector<qint64> m_recentShortStalls;
     // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
     // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
     int  m_currentPartnerSnrDb {127};
@@ -2068,6 +2083,13 @@ public:
     Q_INVOKABLE void    setUiFramelessPopouts(bool v);
     Q_INVOKABLE QString uiStyle() const { return m_uiStyle; }
     Q_INVOKABLE void    setUiStyle(QString const& v);
+
+    // 1.0.186 — Full Spectrum auto-detach (default ON)
+    Q_INVOKABLE bool autoDetachFullSpectrum() const { return m_autoDetachFullSpectrum; }
+    Q_INVOKABLE void setAutoDetachFullSpectrum(bool v);
+    // 1.0.186 — Cap FPS panadapter (15 | 20 | 30)
+    Q_INVOKABLE int  spectrumFpsCap() const { return m_spectrumFpsCap; }
+    Q_INVOKABLE void setSpectrumFpsCap(int v);
 
     // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
     Q_INVOKABLE bool    startWebServer(int port = 8080);

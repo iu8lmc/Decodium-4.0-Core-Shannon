@@ -1508,7 +1508,7 @@ ApplicationWindow {
                     color: secondaryCyan
 
                     SequentialAnimation on x {
-                        running: bridge.pskSearching
+                        running: bridge.pskSearching && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
                         NumberAnimation { to: loadingIndicatorBg.width * 0.7; duration: 800; easing.type: Easing.InOutQuad }
                         NumberAnimation { to: 0; duration: 800; easing.type: Easing.InOutQuad }
@@ -1855,10 +1855,10 @@ ApplicationWindow {
                                 color: bridge.catConnected ? accentGreen : "#555"
 
                                 SequentialAnimation on opacity {
-                                    running: bridge.catConnected
+                                    running: bridge.catConnected && bridge.uiQuality !== "Low"
                                     loops: Animation.Infinite
                                     NumberAnimation { to: 0.4; duration: 800 }
-                                    NumberAnimation { to: 1.0; duration: 800 }
+                                    OpacityAnimator { to: 1.0; duration: 800 }
                                 }
                             }
 
@@ -2012,10 +2012,10 @@ ApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging
+                                running: bridge.coherentAvgEnabled && bridge.ledCoherentAveraging && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
-                                NumberAnimation { to: 0.5; duration: 400 }
-                                NumberAnimation { to: 1.0; duration: 400 }
+                                OpacityAnimator { to: 0.5; duration: 400 }
+                                OpacityAnimator { to: 1.0; duration: 400 }
                             }
 
                             ToolTip.visible: maCoherent.containsMouse
@@ -2047,10 +2047,10 @@ ApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync
+                                running: bridge.neuralSyncEnabled && bridge.ledNeuralSync && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
-                                NumberAnimation { to: 0.5; duration: 300 }
-                                NumberAnimation { to: 1.0; duration: 300 }
+                                OpacityAnimator { to: 0.5; duration: 300 }
+                                OpacityAnimator { to: 1.0; duration: 300 }
                             }
 
                             ToolTip.visible: maNeural.containsMouse
@@ -2082,10 +2082,10 @@ ApplicationWindow {
                             border.width: 1
 
                             SequentialAnimation on opacity {
-                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback
+                                running: bridge.turboFeedbackEnabled && bridge.ledTurboFeedback && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
-                                NumberAnimation { to: 0.5; duration: 350 }
-                                NumberAnimation { to: 1.0; duration: 350 }
+                                OpacityAnimator { to: 0.5; duration: 350 }
+                                OpacityAnimator { to: 1.0; duration: 350 }
                             }
 
                             ToolTip.visible: maTurbo.containsMouse
@@ -2155,10 +2155,10 @@ ApplicationWindow {
                         opacity: 0
 
                         SequentialAnimation on opacity {
-                            running: mainWindow.txVisualActive
+                            running: mainWindow.txVisualActive && bridge && bridge.uiQuality !== "Low"
                             loops: Animation.Infinite
-                            NumberAnimation { to: 1.0; duration: 250 }
-                            NumberAnimation { to: 0.3; duration: 250 }
+                            OpacityAnimator { to: 1.0; duration: 250 }
+                            OpacityAnimator { to: 0.3; duration: 250 }
                         }
                     }
                 }
@@ -2349,10 +2349,10 @@ ApplicationWindow {
                                         anchors.verticalCenter: parent.verticalCenter
 
                                         SequentialAnimation on opacity {
-                                            running: bridge.monitoring
+                                            running: bridge.monitoring && bridge.uiQuality !== "Low"
                                             loops: Animation.Infinite
-                                            NumberAnimation { to: 0.4; duration: 500 }
-                                            NumberAnimation { to: 1.0; duration: 500 }
+                                            OpacityAnimator { to: 0.4; duration: 500 }
+                                            OpacityAnimator { to: 1.0; duration: 500 }
                                         }
                                     }
 
@@ -3203,10 +3203,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: waterfallMinimized
+                        running: waterfallMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3255,10 +3255,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: logWindowMinimized
+                        running: logWindowMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3307,10 +3307,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: astroWindowMinimized
+                        running: astroWindowMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3365,10 +3365,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: liveMapMinimized
+                        running: liveMapMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3551,10 +3551,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: macroDialogMinimized
+                        running: macroDialogMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3603,10 +3603,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: rigControlMinimized
+                        running: rigControlMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3656,10 +3656,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: period1Minimized
+                        running: period1Minimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3708,10 +3708,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: period2Minimized
+                        running: period2Minimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3759,10 +3759,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: rxFreqMinimized
+                        running: rxFreqMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -3811,10 +3811,10 @@ ApplicationWindow {
                     ToolTip.delay: 500
 
                     SequentialAnimation on opacity {
-                        running: txPanelMinimized
+                        running: txPanelMinimized && bridge && bridge.uiQuality !== "Low"
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.7; duration: 800 }
-                        NumberAnimation { to: 1.0; duration: 800 }
+                        OpacityAnimator { to: 0.7; duration: 800 }
+                        OpacityAnimator { to: 1.0; duration: 800 }
                     }
                 }
 
@@ -4109,7 +4109,7 @@ ApplicationWindow {
                         border.width: 1
                         // Glow when near snap
                         OpacityAnimator on opacity {
-                            running: snapChip.parent.nearSnapPoint
+                            running: snapChip.parent.nearSnapPoint && bridge && bridge.uiQuality !== "Low"
                             from: 0.7; to: 1.0; duration: 250
                             loops: Animation.Infinite
                         }
@@ -4230,10 +4230,10 @@ ApplicationWindow {
                             opacity: 0.8
 
                             SequentialAnimation on opacity {
-                                running: waterfallPanel.isDockHighlighted
+                                running: waterfallPanel.isDockHighlighted && bridge && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
-                                NumberAnimation { to: 0.4; duration: 300 }
-                                NumberAnimation { to: 1.0; duration: 300 }
+                                OpacityAnimator { to: 0.4; duration: 300 }
+                                OpacityAnimator { to: 1.0; duration: 300 }
                             }
                         }
                     }
@@ -5091,10 +5091,10 @@ ApplicationWindow {
                                     opacity: 0.8
 
                                     SequentialAnimation on opacity {
-                                        running: period1DockHighlighted
+                                        running: period1DockHighlighted && bridge && bridge.uiQuality !== "Low"
                                         loops: Animation.Infinite
-                                        NumberAnimation { to: 0.4; duration: 300 }
-                                        NumberAnimation { to: 1.0; duration: 300 }
+                                        OpacityAnimator { to: 0.4; duration: 300 }
+                                        OpacityAnimator { to: 1.0; duration: 300 }
                                     }
                                 }
                             }
@@ -5128,10 +5128,10 @@ ApplicationWindow {
                                             color: bridge.themeManager.successColor
 
                                             SequentialAnimation on opacity {
-                                                running: decodePanel.isCurrentPeriodEven
+                                                running: decodePanel.isCurrentPeriodEven && bridge && bridge.uiQuality !== "Low"
                                                 loops: Animation.Infinite
-                                                NumberAnimation { to: 0.3; duration: 500 }
-                                                NumberAnimation { to: 1.0; duration: 500 }
+                                                OpacityAnimator { to: 0.3; duration: 500 }
+                                                OpacityAnimator { to: 1.0; duration: 500 }
                                             }
 
                                             // Reset opacity when not active
@@ -5163,10 +5163,10 @@ ApplicationWindow {
                                             }
 
                                             SequentialAnimation on opacity {
-                                                running: decodePanel.isCurrentPeriodEven
+                                                running: decodePanel.isCurrentPeriodEven && bridge && bridge.uiQuality !== "Low"
                                                 loops: Animation.Infinite
-                                                NumberAnimation { to: 0.6; duration: 600 }
-                                                NumberAnimation { to: 1.0; duration: 600 }
+                                                OpacityAnimator { to: 0.6; duration: 600 }
+                                                OpacityAnimator { to: 1.0; duration: 600 }
                                             }
                                         }
 
@@ -5386,17 +5386,24 @@ NumberAnimation {
                                         on_VerChanged: {
                                             forceTailFollow()
                                         }
+	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
+	                                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
+	                                        // pattern allineato a DecodeList.qml:243-251.
 	                                        add: Transition {
-	                                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        addDisplaced: Transition {
-	                                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        moveDisplaced: Transition {
-	                                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        removeDisplaced: Transition {
-	                                            NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 
                                         ScrollBar.vertical: ScrollBar {
@@ -5636,10 +5643,10 @@ NumberAnimation {
                                     opacity: 0.8
 
                                     SequentialAnimation on opacity {
-                                        running: rxFreqDockHighlighted
+                                        running: rxFreqDockHighlighted && bridge && bridge.uiQuality !== "Low"
                                         loops: Animation.Infinite
-                                        NumberAnimation { to: 0.4; duration: 300 }
-                                        NumberAnimation { to: 1.0; duration: 300 }
+                                        OpacityAnimator { to: 0.4; duration: 300 }
+                                        OpacityAnimator { to: 1.0; duration: 300 }
                                     }
                                 }
                             }
@@ -5884,17 +5891,24 @@ NumberAnimation {
                                             forceTailFollow()
                                         }
                                         model: decodePanel.rxDecodes
+	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
+	                                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
+	                                        // pattern allineato a DecodeList.qml:243-251.
 	                                        add: Transition {
-	                                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        addDisplaced: Transition {
-	                                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        moveDisplaced: Transition {
-	                                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 	                                        removeDisplaced: Transition {
-	                                            NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic }
+	                                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                                        }
 
                                         ScrollBar.vertical: ScrollBar {
@@ -6131,10 +6145,10 @@ NumberAnimation {
                         opacity: 0.8
 
                         SequentialAnimation on opacity {
-                            running: txPanelDockHighlighted
+                            running: txPanelDockHighlighted && bridge && bridge.uiQuality !== "Low"
                             loops: Animation.Infinite
-                            NumberAnimation { to: 0.4; duration: 300 }
-                            NumberAnimation { to: 1.0; duration: 300 }
+                            OpacityAnimator { to: 0.4; duration: 300 }
+                            OpacityAnimator { to: 1.0; duration: 300 }
                         }
                     }
                 }
@@ -8476,10 +8490,10 @@ NumberAnimation {
                             color: bridge.monitoring ? accentGreen : "#555"
 
                             SequentialAnimation on opacity {
-                                running: bridge.monitoring
+                                running: bridge.monitoring && bridge.uiQuality !== "Low"
                                 loops: Animation.Infinite
-                                NumberAnimation { to: 0.4; duration: 600 }
-                                NumberAnimation { to: 1.0; duration: 600 }
+                                OpacityAnimator { to: 0.4; duration: 600 }
+                                OpacityAnimator { to: 1.0; duration: 600 }
                             }
                         }
                     }
@@ -9032,6 +9046,14 @@ NumberAnimation {
             repeat: false
             onTriggered: {
                 mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
+                // 1.0.186 — Auto-detach Full Spectrum di default. Pasquale-pattern:
+                // pop-out in Window separata → render thread isolato → niente stall
+                // main-thread durante drain ListView / texture upload waterfall.
+                // Disattivabile da Settings → "Detach Full Spectrum at startup".
+                if (!mainWindow.period1Detached
+                        && bridge && bridge.autoDetachFullSpectrum) {
+                    mainWindow.detachFullSpectrumPanel()
+                }
             }
         }
 
@@ -9350,17 +9372,24 @@ NumberAnimation {
                         on_VerChanged: {
                             forceTailFollow()
                         }
+	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
+	                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
+	                        // pattern allineato a DecodeList.qml:243-251.
 	                        add: Transition {
-	                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        addDisplaced: Transition {
-	                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        moveDisplaced: Transition {
-	                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        removeDisplaced: Transition {
-	                            NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                        }
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
@@ -9810,17 +9839,24 @@ NumberAnimation {
                             forceTailFollow()
                         }
                         model: decodePanel.rxDecodes
+	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
+	                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
+	                        // pattern allineato a DecodeList.qml:243-251.
 	                        add: Transition {
-	                            NumberAnimation { properties: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            OpacityAnimator { from: 0.0; to: 1.0; duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        addDisplaced: Transition {
-	                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        moveDisplaced: Transition {
-	                            NumberAnimation { properties: "y"; duration: 270; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                        }
 	                        removeDisplaced: Transition {
-	                            NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic }
+	                            enabled: bridge && bridge.smoothDecodeFlow && bridge.uiQuality !== "Low"
+	                            YAnimator { duration: 100; easing.type: Easing.OutQuad }
 	                        }
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AsNeeded
