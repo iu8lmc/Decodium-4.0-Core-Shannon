@@ -112,10 +112,12 @@ def build_v5_packet(command: str) -> bytes:
 
 def decode_v5_payload(packet: bytes) -> str:
     payload = packet[HEADER_SIZE:]
-    terminator = payload.find(b"\x00\x00")
+    terminator = -1
+    for index in range(0, max(0, len(payload) - 1), 2):
+        if payload[index:index + 2] == b"\x00\x00":
+            terminator = index
+            break
     if terminator >= 0:
-        # Keep UTF-16 alignment.
-        terminator -= terminator % 2
         payload = payload[:terminator]
     return payload.decode("utf-16le", errors="replace").strip()
 
