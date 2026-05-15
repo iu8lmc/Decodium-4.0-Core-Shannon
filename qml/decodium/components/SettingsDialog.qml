@@ -2821,11 +2821,17 @@ Dialog {
                                         .arg(bridge.cpuPressureEventCount)
                                         .arg(bridge.cpuPressureSevereEventCount)
                                   : qsTr("totale=0 · severi=0")
-                            hoverEnabled: true
-                            ToolTip.visible: ma.containsMouse
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Contatori eventi cpuPressure dalla sessione corrente. Severi (≥1100ms o burst 4+ short stall) sono il segnale più forte: se vedi >=5 dopo un'ora di uso, abbassa UI Quality a Low oppure Spectrum FPS cap a 15.")
-                            MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                            // 1.0.190 hotfix — hoverEnabled / ToolTip.* non sono
+                            // proprieta' di Text. Tooltip e' attached property
+                            // gestita da MouseArea con .text dedicato.
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                                ToolTip.visible: containsMouse
+                                ToolTip.delay: 400
+                                ToolTip.text: qsTr("Contatori eventi cpuPressure dalla sessione corrente. Severi (≥1100ms o burst 4+ short stall) sono il segnale più forte: se vedi >=5 dopo un'ora di uso, abbassa UI Quality a Low oppure Spectrum FPS cap a 15.")
+                            }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
