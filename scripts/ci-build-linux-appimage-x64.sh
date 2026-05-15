@@ -48,6 +48,8 @@ if [[ -z "${QMAKE}" ]]; then
 fi
 
 QT_PLUGIN_DIR_FOR_BUILD="$("${QMAKE}" -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+QT_LIB_DIR_FOR_BUILD="$("${QMAKE}" -query QT_INSTALL_LIBS 2>/dev/null || true)"
+QT_PREFIX_FOR_BUILD="$("${QMAKE}" -query QT_INSTALL_PREFIX 2>/dev/null || true)"
 restore_disabled_qt_plugin() {
   local plugin_subdir="$1"
   local plugin_name="$2"
@@ -97,10 +99,16 @@ echo "Build dir:      ${BUILD_DIR}"
 echo "Output dir:     ${OUTPUT_DIR}"
 echo "Jobs:           ${JOBS}"
 echo "QMake:          ${QMAKE} ($("${QMAKE}" -query QT_VERSION 2>/dev/null || true))"
+echo "Qt prefix:      ${QT_PREFIX_FOR_BUILD}"
+echo "Qt libs:        ${QT_LIB_DIR_FOR_BUILD}"
 
 export PATH="${HAMLIB_PREFIX}/bin:${PATH}"
 export PKG_CONFIG_PATH="${HAMLIB_PREFIX}/lib/pkgconfig:${HAMLIB_PREFIX}/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
-export LD_LIBRARY_PATH="${HAMLIB_PREFIX}/lib:${HAMLIB_PREFIX}/lib64:${LD_LIBRARY_PATH:-}"
+if [[ -n "${QT_LIB_DIR_FOR_BUILD}" && -d "${QT_LIB_DIR_FOR_BUILD}" ]]; then
+  export LD_LIBRARY_PATH="${QT_LIB_DIR_FOR_BUILD}:${HAMLIB_PREFIX}/lib:${HAMLIB_PREFIX}/lib64:${LD_LIBRARY_PATH:-}"
+else
+  export LD_LIBRARY_PATH="${HAMLIB_PREFIX}/lib:${HAMLIB_PREFIX}/lib64:${LD_LIBRARY_PATH:-}"
+fi
 export CMAKE_PREFIX_PATH="${HAMLIB_PREFIX}${CMAKE_PREFIX_PATH:+;${CMAKE_PREFIX_PATH}}"
 
 hamlib_ready=false
