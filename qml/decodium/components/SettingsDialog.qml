@@ -2471,6 +2471,42 @@ Dialog {
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
+                        // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory cache (30s)
+                        Text { text: qsTr("FT2 partner-memory (anti-QSB):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        CheckBox {
+                            id: ft2PartnerMemoryCheck
+                            checked: bridge ? bridge.ft2PartnerMemoryEnabled : false
+                            enabled: bridge ? bridge.ft2Conservative : false
+                            onCheckedChanged: {
+                                if (bridge) bridge.setFt2PartnerMemoryEnabled(checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Cache stato partner (callsign + TX num + qsoProgress + SNR) per 30 secondi: se il partner sparisce per QSB e ricompare entro 30s, ripristina il qsoProgress invece di ripartire da TX1. Richiede Conservative FT2 attivo. Default OFF (opt-in dopo revert 1.0.186 — gate stretto + log [FT2WS-F]). Disattivato in automatico se Conservative OFF.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
+                        Text { text: qsTr("FT2 TX2 re-send on stall:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        CheckBox {
+                            id: ft2Tx2ResendCheck
+                            checked: bridge ? bridge.ft2Tx2ResendOnStall : true
+                            enabled: bridge ? bridge.ft2Conservative : false
+                            onCheckedChanged: {
+                                if (bridge) bridge.setFt2Tx2ResendOnStall(checked)
+                            }
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                            hoverEnabled: true
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Se sei in TX3 (R+report) e il partner non risponde per 2 periodi (~7.5s), ri-trasmette TX2 (signal report) una volta sola prima di lasciare il QSO. Aiuta sui partner deboli che non hanno acked la prima volta. Cap a 1 re-send per QSO (no loop). Richiede Conservative FT2 attivo. Default ON sotto Conservative.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
                         // Smooth decode flow (streaming progressivo FT8/FT4)
                         // — spalma i decode dal batch a streaming continuo
                         // stile WSJT-X live. Auto-fallback se UI stall.

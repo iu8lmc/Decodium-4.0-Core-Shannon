@@ -351,6 +351,14 @@ class DecodiumBridge : public QObject
 
     // 1.0.174 — FT2 Weak-Signal Pack master flag
     Q_PROPERTY(bool ft2Conservative READ ft2Conservative WRITE setFt2Conservative NOTIFY ft2ConservativeChanged)
+    // 1.0.187 — FT2 Weak-Signal Pack F (v2): partner-memory opt-in.
+    // Diversamente dalla 1.0.186 revertita, qui e' default OFF e ha gate molto
+    // piu' stretti + log immediato di ogni invocazione (anche se guardrail rifiuta).
+    Q_PROPERTY(bool ft2PartnerMemoryEnabled READ ft2PartnerMemoryEnabled WRITE setFt2PartnerMemoryEnabled NOTIFY ft2PartnerMemoryEnabledChanged)
+    // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback.
+    // Quando sei in TX3 (R+report) e il partner non ack in 2 periodi, ri-trasmette TX2
+    // invece di mollare. Gated su Conservative+FT2. Default ON sotto Conservative.
+    Q_PROPERTY(bool ft2Tx2ResendOnStall READ ft2Tx2ResendOnStall WRITE setFt2Tx2ResendOnStall NOTIFY ft2Tx2ResendOnStallChanged)
 
     // 1.0.179 — Smooth Decode Flow scheduler
     Q_PROPERTY(bool smoothDecodeFlow READ smoothDecodeFlow WRITE setSmoothDecodeFlow NOTIFY smoothDecodeFlowChanged)
@@ -787,6 +795,15 @@ public slots:
     Q_INVOKABLE void copyToClipboard(const QString &text);
     Q_INVOKABLE void advanceQsoState(int txNum); // GitHub TxController clone
 
+private:
+    // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory helpers (gate stretto + log immediato)
+    void rememberPartnerStateV2(QString const& tag);
+    bool tryResumeFromPartnerMemoryV2(QString const& newDxCall);
+    void prunePartnerMemoryIfDueV2();
+    // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send check
+    bool maybeForceTx2ResendOnStall();
+public:
+
     // Audio
     Q_INVOKABLE void refreshAudioDevices();
     Q_INVOKABLE void setTxAudioFreqFromClick(int f) { setTxFrequency(f); }
@@ -1047,6 +1064,8 @@ signals:
     void alt12EnabledChanged();
     void asyncTxEnabledChanged();
     void ft2ConservativeChanged();  // 1.0.174 — FT2 Weak-Signal Pack
+    void ft2PartnerMemoryEnabledChanged();  // 1.0.187 — Pack F v2
+    void ft2Tx2ResendOnStallChanged();      // 1.0.187 — Pack G
     void smoothDecodeFlowChanged();  // 1.0.179 — Smooth Decode Flow
     // 1.0.180
     void uiQualityChanged();
@@ -1447,6 +1466,24 @@ private:
     bool m_hideGhostDecodes {true};
     // 1.0.174 — FT2 weak-signal pack master flag (opt-in, default OFF).
     bool m_ft2Conservative {false};
+    // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory state
+    bool m_ft2PartnerMemoryEnabled {false};   // opt-in, default OFF
+    struct PartnerMemoryEntry {
+        QString callUpper;
+        int     lastTxNum {0};
+        int     qsoProgress {0};
+        int     lastSnrDb {127};
+        qint64  lastSeenMs {0};
+        QString lastTxPayload;
+    };
+    QHash<QString, PartnerMemoryEntry> m_partnerMemory;
+    qint64 m_partnerMemoryLastPruneMs {0};
+    static constexpr qint64 kPartnerMemoryWindowMs = 30000;   // 30s
+    static constexpr qint64 kPartnerMemoryPruneMs  = 60000;   // 60s
+    // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
+    bool m_ft2Tx2ResendOnStall {true};        // gated comunque su Conservative+FT2
+    int  m_ft2Tx2ResendsThisQso {0};          // cap: max 1 re-send per QSO (evita loop)
+    int  m_ft2LastForcedTxBefore {0};         // ricorda da quale TX abbiamo "forzato"
     // 1.0.179 — Smooth Decode Flow scheduler state
     bool                  m_smoothDecodeFlow {true};
     QVector<QVariantMap>  m_pendingDecodeReleaseQueue;
@@ -2068,6 +2105,12 @@ public:
     // ghost filter rilassato (-24 dB), retry cap esteso, same-step wait
     // adattivo. Opt-in via Settings; default OFF.
     Q_INVOKABLE bool ft2Conservative() const { return m_ft2Conservative; }
+    // 1.0.187 — FT2 Weak-Signal Pack F v2
+    Q_INVOKABLE bool ft2PartnerMemoryEnabled() const { return m_ft2PartnerMemoryEnabled; }
+    Q_INVOKABLE void setFt2PartnerMemoryEnabled(bool v);
+    // 1.0.187 — FT2 Weak-Signal Pack G
+    Q_INVOKABLE bool ft2Tx2ResendOnStall() const { return m_ft2Tx2ResendOnStall; }
+    Q_INVOKABLE void setFt2Tx2ResendOnStall(bool v);
     Q_INVOKABLE void setFt2Conservative(bool v);
 
     // 1.0.179 — Smooth Decode Flow scheduler: spalma il rilascio dei decode
