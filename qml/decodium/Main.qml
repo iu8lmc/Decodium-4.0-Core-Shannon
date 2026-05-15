@@ -6675,7 +6675,7 @@ NumberAnimation {
         }
         function onTimeSyncSettingsRequested() {
             timeSyncPanelVisible = true
-            openSettingsTab(8)
+            openSettingsTab(9)
         }
         function onSetupSettingsRequested(tabIndex) {
             openSettingsTab(tabIndex !== undefined && tabIndex >= 0 ? tabIndex : 0)

@@ -1311,6 +1311,19 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
           };
     }
 
+  auto const stale_bytes_available = hrd_->bytesAvailable ();
+  if (stale_bytes_available > 0)
+    {
+      auto const stale = hrd_->readAll ();
+      hrd_diag (QStringLiteral ("#%1 discarded stale HRD bytes before write proto=%2 pendingBefore=%3 discarded=%4 hex=%5 cmd='%6'")
+                .arg (QString::number (sequence))
+                .arg (hrd_protocol_name (protocol_))
+                .arg (stale_bytes_available)
+                .arg (stale.size ())
+                .arg (hrd_hex_preview (stale))
+                .arg (hrd_preview (wire_command)));
+    }
+
   if (log_command)
     {
       hrd_diag (QStringLiteral ("#%1 >>> proto=%2 recurse=%3 prepend=%4 pending=%5 cmd='%6'")

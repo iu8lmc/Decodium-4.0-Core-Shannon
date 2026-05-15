@@ -22,7 +22,7 @@ Dialog {
     property bool warmupInProgress: false
     property int currentTab: {
         var savedTab = Number(bridge.getSetting("uiSettingsCurrentTab", 0))
-        return isFinite(savedTab) ? Math.max(0, Math.min(10, Math.floor(savedTab))) : 0
+        return isFinite(savedTab) ? Math.max(0, Math.min(11, Math.floor(savedTab))) : 0
     }
     readonly property int labelWidth: 140
     readonly property int fieldMinWidth: 300
@@ -43,6 +43,13 @@ Dialog {
     property string fontPickerSearch: ""
     property var fontPickerFamilies: []
     property bool loggingChecksUpdating: false
+    property var workingFrequencyRows: []
+    property var stationFrequencyRows: []
+    property var frequencyRegionOptions: bridge.frequencyRegionOptions()
+    property var frequencyModeOptions: bridge.frequencyModeOptions()
+    property var frequencyBandOptions: bridge.frequencyBandOptions()
+    property int selectedWorkingFrequencyIndex: -1
+    property int selectedStationFrequencyIndex: -1
 
     function refreshFontLabels() {
         uiFontLabel = bridge.fontSettingLabel("Font", "", 0)
@@ -94,6 +101,155 @@ Dialog {
         promptToLogCheck.checked = promptMode
         autoLogCheck.checked = autoMode
         loggingChecksUpdating = false
+    }
+
+    function refreshFrequencySettings() {
+        workingFrequencyRows = bridge.workingFrequencyRows()
+        stationFrequencyRows = bridge.stationFrequencyRows()
+        frequencyRegionOptions = bridge.frequencyRegionOptions()
+        frequencyModeOptions = bridge.frequencyModeOptions()
+        frequencyBandOptions = bridge.frequencyBandOptions()
+        if (selectedWorkingFrequencyIndex >= workingFrequencyRows.length)
+            selectedWorkingFrequencyIndex = -1
+        if (selectedStationFrequencyIndex >= stationFrequencyRows.length)
+            selectedStationFrequencyIndex = -1
+        if (typeof frequencySlopeField !== "undefined")
+            frequencySlopeField.text = Number(bridge.frequencyCalibrationSlopePpm()).toFixed(5)
+        if (typeof frequencyInterceptField !== "undefined")
+            frequencyInterceptField.text = Number(bridge.frequencyCalibrationInterceptHz()).toFixed(2)
+    }
+
+    function commitFrequencySlope(text) {
+        var value = Number(String(text).replace(",", "."))
+        if (!isFinite(value))
+            value = bridge.frequencyCalibrationSlopePpm()
+        bridge.setFrequencyCalibrationSlopePpm(value)
+        return Number(bridge.frequencyCalibrationSlopePpm()).toFixed(5)
+    }
+
+    function commitFrequencyIntercept(text) {
+        var value = Number(String(text).replace(",", "."))
+        if (!isFinite(value))
+            value = bridge.frequencyCalibrationInterceptHz()
+        bridge.setFrequencyCalibrationInterceptHz(value)
+        return Number(bridge.frequencyCalibrationInterceptHz()).toFixed(2)
+    }
+
+    function setComboText(combo, value) {
+        if (!combo)
+            return
+        var text = String(value || "")
+        for (var i = 0; i < combo.count; ++i) {
+            if (combo.textAt(i) === text) {
+                combo.currentIndex = i
+                return
+            }
+        }
+        combo.currentIndex = combo.count > 0 ? 0 : -1
+    }
+
+    function selectWorkingFrequencyRow(row) {
+        if (!row)
+            return
+        selectedWorkingFrequencyIndex = Number(row.index)
+        setComboText(frequencyRegionCombo, row.region || "All")
+        setComboText(frequencyModeCombo, row.mode || "FT8")
+        frequencyMHzField.text = row.frequencyMHz || ""
+        frequencyPreferredCheck.checked = !!row.preferred
+        frequencyDescriptionField.text = row.description || ""
+        frequencyStartField.text = row.startTime || ""
+        frequencyEndField.text = row.endTime || ""
+    }
+
+    function clearWorkingFrequencyEditor() {
+        selectedWorkingFrequencyIndex = -1
+        setComboText(frequencyRegionCombo, "All")
+        setComboText(frequencyModeCombo, bridge.mode || "FT8")
+        frequencyMHzField.text = ""
+        frequencyPreferredCheck.checked = false
+        frequencyDescriptionField.text = ""
+        frequencyStartField.text = ""
+        frequencyEndField.text = ""
+    }
+
+    function addWorkingFrequencyFromEditor() {
+        if (bridge.addWorkingFrequencyRow(frequencyRegionCombo.currentText,
+                                          frequencyModeCombo.currentText,
+                                          frequencyMHzField.text,
+                                          frequencyDescriptionField.text,
+                                          frequencyStartField.text,
+                                          frequencyEndField.text,
+                                          frequencyPreferredCheck.checked)) {
+            refreshFrequencySettings()
+        }
+    }
+
+    function updateWorkingFrequencyFromEditor() {
+        if (selectedWorkingFrequencyIndex < 0)
+            return
+        if (bridge.updateWorkingFrequencyRow(selectedWorkingFrequencyIndex,
+                                             frequencyRegionCombo.currentText,
+                                             frequencyModeCombo.currentText,
+                                             frequencyMHzField.text,
+                                             frequencyDescriptionField.text,
+                                             frequencyStartField.text,
+                                             frequencyEndField.text,
+                                             frequencyPreferredCheck.checked)) {
+            refreshFrequencySettings()
+        }
+    }
+
+    function deleteSelectedWorkingFrequency() {
+        if (selectedWorkingFrequencyIndex < 0)
+            return
+        if (bridge.deleteWorkingFrequencyRow(selectedWorkingFrequencyIndex)) {
+            clearWorkingFrequencyEditor()
+            refreshFrequencySettings()
+        }
+    }
+
+    function selectStationFrequencyRow(row) {
+        if (!row)
+            return
+        selectedStationFrequencyIndex = Number(row.index)
+        setComboText(stationBandCombo, row.band || "20m")
+        stationOffsetField.text = row.offsetMHz || String(row.offset || "").replace(" MHz", "")
+        stationAntennaField.text = row.antenna || ""
+    }
+
+    function clearStationFrequencyEditor() {
+        selectedStationFrequencyIndex = -1
+        setComboText(stationBandCombo, "20m")
+        stationOffsetField.text = "0.000000"
+        stationAntennaField.text = ""
+    }
+
+    function addStationFrequencyFromEditor() {
+        if (bridge.addStationFrequencyRow(stationBandCombo.currentText,
+                                          stationOffsetField.text,
+                                          stationAntennaField.text)) {
+            refreshFrequencySettings()
+        }
+    }
+
+    function updateStationFrequencyFromEditor() {
+        if (selectedStationFrequencyIndex < 0)
+            return
+        if (bridge.updateStationFrequencyRow(selectedStationFrequencyIndex,
+                                             stationBandCombo.currentText,
+                                             stationOffsetField.text,
+                                             stationAntennaField.text)) {
+            refreshFrequencySettings()
+        }
+    }
+
+    function deleteSelectedStationFrequency() {
+        if (selectedStationFrequencyIndex < 0)
+            return
+        if (bridge.deleteStationFrequencyRow(selectedStationFrequencyIndex)) {
+            clearStationFrequencyEditor()
+            refreshFrequencySettings()
+        }
     }
 
     function normalizedHexColor(value) {
@@ -206,6 +362,10 @@ Dialog {
         if (text.indexOf("file://") === 0)
             return decodeURIComponent(text.substring(7))
         return decodeURIComponent(text)
+    }
+
+    function fileUrlToLocalPath(url) {
+        return folderUrlToLocalDirectory(url)
     }
 
     function openDirectoryPicker(settingKey, currentPath) {
@@ -597,7 +757,7 @@ Dialog {
 
     function openTab(index) {
         var tab = Number(index)
-        currentTab = isFinite(tab) ? Math.max(0, Math.min(10, Math.floor(tab))) : 0
+        currentTab = isFinite(tab) ? Math.max(0, Math.min(11, Math.floor(tab))) : 0
         open()
     }
 
@@ -719,6 +879,8 @@ Dialog {
     onCurrentTabChanged: {
         if (!warmupInProgress)
             bridge.setSetting("uiSettingsCurrentTab", currentTab)
+        if (currentTab === 7)
+            refreshFrequencySettings()
     }
 
     Timer {
@@ -759,6 +921,32 @@ Dialog {
                 saveDirectoryField.text = path
             else if (settingKey === "AzElDirectory")
                 azElDirectoryField.text = path
+        }
+    }
+
+    FileDialog {
+        id: workingFrequenciesLoadDialog
+        property bool mergeMode: false
+        title: mergeMode ? qsTr("Merge Working Frequencies") : qsTr("Load Working Frequencies")
+        nameFilters: [qsTr("Frequency files (*.qrg *.qrg.json)"), qsTr("All files (*)")]
+        onAccepted: {
+            var path = settingsDialog.fileUrlToLocalPath(selectedFile)
+            if (path.length > 0 && bridge.loadWorkingFrequenciesFile(path, mergeMode)) {
+                settingsDialog.clearWorkingFrequencyEditor()
+                settingsDialog.refreshFrequencySettings()
+            }
+        }
+    }
+
+    FileDialog {
+        id: workingFrequenciesSaveDialog
+        title: qsTr("Save Working Frequencies")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("Frequency files (*.qrg *.qrg.json)"), qsTr("All files (*)")]
+        onAccepted: {
+            var path = settingsDialog.fileUrlToLocalPath(selectedFile)
+            if (path.length > 0)
+                bridge.saveWorkingFrequenciesFile(path)
         }
     }
 
@@ -1156,7 +1344,7 @@ Dialog {
                     spacing: 2
 
                     Repeater {
-                        model: [qsTr("Station"), qsTr("Radio"), qsTr("Audio"), qsTr("TX"), qsTr("Display"), qsTr("Decode"), qsTr("Reporting"), qsTr("Colors"), qsTr("Advanced"), qsTr("Alerts"), qsTr("Filters")]
+                        model: [qsTr("Station"), qsTr("Radio"), qsTr("Audio"), qsTr("TX"), qsTr("Display"), qsTr("Decode"), qsTr("Reporting"), qsTr("Frequencies"), qsTr("Colors"), qsTr("Advanced"), qsTr("Alerts"), qsTr("Filters")]
                         delegate: Rectangle {
                             width: parent.width; height: 36; radius: 6
                             color: tabStack.currentIndex === index ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.25) : (tabMA.containsMouse ? Qt.rgba(1,1,1,0.05) : "transparent")
@@ -4007,7 +4195,548 @@ Dialog {
                     }
                 }
 
-                // ═══════════ TAB 7 — COLORI ═══════════
+                // ═══════════ TAB 7 — FREQUENCIES ═══════════
+                ScrollView {
+                    clip: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                    ColumnLayout {
+                        width: parent.width - 20
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        spacing: 10
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("FREQUENCY CALIBRATION")
+                                color: secondaryCyan
+                                font.pixelSize: 12
+                                font.bold: true
+                                Layout.fillWidth: true
+                            }
+                            Button {
+                                id: refreshFrequencyButton
+                                text: qsTr("Refresh")
+                                implicitHeight: controlHeight
+                                Layout.preferredWidth: 94
+                                onClicked: settingsDialog.refreshFrequencySettings()
+                                background: Rectangle {
+                                    color: refreshFrequencyButton.hovered ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.24) : bgMedium
+                                    border.color: glassBorder
+                                    radius: 4
+                                }
+                                contentItem: Text {
+                                    text: refreshFrequencyButton.text
+                                    color: textSecondary
+                                    font.pixelSize: 11
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 6
+                            columnSpacing: 10
+                            rowSpacing: 8
+
+                            Text { text: qsTr("Slope:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 80; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                            TextField {
+                                id: frequencySlopeField
+                                text: Number(bridge.frequencyCalibrationSlopePpm()).toFixed(5)
+                                Layout.preferredWidth: 130
+                                implicitHeight: controlHeight
+                                leftPadding: 8
+                                color: textPrimary
+                                font.pixelSize: controlFontSize
+                                horizontalAlignment: TextInput.AlignRight
+                                inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                validator: DoubleValidator { bottom: -200; top: 200; decimals: 5; notation: DoubleValidator.StandardNotation }
+                                topPadding: controlVerticalPadding
+                                bottomPadding: controlVerticalPadding
+                                verticalAlignment: TextInput.AlignVCenter
+                                background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                onEditingFinished: text = settingsDialog.commitFrequencySlope(text)
+                            }
+                            Text { text: qsTr("ppm"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 44; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+
+                            Text { text: qsTr("Intercept:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 88; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                            TextField {
+                                id: frequencyInterceptField
+                                text: Number(bridge.frequencyCalibrationInterceptHz()).toFixed(2)
+                                Layout.preferredWidth: 130
+                                implicitHeight: controlHeight
+                                leftPadding: 8
+                                color: textPrimary
+                                font.pixelSize: controlFontSize
+                                horizontalAlignment: TextInput.AlignRight
+                                inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                validator: DoubleValidator { bottom: -1000; top: 1000; decimals: 2; notation: DoubleValidator.StandardNotation }
+                                topPadding: controlVerticalPadding
+                                bottomPadding: controlVerticalPadding
+                                verticalAlignment: TextInput.AlignVCenter
+                                background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                onEditingFinished: text = settingsDialog.commitFrequencyIntercept(text)
+                            }
+                            Text { text: qsTr("Hz"); color: textSecondary; font.pixelSize: 12; Layout.fillWidth: true; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 8
+                            Text {
+                                text: qsTr("WORKING FREQUENCIES")
+                                color: secondaryCyan
+                                font.pixelSize: 12
+                                font.bold: true
+                                Layout.fillWidth: true
+                            }
+                            Button {
+                                id: loadWorkingFrequenciesButton
+                                text: qsTr("Load")
+                                implicitHeight: controlHeight
+                                Layout.preferredWidth: 78
+                                onClicked: {
+                                    workingFrequenciesLoadDialog.mergeMode = false
+                                    workingFrequenciesLoadDialog.open()
+                                }
+                                background: Rectangle { color: loadWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
+                                contentItem: Text { text: loadWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            }
+                            Button {
+                                id: mergeWorkingFrequenciesButton
+                                text: qsTr("Merge")
+                                implicitHeight: controlHeight
+                                Layout.preferredWidth: 78
+                                onClicked: {
+                                    workingFrequenciesLoadDialog.mergeMode = true
+                                    workingFrequenciesLoadDialog.open()
+                                }
+                                background: Rectangle { color: mergeWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
+                                contentItem: Text { text: mergeWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            }
+                            Button {
+                                id: saveWorkingFrequenciesButton
+                                text: qsTr("Save as")
+                                implicitHeight: controlHeight
+                                Layout.preferredWidth: 88
+                                onClicked: workingFrequenciesSaveDialog.open()
+                                background: Rectangle { color: saveWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
+                                contentItem: Text { text: saveWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            }
+                            Button {
+                                id: resetWorkingFrequenciesButton
+                                text: qsTr("Defaults")
+                                implicitHeight: controlHeight
+                                Layout.preferredWidth: 104
+                                onClicked: {
+                                    bridge.resetWorkingFrequenciesToDefaults()
+                                    settingsDialog.clearWorkingFrequencyEditor()
+                                    settingsDialog.refreshFrequencySettings()
+                                }
+                                background: Rectangle { color: resetWorkingFrequenciesButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: glassBorder; radius: 4 }
+                                contentItem: Text { text: resetWorkingFrequenciesButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            }
+                        }
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 168
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.44)
+                            border.color: glassBorder
+                            radius: 6
+                            clip: true
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: qsTr("Region:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 58; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    ComboBox {
+                                        id: frequencyRegionCombo
+                                        model: settingsDialog.frequencyRegionOptions
+                                        Layout.preferredWidth: 132
+                                        implicitHeight: controlHeight
+                                    }
+                                    Text { text: qsTr("Mode:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 44; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    ComboBox {
+                                        id: frequencyModeCombo
+                                        model: settingsDialog.frequencyModeOptions
+                                        Layout.preferredWidth: 124
+                                        implicitHeight: controlHeight
+                                        Component.onCompleted: settingsDialog.setComboText(frequencyModeCombo, bridge.mode || "FT8")
+                                    }
+                                    Text { text: qsTr("Freq MHz:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 68; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    TextField {
+                                        id: frequencyMHzField
+                                        placeholderText: "14.074000"
+                                        color: textPrimary
+                                        font.pixelSize: controlFontSize
+                                        horizontalAlignment: TextInput.AlignRight
+                                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 120
+                                        implicitHeight: controlHeight
+                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                    }
+                                    CheckBox {
+                                        id: frequencyPreferredCheck
+                                        text: qsTr("Pref")
+                                        Layout.preferredWidth: 82
+                                        implicitHeight: controlHeight
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: qsTr("Description:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 94; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    TextField {
+                                        id: frequencyDescriptionField
+                                        color: textPrimary
+                                        font.pixelSize: controlFontSize
+                                        Layout.fillWidth: true
+                                        implicitHeight: controlHeight
+                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: qsTr("Start:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 46; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    TextField {
+                                        id: frequencyStartField
+                                        placeholderText: "yyyy-MM-dd HH:mm"
+                                        color: textPrimary
+                                        font.pixelSize: controlFontSize
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 170
+                                        implicitHeight: controlHeight
+                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                    }
+                                    Text { text: qsTr("End:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 38; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    TextField {
+                                        id: frequencyEndField
+                                        placeholderText: "yyyy-MM-dd HH:mm"
+                                        color: textPrimary
+                                        font.pixelSize: controlFontSize
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 170
+                                        implicitHeight: controlHeight
+                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Item { Layout.fillWidth: true }
+                                    Button {
+                                        id: addWorkingFrequencyButton
+                                        text: qsTr("Add")
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 86
+                                        onClicked: settingsDialog.addWorkingFrequencyFromEditor()
+                                        background: Rectangle { color: addWorkingFrequencyButton.hovered ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.18) : bgMedium; border.color: accentGreen; radius: 4 }
+                                        contentItem: Text { text: addWorkingFrequencyButton.text; color: accentGreen; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                    Button {
+                                        id: updateWorkingFrequencyButton
+                                        text: qsTr("Update")
+                                        enabled: settingsDialog.selectedWorkingFrequencyIndex >= 0
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 96
+                                        onClicked: settingsDialog.updateWorkingFrequencyFromEditor()
+                                        background: Rectangle { color: updateWorkingFrequencyButton.enabled && updateWorkingFrequencyButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: updateWorkingFrequencyButton.enabled ? primaryBlue : glassBorder; radius: 4 }
+                                        contentItem: Text { text: updateWorkingFrequencyButton.text; color: updateWorkingFrequencyButton.enabled ? primaryBlue : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                    Button {
+                                        id: deleteWorkingFrequencyButton
+                                        text: qsTr("Delete")
+                                        enabled: settingsDialog.selectedWorkingFrequencyIndex >= 0
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 96
+                                        onClicked: settingsDialog.deleteSelectedWorkingFrequency()
+                                        background: Rectangle { color: deleteWorkingFrequencyButton.enabled && deleteWorkingFrequencyButton.hovered ? Qt.rgba(1,0.2,0.2,0.16) : bgMedium; border.color: deleteWorkingFrequencyButton.enabled ? "#ff5b5b" : glassBorder; radius: 4 }
+                                        contentItem: Text { text: deleteWorkingFrequencyButton.text; color: deleteWorkingFrequencyButton.enabled ? "#ff7777" : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                    Button {
+                                        id: clearWorkingFrequencyButton
+                                        text: qsTr("New")
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 86
+                                        onClicked: settingsDialog.clearWorkingFrequencyEditor()
+                                        background: Rectangle { color: clearWorkingFrequencyButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.16) : bgMedium; border.color: glassBorder; radius: 4 }
+                                        contentItem: Text { text: clearWorkingFrequencyButton.text; color: textSecondary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(420, Math.max(260, settingsDialog.height * 0.40))
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.62)
+                            border.color: glassBorder
+                            radius: 6
+                            clip: true
+
+                            Flickable {
+                                id: frequencyTableFlick
+                                anchors.fill: parent
+                                contentWidth: Math.max(width, 1120)
+                                contentHeight: frequencyTableColumn.height
+                                boundsBehavior: Flickable.StopAtBounds
+                                clip: true
+                                ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                                Column {
+                                    id: frequencyTableColumn
+                                    width: frequencyTableFlick.contentWidth
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 30
+                                        color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.18)
+                                        Row {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 10
+                                            spacing: 8
+                                            Text { text: qsTr("IARU Region"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: qsTr("Mode"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 80; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: qsTr("Frequency"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 210; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: qsTr("Pref"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 56; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: qsTr("Description"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 250; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: qsTr("Start Date/Time"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: qsTr("End Date/Time"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                        }
+                                    }
+                                    Repeater {
+                                        id: frequencySettingsList
+                                        model: settingsDialog.workingFrequencyRows
+                                        delegate: Rectangle {
+                                            id: frequencySettingsRow
+                                            width: frequencyTableColumn.width
+                                            height: 30
+                                            color: settingsDialog.selectedWorkingFrequencyIndex === Number(row.index)
+                                                   ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.22)
+                                                   : (index % 2 === 0 ? Qt.rgba(1,1,1,0.035) : Qt.rgba(1,1,1,0.015))
+                                            property var row: modelData
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                onClicked: settingsDialog.selectWorkingFrequencyRow(frequencySettingsRow.row)
+                                            }
+                                            Row {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 10
+                                                anchors.rightMargin: 10
+                                                spacing: 8
+                                                Text { text: frequencySettingsRow.row.region || ""; color: textPrimary; font.pixelSize: 11; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                                Text { text: frequencySettingsRow.row.mode || ""; color: textPrimary; font.pixelSize: 11; width: 80; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                                Text { text: frequencySettingsRow.row.frequency || ""; color: textPrimary; font.pixelSize: 11; width: 210; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                                CheckBox {
+                                                    id: preferredFrequencyCheck
+                                                    checked: !!frequencySettingsRow.row.preferred
+                                                    width: 56
+                                                    height: 30
+                                                    onClicked: {
+                                                        bridge.setWorkingFrequencyPreferred(Number(frequencySettingsRow.row.index), checked)
+                                                        settingsDialog.refreshFrequencySettings()
+                                                    }
+                                                    indicator: Rectangle { width: 14; height: 14; radius: 3; color: preferredFrequencyCheck.checked ? primaryBlue : bgMedium; border.color: glassBorder; x: preferredFrequencyCheck.width / 2 - width / 2; y: preferredFrequencyCheck.height / 2 - height / 2 }
+                                                    contentItem: Text { text: "" }
+                                                }
+                                                Text { text: frequencySettingsRow.row.description || ""; color: textPrimary; font.pixelSize: 11; width: 250; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                                Text { text: frequencySettingsRow.row.startTime || ""; color: textSecondary; font.pixelSize: 11; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                                Text { text: frequencySettingsRow.row.endTime || ""; color: textSecondary; font.pixelSize: 11; width: 170; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 8
+                            spacing: 3
+                            Text {
+                                text: qsTr("STATION INFORMATION")
+                                color: secondaryCyan
+                                font.pixelSize: 12
+                                font.bold: true
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: qsTr("Band offset is the transverter/station frequency offset for that band; use 0.000000 when unused.")
+                                color: textSecondary
+                                font.pixelSize: 10
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 106
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.44)
+                            border.color: glassBorder
+                            radius: 6
+                            clip: true
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: qsTr("Band:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 46; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    ComboBox {
+                                        id: stationBandCombo
+                                        model: settingsDialog.frequencyBandOptions
+                                        Layout.preferredWidth: 132
+                                        implicitHeight: controlHeight
+                                        Component.onCompleted: settingsDialog.setComboText(stationBandCombo, "20m")
+                                    }
+                                    Text { text: qsTr("Offset MHz:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 82; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    TextField {
+                                        id: stationOffsetField
+                                        text: "0.000000"
+                                        color: textPrimary
+                                        font.pixelSize: controlFontSize
+                                        horizontalAlignment: TextInput.AlignRight
+                                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                        Layout.preferredWidth: 146
+                                        implicitHeight: controlHeight
+                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                    }
+                                    Text { text: qsTr("Antenna:"); color: textSecondary; font.pixelSize: 11; Layout.preferredWidth: 70; Layout.preferredHeight: controlHeight; verticalAlignment: Text.AlignVCenter }
+                                    TextField {
+                                        id: stationAntennaField
+                                        color: textPrimary
+                                        font.pixelSize: controlFontSize
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 160
+                                        implicitHeight: controlHeight
+                                        background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Item { Layout.fillWidth: true }
+                                    Button {
+                                        id: addStationFrequencyButton
+                                        text: qsTr("Add")
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 86
+                                        onClicked: settingsDialog.addStationFrequencyFromEditor()
+                                        background: Rectangle { color: addStationFrequencyButton.hovered ? Qt.rgba(accentGreen.r,accentGreen.g,accentGreen.b,0.18) : bgMedium; border.color: accentGreen; radius: 4 }
+                                        contentItem: Text { text: addStationFrequencyButton.text; color: accentGreen; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                    Button {
+                                        id: updateStationFrequencyButton
+                                        text: qsTr("Update")
+                                        enabled: settingsDialog.selectedStationFrequencyIndex >= 0
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 96
+                                        onClicked: settingsDialog.updateStationFrequencyFromEditor()
+                                        background: Rectangle { color: updateStationFrequencyButton.enabled && updateStationFrequencyButton.hovered ? Qt.rgba(primaryBlue.r,primaryBlue.g,primaryBlue.b,0.24) : bgMedium; border.color: updateStationFrequencyButton.enabled ? primaryBlue : glassBorder; radius: 4 }
+                                        contentItem: Text { text: updateStationFrequencyButton.text; color: updateStationFrequencyButton.enabled ? primaryBlue : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                    Button {
+                                        id: deleteStationFrequencyButton
+                                        text: qsTr("Delete")
+                                        enabled: settingsDialog.selectedStationFrequencyIndex >= 0
+                                        implicitHeight: controlHeight
+                                        Layout.preferredWidth: 96
+                                        onClicked: settingsDialog.deleteSelectedStationFrequency()
+                                        background: Rectangle { color: deleteStationFrequencyButton.enabled && deleteStationFrequencyButton.hovered ? Qt.rgba(1,0.2,0.2,0.16) : bgMedium; border.color: deleteStationFrequencyButton.enabled ? "#ff5b5b" : glassBorder; radius: 4 }
+                                        contentItem: Text { text: deleteStationFrequencyButton.text; color: deleteStationFrequencyButton.enabled ? "#ff7777" : textSecondary; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 210
+                            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.62)
+                            border.color: glassBorder
+                            radius: 6
+                            clip: true
+                            Column {
+                                anchors.fill: parent
+                                Rectangle {
+                                    width: parent.width
+                                    height: 30
+                                    color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.18)
+                                    Row {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 8
+                                        Text { text: qsTr("Band"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                        Text { text: qsTr("Offset"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: 160; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                        Text { text: qsTr("Antenna Description"); color: primaryBlue; font.pixelSize: 11; font.bold: true; width: parent.width - 310; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                    }
+                                }
+                                ListView {
+                                    id: stationSettingsList
+                                    width: parent.width
+                                    height: parent.height - 30
+                                    clip: true
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    model: settingsDialog.stationFrequencyRows
+                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                    delegate: Rectangle {
+                                        id: stationSettingsRow
+                                        width: stationSettingsList.width
+                                        height: 30
+                                        color: settingsDialog.selectedStationFrequencyIndex === Number(row.index)
+                                               ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.22)
+                                               : (index % 2 === 0 ? Qt.rgba(1,1,1,0.035) : Qt.rgba(1,1,1,0.015))
+                                        property var row: modelData
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: settingsDialog.selectStationFrequencyRow(stationSettingsRow.row)
+                                        }
+                                        Row {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 10
+                                            spacing: 8
+                                            Text { text: stationSettingsRow.row.band || ""; color: textPrimary; font.pixelSize: 11; width: 110; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: stationSettingsRow.row.offset || ""; color: textPrimary; font.pixelSize: 11; width: 160; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                            Text { text: stationSettingsRow.row.antenna || ""; color: textPrimary; font.pixelSize: 11; width: parent.width - 310; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+                        }
+
+                        Component.onCompleted: settingsDialog.refreshFrequencySettings()
+                    }
+                }
+
+                // ═══════════ TAB 8 — COLORI ═══════════
                 ScrollView {
                     clip: true
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -4272,7 +5001,7 @@ Dialog {
                     }
                 }
 
-                // ═══════════ TAB 8 — AVANZATE ═══════════
+                // ═══════════ TAB 9 — AVANZATE ═══════════
                 ScrollView {
                     clip: true
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -4752,7 +5481,7 @@ Dialog {
                     }
                 }
 
-                // ═══════════ TAB 9 — ALERTS ═══════════
+                // ═══════════ TAB 10 — ALERTS ═══════════
                 ScrollView {
                     clip: true
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -4883,7 +5612,7 @@ Dialog {
                     }
                 }
 
-                // ═══════════ TAB 10 — FILTRI ═══════════
+                // ═══════════ TAB 11 — FILTRI ═══════════
                 ScrollView {
                     clip: true
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff

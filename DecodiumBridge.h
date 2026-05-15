@@ -910,6 +910,43 @@ public:
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE QVariant getSetting(const QString& key, const QVariant& defaultValue = {}) const;
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE QVariantList workingFrequencyRows() const;
+    Q_INVOKABLE QVariantList stationFrequencyRows() const;
+    Q_INVOKABLE QStringList frequencyRegionOptions() const;
+    Q_INVOKABLE QStringList frequencyModeOptions() const;
+    Q_INVOKABLE QStringList frequencyBandOptions() const;
+    Q_INVOKABLE bool addWorkingFrequencyRow(const QString& region,
+                                            const QString& mode,
+                                            const QVariant& frequency,
+                                            const QString& description,
+                                            const QString& startTime,
+                                            const QString& endTime,
+                                            bool preferred);
+    Q_INVOKABLE bool updateWorkingFrequencyRow(int index,
+                                               const QString& region,
+                                               const QString& mode,
+                                               const QVariant& frequency,
+                                               const QString& description,
+                                               const QString& startTime,
+                                               const QString& endTime,
+                                               bool preferred);
+    Q_INVOKABLE bool deleteWorkingFrequencyRow(int index);
+    Q_INVOKABLE bool setWorkingFrequencyPreferred(int index, bool preferred);
+    Q_INVOKABLE void resetWorkingFrequenciesToDefaults();
+    Q_INVOKABLE bool loadWorkingFrequenciesFile(const QString& path, bool merge);
+    Q_INVOKABLE bool saveWorkingFrequenciesFile(const QString& path);
+    Q_INVOKABLE bool addStationFrequencyRow(const QString& band,
+                                            const QVariant& offset,
+                                            const QString& antennaDescription);
+    Q_INVOKABLE bool updateStationFrequencyRow(int index,
+                                               const QString& band,
+                                               const QVariant& offset,
+                                               const QString& antennaDescription);
+    Q_INVOKABLE bool deleteStationFrequencyRow(int index);
+    Q_INVOKABLE double frequencyCalibrationSlopePpm() const;
+    Q_INVOKABLE double frequencyCalibrationInterceptHz() const;
+    Q_INVOKABLE void setFrequencyCalibrationSlopePpm(double value);
+    Q_INVOKABLE void setFrequencyCalibrationInterceptHz(double value);
     Q_INVOKABLE QVariantMap pendingLogQsoPreview() const;
     Q_INVOKABLE QStringList satelliteOptions() const;
     Q_INVOKABLE QStringList satModeOptions() const;
