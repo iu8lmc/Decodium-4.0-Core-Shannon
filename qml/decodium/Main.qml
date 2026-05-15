@@ -4090,39 +4090,6 @@ ApplicationWindow {
                         }
                     }
 
-                    // 1.0.180 — Snap chip magnetico: mostra altezza corrente
-                    // del Waterfall con glow visivo quando vicino a snap point.
-                    Rectangle {
-                        id: snapChip
-                        anchors.bottom: parent.bottom
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottomMargin: 8
-                        visible: parent.SplitHandle.hovered || parent.SplitHandle.pressed
-                                 || parent.nearSnapPoint
-                        width: chipText.implicitWidth + 16
-                        height: 18
-                        radius: 9
-                        color: parent.nearSnapPoint
-                               ? Qt.rgba(0, 0.9, 0.9, 0.85)
-                               : Qt.rgba(0.1, 0.1, 0.15, 0.85)
-                        border.color: parent.nearSnapPoint ? "#00ffff" : "#505070"
-                        border.width: 1
-                        // Glow when near snap
-                        OpacityAnimator on opacity {
-                            running: snapChip.parent.nearSnapPoint && bridge && bridge.uiQuality !== "Low"
-                            from: 0.7; to: 1.0; duration: 250
-                            loops: Animation.Infinite
-                        }
-                        Text {
-                            id: chipText
-                            anchors.centerIn: parent
-                            color: snapChip.parent.nearSnapPoint ? "#001a1a" : "#cccccc"
-                            font.pixelSize: 10
-                            font.bold: true
-                            text: Math.round(waterfallPanel.height) + "px"
-                        }
-                    }
-
                     SplitHandle.onPressedChanged: {
                         if (!SplitHandle.pressed) {
                             // Find nearest snap point
@@ -4160,7 +4127,7 @@ ApplicationWindow {
                 Rectangle {
                     id: waterfallPanel
                     SplitView.preferredHeight: waterfallDetached ? 40 : mainWindow.waterfallPanelHeight
-                    SplitView.minimumHeight: waterfallDetached ? 40 : 180
+                    SplitView.minimumHeight: waterfallDetached ? 40 : 260
                     color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.6)
                     radius: 8
                     border.color: isDockHighlighted ? secondaryCyan : glassBorder
@@ -4388,6 +4355,20 @@ ApplicationWindow {
                         return 0
                     }
 
+                    function fullSpectrumModelCount() {
+                        void(decodePanel.decodeListVersion)
+                        if (bridge && bridge.bandActivityModel)
+                            return bridge.bandActivityModel.count()
+                        return decodePanel.allDecodes ? decodePanel.allDecodes.length : 0
+                    }
+
+                    function signalRxModelCount() {
+                        void(decodePanel.rxDecodeListVersion)
+                        if (bridge && bridge.rxDecodeModel)
+                            return bridge.rxDecodeModel.count()
+                        return decodePanel.rxDecodes ? decodePanel.rxDecodes.length : 0
+                    }
+
                     function updatePeriodState() {
                         var nowMs = Date.now()
                         var periodMs = currentPeriodMs()
@@ -4596,10 +4577,7 @@ ApplicationWindow {
 	                        return injectSeparatorsJS(filtered)
 	                    }
 
-	                    // 1.0.154: il decodePanel di Main.qml usa modelli JS
-	                    // (allDecodes, rxDecodes), separati dal C++ injectPeriodSeparators
-	                    // (che alimenta solo bridge.bandActivityModel / DecodeWindow flottante).
-	                    // Inject JS-side per le liste viste dal pannello principale.
+	                    // Fallback JS per ambienti senza i model C++ nativi.
 	                    function injectSeparatorsJS(filtered) {
 	                        if (!filtered || filtered.length <= 1)
 	                            return filtered
@@ -5173,7 +5151,7 @@ ApplicationWindow {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: decodePanel.displayedDecodeCount() + " decodes"
+                                            text: decodePanel.fullSpectrumModelCount() + " decodes"
                                             font.pixelSize: 10
                                             color: textSecondary
                                         }
@@ -5291,7 +5269,7 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         anchors.margins: 2
                                         clip: true
-                                        model: decodePanel.allDecodes
+                                        model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes
                                         spacing: 1
                                         cacheBuffer: 3000
                                         reuseItems: true
@@ -5704,7 +5682,7 @@ NumberAnimation {
                                         Text {
                                             text: {
                                                 void(decodePanel.rxDecodeListVersion)
-                                                return decodePanel.currentRxDecodes().length + " msgs"
+                                                return decodePanel.signalRxModelCount() + " msgs"
                                             }
                                             font.pixelSize: 10
                                             color: textSecondary
@@ -5890,7 +5868,7 @@ NumberAnimation {
                                         on_VerChanged: {
                                             forceTailFollow()
                                         }
-                                        model: decodePanel.rxDecodes
+                                        model: (bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodePanel.rxDecodes
 	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
 	                                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
 	                                        // pattern allineato a DecodeList.qml:243-251.
@@ -7062,22 +7040,6 @@ NumberAnimation {
         }
 
         MenuItem {
-            text: (bridge.splitMode ? "✓ " : "☐ ") + qsTr("Split Mode")
-            onTriggered: bridge.splitMode = !bridge.splitMode
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: bridge.splitMode ? successGreen : textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
             text: (bridge.contestType > 0 ? "✓ " : "☐ ") + qsTr("Contest Mode")
             onTriggered: contestDialog.open()
 
@@ -7129,22 +7091,6 @@ NumberAnimation {
                 text: parent.text
                 font.pixelSize: 12
                 color: bridge.filterMyCallOnly ? successGreen : textSecondary
-                leftPadding: 10
-            }
-        }
-
-        MenuItem {
-            text: (bridge.zapEnabled ? "✓ " : "☐ ") + qsTr("ZAP Mode")
-            onTriggered: bridge.zapEnabled = !bridge.zapEnabled
-
-            background: Rectangle {
-                color: parent.highlighted ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2) : "transparent"
-                radius: 6
-            }
-            contentItem: Text {
-                text: parent.text
-                font.pixelSize: 12
-                color: bridge.zapEnabled ? accentOrange : textSecondary
                 leftPadding: 10
             }
         }
@@ -9062,10 +9008,10 @@ NumberAnimation {
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
-        onVisibilityChanged: {
+        onVisibilityChanged: function(visibility) {
             if (period1Detached && visibility === Window.Minimized) {
                 period1Minimized = true
-            } else if (period1Detached && visible && period1Minimized) {
+            } else if (period1Detached && period1FloatingWindow.visible && period1Minimized) {
                 period1Minimized = false
             }
         }
@@ -9161,7 +9107,7 @@ NumberAnimation {
 
 	                            Text {
 	                                visible: period1FloatingWindow.width >= 470
-	                                text: decodePanel.displayedDecodeCount() + " " + qsTr("decodes")
+	                                text: decodePanel.fullSpectrumModelCount() + " " + qsTr("decodes")
 	                                font.pixelSize: 10
 	                                color: textSecondary
 	                            }
@@ -9278,7 +9224,7 @@ NumberAnimation {
                         anchors.margins: 4
                         clip: true
                         spacing: 1
-                        model: decodePanel.allDecodes
+                        model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes
                         cacheBuffer: 3000
                         reuseItems: true
                         interactive: true
@@ -9513,10 +9459,10 @@ NumberAnimation {
         onYChanged: mainWindow.scheduleWindowStateSave()
         onWidthChanged: mainWindow.scheduleWindowStateSave()
         onHeightChanged: mainWindow.scheduleWindowStateSave()
-        onVisibilityChanged: {
+        onVisibilityChanged: function(visibility) {
             if (rxFreqDetached && visibility === Window.Minimized) {
                 rxFreqMinimized = true
-            } else if (rxFreqDetached && visible && rxFreqMinimized) {
+            } else if (rxFreqDetached && rxFreqFloatingWindow.visible && rxFreqMinimized) {
                 rxFreqMinimized = false
             }
         }
@@ -9632,7 +9578,7 @@ NumberAnimation {
 	                                visible: rxFreqFloatingWindow.width >= 500
 	                                text: {
 	                                    void(decodePanel.rxDecodeListVersion)
-	                                    return decodePanel.currentRxDecodes().length + " " + qsTr("msgs")
+	                                    return decodePanel.signalRxModelCount() + " " + qsTr("msgs")
 	                                }
 	                                font.pixelSize: 10
 	                                color: textSecondary
@@ -9838,7 +9784,7 @@ NumberAnimation {
 	                        on_VerChanged: {
                             forceTailFollow()
                         }
-                        model: decodePanel.rxDecodes
+                        model: (bridge && bridge.rxDecodeModel) ? bridge.rxDecodeModel : decodePanel.rxDecodes
 	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
 	                        // OpacityAnimator/YAnimator non si fermano durante stall main thread,
 	                        // pattern allineato a DecodeList.qml:243-251.

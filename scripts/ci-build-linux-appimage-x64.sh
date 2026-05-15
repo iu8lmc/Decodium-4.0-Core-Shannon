@@ -47,6 +47,47 @@ if [[ -z "${QMAKE}" ]]; then
   exit 1
 fi
 
+QT_PLUGIN_DIR_FOR_BUILD="$("${QMAKE}" -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+restore_disabled_qt_plugin() {
+  local plugin_subdir="$1"
+  local plugin_name="$2"
+  local disabled_subdir="${plugin_subdir}-disabled"
+
+  if [[ -z "${QT_PLUGIN_DIR_FOR_BUILD}" ]]; then
+    return
+  fi
+  if [[ -f "${QT_PLUGIN_DIR_FOR_BUILD}/${plugin_subdir}/${plugin_name}" ]]; then
+    return
+  fi
+  if [[ -f "${QT_PLUGIN_DIR_FOR_BUILD}/${disabled_subdir}/${plugin_name}" ]]; then
+    mkdir -p "${QT_PLUGIN_DIR_FOR_BUILD}/${plugin_subdir}"
+    cp -a "${QT_PLUGIN_DIR_FOR_BUILD}/${disabled_subdir}/${plugin_name}" \
+      "${QT_PLUGIN_DIR_FOR_BUILD}/${plugin_subdir}/${plugin_name}"
+  fi
+}
+
+restore_disabled_qt_plugin imageformats libqtiff.so
+if [[ -n "${QT_PLUGIN_DIR_FOR_BUILD}" && -d "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers-disabled" ]]; then
+  mkdir -p "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers"
+  cp -a "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers-disabled"/libqsql*.so \
+    "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers/" 2>/dev/null || true
+fi
+
+stash_optional_qt_plugin() {
+  local plugin_subdir="$1"
+  local plugin_name="$2"
+  local disabled_subdir="${plugin_subdir}-disabled"
+
+  if [[ -z "${QT_PLUGIN_DIR_FOR_BUILD}" ]]; then
+    return
+  fi
+  if [[ -f "${QT_PLUGIN_DIR_FOR_BUILD}/${plugin_subdir}/${plugin_name}" ]]; then
+    mkdir -p "${QT_PLUGIN_DIR_FOR_BUILD}/${disabled_subdir}"
+    mv -f "${QT_PLUGIN_DIR_FOR_BUILD}/${plugin_subdir}/${plugin_name}" \
+      "${QT_PLUGIN_DIR_FOR_BUILD}/${disabled_subdir}/${plugin_name}"
+  fi
+}
+
 log "Build context"
 echo "Root:           ${ROOT_DIR}"
 echo "Version:        ${VERSION}"
@@ -112,7 +153,12 @@ if [[ -z "${HAMLIB_LIBRARY}" ]]; then
 fi
 
 log "Configure CMake"
-rm -rf "${BUILD_DIR}" "${APPDIR}"
+if [[ "${INCREMENTAL:-0}" == "1" && -d "${BUILD_DIR}" ]]; then
+  log "Incremental build enabled: preserving ${BUILD_DIR}"
+  rm -rf "${APPDIR}"
+else
+  rm -rf "${BUILD_DIR}" "${APPDIR}"
+fi
 cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
@@ -168,6 +214,12 @@ DESKTOP
 
 log "Prepare linuxdeploy"
 mkdir -p "${TOOLS_DIR}"
+stash_optional_qt_plugin imageformats libqtiff.so
+if [[ -n "${QT_PLUGIN_DIR_FOR_BUILD}" && -d "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers" ]]; then
+  mkdir -p "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers-disabled"
+  find "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers" -maxdepth 1 -type f -name 'libqsql*.so' ! -name 'libqsqlite.so' \
+    -exec mv -f {} "${QT_PLUGIN_DIR_FOR_BUILD}/sqldrivers-disabled/" \;
+fi
 LINUXDEPLOY="${TOOLS_DIR}/linuxdeploy-x86_64.AppImage"
 QT_PLUGIN="${TOOLS_DIR}/linuxdeploy-plugin-qt-x86_64.AppImage"
 if [[ ! -x "${LINUXDEPLOY}" ]]; then
@@ -188,6 +240,12 @@ resolve_appimage_runner() {
   local squashfs="${TOOLS_DIR}/${name}.squashfs"
   local found=0
   local offset
+
+  if [[ -x "${extract_dir}/AppRun" ]]; then
+    echo "Using cached extracted ${name} AppImage payload" >&2
+    printf '%s\n' "${extract_dir}/AppRun"
+    return 0
+  fi
 
   if "${appimage}" --appimage-version >/dev/null 2>&1; then
     printf '%s\n' "${appimage}"
@@ -221,12 +279,26 @@ resolve_appimage_runner() {
 
 LINUXDEPLOY_RUNNER="$(resolve_appimage_runner "${LINUXDEPLOY}" linuxdeploy)"
 QT_PLUGIN_RUNNER="$(resolve_appimage_runner "${QT_PLUGIN}" linuxdeploy-plugin-qt)"
-rm -f "${TOOLS_DIR}/linuxdeploy-plugin-qt"
-{
-  printf '#!/usr/bin/env bash\n'
-  printf 'exec %q "$@"\n' "${QT_PLUGIN_RUNNER}"
-} > "${TOOLS_DIR}/linuxdeploy-plugin-qt"
-chmod +x "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+if [[ "${QT_PLUGIN_RUNNER}" == */linuxdeploy-plugin-qt-extracted/AppRun ]]; then
+  mkdir -p "${TOOLS_DIR}/disabled-appimages"
+  if [[ -f "${QT_PLUGIN}" && ! -f "${TOOLS_DIR}/disabled-appimages/linuxdeploy-plugin-qt-x86_64.AppImage.real" ]]; then
+    cp -a "${QT_PLUGIN}" "${TOOLS_DIR}/disabled-appimages/linuxdeploy-plugin-qt-x86_64.AppImage.real"
+  fi
+  for qt_plugin_launcher in "${TOOLS_DIR}/linuxdeploy-plugin-qt" "${QT_PLUGIN}"; do
+    {
+      printf '#!/usr/bin/env bash\n'
+      printf 'exec %q "$@"\n' "${QT_PLUGIN_RUNNER}"
+    } > "${qt_plugin_launcher}"
+    chmod +x "${qt_plugin_launcher}"
+  done
+else
+  rm -f "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'exec %q "$@"\n' "${QT_PLUGIN_RUNNER}"
+  } > "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+  chmod +x "${TOOLS_DIR}/linuxdeploy-plugin-qt"
+fi
 
 export APPIMAGE_EXTRACT_AND_RUN=1
 export QMAKE="${QMAKE}"
@@ -274,6 +346,56 @@ for qml_module in \
   QtQml/WorkerScript/qmldir; do
   test -f "${APPDIR}/usr/bin/qml/${qml_module}"
 done
+
+log "Bundle supplemental Qt plugins"
+QT_PLUGIN_DIR="$("${QMAKE}" -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+copy_qt_plugin_dir() {
+  local plugin_dir="$1"
+  if [[ -n "${QT_PLUGIN_DIR}" && -d "${QT_PLUGIN_DIR}/${plugin_dir}" ]]; then
+    mkdir -p "${APPDIR}/usr/plugins/${plugin_dir}"
+    cp -a "${QT_PLUGIN_DIR}/${plugin_dir}/." "${APPDIR}/usr/plugins/${plugin_dir}/"
+    echo "Bundled Qt plugin dir: ${plugin_dir}"
+  fi
+}
+
+copy_qt_plugin_dir audio
+copy_qt_plugin_dir multimedia
+copy_qt_plugin_dir wayland-decoration-client
+copy_qt_plugin_dir wayland-graphics-integration-client
+copy_qt_plugin_dir wayland-shell-integration
+
+if [[ -n "${QT_PLUGIN_DIR}" && -d "${QT_PLUGIN_DIR}/platforms" ]] \
+   && compgen -G "${QT_PLUGIN_DIR}/platforms/libqwayland*.so" >/dev/null; then
+  mkdir -p "${APPDIR}/usr/plugins/platforms"
+  cp -a "${QT_PLUGIN_DIR}"/platforms/libqwayland*.so "${APPDIR}/usr/plugins/platforms/"
+  echo "Bundled Qt Wayland platform plugin"
+fi
+
+log "Patch AppImage launcher"
+if [[ -L "${APPDIR}/AppRun" || -f "${APPDIR}/AppRun" ]]; then
+  rm -f "${APPDIR}/AppRun.decodium-real"
+  if [[ -L "${APPDIR}/AppRun" ]]; then
+    app_run_target="$(readlink "${APPDIR}/AppRun")"
+    rm -f "${APPDIR}/AppRun"
+    ln -s "${app_run_target}" "${APPDIR}/AppRun.decodium-real"
+  else
+    mv "${APPDIR}/AppRun" "${APPDIR}/AppRun.decodium-real"
+  fi
+  cat > "${APPDIR}/AppRun" <<'APPRUN'
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+
+# The Qt 6.11 Wayland platform plugin can be present but unusable on some
+# Ubuntu/AppImage combinations because part of the compositor stack is supplied
+# by the host. Prefer XCB unless the user explicitly overrides it.
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+export QT_MEDIA_BACKEND="${QT_MEDIA_BACKEND:-ffmpeg}"
+
+exec "${HERE}/AppRun.decodium-real" "$@"
+APPRUN
+  chmod +x "${APPDIR}/AppRun"
+  echo "Wrapped AppRun with Linux AppImage runtime defaults"
+fi
 
 find "${APPDIR}" -name '._*' -o -name '.DS_Store' | xargs -r rm -f
 

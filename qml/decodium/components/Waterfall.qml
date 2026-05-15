@@ -26,6 +26,7 @@ Item {
     // Altezza minima/massima del grafico spettro (regolabile tramite drag)
     readonly property int spectrumMinHeight: 60
     readonly property int spectrumMaxHeight: 500
+    readonly property int waterfallMinHeight: 72
 
     // Colors
     property color bgDeep:      bridge.themeManager.bgDeep
@@ -671,7 +672,8 @@ Item {
             txFreq:         bridge.txFrequency
             running:        bridge.monitoring
             showTxBrackets: true
-            spectrumHeight: waterfallPanel.spectrumHeight
+            spectrumHeight: Math.max(40, Math.min(waterfallPanel.spectrumHeight,
+                                                  Math.max(40, waterfallDisplay.height - waterfallPanel.waterfallMinHeight)))
             // Low CPU mode riattiva un throttle leggero per contenere il render
             // QML/RHI sui PC datati. A profilo normale resta fluido a pieno rate.
             throttleActive: bridge.lowCpuModeEnabled

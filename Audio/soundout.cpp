@@ -1,6 +1,7 @@
 #include "soundout.h"
 
 #include <QDateTime>
+#include <QCoreApplication>
 #include <qmath.h>
 #include <QDebug>
 
@@ -46,6 +47,40 @@ QString audioErrorName(QAudio::Error error)
   case QAudio::FatalError: return QStringLiteral("FatalError");
   }
   return QStringLiteral("UnknownError(%1)").arg(static_cast<int>(error));
+}
+
+bool deferCoreAudioSinkDelete()
+{
+#if defined(Q_OS_MAC)
+  return QOperatingSystemVersion::current()
+      >= QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15);
+#else
+  return false;
+#endif
+}
+
+void deleteStreamAfterCoreAudioCallbacks(QAudioSink *stream, QString const& reason)
+{
+  if (!stream) {
+    return;
+  }
+
+  QObject *context = QCoreApplication::instance();
+  if (!context) {
+    delete stream;
+    return;
+  }
+
+  QPointer<QAudioSink> guard(stream);
+  stream->setParent(nullptr);
+  QTimer::singleShot(5000, context, [guard, reason]() {
+    if (!guard) {
+      return;
+    }
+    guard->disconnect();
+    guard->deleteLater();
+    qInfo() << "TX SoundOutput CoreAudio sink deferred delete released:" << reason;
+  });
 }
 }
 
@@ -98,6 +133,7 @@ void SoundOutput::restart(QIODevice* source)
   m_streamDevice.clear();
   m_sourceDevice.clear();
   m_pendingWrite.clear();
+  retireStream(QStringLiteral("restart"));
 
   if (!m_device.id().isEmpty()) {
     // Keep TX format fixed to 48 kHz / Int16 to match the modulator output.
@@ -218,6 +254,10 @@ void SoundOutput::reset()
   m_streamDevice.clear();
   m_sourceDevice.clear();
   if (m_stream) {
+    if (deferCoreAudioSinkDelete()) {
+      retireStream(QStringLiteral("reset"));
+      return;
+    }
     m_stream->reset();
     checkStream();
   }
@@ -229,21 +269,31 @@ void SoundOutput::stop()
   m_pendingWrite.clear();
   m_streamDevice.clear();
   m_sourceDevice.clear();
-  if (m_stream) {
-#if defined(__APPLE__)
-    const bool sequoiaOrNewer =
-        QOperatingSystemVersion::current() >= QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15);
-    if (!sequoiaOrNewer)
-      m_stream->reset();
-#else
-    m_stream->reset();
-#endif
-    m_stream->stop();
+  retireStream(QStringLiteral("stop"));
+}
+
+void SoundOutput::retireStream(QString const& reason)
+{
+  if (!m_stream) {
+    return;
   }
-#if defined(__APPLE__)
-  if (QOperatingSystemVersion::current() < QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15))
-    m_stream.reset();
-#endif
+
+  QAudioSink *stream = m_stream.take();
+  stream->disconnect(this);
+  stream->disconnect();
+
+  if (deferCoreAudioSinkDelete()) {
+    if (stream->state() != QAudio::StoppedState) {
+      stream->stop();
+    }
+    Q_EMIT status(QStringLiteral("TX SoundOutput CoreAudio sink retired: %1").arg(reason));
+    deleteStreamAfterCoreAudioCallbacks(stream, reason);
+    return;
+  }
+
+  stream->reset();
+  stream->stop();
+  delete stream;
 }
 
 qreal SoundOutput::attenuation() const

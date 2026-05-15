@@ -51,6 +51,7 @@ Q_SIGNALS:
 
 private:
   bool checkStream() const;
+  void retireStream(QString const& reason);
 
 private Q_SLOTS:
   void handleStateChanged(QAudio::State);

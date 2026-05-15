@@ -98,6 +98,7 @@ protected:
   virtual int do_start () = 0;  // returns resolution, See Transceiver::resolution
   virtual void do_post_start () {}
 
+  virtual void do_prepare_shutdown () {}
   virtual void do_stop () = 0;
   virtual void do_post_stop () {}
 

@@ -44,6 +44,7 @@ public:
 protected:
   // Implement the TransceiverBase interface.
   int do_start () override;
+  void do_prepare_shutdown () override;
   void do_stop () override;
   void do_frequency (Frequency, MODE, bool no_ignore) override;
   void do_tx_frequency (Frequency, MODE, bool no_ignore) override;
@@ -196,6 +197,7 @@ private:
 
   bool reversed_;               // True if VFOs are reversed.
   bool startup_diagnostics_active_ {false};
+  bool shutdown_in_progress_ {false};
   quint64 hrd_command_sequence_ {0};
 };
 

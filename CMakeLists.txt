@@ -1636,16 +1636,25 @@ if (WIN32)
   target_link_libraries (decodium_qml Qt6::AxContainer Pdh)
 endif ()
 if (Qt6ShaderTools_FOUND)
-  qt_add_shaders(decodium_qml decodium_waterfall_shaders
-    PREFIX
-      "/shaders"
-    BASE
-      "shaders"
-    GLSL
-      "310 es,440"
+	  qt_add_shaders(decodium_qml decodium_waterfall_shaders
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
     FILES
       shaders/waterfall_palette.vert
       shaders/waterfall_palette.frag
+  )
+	  qt_add_shaders(decodium_qml decodium_panadapter_fft_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "310 es,420,430,440"
+    FILES
       shaders/panadapter_fft.comp
   )
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_WATERFALL_SHADER_QSB=1)
@@ -1691,7 +1700,10 @@ add_custom_target (sync_decodium_assets ALL
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/artwork/maps/world_overlay_2048x1024.png"
     "${CMAKE_BINARY_DIR}/artwork/maps/world_overlay_2048x1024.png"
-  COMMENT "Syncing Decodium runtime artwork"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/sounds"
+    "${CMAKE_BINARY_DIR}/sounds"
+  COMMENT "Syncing Decodium runtime artwork and sounds"
 )
 
 add_dependencies (decodium_qml sync_decodium_qml sync_decodium_assets)
@@ -1713,7 +1725,10 @@ add_custom_command (TARGET decodium_qml POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/sat.dat"
     "$<TARGET_FILE_DIR:decodium_qml>/sat.dat"
-  COMMENT "Syncing QML files and artwork after decodium_qml build"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/sounds"
+    "$<TARGET_FILE_DIR:decodium_qml>/sounds"
+  COMMENT "Syncing QML files, artwork, and sounds after decodium_qml build"
 )
 
 if (APPLE)

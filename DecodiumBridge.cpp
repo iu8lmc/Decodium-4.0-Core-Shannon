@@ -80,9 +80,12 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPointer>
+#include <QProcess>
 #include <QRunnable>
 #include <QTimeZone>
+#include <QTimer>
 #include <QThreadPool>
+#include <QOperatingSystemVersion>
 #include "Network/FoxVerifier.hpp"
 #include "wsjtx_config.h"
 #include <QFile>
@@ -138,6 +141,317 @@ static QString extractRightCallsign(const QString& msg);
 static void bridgeLog(const QString& msg) {
     DIAG_INFO(msg);
 }
+
+static QString audioDeviceIdForLog(const QAudioDevice& device)
+{
+    const QByteArray id = device.id();
+    return id.isEmpty() ? QStringLiteral("<empty>") : QString::fromLatin1(id.toHex());
+}
+
+static QString audioFormatForLog(const QAudioFormat& format)
+{
+    return QStringLiteral("rate=%1 channels=%2 sampleFormat=%3")
+        .arg(format.sampleRate())
+        .arg(format.channelCount())
+        .arg(static_cast<int>(format.sampleFormat()));
+}
+
+static bool deferCoreAudioSinkDelete()
+{
+#if defined(Q_OS_MAC)
+    return QOperatingSystemVersion::current()
+        >= QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15);
+#else
+    return false;
+#endif
+}
+
+static void deleteBufferLater(QBuffer *buffer, QObject *context)
+{
+    if (!buffer) {
+        return;
+    }
+    buffer->close();
+    if (!context) {
+        delete buffer;
+        return;
+    }
+    buffer->setParent(context);
+    buffer->deleteLater();
+}
+
+static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& reason)
+{
+    if (!sink) {
+        deleteBufferLater(buffer, QCoreApplication::instance());
+        return;
+    }
+
+    sink->disconnect();
+
+    if (deferCoreAudioSinkDelete()) {
+        QObject *context = QCoreApplication::instance();
+        if (!context) {
+            if (sink->state() != QAudio::StoppedState) {
+                sink->stop();
+            }
+            delete sink;
+            if (buffer) {
+                buffer->close();
+                delete buffer;
+            }
+            return;
+        }
+        QPointer<QAudioSink> sinkGuard(sink);
+        QPointer<QBuffer> bufferGuard(buffer);
+        sink->setParent(nullptr);
+        if (buffer) {
+            buffer->setParent(nullptr);
+        }
+
+        if (sink->state() != QAudio::StoppedState) {
+            sink->stop();
+        }
+
+        bridgeLog(QStringLiteral("TX CoreAudio sink retired with deferred delete: reason=%1").arg(reason));
+        QTimer::singleShot(5000, context, [sinkGuard, bufferGuard, reason]() {
+            if (sinkGuard) {
+                sinkGuard->disconnect();
+                sinkGuard->deleteLater();
+            }
+            if (bufferGuard) {
+                bufferGuard->close();
+                bufferGuard->deleteLater();
+            }
+            bridgeLog(QStringLiteral("TX CoreAudio sink deferred delete released: reason=%1").arg(reason));
+        });
+        return;
+    }
+
+    if (sink->state() != QAudio::StoppedState) {
+        sink->stop();
+    }
+    delete sink;
+    if (buffer) {
+        buffer->close();
+        delete buffer;
+    }
+}
+
+#ifdef Q_OS_LINUX
+static constexpr char kLinuxPulseSourcePrefix[] = "Pulse/PipeWire: ";
+static constexpr char kLinuxPulseSinkPrefix[] = "Pulse/PipeWire: ";
+
+static QStringList linuxAlsaCardsForLog()
+{
+    QFile file(QStringLiteral("/proc/asound/cards"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+
+    QStringList lines;
+    QTextStream stream(&file);
+    while (!stream.atEnd()) {
+        QString line = stream.readLine().trimmed();
+        if (!line.isEmpty()) {
+            lines.append(line);
+        }
+    }
+    return lines;
+}
+
+static QString linuxPulseSourceNameFromShortLine(const QString& line)
+{
+    const QStringList fields = line.split(QLatin1Char('\t'));
+    if (fields.size() < 2) {
+        return {};
+    }
+
+    const QString name = fields.at(1).trimmed();
+    if (name.isEmpty() || name.endsWith(QStringLiteral(".monitor"))) {
+        return {};
+    }
+    return name;
+}
+
+static QString linuxPulseSinkNameFromShortLine(const QString& line)
+{
+    const QStringList fields = line.split(QLatin1Char('\t'));
+    if (fields.size() < 2) {
+        return {};
+    }
+
+    const QString name = fields.at(1).trimmed();
+    return name.isEmpty() ? QString() : name;
+}
+
+static QStringList linuxPulseSourcesForLog()
+{
+    QStringList lines;
+    QProcess process;
+    process.setProgram(QStringLiteral("pactl"));
+    process.setArguments({QStringLiteral("list"), QStringLiteral("short"), QStringLiteral("sources")});
+    process.start();
+    if (!process.waitForFinished(1500)) {
+        process.kill();
+        process.waitForFinished(500);
+        return {QStringLiteral("pactl list short sources timed out or is unavailable")};
+    }
+    const QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
+    const QString error = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+    for (const QString& rawLine : output.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        if (!line.isEmpty()) {
+            lines.append(line);
+        }
+    }
+    if (lines.isEmpty()) {
+        lines.append(error.isEmpty()
+                         ? QStringLiteral("pactl returned no PulseAudio/PipeWire sources")
+                         : QStringLiteral("pactl error: %1").arg(error));
+    }
+    return lines;
+}
+
+static QStringList linuxPulseSinksForLog()
+{
+    QStringList lines;
+    QProcess process;
+    process.setProgram(QStringLiteral("pactl"));
+    process.setArguments({QStringLiteral("list"), QStringLiteral("short"), QStringLiteral("sinks")});
+    process.start();
+    if (!process.waitForFinished(1500)) {
+        process.kill();
+        process.waitForFinished(500);
+        return {QStringLiteral("pactl list short sinks timed out or is unavailable")};
+    }
+    const QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
+    const QString error = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+    for (const QString& rawLine : output.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        if (!line.isEmpty()) {
+            lines.append(line);
+        }
+    }
+    if (lines.isEmpty()) {
+        lines.append(error.isEmpty()
+                         ? QStringLiteral("pactl returned no PulseAudio/PipeWire sinks")
+                         : QStringLiteral("pactl error: %1").arg(error));
+    }
+    return lines;
+}
+
+static QString linuxPulseSourceNameFromDisplay(QString value)
+{
+    value = value.trimmed();
+    const QString prefix = QString::fromLatin1(kLinuxPulseSourcePrefix);
+    return value.startsWith(prefix, Qt::CaseInsensitive)
+        ? value.mid(prefix.size()).trimmed()
+        : QString();
+}
+
+static QString linuxPulseSinkNameFromDisplay(QString value)
+{
+    value = value.trimmed();
+    const QString prefix = QString::fromLatin1(kLinuxPulseSinkPrefix);
+    return value.startsWith(prefix, Qt::CaseInsensitive)
+        ? value.mid(prefix.size()).trimmed()
+        : QString();
+}
+
+static bool linuxSetDefaultPulseSource(const QString& sourceName, QString* errorOut = nullptr)
+{
+    const QString source = sourceName.trimmed();
+    if (source.isEmpty()) {
+        if (errorOut) *errorOut = QStringLiteral("empty Pulse/PipeWire source");
+        return false;
+    }
+
+    QProcess process;
+    process.setProgram(QStringLiteral("pactl"));
+    process.setArguments({QStringLiteral("set-default-source"), source});
+    process.start();
+    if (!process.waitForFinished(1500)) {
+        process.kill();
+        process.waitForFinished(500);
+        if (errorOut) *errorOut = QStringLiteral("pactl set-default-source timed out");
+        return false;
+    }
+
+    const QString stderrText = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        if (errorOut) {
+            *errorOut = stderrText.isEmpty()
+                ? QStringLiteral("pactl set-default-source failed with exit code %1").arg(process.exitCode())
+                : stderrText;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+static bool linuxSetDefaultPulseSink(const QString& sinkName, QString* errorOut = nullptr)
+{
+    const QString sink = sinkName.trimmed();
+    if (sink.isEmpty()) {
+        if (errorOut) *errorOut = QStringLiteral("empty Pulse/PipeWire sink");
+        return false;
+    }
+
+    QProcess process;
+    process.setProgram(QStringLiteral("pactl"));
+    process.setArguments({QStringLiteral("set-default-sink"), sink});
+    process.start();
+    if (!process.waitForFinished(1500)) {
+        process.kill();
+        process.waitForFinished(500);
+        if (errorOut) *errorOut = QStringLiteral("pactl set-default-sink timed out");
+        return false;
+    }
+
+    const QString stderrText = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        if (errorOut) {
+            *errorOut = stderrText.isEmpty()
+                ? QStringLiteral("pactl set-default-sink failed with exit code %1").arg(process.exitCode())
+                : stderrText;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+static QString linuxMatchingPulseSinkForSource(const QString& sourceName)
+{
+    QString sinkName = sourceName.trimmed();
+    if (sinkName.isEmpty()) {
+        return {};
+    }
+
+    if (sinkName.startsWith(QStringLiteral("alsa_input."))) {
+        sinkName.replace(0, QStringLiteral("alsa_input.").size(), QStringLiteral("alsa_output."));
+    }
+
+    const QStringList sinks = linuxPulseSinksForLog();
+    for (const QString& line : sinks) {
+        const QString candidate = linuxPulseSinkNameFromShortLine(line);
+        if (candidate.compare(sinkName, Qt::CaseInsensitive) == 0) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+static bool audioDeviceLooksUsb(const QString& description)
+{
+    return description.contains(QStringLiteral("USB"), Qt::CaseInsensitive)
+        || description.contains(QStringLiteral("CODEC"), Qt::CaseInsensitive)
+        || description.contains(QStringLiteral("IC-"), Qt::CaseInsensitive)
+        || description.contains(QStringLiteral("radio"), Qt::CaseInsensitive);
+}
+#endif
 
 static QString bridgeDiagnosticOneLine(QString msg)
 {
@@ -3934,16 +4248,18 @@ QVariantList DecodiumBridge::filterEntriesForRxDecode(QVariantList const& source
 {
     QVariantList filtered;
     filtered.reserve(source.size());
+    bool const showTxMessagesInRx =
+        getSetting(QStringLiteral("TXMessagesToRX"), true).toBool();
     for (QVariant const& v : source) {
         QVariantMap const e = v.toMap();
         if (!shouldDisplayEntryForBandActivity(e)) continue;  // stesso filter telemetry
+        if (e.value(QStringLiteral("isTx")).toBool() && !showTxMessagesInRx) continue;
         QString const key = decodeRxClearEntryKey(e);
         if (!key.isEmpty() && m_clearedRxDecodeKeys.contains(key)) continue;
         if (entryBelongsToCurrentQso(e)) {
             filtered.append(e);
         }
     }
-    // Aggiungi entries TX dal m_decodeList (sono già in source visto che è m_decodeList)
     // Sort per timestamp ms (1.0.139 fix style)
     std::stable_sort(filtered.begin(), filtered.end(),
         [](QVariant const& a, QVariant const& b) {
@@ -3966,10 +4282,21 @@ void DecodiumBridge::rebuildBandActivityModel()
 void DecodiumBridge::rebuildRxDecodeModel()
 {
     if (!m_rxDecodeModel) return;
-    // m_rxDecodeList contiene già le entries filtrate per RX pane (vedi
-    // appendRxDecodeEntry). Però filterEntriesForRxDecode applica anche il
-    // filter dxCall/myCall live, quindi usare m_decodeList come source.
-    QVariantList const filtered = filterEntriesForRxDecode(m_decodeList);
+    QVariantList merged;
+    merged.reserve(m_rxDecodeList.size() + m_decodeList.size());
+    QSet<QString> seen;
+    auto appendUnique = [&merged, &seen](QVariant const& value) {
+        QVariantMap const entry = value.toMap();
+        QString const key = decodeMirrorEntryKey(entry);
+        if (!key.isEmpty()) {
+            if (seen.contains(key)) return;
+            seen.insert(key);
+        }
+        merged.append(entry);
+    };
+    for (QVariant const& value : std::as_const(m_rxDecodeList)) appendUnique(value);
+    for (QVariant const& value : std::as_const(m_decodeList)) appendUnique(value);
+    QVariantList const filtered = filterEntriesForRxDecode(merged);
     m_rxDecodeModel->setEntries(filtered);
 }
 
@@ -4016,6 +4343,9 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         rebuildBandActivityModel();
         rebuildRxDecodeModel();
     });
+    connect(this, &DecodiumBridge::rxDecodeListChanged, this, [this]() {
+        rebuildRxDecodeModel();
+    });
     // RX model dipende anche da dxCall / rxFrequency / callsign / mode.
     connect(this, &DecodiumBridge::dxCallChanged, this, [this]() {
         m_clearedRxDecodeKeys.clear();
@@ -4029,6 +4359,13 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
         m_clearedRxDecodeKeys.clear();
         rebuildRxDecodeModel();
     });
+    connect(this, &DecodiumBridge::settingValueChanged, this,
+        [this](QString const& key, QVariant const&) {
+            if (key == QStringLiteral("TXMessagesToRX")
+                || key == QStringLiteral("Tx2QSO")) {
+                rebuildRxDecodeModel();
+            }
+        });
 
     if (qEnvironmentVariableIsSet("DECODIUM_DISABLE_GPU_PANADAPTER_FFT")) {
         m_gpuPanadapterFftAvailable.store(false);
@@ -4506,6 +4843,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
     // Helper: collega i segnali di un manager alle property del bridge, con guard backend
     auto connectCatSignals = [this, catProp](auto* mgr, const QString& backend) {
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::frequencyChanged, this, [this, backend, catProp]() {
+            if (m_shuttingDown) return;
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             double f = catProp("frequency").toDouble();
@@ -4542,12 +4880,14 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::modeChanged, this, [this, backend, catProp]() {
+            if (m_shuttingDown) return;
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             QString m = catProp("mode").toString();
             if (m_catMode != m) { m_catMode = m; emit catModeChanged(); }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::splitModeChanged, this, [this, backend, catProp]() {
+            if (m_shuttingDown) return;
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             QString const splitMode = catProp("splitMode").toString();
@@ -4555,6 +4895,10 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             syncActiveCatTxSplitFrequency(QStringLiteral("split-mode-change"));
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::connectedChanged, this, [this, backend, catProp]() {
+            if (m_shuttingDown) {
+                bridgeLog("CAT[" + backend + "] connectedChanged ignored during shutdown");
+                return;
+            }
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             bool c = catProp("connected").toBool();
@@ -4675,6 +5019,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             }
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::errorOccurred, this, [this, backend](const QString& msg) {
+            if (m_shuttingDown) return;
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             if (m_suppressCatErrors) { bridgeLog("CAT[" + backend + "] error suppressed: " + msg); return; }
@@ -4686,6 +5031,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             emit errorMessage(msg);
         });
         connect(mgr, &std::remove_pointer_t<decltype(mgr)>::statusUpdate, this, [this, backend](const QString& msg) {
+            if (m_shuttingDown) return;
             if (useLegacyRigControlFallback(m_legacyBackend, m_catBackend) && backend == QStringLiteral("hamlib")) return;
             if (!catSignalMatchesBackend(m_catBackend, backend)) return;
             bridgeLog("CAT[" + backend + "] status: " + msg);
@@ -5031,9 +5377,10 @@ DecodiumBridge::~DecodiumBridge()
     stopRx();
     teardownAudioCapture();
     // Ferma TX/Tune prima di distruggere tutto
-    if (m_txAudioSink) {
-        m_txAudioSink->disconnect();
-        m_txAudioSink->stop();
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("bridge-dtor"));
+        m_txAudioSink = nullptr;
+        m_txPcmBuffer = nullptr;
     }
     if (m_modulator && m_modulator->isActive()) m_modulator->stop(true);
     if (m_soundOutput) m_soundOutput->stop();
@@ -5095,6 +5442,16 @@ void DecodiumBridge::runPostQmlStartupServices()
     bridgeLog(QStringLiteral("startup services: starting after Main.qml ready"));
 
     QTimer::singleShot(100, this, [this]() {
+        if (!m_shuttingDown) {
+            enumerateAudioDevices();
+        }
+    });
+    QTimer::singleShot(1800, this, [this]() {
+        if (!m_shuttingDown) {
+            enumerateAudioDevices();
+        }
+    });
+    QTimer::singleShot(4500, this, [this]() {
         if (!m_shuttingDown) {
             enumerateAudioDevices();
         }
@@ -8368,6 +8725,22 @@ void DecodiumBridge::setAudioOutputDevice(const QString& v) {
         QString const previous = m_audioOutputDevice;
         m_audioOutputDevice = value;
         bridgeLog("audioOutputDevice set to: " + m_audioOutputDevice);
+#ifdef Q_OS_LINUX
+        const QString pulseSinkName = linuxPulseSinkNameFromDisplay(m_audioOutputDevice);
+        if (!pulseSinkName.isEmpty()) {
+            QString pulseError;
+            if (linuxSetDefaultPulseSink(pulseSinkName, &pulseError)) {
+                bridgeLog(QStringLiteral("audioOutputDevice: selected Linux Pulse/PipeWire sink [%1]")
+                              .arg(pulseSinkName));
+                qInfo().noquote() << "[AUDIODEV] selected Pulse/PipeWire sink:" << pulseSinkName;
+            } else {
+                bridgeLog(QStringLiteral("audioOutputDevice: failed to select Linux Pulse/PipeWire sink [%1]: %2")
+                              .arg(pulseSinkName, pulseError));
+                qWarning().noquote() << "[AUDIODEV] failed to select Pulse/PipeWire sink:"
+                                     << pulseSinkName << pulseError;
+            }
+        }
+#endif
         syncAudioDeviceSettingsToLegacyIni();
         if (legacyBackendAvailable()) {
             m_legacyBackend->setAudioOutputDeviceName(value);
@@ -9844,6 +10217,24 @@ static QAudioDevice findOutputDevice(const QString& name, bool* requestedDeviceF
     auto const outputs = QMediaDevices::audioOutputs();
 
     QString const requestedName = name.trimmed();
+#ifdef Q_OS_LINUX
+    const QString pulseSinkName = linuxPulseSinkNameFromDisplay(requestedName);
+    if (!pulseSinkName.isEmpty()) {
+        QString pulseError;
+        if (linuxSetDefaultPulseSink(pulseSinkName, &pulseError)) {
+            bridgeLog(QStringLiteral("findOutputDevice: selected Linux Pulse/PipeWire sink [%1], using Qt default output after pactl default-sink")
+                          .arg(pulseSinkName));
+            qInfo().noquote() << "[AUDIODEV] selected Pulse/PipeWire sink:" << pulseSinkName;
+            if (requestedDeviceFound) *requestedDeviceFound = true;
+            return QMediaDevices::defaultAudioOutput();
+        }
+
+        bridgeLog(QStringLiteral("findOutputDevice: failed to select Linux Pulse/PipeWire sink [%1]: %2")
+                      .arg(pulseSinkName, pulseError));
+        qWarning().noquote() << "[AUDIODEV] failed to select Pulse/PipeWire sink:"
+                             << pulseSinkName << pulseError;
+    }
+#endif
     if (!requestedName.isEmpty()) {
         for (const QAudioDevice& d : outputs) {
             if (audioDeviceNameExactMatches(d.description(), requestedName)) {
@@ -10553,10 +10944,10 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     m_bridgeAudioLegacyTxActive = false;
 
     if (m_txAudioSink) {
-        m_txAudioSink->disconnect(this);
-        if (m_txAudioSink->state() != QAudio::StoppedState) {
-            m_txAudioSink->stop();
-        }
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, reason);
+        m_txAudioSink = nullptr;
+        m_txPcmBuffer = nullptr;
+        m_txPcmData.clear();
     }
     if (wasBridgeLegacyTx && m_soundOutput) {
         m_soundOutput->stop();
@@ -11123,15 +11514,9 @@ void DecodiumBridge::startTx()
     }
 
     // Pulizia risorse TX precedenti
-    if (m_txAudioSink) {
-        m_txAudioSink->disconnect();
-        m_txAudioSink->stop();
-        delete m_txAudioSink;
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("startTx-cleanup"));
         m_txAudioSink = nullptr;
-    }
-    if (m_txPcmBuffer) {
-        m_txPcmBuffer->close();
-        delete m_txPcmBuffer;
         m_txPcmBuffer = nullptr;
     }
 
@@ -11497,6 +11882,11 @@ void DecodiumBridge::stopTx()
     m_activeTxMessage.clear();
 
 #if defined(Q_OS_MAC)
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("stopTx-mac"));
+        m_txAudioSink = nullptr;
+        m_txPcmBuffer = nullptr;
+    }
     if (m_modulator && m_modulator->isActive())
         m_modulator->stop(true);
     if (m_soundOutput)
@@ -11515,15 +11905,9 @@ void DecodiumBridge::stopTx()
     return;
 #endif
 
-    if (m_txAudioSink) {
-        m_txAudioSink->disconnect();
-        m_txAudioSink->stop();
-        delete m_txAudioSink;
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("stopTx"));
         m_txAudioSink = nullptr;
-    }
-    if (m_txPcmBuffer) {
-        m_txPcmBuffer->close();
-        delete m_txPcmBuffer;
         m_txPcmBuffer = nullptr;
     }
     m_txPcmData.clear();
@@ -11731,13 +12115,11 @@ bool DecodiumBridge::launchTuneAudio()
     QVector<float> const wave = buildTuneWaveform(freq, 48000, 10);
 
     // Pulizia sink precedente
-    if (m_txAudioSink) {
-        m_txAudioSink->disconnect();
-        m_txAudioSink->stop();
-        delete m_txAudioSink;
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("launchTune-cleanup"));
         m_txAudioSink = nullptr;
+        m_txPcmBuffer = nullptr;
     }
-    if (m_txPcmBuffer) { delete m_txPcmBuffer; m_txPcmBuffer = nullptr; }
 
     bool requestedDeviceFound = false;
     QAudioDevice outDev = resolveTxOutputDevice(&requestedDeviceFound);
@@ -11842,6 +12224,11 @@ void DecodiumBridge::stopTune()
 
 #if defined(Q_OS_MAC)
     if (m_tuneTimer) m_tuneTimer->stop();
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("stopTune-mac"));
+        m_txAudioSink = nullptr;
+        m_txPcmBuffer = nullptr;
+    }
     if (m_modulator)
         m_modulator->tune(false);
     if (m_soundOutput)
@@ -11862,15 +12249,9 @@ void DecodiumBridge::stopTune()
     if (!m_tuning) return;
     m_bridgeAudioTuneActive = false;
     if (m_tuneTimer) m_tuneTimer->stop();
-    if (m_txAudioSink) {
-        m_txAudioSink->disconnect();
-        m_txAudioSink->stop();
-        delete m_txAudioSink;
+    if (m_txAudioSink || m_txPcmBuffer) {
+        retireAudioSink(m_txAudioSink, m_txPcmBuffer, QStringLiteral("stopTune"));
         m_txAudioSink = nullptr;
-    }
-    if (m_txPcmBuffer) {
-        m_txPcmBuffer->close();
-        delete m_txPcmBuffer;
         m_txPcmBuffer = nullptr;
     }
     m_txPcmData.clear();
@@ -11950,8 +12331,16 @@ void DecodiumBridge::refreshAudioDevices()
 
     bool const tciAudio = usingTciAudioInput();
     QList<QAudioDevice> const inputs = QMediaDevices::audioInputs();
+#ifdef Q_OS_LINUX
+    const bool linuxPulseInputSelected =
+        !linuxPulseSourceNameFromDisplay(m_audioInputDevice).isEmpty();
+#else
+    const bool linuxPulseInputSelected = false;
+#endif
     if (tciAudio) {
         applyAudioInputRuntimeChange(QStringLiteral("refresh: TCI audio selected"));
+    } else if (linuxPulseInputSelected) {
+        applyAudioInputRuntimeChange(QStringLiteral("refresh: Linux Pulse/PipeWire source selected"));
     } else if (!inputs.isEmpty()) {
         if (hasAudioDeviceNamed(inputs, m_audioInputDevice)) {
             if (legacyBackendAvailable()) {
@@ -11969,8 +12358,16 @@ void DecodiumBridge::refreshAudioDevices()
     }
 
     QList<QAudioDevice> const outputs = QMediaDevices::audioOutputs();
+#ifdef Q_OS_LINUX
+    const bool linuxPulseOutputSelected =
+        !linuxPulseSinkNameFromDisplay(m_audioOutputDevice).isEmpty();
+#else
+    const bool linuxPulseOutputSelected = false;
+#endif
     if (tciAudio) {
         applyAudioOutputRuntimeChange(QStringLiteral("refresh: TCI audio selected"));
+    } else if (linuxPulseOutputSelected) {
+        applyAudioOutputRuntimeChange(QStringLiteral("refresh: Linux Pulse/PipeWire sink selected"));
     } else if (!outputs.isEmpty()) {
         if (hasAudioDeviceNamed(outputs, m_audioOutputDevice)) {
             if (legacyBackendAvailable()) {
@@ -22532,6 +22929,24 @@ void DecodiumBridge::startAudioCapture()
     // Qt6: use QMediaDevices::audioInputs() and QAudioDevice
     QAudioDevice selectedDevice = QMediaDevices::defaultAudioInput();
     bool requestedDeviceFound = m_audioInputDevice.isEmpty();
+#ifdef Q_OS_LINUX
+    const QString pulseSourceName = linuxPulseSourceNameFromDisplay(m_audioInputDevice);
+    if (!pulseSourceName.isEmpty()) {
+        QString pulseError;
+        if (linuxSetDefaultPulseSource(pulseSourceName, &pulseError)) {
+            bridgeLog(QStringLiteral("startAudioCapture: selected Linux Pulse/PipeWire source [%1], using Qt default input after pactl default-source")
+                          .arg(pulseSourceName));
+            qInfo().noquote() << "[AUDIODEV] selected Pulse/PipeWire source:" << pulseSourceName;
+            selectedDevice = QMediaDevices::defaultAudioInput();
+            requestedDeviceFound = true;
+        } else {
+            bridgeLog(QStringLiteral("startAudioCapture: failed to select Linux Pulse/PipeWire source [%1]: %2")
+                          .arg(pulseSourceName, pulseError));
+            qWarning().noquote() << "[AUDIODEV] failed to select Pulse/PipeWire source:"
+                                 << pulseSourceName << pulseError;
+        }
+    } else
+#endif
     if (!m_audioInputDevice.isEmpty()) {
         for (const QAudioDevice& dev : QMediaDevices::audioInputs()) {
             if (dev.description() == m_audioInputDevice ||
@@ -22646,6 +23061,17 @@ void DecodiumBridge::startAudioCapture()
 
     // Auto-match: se l'output TX non è configurato, cerca un device di output
     // che appartiene alla stessa scheda audio dell'input (es. "USB Audio CODEC")
+    if (m_audioOutputDevice.isEmpty()) {
+#ifdef Q_OS_LINUX
+        const QString matchingPulseSink = linuxMatchingPulseSinkForSource(pulseSourceName);
+        if (!matchingPulseSink.isEmpty()) {
+            const QString displayName = QString::fromLatin1(kLinuxPulseSinkPrefix) + matchingPulseSink;
+            setAudioOutputDevice(displayName);
+            bridgeLog(QStringLiteral("auto-matched Linux Pulse/PipeWire TX output sink: %1 (from source: %2)")
+                          .arg(matchingPulseSink, pulseSourceName));
+        }
+#endif
+    }
     if (m_audioOutputDevice.isEmpty()) {
         // Estrai la parte identificativa dal nome input (es. "USB Audio CODEC" da "Microphone (USB Audio CODEC )")
         QString inputDesc = selectedDevice.description();
@@ -24216,16 +24642,115 @@ void DecodiumBridge::enumerateAudioDevices()
     m_audioInputDevices.clear();
     m_audioOutputDevices.clear();
 
-    bridgeLog("=== enumerateAudioDevices INPUT ===");
-    for (const QAudioDevice& dev : QMediaDevices::audioInputs()) {
-        bridgeLog("  IN: " + dev.description());
+    const QList<QAudioDevice> inputs = QMediaDevices::audioInputs();
+    const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
+    const QAudioDevice defaultInput = QMediaDevices::defaultAudioInput();
+    const QAudioDevice defaultOutput = QMediaDevices::defaultAudioOutput();
+
+    bridgeLog(QStringLiteral("=== enumerateAudioDevices INPUT count=%1 default=[%2] id=%3 ===")
+                  .arg(inputs.size())
+                  .arg(defaultInput.description())
+                  .arg(audioDeviceIdForLog(defaultInput)));
+    qInfo().noquote() << QStringLiteral("[AUDIODEV] Qt inputs count=%1 default=[%2] id=%3")
+                             .arg(inputs.size())
+                             .arg(defaultInput.description())
+                             .arg(audioDeviceIdForLog(defaultInput));
+#ifdef Q_OS_LINUX
+    bool qtExposesLikelyUsbInput = false;
+#endif
+    for (const QAudioDevice& dev : inputs) {
+        const QString description = dev.description().trimmed();
+#ifdef Q_OS_LINUX
+        qtExposesLikelyUsbInput = qtExposesLikelyUsbInput || audioDeviceLooksUsb(description);
+#endif
+        bridgeLog(QStringLiteral("  IN: [%1] id=%2 preferred={%3}")
+                      .arg(description)
+                      .arg(audioDeviceIdForLog(dev))
+                      .arg(audioFormatForLog(dev.preferredFormat())));
+        qInfo().noquote() << QStringLiteral("[AUDIODEV] IN [%1] id=%2 preferred={%3}")
+                                 .arg(description)
+                                 .arg(audioDeviceIdForLog(dev))
+                                 .arg(audioFormatForLog(dev.preferredFormat()));
         m_audioInputDevices.append(dev.description());
     }
-    bridgeLog("=== enumerateAudioDevices OUTPUT ===");
-    for (const QAudioDevice& dev : QMediaDevices::audioOutputs()) {
-        bridgeLog("  OUT: " + dev.description());
+    bridgeLog(QStringLiteral("=== enumerateAudioDevices OUTPUT count=%1 default=[%2] id=%3 ===")
+                  .arg(outputs.size())
+                  .arg(defaultOutput.description())
+                  .arg(audioDeviceIdForLog(defaultOutput)));
+#ifdef Q_OS_LINUX
+    bool qtExposesLikelyUsbOutput = false;
+#endif
+    qInfo().noquote() << QStringLiteral("[AUDIODEV] Qt outputs count=%1 default=[%2] id=%3")
+                             .arg(outputs.size())
+                             .arg(defaultOutput.description())
+                             .arg(audioDeviceIdForLog(defaultOutput));
+    for (const QAudioDevice& dev : outputs) {
+        const QString description = dev.description().trimmed();
+#ifdef Q_OS_LINUX
+        qtExposesLikelyUsbOutput = qtExposesLikelyUsbOutput || audioDeviceLooksUsb(description);
+#endif
+        bridgeLog(QStringLiteral("  OUT: [%1] id=%2 preferred={%3}")
+                      .arg(description)
+                      .arg(audioDeviceIdForLog(dev))
+                      .arg(audioFormatForLog(dev.preferredFormat())));
+        qInfo().noquote() << QStringLiteral("[AUDIODEV] OUT [%1] id=%2 preferred={%3}")
+                                 .arg(description)
+                                 .arg(audioDeviceIdForLog(dev))
+                                 .arg(audioFormatForLog(dev.preferredFormat()));
         m_audioOutputDevices.append(dev.description());
     }
+#ifdef Q_OS_LINUX
+    const QStringList alsaCards = linuxAlsaCardsForLog();
+    if (!alsaCards.isEmpty()) {
+        bridgeLog(QStringLiteral("=== Linux ALSA cards visible to process (%1 lines) ===")
+                      .arg(alsaCards.size()));
+        for (const QString& line : alsaCards) {
+            bridgeLog(QStringLiteral("  ALSA: %1").arg(line));
+        }
+        if (!qtExposesLikelyUsbInput) {
+            bridgeLog(QStringLiteral("Audio Linux warning: ALSA sees devices but Qt Multimedia did not expose a USB/radio-like input. "
+                                     "Check PipeWire/PulseAudio input profiles, application permissions, and AppImage Qt audio plugins."));
+        }
+    } else {
+        bridgeLog(QStringLiteral("Linux ALSA cards: /proc/asound/cards unavailable or empty"));
+    }
+    const QStringList pulseSources = linuxPulseSourcesForLog();
+    bridgeLog(QStringLiteral("=== Linux PulseAudio/PipeWire sources via pactl (%1 lines) ===")
+                  .arg(pulseSources.size()));
+    for (const QString& line : pulseSources) {
+        bridgeLog(QStringLiteral("  PULSE: %1").arg(line));
+        qInfo().noquote() << QStringLiteral("[AUDIODEV] PULSE SOURCE %1").arg(line);
+        const QString pulseSourceName = linuxPulseSourceNameFromShortLine(line);
+        if (!pulseSourceName.isEmpty()) {
+            const QString displayName = QString::fromLatin1(kLinuxPulseSourcePrefix) + pulseSourceName;
+            if (!m_audioInputDevices.contains(displayName, Qt::CaseInsensitive)) {
+                m_audioInputDevices.append(displayName);
+            }
+        }
+    }
+    const QStringList pulseSinks = linuxPulseSinksForLog();
+    bridgeLog(QStringLiteral("=== Linux PulseAudio/PipeWire sinks via pactl (%1 lines) ===")
+                  .arg(pulseSinks.size()));
+    for (const QString& line : pulseSinks) {
+        bridgeLog(QStringLiteral("  PULSE OUT: %1").arg(line));
+        qInfo().noquote() << QStringLiteral("[AUDIODEV] PULSE SINK %1").arg(line);
+        const QString pulseSinkName = linuxPulseSinkNameFromShortLine(line);
+        if (!pulseSinkName.isEmpty()) {
+            const QString displayName = QString::fromLatin1(kLinuxPulseSinkPrefix) + pulseSinkName;
+            if (!m_audioOutputDevices.contains(displayName, Qt::CaseInsensitive)) {
+                m_audioOutputDevices.append(displayName);
+            }
+        }
+    }
+    if (!qtExposesLikelyUsbOutput) {
+        for (const QString& line : pulseSinks) {
+            if (line.contains(QStringLiteral("usb-"), Qt::CaseInsensitive)) {
+                bridgeLog(QStringLiteral("Audio Linux note: Qt Multimedia did not expose a USB/radio-like output directly; added Pulse/PipeWire sinks as selectable TX outputs."));
+                break;
+            }
+        }
+    }
+#endif
     bridgeLog("=== enumerateAudioDevices END ===");
 
     emit audioInputDevicesChanged();

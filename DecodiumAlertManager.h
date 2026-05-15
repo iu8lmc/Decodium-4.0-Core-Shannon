@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QStringList>
 
 class DecodiumAlertManager : public QObject {
     Q_OBJECT
@@ -23,6 +24,7 @@ public:
 private:
     QSoundEffect* soundForType(const QString& type);
     QString findSoundFile(const QString& name) const;
+    QString findSoundFile(const QStringList& names) const;
 
     QSoundEffect* m_cqSound     {nullptr};
     QSoundEffect* m_myCallSound {nullptr};
