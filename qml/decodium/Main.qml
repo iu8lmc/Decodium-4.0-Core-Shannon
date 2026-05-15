@@ -6603,6 +6603,36 @@ NumberAnimation {
         id: settingsDialog
     }
 
+    // 1.0.195 — QSY Quick Picker (F2 shortcut). Lazy Loader async per evitare
+    // overhead startup; vive in Window separata (render thread isolato).
+    Loader {
+        id: qsyQuickPickerLoader
+        active: false
+        asynchronous: true
+        source: "components/QsyQuickPickerDialog.qml"
+        onLoaded: {
+            if (item) {
+                item.show()
+                item.raise()
+                item.requestActivate()
+            }
+        }
+    }
+    function openQsyQuickPicker() {
+        if (!qsyQuickPickerLoader.active) {
+            qsyQuickPickerLoader.active = true
+        } else if (qsyQuickPickerLoader.item) {
+            qsyQuickPickerLoader.item.show()
+            qsyQuickPickerLoader.item.raise()
+            qsyQuickPickerLoader.item.requestActivate()
+        }
+    }
+    Shortcut {
+        sequence: "F2"
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.openQsyQuickPicker()
+    }
+
     Loader {
         id: bugReportDialogLoader
         active: false

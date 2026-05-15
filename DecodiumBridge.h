@@ -955,6 +955,10 @@ public:
     // dalle Station Frequencies (antenna offsets, sub-band correction).
     // Ritorna 0 se la freq e' OOB o se non c'e' record per quella banda.
     double stationOffsetForFrequencyHz(double hz) const;
+    // 1.0.195 — QSY rapido a un preset Working Frequencies (index nella tabella
+    // restituita da workingFrequencyRows()). Chiama setFrequency + setMode in
+    // sequenza. Log [QSY-Preset] su ogni invocazione (audit/diagnostic).
+    Q_INVOKABLE void qsyToWorkingFrequency(int index);
     Q_INVOKABLE QVariantMap pendingLogQsoPreview() const;
     Q_INVOKABLE QStringList satelliteOptions() const;
     Q_INVOKABLE QStringList satModeOptions() const;

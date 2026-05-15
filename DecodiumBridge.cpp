@@ -13418,6 +13418,38 @@ bool DecodiumBridge::saveWorkingFrequenciesFile(const QString& path)
     return true;
 }
 
+// 1.0.195 — QSY rapido a un preset Working Frequencies. Risolve l'index nella
+// lista corrente (rispetta filtri/sorting di workingFrequencyRows), legge
+// frequency_ + mode_ e chiama setFrequency + setMode in sequenza. Log audit.
+void DecodiumBridge::qsyToWorkingFrequency(int index)
+{
+    QVariantList const rows = workingFrequencyRows();
+    if (index < 0 || index >= rows.size()) {
+        bridgeLog(QStringLiteral("[QSY-Preset] invalid index=%1 (rows=%2)")
+                      .arg(index).arg(rows.size()));
+        return;
+    }
+    QVariantMap const entry = rows.at(index).toMap();
+    qlonglong const freqHz = entry.value(QStringLiteral("frequencyHz")).toLongLong();
+    QString const mode = entry.value(QStringLiteral("mode")).toString().trimmed();
+    QString const band = entry.value(QStringLiteral("band")).toString();
+    QString const desc = entry.value(QStringLiteral("description")).toString();
+    if (freqHz <= 0) {
+        bridgeLog(QStringLiteral("[QSY-Preset] skip: invalid frequency in entry idx=%1").arg(index));
+        return;
+    }
+    bridgeLog(QStringLiteral("[QSY-Preset] QSY idx=%1 → %2 Hz mode=%3 band=%4 desc=%5")
+                  .arg(index)
+                  .arg(freqHz)
+                  .arg(mode)
+                  .arg(band)
+                  .arg(desc.isEmpty() ? QStringLiteral("-") : desc));
+    setFrequency(static_cast<double>(freqHz));
+    if (!mode.isEmpty() && mode != m_mode) {
+        setMode(mode);
+    }
+}
+
 QVariantList DecodiumBridge::stationFrequencyRows() const
 {
     QVariant const raw = readSettingFromLegacyIni(QStringLiteral("stations"));
