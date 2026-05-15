@@ -4303,6 +4303,36 @@ Dialog {
                             }
                         }
 
+                        // 1.0.193 — Live preview della correzione su frequenze tipiche FT8
+                        // (banda 20m 14.074 MHz, banda 10m 28.074 MHz). Aggiornato a ogni
+                        // edit dei TextField slope/intercept tramite property binding.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 6
+                            spacing: 12
+                            Text {
+                                text: qsTr("Preview correzione:")
+                                color: textSecondary
+                                font.pixelSize: 11
+                                font.italic: true
+                            }
+                            Text {
+                                id: frequencyCalibrationPreview
+                                readonly property double slope: parseFloat(frequencySlopeField.text) || 0.0
+                                readonly property double intercept: parseFloat(frequencyInterceptField.text) || 0.0
+                                readonly property double delta14: 14074000.0 * slope * 1e-6 + intercept
+                                readonly property double delta28: 28074000.0 * slope * 1e-6 + intercept
+                                text: qsTr("14.074 MHz → %1 Hz · 28.074 MHz → %2 Hz")
+                                          .arg(delta14.toFixed(2))
+                                          .arg(delta28.toFixed(2))
+                                color: (Math.abs(delta14) > 50 || Math.abs(delta28) > 100)
+                                       ? "#ff8844" : secondaryCyan
+                                font.pixelSize: 11
+                                font.family: mainWindow.decodedTextFontFamily
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+
                         RowLayout {
                             Layout.fillWidth: true
                             Layout.topMargin: 8
