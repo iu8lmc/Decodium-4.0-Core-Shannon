@@ -745,6 +745,14 @@ int main(int argc, char* argv[])
     DecodiumLogging::installCrashHandler();
     L("QApplication OK");
 
+    // Set the real app identity before any QStandardPaths lookup. In AppImage
+    // builds argv[0] is the launcher wrapper, and using it for CacheLocation
+    // creates paths such as ~/.cache/AppRun.decodium-real.
+    app.setApplicationName("Decodium");
+    app.setApplicationVersion(QStringLiteral(FORK_RELEASE_VERSION));
+    app.setOrganizationName("IU8LMC");
+    app.setOrganizationDomain("decodium.iu8lmc.it");
+
     // 1.0.180 — Pipeline cache shader: build path here, apply via objectCreated
     // (setGraphicsConfiguration is an instance method on QQuickWindow, must be
     // called before the scene graph initialises — objectCreated is the right hook).

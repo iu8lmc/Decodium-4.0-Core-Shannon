@@ -2,7 +2,7 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-layout(std430, binding = 0) readonly buffer ParamsBuffer {
+layout(std430, binding = 0) buffer ParamsBuffer {
     int n;
     int binStart;
     int nBins;
@@ -17,11 +17,11 @@ layout(std430, binding = 0) readonly buffer ParamsBuffer {
     float reserved3;
 } params;
 
-layout(std430, binding = 1) readonly buffer SampleBuffer {
+layout(std430, binding = 1) buffer SampleBuffer {
     float samples[];
 };
 
-layout(std430, binding = 2) writeonly buffer OutputBuffer {
+layout(std430, binding = 2) buffer OutputBuffer {
     float dbValues[];
 };
 

@@ -28,6 +28,7 @@ Dialog {
     readonly property int fieldMinWidth: 300
     readonly property int wideFieldMinWidth: 420
     readonly property int portFieldMinWidth: 190
+    readonly property int frequencyPageMinWidth: 1120
     property string dataDownloadStatus: ""
     property bool dataDownloadIsError: false
     property string uiFontLabel: bridge.fontSettingLabel("Font", "", 0)
@@ -954,11 +955,13 @@ Dialog {
     property color bgDeep:        bridge.themeManager.bgDeep
     property color bgMedium:      bridge.themeManager.bgMedium
     property color bgLight:       bridge.themeManager.bgLight
+    property color bgDark:        bridge.themeManager.bgDeep
     property color primaryBlue:   bridge.themeManager.primaryColor
     property color secondaryCyan: bridge.themeManager.secondaryColor
     property color accentGreen:   bridge.themeManager.accentColor
     property color textPrimary:   bridge.themeManager.textPrimary
     property color textSecondary: bridge.themeManager.textSecondary
+    property color textDim:       Qt.rgba(textSecondary.r, textSecondary.g, textSecondary.b, 0.55)
     property color glassBorder:   bridge.themeManager.glassBorder
     readonly property int controlHeight: Qt.platform.os === "linux" ? 36 : 32
     readonly property int controlFontSize: 12
@@ -4197,12 +4200,17 @@ Dialog {
 
                 // ═══════════ TAB 7 — FREQUENCIES ═══════════
                 ScrollView {
+                    id: frequenciesScrollView
                     clip: true
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    readonly property int pageContentWidth: settingsDialog.frequencyPageMinWidth
+                    contentWidth: settingsDialog.frequencyPageMinWidth + 20
+                    contentHeight: frequenciesContent.implicitHeight + 20
+                    ScrollBar.horizontal.policy: ScrollBar.AsNeeded
 
                     ColumnLayout {
-                        width: parent.width - 20
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        id: frequenciesContent
+                        width: settingsDialog.frequencyPageMinWidth
+                        anchors { left: parent.left; top: parent.top; margins: 10 }
                         spacing: 10
 
                         RowLayout {
@@ -5552,7 +5560,27 @@ Dialog {
                             indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                             contentItem: Text { text: ""; leftPadding: 24 }
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                        Button {
+                            text: qsTr("Test")
+                            enabled: bridge.alertSoundsEnabled
+                            Layout.preferredWidth: 90
+                            Layout.preferredHeight: 28
+                            onClicked: bridge.playAlert("MyCall")
+                            background: Rectangle {
+                                radius: 4
+                                color: parent.enabled ? settingsDialog.bgMedium : settingsDialog.bgDark
+                                border.color: parent.enabled ? settingsDialog.primaryBlue : settingsDialog.glassBorder
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.enabled ? settingsDialog.primaryBlue : settingsDialog.textDim
+                                font.pixelSize: 11
+                                font.bold: true
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
 
                         // Alert grid
                         Text { text: qsTr("CQ in Msg:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }

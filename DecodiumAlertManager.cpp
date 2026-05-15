@@ -1,5 +1,8 @@
 #include "DecodiumAlertManager.h"
 #include <QApplication>
+#include <QDebug>
+#include <QSet>
+#include <QStandardPaths>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -11,6 +14,12 @@ static QSoundEffect* makeEffect(const QString& path, float volume, QObject* pare
     fx->setVolume(static_cast<qreal>(volume));
     if (!path.isEmpty())
         fx->setSource(QUrl::fromLocalFile(path));
+    QObject::connect(fx, &QSoundEffect::statusChanged, fx, [fx, path] {
+        if (fx->status() == QSoundEffect::Error) {
+            qWarning().noquote() << "[AlertAudio] failed to load"
+                                 << (path.isEmpty() ? QStringLiteral("<empty>") : path);
+        }
+    });
     return fx;
 }
 
@@ -21,12 +30,12 @@ static QSoundEffect* makeEffect(const QString& path, float volume, QObject* pare
 DecodiumAlertManager::DecodiumAlertManager(QObject* parent)
     : QObject(parent)
 {
-    m_cqSound      = makeEffect(findSoundFile("cq"),      m_volume, this);
-    m_myCallSound  = makeEffect(findSoundFile("mycall"),  m_volume, this);
-    m_dxSound      = makeEffect(findSoundFile("dx"),      m_volume, this);
-    m_sound73      = makeEffect(findSoundFile("73"),      m_volume, this);
-    m_newDxccSound = makeEffect(findSoundFile("newdxcc"), m_volume, this);
-    m_errorSound   = makeEffect(findSoundFile("error"),   m_volume, this);
+    m_cqSound      = makeEffect(findSoundFile({QStringLiteral("CQ.wav"), QStringLiteral("cq.wav")}), m_volume, this);
+    m_myCallSound  = makeEffect(findSoundFile({QStringLiteral("MyCall.wav"), QStringLiteral("mycall.wav")}), m_volume, this);
+    m_dxSound      = makeEffect(findSoundFile({QStringLiteral("DXcall.wav"), QStringLiteral("DX.wav"), QStringLiteral("dx.wav")}), m_volume, this);
+    m_sound73      = makeEffect(findSoundFile({QStringLiteral("Message.wav"), QStringLiteral("73.wav")}), m_volume, this);
+    m_newDxccSound = makeEffect(findSoundFile({QStringLiteral("DXCC.wav"), QStringLiteral("NewDXCC.wav"), QStringLiteral("newdxcc.wav")}), m_volume, this);
+    m_errorSound   = makeEffect(findSoundFile({QStringLiteral("_Testing.wav"), QStringLiteral("Message.wav"), QStringLiteral("Error.wav"), QStringLiteral("error.wav")}), m_volume, this);
 }
 
 // ---------------------------------------------------------------------------
@@ -35,18 +44,56 @@ DecodiumAlertManager::DecodiumAlertManager(QObject* parent)
 
 QString DecodiumAlertManager::findSoundFile(const QString& name) const
 {
-    // Candidate directories in priority order
-    const QStringList dirs = {
-        QCoreApplication::applicationDirPath() + "/sounds",
-        QDir::homePath() + "/.decodium/sounds"
-    };
+    return findSoundFile(QStringList{name + QStringLiteral(".wav"), name});
+}
 
-    for (const QString& dir : dirs) {
-        QString path = dir + "/" + name + ".wav";
-        if (QFileInfo::exists(path))
-            return path;
+QString DecodiumAlertManager::findSoundFile(const QStringList& names) const
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString resourceDir = QDir(appDir).absoluteFilePath(QStringLiteral("../Resources/sounds"));
+    const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/sounds");
+
+    QStringList dirs = {
+        QDir(appDir).absoluteFilePath(QStringLiteral("sounds")),
+        resourceDir,
+        dataDir,
+        QDir::homePath() + QStringLiteral("/.decodium/sounds"),
+        QDir::current().absoluteFilePath(QStringLiteral("sounds"))
+    };
+#ifdef CMAKE_SOURCE_DIR
+    dirs << QDir(QStringLiteral(CMAKE_SOURCE_DIR)).absoluteFilePath(QStringLiteral("sounds"));
+#endif
+
+    QSet<QString> seenDirs;
+    for (const QString& rawDir : dirs) {
+        const QString dir = QDir::cleanPath(rawDir);
+        if (dir.isEmpty() || seenDirs.contains(dir))
+            continue;
+        seenDirs.insert(dir);
+
+        QDir soundDir(dir);
+        if (!soundDir.exists())
+            continue;
+
+        for (const QString& name : names) {
+            const QString path = soundDir.absoluteFilePath(name);
+            if (QFileInfo::exists(path))
+                return path;
+        }
+
+        const QFileInfoList wavFiles = soundDir.entryInfoList({QStringLiteral("*.wav")},
+                                                              QDir::Files | QDir::Readable);
+        for (const QString& name : names) {
+            for (const QFileInfo& wav : wavFiles) {
+                if (wav.fileName().compare(name, Qt::CaseInsensitive) == 0)
+                    return wav.absoluteFilePath();
+            }
+        }
     }
-    return {};   // not found — QSoundEffect will stay silent
+    qWarning().noquote() << "[AlertAudio] sound file not found for"
+                         << names.join(QStringLiteral(", "));
+    return {};
 }
 
 // ---------------------------------------------------------------------------
