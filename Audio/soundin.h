@@ -33,6 +33,7 @@ public:
 
   // sink must exist from the start call until the next start call or
   // stop call
+  bool isActiveFor (QAudioDevice const&, unsigned downSampleFactor, AudioDevice::Channel = AudioDevice::Mono) const;
   Q_SLOT void start(QAudioDevice const&, int framesPerBuffer, AudioDevice * sink, unsigned downSampleFactor, AudioDevice::Channel = AudioDevice::Mono);
   Q_SLOT void suspend ();
   Q_SLOT void resume ();
@@ -67,9 +68,12 @@ private:
   int m_channelCount {0};
   int m_channelSelector {static_cast<int>(AudioDevice::Mono)};
   QString m_lastStatusMessage;
+  QString m_lastDuplicateStartKey;
   QAudio::State m_lastReportedState {QAudio::StoppedState};
   qint64 m_lastDebugStateLogMs {-1};
+  qint64 m_lastDuplicateStartLogMs {-1};
   int m_suppressedDebugStateLogs {0};
+  int m_suppressedDuplicateStartLogs {0};
   bool m_haveReportedState_ {false};
   bool m_expectedSuspend_ {false};
 };

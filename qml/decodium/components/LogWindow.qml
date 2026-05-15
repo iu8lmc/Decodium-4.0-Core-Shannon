@@ -85,6 +85,22 @@ Popup {
         }
     }
 
+    function hasActiveFilters() {
+        var band = bandFilter.currentText || ""
+        var mode = modeFilter.currentText || ""
+        return searchField.text.length > 0
+               || (band.length > 0 && band !== "All")
+               || (mode.length > 0 && mode !== "All")
+    }
+
+    function resetFilters() {
+        searchField.text = ""
+        bandFilter.currentIndex = 0
+        modeFilter.currentIndex = 0
+        clearSelection()
+        refreshLog()
+    }
+
     function fileUrlToLocalPath(fileUrl) {
         var path = String(fileUrl || "")
         if (path.indexOf("file://localhost/") === 0)
@@ -388,6 +404,7 @@ Popup {
                 StyledComboBox {
                     id: bandFilter
                     model: ["All", "160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "2m", "70cm"]
+                    currentIndex: 0
                     Layout.preferredWidth: 85; height: 28
                     font.pixelSize: 10
                     onCurrentTextChanged: { clearSelection(); refreshLog() }
@@ -396,9 +413,44 @@ Popup {
                 StyledComboBox {
                     id: modeFilter
                     model: ["All", "FT8", "FT4", "SFox", "JT65", "JT9", "Q65", "MSK144", "MSK40", "FSK441"]
+                    currentIndex: 0
                     Layout.preferredWidth: 85; height: 28
                     font.pixelSize: 10
                     onCurrentTextChanged: { clearSelection(); refreshLog() }
+                }
+
+                Rectangle {
+                    id: clearFiltersButton
+                    visible: logWindow.hasActiveFilters()
+                    Layout.preferredWidth: visible ? clearFiltersLabel.width + 18 : 0
+                    height: 28
+                    radius: 4
+                    color: clearFiltersMA.containsMouse
+                           ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.25)
+                           : Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.10)
+                    border.color: Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.55)
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        id: clearFiltersLabel
+                        anchors.centerIn: parent
+                        text: "Clear"
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: accentOrange
+                    }
+
+                    MouseArea {
+                        id: clearFiltersMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: logWindow.resetFilters()
+                    }
+
+                    ToolTip.visible: clearFiltersMA.containsMouse
+                    ToolTip.text: "Remove search, band and mode filters"
+                    ToolTip.delay: 500
                 }
 
                 Item { Layout.fillWidth: true }

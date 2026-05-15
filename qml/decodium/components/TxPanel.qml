@@ -28,6 +28,7 @@ Item {
     property var logSatModeChoices: [""]
     property int editingTxNum: 0
     property string editingTxError: ""
+    readonly property real compactTxButtonWidth: Math.max(104, Math.min(220, (width - 56) / 6))
 
     function refreshLogPreview() {
         var preview = engine && engine.pendingLogQsoPreview ? engine.pendingLogQsoPreview() : ({})
@@ -1135,6 +1136,11 @@ Item {
                 Layout.fillWidth: true
                 spacing: 6
 
+                Item {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                }
+
                 // TX1 - Answer CQ (Grid)
                 TxButton {
                     txNum: 1
@@ -1201,6 +1207,11 @@ Item {
                     isCQ: true
                     onClicked: if (engine && !isDisabled) engine.sendTx(6)
                     onEditRequested: txPanel.openTxMessageEditor(txNum, message)
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
 
             }
@@ -1526,8 +1537,11 @@ Item {
         readonly property bool isDisabled: bridge && (bridge.txDisabledMask & (1 << (txNum - 1))) !== 0
         signal editRequested(int txNum, string message)
 
-        Layout.fillWidth: true
-        Layout.preferredHeight: 50
+        Layout.fillWidth: false
+        Layout.preferredWidth: txPanel.compactTxButtonWidth
+        Layout.maximumWidth: 220
+        Layout.minimumWidth: 104
+        Layout.preferredHeight: 44
         opacity: isDisabled ? 0.4 : 1.0
 
         background: Rectangle {
@@ -1546,7 +1560,7 @@ Item {
                 return glassBorder
             }
             border.width: isSelected || isTransmitting ? 2 : 1
-            radius: 6
+            radius: 7
 
             Behavior on color { ColorAnimation { duration: 150 } }
         }
@@ -1554,8 +1568,8 @@ Item {
         contentItem: Item {
             Column {
                 anchors.centerIn: parent
-                width: parent.width - 10
-                spacing: 2
+                width: parent.width - 14
+                spacing: 1
 
                 Text {
                     width: parent.width

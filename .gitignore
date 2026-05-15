@@ -38,6 +38,7 @@ build-linux-appimage-x64/
 AppDir-linux-x86_64/
 .ci/
 dist-linux-appimage/
+dist-linux-appimage-*/
 local-release/
 
 # Installer and archive artifacts

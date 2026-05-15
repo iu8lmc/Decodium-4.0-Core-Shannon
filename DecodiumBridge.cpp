@@ -10,6 +10,7 @@
 #include "DecodiumLegacyBackend.h"
 #include "Network/DecodiumPskReporterLite.h"
 #include "Network/DecodiumCloudlogLite.h"
+#include "Network/DecodiumQrzLogbookLite.h"
 #include "Network/DecodiumWsprUploader.h"
 #include "Network/NtpClient.hpp"
 #include "Network/DecoSyncTime.hpp"
@@ -156,6 +157,9 @@ static QString audioFormatForLog(const QAudioFormat& format)
         .arg(static_cast<int>(format.sampleFormat()));
 }
 
+static QString audioStateToString(QAudio::State state);
+static QString audioErrorToString(QAudio::Error error);
+
 static bool deferCoreAudioSinkDelete()
 {
 #if defined(Q_OS_MAC)
@@ -210,20 +214,33 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
         }
 
         if (sink->state() != QAudio::StoppedState) {
-            sink->stop();
+            sink->suspend();
+        }
+        if (buffer) {
+            buffer->close();
         }
 
-        bridgeLog(QStringLiteral("TX CoreAudio sink retired with deferred delete: reason=%1").arg(reason));
-        QTimer::singleShot(5000, context, [sinkGuard, bufferGuard, reason]() {
+        bridgeLog(QStringLiteral("TX CoreAudio sink retired without immediate stop: reason=%1").arg(reason));
+        QTimer::singleShot(30000, context, [sinkGuard, bufferGuard, reason]() {
             if (sinkGuard) {
                 sinkGuard->disconnect();
-                sinkGuard->deleteLater();
+                if (sinkGuard->state() == QAudio::StoppedState) {
+                    sinkGuard->deleteLater();
+                    if (bufferGuard) {
+                        bufferGuard->deleteLater();
+                    }
+                    bridgeLog(QStringLiteral("TX CoreAudio sink deferred delete released: reason=%1").arg(reason));
+                    return;
+                }
+                bridgeLog(QStringLiteral("TX CoreAudio sink parked to avoid Qt stopAudioUnit crash: reason=%1 state=%2 err=%3")
+                              .arg(reason)
+                              .arg(audioStateToString(sinkGuard->state()))
+                              .arg(audioErrorToString(sinkGuard->error())));
+                return;
             }
             if (bufferGuard) {
-                bufferGuard->close();
                 bufferGuard->deleteLater();
             }
-            bridgeLog(QStringLiteral("TX CoreAudio sink deferred delete released: reason=%1").arg(reason));
         });
         return;
     }
@@ -916,12 +933,77 @@ static QString aliasedBridgeSettingKey(const QString& key)
     return key;
 }
 
+static QString resolveBridgeFontFamily(QString const& requestedFamily,
+                                       QString const& fallbackFamily = QString {})
+{
+    static QStringList const availableFamilies = [] {
+        QStringList families = QFontDatabase::families();
+        families.removeDuplicates();
+        return families;
+    }();
+
+    auto findInstalledFamily = [] (QString const& family) -> QString {
+        QString const clean = family.trimmed();
+        if (clean.isEmpty()) {
+            return {};
+        }
+        for (QString const& available : availableFamilies) {
+            if (available.compare(clean, Qt::CaseInsensitive) == 0) {
+                return available;
+            }
+        }
+        return {};
+    };
+
+    QStringList candidates;
+    auto addCandidate = [&candidates] (QString const& candidate) {
+        QString const clean = candidate.trimmed();
+        if (!clean.isEmpty()) {
+            candidates << clean;
+        }
+    };
+
+    for (QString const& token : requestedFamily.split(',', Qt::SkipEmptyParts)) {
+        QString const clean = token.trimmed();
+        if (clean.compare(QStringLiteral("monospace"), Qt::CaseInsensitive) == 0) {
+#if defined(Q_OS_MAC)
+            addCandidate(QStringLiteral("Menlo"));
+            addCandidate(QStringLiteral("Monaco"));
+#elif defined(Q_OS_WIN)
+            addCandidate(QStringLiteral("Consolas"));
+            addCandidate(QStringLiteral("Cascadia Mono"));
+#else
+            addCandidate(QStringLiteral("DejaVu Sans Mono"));
+            addCandidate(QStringLiteral("Noto Sans Mono"));
+            addCandidate(QStringLiteral("Liberation Mono"));
+#endif
+            addCandidate(QStringLiteral("Monospace"));
+        } else {
+            addCandidate(clean);
+        }
+    }
+
+    addCandidate(fallbackFamily);
+    addCandidate(QGuiApplication::font().family());
+
+    for (QString const& candidate : candidates) {
+        QString const installed = findInstalledFamily(candidate);
+        if (!installed.isEmpty()) {
+            return installed;
+        }
+    }
+
+    return fallbackFamily.trimmed().isEmpty()
+        ? QGuiApplication::font().family()
+        : fallbackFamily.trimmed();
+}
+
 static QFont fallbackBridgeFont(QString const& fallbackFamily, int fallbackPointSize)
 {
     static QFont const defaultApplicationFont = QGuiApplication::font();
     QFont font = defaultApplicationFont;
     if (!fallbackFamily.trimmed().isEmpty()) {
-        font.setFamily(fallbackFamily.trimmed());
+        font.setFamily(resolveBridgeFontFamily(fallbackFamily.trimmed(), defaultApplicationFont.family()));
     }
     if (fallbackPointSize > 0) {
         font.setPointSize(fallbackPointSize);
@@ -3436,6 +3518,7 @@ static int autoTxDecodeGraceMs(const QString& mode)
 static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMaxRetries,
                                            int partnerSnrDb = 127, bool conservative = false)
 {
+    Q_UNUSED(configuredMaxRetries)
     QString const normalized = mode.trimmed().toUpper();
     int modeCap = 3;
     if (normalized == QStringLiteral("FT4")) {
@@ -3453,7 +3536,10 @@ static int deferredSignoffRetryCapForMode(const QString& mode, int configuredMax
     }
     if (conservative) extra += 2;
     modeCap += extra;
-    return qBound(1, configuredMaxRetries + extra, modeCap);
+    // The caller retry setting controls report-step retries, not the final
+    // RR73/73 wait. A low value here made AutoCQ leave the QSO after the first
+    // RR73, before the partner's final 73 could arrive.
+    return modeCap;
 }
 
 static int autoSeqTxRank(int txNum)
@@ -4015,9 +4101,9 @@ void DecodiumBridge::setUiQuality(QString const& v)
     bridgeLog(QStringLiteral("[UI] Quality = %1").arg(norm));
 }
 
-// 1.0.186 — Full Spectrum auto-detach: pop-out di period1 per isolare il
-// scene-graph dei ListView decode dal Main (Pasquale-pattern). Default ON
-// per migliorare fluidita' su PC modesti. Persistito su QSettings.
+// 1.0.186 — Full Spectrum auto-detach: pop-out opzionale di period1 per
+// isolare il scene-graph dei ListView decode dal Main (Pasquale-pattern).
+// Default OFF al primo avvio. Persistito su QSettings.
 void DecodiumBridge::setAutoDetachFullSpectrum(bool v)
 {
     if (m_autoDetachFullSpectrum == v) return;
@@ -4597,6 +4683,15 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             this, [this](const QString& c) { emit statusMessage("Cloudlog: QSO loggato " + c); });
     connect(m_cloudlog, &DecodiumCloudlogLite::errorOccurred,
             this, [this](const QString& msg) { emit errorMessage("Cloudlog: " + msg); });
+
+    // QRZ Logbook
+    m_qrzLogbook = new DecodiumQrzLogbookLite(this);
+    connect(m_qrzLogbook, &DecodiumQrzLogbookLite::apiKeyOk,
+            this, [this]() { emit statusMessage(QStringLiteral("QRZ Logbook: API key OK")); });
+    connect(m_qrzLogbook, &DecodiumQrzLogbookLite::qsoLogged,
+            this, [this](const QString& c) { emit statusMessage(QStringLiteral("QRZ Logbook: QSO loggato ") + c); });
+    connect(m_qrzLogbook, &DecodiumQrzLogbookLite::errorOccurred,
+            this, [this](const QString& msg) { emit errorMessage(QStringLiteral("QRZ Logbook: ") + msg); });
 
     // WSPR uploader
     m_wsprUploader = new DecodiumWsprUploader(this);
@@ -5260,7 +5355,7 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
 
         // 1.0.186 — Full Spectrum auto-detach + Spectrum FPS cap
         m_autoDetachFullSpectrum = s.value(
-            QStringLiteral("UI/AutoDetachFullSpectrum"), true).toBool();
+            QStringLiteral("UI/AutoDetachFullSpectrum"), false).toBool();
         int const fpsRaw = s.value(QStringLiteral("UI/SpectrumFpsCap"), 20).toInt();
         m_spectrumFpsCap = (fpsRaw <= 15) ? 15 : (fpsRaw >= 30) ? 30 : 20;
 
@@ -5633,11 +5728,29 @@ bool DecodiumBridge::ensureLegacyBackendAvailable()
                 this, &DecodiumBridge::onLegacyAudioSamples);
         connect(m_legacyBackend, &DecodiumLegacyBackend::warningRaised,
                 this, [this](QString const& title, QString const& summary, QString const& details) {
-            // Quando il CAT nativo gestisce il rig, i warning Hamlib del legacy backend
-            // sono falsi positivi (es. conflitto porta COM). Li sopprimiamo.
+            // Quando il CAT nativo gestisce il rig, solo i warning legacy
+            // realmente legati a rig/Hamlib/seriale sono falsi positivi.
+            // Gli altri warning, come log QSO non registrabile, devono arrivare
+            // alla shell QML.
             if (m_catBackend == QStringLiteral("native")) {
-                bridgeLog("Legacy warning suppressed (native CAT active): " + summary);
-                return;
+                QString const lower = (title + QLatin1Char(' ') + summary + QLatin1Char(' ') + details).toLower();
+                bool const catLike =
+                    lower.startsWith(QStringLiteral("cat"))
+                    || lower.contains(QStringLiteral(" cat"))
+                    || lower.contains(QStringLiteral("[cat"))
+                    || lower.contains(QStringLiteral("cat:"))
+                    || lower.contains(QStringLiteral("cat/"));
+                bool const rigWarning =
+                    lower.contains(QStringLiteral("hamlib"))
+                    || catLike
+                    || lower.contains(QStringLiteral("rig"))
+                    || lower.contains(QStringLiteral("serial"))
+                    || lower.contains(QStringLiteral("com "))
+                    || lower.contains(QStringLiteral("timed out"));
+                if (rigWarning) {
+                    bridgeLog("Legacy warning suppressed (native CAT active): " + summary);
+                    return;
+                }
             }
             emit warningRaised(title, summary, details);
         });
@@ -6138,8 +6251,11 @@ void DecodiumBridge::syncLegacyBackendState()
         || m_legacyBackend->tuning()
         || m_bridgeAudioLegacyTxActive
         || m_bridgeAudioTuneActive;
+    bool const legacyMonitoringStartPending = m_legacyBackend->monitoringStartPending();
     bool const effectiveLegacyMonitoring = m_legacyBackend->monitoring()
-        || (m_monitorRequested && usingLegacyBackendForTx() && legacyTxOrTune);
+        || (m_monitorRequested
+            && usingLegacyBackendForTx()
+            && (legacyMonitoringStartPending || legacyTxOrTune));
     updateBool(m_monitoring, effectiveLegacyMonitoring, [this]() { emit monitoringChanged(); });
     if (m_monitorRequested && monitorBeforeLegacySync && !m_monitoring) {
         scheduleMonitorRecovery(QStringLiteral("legacy state sync"),
@@ -14146,11 +14262,12 @@ QFont DecodiumBridge::fontSettingFont(const QString& key,
 
     QFont parsed;
     if (parsed.fromString(raw)) {
+        parsed.setFamily(resolveBridgeFontFamily(parsed.family(), fallback.family()));
         return parsed;
     }
 
     // Be tolerant of older/manual values that only contain a family name.
-    fallback.setFamily(raw);
+    fallback.setFamily(resolveBridgeFontFamily(raw, fallback.family()));
     return fallback;
 }
 
@@ -15462,6 +15579,10 @@ void DecodiumBridge::saveSettings()
     s.setValue("cloudlogEnabled",  m_cloudlogEnabled);
     s.setValue("cloudlogUrl",      m_cloudlogUrl);
     s.setValue("cloudlogApiKey",   m_cloudlogApiKey);
+    // QRZ Logbook
+    s.setValue("qrzLogbookEnabled", m_qrzLogbookEnabled);
+    s.setValue("qrzLogbookApiKey",  m_qrzLogbookApiKey);
+    s.setValue("qrzLogbookReplaceDuplicates", m_qrzLogbookReplaceDuplicates);
     // LotW / ADIF
     s.setValue("lotwEnabled",      m_lotwEnabled);
     // WSPR upload
@@ -17132,6 +17253,22 @@ void DecodiumBridge::checkAndStartPeriodicTx()
             return false;
         }
 
+        bool const autoCqDeferredSignoffMode =
+            m_mode == QStringLiteral("FT2")
+            || m_mode == QStringLiteral("FT4")
+            || m_mode == QStringLiteral("FT8");
+        if (m_autoCqRepeat
+            && autoCqDeferredSignoffMode
+            && !m_logAfterOwn73
+            && !m_ft2DeferredLogPending) {
+            m_ft2DeferredLogPending = true;
+            capturePendingAutoLogSnapshot();
+            bridgeLog(QStringLiteral("checkAndStartPeriodicTx: repaired deferred signoff wait for AutoCQ TX%1 mode=%2 count=%3")
+                          .arg(m_currentTx)
+                          .arg(m_mode)
+                          .arg(m_nTx73));
+        }
+
         if (m_logAfterOwn73) {
             finishAutoSequenceQso(QStringLiteral("checkAndStartPeriodicTx: completed own 73 → QSO complete"), true);
             return true;
@@ -18384,6 +18521,15 @@ void DecodiumBridge::loadSettings()
         m_cloudlog->setApiUrl(m_cloudlogUrl);
         m_cloudlog->setApiKey(m_cloudlogApiKey);
     }
+    // QRZ Logbook
+    m_qrzLogbookEnabled = s.value("qrzLogbookEnabled", false).toBool();
+    m_qrzLogbookApiKey = s.value("qrzLogbookApiKey", QString()).toString();
+    m_qrzLogbookReplaceDuplicates = s.value("qrzLogbookReplaceDuplicates", false).toBool();
+    if (m_qrzLogbook) {
+        m_qrzLogbook->setEnabled(m_qrzLogbookEnabled);
+        m_qrzLogbook->setApiKey(m_qrzLogbookApiKey);
+        m_qrzLogbook->setReplaceDuplicates(m_qrzLogbookReplaceDuplicates);
+    }
     // LotW
     m_lotwEnabled = s.value("lotwEnabled", false).toBool();
     // WSPR upload
@@ -18589,6 +18735,9 @@ void DecodiumBridge::reloadBridgeSettingsFromPersistentStore()
     emit cloudlogEnabledChanged();
     emit cloudlogUrlChanged();
     emit cloudlogApiKeyChanged();
+    emit qrzLogbookEnabledChanged();
+    emit qrzLogbookApiKeyChanged();
+    emit qrzLogbookReplaceDuplicatesChanged();
     emit lotwEnabledChanged();
     emit wsprUploadEnabledChanged();
     emit nfaChanged();
@@ -19900,7 +20049,13 @@ void DecodiumBridge::logQsoNow()
     tcpSendLoggedAdifQso(logDxCall, adifRecord);
     traceLogStep(QStringLiteral("adif-tcp-started"));
 
-    // 4) Cloudlog upload
+    // 4) QRZ Logbook upload
+    if (m_qrzLogbookEnabled && m_qrzLogbook) {
+        m_qrzLogbook->uploadAdif(logDxCall, adifRecord);
+    }
+    traceLogStep(QStringLiteral("qrz-logbook-started"));
+
+    // 5) Cloudlog upload
     bool snrOk = false;
     int const snr = logRptSent.toInt(&snrOk);
     if (m_cloudlogEnabled && m_cloudlog) {
@@ -23102,6 +23257,11 @@ void DecodiumBridge::startAudioCapture()
     // Rolling back a 8192 (~170ms) — buffer sufficiente per FT4/FT8 final
     // windows ma sotto la soglia di breakage di Qt-WASAPI.
     const int rxFramesPerBuffer = 8192; // ~170 ms at 48 kHz, before decimation.
+    if (m_soundInput && m_soundInput->isActiveFor(selectedDevice, downSampleFactor, channel)) {
+        m_soundInput->setInputGain(rxInputGainFromLevel(m_rxInputLevel));
+        return;
+    }
+
     bridgeLog("SoundInput::start device=" + selectedDevice.description() +
               " channel=" + QString::number((int)channel) +
               " dsf=" + QString::number(downSampleFactor) +
@@ -26284,6 +26444,56 @@ void DecodiumBridge::testCloudlogApi()
         if (data.contains("auth")) emit statusMessage("Cloudlog: API key OK");
         else emit errorMessage("Cloudlog: API key non valida");
     });
+}
+
+void DecodiumBridge::setQrzLogbookEnabled(bool v)
+{
+    if (m_qrzLogbookEnabled == v) {
+        return;
+    }
+    m_qrzLogbookEnabled = v;
+    if (m_qrzLogbook) {
+        m_qrzLogbook->setEnabled(v);
+    }
+    emit qrzLogbookEnabledChanged();
+}
+
+void DecodiumBridge::setQrzLogbookApiKey(const QString& v)
+{
+    if (m_qrzLogbookApiKey == v) {
+        return;
+    }
+    m_qrzLogbookApiKey = v;
+    if (m_qrzLogbook) {
+        m_qrzLogbook->setApiKey(v);
+    }
+    emit qrzLogbookApiKeyChanged();
+}
+
+void DecodiumBridge::setQrzLogbookReplaceDuplicates(bool v)
+{
+    if (m_qrzLogbookReplaceDuplicates == v) {
+        return;
+    }
+    m_qrzLogbookReplaceDuplicates = v;
+    if (m_qrzLogbook) {
+        m_qrzLogbook->setReplaceDuplicates(v);
+    }
+    emit qrzLogbookReplaceDuplicatesChanged();
+}
+
+void DecodiumBridge::testQrzLogbookApi()
+{
+    if (m_qrzLogbookApiKey.trimmed().isEmpty()) {
+        emit errorMessage(QStringLiteral("QRZ Logbook: API key mancante"));
+        return;
+    }
+    if (!m_qrzLogbook) {
+        emit errorMessage(QStringLiteral("QRZ Logbook: client non inizializzato"));
+        return;
+    }
+    m_qrzLogbook->setApiKey(m_qrzLogbookApiKey);
+    m_qrzLogbook->testApi();
 }
 
 // === ADV AUTO-MODE ===

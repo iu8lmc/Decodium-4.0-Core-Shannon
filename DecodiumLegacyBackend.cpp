@@ -509,6 +509,8 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     m_originalQuitOnLastWindowClosed = m_app->quitOnLastWindowClosed();
     m_originalStyleSheet = m_app->styleSheet();
     m_originalPalette = m_app->palette();
+    QString const originalAppDataPath =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QString const originalAppLocalDataPath =
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QString const embeddedLegacyDataDir =
@@ -527,6 +529,8 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     }
     m_app->setProperty("decodiumEmbeddedLegacyShell", true);
     m_app->setProperty("decodiumEmbeddedLegacyDataDir", embeddedLegacyDataDir);
+    m_app->setProperty("decodiumPrimaryAppDataDir", originalAppDataPath);
+    m_app->setProperty("decodiumPrimaryAppLocalDataDir", originalAppLocalDataPath);
     m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", m_rigControlEnabled);
     bootstrapEmbeddedLegacyDataDir(embeddedLegacyDataDir);
     bootstrapEmbeddedLegacyConfig();
@@ -593,12 +597,16 @@ DecodiumLegacyBackend::DecodiumLegacyBackend(QObject* parent)
     } catch (std::exception const& e) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
+        m_app->setProperty("decodiumPrimaryAppDataDir", QString {});
+        m_app->setProperty("decodiumPrimaryAppLocalDataDir", QString {});
         m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
         m_failureReason = QString::fromLocal8Bit(e.what());
         m_available = false;
     } catch (...) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
+        m_app->setProperty("decodiumPrimaryAppDataDir", QString {});
+        m_app->setProperty("decodiumPrimaryAppLocalDataDir", QString {});
         m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
         m_failureReason = QStringLiteral("Unknown exception while creating legacy backend");
         m_available = false;
@@ -625,6 +633,8 @@ DecodiumLegacyBackend::~DecodiumLegacyBackend()
     if (m_app) {
         m_app->setProperty("decodiumEmbeddedLegacyShell", false);
         m_app->setProperty("decodiumEmbeddedLegacyDataDir", QString {});
+        m_app->setProperty("decodiumPrimaryAppDataDir", QString {});
+        m_app->setProperty("decodiumPrimaryAppLocalDataDir", QString {});
         m_app->setProperty("decodiumEmbeddedLegacyRigControlEnabled", QVariant {});
     }
 }

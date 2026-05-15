@@ -1,5 +1,4 @@
 #include "DecodeListModel.h"
-#include <QDebug>
 
 namespace {
 // Mapping role → field name nella QVariantMap. Allinea con quello che
@@ -87,29 +86,7 @@ QVariant DecodeListModel::data(QModelIndex const& index, int role) const
     }
     QVariantMap const& entry = m_entries.at(index.row());
 
-    if (role == EntryRole) {
-        // 1.0.153: log diagnostico — quando QML chiede l'entry per separator
-        // (modelData binding), verifica che il QVariantMap esposto contenga
-        // realmente isSeparator=true.
-        static int s_entryDbgCount = 0;
-        if (entry.value(QStringLiteral("isSeparator")).toBool() && s_entryDbgCount < 5) {
-            ++s_entryDbgCount;
-            qInfo().noquote() << "[DLM] data EntryRole(row=" << index.row()
-                              << ") isSeparator=true keys=" << entry.keys().join(",");
-        }
-        return entry;
-    }
-
-    if (role == IsSeparatorRole) {
-        static int s_sepDbgCount = 0;
-        if (s_sepDbgCount < 10) {
-            QVariant const val = entry.value(QStringLiteral("isSeparator"));
-            ++s_sepDbgCount;
-            qInfo().noquote() << "[DLM] data IsSeparatorRole(row=" << index.row()
-                              << ") returned=" << val
-                              << " type=" << val.typeName();
-        }
-    }
+    if (role == EntryRole) return entry;
 
     QString const key = roleFieldKey(role);
     if (key.isEmpty()) return QVariant();

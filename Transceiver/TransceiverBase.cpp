@@ -271,18 +271,6 @@ void TransceiverBase::shutdown ()
     {
       try
         {
-          do_prepare_shutdown ();
-        }
-      catch (std::exception const& e)
-        {
-          CAT_WARNING ("shutdown preparation failed:" << e.what ());
-        }
-      catch (...)
-        {
-          CAT_WARNING ("shutdown preparation failed: unexpected exception");
-        }
-      try
-        {
           // try and ensure PTT isn't left set
           do_ptt (false);
           do_post_ptt (false);

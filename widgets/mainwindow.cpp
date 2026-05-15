@@ -6264,7 +6264,7 @@ void MainWindow::readSettings()
   else if(m_ft8threads==10) ui->actionMT10->setChecked(true);
   else if(m_ft8threads==11) ui->actionMT11->setChecked(true);
   else if(m_ft8threads==12) ui->actionMT12->setChecked(true);
-  qDebug() << "m_ft8threads is " << m_ft8threads;
+  debugToFile (QString {"ft8Threads  setting:%1 (0=auto)"}.arg (m_ft8threads));
   dec_data.params.nmt = m_ft8threads;
 
   ui->actionHide_FT8_dupe_messages->setChecked(m_settings->value("HideFT8Dupes",true).toBool());
@@ -12956,7 +12956,9 @@ void MainWindow::requestInProcessFt8Decode ()
   }
 
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    qWarning() << "FT8 decode worker unavailable";
+    debugToFile (QString {"ft8Decode   worker unavailable source:request running:%1 worker:%2"}
+                   .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
+                   .arg (m_ft8DecodeWorker ? 1 : 0));
     return;
   }
 
@@ -12970,7 +12972,9 @@ void MainWindow::queueInProcessFt8Decode ()
   }
 
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    qWarning() << "FT8 decode worker unavailable";
+    debugToFile (QString {"ft8Decode   worker unavailable source:queue running:%1 worker:%2"}
+                   .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
+                   .arg (m_ft8DecodeWorker ? 1 : 0));
     return;
   }
 
@@ -13072,7 +13076,12 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
 void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request)
 {
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    qWarning() << "FT8 decode worker unavailable";
+    debugToFile (QString {"ft8Decode   worker unavailable source:dispatch running:%1 worker:%2 utc:%3 nzhsym:%4 samples:%5"}
+                   .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
+                   .arg (m_ft8DecodeWorker ? 1 : 0)
+                   .arg (request.nutc)
+                   .arg (request.nzhsym)
+                   .arg (request.availableSamples));
     return;
   }
 
@@ -20931,11 +20940,80 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
     return true;
   };
 
+  auto selectedTxMessage = [this] {
+    if (!ui) return QString {};
+    switch (m_ntx) {
+    case 1: return ui->tx1 ? ui->tx1->text () : QString {};
+    case 2: return ui->tx2 ? ui->tx2->text () : QString {};
+    case 3: return ui->tx3 ? ui->tx3->text () : QString {};
+    case 4: return ui->tx4 ? ui->tx4->text () : QString {};
+    case 5: return ui->tx5 ? ui->tx5->currentText () : QString {};
+    case 6: return ui->tx6 ? ui->tx6->text () : QString {};
+    default: return QString {};
+    }
+  };
+
+  auto acceptRecoveredLogCall = [&] (QString candidate, QString const& source) {
+    candidate = normalize_call_token (candidate).trimmed ().toUpper ();
+    if (candidate.isEmpty ()) return false;
+
+    auto const base = Radio::base_callsign (candidate).trimmed ().toUpper ();
+    auto const myBase = Radio::base_callsign (m_config.my_callsign ()).trimmed ().toUpper ();
+    if (base.isEmpty () || base == myBase || !base.contains (QRegularExpression {R"(\d)"})) {
+      return false;
+    }
+
+    logHisCall = candidate;
+    if (m_hisCall.trimmed ().isEmpty ()) m_hisCall = candidate;
+    if (logHisGrid.trimmed ().isEmpty () && ui && ui->dxGridEntry) {
+      logHisGrid = ui->dxGridEntry->text ().trimmed ();
+    }
+    if (ui && ui->dxCallEntry && ui->dxCallEntry->text ().trimmed ().isEmpty ()) {
+      QSignalBlocker const blocker {ui->dxCallEntry};
+      ui->dxCallEntry->setText (candidate);
+    }
+
+    debugToFile (QString {"logQSO-recovered-dx source:%1 call:%2 timer:%3 embedded:%4 autoCQ:%5 qso:%6 ntx:%7 current:%8 last:%9 selected:%10"}
+                   .arg (source, candidate)
+                   .arg (logTriggeredByTimer)
+                   .arg (m_embeddedShellMode)
+                   .arg (m_autoCQ)
+                   .arg (m_QSOProgress)
+                   .arg (m_ntx)
+                   .arg (m_currentMessage.trimmed (),
+                         m_lastMessageSent.trimmed (),
+                         selectedTxMessage ().trimmed ()));
+    return true;
+  };
+
+  auto recoverLogCallFromActiveContext = [&] {
+    if (!logHisCall.trimmed ().isEmpty ()) return true;
+    if (ui && ui->dxCallEntry && acceptRecoveredLogCall (ui->dxCallEntry->text (), QStringLiteral ("dx-entry"))) return true;
+    if (m_pendingAutoLogValid && acceptRecoveredLogCall (m_pendingAutoLogCall, QStringLiteral ("pending-auto-log"))) return true;
+    if (m_lateAutoLogValid
+        && (!m_lateAutoLogExpires.isValid () || QDateTime::currentDateTimeUtc () <= m_lateAutoLogExpires)
+        && acceptRecoveredLogCall (m_lateAutoLogCall, QStringLiteral ("late-auto-log"))) return true;
+    if (m_autoCQ && acceptRecoveredLogCall (m_autoCqLockedCall, QStringLiteral ("auto-cq-lock"))) return true;
+    if (acceptRecoveredLogCall (infer_partner_from_directed_message (m_currentMessage,
+                                                                     m_config.my_callsign (),
+                                                                     m_baseCall),
+                                QStringLiteral ("current-message"))) return true;
+    if (acceptRecoveredLogCall (infer_partner_from_directed_message (m_lastMessageSent,
+                                                                     m_config.my_callsign (),
+                                                                     m_baseCall),
+                                QStringLiteral ("last-message"))) return true;
+    return acceptRecoveredLogCall (infer_partner_from_directed_message (selectedTxMessage (),
+                                                                       m_config.my_callsign (),
+                                                                       m_baseCall),
+                                   QStringLiteral ("selected-tx"));
+  };
+
   bool const mayUseDeferredLogSnapshot =
       m_autoCQ || logTriggeredByTimer || currentTxIs73 || m_sentFirst73 || m_QSOProgress >= SIGNOFF;
   if (mayUseDeferredLogSnapshot && !applyPendingAutoLogSnapshot ()) {
     applyLateAutoLogSnapshot ();
   }
+  recoverLogCallFromActiveContext ();
 
   if (logHisCall.trimmed ().isEmpty ()) {
     if (mayUseDeferredLogSnapshot) {
@@ -20944,19 +21022,26 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
       if (!applyPendingAutoLogSnapshot ()) {
         applyLateAutoLogSnapshot ();
       }
-      if (logHisCall.trimmed ().isEmpty () && (m_autoCQ || logTriggeredByTimer)) {
-        debugToFile (QString {"logQSO-skip-empty-dx timer:%1 autoCQ:%2 tx73:%3 sent73:%4 qso:%5 ntx:%6"}
-                         .arg (logTriggeredByTimer)
-                         .arg (m_autoCQ)
-                         .arg (currentTxIs73)
-                         .arg (m_sentFirst73)
-                         .arg (m_QSOProgress)
-                         .arg (m_ntx));
-        return;  // Automatic/deferred log: stale trigger with no stable partner context.
-      }
+      recoverLogCallFromActiveContext ();
     }
-    MessageBox::warning_message (this, tr ("Warning:  DX Call field is empty."));
-    if ((SpecOp::NA_VHF == m_specOp or SpecOp::WW_DIGI == m_specOp) && m_config.autoLog()) return;  // prevent program crash
+    if (logHisCall.trimmed ().isEmpty () && (m_embeddedShellMode || m_autoCQ || logTriggeredByTimer)) {
+      debugToFile (QString {"logQSO-skip-empty-dx timer:%1 embedded:%2 autoCQ:%3 tx73:%4 sent73:%5 qso:%6 ntx:%7 current:%8 last:%9 selected:%10"}
+                       .arg (logTriggeredByTimer)
+                       .arg (m_embeddedShellMode)
+                       .arg (m_autoCQ)
+                       .arg (currentTxIs73)
+                       .arg (m_sentFirst73)
+                       .arg (m_QSOProgress)
+                       .arg (m_ntx)
+                       .arg (m_currentMessage.trimmed (),
+                             m_lastMessageSent.trimmed (),
+                             selectedTxMessage ().trimmed ()));
+      return;  // Embedded/deferred log: stale trigger with no stable partner context.
+    }
+    legacyRaiseWarning (tr ("DX Call field is empty"),
+                        tr ("The logger received a manual log request without a DX callsign."),
+                        tr ("Select a received message or type the DX callsign before logging the QSO."));
+    return;
   }
   // m_dateTimeQSOOn should really already be set but we'll ensure it gets set to something just in case
   if (!logDateTimeQSOOn.isValid ()) {

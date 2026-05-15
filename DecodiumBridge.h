@@ -33,6 +33,7 @@ class DecodiumAlertManager;
 #include "DecodiumDxCluster.h"
 class DecodiumPskReporterLite;
 class DecodiumCloudlogLite;
+class DecodiumQrzLogbookLite;
 class DecodiumWsprUploader;
 class DxccLookup;
 class DecodiumLegacyBackend;
@@ -241,6 +242,11 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString cloudlogUrl     READ cloudlogUrl     WRITE setCloudlogUrl     NOTIFY cloudlogUrlChanged)
     Q_PROPERTY(QString cloudlogApiKey  READ cloudlogApiKey  WRITE setCloudlogApiKey  NOTIFY cloudlogApiKeyChanged)
 
+    // === QRZ LOGBOOK ===
+    Q_PROPERTY(bool    qrzLogbookEnabled READ qrzLogbookEnabled WRITE setQrzLogbookEnabled NOTIFY qrzLogbookEnabledChanged)
+    Q_PROPERTY(QString qrzLogbookApiKey  READ qrzLogbookApiKey  WRITE setQrzLogbookApiKey  NOTIFY qrzLogbookApiKeyChanged)
+    Q_PROPERTY(bool    qrzLogbookReplaceDuplicates READ qrzLogbookReplaceDuplicates WRITE setQrzLogbookReplaceDuplicates NOTIFY qrzLogbookReplaceDuplicatesChanged)
+
     // === THEME / UI ===
     Q_PROPERTY(DecodiumThemeManager* themeManager READ themeManager CONSTANT)
     Q_PROPERTY(double fontScale READ fontScale NOTIFY fontScaleChanged)
@@ -367,7 +373,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(QString uiQuality READ uiQuality WRITE setUiQuality NOTIFY uiQualityChanged)
     Q_PROPERTY(bool uiFramelessPopouts READ uiFramelessPopouts WRITE setUiFramelessPopouts NOTIFY uiFramelessPopoutsChanged)
     Q_PROPERTY(QString uiStyle READ uiStyle WRITE setUiStyle NOTIFY uiStyleChanged)
-    // 1.0.186 — Full Spectrum auto-detach: pop-out di default per isolare il
+    // 1.0.186 — Full Spectrum auto-detach: pop-out opzionale per isolare il
     // scene-graph del Waterfall e degli ListView period1/period2 dal Main,
     // ottenendo render thread separato (Pasquale-pattern).
     Q_PROPERTY(bool autoDetachFullSpectrum READ autoDetachFullSpectrum WRITE setAutoDetachFullSpectrum NOTIFY autoDetachFullSpectrumChanged)
@@ -1043,6 +1049,15 @@ public:
     void    setCloudlogApiKey(const QString& v) { if (m_cloudlogApiKey!=v){m_cloudlogApiKey=v;emit cloudlogApiKeyChanged();} }
     Q_INVOKABLE void testCloudlogApi();
 
+    // QRZ Logbook
+    bool    qrzLogbookEnabled() const { return m_qrzLogbookEnabled; }
+    void    setQrzLogbookEnabled(bool v);
+    QString qrzLogbookApiKey() const { return m_qrzLogbookApiKey; }
+    void    setQrzLogbookApiKey(const QString& v);
+    bool    qrzLogbookReplaceDuplicates() const { return m_qrzLogbookReplaceDuplicates; }
+    void    setQrzLogbookReplaceDuplicates(bool v);
+    Q_INVOKABLE void testQrzLogbookApi();
+
 signals:
     void spectrumDataReady(QVector<float> data);
     // Alta risoluzione: dB raw + range + frequenze exact — per PanadapterItem
@@ -1268,6 +1283,9 @@ signals:
     void cloudlogEnabledChanged();
     void cloudlogUrlChanged();
     void cloudlogApiKeyChanged();
+    void qrzLogbookEnabledChanged();
+    void qrzLogbookApiKeyChanged();
+    void qrzLogbookReplaceDuplicatesChanged();
     void wsprUploadEnabledChanged();
     void catManagerChanged();
     void catBackendChanged();
@@ -1551,7 +1569,7 @@ private:
     bool    m_uiFramelessPopouts {false};
     QString m_uiStyle {QStringLiteral("Default")};        // Default | FluentWinUI3 | Material | Universal
     // 1.0.186 — Full Spectrum auto-detach + spectrum FPS cap
-    bool m_autoDetachFullSpectrum {true};                 // default ON: pop-out per isolation
+    bool m_autoDetachFullSpectrum {false};                // default OFF: resta integrato al primo avvio
     int  m_spectrumFpsCap {20};                           // 15 | 20 | 30 (FPS panadapter)
     // 1.0.189 — Telemetria pressione CPU (contatori sessione corrente)
     int m_cpuPressureEventCount {0};
@@ -1687,6 +1705,7 @@ private:
     bool                  m_nextLogClusterSpotEnabled {false};
     DecodiumPskReporterLite* m_pskReporter {nullptr};
     DecodiumCloudlogLite*    m_cloudlog    {nullptr};
+    DecodiumQrzLogbookLite*  m_qrzLogbook  {nullptr};
     DecodiumWsprUploader*    m_wsprUploader{nullptr};
     bool                  m_wsprUploadEnabled {false};
 
@@ -2089,6 +2108,11 @@ private:
     QString m_cloudlogUrl;
     QString m_cloudlogApiKey;
 
+    // QRZ Logbook
+    bool    m_qrzLogbookEnabled {false};
+    QString m_qrzLogbookApiKey;
+    bool    m_qrzLogbookReplaceDuplicates {false};
+
     // FT2 async ring buffer: ultimi 7.5s di audio (90000 campioni a 12kHz)
     static constexpr int ASYNC_BUF_SIZE = 90000;
     short m_asyncAudio[ASYNC_BUF_SIZE] {};
@@ -2186,7 +2210,7 @@ public:
     Q_INVOKABLE QString uiStyle() const { return m_uiStyle; }
     Q_INVOKABLE void    setUiStyle(QString const& v);
 
-    // 1.0.186 — Full Spectrum auto-detach (default ON)
+    // 1.0.186 — Full Spectrum auto-detach (default OFF)
     Q_INVOKABLE bool autoDetachFullSpectrum() const { return m_autoDetachFullSpectrum; }
     Q_INVOKABLE void setAutoDetachFullSpectrum(bool v);
     // 1.0.186 — Cap FPS panadapter (15 | 20 | 30)

@@ -2595,128 +2595,233 @@ Dialog {
                         Text { text: qsTr("AUTO SEQUENCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: qsTr("Auto Sequence:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.autoSeq
-                            onCheckedChanged: {
-                                bridge.autoSeq = checked
-                                bridge.setSetting("autoSeq", checked)
-                                bridge.setSetting("AutoSeq", checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Send RR73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.sendRR73
-                            onCheckedChanged: {
-                                bridge.sendRR73 = checked
-                                bridge.setSetting("sendRR73", checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Quick QSO:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.quickQsoEnabled
-                            onCheckedChanged: {
-                                bridge.quickQsoEnabled = checked
-                                bridge.setSetting("quickQsoEnabled", checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Disable TX after 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("73TxDisable", true)
-                            onCheckedChanged: bridge.setSetting("73TxDisable", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                        Item {
+                            Layout.columnSpan: 4
+                            Layout.fillWidth: true
+                            implicitHeight: autoSequenceGrid.implicitHeight
 
-                        Text { text: qsTr("MSK/Q65 TX until 73:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("RepeatTx", false)
-                            onCheckedChanged: bridge.setSetting("RepeatTx", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                            GridLayout {
+                                id: autoSequenceGrid
+                                width: parent.width
+                                columns: 4
+                                columnSpacing: 14
+                                rowSpacing: 10
+                                property int checkWidth: 34
+                                property real labelWidth: Math.max(150, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
 
-                        // Conservative FT2 (weak-signal mode) — opt-in tuning
-                        // anti-QSB: ghost filter rilassato, retry cap esteso SNR-
-                        // adattivo, same-step wait piu' permissivo per partner
-                        // marginali. Default OFF: comportamento standard FT2.
-                        Text { text: qsTr("Conservative FT2 (weak-signal mode):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: ft2ConservativeCheck
-                            checked: bridge ? bridge.ft2Conservative : false
-                            onCheckedChanged: {
-                                if (bridge) bridge.setFt2Conservative(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Tuning anti-QSB: ghost filter -24 dB invece di -22, retry cap esteso SNR-adattivo (+2..+4 extra), same-step wait rilassato per partner deboli. Default OFF — attivalo se hai partner DX deboli o propagazione marginale.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                                Text {
+                                    text: qsTr("Auto Sequence:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge.autoSeq
+                                    onCheckedChanged: {
+                                        bridge.autoSeq = checked
+                                        bridge.setSetting("autoSeq", checked)
+                                        bridge.setSetting("AutoSeq", checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text {
+                                    text: qsTr("Send RR73:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge.sendRR73
+                                    onCheckedChanged: {
+                                        bridge.sendRR73 = checked
+                                        bridge.setSetting("sendRR73", checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
 
-                        // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory cache (30s)
-                        Text { text: qsTr("FT2 partner-memory (anti-QSB):"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: ft2PartnerMemoryCheck
-                            checked: bridge ? bridge.ft2PartnerMemoryEnabled : false
-                            enabled: bridge ? bridge.ft2Conservative : false
-                            onCheckedChanged: {
-                                if (bridge) bridge.setFt2PartnerMemoryEnabled(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Cache stato partner (callsign + TX num + qsoProgress + SNR) per 30 secondi: se il partner sparisce per QSB e ricompare entro 30s, ripristina il qsoProgress invece di ripartire da TX1. Richiede Conservative FT2 attivo. Default OFF (opt-in dopo revert 1.0.186 — gate stretto + log [FT2WS-F]). Disattivato in automatico se Conservative OFF.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                                Text {
+                                    text: qsTr("Quick QSO:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge.quickQsoEnabled
+                                    onCheckedChanged: {
+                                        bridge.quickQsoEnabled = checked
+                                        bridge.setSetting("quickQsoEnabled", checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text {
+                                    text: qsTr("Disable TX after 73:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge.getSetting("73TxDisable", true)
+                                    onCheckedChanged: bridge.setSetting("73TxDisable", checked)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
 
-                        // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
-                        Text { text: qsTr("FT2 TX2 re-send on stall:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: ft2Tx2ResendCheck
-                            checked: bridge ? bridge.ft2Tx2ResendOnStall : true
-                            enabled: bridge ? bridge.ft2Conservative : false
-                            onCheckedChanged: {
-                                if (bridge) bridge.setFt2Tx2ResendOnStall(checked)
-                            }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Se sei in TX3 (R+report) e il partner non risponde per 2 periodi (~7.5s), ri-trasmette TX2 (signal report) una volta sola prima di lasciare il QSO. Aiuta sui partner deboli che non hanno acked la prima volta. Cap a 1 re-send per QSO (no loop). Richiede Conservative FT2 attivo. Default ON sotto Conservative.")
-                        }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+                                Text {
+                                    text: qsTr("MSK/Q65 TX until 73:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge.getSetting("RepeatTx", false)
+                                    onCheckedChanged: bridge.setSetting("RepeatTx", checked)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
 
-                        // Smooth decode flow (streaming progressivo FT8/FT4)
-                        // — spalma i decode dal batch a streaming continuo
-                        // stile WSJT-X live. Auto-fallback se UI stall.
-                        // Default ON; disattiva se vedi rallentamenti.
-                        Text { text: qsTr("Smooth decode flow:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
-                        CheckBox {
-                            id: smoothDecodeFlowCheck
-                            checked: bridge ? bridge.smoothDecodeFlow : true
-                            onCheckedChanged: {
-                                if (bridge) bridge.setSmoothDecodeFlow(checked)
+                                // Conservative FT2 (weak-signal mode) — opt-in tuning
+                                // anti-QSB: ghost filter rilassato, retry cap esteso SNR-
+                                // adattivo, same-step wait piu' permissivo per partner
+                                // marginali. Default OFF: comportamento standard FT2.
+                                Text {
+                                    text: qsTr("Conservative FT2 (weak-signal mode):")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    id: ft2ConservativeCheck
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge ? bridge.ft2Conservative : false
+                                    onCheckedChanged: {
+                                        if (bridge) bridge.setFt2Conservative(checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                    hoverEnabled: true
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    ToolTip.text: qsTr("Tuning anti-QSB: ghost filter -24 dB invece di -22, retry cap esteso SNR-adattivo (+2..+4 extra), same-step wait rilassato per partner deboli. Default OFF — attivalo se hai partner DX deboli o propagazione marginale.")
+                                }
+
+                                // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory cache (30s)
+                                Text {
+                                    text: qsTr("FT2 partner-memory (anti-QSB):")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    id: ft2PartnerMemoryCheck
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge ? bridge.ft2PartnerMemoryEnabled : false
+                                    enabled: bridge ? bridge.ft2Conservative : false
+                                    onCheckedChanged: {
+                                        if (bridge) bridge.setFt2PartnerMemoryEnabled(checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                    hoverEnabled: true
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    ToolTip.text: qsTr("Cache stato partner (callsign + TX num + qsoProgress + SNR) per 30 secondi: se il partner sparisce per QSB e ricompare entro 30s, ripristina il qsoProgress invece di ripartire da TX1. Richiede Conservative FT2 attivo. Default OFF (opt-in dopo revert 1.0.186 — gate stretto + log [FT2WS-F]). Disattivato in automatico se Conservative OFF.")
+                                }
+
+                                // 1.0.187 — FT2 Weak-Signal Pack G: TX2 re-send forzato pre-fallback
+                                Text {
+                                    text: qsTr("FT2 TX2 re-send on stall:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    id: ft2Tx2ResendCheck
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge ? bridge.ft2Tx2ResendOnStall : true
+                                    enabled: bridge ? bridge.ft2Conservative : false
+                                    onCheckedChanged: {
+                                        if (bridge) bridge.setFt2Tx2ResendOnStall(checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2; opacity: parent.enabled ? 1.0 : 0.4 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                    hoverEnabled: true
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    ToolTip.text: qsTr("Se sei in TX3 (R+report) e il partner non risponde per 2 periodi (~7.5s), ri-trasmette TX2 (signal report) una volta sola prima di lasciare il QSO. Aiuta sui partner deboli che non hanno acked la prima volta. Cap a 1 re-send per QSO (no loop). Richiede Conservative FT2 attivo. Default ON sotto Conservative.")
+                                }
+
+                                // Smooth decode flow (streaming progressivo FT8/FT4)
+                                // — spalma i decode dal batch a streaming continuo
+                                // stile WSJT-X live. Auto-fallback se UI stall.
+                                // Default ON; disattiva se vedi rallentamenti.
+                                Text {
+                                    text: qsTr("Smooth decode flow:")
+                                    color: textSecondary
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.preferredWidth: autoSequenceGrid.labelWidth
+                                    Layout.preferredHeight: controlHeight
+                                }
+                                CheckBox {
+                                    id: smoothDecodeFlowCheck
+                                    Layout.preferredWidth: autoSequenceGrid.checkWidth
+                                    Layout.preferredHeight: controlHeight
+                                    checked: bridge ? bridge.smoothDecodeFlow : true
+                                    onCheckedChanged: {
+                                        if (bridge) bridge.setSmoothDecodeFlow(checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                    hoverEnabled: true
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    ToolTip.text: qsTr("Spalma i decode FT8/FT4 dal batch finale del periodo a streaming continuo con fade animato (~100ms per row). FT2 async resta invariato (gia' streaming). Default ON; auto-fallback se rileva UI stall su PC modesti. Disattiva per comportamento batch legacy.")
+                                }
+                                Item { Layout.preferredWidth: autoSequenceGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                Item { Layout.preferredWidth: autoSequenceGrid.checkWidth; Layout.preferredHeight: controlHeight }
                             }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                            hoverEnabled: true
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 400
-                            ToolTip.text: qsTr("Spalma i decode FT8/FT4 dal batch finale del periodo a streaming continuo con fade animato (~100ms per row). FT2 async resta invariato (gia' streaming). Default ON; auto-fallback se rileva UI stall su PC modesti. Disattiva per comportamento batch legacy.")
                         }
-                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
                         // ── Watchdog ──
                         Text { text: qsTr("WATCHDOG"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
@@ -2954,7 +3059,7 @@ Dialog {
                         Text { text: qsTr("Detach Full Spectrum:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
                         CheckBox {
                             id: autoDetachFullSpectrumCheck
-                            checked: bridge ? bridge.autoDetachFullSpectrum : true
+                            checked: bridge ? bridge.autoDetachFullSpectrum : false
                             onCheckedChanged: {
                                 if (bridge) bridge.setAutoDetachFullSpectrum(checked)
                             }
@@ -2963,7 +3068,7 @@ Dialog {
                             hoverEnabled: true
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
-                            ToolTip.text: qsTr("All'avvio apre il Full Spectrum (Band Activity) in finestra separata, isolando il render thread del Main dalle animazioni ListView. Riduce stall su PC modesti. Default ON. Richiede restart.")
+                            ToolTip.text: qsTr("All'avvio apre il Full Spectrum (Band Activity) in finestra separata, isolando il render thread del Main dalle animazioni ListView. Riduce stall su PC modesti. Default OFF. Richiede restart.")
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -3252,7 +3357,7 @@ Dialog {
                             text: bridge.webServerUrl() || "(non attivo)"
                             color: bridge.webServerRunning() ? accentGreen : textSecondary
                             font.pixelSize: 12
-                            font.family: "Consolas, monospace"
+                            font.family: Qt.platform.os === "osx" ? "Menlo" : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
                             Layout.columnSpan: 3
                             Layout.fillWidth: true
                         }
@@ -3640,6 +3745,50 @@ Dialog {
                             onValueChanged: bridge.setSetting("CloudlogStationID", value)
                             contentItem: TextInput { text: cloudlogStIdSpin.textFromValue(cloudlogStIdSpin.value, cloudlogStIdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !cloudlogStIdSpin.editable; validator: cloudlogStIdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // ── QRZ Logbook ──
+                        Text { text: qsTr("QRZ LOGBOOK"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.qrzLogbookEnabled
+                            onCheckedChanged: bridge.qrzLogbookEnabled = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
+                        Text { text: qsTr("Replace duplicates:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 130 }
+                        CheckBox {
+                            checked: bridge.qrzLogbookReplaceDuplicates
+                            onCheckedChanged: bridge.qrzLogbookReplaceDuplicates = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
+                        Text { text: qsTr("API Key:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        TextField {
+                            text: bridge.qrzLogbookApiKey; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
+                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onTextChanged: bridge.qrzLogbookApiKey = text
+                        }
+
+                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Rectangle {
+                            width: 110; height: controlHeight; radius: 4
+                            color: qrzTestMA.containsMouse ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.2) : bgMedium
+                            border.color: secondaryCyan
+                            Text { anchors.centerIn: parent; text: qsTr("Test"); color: secondaryCyan; font.pixelSize: 12 }
+                            MouseArea {
+                                id: qrzTestMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.testQrzLogbookApi()
+                            }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -5073,199 +5222,271 @@ Dialog {
                         Text { text: qsTr("STARTUP"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 4 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: qsTr("Monitor OFF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            enabled: false
-                            checked: false
-                            Component.onCompleted: settingsDialog.setBoolSettingIfChanged("MonitorOFF", false, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; opacity: parent.enabled ? 1.0 : 0.55; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Monitor Last:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("MonitorLastUsed", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("MonitorLastUsed", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Auto Astro:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("AutoAstroWindow", false)
-                            onCheckedChanged: bridge.setSetting("AutoAstroWindow", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("kHz no k:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("kHzWithoutK", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("kHzWithoutK", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Progress Red:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("ProgressBarRed", true)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("ProgressBarRed", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("High DPI:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("HighDPI", true)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("HighDPI", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Larger Tab:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.getSetting("LargerTabWidget", false)
-                            onCheckedChanged: bridge.setSetting("LargerTabWidget", checked)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Direct Visual:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("DirectVisualAudioCaptureUnsafe", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("DirectVisualAudioCaptureUnsafe", checked, false)
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Fast visual panadapter. In legacy mode it may open a second audio capture; in normal mode it only raises the visual refresh rate.")
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Low CPU:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.lowCpuModeEnabled
-                            onToggled: bridge.lowCpuModeEnabled = checked
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Profile for slow PCs: up to 2 FT threads, slower waterfall, reduced early/deep decoding.")
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text {
-                            text: qsTr("Reduces FT threads, waterfall refresh, and QML rendering during monitor/TX.")
-                            color: textSecondary
-                            font.pixelSize: 11
-                            wrapMode: Text.Wrap
-                            Layout.columnSpan: 2
+                        Item {
+                            Layout.columnSpan: 4
                             Layout.fillWidth: true
+                            implicitHeight: advancedStartupGrid.implicitHeight
+
+                            GridLayout {
+                                id: advancedStartupGrid
+                                width: parent.width
+                                columns: 4
+                                columnSpacing: 14
+                                rowSpacing: 10
+                                property int checkWidth: 34
+                                property real labelWidth: Math.max(190, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
+
+                                Text { text: qsTr("Monitor OFF:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    enabled: false
+                                    checked: false
+                                    Component.onCompleted: settingsDialog.setBoolSettingIfChanged("MonitorOFF", false, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; opacity: parent.enabled ? 1.0 : 0.55; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Monitor Last:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("MonitorLastUsed", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("MonitorLastUsed", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Auto Astro:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: bridge.getSetting("AutoAstroWindow", false)
+                                    onCheckedChanged: bridge.setSetting("AutoAstroWindow", checked)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("kHz no k:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("kHzWithoutK", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("kHzWithoutK", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Progress Red:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("ProgressBarRed", true)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("ProgressBarRed", checked, true)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("High DPI:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("HighDPI", true)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("HighDPI", checked, true)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Larger Tab:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: bridge.getSetting("LargerTabWidget", false)
+                                    onCheckedChanged: bridge.setSetting("LargerTabWidget", checked)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Direct Visual:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("DirectVisualAudioCaptureUnsafe", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("DirectVisualAudioCaptureUnsafe", checked, false)
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Fast visual panadapter. In legacy mode it may open a second audio capture; in normal mode it only raises the visual refresh rate.")
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Low CPU:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedStartupGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedStartupGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: bridge.lowCpuModeEnabled
+                                    onToggled: bridge.lowCpuModeEnabled = checked
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Profile for slow PCs: up to 2 FT threads, slower waterfall, reduced early/deep decoding.")
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text {
+                                    text: qsTr("Reduces FT threads, waterfall refresh, and QML rendering during monitor/TX.")
+                                    color: textSecondary
+                                    font.pixelSize: 11
+                                    wrapMode: Text.Wrap
+                                    Layout.columnSpan: 2
+                                    Layout.fillWidth: true
+                                }
+                            }
                         }
 
                         // ── Comportamento ──
                         Text { text: qsTr("BEHAVIOR"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: qsTr("Quick Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("QuickCall", true)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("QuickCall", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Force Call 1st:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("ForceCallFirst", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("ForceCallFirst", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
+                        Item {
+                            Layout.columnSpan: 4
+                            Layout.fillWidth: true
+                            implicitHeight: advancedBehaviorGrid.implicitHeight
 
-                        Text { text: qsTr("VHF/UHF:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.vhfUhfFeatures
-                            onToggled: {
-                                bridge.vhfUhfFeatures = checked
-                                bridge.setSetting("VHFUHF", checked)
+                            GridLayout {
+                                id: advancedBehaviorGrid
+                                width: parent.width
+                                columns: 4
+                                columnSpacing: 14
+                                rowSpacing: 10
+                                property int checkWidth: 34
+                                property real labelWidth: Math.max(190, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
+
+                                Text { text: qsTr("Quick Call:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("QuickCall", true)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("QuickCall", checked, true)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Force Call 1st:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("ForceCallFirst", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("ForceCallFirst", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("VHF/UHF:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: bridge.vhfUhfFeatures
+                                    onToggled: {
+                                        bridge.vhfUhfFeatures = checked
+                                        bridge.setSetting("VHFUHF", checked)
+                                    }
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Wait Features:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("WaitFeaturesEnabled", true)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("WaitFeaturesEnabled", checked, true)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Erase Band Act:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("erase_BandActivity", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("erase_BandActivity", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Clear DX Grid:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("clear_DXgrid", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXgrid", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Clear DX Call:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("clear_DXcall", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXcall", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("RX>TX after QSO:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("set_RXtoTX", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("set_RXtoTX", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+
+                                Text { text: qsTr("Alt Erase Btn:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("AlternateEraseButtonBehavior", true)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("AlternateEraseButtonBehavior", checked, true)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("No Btn Color:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedBehaviorGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedBehaviorGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("TxWarningDisabled", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("TxWarningDisabled", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
                             }
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Wait Features:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("WaitFeaturesEnabled", true)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("WaitFeaturesEnabled", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Erase Band Act:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("erase_BandActivity", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("erase_BandActivity", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Clear DX Grid:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("clear_DXgrid", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXgrid", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Clear DX Call:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("clear_DXcall", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("clear_DXcall", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("RX>TX after QSO:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("set_RXtoTX", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("set_RXtoTX", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-
-                        Text { text: qsTr("Alt Erase Btn:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("AlternateEraseButtonBehavior", true)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("AlternateEraseButtonBehavior", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("No Btn Color:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("TxWarningDisabled", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("TxWarningDisabled", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
                         }
 
                         // ── Modo Operativo ──
                         Text { text: qsTr("OPERATING MODE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
-                        Text { text: qsTr("Fox Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.foxMode
-                            onToggled: bridge.foxMode = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Hound Mode:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: bridge.houndMode
-                            onToggled: bridge.houndMode = checked
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("SuperFox:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("SuperFox", true)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("SuperFox", checked, true)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
-                        }
-                        Text { text: qsTr("Show OTP:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
-                        CheckBox {
-                            checked: settingsDialog.boolSetting("ShowOTP", false)
-                            onToggled: settingsDialog.setBoolSettingIfChanged("ShowOTP", checked, false)
-                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
-                            contentItem: Text { text: ""; leftPadding: 24 }
+                        Item {
+                            Layout.columnSpan: 4
+                            Layout.fillWidth: true
+                            implicitHeight: advancedOperatingGrid.implicitHeight
+
+                            GridLayout {
+                                id: advancedOperatingGrid
+                                width: parent.width
+                                columns: 4
+                                columnSpacing: 14
+                                rowSpacing: 10
+                                property int checkWidth: 34
+                                property real labelWidth: Math.max(190, (width - (checkWidth * 2) - (columnSpacing * 3)) / 2)
+
+                                Text { text: qsTr("Fox Mode:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: bridge.foxMode
+                                    onToggled: bridge.foxMode = checked
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Hound Mode:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: bridge.houndMode
+                                    onToggled: bridge.houndMode = checked
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("SuperFox:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("SuperFox", true)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("SuperFox", checked, true)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                                Text { text: qsTr("Show OTP:"); color: textSecondary; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter; Layout.preferredWidth: advancedOperatingGrid.labelWidth; Layout.preferredHeight: controlHeight }
+                                CheckBox {
+                                    Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
+                                    checked: settingsDialog.boolSetting("ShowOTP", false)
+                                    onToggled: settingsDialog.setBoolSettingIfChanged("ShowOTP", checked, false)
+                                    indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                                    contentItem: Text { text: ""; leftPadding: 24 }
+                                }
+                            }
                         }
 
                         // ── Contest ──

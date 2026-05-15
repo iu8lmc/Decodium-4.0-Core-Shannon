@@ -73,13 +73,20 @@ void deleteStreamAfterCoreAudioCallbacks(QAudioSink *stream, QString const& reas
 
   QPointer<QAudioSink> guard(stream);
   stream->setParent(nullptr);
-  QTimer::singleShot(5000, context, [guard, reason]() {
+  QTimer::singleShot(30000, context, [guard, reason]() {
     if (!guard) {
       return;
     }
     guard->disconnect();
-    guard->deleteLater();
-    qInfo() << "TX SoundOutput CoreAudio sink deferred delete released:" << reason;
+    if (guard->state() == QAudio::StoppedState) {
+      guard->deleteLater();
+      qInfo() << "TX SoundOutput CoreAudio sink deferred delete released:" << reason;
+      return;
+    }
+    qInfo() << "TX SoundOutput CoreAudio sink parked to avoid Qt stopAudioUnit crash:"
+            << reason
+            << "state=" << audioStateName(guard->state())
+            << "error=" << audioErrorName(guard->error());
   });
 }
 }
@@ -284,7 +291,7 @@ void SoundOutput::retireStream(QString const& reason)
 
   if (deferCoreAudioSinkDelete()) {
     if (stream->state() != QAudio::StoppedState) {
-      stream->stop();
+      stream->suspend();
     }
     Q_EMIT status(QStringLiteral("TX SoundOutput CoreAudio sink retired: %1").arg(reason));
     deleteStreamAfterCoreAudioCallbacks(stream, reason);

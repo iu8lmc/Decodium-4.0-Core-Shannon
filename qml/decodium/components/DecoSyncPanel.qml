@@ -83,7 +83,7 @@ Rectangle {
             text: root.buildStatusText()
             color: textPrimary
             font.pixelSize: 11
-            font.family: "Consolas, Monaco, monospace"
+            font.family: Qt.platform.os === "osx" ? "Menlo" : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
             Layout.fillWidth: true
         }
 
