@@ -373,6 +373,11 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(bool autoDetachFullSpectrum READ autoDetachFullSpectrum WRITE setAutoDetachFullSpectrum NOTIFY autoDetachFullSpectrumChanged)
     // 1.0.186 — Cap FPS panadapter (15/20/30); default 20 integrato/30 detached
     Q_PROPERTY(int spectrumFpsCap READ spectrumFpsCap WRITE setSpectrumFpsCap NOTIFY spectrumFpsCapChanged)
+    // 1.0.189 — Telemetria diagnostica: contatori eventi cpuPressure (anche
+    // severe) della sessione corrente. Visibili da Settings per capire se il
+    // PC sta soffrendo i preset attuali (UI Quality, Detach, FPS cap).
+    Q_PROPERTY(int cpuPressureEventCount READ cpuPressureEventCount NOTIFY cpuPressureEventCountChanged)
+    Q_PROPERTY(int cpuPressureSevereEventCount READ cpuPressureSevereEventCount NOTIFY cpuPressureSevereEventCountChanged)
 
 public:
     explicit DecodiumBridge(QObject* parent = nullptr);
@@ -1071,6 +1076,8 @@ signals:
     void uiQualityChanged();
     void autoDetachFullSpectrumChanged();
     void spectrumFpsCapChanged();
+    void cpuPressureEventCountChanged();
+    void cpuPressureSevereEventCountChanged();
     void uiFramelessPopoutsChanged();
     void uiStyleChanged();
     void dualCarrierEnabledChanged();
@@ -1497,6 +1504,9 @@ private:
     // 1.0.186 — Full Spectrum auto-detach + spectrum FPS cap
     bool m_autoDetachFullSpectrum {true};                 // default ON: pop-out per isolation
     int  m_spectrumFpsCap {20};                           // 15 | 20 | 30 (FPS panadapter)
+    // 1.0.189 — Telemetria pressione CPU (contatori sessione corrente)
+    int m_cpuPressureEventCount {0};
+    int m_cpuPressureSevereEventCount {0};
     // 1.0.186 — Ring buffer timestamps dei "short stall" (gapMs >= 300 ma < 600),
     // per scattare cpuPressure anche su raffiche di stall corti consecutivi
     // che non superano la soglia 600ms ma cumulativamente strozzano il decode.
@@ -2133,6 +2143,9 @@ public:
     // 1.0.186 — Cap FPS panadapter (15 | 20 | 30)
     Q_INVOKABLE int  spectrumFpsCap() const { return m_spectrumFpsCap; }
     Q_INVOKABLE void setSpectrumFpsCap(int v);
+    // 1.0.189 — Telemetria sessione
+    Q_INVOKABLE int cpuPressureEventCount() const { return m_cpuPressureEventCount; }
+    Q_INVOKABLE int cpuPressureSevereEventCount() const { return m_cpuPressureSevereEventCount; }
 
     // 1.0.167 — Remote viewer web server (PWA per iPad/mobile)
     Q_INVOKABLE bool    startWebServer(int port = 8080);

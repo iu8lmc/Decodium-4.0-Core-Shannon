@@ -2680,8 +2680,10 @@ Dialog {
                         // riga vuota per riempire le 4 colonne
                         Item { Layout.columnSpan: 2; Layout.preferredHeight: controlHeight }
 
-                        // ── UI MODERN (1.0.180 UI Revolution, spostato in tab Display in 1.0.181) ──
-                        Text { text: qsTr("UI MODERN"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        // 1.0.189 — Riorganizzato in 2 sub-section per UX migliore:
+                        // PERFORMANCE (gates anti-stall) + STYLE (estetica).
+                        // ── UI — PERFORMANCE ──
+                        Text { text: qsTr("UI — PERFORMANCE"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
                         Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
 
                         // 1.0.180 — Quality preset: gate per effetti visivi pesanti.
@@ -2796,6 +2798,34 @@ Dialog {
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
                             ToolTip.text: qsTr("Frame rate massimo del waterfall/panadapter integrato. 15=PC modesti, 20=default bilanciato, 30=hardware moderno. Quando Full Spectrum è detached il render thread separato regge i 30 fps senza impatto sul decode.")
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // 1.0.189 — Telemetria pressione CPU (sessione corrente, read-only).
+                        // Se i contatori sono alti, considera Low Quality / FPS cap=15 / Detach ON.
+                        Text { text: qsTr("Eventi CPU pressure:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
+                        Text {
+                            id: cpuPressureTelemetryText
+                            Layout.preferredWidth: 240
+                            Layout.columnSpan: 1
+                            color: {
+                                if (!bridge) return textSecondary
+                                const severe = bridge.cpuPressureSevereEventCount
+                                if (severe >= 5) return "#ff8844"
+                                if (severe >= 1) return secondaryCyan
+                                return textSecondary
+                            }
+                            font.pixelSize: 12
+                            text: bridge
+                                  ? qsTr("totale=%1 · severi=%2 (sessione)")
+                                        .arg(bridge.cpuPressureEventCount)
+                                        .arg(bridge.cpuPressureSevereEventCount)
+                                  : qsTr("totale=0 · severi=0")
+                            hoverEnabled: true
+                            ToolTip.visible: ma.containsMouse
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Contatori eventi cpuPressure dalla sessione corrente. Severi (≥1100ms o burst 4+ short stall) sono il segnale più forte: se vedi >=5 dopo un'ora di uso, abbassa UI Quality a Low oppure Spectrum FPS cap a 15.")
+                            MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 

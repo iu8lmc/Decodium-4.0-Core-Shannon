@@ -17660,6 +17660,18 @@ void DecodiumBridge::applyLowCpuRuntimeProfile(const QString& reason)
 void DecodiumBridge::noteCpuPressure(const QString& reason, int durationMs, bool severe)
 {
     qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    // 1.0.189 — Telemetria sessione: incrementa contatori distinti per
+    // pressione normale vs severa, emette signal Q_PROPERTY per Settings UI.
+    bool const wasPressureActive = (nowMs < m_cpuPressureUntilMs);
+    bool const wasSevereActive   = (nowMs < m_cpuPressureSevereUntilMs);
+    if (!wasPressureActive) {
+        ++m_cpuPressureEventCount;
+        emit cpuPressureEventCountChanged();
+    }
+    if (severe && !wasSevereActive) {
+        ++m_cpuPressureSevereEventCount;
+        emit cpuPressureSevereEventCountChanged();
+    }
     m_cpuPressureUntilMs = qMax(m_cpuPressureUntilMs,
                                 nowMs + static_cast<qint64>(qMax(1000, durationMs)));
     if (severe) {
