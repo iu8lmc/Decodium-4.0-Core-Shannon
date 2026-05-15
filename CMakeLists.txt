@@ -423,6 +423,8 @@ set (wsjtx_CXXSRCS
   Network/DecodiumPskReporterLite.h
   Network/DecodiumCloudlogLite.cpp
   Network/DecodiumCloudlogLite.h
+  Network/DecodiumQrzLogbookLite.cpp
+  Network/DecodiumQrzLogbookLite.h
   DecodiumDxCluster.cpp
   DecodiumDxCluster.h
   DxccLookup.cpp
@@ -1579,6 +1581,8 @@ add_executable (decodium_qml
   Network/DecodiumPskReporterLite.h
   Network/DecodiumCloudlogLite.cpp
   Network/DecodiumCloudlogLite.h
+  Network/DecodiumQrzLogbookLite.cpp
+  Network/DecodiumQrzLogbookLite.h
   DecodiumDxCluster.cpp
   DecodiumDxCluster.h
   DxccLookup.cpp

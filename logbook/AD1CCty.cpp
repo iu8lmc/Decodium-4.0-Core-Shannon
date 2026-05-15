@@ -10,6 +10,8 @@
 #include <boost/lambda/lambda.hpp>
 #include <boost/lexical_cast.hpp>
 #include <QString>
+#include <QStringList>
+#include <QCoreApplication>
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
@@ -34,6 +36,56 @@ namespace
   auto const file_name = "cty.dat";
   auto const grid_file_name = "grid.dat";    // NJ0A
 //  auto const logFileName = "wsjtx_log.adi";  // NJ0A
+
+  QString resolve_preferred_data_file(Configuration const * configuration, QString const& name)
+  {
+    QStringList candidates;
+
+    auto append_dir = [&candidates, &name] (QString const& dir_path) {
+      auto const trimmed = dir_path.trimmed ();
+      if (!trimmed.isEmpty ())
+        {
+          candidates << QDir {trimmed}.absoluteFilePath (name);
+        }
+    };
+
+    if (qApp)
+      {
+        append_dir (qApp->property ("decodiumPrimaryAppDataDir").toString ());
+        append_dir (qApp->property ("decodiumPrimaryAppLocalDataDir").toString ());
+        append_dir (qApp->property ("decodiumEmbeddedLegacyDataDir").toString ());
+      }
+
+    if (configuration)
+      {
+        append_dir (configuration->writeable_data_dir ().absolutePath ());
+      }
+
+    append_dir (QStandardPaths::writableLocation (QStandardPaths::AppDataLocation));
+    append_dir (QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation));
+
+    if (configuration)
+      {
+        append_dir (configuration->data_dir ().absolutePath ());
+      }
+
+    candidates.removeDuplicates ();
+    for (auto const& candidate : candidates)
+      {
+        QFileInfo info {candidate};
+        if (info.exists () && info.isFile ())
+          {
+            return candidate;
+          }
+      }
+
+    if (!candidates.isEmpty ())
+      {
+        return candidates.constFirst ();
+      }
+
+    return name;
+  }
 }
 
 struct entity
@@ -337,11 +389,7 @@ char const * AD1CCty::continent (Continent c)
 
 QString AD1CCty::impl::get_cty_path(Configuration const * configuration)
 {
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
-  auto path = dataPath.exists (file_name)
-              ? dataPath.absoluteFilePath (file_name) // user override
-              : configuration->data_dir ().absoluteFilePath (file_name); // or original
-  return path;
+  return resolve_preferred_data_file (configuration, file_name);
 }
 
 void AD1CCty::impl::load_cty(QFile &file, entities_type& entities, prefixes_type& prefixes, QString& cty_version_date) const
@@ -439,14 +487,9 @@ AD1CCty::AD1CCty (Configuration const * configuration)
       }
   }
 
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::AppLocalDataLocation)};
-  m_->path_ = dataPath.exists (file_name)
-    ? dataPath.absoluteFilePath (file_name) // user override
-    : configuration->data_dir ().absoluteFilePath (file_name); // or original
+  m_->path_ = resolve_preferred_data_file (configuration, file_name);
 
-  QString path = dataPath.exists (grid_file_name)
-   ? dataPath.absoluteFilePath (grid_file_name) // user override
-   : configuration->data_dir ().absoluteFilePath (grid_file_name);   // or original in the resources FS
+  QString path = resolve_preferred_data_file (configuration, grid_file_name);
 
 
   QFile file1 {path};

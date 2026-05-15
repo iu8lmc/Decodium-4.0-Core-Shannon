@@ -28,7 +28,7 @@ Item {
     property var logSatModeChoices: [""]
     property int editingTxNum: 0
     property string editingTxError: ""
-    readonly property real compactTxButtonWidth: Math.max(88, Math.min(180, (width - 44) / 6))
+    readonly property real compactTxButtonWidth: Math.max(104, Math.min(220, (width - 56) / 6))
 
     function refreshLogPreview() {
         var preview = engine && engine.pendingLogQsoPreview ? engine.pendingLogQsoPreview() : ({})
@@ -1134,7 +1134,7 @@ Item {
             // TX Buttons row
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 6
 
                 Item {
                     Layout.fillWidth: true
@@ -1539,9 +1539,9 @@ Item {
 
         Layout.fillWidth: false
         Layout.preferredWidth: txPanel.compactTxButtonWidth
-        Layout.maximumWidth: 180
-        Layout.minimumWidth: 88
-        Layout.preferredHeight: 34
+        Layout.maximumWidth: 220
+        Layout.minimumWidth: 104
+        Layout.preferredHeight: 44
         opacity: isDisabled ? 0.4 : 1.0
 
         background: Rectangle {
@@ -1560,7 +1560,7 @@ Item {
                 return glassBorder
             }
             border.width: isSelected || isTransmitting ? 2 : 1
-            radius: 6
+            radius: 7
 
             Behavior on color { ColorAnimation { duration: 150 } }
         }
@@ -1568,8 +1568,8 @@ Item {
         contentItem: Item {
             Column {
                 anchors.centerIn: parent
-                width: parent.width - 8
-                spacing: 0
+                width: parent.width - 14
+                spacing: 1
 
                 Text {
                     width: parent.width
@@ -1580,7 +1580,7 @@ Item {
                         if (isCQ) return accentGreen
                         return textSecondary
                     }
-                    font.pixelSize: 9
+                    font.pixelSize: 10
                     font.bold: isSelected || isTransmitting
                     font.strikeout: txButton.isDisabled
                     horizontalAlignment: Text.AlignHCenter
@@ -1591,7 +1591,7 @@ Item {
                     text: message
                     color: isTransmitting ? errorRed : textPrimary
                     font.family: "Monospace"
-                    font.pixelSize: 8
+                    font.pixelSize: 9
                     font.strikeout: txButton.isDisabled
                     elide: Text.ElideMiddle
                     horizontalAlignment: Text.AlignHCenter

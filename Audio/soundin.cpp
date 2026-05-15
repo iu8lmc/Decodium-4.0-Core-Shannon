@@ -93,6 +93,17 @@ QAudioFormat makeInputFormat(QAudioDevice const& device,
 
   return format;
 }
+
+bool isReusableInputStream(QAudioSource const* stream)
+{
+  if (!stream || stream->error() != QAudio::NoError)
+    {
+      return false;
+    }
+
+  QAudio::State const state = stream->state();
+  return state == QAudio::ActiveState || state == QAudio::IdleState;
+}
 }
 
 bool SoundInput::isActiveFor (QAudioDevice const& device,
@@ -101,7 +112,7 @@ bool SoundInput::isActiveFor (QAudioDevice const& device,
 {
   QAudioFormat const format = makeInputFormat(device, downSampleFactor, channel);
   return m_stream
-      && m_stream->state () == QAudio::ActiveState
+      && isReusableInputStream(m_stream.data())
       && m_deviceDescription == device.description()
       && m_sampleRate == format.sampleRate()
       && m_channelCount == format.channelCount()
@@ -178,7 +189,7 @@ void SoundInput::start(QAudioDevice const& device, int framesPerBuffer, AudioDev
   QAudioFormat const format = makeInputFormat(device, downSampleFactor, channel, &usingStereoForMono);
 
   if (m_stream
-      && m_stream->state () == QAudio::ActiveState
+      && isReusableInputStream(m_stream.data())
       && m_sink == sink
       && m_deviceDescription == device.description()
       && m_sampleRate == format.sampleRate()

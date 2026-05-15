@@ -1163,9 +1163,13 @@ int main(int argc, char* argv[])
         if (auto *win = qobject_cast<QQuickWindow *>(obj)) {
             QQuickGraphicsConfiguration gc;
             gc.setPipelineCacheSaveFile(pipelineCacheFile);
-            gc.setPipelineCacheLoadFile(pipelineCacheFile);
+            bool const canLoadPipelineCache = QFileInfo::exists(pipelineCacheFile);
+            if (canLoadPipelineCache) {
+                gc.setPipelineCacheLoadFile(pipelineCacheFile);
+            }
             win->setGraphicsConfiguration(gc);
-            qInfo() << "[UI] Pipeline cache applied to window:" << pipelineCacheFile;
+            qInfo() << "[UI] Pipeline cache applied to window:" << pipelineCacheFile
+                    << "load=" << canLoadPipelineCache;
         }
     });
 

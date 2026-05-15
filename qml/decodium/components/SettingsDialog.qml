@@ -3059,7 +3059,7 @@ Dialog {
                         Text { text: qsTr("Detach Full Spectrum:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100; Layout.columnSpan: 1 }
                         CheckBox {
                             id: autoDetachFullSpectrumCheck
-                            checked: bridge ? bridge.autoDetachFullSpectrum : true
+                            checked: bridge ? bridge.autoDetachFullSpectrum : false
                             onCheckedChanged: {
                                 if (bridge) bridge.setAutoDetachFullSpectrum(checked)
                             }
@@ -3068,7 +3068,7 @@ Dialog {
                             hoverEnabled: true
                             ToolTip.visible: hovered
                             ToolTip.delay: 400
-                            ToolTip.text: qsTr("All'avvio apre il Full Spectrum (Band Activity) in finestra separata, isolando il render thread del Main dalle animazioni ListView. Riduce stall su PC modesti. Default ON. Richiede restart.")
+                            ToolTip.text: qsTr("All'avvio apre il Full Spectrum (Band Activity) in finestra separata, isolando il render thread del Main dalle animazioni ListView. Riduce stall su PC modesti. Default OFF. Richiede restart.")
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 
@@ -3357,7 +3357,7 @@ Dialog {
                             text: bridge.webServerUrl() || "(non attivo)"
                             color: bridge.webServerRunning() ? accentGreen : textSecondary
                             font.pixelSize: 12
-                            font.family: "Consolas, monospace"
+                            font.family: Qt.platform.os === "osx" ? "Menlo" : (Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono")
                             Layout.columnSpan: 3
                             Layout.fillWidth: true
                         }
@@ -3745,6 +3745,50 @@ Dialog {
                             onValueChanged: bridge.setSetting("CloudlogStationID", value)
                             contentItem: TextInput { text: cloudlogStIdSpin.textFromValue(cloudlogStIdSpin.value, cloudlogStIdSpin.locale); color: textPrimary; font.pixelSize: controlFontSize; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; readOnly: !cloudlogStIdSpin.editable; validator: cloudlogStIdSpin.validator; inputMethodHints: Qt.ImhFormattedNumbersOnly }
                             background: Rectangle { color: bgMedium; border.color: glassBorder; radius: 4 }
+                        }
+                        Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
+
+                        // ── QRZ Logbook ──
+                        Text { text: qsTr("QRZ LOGBOOK"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: 4; Layout.topMargin: 10 }
+                        Rectangle { Layout.fillWidth: true; Layout.columnSpan: 4; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }
+
+                        Text { text: qsTr("Enabled:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        CheckBox {
+                            checked: bridge.qrzLogbookEnabled
+                            onCheckedChanged: bridge.qrzLogbookEnabled = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
+                        Text { text: qsTr("Replace duplicates:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 130 }
+                        CheckBox {
+                            checked: bridge.qrzLogbookReplaceDuplicates
+                            onCheckedChanged: bridge.qrzLogbookReplaceDuplicates = checked
+                            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+                            contentItem: Text { text: ""; leftPadding: 24 }
+                        }
+
+                        Text { text: qsTr("API Key:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        TextField {
+                            text: bridge.qrzLogbookApiKey; Layout.fillWidth: true; implicitHeight: controlHeight; leftPadding: 8; Layout.columnSpan: 3
+                            color: textPrimary; font.pixelSize: controlFontSize; echoMode: TextInput.Password
+                            background: Rectangle { color: bgMedium; border.color: parent.activeFocus ? secondaryCyan : glassBorder; radius: 4 }
+                            onTextChanged: bridge.qrzLogbookApiKey = text
+                        }
+
+                        Text { text: qsTr("Status:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+                        Rectangle {
+                            width: 110; height: controlHeight; radius: 4
+                            color: qrzTestMA.containsMouse ? Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.2) : bgMedium
+                            border.color: secondaryCyan
+                            Text { anchors.centerIn: parent; text: qsTr("Test"); color: secondaryCyan; font.pixelSize: 12 }
+                            MouseArea {
+                                id: qrzTestMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.testQrzLogbookApi()
+                            }
                         }
                         Item { Layout.fillWidth: true; Layout.columnSpan: 2 }
 

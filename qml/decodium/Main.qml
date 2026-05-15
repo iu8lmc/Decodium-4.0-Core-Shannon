@@ -1018,19 +1018,23 @@ ApplicationWindow {
         return false
     }
 
-    function customHighlightColor(modelData) {
-        var message = modelData.message || ""
-        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
-            return "#E14B00"
+	    function customHighlightColor(modelData) {
+	        if (!modelData)
+	            return ""
+	        var message = modelData.message || ""
+	        if (highlightOrange && highlightListMatches(message, highlightOrangeCallsigns))
+	            return "#E14B00"
         if (highlightBlue && highlightListMatches(message, highlightBlueCallsigns))
             return "#0064FF"
         return ""
     }
 
-    // Shannon-compatible color function (allineato a DecodeWindow.qml)
-    function getDxccColor(modelData) {
-        var customColor = customHighlightColor(modelData)
-        if (modelData.isTx)     return bridge.themeManager.warningColor
+	    // Shannon-compatible color function (allineato a DecodeWindow.qml)
+	    function getDxccColor(modelData) {
+	        if (!modelData)
+	            return textPrimary
+	        var customColor = customHighlightColor(modelData)
+	        if (modelData.isTx)     return bridge.themeManager.warningColor
         if (modelData.isMyCall) return bridge.colorMyCall
         if (customColor !== "") return customColor
         if (highlight73 && isSignoffMessage(modelData.message)) return bridge.color73
@@ -5895,59 +5899,62 @@ NumberAnimation {
                                             width: 8
                                         }
 
-                                        delegate: Rectangle {
-                                            // 1.0.155: separator meno invasivo nel pannello RX
-                                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
+	                                        delegate: Rectangle {
+	                                            id: rxFrequencyDelegate
+	                                            // 1.0.155: separator meno invasivo nel pannello RX
+	                                            readonly property bool hasEntry: !!modelData
+	                                            readonly property var entry: modelData || ({})
+                                            readonly property bool isPeriodSeparator: hasEntry && entry.isSeparator === true
                                             width: rxFrequencyList.width - 8
-                                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
+                                            height: !hasEntry ? 0 : isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
                                             color: isPeriodSeparator ? "transparent" :
-                                                   modelData.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.3) :
-                                                   modelData.isMyCall ? Qt.rgba(244/255, 67/255, 54/255, 0.3) :
-                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
+                                                   entry.isTx ? Qt.rgba(241/255, 196/255, 15/255, 0.3) :
+                                                   entry.isMyCall ? Qt.rgba(244/255, 67/255, 54/255, 0.3) :
+                                                   entry.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
                                                    index % 2 === 0 ? Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.08) : Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
                                             radius: 2
 
-                                            Rectangle {
-                                                visible: parent.isPeriodSeparator
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                anchors.left: parent.left
-                                                anchors.right: parent.right
-                                                anchors.leftMargin: 12
-                                                anchors.rightMargin: 12
-                                                height: 1
+	                                            Rectangle {
+	                                                visible: rxFrequencyDelegate.isPeriodSeparator
+	                                                anchors.verticalCenter: rxFrequencyDelegate.verticalCenter
+	                                                anchors.left: rxFrequencyDelegate.left
+	                                                anchors.right: rxFrequencyDelegate.right
+	                                                anchors.leftMargin: 12
+	                                                anchors.rightMargin: 12
+	                                                height: 1
                                                 color: Qt.rgba(0.85, 0.25, 0.25, 0.55)
-                                            }
+	                                            }
 
-                                            MouseArea {
-                                                enabled: !parent.isPeriodSeparator
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                                onClicked: function(mouse) {
-                                                    if (parent.isPeriodSeparator) return
-                                                    if (modelData.isTx) return
-                                                    if (mouse.button === Qt.LeftButton) {
-                                                        // Sinistro = imposta TX freq
-                                                        if (!bridge.holdTxFreq)
-                                                            bridge.txFrequency = parseInt(modelData.freq || "0")
-                                                    } else if (mouse.button === Qt.RightButton) {
-                                                        // Destro = imposta RX freq
-                                                        bridge.rxFrequency = parseInt(modelData.freq || "0")
-                                                    }
-                                                }
-                                                onDoubleClicked: function(mouse) {
-                                                    if (parent.isPeriodSeparator) return
-                                                    if (!modelData.isTx && mouse.button === Qt.LeftButton)
-                                                        decodePanel.handleDecodeDoubleClick(modelData)
-                                                }
-                                                // IU8LMC: Show DXCC tooltip on hover
-                                                onContainsMouseChanged: {
-                                                    if (parent.isPeriodSeparator) { dxccTooltipVisible = false; return }
-                                                    if (containsMouse && modelData.dxCountry && modelData.dxCountry !== "") {
-                                                        dxccTooltipText = getDxccTooltipText(modelData)
-                                                        var pos = mapToGlobal(mouseX, mouseY)
-                                                        dxccTooltipX = pos.x - mainWindow.x
-                                                        dxccTooltipY = pos.y - mainWindow.y
+	                                            MouseArea {
+	                                                enabled: rxFrequencyDelegate.hasEntry && !rxFrequencyDelegate.isPeriodSeparator
+	                                                anchors.fill: rxFrequencyDelegate
+	                                                hoverEnabled: true
+	                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+	                                                onClicked: function(mouse) {
+	                                                    if (!rxFrequencyDelegate.hasEntry || rxFrequencyDelegate.isPeriodSeparator) return
+	                                                    if (rxFrequencyDelegate.entry.isTx) return
+	                                                    if (mouse.button === Qt.LeftButton) {
+	                                                        // Sinistro = imposta TX freq
+	                                                        if (!bridge.holdTxFreq)
+	                                                            bridge.txFrequency = parseInt(rxFrequencyDelegate.entry.freq || "0")
+	                                                    } else if (mouse.button === Qt.RightButton) {
+	                                                        // Destro = imposta RX freq
+	                                                        bridge.rxFrequency = parseInt(rxFrequencyDelegate.entry.freq || "0")
+	                                                    }
+	                                                }
+	                                                onDoubleClicked: function(mouse) {
+	                                                    if (!rxFrequencyDelegate.hasEntry || rxFrequencyDelegate.isPeriodSeparator) return
+	                                                    if (!rxFrequencyDelegate.entry.isTx && mouse.button === Qt.LeftButton)
+	                                                        decodePanel.handleDecodeDoubleClick(rxFrequencyDelegate.entry)
+	                                                }
+	                                                // IU8LMC: Show DXCC tooltip on hover
+	                                                onContainsMouseChanged: {
+	                                                    if (!rxFrequencyDelegate.hasEntry || rxFrequencyDelegate.isPeriodSeparator) { dxccTooltipVisible = false; return }
+	                                                    if (containsMouse && rxFrequencyDelegate.entry.dxCountry && rxFrequencyDelegate.entry.dxCountry !== "") {
+	                                                        dxccTooltipText = getDxccTooltipText(rxFrequencyDelegate.entry)
+	                                                        var pos = mapToGlobal(mouseX, mouseY)
+	                                                        dxccTooltipX = pos.x - mainWindow.x
+	                                                        dxccTooltipY = pos.y - mainWindow.y
                                                         dxccTooltipVisible = true
                                                     } else {
                                                         dxccTooltipVisible = false
@@ -5960,24 +5967,24 @@ NumberAnimation {
                                                         dxccTooltipY = pos.y - mainWindow.y
                                                     }
                                                 }
-                                            }
+	                                            }
 
-	                                            RowLayout {
-	                                                visible: !parent.isPeriodSeparator
-	                                                anchors.fill: parent
-	                                                anchors.leftMargin: 4
-	                                                anchors.rightMargin: 4
-                                                spacing: 0
+		                                            RowLayout {
+		                                                visible: rxFrequencyDelegate.hasEntry && !rxFrequencyDelegate.isPeriodSeparator
+		                                                anchors.fill: rxFrequencyDelegate
+		                                                anchors.leftMargin: 4
+		                                                anchors.rightMargin: 4
+	                                                spacing: 0
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
-                                                Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
-                                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
-                                                Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
-                                                Text { text: modelData.displayMessage || modelData.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(modelData); font.strikeout: decodePanel.decodeEntryStrikeout(modelData); color: getDxccColor(modelData); Layout.fillWidth: true; elide: messageElideMode(modelData.displayMessage || modelData.message) }
-                                                Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(modelData); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
-                                            }
-                                        }
+	                                                Text { text: decodePanel.formatUtcForDisplay(rxFrequencyDelegate.entry.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+	                                                Text { text: rxFrequencyDelegate.entry.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : parseInt(rxFrequencyDelegate.entry.db || "0") > -5 ? accentGreen : parseInt(rxFrequencyDelegate.entry.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+	                                                Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
+	                                                Text { text: rxFrequencyDelegate.entry.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
+	                                                Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
+	                                                Text { text: rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); font.bold: decodePanel.decodeEntryBold(rxFrequencyDelegate.entry); font.strikeout: decodePanel.decodeEntryStrikeout(rxFrequencyDelegate.entry); color: getDxccColor(rxFrequencyDelegate.entry); Layout.fillWidth: true; elide: messageElideMode(rxFrequencyDelegate.entry.displayMessage || rxFrequencyDelegate.entry.message) }
+	                                                Text { visible: rxFreqPanel.distanceColumnWidth > 0; text: decodePanel.distanceText(rxFrequencyDelegate.entry); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.distanceColumnWidth }
+	                                            }
+	                                        }
 
                                         Text {
                                             anchors.centerIn: parent
@@ -9058,10 +9065,10 @@ NumberAnimation {
             repeat: false
             onTriggered: {
                 mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
-                // 1.0.186 — Auto-detach Full Spectrum di default. Pasquale-pattern:
-                // pop-out in Window separata → render thread isolato → niente stall
+                // 1.0.186 — Auto-detach Full Spectrum opzionale. Pasquale-pattern:
+                // pop-out in Window separata -> render thread isolato -> niente stall
                 // main-thread durante drain ListView / texture upload waterfall.
-                // Disattivabile da Settings → "Detach Full Spectrum at startup".
+                // Attivabile da Settings -> "Detach Full Spectrum".
                 if (!mainWindow.period1Detached
                         && bridge && bridge.autoDetachFullSpectrum) {
                     mainWindow.detachFullSpectrumPanel()

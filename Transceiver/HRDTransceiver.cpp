@@ -40,15 +40,12 @@ namespace
   unsigned constexpr hrd_startup_command_reply_retries {8};
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
-  int constexpr hrd_shutdown_write_timeout_ms {500};
-  int constexpr hrd_shutdown_command_reply_timeout_ms {500};
-  unsigned constexpr hrd_shutdown_command_reply_retries {2};
   qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
 
   bool is_startup_probe (QString const& cmd)
   {
-    return 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive)
-      || 0 == cmd.compare (QStringLiteral ("get id"), Qt::CaseInsensitive);
+    return 0 == cmd.compare (QStringLiteral ("get id"), Qt::CaseInsensitive)
+        || 0 == cmd.compare (QStringLiteral ("get context"), Qt::CaseInsensitive);
   }
 
   QString hrd_protocol_name (int protocol)
@@ -221,7 +218,6 @@ HRDTransceiver::HRDTransceiver (logger_type * logger
   , alt_ptt_button_ {-1}
   , reversed_ {false}
   , startup_diagnostics_active_ {false}
-  , shutdown_in_progress_ {false}
   , hrd_command_sequence_ {0}
 {
 }
@@ -232,7 +228,6 @@ int HRDTransceiver::do_start ()
   QElapsedTimer startup_timer;
   startup_timer.start ();
   ScopedStartupDiagnostics diagnostics_guard {startup_diagnostics_active_};
-  shutdown_in_progress_ = false;
   hrd_command_sequence_ = 0;
   hrd_diag (QStringLiteral ("startup begin server='%1' usePtt=%2 audioSource=%3")
             .arg (server_)
@@ -246,17 +241,8 @@ int HRDTransceiver::do_start ()
     {
       hrd_ = new QTcpSocket {this}; // QObject takes ownership
     }
-  auto host = std::get<0> (server_details);
+  auto const host = std::get<0> (server_details);
   auto const port = std::get<1> (server_details);
-  auto const normalized_server = server_.trimmed ();
-  bool const localhost_requested =
-    normalized_server.compare (QStringLiteral ("localhost"), Qt::CaseInsensitive) == 0
-    || normalized_server.startsWith (QStringLiteral ("localhost:"), Qt::CaseInsensitive);
-  if (localhost_requested && host == QHostAddress::LocalHostIPv6)
-    {
-      hrd_diag (QStringLiteral ("localhost resolved to IPv6 loopback; using IPv4 loopback for HRD compatibility"));
-      host = QHostAddress::LocalHost;
-    }
   auto const host_text = host.toString ();
   CAT_INFO ("HRD TCP connecting to" << host_text << port);
   hrd_diag (QStringLiteral ("tcp connect host=%1 port=%2 state=%3")
@@ -283,96 +269,82 @@ int HRDTransceiver::do_start ()
 
   if (none == protocol_)
     {
+      protocol_ = v5;	// try this first (works for v6 too)
+      bool accepted {false};
+      for (auto const& probe_command : {QStringLiteral ("get id"), QStringLiteral ("get context")})
+        {
+          CAT_INFO ("HRD protocol probe v5 starting");
+          hrd_diag (QStringLiteral ("protocol probe v5 start command='%1'").arg (probe_command));
+          try
+            {
+              auto probe_id = send_command (probe_command, false, false);
+              CAT_INFO ("HRD protocol probe v5 accepted:" << probe_id);
+              hrd_diag (QStringLiteral ("protocol probe v5 accepted command='%1' reply='%2'")
+                        .arg (probe_command, hrd_preview (probe_id)));
+              accepted = true;
+              break;
+            }
+          catch (error const& e)
+            {
+              CAT_ERROR ("HRD protocol probe v5 failed:" << e.what ());
+              hrd_diag (QStringLiteral ("protocol probe v5 failed command='%1': %2")
+                        .arg (probe_command, QString::fromUtf8 (e.what ())));
+            }
+        }
+      if (!accepted)
+        {
+          protocol_ = none;
+        }
+    }
+
+  if (none == protocol_)
+    {
+      hrd_->close ();
+
+      protocol_ = v4;		// try again with older protocol
+      CAT_INFO ("HRD TCP reconnecting for protocol v4 to" << host_text << port);
+      hrd_diag (QStringLiteral ("tcp reconnect for protocol v4 host=%1 port=%2")
+                .arg (host_text)
+                .arg (port));
+      hrd_->connectToHost (host, port);
+      if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
+        {
+          CAT_ERROR ("failed to connect:" <<  hrd_->errorString ());
+          hrd_diag (QStringLiteral ("tcp reconnect v4 failed host=%1 port=%2 state=%3 error=%4")
+                    .arg (host_text)
+                    .arg (port)
+                    .arg (hrd_socket_state_name (hrd_))
+                    .arg (hrd_->errorString ()));
+          throw error {tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ()};
+        }
+
+      bool accepted {false};
       QString last_error;
-
-      auto reconnect_probe_socket = [&] (QString const& protocol_name, QString const& probe_command) -> bool
-      {
-        if (hrd_)
-          {
-            hrd_->abort ();
-          }
-
-        CAT_INFO ("HRD TCP reconnecting for protocol probe" << protocol_name << probe_command << "to" << host_text << port);
-        hrd_diag (QStringLiteral ("tcp reconnect for protocol %1 command='%2' host=%3 port=%4")
-                  .arg (protocol_name)
-                  .arg (probe_command)
-                  .arg (host_text)
-                  .arg (port));
-        hrd_->connectToHost (host, port);
-        if (!hrd_->waitForConnected (hrd_connect_timeout_ms))
-          {
-            last_error = tr ("Failed to connect to Ham Radio Deluxe\n") + hrd_->errorString ();
-            CAT_ERROR ("failed to connect:" << hrd_->errorString ());
-            hrd_diag (QStringLiteral ("tcp reconnect %1 failed host=%2 port=%3 state=%4 error=%5")
-                      .arg (protocol_name)
-                      .arg (host_text)
-                      .arg (port)
-                      .arg (hrd_socket_state_name (hrd_))
-                      .arg (hrd_->errorString ()));
-            return false;
-          }
-
-        hrd_diag (QStringLiteral ("tcp connected for probe %1 command='%2' host=%3 port=%4 local=%5:%6")
-                  .arg (protocol_name)
-                  .arg (probe_command)
-                  .arg (host_text)
-                  .arg (port)
-                  .arg (hrd_->localAddress ().toString ())
-                  .arg (hrd_->localPort ()));
-        return true;
-      };
-
-      auto try_probe = [&] (auto protocol, QString const& protocol_name, QString const& probe_command, bool reuse_existing_socket) -> bool
-      {
-        if (!reuse_existing_socket && !reconnect_probe_socket (protocol_name, probe_command))
-          {
-            protocol_ = none;
-            return false;
-          }
-
-        protocol_ = protocol;
-        CAT_INFO ("HRD protocol probe" << protocol_name << "starting command" << probe_command);
-        hrd_diag (QStringLiteral ("protocol probe %1 start command='%2'")
-                  .arg (protocol_name)
-                  .arg (probe_command));
-
-        try
-          {
-            auto reply = send_command (probe_command, false, false);
-            CAT_INFO ("HRD protocol probe" << protocol_name << "accepted:" << reply);
-            hrd_diag (QStringLiteral ("protocol probe %1 accepted command='%2' reply='%3'")
-                      .arg (protocol_name)
-                      .arg (probe_command)
-                      .arg (hrd_preview (reply)));
-            return true;
-          }
-        catch (error const& e)
-          {
-            last_error = QString::fromUtf8 (e.what ());
-            CAT_ERROR ("HRD protocol probe" << protocol_name << "failed:" << e.what ());
-            hrd_diag (QStringLiteral ("protocol probe %1 failed command='%2': %3")
-                      .arg (protocol_name)
-                      .arg (probe_command)
-                      .arg (last_error));
-            if (hrd_)
-              {
-                hrd_->abort ();
-              }
-            protocol_ = none;
-            return false;
-          }
-      };
-
-      bool const protocol_detected =
-        try_probe (v5, QStringLiteral ("v5"), QStringLiteral ("get context"), true)
-        || try_probe (v5, QStringLiteral ("v5"), QStringLiteral ("get id"), false)
-        || try_probe (v4, QStringLiteral ("v4"), QStringLiteral ("get context"), false)
-        || try_probe (v4, QStringLiteral ("v4"), QStringLiteral ("get id"), false);
-
-      if (!protocol_detected)
+      for (auto const& probe_command : {QStringLiteral ("get id"), QStringLiteral ("get context")})
+        {
+          CAT_INFO ("HRD protocol probe v4 starting");
+          hrd_diag (QStringLiteral ("protocol probe v4 start command='%1'").arg (probe_command));
+          try
+            {
+              auto probe_id = send_command (probe_command, false, false);
+              CAT_INFO ("HRD protocol probe v4 accepted:" << probe_id);
+              hrd_diag (QStringLiteral ("protocol probe v4 accepted command='%1' reply='%2'")
+                        .arg (probe_command, hrd_preview (probe_id)));
+              accepted = true;
+              break;
+            }
+          catch (error const& e)
+            {
+              last_error = QString::fromUtf8 (e.what ());
+              CAT_ERROR ("HRD protocol probe v4 failed:" << e.what ());
+              hrd_diag (QStringLiteral ("protocol probe v4 failed command='%1': %2")
+                        .arg (probe_command, last_error));
+            }
+        }
+      if (!accepted)
         {
           throw error {last_error.isEmpty ()
-                         ? tr ("Ham Radio Deluxe failed protocol probe using get context or get id")
+                         ? tr ("Ham Radio Deluxe failed protocol probe using get id/get context")
                          : last_error};
         }
     }
@@ -637,23 +609,11 @@ void HRDTransceiver::do_stop ()
 {
   if (hrd_)
     {
-      hrd_->abort ();
+      hrd_->close ();
     }
-  protocol_ = none;
-  current_radio_ = 0;
-  shutdown_in_progress_ = false;
 
   if (wrapped_) wrapped_->stop ();
   CAT_TRACE ("stopped" << state () << "reversed" << reversed_);
-}
-
-void HRDTransceiver::do_prepare_shutdown ()
-{
-  shutdown_in_progress_ = true;
-  stop_polling ();
-  hrd_diag (QStringLiteral ("shutdown preparation: polling stopped, fast HRD timeouts active state=%1 protocol=%2")
-            .arg (hrd_socket_state_name (hrd_))
-            .arg (hrd_protocol_name (protocol_)));
 }
 
 int HRDTransceiver::find_button (QRegularExpression const& re) const
@@ -1313,7 +1273,7 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
       QThread::msleep (50);
    }
 
-  if (!recurse && prepend_context)
+  if (!recurse && prepend_context && 0u == current_radio_)
     {
       auto radio_name = send_command ("get radio", current_radio_, true);
       auto radio_iter = std::find_if (radios_.begin (), radios_.end (), [&radio_name] (RadioMap::value_type const& radio)
@@ -1532,9 +1492,7 @@ bool HRDTransceiver::write_to_port (char const * data, qint64 length)
   while (total_bytes_sent < length)
     {
       auto bytes_sent = hrd_->write (data + total_bytes_sent, length - total_bytes_sent);
-      int const timeout_ms = shutdown_in_progress_ ? hrd_shutdown_write_timeout_ms
-                                                   : hrd_write_timeout_ms;
-      if (bytes_sent < 0 || !hrd_->waitForBytesWritten (timeout_ms))
+      if (bytes_sent < 0 || !hrd_->waitForBytesWritten (hrd_write_timeout_ms))
         {
           return false;
         }
@@ -1554,13 +1512,11 @@ QByteArray HRDTransceiver::read_reply (QString const& cmd, quint64 sequence)
   total_timer.start ();
   bool const startup_probe = is_startup_probe (cmd);
   int const timeout_ms = startup_probe ? hrd_probe_reply_timeout_ms
-                                       : (shutdown_in_progress_ ? hrd_shutdown_command_reply_timeout_ms
-                                                               : (startup_diagnostics_active_ ? hrd_startup_command_reply_timeout_ms
-                                                                                              : hrd_command_reply_timeout_ms));
+                                       : (startup_diagnostics_active_ ? hrd_startup_command_reply_timeout_ms
+                                                                      : hrd_command_reply_timeout_ms);
   unsigned retries = startup_probe ? hrd_probe_reply_retries
-                                   : (shutdown_in_progress_ ? hrd_shutdown_command_reply_retries
-                                                           : (startup_diagnostics_active_ ? hrd_startup_command_reply_retries
-                                                                                          : hrd_command_reply_retries));
+                                   : (startup_diagnostics_active_ ? hrd_startup_command_reply_retries
+                                                                  : hrd_command_reply_retries);
   bool replied {false};
   unsigned attempt {0};
   while (!replied && retries--)

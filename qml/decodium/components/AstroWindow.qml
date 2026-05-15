@@ -58,6 +58,7 @@ Dialog {
     property string fallbackGrid: hasGrid ? bridge.grid.toUpperCase() : "----"
     property real fallbackLatitude: hasGrid ? bridge.latFromGrid(bridge.grid) : 0.0
     property real fallbackLongitude: hasGrid ? bridge.lonFromGrid(bridge.grid) : 0.0
+    property bool refreshFeedbackActive: false
 
     property color bgDeep: bridge.themeManager.bgDeep
     property color bgMedium: bridge.themeManager.bgMedium
@@ -176,63 +177,82 @@ Dialog {
         }
     }
 
-    contentItem: ScrollView {
-        id: astroScroll
-        clip: true
-        rightPadding: 12
-        contentWidth: availableWidth
-        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+    function refreshAstroData() {
+        refreshFeedbackActive = true
+        refreshFeedbackTimer.restart()
 
-        ColumnLayout {
-            width: Math.max(astroScroll.availableWidth, 0)
-            spacing: 12
+        if (astroWindow.astroManager) {
+            astroWindow.astroManager.update()
+        }
+        if (astroWindow.propagationManager) {
+            astroWindow.propagationManager.refresh()
+        }
+    }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 50
-                color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
-                border.color: primaryBlue
-                radius: 8
+    contentItem: ColumnLayout {
+        spacing: 10
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 12
+        ScrollView {
+            id: astroScroll
+            clip: true
+            rightPadding: 12
+            bottomPadding: 8
+            contentWidth: availableWidth
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-                    Text {
-                        text: "Location:"
-                        font.pixelSize: 12
-                        color: textSecondary
-                    }
+            ColumnLayout {
+                width: Math.max(astroScroll.availableWidth, 0)
+                spacing: 12
 
-                    Text {
-                        text: astroWindow.hasAstroManager ? astroManager.gridLocator : astroWindow.fallbackGrid
-                        font.pixelSize: 14
-                        font.bold: true
-                        font.family: "Monospace"
-                        color: primaryBlue
-                    }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 50
+                    color: Qt.rgba(primaryBlue.r, primaryBlue.g, primaryBlue.b, 0.15)
+                    border.color: primaryBlue
+                    radius: 8
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: astroWindow.hasAstroManager
-                              ? "(" + astroManager.latitude.toFixed(2) + ", " + astroManager.longitude.toFixed(2) + ")"
-                              : (astroWindow.hasGrid
-                                 ? "(" + astroWindow.fallbackLatitude.toFixed(2) + ", " + astroWindow.fallbackLongitude.toFixed(2) + ")"
-                                 : "Configure your grid locator to enable the local astro view")
-                        font.pixelSize: 11
-                        color: textSecondary
-                        elide: Text.ElideRight
-                    }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 12
 
-                    Text {
-                        text: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm") + " UTC"
-                        font.pixelSize: 11
-                        font.family: "Monospace"
-                        color: textSecondary
+                        Text {
+                            text: "Location:"
+                            font.pixelSize: 12
+                            color: textSecondary
+                        }
+
+                        Text {
+                            text: astroWindow.hasAstroManager ? astroManager.gridLocator : astroWindow.fallbackGrid
+                            font.pixelSize: 14
+                            font.bold: true
+                            font.family: "Monospace"
+                            color: primaryBlue
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: astroWindow.hasAstroManager
+                                  ? "(" + astroManager.latitude.toFixed(2) + ", " + astroManager.longitude.toFixed(2) + ")"
+                                  : (astroWindow.hasGrid
+                                     ? "(" + astroWindow.fallbackLatitude.toFixed(2) + ", " + astroWindow.fallbackLongitude.toFixed(2) + ")"
+                                     : "Configure your grid locator to enable the local astro view")
+                            font.pixelSize: 11
+                            color: textSecondary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            text: Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm") + " UTC"
+                            font.pixelSize: 11
+                            font.family: "Monospace"
+                            color: textSecondary
+                        }
                     }
                 }
-            }
 
             Rectangle {
                 visible: !astroWindow.hasAstroManager
@@ -823,22 +843,56 @@ Dialog {
                 }
             }
 
+            }
+        }
+
+        Rectangle {
+            visible: astroWindow.hasAstroManager || astroWindow.hasPropagationManager
+            Layout.fillWidth: true
+            Layout.preferredHeight: 46
+            color: Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.84)
+
             RowLayout {
-                visible: astroWindow.hasAstroManager || astroWindow.hasPropagationManager
-                Layout.alignment: Qt.AlignHCenter
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                anchors.topMargin: 5
+                anchors.bottomMargin: 5
+
+                Item { Layout.fillWidth: true }
 
                 Button {
                     id: refreshButton
                     text: "Refresh"
-                    implicitWidth: 100
-                    implicitHeight: 32
+                    implicitWidth: 132
+                    implicitHeight: 34
+                    scale: down ? 0.97 : 1.0
+
+                    Behavior on scale {
+                        NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
+                    }
 
                     background: Rectangle {
-                        radius: 6
+                        radius: 7
+                        border.width: refreshButton.down || astroWindow.refreshFeedbackActive ? 2 : 1
+                        border.color: astroWindow.refreshFeedbackActive
+                                      ? accentGreen
+                                      : (refreshButton.down ? textPrimary : secondaryCyan)
+                        opacity: refreshButton.enabled ? 1.0 : 0.55
 
                         gradient: Gradient {
-                            GradientStop { position: 0.0; color: primaryBlue }
-                            GradientStop { position: 1.0; color: secondaryCyan }
+                            GradientStop {
+                                position: 0.0
+                                color: astroWindow.refreshFeedbackActive
+                                       ? Qt.lighter(accentGreen, 1.18)
+                                       : (refreshButton.down ? Qt.darker(primaryBlue, 1.25) : primaryBlue)
+                            }
+                            GradientStop {
+                                position: 1.0
+                                color: astroWindow.refreshFeedbackActive
+                                       ? accentGreen
+                                       : (refreshButton.down ? primaryBlue : secondaryCyan)
+                            }
                         }
                     }
 
@@ -846,21 +900,24 @@ Dialog {
                         text: refreshButton.text
                         font.pixelSize: 12
                         font.bold: true
-                        color: textPrimary
+                        color: refreshButton.down || astroWindow.refreshFeedbackActive ? bgDeep : textPrimary
                         horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    onClicked: {
-                        if (astroWindow.astroManager) {
-                            astroWindow.astroManager.update()
-                        }
-                        if (astroWindow.propagationManager) {
-                            astroWindow.propagationManager.refresh()
-                        }
-                    }
+                    onClicked: astroWindow.refreshAstroData()
                 }
+
+                Item { Layout.fillWidth: true }
             }
         }
+    }
+
+    Timer {
+        id: refreshFeedbackTimer
+        interval: 420
+        repeat: false
+        onTriggered: astroWindow.refreshFeedbackActive = false
     }
 
     Timer {

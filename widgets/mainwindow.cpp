@@ -6264,7 +6264,7 @@ void MainWindow::readSettings()
   else if(m_ft8threads==10) ui->actionMT10->setChecked(true);
   else if(m_ft8threads==11) ui->actionMT11->setChecked(true);
   else if(m_ft8threads==12) ui->actionMT12->setChecked(true);
-  qDebug() << "m_ft8threads is " << m_ft8threads;
+  debugToFile (QString {"ft8Threads  setting:%1 (0=auto)"}.arg (m_ft8threads));
   dec_data.params.nmt = m_ft8threads;
 
   ui->actionHide_FT8_dupe_messages->setChecked(m_settings->value("HideFT8Dupes",true).toBool());
@@ -12956,7 +12956,9 @@ void MainWindow::requestInProcessFt8Decode ()
   }
 
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    qWarning() << "FT8 decode worker unavailable";
+    debugToFile (QString {"ft8Decode   worker unavailable source:request running:%1 worker:%2"}
+                   .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
+                   .arg (m_ft8DecodeWorker ? 1 : 0));
     return;
   }
 
@@ -12970,7 +12972,9 @@ void MainWindow::queueInProcessFt8Decode ()
   }
 
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    qWarning() << "FT8 decode worker unavailable";
+    debugToFile (QString {"ft8Decode   worker unavailable source:queue running:%1 worker:%2"}
+                   .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
+                   .arg (m_ft8DecodeWorker ? 1 : 0));
     return;
   }
 
@@ -13072,7 +13076,12 @@ decodium::ft8::DecodeRequest MainWindow::buildFt8DecodeRequest () const
 void MainWindow::dispatchFt8DecodeRequest (decodium::ft8::DecodeRequest request)
 {
   if (!m_ft8DecodeWorker || !m_ft8DecodeThread.isRunning ()) {
-    qWarning() << "FT8 decode worker unavailable";
+    debugToFile (QString {"ft8Decode   worker unavailable source:dispatch running:%1 worker:%2 utc:%3 nzhsym:%4 samples:%5"}
+                   .arg (m_ft8DecodeThread.isRunning () ? 1 : 0)
+                   .arg (m_ft8DecodeWorker ? 1 : 0)
+                   .arg (request.nutc)
+                   .arg (request.nzhsym)
+                   .arg (request.availableSamples));
     return;
   }
 
