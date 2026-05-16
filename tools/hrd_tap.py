@@ -424,29 +424,69 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def parse_port_value(text: str, current_port: int) -> int:
+    try:
+        port = int(text.strip())
+    except ValueError:
+        print(f"Invalid port {text!r}; keeping {current_port}")
+        return current_port
+    if port < 1 or port > 65535:
+        print(f"Invalid port {text!r}; keeping {current_port}")
+        return current_port
+    return port
+
+
+def apply_endpoint_input(args: argparse.Namespace, host_attr: str, port_attr: str, text: str) -> None:
+    text = text.strip()
+    if not text:
+        return
+
+    current_host = getattr(args, host_attr)
+    current_port = getattr(args, port_attr)
+    if text.isdecimal():
+        setattr(args, port_attr, parse_port_value(text, current_port))
+        return
+
+    host = text
+    port_text: str | None = None
+    if text.startswith("[") and "]" in text:
+        close = text.index("]")
+        host = text[1:close].strip()
+        suffix = text[close + 1:].strip()
+        if suffix.startswith(":"):
+            port_text = suffix[1:].strip()
+        elif suffix:
+            print(f"Invalid endpoint {text!r}; keeping {current_host}:{current_port}")
+            return
+    elif ":" in text:
+        host_candidate, port_candidate = text.rsplit(":", 1)
+        if port_candidate.strip().isdecimal():
+            host = host_candidate.strip()
+            port_text = port_candidate.strip()
+
+    if host:
+        setattr(args, host_attr, host)
+    if port_text:
+        setattr(args, port_attr, parse_port_value(port_text, current_port))
+
+
 def maybe_prompt(args: argparse.Namespace, raw_argv: list[str]) -> None:
     if raw_argv or args.no_prompt or not sys.stdin.isatty():
         return
     print("Decodium HRD Tap - transparent TCP proxy")
     print("Run on the PC where HRD is listening. Then set Decodium HRD server to the tap listen address.")
-    listen_host = input(f"Tap listen host [{args.listen_host}]: ").strip()
+    listen_host = input(f"Tap listen host or host:port [{args.listen_host}:{args.listen_port}]: ").strip()
     if listen_host:
-        args.listen_host = listen_host
+        apply_endpoint_input(args, "listen_host", "listen_port", listen_host)
     listen_port = input(f"Tap listen port [{args.listen_port}]: ").strip()
     if listen_port:
-        try:
-            args.listen_port = int(listen_port)
-        except ValueError:
-            print(f"Invalid listen port {listen_port!r}; keeping {args.listen_port}")
-    target_host = input(f"Real HRD host [{args.target_host}]: ").strip()
+        args.listen_port = parse_port_value(listen_port, args.listen_port)
+    target_host = input(f"Real HRD host or host:port [{args.target_host}:{args.target_port}]: ").strip()
     if target_host:
-        args.target_host = target_host
+        apply_endpoint_input(args, "target_host", "target_port", target_host)
     target_port = input(f"Real HRD port [{args.target_port}]: ").strip()
     if target_port:
-        try:
-            args.target_port = int(target_port)
-        except ValueError:
-            print(f"Invalid target port {target_port!r}; keeping {args.target_port}")
+        args.target_port = parse_port_value(target_port, args.target_port)
 
 
 def main(argv: list[str]) -> int:

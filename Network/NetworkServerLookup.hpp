@@ -15,13 +15,14 @@ class QString;
 // query can be one of:
 //
 // 1) "" (empty string) - use defaults
-// 2) ":nnnnn" - override default service port with port nnnnn
-// 3) "<valid-host-name>" - override default host address with DNS lookup
-// 4) "nnn.nnn.nnn.nnn" - override default host address with the IPv4 address given by nnn.nnn.nnn.nnn
-// 5) "[<valid-IPv6-address]" - override default host address with the given IPv6 address
-// 6) "<valid-host-name>:nnnnn" - use as per (3) & (2)
-// 7) "nnn.nnn.nnn.nnn:nnnnn" - use as per (4) & (2)
-// 8) "[<valid-IPv6-address]:nnnnn" - use as per (5) & (2)
+// 2) "nnnnn" - override default service port with port nnnnn
+// 3) ":nnnnn" - override default service port with port nnnnn
+// 4) "<valid-host-name>" - override default host address with DNS lookup
+// 5) "nnn.nnn.nnn.nnn" - override default host address with the IPv4 address given by nnn.nnn.nnn.nnn
+// 6) "[<valid-IPv6-address>]" - override default host address with the given IPv6 address
+// 7) "<valid-host-name>:nnnnn" - use as per (4) & (3)
+// 8) "nnn.nnn.nnn.nnn:nnnnn" - use as per (5) & (3)
+// 9) "[<valid-IPv6-address>]:nnnnn" - use as per (6) & (3)
 //
 // The first host address matching the protocol and the service port
 // number are returned.
