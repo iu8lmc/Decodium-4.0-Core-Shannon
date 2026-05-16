@@ -9065,10 +9065,12 @@ NumberAnimation {
             repeat: false
             onTriggered: {
                 mainWindow.restoreFloatingWindowState(period1FloatingWindow, "period1FloatingWindow", "period1Detached", "period1Minimized")
-                // 1.0.186 — Auto-detach Full Spectrum opzionale. Pasquale-pattern:
+                // 1.0.186 — Auto-detach Full Spectrum di default. Pasquale-pattern:
                 // pop-out in Window separata -> render thread isolato -> niente stall
                 // main-thread durante drain ListView / texture upload waterfall.
-                // Attivabile da Settings -> "Detach Full Spectrum".
+                // 1.0.201 — default ripristinato a true (1.0.197 upstream lo aveva
+                // spento, causando regressione performance progressiva).
+                // Disattivabile da Settings -> "Detach Full Spectrum".
                 if (!mainWindow.period1Detached
                         && bridge && bridge.autoDetachFullSpectrum) {
                     mainWindow.detachFullSpectrumPanel()
