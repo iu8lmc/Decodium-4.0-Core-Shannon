@@ -5353,9 +5353,14 @@ DecodiumBridge::DecodiumBridge(QObject* parent)
             s.setValue(QStringLiteral("UI/Style"), m_uiStyle);
         }
 
-        // 1.0.186 — Full Spectrum auto-detach + Spectrum FPS cap
+        // 1.0.186 — Full Spectrum auto-detach + Spectrum FPS cap.
+        // 1.0.201 — Default ripristinato a true: la 1.0.197 lo aveva spento
+        // upstream, ma su PC modesti il Pasquale-pattern (pop-out su Window
+        // separata = render thread isolato) elimina stall main-thread di
+        // ~518ms cadenza costante durante drain ListView / texture upload
+        // waterfall. Misurato: 1463 -> 1 stall in 9 min RX FT8.
         m_autoDetachFullSpectrum = s.value(
-            QStringLiteral("UI/AutoDetachFullSpectrum"), false).toBool();
+            QStringLiteral("UI/AutoDetachFullSpectrum"), true).toBool();
         int const fpsRaw = s.value(QStringLiteral("UI/SpectrumFpsCap"), 20).toInt();
         m_spectrumFpsCap = (fpsRaw <= 15) ? 15 : (fpsRaw >= 30) ? 30 : 20;
 
