@@ -1,0 +1,223 @@
+name: Release Linux AppImage Qt 6.11 x86_64
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (leave empty to use fork_release_version.txt)"
+        required: false
+        default: ""
+      publish_release:
+        description: "Upload AppImage to GitHub release"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: "6.11.0"
+  QT_ARCH: "linux_gcc_64"
+  QT_CACHE_ROOT: ".ci/cache/qt-linux-6.11.0"
+  HAMLIB_TAG: "4.7.1"
+  HAMLIB_VERSION: "4.7.1"
+  HAMLIB_CACHE_DIR: ".ci/cache/hamlib-linux-x86_64-4.7.1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name || inputs.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build-appimage-qt611-x86_64:
+    name: Build Qt 6.11 Linux AppImage x86_64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          RAW_VERSION=""
+          if [[ -n "${RELEASE_TAG}" ]]; then
+            RAW_VERSION="${RELEASE_TAG}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            RAW_VERSION="${INPUT_VERSION}"
+          elif [[ -f fork_release_version.txt ]]; then
+            RAW_VERSION="$(tr -d '\r\n' < fork_release_version.txt)"
+          else
+            RAW_VERSION="0.0.0-ci-${GITHUB_SHA::7}"
+          fi
+
+          VERSION="${RAW_VERSION#v}"
+          RELEASE_REF="${RAW_VERSION}"
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          echo "RELEASE_REF=${RELEASE_REF}" >> "${GITHUB_ENV}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "release_ref=${RELEASE_REF}" >> "${GITHUB_OUTPUT}"
+          echo "Using version: ${VERSION}"
+          echo "Release ref: ${RELEASE_REF}"
+
+      - name: Install Linux build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            gfortran \
+            cmake \
+            make \
+            python3 \
+            python3-pip \
+            python3-venv \
+            pkg-config \
+            ca-certificates \
+            curl \
+            tar \
+            wget \
+            squashfs-tools \
+            libfftw3-dev \
+            libusb-1.0-0-dev \
+            libudev-dev \
+            libboost-log-dev \
+            libboost-filesystem-dev \
+            libboost-thread-dev \
+            portaudio19-dev \
+            libreadline-dev \
+            desktop-file-utils \
+            patchelf \
+            file \
+            texinfo \
+            mesa-common-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcb-cursor-dev \
+            libxcb-icccm4-dev \
+            libxcb-image0-dev \
+            libxcb-keysyms1-dev \
+            libxcb-randr0-dev \
+            libxcb-render-util0-dev \
+            libxcb-shape0-dev \
+            libxcb-shm0-dev \
+            libxcb-sync-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libasound2-dev \
+            libpulse-dev
+          sudo apt-get install -y -qq libfuse2t64 || sudo apt-get install -y -qq libfuse2
+
+      - name: Restore Qt 6.11 cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_CACHE_ROOT }}
+          key: linux-x86_64-qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}-v1
+
+      - name: Install Qt 6.11
+        run: |
+          set -euo pipefail
+          QT_INSTALL_ROOT="${GITHUB_WORKSPACE}/${QT_CACHE_ROOT}"
+          QT_PREFIX="${QT_INSTALL_ROOT}/${QT_VERSION}/gcc_64"
+
+          if [[ ! -x "${QT_PREFIX}/bin/qmake6" ]]; then
+            rm -rf "${QT_INSTALL_ROOT}"
+            python3 -m venv "${RUNNER_TEMP}/aqt-venv"
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m pip install --upgrade pip aqtinstall
+            "${RUNNER_TEMP}/aqt-venv/bin/python" -m aqt install-qt linux desktop "${QT_VERSION}" "${QT_ARCH}" \
+              -O "${QT_INSTALL_ROOT}" \
+              -m qt5compat qtimageformats qtmultimedia qtserialport qtshadertools qtwebsockets
+          fi
+
+          test -x "${QT_PREFIX}/bin/qmake6"
+          echo "${QT_PREFIX}/bin" >> "${GITHUB_PATH}"
+          echo "QT_PREFIX=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          echo "QMAKE=${QT_PREFIX}/bin/qmake6" >> "${GITHUB_ENV}"
+          echo "CMAKE_PREFIX_PATH=${QT_PREFIX}" >> "${GITHUB_ENV}"
+          "${QT_PREFIX}/bin/qmake6" -v
+          test "$("${QT_PREFIX}/bin/qmake6" -query QT_VERSION)" = "${QT_VERSION}"
+
+      - name: Restore Hamlib cache
+        id: hamlib-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HAMLIB_CACHE_DIR }}
+          key: linux-x86_64-hamlib-${{ env.HAMLIB_VERSION }}-ubuntu24.04-qt611-v1
+          restore-keys: |
+            linux-x86_64-hamlib-${{ env.HAMLIB_VERSION }}-
+            linux-x86_64-hamlib-
+
+      - name: Build Qt 6.11 AppImage
+        run: |
+          set -euo pipefail
+          mkdir -p "${HAMLIB_CACHE_DIR}" dist-linux-appimage-qt611
+
+          export PATH="${QT_PREFIX}/bin:${PATH}"
+          export QMAKE="${QT_PREFIX}/bin/qmake6"
+          export CMAKE_PREFIX_PATH="${QT_PREFIX}"
+
+          HAMLIB_PREFIX="${GITHUB_WORKSPACE}/${HAMLIB_CACHE_DIR}" \
+          OUTPUT_DIR="${GITHUB_WORKSPACE}/dist-linux-appimage-qt611" \
+          BUILD_DIR="${GITHUB_WORKSPACE}/build-linux-appimage-qt611-x64" \
+          APPDIR="${GITHUB_WORKSPACE}/AppDir-linux-qt611-x86_64" \
+          VERSION="${VERSION}" \
+          bash scripts/ci-build-linux-appimage-x64.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64-qt611
+          if-no-files-found: error
+          path: |
+            dist-linux-appimage-qt611/decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64.AppImage
+            dist-linux-appimage-qt611/decodium4-ft2-${{ steps.version.outputs.version }}-linux-x86_64.AppImage.sha256.txt
+
+      - name: Publish AppImage to GitHub release
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_REF="${{ steps.version.outputs.release_ref }}"
+          REPO="${GITHUB_REPOSITORY}"
+          ASSETS=(
+            "dist-linux-appimage-qt611/decodium4-ft2-${VERSION}-linux-x86_64.AppImage"
+            "dist-linux-appimage-qt611/decodium4-ft2-${VERSION}-linux-x86_64.AppImage.sha256.txt"
+          )
+
+          for asset in "${ASSETS[@]}"; do
+            test -f "${asset}"
+          done
+
+          if gh release view "${RELEASE_REF}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_REF}" "${ASSETS[@]}" --repo "${REPO}" --clobber
+          else
+            NOTES_FILE="$(mktemp)"
+            NOTES_TEMPLATE="doc/GITHUB_RELEASE_BODY_${VERSION}.md"
+            if [[ -f "${NOTES_TEMPLATE}" ]]; then
+              cp "${NOTES_TEMPLATE}" "${NOTES_FILE}"
+            elif [[ -f "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" ]]; then
+              cp "doc/GITHUB_RELEASE_BODY_v${VERSION}.md" "${NOTES_FILE}"
+            else
+              printf "# Decodium 4 FT2 %s\n\nLinux x86_64 AppImage built with Qt %s.\n" "${VERSION}" "${QT_VERSION}" > "${NOTES_FILE}"
+            fi
+            gh release create "${RELEASE_REF}" "${ASSETS[@]}" \
+              --repo "${REPO}" \
+              --title "Decodium 4 FT2 ${VERSION}" \
+              --notes-file "${NOTES_FILE}"
+            rm -f "${NOTES_FILE}"
+          fi
