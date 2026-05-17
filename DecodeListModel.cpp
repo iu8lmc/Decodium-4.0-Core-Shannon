@@ -195,7 +195,44 @@ void DecodeListModel::setEntries(QVariantList const& newEntries)
         }
     }
 
-    // --- Caso 3 (fallback): struttura cambiata, reset model ---
+    // --- Caso 3 (1.0.207): shift-N-from-head + append-M-to-tail ---
+    // Tipico quando cap m_decodeList rimuove oldest e nuovi decode entrano in
+    // coda (1.0.206 cap 500). Senza questo caso si cadeva in beginResetModel
+    // = ridisegno totale ListView ad ogni decode → Full Spectrum scattoso.
+    // Cerco lo shift N tale che oldEntries[N..oldCount-1] match newEntries[0..oldCount-N-1].
+    // Limita ricerca a shift <=64 (cap conservativo per non bruciare CPU su miss).
+    if (oldCount > 0 && newCount > 0) {
+        int const maxShift = qMin(oldCount, 64);
+        for (int shift = 1; shift <= maxShift; ++shift) {
+            int const overlapLen = oldCount - shift;
+            if (overlapLen <= 0 || overlapLen > newCount) continue;
+            bool overlapMatches = true;
+            for (int i = 0; i < overlapLen; ++i) {
+                if (decodeMatchKey(m_entries.at(i + shift))
+                    != decodeMatchKey(newEntries.at(i).toMap())) {
+                    overlapMatches = false;
+                    break;
+                }
+            }
+            if (!overlapMatches) continue;
+            // Match! Applica: rimuovi shift entries dalla testa, poi append M nuove in coda.
+            beginRemoveRows(QModelIndex(), 0, shift - 1);
+            m_entries.remove(0, shift);
+            endRemoveRows();
+            int const tailNew = newCount - overlapLen;
+            if (tailNew > 0) {
+                beginInsertRows(QModelIndex(), overlapLen, overlapLen + tailNew - 1);
+                for (int i = overlapLen; i < newCount; ++i) {
+                    m_entries.append(newEntries.at(i).toMap());
+                }
+                endInsertRows();
+            }
+            applyPrefixDiff(overlapLen);  // catch in-place value updates su overlap
+            return;
+        }
+    }
+
+    // --- Caso 4 (fallback ultimo): struttura cambiata, reset model ---
     beginResetModel();
     m_entries.clear();
     m_entries.reserve(newCount);
