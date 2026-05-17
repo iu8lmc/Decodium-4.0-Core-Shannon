@@ -136,6 +136,7 @@ class DecodiumBridge : public QObject
     Q_PROPERTY(int txWatchdogCount READ txWatchdogCount WRITE setTxWatchdogCount NOTIFY txWatchdogCountChanged)
     Q_PROPERTY(bool filterCqOnly READ filterCqOnly WRITE setFilterCqOnly NOTIFY filterCqOnlyChanged)
     Q_PROPERTY(bool filterMyCallOnly READ filterMyCallOnly WRITE setFilterMyCallOnly NOTIFY filterMyCallOnlyChanged)
+    Q_PROPERTY(bool filtersBypassed READ filtersBypassed WRITE setFiltersBypassed NOTIFY filtersBypassedChanged)
     Q_PROPERTY(int contestType READ contestType WRITE setContestType NOTIFY contestTypeChanged)
     Q_PROPERTY(bool zapEnabled READ zapEnabled WRITE setZapEnabled NOTIFY zapEnabledChanged)
     Q_PROPERTY(bool deepSearchEnabled READ deepSearchEnabled WRITE setDeepSearchEnabled NOTIFY deepSearchEnabledChanged)
@@ -519,6 +520,8 @@ public:
     void setFilterCqOnly(bool v) { if (m_filterCqOnly!=v){m_filterCqOnly=v;emit filterCqOnlyChanged();} }
     bool filterMyCallOnly() const { return m_filterMyCallOnly; }
     void setFilterMyCallOnly(bool v) { if (m_filterMyCallOnly!=v){m_filterMyCallOnly=v;emit filterMyCallOnlyChanged();} }
+    bool filtersBypassed() const { return m_filtersBypassed; }
+    void setFiltersBypassed(bool v);
     int contestType() const { return m_contestType; }
     void setContestType(int v) { if (m_contestType!=v){m_contestType=v;emit contestTypeChanged();} }
     bool zapEnabled() const { return m_zapEnabled; }
@@ -1245,6 +1248,7 @@ signals:
     void txWatchdogCountChanged();
     void filterCqOnlyChanged();
     void filterMyCallOnlyChanged();
+    void filtersBypassedChanged();
     void contestTypeChanged();
     void zapEnabledChanged();
     void deepSearchEnabledChanged();
@@ -1478,7 +1482,7 @@ private:
     void tcpSendLoggedAdifQso(const QString& dxCall, const QByteArray& adifRecord);
     void maybePlayDecodeAlert(bool isCQ, bool isMyCall);
 
-    QString m_callsign {"IU8LMC"};
+    QString m_callsign;
     QString m_grid {"JN70"};
     double m_frequency {14074000.0};
     QString m_mode {"FT2"};
@@ -1902,6 +1906,7 @@ private:
     int     m_txWatchdogCount {3};
     bool    m_filterCqOnly {false};
     bool    m_filterMyCallOnly {false};
+    bool    m_filtersBypassed {false};
     int     m_contestType {0};
     bool    m_zapEnabled {false};
     bool    m_deepSearchEnabled {false};

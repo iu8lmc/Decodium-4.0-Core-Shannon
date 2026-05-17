@@ -1,13 +1,5 @@
 #include "HRDTransceiver.hpp"
 
-// HRDMessage usa placement new su buffer raw (vedi struct riga ~33): GCC 14+
-// non riesce a tracciare l'inizializzazione attraverso il placement new e
-// emette -Wmaybe-uninitialized in send_command. La build CI MSYS2 ha
-// -Werror attivo, quindi disabilitiamo localmente il warning.
-#if defined(__GNUC__) && !defined(__clang__)
-# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-
 #include <algorithm>
 #include <cstddef>
 #include <QHostAddress>
@@ -41,6 +33,89 @@ namespace
   int constexpr hrd_command_reply_timeout_ms {1000};
   unsigned constexpr hrd_command_reply_retries {5};
   qsizetype constexpr hrd_max_reply_bytes {16 * 1024 * 1024};
+  qsizetype constexpr hrd_v5_header_size {16};
+  quint32 constexpr hrd_v5_magic_1 {0x1234ABCDu};
+  quint32 constexpr hrd_v5_magic_2 {0xABCD1234u};
+
+  void hrd_append_le16 (QByteArray& data, quint16 value)
+  {
+    data.append (static_cast<char> (value & 0xffu));
+    data.append (static_cast<char> ((value >> 8) & 0xffu));
+  }
+
+  void hrd_append_le32 (QByteArray& data, quint32 value)
+  {
+    data.append (static_cast<char> (value & 0xffu));
+    data.append (static_cast<char> ((value >> 8) & 0xffu));
+    data.append (static_cast<char> ((value >> 16) & 0xffu));
+    data.append (static_cast<char> ((value >> 24) & 0xffu));
+  }
+
+  quint16 hrd_read_le16 (QByteArray const& data, qsizetype offset)
+  {
+    auto const * bytes = reinterpret_cast<unsigned char const *> (data.constData ());
+    return static_cast<quint16> (bytes[offset])
+         | static_cast<quint16> (bytes[offset + 1] << 8);
+  }
+
+  quint32 hrd_read_le32 (QByteArray const& data, qsizetype offset)
+  {
+    auto const * bytes = reinterpret_cast<unsigned char const *> (data.constData ());
+    return static_cast<quint32> (bytes[offset])
+         | (static_cast<quint32> (bytes[offset + 1]) << 8)
+         | (static_cast<quint32> (bytes[offset + 2]) << 16)
+         | (static_cast<quint32> (bytes[offset + 3]) << 24);
+  }
+
+  QByteArray hrd_v5_encode_message (QString const& payload)
+  {
+    auto const payload_bytes = static_cast<quint32> ((payload.size () + 1) * 2);
+    auto const packet_size = static_cast<quint32> (hrd_v5_header_size) + payload_bytes;
+
+    QByteArray message;
+    message.reserve (static_cast<qsizetype> (packet_size));
+    hrd_append_le32 (message, packet_size);
+    hrd_append_le32 (message, hrd_v5_magic_1);
+    hrd_append_le32 (message, hrd_v5_magic_2);
+    hrd_append_le32 (message, 0u); // checksum, unused by HRD
+
+    for (auto const ch : payload)
+      {
+        hrd_append_le16 (message, ch.unicode ());
+      }
+    hrd_append_le16 (message, 0u);
+    return message;
+  }
+
+  bool hrd_v5_has_valid_header (QByteArray const& packet)
+  {
+    return packet.size () >= hrd_v5_header_size
+        && hrd_read_le32 (packet, 4) == hrd_v5_magic_1
+        && hrd_read_le32 (packet, 8) == hrd_v5_magic_2;
+  }
+
+  quint32 hrd_v5_packet_size (QByteArray const& packet)
+  {
+    return hrd_read_le32 (packet, 0);
+  }
+
+  QString hrd_v5_decode_payload (QByteArray const& packet, quint32 packet_size)
+  {
+    auto const payload_bytes = static_cast<qsizetype> (packet_size) - hrd_v5_header_size;
+    auto const payload_chars = payload_bytes / 2;
+    QString result;
+    result.reserve (static_cast<int> (payload_chars));
+    for (qsizetype i = 0; i < payload_chars; ++i)
+      {
+        auto const code_unit = hrd_read_le16 (packet, hrd_v5_header_size + i * 2);
+        if (0u == code_unit)
+          {
+            break;
+          }
+        result.append (QChar {code_unit});
+      }
+    return result;
+  }
 
   bool is_startup_probe (QString const& cmd)
   {
@@ -137,48 +212,6 @@ void HRDTransceiver::register_transceivers (logger_type *,
 {
   (*registry)[HRD_transceiver_name] = TransceiverFactory::Capabilities (id, TransceiverFactory::Capabilities::network, true, true /* maybe */);
 }
-
-struct HRDMessage
-{
-  // Placement style new overload for outgoing messages that does the
-  // construction too.
-  static void * operator new (size_t size, QString const& payload)
-  {
-    size += sizeof (QChar) * (payload.size () + 1); // space for terminator too
-    HRDMessage * storage (reinterpret_cast<HRDMessage *> (new char[size]));
-    storage->size_ = size ;
-    ushort const * pl (payload.utf16 ());
-    std::copy (pl, pl + payload.size () + 1, storage->payload_); // copy terminator too
-    storage->magic_1_ = magic_1_value_;
-    storage->magic_2_ = magic_2_value_;
-    storage->checksum_ = 0;
-    return storage;
-  }
-
-  // Placement style new overload for incoming messages that does the
-  // construction too.
-  //
-  // No memory allocation here.
-  static void * operator new (size_t /* size */, QByteArray const& message)
-  {
-    // Nasty const_cast here to avoid copying the message buffer.
-    return const_cast<HRDMessage *> (reinterpret_cast<HRDMessage const *> (message.data ()));
-  }
-
-  void operator delete (void * p, size_t)
-  {
-    delete [] reinterpret_cast<char *> (p); // Mirror allocation in operator new above.
-  }
-
-  quint32 size_;
-  qint32 magic_1_;
-  qint32 magic_2_;
-  qint32 checksum_;            // Apparently not used.
-  QChar payload_[0];           // UTF-16 (which is wchar_t on Windows)
-
-  static qint32 constexpr magic_1_value_ = 0x1234ABCD;
-  static qint32 constexpr magic_2_value_ = 0xABCD1234;
-};
 
 HRDTransceiver::HRDTransceiver (logger_type * logger
                                 , std::unique_ptr<TransceiverBase> wrapped
@@ -1364,13 +1397,13 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
     }
   else
     {
-      QScopedPointer<HRDMessage> message {new (wire_command) HRDMessage};
-      if (!write_to_port (reinterpret_cast<char const *> (message.data ()), message->size_))
+      auto const message = hrd_v5_encode_message (wire_command);
+      if (!write_to_port (message.constData (), message.size ()))
         {
           CAT_ERROR ("failed to write command" << cmd << "to HRD");
           hrd_diag (QStringLiteral ("#%1 write failed proto=v5 bytes=%2 state=%3 error=%4 cmd='%5'")
                     .arg (QString::number (sequence))
-                    .arg (message->size_)
+                    .arg (message.size ())
                     .arg (hrd_socket_state_name (hrd_))
                     .arg (hrd_->errorString ())
                     .arg (hrd_preview (wire_command)));
@@ -1383,7 +1416,7 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
         {
           hrd_diag (QStringLiteral ("#%1 wrote proto=v5 bytes=%2")
                     .arg (QString::number (sequence))
-                    .arg (message->size_));
+                    .arg (message.size ()));
         }
     }
 
@@ -1416,22 +1449,20 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
     }
   else
     {
-      qsizetype const header_size = static_cast<qsizetype> (offsetof (HRDMessage, payload_));
-      while (buffer.size () < header_size)
+      while (buffer.size () < hrd_v5_header_size)
         {
           if (log_command)
             {
               hrd_diag (QStringLiteral ("#%1 partial v5 header bytes=%2/%3 hex=%4")
                         .arg (QString::number (sequence))
                         .arg (buffer.size ())
-                        .arg (header_size)
+                        .arg (hrd_v5_header_size)
                         .arg (hrd_hex_preview (buffer)));
             }
           buffer += read_reply (cmd, sequence);
         }
 
-      HRDMessage const * reply {new (buffer) HRDMessage};
-      if (reply->magic_1_value_ != reply->magic_1_ || reply->magic_2_value_ != reply->magic_2_)
+      if (!hrd_v5_has_valid_header (buffer))
         {
           CAT_ERROR (cmd << "invalid reply header");
           hrd_diag (QStringLiteral ("#%1 invalid v5 header bytes=%2 hex=%3 cmd='%4'")
@@ -1445,14 +1476,15 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
               };
         }
 
-      if (reply->size_ < static_cast<quint32> (header_size)
-          || reply->size_ > static_cast<quint32> (hrd_max_reply_bytes))
+      auto packet_size = hrd_v5_packet_size (buffer);
+      if (packet_size < static_cast<quint32> (hrd_v5_header_size)
+          || packet_size > static_cast<quint32> (hrd_max_reply_bytes))
         {
-          CAT_ERROR (cmd << "invalid reply size" << reply->size_);
+          CAT_ERROR (cmd << "invalid reply size" << packet_size);
           hrd_diag (QStringLiteral ("#%1 invalid v5 size=%2 header=%3 max=%4 cmd='%5'")
                     .arg (QString::number (sequence))
-                    .arg (reply->size_)
-                    .arg (header_size)
+                    .arg (packet_size)
+                    .arg (hrd_v5_header_size)
                     .arg (hrd_max_reply_bytes)
                     .arg (hrd_preview (wire_command)));
           throw error {
@@ -1462,27 +1494,19 @@ QString HRDTransceiver::send_command (QString const& cmd, bool prepend_context, 
         }
 
       // keep reading until expected size arrives
-      while (buffer.size () < static_cast<qsizetype> (reply->size_))
+      while (buffer.size () < static_cast<qsizetype> (packet_size))
         {
           if (log_command)
             {
               hrd_diag (QStringLiteral ("#%1 partial v5 packet bytes=%2/%3")
                         .arg (QString::number (sequence))
                         .arg (buffer.size ())
-                        .arg (reply->size_));
+                        .arg (packet_size));
             }
           buffer += read_reply (cmd, sequence);
-          reply = new (buffer) HRDMessage;
         }
 
-      auto const payload_bytes = static_cast<qsizetype> (reply->size_) - header_size;
-      auto const payload_chars = payload_bytes / static_cast<qsizetype> (sizeof (QChar));
-      qsizetype text_chars {0};
-      while (text_chars < payload_chars && !reply->payload_[text_chars].isNull ())
-        {
-          ++text_chars;
-        }
-      result = QString {reply->payload_, text_chars}; // this is not a memory leak (honest!)
+      result = hrd_v5_decode_payload (buffer, packet_size);
     }
   CAT_TRACE (cmd << " ->" << result);
   if (log_command || command_timer.elapsed () >= 250)

@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "tools/hrd_probe.py"
+      - "tools/hrd_tap.py"
       - ".github/workflows/build-hrd-probe-windows.yml"
 
 permissions:
@@ -41,14 +42,28 @@ jobs:
             tools/hrd_probe.py
           Get-ChildItem dist
 
+      - name: Build hrd_tap.exe
+        shell: pwsh
+        run: |
+          pyinstaller `
+            --onefile `
+            --console `
+            --name hrd_tap `
+            --clean `
+            tools/hrd_tap.py
+          Get-ChildItem dist
+
       - name: Smoke test help
         shell: pwsh
         run: |
           .\dist\hrd_probe.exe --help
+          .\dist\hrd_tap.exe --help
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: hrd-probe-windows-x64
+          name: hrd-diagnostics-windows-x64
           if-no-files-found: error
-          path: dist/hrd_probe.exe
+          path: |
+            dist/hrd_probe.exe
+            dist/hrd_tap.exe

@@ -1289,6 +1289,13 @@ bool PanadapterItem::gpuFftSupported(QString* reason) const
         return false;
     }
     auto api = rif->graphicsApi();
+    if (api == QSGRendererInterface::OpenGL
+        && !qEnvironmentVariableIsSet("DECODIUM_ENABLE_EXPERIMENTAL_OPENGL_GPU_PANADAPTER_FFT")) {
+        if (reason)
+            *reason = QStringLiteral(
+                "OpenGL GPU FFT disabled by default; set DECODIUM_ENABLE_EXPERIMENTAL_OPENGL_GPU_PANADAPTER_FFT=1 to force it");
+        return false;
+    }
     if (!QSGRendererInterface::isApiRhiBased(api)
         || api == QSGRendererInterface::Software
         || api == QSGRendererInterface::Null) {

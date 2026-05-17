@@ -5,6 +5,37 @@
 #include <QHostInfo>
 #include <QString>
 
+namespace
+{
+  quint16 parse_service_port (QString const& text)
+  {
+    bool ok {false};
+    auto const port = text.trimmed ().toUInt (&ok);
+    if (!ok || port > 65535u)
+      {
+        throw std::runtime_error {"network server lookup error: invalid port"};
+      }
+    return static_cast<quint16> (port);
+  }
+
+  bool is_decimal_port (QString const& text)
+  {
+    auto const trimmed = text.trimmed ();
+    if (trimmed.isEmpty ())
+      {
+        return false;
+      }
+    for (auto const ch : trimmed)
+      {
+        if (!ch.isDigit ())
+          {
+            return false;
+          }
+      }
+    return true;
+  }
+}
+
 std::tuple<QHostAddress, quint16>
 network_server_lookup (QString query
 		       , quint16 default_service_port
@@ -25,24 +56,37 @@ network_server_lookup (QString query
         {
           // assume IPv6 combined address/port syntax [<address>]:<port>
           auto close_bracket_index = query.lastIndexOf (']');
+          if (close_bracket_index < 0)
+            {
+              throw std::runtime_error {"network server lookup error: invalid bracketed host"};
+            }
           host_name = query.mid (1, close_bracket_index - 1);
           port_colon_index = query.indexOf (':', close_bracket_index);
         }
       else
         {
           port_colon_index = query.lastIndexOf (':');
-          host_name = query.left (port_colon_index);
+          if (port_colon_index >= 0)
+            {
+              host_name = query.left (port_colon_index);
+            }
+          else
+            {
+              if (is_decimal_port (query))
+                {
+                  service_port = parse_service_port (query);
+                }
+              else
+                {
+                  host_name = query;
+                }
+            }
         }
       host_name = host_name.trimmed ();
 
       if (port_colon_index >= 0)
         {
-          bool ok;
-          service_port = query.mid (port_colon_index + 1).trimmed ().toUShort (&ok);
-          if (!ok)
-            {
-              throw std::runtime_error {"network server lookup error: invalid port"};
-            }
+          service_port = parse_service_port (query.mid (port_colon_index + 1));
         }
     }
 
