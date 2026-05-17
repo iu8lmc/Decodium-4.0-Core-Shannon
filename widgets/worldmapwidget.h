@@ -47,6 +47,12 @@ public:
 
 signals:
   void contactClicked(QString const& call, QString const& grid);
+  // 1.0.214 — emit ad ogni tick del m_animationTimer interno cosi' il
+  // QQuickPaintedItem host (WorldMapItem) puo' propagare la richiesta di
+  // repaint al scene-graph. Senza questo segnale l'animation phase del
+  // widget legacy avanzerebbe ma il QQuickItem non lo saprebbe mai
+  // (greyline pulse + tx travel arc invisibili in QML).
+  void repaintRequested();
 
 protected:
   void mousePressEvent(QMouseEvent *event) override;

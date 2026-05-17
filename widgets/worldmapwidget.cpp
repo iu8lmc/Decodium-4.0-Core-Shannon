@@ -232,6 +232,11 @@ WorldMapWidget::WorldMapWidget(QWidget * parent)
         m_backgroundCache = QPixmap();
     }
     m_animationPhase = std::fmod(m_animationPhase + 0.006, 1.0);
+    // 1.0.214 — emit signal cosi' il QQuickItem host (WorldMapItem) puo'
+    // propagare al scene-graph (via markDirty -> update() throttled).
+    // update() interno resta per il caso d'uso standalone (widget mostrato
+    // come QWidget normale fuori da QQuickPaintedItem).
+    emit repaintRequested();
     update();
   });
   m_animationTimer.start();
@@ -647,11 +652,16 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
   painter.drawRoundedRect(frame, 8, 8);
 
   QRectF mapBounds = frame.adjusted(2, 2, -2, -2);
-  QPainterPath clipPath;
-  clipPath.addRoundedRect(mapBounds, 7, 7);
 
+  // 1.0.214 — clipRect rettangolare invece di clipPath(roundedRect).
+  // setClipPath con anti-aliasing genera una mask CPU-pesante ad ogni
+  // paint = ~5-15ms per paint su map 2174x1113. Il QML Rectangle che
+  // contiene il WorldMapItem ha gia' clip:true + radius:4 -> i corners
+  // arrotondati esterni sono gestiti dallo scene-graph GPU. Quindi il
+  // clipping interno con rounded corners e' ridondante; basta un
+  // rectangle clip per non oltrepassare il frame.
   painter.save();
-  painter.setClipPath(clipPath);
+  painter.setClipRect(mapBounds);
 
   // 1.0.213 — Background cache layered: earth + overlay + grid rebuildati
   // SOLO se viewport o size sono cambiati. In idle (viewport settled), il

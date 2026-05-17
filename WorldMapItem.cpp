@@ -55,6 +55,11 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
 
     connect(&m_widget, &WorldMapWidget::contactClicked,
             this, &WorldMapItem::contactClicked);
+    // 1.0.214 — propaga l'animation tick dal widget legacy al QQuickItem
+    // (greyline pulse, tx travel arc, contact age fade). markDirty fa
+    // throttle vero: max 1 paint per m_repaintIntervalMs.
+    connect(&m_widget, &WorldMapWidget::repaintRequested,
+            this, &WorldMapItem::markDirty);
 
     connect(this, &QQuickItem::widthChanged, this, [this]() {
         syncWidgetSize();
@@ -86,11 +91,20 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
 
 void WorldMapItem::markDirty()
 {
+    // 1.0.214 — throttle vero. Pre-1.0.214 markDirty() chiamava update()
+    // immediato ad ogni invocazione: durante burst FT8 (5-25 decode per
+    // slot ognuno scatena markDirty via addContact) lo scene-graph
+    // schedulava paint() ad ogni frame = 60 widget.render() al secondo
+    // = scattosita' anche con GPU+FBO+cache.
+    //
+    // Ora: solo il primo markDirty di un ciclo "clean" schedula update()
+    // immediato (preserva 1.0.210 first-paint reattivo). Markup successivi
+    // settano m_dirty=true ma non re-update: il prossimo tick del
+    // m_repaintTimer (80/160/333ms) prendera' il clear+update unico.
+    // Rate paint cap effettivo: 1 / m_repaintIntervalMs.
+    bool const wasDirty = m_dirty;
     m_dirty = true;
-    // 1.0.210 — Se visibile, chiama subito update() per primo paint
-    // istantaneo. Il timer m_repaintIntervalMs resta come coalesce backup
-    // per evitare burst quando arrivano molti addContact ravvicinati.
-    if (isVisible()) {
+    if (isVisible() && !wasDirty) {
         update();
     }
 }
