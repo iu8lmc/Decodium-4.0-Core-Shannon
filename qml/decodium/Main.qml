@@ -235,7 +235,7 @@ ApplicationWindow {
     Component.onCompleted: {
         startupCompletedStartedMs = Date.now()
         startupLog("Component.onCompleted begin")
-        callerQueuePanelVisible = !!(bridge && bridge.foxMode)
+        callerQueuePanelVisible = !!safeBridgeSetting("uiCallerQueuePanelVisible", !!(bridge && bridge.foxMode))
         startupLog("fox/caller queue state restored")
         decodePanelLayoutSaved = !!safeBridgeSetting("uiDecodePanelsLayoutSaved", false)
         savedPeriod1PanelWidth = safeStoredPanelWidth(safeBridgeSetting("uiFullSpectrumPanelWidth", 400), 400, 360)
@@ -383,12 +383,14 @@ ApplicationWindow {
         bridge.saveWindowState("rxFreqFloatingWindow", Math.round(rxFreqFloatingWindow.x), Math.round(rxFreqFloatingWindow.y), Math.round(rxFreqFloatingWindow.width), Math.round(rxFreqFloatingWindow.height), rxFreqDetached, rxFreqMinimized)
         bridge.saveWindowState("txPanelFloatingWindow", Math.round(txPanelFloatingWindow.x), Math.round(txPanelFloatingWindow.y), Math.round(txPanelFloatingWindow.width), Math.round(txPanelFloatingWindow.height), txPanelDetached, txPanelMinimized)
         bridge.saveWindowState("liveMapFloatingWindow", Math.round(liveMapFloatingWindow.x), Math.round(liveMapFloatingWindow.y), Math.round(liveMapFloatingWindow.width), Math.round(liveMapFloatingWindow.height), liveMapDetached, false)
+        bridge.saveWindowState("decoSyncMonitorWindow", Math.round(decoSyncMonitorWindow.x), Math.round(decoSyncMonitorWindow.y), Math.round(decoSyncMonitorWindow.width), Math.round(decoSyncMonitorWindow.height), false, decoSyncMonitorWindow.visibility === Window.Minimized)
     }
 
     // Salva impostazioni bridge al close
     onClosing: function(close) {
         saveTimer.stop()
         windowStateSaveTimer.stop()
+        applicationClosing = true
         persistSettingsDialogIfOpen()
         persistWindowLayouts()
         bridge.saveSettings()
@@ -633,6 +635,7 @@ ApplicationWindow {
     property bool txPanelMinimized: false
     property bool liveMapDetached: false
     property bool liveMapMinimized: false
+    property bool applicationClosing: false
     onWaterfallDetachedChanged: scheduleWindowStateSave()
     onWaterfallMinimizedChanged: scheduleWindowStateSave()
     onLogWindowDetachedChanged: scheduleWindowStateSave()
@@ -663,13 +666,14 @@ ApplicationWindow {
     // === GAP 3 — Nuovi pannelli (A3, B9, A4, C14) ===
     property bool timeSyncPanelVisible:       !!bridge.getSetting("uiTimeSyncPanelVisible", false)
     property bool activeStationsPanelVisible: !!bridge.getSetting("uiActiveStationsPanelVisible", false)
-    property bool callerQueuePanelVisible:    false
+    property bool callerQueuePanelVisible:    !!bridge.getSetting("uiCallerQueuePanelVisible", false)
     property bool astroPanelVisible:          !!bridge.getSetting("uiAstroPanelVisible", false)
-    property bool dxClusterPanelVisible:      false
+    property bool dxClusterPanelVisible:      !!bridge.getSetting("uiDxClusterPanelVisible", false)
     property bool dxClusterToolbarVisible:    !!bridge.getSetting("uiDxClusterToolbarVisible", true)
     property bool pskReporterToolbarVisible: !!bridge.getSetting("uiPskReporterToolbarVisible", true)
     property bool asyncIconVisible:          !!bridge.getSetting("uiAsyncIconVisible", true)
     property bool liveMapPanelVisible:        bridge.getSetting("WorldMapDisplayed", true)
+    property bool decoSyncMonitorVisible:     !!bridge.getSetting("uiDecoSyncMonitorVisible", false)
     property string uiLanguage: normalizeUiLanguage(String(bridge.getSetting("UILanguage", "en") || "en"))
     readonly property var uiLanguageOptions: [
         { code: "en", name: "English" },
@@ -739,7 +743,10 @@ ApplicationWindow {
     }
     onTimeSyncPanelVisibleChanged: bridge.setSetting("uiTimeSyncPanelVisible", timeSyncPanelVisible)
     onActiveStationsPanelVisibleChanged: bridge.setSetting("uiActiveStationsPanelVisible", activeStationsPanelVisible)
+    onCallerQueuePanelVisibleChanged: bridge.setSetting("uiCallerQueuePanelVisible", callerQueuePanelVisible)
     onAstroPanelVisibleChanged: bridge.setSetting("uiAstroPanelVisible", astroPanelVisible)
+    onDxClusterPanelVisibleChanged: bridge.setSetting("uiDxClusterPanelVisible", dxClusterPanelVisible)
+    onDecoSyncMonitorVisibleChanged: bridge.setSetting("uiDecoSyncMonitorVisible", decoSyncMonitorVisible)
     function syncLiveMapFloatingVisibility(activate) {
         if (typeof liveMapFloatingWindow === "undefined" || !liveMapFloatingWindow)
             return
@@ -814,13 +821,16 @@ ApplicationWindow {
 	        rxFreqFloatingWindow.hide()
 	        Qt.callLater(mainWindow.restoreDecodePanelWidths)
 	    }
-	    onLiveMapPanelVisibleChanged: Qt.callLater(function() {
-	        mainWindow.syncLiveMapFloatingVisibility(false)
-	        if (mainWindow.decodePanelLayoutSaved)
-            mainWindow.restoreDecodePanelWidths()
-        else if (typeof period1Panel !== "undefined" && period1Panel)
-            period1Panel.applyCenterSplit()
-    })
+    onLiveMapPanelVisibleChanged: {
+        bridge.setSetting("WorldMapDisplayed", liveMapPanelVisible)
+        Qt.callLater(function() {
+            mainWindow.syncLiveMapFloatingVisibility(false)
+            if (mainWindow.decodePanelLayoutSaved)
+                mainWindow.restoreDecodePanelWidths()
+            else if (typeof period1Panel !== "undefined" && period1Panel)
+                period1Panel.applyCenterSplit()
+        })
+    }
 
     // === Dialoghi ===
     Loader { id: colorDialogLoader; source: "../dialogs/ColorHighlightingDialog.qml"; active: false }
@@ -3506,6 +3516,63 @@ ApplicationWindow {
                     ToolTip.visible: dxcBtnMA.containsMouse
                     ToolTip.text: qsTr("DX Cluster\nLeft-click: open and connect\nRight-click: disconnect")
                     ToolTip.delay: 400
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                // Decode filters bypass toggle
+                Rectangle {
+                    width: 86
+                    height: 74
+                    radius: 8
+                    color: bridge.filtersBypassed
+                           ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.26)
+                           : bypassFiltersMA.containsMouse
+                             ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.14)
+                             : Qt.rgba(bgDeep.r, bgDeep.g, bgDeep.b, 0.85)
+                    border.color: bridge.filtersBypassed ? accentOrange
+                                  : bypassFiltersMA.containsMouse ? accentOrange : glassBorder
+                    border.width: bridge.filtersBypassed || bypassFiltersMA.containsMouse ? 2 : 1
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "⌀"
+                            font.pixelSize: 24
+                            font.bold: true
+                            color: bridge.filtersBypassed ? accentOrange : textSecondary
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Bypass"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: bridge.filtersBypassed ? accentOrange : textSecondary
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "Filters"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: bridge.filtersBypassed ? accentOrange : textSecondary
+                        }
+                    }
+
+                    MouseArea {
+                        id: bypassFiltersMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: bridge.filtersBypassed = !bridge.filtersBypassed
+                    }
+
+                    ToolTip.visible: bypassFiltersMA.containsMouse
+                    ToolTip.text: bridge.filtersBypassed
+                                  ? qsTr("Disable filter bypass")
+                                  : qsTr("Bypass CQ/My Call and setup decode filters")
+                    ToolTip.delay: 500
 
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
@@ -7137,6 +7204,22 @@ NumberAnimation {
 
         // ===== DECODE FILTERS =====
         MenuItem {
+            text: (bridge.filtersBypassed ? "✓ " : "☐ ") + qsTr("Bypass Filters")
+            onTriggered: bridge.filtersBypassed = !bridge.filtersBypassed
+
+            background: Rectangle {
+                color: parent.highlighted ? Qt.rgba(accentOrange.r, accentOrange.g, accentOrange.b, 0.18) : "transparent"
+                radius: 6
+            }
+            contentItem: Text {
+                text: parent.text
+                font.pixelSize: 12
+                color: bridge.filtersBypassed ? accentOrange : textSecondary
+                leftPadding: 10
+            }
+        }
+
+        MenuItem {
             text: (bridge.filterCqOnly ? "✓ " : "☐ ") + qsTr("CQ Only")
             onTriggered: bridge.filterCqOnly = !bridge.filterCqOnly
 
@@ -10551,11 +10634,30 @@ NumberAnimation {
         height: 380
         minimumWidth: 360
         minimumHeight: 260
-        visible: false
+        visible: mainWindow.decoSyncMonitorVisible
         flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
              | Qt.WindowCloseButtonHint
         title: "DecoSyncTime Monitor"
         color: "transparent"
+
+        Component.onCompleted: {
+            mainWindow.restoreFloatingWindowState(decoSyncMonitorWindow, "decoSyncMonitorWindow", "", "")
+            if (mainWindow.decoSyncMonitorVisible)
+                decoSyncMonitorWindow.show()
+        }
+        onXChanged: mainWindow.scheduleWindowStateSave()
+        onYChanged: mainWindow.scheduleWindowStateSave()
+        onWidthChanged: mainWindow.scheduleWindowStateSave()
+        onHeightChanged: mainWindow.scheduleWindowStateSave()
+        onVisibilityChanged: {
+            if (visibility === Window.Minimized)
+                mainWindow.scheduleWindowStateSave()
+        }
+        onClosing: function(close) {
+            if (!mainWindow.applicationClosing)
+                mainWindow.decoSyncMonitorVisible = false
+            close.accepted = true
+        }
 
         DecoSyncPanel {
             anchors.fill: parent
@@ -10563,6 +10665,7 @@ NumberAnimation {
     }
 
     function openDecoSyncMonitor() {
+        decoSyncMonitorVisible = true
         decoSyncMonitorWindow.show()
         decoSyncMonitorWindow.raise()
         decoSyncMonitorWindow.requestActivate()
