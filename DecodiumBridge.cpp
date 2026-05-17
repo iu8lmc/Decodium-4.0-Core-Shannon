@@ -184,6 +184,19 @@ static void deleteBufferLater(QBuffer *buffer, QObject *context)
     buffer->deleteLater();
 }
 
+// 1.0.217 — Lifetime parking allineato per platform.
+// Mac: 30s (workaround stopAudioUnit crash CoreAudio).
+// Windows: 8s (oltre 1 slot FT2 7.5s ma sotto 2 slot, max ~2 sink parked
+// contemporanei. Pre-1.0.217 era 30s hardcoded come Mac, ma con park
+// abilitato su Windows da 1.0.216 si accumulava 4 sink/slot FT2 =
+// memory leak temporaneo + WASAPI session pressure).
+static constexpr int kRetireAudioSinkParkMs =
+#if defined(Q_OS_WIN)
+    8000;
+#else
+    30000;
+#endif
+
 static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& reason)
 {
     if (!sink) {
@@ -231,8 +244,9 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
             buffer->close();
         }
 
-        bridgeLog(QStringLiteral("TX CoreAudio sink retired without immediate stop/suspend: reason=%1").arg(reason));
-        QTimer::singleShot(30000, context, [sinkGuard, bufferGuard, reason]() {
+        bridgeLog(QStringLiteral("TX audio sink parked: reason=%1 lifetimeMs=%2")
+                      .arg(reason).arg(kRetireAudioSinkParkMs));
+        QTimer::singleShot(kRetireAudioSinkParkMs, context, [sinkGuard, bufferGuard, reason]() {
             if (sinkGuard) {
                 sinkGuard->disconnect();
                 if (sinkGuard->state() == QAudio::StoppedState) {
@@ -240,14 +254,30 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
                     if (bufferGuard) {
                         bufferGuard->deleteLater();
                     }
-                    bridgeLog(QStringLiteral("TX CoreAudio sink deferred delete released: reason=%1").arg(reason));
+                    bridgeLog(QStringLiteral("TX audio sink deferred delete released: reason=%1").arg(reason));
                     return;
                 }
+                // 1.0.217 — Su Windows forziamo stop+delete dopo il lifetime.
+                // L'utente ha gia' avuto la safe-window post-TX (8s); attendere
+                // ulteriormente puo' lasciare sink WASAPI in IdleState con un
+                // session aperto = pressure su resources WASAPI.
+#if defined(Q_OS_WIN)
+                sinkGuard->stop();
+                sinkGuard->deleteLater();
+                if (bufferGuard) {
+                    bufferGuard->deleteLater();
+                }
+                bridgeLog(QStringLiteral("TX audio sink parked stop+delete after lifetime: reason=%1 state=%2")
+                              .arg(reason)
+                              .arg(audioStateToString(sinkGuard->state())));
+                return;
+#else
                 bridgeLog(QStringLiteral("TX CoreAudio sink parked to avoid Qt stopAudioUnit crash: reason=%1 state=%2 err=%3")
                               .arg(reason)
                               .arg(audioStateToString(sinkGuard->state()))
                               .arg(audioErrorToString(sinkGuard->error())));
                 return;
+#endif
             }
             if (bufferGuard) {
                 bufferGuard->deleteLater();
