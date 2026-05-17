@@ -42,6 +42,14 @@ private:
   bool do_pwr2_ = false;
   bool do_swr_ = false;
 
+  // 1.0.204 — throttle telemetry polling: SWR/PWR add ~300ms per poll on slow
+  // rigs (FT-991 38400 baud). Polling at full 1Hz blocks the worker thread
+  // for ~470ms which propagates as main-thread stall when sendStateSync runs
+  // concurrently. Skip telemetry on N-1 ticks of every N (default 4) when
+  // any telemetry channel is enabled.
+  static constexpr int kTelemetrySkipRatio_ = 4;
+  int telemetry_tick_ = 0;
+
   class impl;
   pimpl<impl> m_;
 };

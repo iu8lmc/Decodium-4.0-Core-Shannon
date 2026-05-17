@@ -1333,6 +1333,29 @@ void HamlibTransceiver::do_poll ()
      }
    }
 
+  // 1.0.204 — throttle PWR/SWR polling: each rig_get_level RIG_LEVEL_SWR /
+  // RFPOWER_METER_WATTS takes ~150ms on Yaesu FT-991 at 38400 baud. Running
+  // both every tick made do_poll() ~470ms, which surfaced as main-thread
+  // stall whenever sendStateSync was issued concurrently. Always run
+  // telemetry when actually transmitting (so meters stay responsive), and
+  // skip 3 out of 4 RX ticks otherwise — meters can also be updated by
+  // schedule_transmit_telemetry_burst when PTT transitions.
+  bool const tx_active_for_meters = ptt_on_ || state ().ptt ();
+  bool const telemetry_enabled = do_pwr_ || do_pwr2_ || do_swr_;
+  if (telemetry_enabled && !tx_active_for_meters)
+    {
+      ++telemetry_tick_;
+      if (telemetry_tick_ < kTelemetrySkipRatio_)
+        {
+          return;
+        }
+      telemetry_tick_ = 0;
+    }
+  else
+    {
+      telemetry_tick_ = 0;
+    }
+
   poll_transmit_telemetry (false);
 }
 

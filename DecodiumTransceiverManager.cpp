@@ -1789,10 +1789,11 @@ void DecodiumTransceiverManager::setRigPtt(bool on)
         return;
     }
     d->desired.ptt(on);
-    if (on)
-        sendState(d.get());
-    else
-        sendStateSync(d.get());
+    // 1.0.204 — PTT off non e' time-critical (lo stato del rig non e' letto
+    // immediatamente dal chiamante). Usare sendState (Queued) per non bloccare
+    // il main thread se il worker e' nel mezzo di do_poll (~150-470ms su
+    // FT-991 38400 baud). Il PTT on resta async via sendState gia' di suo.
+    sendState(d.get());
 }
 
 void DecodiumTransceiverManager::setRigMode(const QString& mode)
@@ -1807,10 +1808,9 @@ void DecodiumTransceiverManager::setRigAudio(bool on, double periodSeconds, int 
     d->desired.period(qBound(0.1, periodSeconds, 1800.0));
     d->desired.blocksize(qBound(256, blockSize, 48000));
     d->desired.audio(on);
-    if (on)
-        sendState(d.get());
-    else
-        sendStateSync(d.get());
+    // 1.0.204 — Audio off non richiede attesa sincrona; il main puo'
+    // proseguire senza bloccarsi sul worker thread CAT.
+    sendState(d.get());
 }
 
 void DecodiumTransceiverManager::setRigTune(bool on)
@@ -1844,7 +1844,9 @@ void DecodiumTransceiverManager::stopRigTxAudio(bool quick)
     d->desired.online(true);
     d->desired.quick(quick);
     d->desired.tx_audio(false);
-    sendStateSync(d.get());
+    // 1.0.204 — Stop TX audio non e' time-critical (il modulatore si ferma
+    // localmente prima di questo invio). Async per non bloccare il main.
+    sendState(d.get());
 }
 
 // ── refreshPorts ──────────────────────────────────────────────────────────
