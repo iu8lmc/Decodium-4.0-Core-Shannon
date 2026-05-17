@@ -140,7 +140,13 @@ void WorldMapItem::paint(QPainter* painter)
     }
 
     syncWidgetSize();
-    m_widget.render(painter, QPoint(), QRegion(), QWidget::DrawChildren);
+    // 1.0.211 — BUG FIX: passare solo QWidget::DrawChildren a render()
+    // significava "rendi SOLO i children, non il widget self". WorldMapWidget
+    // non ha children, dipinge tutto in paintEvent → render disegnava NULLA
+    // → mappa invisibile a schermo (bug presente dalle prime versioni
+    // QQuickPaintedItem). Default flags (no arg) = DrawWindowBackground
+    // | DrawChildren | IgnoreMask: rende il widget self correttamente.
+    m_widget.render(painter);
 }
 
 void WorldMapItem::mousePressEvent(QMouseEvent* event)
