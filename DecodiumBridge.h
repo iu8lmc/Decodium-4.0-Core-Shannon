@@ -1523,6 +1523,14 @@ private:
     int m_audioOutputChannel {0};
     QVariantList m_decodeList;
     QVariantList m_rxDecodeList;
+    // 1.0.206 — Cap re-introduced (era 200 in 1.0.155, perso da merge upstream).
+    // Senza cap, ogni rebuildBandActivityModel/rebuildRxDecodeModel itera O(N)
+    // su lista che cresce indefinitamente → CPU saturo + RAM crescente quando
+    // Decodium gira per ore. Cap conservativo 500 (contesti FT8 affollati).
+    // m_rxDecodeList condivide stesso cap (QSO scope, raramente >50 entries).
+    static constexpr int kDecodeListCap = 500;
+    static constexpr int kRxDecodeListCap = 200;
+    void trimDecodeListsIfNeeded();
     // 1.0.142: throttle per decodeListChanged signal nei path high-frequency
     // (FT2 async 5-20Hz, FT8 ready bursts, legacy mirror replace). Riduce
     // rebuild ListView QML da ~20/sec a ~4/sec → fluidità percepita.

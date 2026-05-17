@@ -4122,6 +4122,7 @@ void DecodiumBridge::setSmoothDecodeFlow(bool v)
         }
         m_pendingDecodeReleaseQueue.clear();
         if (m_decodeReleaseTimer) m_decodeReleaseTimer->stop();
+        trimDecodeListsIfNeeded();  // 1.0.206 cap
         emitDecodeListChangedThrottled();
     }
 }
@@ -4203,6 +4204,21 @@ void DecodiumBridge::setUiStyle(QString const& v)
 void DecodiumBridge::appendDecodeMapToList(QVariantMap const& entry)
 {
     m_decodeList.append(QVariant(entry));
+    trimDecodeListsIfNeeded();
+}
+
+// 1.0.206 — Cap m_decodeList/m_rxDecodeList per evitare crescita illimitata.
+// Memory leak storico (cap 200 di 1.0.155 perso da merge upstream): dopo 1h
+// di RX in banda affollata m_decodeList superava 500 entries, ogni rebuild
+// model O(N) saturava CPU. Chiamato dopo ogni append.
+void DecodiumBridge::trimDecodeListsIfNeeded()
+{
+    while (m_decodeList.size() > kDecodeListCap) {
+        m_decodeList.removeFirst();
+    }
+    while (m_rxDecodeList.size() > kRxDecodeListCap) {
+        m_rxDecodeList.removeFirst();
+    }
 }
 
 // 1.0.179 — Drain timer slot: estrae 1-2 entry dalla queue smooth e le
@@ -4220,6 +4236,7 @@ void DecodiumBridge::drainDecodeReleaseQueue()
         m_decodeList.append(QVariant(m_pendingDecodeReleaseQueue.first()));
         m_pendingDecodeReleaseQueue.removeFirst();
     }
+    trimDecodeListsIfNeeded();  // 1.0.206 cap
     emitDecodeListChangedThrottled();
     if (m_pendingDecodeReleaseQueue.isEmpty() && m_decodeReleaseTimer) {
         m_decodeReleaseTimer->stop();
@@ -7351,6 +7368,7 @@ void DecodiumBridge::appendRxDecodeEntry(const QVariantMap& entry)
     }
 
     m_rxDecodeList.append(entry);
+    trimDecodeListsIfNeeded();  // 1.0.206 cap
     coalesceRxPaneTxRows(m_rxDecodeList, m_mode);
     normalizeDecodeEntriesForDisplay(m_rxDecodeList, 1500, m_mode);
     emit rxDecodeListChanged();
@@ -21669,6 +21687,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                 m_decodeList.append(QVariant(e));
             }
             m_pendingDecodeReleaseQueue.clear();
+            trimDecodeListsIfNeeded();  // 1.0.206 cap
             emitDecodeListChangedThrottled();
         }
         m_lastReleaseSerial = static_cast<qint64>(serial);
@@ -21839,6 +21858,7 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
                 m_pendingDecodeReleaseQueue.append(entry);
             } else {
                 m_decodeList.append(QVariant(entry));
+                trimDecodeListsIfNeeded();  // 1.0.206 cap
             }
             appendRxDecodeEntry(entry);
             appendLegacyAllTxtDecodeLine(entry);
@@ -22175,6 +22195,7 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         tryStartWaitPounceFromEntry(entry, m_decodeList, QStringLiteral("ft2-async"));
 
         m_decodeList.append(QVariant(entry));
+        trimDecodeListsIfNeeded();  // 1.0.206 cap
         appendRxDecodeEntry(entry);
         appendLegacyAllTxtDecodeLine(entry);
         // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
@@ -22392,6 +22413,7 @@ void DecodiumBridge::onLegacyJtDecodeReady(quint64 serial, QStringList rows)
           } if (isDupe) continue; }
         tryStartWaitPounceFromEntry(entry, m_decodeList, QStringLiteral("legacy-jt"));
         m_decodeList.append(QVariant(entry));
+        trimDecodeListsIfNeeded();  // 1.0.206 cap
         appendRxDecodeEntry(entry);
         // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
         if (m_decoSyncTime && !entry.value("isTx").toBool()) {
