@@ -47,7 +47,16 @@ Rectangle {
 
     Timer {
         id: rebuildTimer
-        interval: 0
+        // 1.0.209 — Debounce 1s. Era interval:0 (fires next tick) che con
+        // 13 signal del bridge che invocavano scheduleRebuild() (decodeList,
+        // rxDecodeList, transmitting, tuning, dxCall, dxGrid, currentTx,
+        // txEnabled, qsoProgress, autoCqRepeat, mode, settingValue, grid)
+        // significava clearContacts + replayWorldMapFeed (re-itera 500 entries
+        // + addContact ognuno + paint) 2 volte/sec. Mappa mai stabile, "non
+        // si vedeva" perche' sempre in rebuild. Ora rebuild totale solo
+        // quando l'utente apre il pannello o cambia home grid; i nuovi
+        // contact arrivano incrementali via onWorldMapContactAdded.
+        interval: 1000
         repeat: false
         onTriggered: {
             if (!root.engine)
@@ -164,58 +173,40 @@ Rectangle {
             if (root.visible)
                 root.scheduleRebuild()
         }
-        function onDecodeListChanged() {
-            if (root.visible)
-                root.scheduleRebuild()
-        }
-        function onRxDecodeListChanged() {
-            if (root.visible)
-                root.scheduleRebuild()
-        }
+        // 1.0.209 — RIMOSSO: onDecodeListChanged + onRxDecodeListChanged
+        // triggeravano scheduleRebuild() = clearContacts + replayWorldMapFeed
+        // a ogni decode (2/sec). I nuovi contact arrivano gia' incrementali
+        // via onWorldMapContactAdded signal del bridge, no replay full
+        // necessario.
+        //
+        // I signal TX/QSO sotto chiamano solo syncTxState() (cambio target
+        // line lampeggiante, no rebuild): leggera e safe a ogni cambio.
         function onTransmittingChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onTuningChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onDxCallChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onDxGridChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onCurrentTxChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onTxEnabledChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onQsoProgressChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onAutoCqRepeatChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onModeChanged() {
             root.syncTxState()
-            if (root.visible)
-                root.scheduleRebuild()
         }
         function onSettingValueChanged(key, value) {
             if (key === "ShowGreyline" || key === "MapShowGreyline") {

@@ -5,7 +5,11 @@
 
 namespace {
 
-constexpr int kWorldMapRepaintMs = 60;
+// 1.0.209 — Repaint timer ridotto da 60ms (16Hz always-on, ~50% CPU sprecato
+// in idle perche' paint() invocava QWidget::render full su texture 1280x720)
+// a 250ms (4Hz). Combinato con dirty flag: il timer fa update() SOLO se c'e'
+// un cambio pending (m_dirty true). In idle, zero paint.
+constexpr int kWorldMapRepaintMs = 250;
 
 }
 
@@ -30,44 +34,58 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
 
     connect(this, &QQuickItem::widthChanged, this, [this]() {
         syncWidgetSize();
-        update();
+        markDirty();
     });
     connect(this, &QQuickItem::heightChanged, this, [this]() {
         syncWidgetSize();
-        update();
+        markDirty();
     });
     connect(this, &QQuickItem::visibleChanged, this, [this]() {
         if (isVisible()) {
             syncWidgetSize();
-            update();
+            markDirty();
         }
     });
 
     m_repaintTimer.setInterval(kWorldMapRepaintMs);
     connect(&m_repaintTimer, &QTimer::timeout, this, [this]() {
-        if (isVisible()) {
+        // 1.0.209 — Solo se visibile E dirty. Risparmia il 50% CPU in idle
+        // (era timer 60ms always-on che chiamava QWidget::render full anche
+        // quando la mappa non era cambiata).
+        if (isVisible() && m_dirty) {
+            m_dirty = false;
             update();
         }
     });
     m_repaintTimer.start();
 }
 
+void WorldMapItem::markDirty()
+{
+    m_dirty = true;
+    // Se gia' visibile, programma update con un singleShot per non saltare
+    // la prima emission; altrimenti aspetta che timer/visibilita' lo facciano.
+    if (isVisible() && !m_repaintTimer.isActive()) {
+        m_repaintTimer.start();
+    }
+}
+
 void WorldMapItem::setHomeGrid(const QString& grid)
 {
     m_widget.setHomeGrid(grid);
-    update();
+    markDirty();
 }
 
 void WorldMapItem::setGreylineEnabled(bool enabled)
 {
     m_widget.setGreylineEnabled(enabled);
-    update();
+    markDirty();
 }
 
 void WorldMapItem::setDistanceInMiles(bool enabled)
 {
     m_widget.setDistanceInMiles(enabled);
-    update();
+    markDirty();
 }
 
 void WorldMapItem::setTransmitState(bool transmitting,
@@ -76,19 +94,19 @@ void WorldMapItem::setTransmitState(bool transmitting,
                                     const QString& mode)
 {
     m_widget.setTransmitState(transmitting, targetCall, targetGrid, mode);
-    update();
+    markDirty();
 }
 
 void WorldMapItem::clearContacts()
 {
     m_widget.clearContacts();
-    update();
+    markDirty();
 }
 
 void WorldMapItem::downgradeContactToBand(const QString& call)
 {
     m_widget.downgradeContactToBand(call);
-    update();
+    markDirty();
 }
 
 void WorldMapItem::addContact(const QString& call,
@@ -97,7 +115,7 @@ void WorldMapItem::addContact(const QString& call,
                               int role)
 {
     m_widget.addContact(call, sourceGrid, destinationGrid, pathRoleFromInt(role));
-    update();
+    markDirty();
 }
 
 void WorldMapItem::addContactByLonLat(const QString& call,
@@ -110,7 +128,7 @@ void WorldMapItem::addContactByLonLat(const QString& call,
                                 QPointF(sourceLon, sourceLat),
                                 destinationGrid,
                                 pathRoleFromInt(role));
-    update();
+    markDirty();
 }
 
 void WorldMapItem::paint(QPainter* painter)

@@ -45,4 +45,7 @@ private:
 
     WorldMapWidget m_widget;
     QTimer m_repaintTimer;
+    // 1.0.209 — dirty flag per evitare repaint in idle (50% CPU sprecato a 16Hz)
+    bool m_dirty {true};
+    void markDirty();
 };
