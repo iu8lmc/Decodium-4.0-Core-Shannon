@@ -21867,6 +21867,14 @@ void DecodiumBridge::onFt8DecodeReady(quint64 serial, QStringList rows)
             }
             appendRxDecodeEntry(entry);
             appendLegacyAllTxtDecodeLine(entry);
+            // 1.0.212 — Live Map feed incrementale. In 1.0.209 il QML
+            // LiveMapPanel aveva onDecodeListChanged → scheduleRebuild
+            // (clear+replay). Rimosso per evitare freeze, ma la mappa
+            // non si aggiornava più (no live). Soluzione: emit
+            // worldMapContactAdded direttamente da qui per ogni decode
+            // accettato dal decoder nativo (FT8/FT4). Il legacy path
+            // emette gia' via publishWorldMapFromEntries.
+            replayWorldMapEntry(entry);
             // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
             if (m_decoSyncTime && !entry.value("isTx").toBool()) {
                 bool dtOk = false, snrOk = false;
@@ -22203,6 +22211,8 @@ void DecodiumBridge::onFt2AsyncDecodeReady(QStringList rows)
         trimDecodeListsIfNeeded();  // 1.0.206 cap
         appendRxDecodeEntry(entry);
         appendLegacyAllTxtDecodeLine(entry);
+        // 1.0.212 — Live Map feed incrementale per FT2 async (vedi nota FT8)
+        replayWorldMapEntry(entry);
         // 1.0.162 — DecoSyncTime fase 4: feed dt al self-calibrator
         if (m_decoSyncTime && !entry.value("isTx").toBool()) {
             bool dtOk = false, snrOk = false;

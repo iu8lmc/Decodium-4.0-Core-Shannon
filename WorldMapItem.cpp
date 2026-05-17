@@ -22,12 +22,23 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
     setAntialiasing(true);
     setImplicitWidth(340);
     setImplicitHeight(220);
-    // 1.0.156: cap della texture interna a 1280x720. Su TV 4K la mappa
-    // era lentissima perche' QPainter ridipinge l'intera area ad ogni
-    // repaint (kWorldMapRepaintMs = 60ms). Adesso il widget rendera'
-    // sempre in 1280x720, scalato via GPU alla dimensione effettiva —
-    // costo costante indipendente da quanto e' grande la finestra.
-    setTextureSize(QSize(1280, 720));
+
+    // 1.0.212 — Su Qt 6 RHI un QWidget mai mostrato puo' non avere lo state
+    // necessario per render() off-screen (style/policy/pipeline non
+    // inizializzati). Set DontShowOnScreen + show() prepara il widget per
+    // il rendering senza farlo apparire fisicamente sullo schermo.
+    m_widget.setAttribute(Qt::WA_DontShowOnScreen, true);
+    m_widget.setAttribute(Qt::WA_TranslucentBackground, false);
+    m_widget.resize(1280, 720);
+    m_widget.show();
+    m_widget.ensurePolished();
+    // 1.0.213 — RIMOSSO setTextureSize(1280x720) ereditato da 1.0.156.
+    // Il cap forzava il backing buffer di QQuickPaintedItem a 1280x720,
+    // ma con drawImage(0,0,QImage(w_effettivo,h_effettivo)) si finiva
+    // per copiare solo il top-left 1280x720 dell'immagine (resto clippato)
+    // = utente vedeva solo l'angolo della mappa = sembrava vuota.
+    // Senza cap, il backing scala con l'item e drawImage riesce a copiare
+    // l'intera immagine renderizzata dal widget legacy.
 
     connect(&m_widget, &WorldMapWidget::contactClicked,
             this, &WorldMapItem::contactClicked);
@@ -140,12 +151,10 @@ void WorldMapItem::paint(QPainter* painter)
     }
 
     syncWidgetSize();
-    // 1.0.211 — BUG FIX: passare solo QWidget::DrawChildren a render()
-    // significava "rendi SOLO i children, non il widget self". WorldMapWidget
-    // non ha children, dipinge tutto in paintEvent → render disegnava NULLA
-    // → mappa invisibile a schermo (bug presente dalle prime versioni
-    // QQuickPaintedItem). Default flags (no arg) = DrawWindowBackground
-    // | DrawChildren | IgnoreMask: rende il widget self correttamente.
+    // 1.0.213e — Approccio finale: render direct via render(painter) senza
+    // flag (default DrawWindowBackground | DrawChildren). Niente FBO,
+    // niente offscreen QImage, niente fillColor. Il widget legacy disegna
+    // direttamente sul painter del QQuickPaintedItem.
     m_widget.render(painter);
 }
 
