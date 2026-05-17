@@ -63,10 +63,12 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
 void WorldMapItem::markDirty()
 {
     m_dirty = true;
-    // Se gia' visibile, programma update con un singleShot per non saltare
-    // la prima emission; altrimenti aspetta che timer/visibilita' lo facciano.
-    if (isVisible() && !m_repaintTimer.isActive()) {
-        m_repaintTimer.start();
+    // 1.0.210 — Se visibile, chiama subito update() per primo paint
+    // istantaneo. Il timer 250ms resta come coalesce backup per evitare
+    // burst >4Hz quando arrivano molti addContact ravvicinati: il timer
+    // tick fa update solo se m_dirty true (ancora marcato dopo paint).
+    if (isVisible()) {
+        update();
     }
 }
 
