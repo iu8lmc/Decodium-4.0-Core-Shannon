@@ -246,7 +246,13 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
 
         bridgeLog(QStringLiteral("TX audio sink parked: reason=%1 lifetimeMs=%2")
                       .arg(reason).arg(kRetireAudioSinkParkMs));
-        QTimer::singleShot(kRetireAudioSinkParkMs, context, [sinkGuard, bufferGuard, reason]() {
+        // 1.0.218 — [TX-TL] park entry timestamp per misurare lo span tra
+        // park e delayed-delete release. Aiuta a distinguere stutter da
+        // sink-create dal stutter da park-delete-overlap.
+        qint64 const parkEntryMs = QDateTime::currentMSecsSinceEpoch();
+        bridgeLog(QStringLiteral("[TX-TL] park_entry reason=%1 lifetime_ms=%2")
+                      .arg(reason).arg(kRetireAudioSinkParkMs));
+        QTimer::singleShot(kRetireAudioSinkParkMs, context, [sinkGuard, bufferGuard, reason, parkEntryMs]() {
             if (sinkGuard) {
                 sinkGuard->disconnect();
                 if (sinkGuard->state() == QAudio::StoppedState) {
@@ -254,7 +260,9 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
                     if (bufferGuard) {
                         bufferGuard->deleteLater();
                     }
-                    bridgeLog(QStringLiteral("TX audio sink deferred delete released: reason=%1").arg(reason));
+                    qint64 const parkSpanMs = QDateTime::currentMSecsSinceEpoch() - parkEntryMs;
+                    bridgeLog(QStringLiteral("TX audio sink deferred delete released: reason=%1 park_span_ms=%2").arg(reason).arg(parkSpanMs));
+                    bridgeLog(QStringLiteral("[TX-TL] park_release reason=%1 span_ms=%2 state=stopped").arg(reason).arg(parkSpanMs));
                     return;
                 }
                 // 1.0.217 — Su Windows forziamo stop+delete dopo il lifetime.
@@ -267,9 +275,11 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
                 if (bufferGuard) {
                     bufferGuard->deleteLater();
                 }
+                qint64 const parkSpanMsForcedWin = QDateTime::currentMSecsSinceEpoch() - parkEntryMs;
                 bridgeLog(QStringLiteral("TX audio sink parked stop+delete after lifetime: reason=%1 state=%2")
                               .arg(reason)
                               .arg(audioStateToString(sinkGuard->state())));
+                bridgeLog(QStringLiteral("[TX-TL] park_release reason=%1 span_ms=%2 state=forced_stop_win").arg(reason).arg(parkSpanMsForcedWin));
                 return;
 #else
                 bridgeLog(QStringLiteral("TX CoreAudio sink parked to avoid Qt stopAudioUnit crash: reason=%1 state=%2 err=%3")
@@ -11110,20 +11120,43 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
     bridgeLog("completeTxPlayback: reason=" + reason +
               " transmitting=" + QString::number(m_transmitting) +
               " rxSuspended=" + QString::number(m_rxAudioSuspendedForTx));
+    // 1.0.218 — [TX-TL] entry timestamp con stato chiave per misurare la
+    // latenza end-to-end fra "audio finito" e "TX terminato" (sospetto
+    // singhiozzi).
+    qint64 const completeEntryMs = QDateTime::currentMSecsSinceEpoch();
+    qint64 const holdRemaining = qMax<qint64>(0, m_txPlaybackHoldUntilMs - completeEntryMs);
+    qint64 const bufRemaining = m_txPcmBuffer
+        ? qMax<qint64>(0, m_txPcmBuffer->size() - m_txPcmBuffer->pos())
+        : -1;
+    bridgeLog(QStringLiteral("[TX-TL] complete_entry reason=%1 err=%2 tx=%3 hold_ms=%4 buf_rem=%5")
+                  .arg(reason).arg(error ? 1 : 0).arg(m_transmitting ? 1 : 0)
+                  .arg(holdRemaining).arg(bufRemaining));
 
     qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
     if (!error && m_transmitting && m_txPlaybackHoldUntilMs > nowMs) {
-        qint64 const delayMs = qMax<qint64>(1, m_txPlaybackHoldUntilMs - nowMs);
-        if (!m_txPlaybackReleasePending) {
-            m_txPlaybackReleasePending = true;
-            bridgeLog(QStringLiteral("completeTxPlayback delayed: reason=%1 hold_ms=%2")
-                          .arg(reason).arg(delayMs));
-            QTimer::singleShot(delayMs, this, [this, reason]() {
-                m_txPlaybackReleasePending = false;
-                completeTxPlayback(reason + QStringLiteral("-held"));
-            });
+        // 1.0.218 — Cap rescheduling reason chain "-held" a 5 livelli. Senza
+        // questo, se m_txPlaybackHoldUntilMs viene bumped ripetutamente dal
+        // partial-idle path (line 11829), il reschedule sarebbe infinito.
+        int const heldDepth = reason.count(QStringLiteral("-held"));
+        if (heldDepth >= 5) {
+            bridgeLog(QStringLiteral("completeTxPlayback: held chain cap raggiunto (%1), forcing complete: reason=%2")
+                          .arg(heldDepth).arg(reason));
+            m_txPlaybackHoldUntilMs = 0;
+            m_txPlaybackReleasePending = false;
+            // Fall through to normale cleanup path below
+        } else {
+            qint64 const delayMs = qMax<qint64>(1, m_txPlaybackHoldUntilMs - nowMs);
+            if (!m_txPlaybackReleasePending) {
+                m_txPlaybackReleasePending = true;
+                bridgeLog(QStringLiteral("completeTxPlayback delayed: reason=%1 hold_ms=%2 depth=%3")
+                              .arg(reason).arg(delayMs).arg(heldDepth));
+                QTimer::singleShot(delayMs, this, [this, reason]() {
+                    m_txPlaybackReleasePending = false;
+                    completeTxPlayback(reason + QStringLiteral("-held"));
+                });
+            }
+            return;
         }
-        return;
     }
 
     if (!error && m_transmitting && m_txPcmBuffer && !m_txPcmBuffer->atEnd()) {
@@ -11779,7 +11812,18 @@ void DecodiumBridge::startTx()
                           .arg(m_txPcmBuffer->size()));
         }
 
+        // 1.0.218 — [TX-TL] timeline diagnostic per facilitare la diagnosi
+        // di stutter/duplicati/rallentamenti via loopback ALPHA-BRAVO. Ogni
+        // step audio sink ha timestamp in ms con etichetta dedicata, cosi'
+        // grep [TX-TL] mostra la latenza end-to-end.
+        qint64 const sinkCreateStartMs = QDateTime::currentMSecsSinceEpoch();
         m_txAudioSink = new QAudioSink(outDev, outFmt, this);
+        qint64 const sinkCreateEndMs = QDateTime::currentMSecsSinceEpoch();
+        bridgeLog(QStringLiteral("[TX-TL] sink_create dt=%1ms dev=%2")
+                      .arg(sinkCreateEndMs - sinkCreateStartMs)
+                      .arg(outDev.description().isEmpty()
+                           ? QStringLiteral("<default>")
+                           : outDev.description()));
         qreal const effectiveGain = txGainFromSlider(m_txOutputLevel);
         double const wavePeak = txWavePeak(wave);
         qint64 const pcmBytes = m_txPcmData.size();
@@ -11817,6 +11861,9 @@ void DecodiumBridge::startTx()
             if (m_txPcmBuffer) extra += " bufPos=" + QString::number(m_txPcmBuffer->pos())
                 + "/" + QString::number(m_txPcmBuffer->size());
             bridgeLog("TX QAudioSink stateChanged: " + QString::number(static_cast<int>(st)) + extra);
+            // 1.0.218 — [TX-TL] state transition con timestamp ms
+            bridgeLog(QStringLiteral("[TX-TL] sink_state st=%1%2")
+                          .arg(static_cast<int>(st)).arg(extra));
             if (st == QAudio::IdleState) {
                 bool const bufferIncomplete = m_txPcmBuffer && !m_txPcmBuffer->atEnd();
                 if (bufferIncomplete) {
