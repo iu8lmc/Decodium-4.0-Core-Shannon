@@ -4450,7 +4450,12 @@ void DecodiumBridge::emitDecodeListChangedThrottled()
     if (m_decodeListEmitTimer == nullptr) {
         m_decodeListEmitTimer = new QTimer(this);
         m_decodeListEmitTimer->setSingleShot(true);
-        m_decodeListEmitTimer->setInterval(250);  // max 4 emit/sec
+        // 1.0.207b — coalesce throttle raddoppiato da 250→500ms (4→2 emit/sec).
+        // rebuildBandActivityModel + rebuildRxDecodeModel sono O(N) con N≤500;
+        // a 4 emit/sec saturavano CPU 146% in regime stabile RX FT8 + Live Map.
+        // A 2 emit/sec la latenza percepita resta sotto-soglia (decode appare
+        // sempre entro 500ms dall'arrivo) ma CPU media scende del 50%.
+        m_decodeListEmitTimer->setInterval(500);
         connect(m_decodeListEmitTimer, &QTimer::timeout, this, [this]() {
             if (m_decodeListEmitPending) {
                 m_decodeListEmitPending = false;
