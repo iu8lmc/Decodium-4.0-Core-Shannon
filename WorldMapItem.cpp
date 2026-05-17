@@ -124,7 +124,13 @@ void WorldMapItem::applyAnimationCadence(bool visible)
         m_widget.setAnimationActive(false);
         return;
     }
-    int const ms = m_lowSpecMode ? kAnimationLowMs : kAnimationHighMs;
+    // 1.0.215 — sync anim interval con il paint rate cap. Pre-1.0.215
+    // anim girava a 60ms (16Hz) mentre paint rate era capped a 80ms
+    // (12.5Hz GPU full) o 333ms (CPU): l'anim tick eccedente NON causava
+    // paint visibile = lavoro sprecato (computeCircularLongitudeBounds +
+    // smoothViewport + emit signal coalesced dal markDirty throttle).
+    // Floor a 60ms per non degradare percezione fluida di greyline.
+    int const ms = qMax(60, m_repaintIntervalMs);
     m_widget.setAnimationInterval(ms);
     m_widget.setAnimationActive(true);
 }

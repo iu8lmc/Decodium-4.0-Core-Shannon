@@ -215,22 +215,12 @@ WorldMapWidget::WorldMapWidget(QWidget * parent)
   m_animationTimer.setInterval(60);
   connect(&m_animationTimer, &QTimer::timeout, this, [this] {
     pruneExpiredContacts();
-    double const prevCenterLon = m_viewCenterLon;
-    double const prevCenterLat = m_viewCenterLat;
-    double const prevSpanLon = m_viewSpanLon;
-    double const prevSpanLat = m_viewSpanLat;
     updateViewportTargets();
     smoothViewport();
-    // 1.0.213 — invalida background cache se viewport si e' mosso
-    // davvero (smoothViewport e' interpolato continuo finche' velocity!=0).
-    bool const viewportShifted =
-        !qFuzzyCompare(prevCenterLon + 1.0, m_viewCenterLon + 1.0)
-        || !qFuzzyCompare(prevCenterLat + 1.0, m_viewCenterLat + 1.0)
-        || !qFuzzyCompare(prevSpanLon + 1.0, m_viewSpanLon + 1.0)
-        || !qFuzzyCompare(prevSpanLat + 1.0, m_viewSpanLat + 1.0);
-    if (viewportShifted) {
-        m_backgroundCache = QPixmap();
-    }
+    // 1.0.215 — l'invalidazione esplicita del cache su viewport shift
+    // (esisteva in 1.0.213) e' rimossa: backgroundCacheValid() ora
+    // applica tolerance sub-pixel + 0.5% span, sufficiente per evitare
+    // jitter visivo e tagliare il rebuild durante settle.
     m_animationPhase = std::fmod(m_animationPhase + 0.006, 1.0);
     // 1.0.214 — emit signal cosi' il QQuickItem host (WorldMapItem) puo'
     // propagare al scene-graph (via markDirty -> update() throttled).
@@ -274,10 +264,22 @@ bool WorldMapWidget::backgroundCacheValid(QRectF const& bounds) const
 {
   if (m_backgroundCache.isNull()) return false;
   if (m_bgCacheBoundsSize != bounds.size()) return false;
-  if (!qFuzzyCompare(m_bgCacheCenterLon + 1.0, m_viewCenterLon + 1.0)) return false;
-  if (!qFuzzyCompare(m_bgCacheCenterLat + 1.0, m_viewCenterLat + 1.0)) return false;
-  if (!qFuzzyCompare(m_bgCacheSpanLon + 1.0, m_viewSpanLon + 1.0)) return false;
-  if (!qFuzzyCompare(m_bgCacheSpanLat + 1.0, m_viewSpanLat + 1.0)) return false;
+  // 1.0.215 — Tolerance sub-pixel invece di equality esatta.
+  // smoothViewport interpola continuo durante il settle: pre-1.0.215 ogni
+  // tick a 60ms cambiava il viewport di 0.4-2° -> cache invalidata ad ogni
+  // paint = rebuild a 12fps anche su viewport "fermo dall'occhio umano".
+  // Ora cache valida se delta lon/lat < 1 pixel di shift visivo e span
+  // < 0.5% diff. Durante l'intero settle finale (ultimi 10-20 tick quando
+  // velocity -> 0), cache hit costante = 0 rebuild.
+  if (bounds.width() <= 0.0 || bounds.height() <= 0.0) return true;
+  qreal const pxPerDegLon = bounds.width() / qMax(1.0, m_bgCacheSpanLon);
+  qreal const pxPerDegLat = bounds.height() / qMax(1.0, m_bgCacheSpanLat);
+  qreal const lonShiftPx = qAbs((m_bgCacheCenterLon - m_viewCenterLon) * pxPerDegLon);
+  qreal const latShiftPx = qAbs((m_bgCacheCenterLat - m_viewCenterLat) * pxPerDegLat);
+  if (lonShiftPx > 1.0) return false;
+  if (latShiftPx > 1.0) return false;
+  if (qAbs(m_bgCacheSpanLon - m_viewSpanLon) > 0.005 * m_bgCacheSpanLon) return false;
+  if (qAbs(m_bgCacheSpanLat - m_viewSpanLat) > 0.005 * m_bgCacheSpanLat) return false;
   return true;
 }
 
