@@ -1598,6 +1598,7 @@ private:
     QHash<QString, QString> m_worldMapGridByCall;
     QSet<QString> m_worldMapClosedQsoCallKeys;
     bool m_worldMapCall3Loaded {false};
+    bool m_worldMapDisplayed {true};
     QString m_mapLastClickCall;
     qint64 m_mapLastClickMs {0};
     int m_periodProgress {0};
@@ -2381,6 +2382,7 @@ private:
     void appendTxDecodeEntry(const QString& message);
     void appendRxDecodeEntry(const QVariantMap& entry);
     void rebuildRxDecodeList();
+    bool worldMapFeedEnabled() const;
     void replayWorldMapEntry(const QVariantMap& entry);
     void emitCurrentWorldMapQsoPath();
     void markWorldMapQsoClosed(const QString& call, const QString& reason = QString());

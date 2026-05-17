@@ -19,9 +19,11 @@ Rectangle {
     property color textPrimary: engine ? engine.themeManager.textPrimary : "#e5eefc"
     property color textSecondary: engine ? engine.themeManager.textSecondary : "#9db1c9"
     property color glassBorder: engine ? engine.themeManager.glassBorder : "#2a3950"
+    property var worldMap: worldMapLoader.item
+    property bool gpuLiveMapEnabled: engine ? !!engine.getSetting("LiveMapUseGpu", true) : true
 
     function syncMapSettings() {
-        if (!engine)
+        if (!engine || !worldMap)
             return
         worldMap.setHomeGrid(engine.grid)
         worldMap.setGreylineEnabled(!!engine.getSetting("ShowGreyline", true))
@@ -29,7 +31,7 @@ Rectangle {
     }
 
     function syncTxState() {
-        if (!engine)
+        if (!engine || !worldMap)
             return
         worldMap.setTransmitState(!!(engine.transmitting || engine.tuning),
                                   engine.dxCall,
@@ -38,9 +40,19 @@ Rectangle {
     }
 
     function scheduleRebuild() {
-        if (!engine)
+        if (!engine || !worldMap)
             return
         rebuildTimer.restart()
+    }
+
+    function initializeMap() {
+        if (!worldMap)
+            return
+        worldMap.setActive(visible)
+        root.syncMapSettings()
+        root.syncTxState()
+        if (visible)
+            root.scheduleRebuild()
     }
 
     Timer {
@@ -48,7 +60,7 @@ Rectangle {
         interval: 0
         repeat: false
         onTriggered: {
-            if (!root.engine)
+            if (!root.engine || !root.worldMap)
                 return
             worldMap.clearContacts()
             root.syncMapSettings()
@@ -57,8 +69,13 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: scheduleRebuild()
-    onVisibleChanged: if (visible) scheduleRebuild()
+    Component.onCompleted: root.initializeMap()
+    onVisibleChanged: {
+        if (worldMap)
+            worldMap.setActive(visible)
+        if (visible)
+            scheduleRebuild()
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -141,13 +158,37 @@ Rectangle {
             radius: 4
             clip: true
 
-            WorldMapItem {
-                id: worldMap
+            Loader {
+                id: worldMapLoader
                 anchors.fill: parent
                 anchors.margins: 2
-                onContactClicked: function(call, grid) {
-                    if (root.engine)
-                        root.engine.processMapContactClick(call, grid)
+                sourceComponent: root.gpuLiveMapEnabled ? gpuWorldMapComponent : painterWorldMapComponent
+                onLoaded: root.initializeMap()
+                onStatusChanged: {
+                    if (status === Loader.Error && root.gpuLiveMapEnabled) {
+                        console.warn("Live Map GPU component failed to load; falling back to CPU WorldMapItem")
+                        root.gpuLiveMapEnabled = false
+                    }
+                }
+
+                Component {
+                    id: painterWorldMapComponent
+                    WorldMapItem {
+                        onContactClicked: function(call, grid) {
+                            if (root.engine)
+                                root.engine.processMapContactClick(call, grid)
+                        }
+                    }
+                }
+
+                Component {
+                    id: gpuWorldMapComponent
+                    WorldMapGpuItem {
+                        onContactClicked: function(call, grid) {
+                            if (root.engine)
+                                root.engine.processMapContactClick(call, grid)
+                        }
+                    }
                 }
             }
         }
@@ -196,6 +237,12 @@ Rectangle {
                 root.scheduleRebuild()
         }
         function onSettingValueChanged(key, value) {
+            if (key === "LiveMapUseGpu") {
+                root.gpuLiveMapEnabled = !!value
+                return
+            }
+            if (!worldMap)
+                return
             if (key === "ShowGreyline" || key === "MapShowGreyline") {
                 worldMap.setGreylineEnabled(!!value)
             } else if (key === "Miles") {
@@ -205,15 +252,23 @@ Rectangle {
             }
         }
         function onWorldMapResetRequested() {
+            if (!worldMap)
+                return
             worldMap.clearContacts()
         }
         function onWorldMapContactAdded(call, sourceGrid, destinationGrid, role) {
+            if (!worldMap)
+                return
             worldMap.addContact(call, sourceGrid, destinationGrid, role)
         }
         function onWorldMapContactAddedByLonLat(call, sourceLon, sourceLat, destinationGrid, role) {
+            if (!worldMap)
+                return
             worldMap.addContactByLonLat(call, sourceLon, sourceLat, destinationGrid, role)
         }
         function onWorldMapContactDowngraded(call) {
+            if (!worldMap)
+                return
             worldMap.downgradeContactToBand(call)
         }
     }

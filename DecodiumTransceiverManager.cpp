@@ -19,6 +19,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <stdexcept>
 #include <hamlib/rig.h>
 
@@ -167,6 +168,55 @@ QString defaultNetworkEndpointForRig(QString const& rigName)
 bool isHamRadioDeluxeRig(QString const& rigName)
 {
     return 0 == rigName.compare(QStringLiteral("Ham Radio Deluxe"), Qt::CaseInsensitive);
+}
+
+QString activeCatTransport(QString const& rigName, QString const& portType,
+                           QString const& serialPort, QString const& networkPort,
+                           QString const& tciPort)
+{
+    QString const lowerPortType = portType.trimmed().toLower();
+    if (isHamRadioDeluxeRig(rigName)
+        || 0 == rigName.compare(QStringLiteral("DX Lab Suite Commander"), Qt::CaseInsensitive)) {
+        return QStringLiteral("network(%1)").arg(networkPort);
+    }
+    if (lowerPortType == QStringLiteral("serial")) {
+        return QStringLiteral("serial(%1)").arg(serialPort);
+    }
+    if (lowerPortType == QStringLiteral("usb")) {
+        return QStringLiteral("usb(%1)").arg(serialPort);
+    }
+    if (lowerPortType == QStringLiteral("tci")) {
+        return QStringLiteral("tci(%1)").arg(tciPort);
+    }
+    if (lowerPortType == QStringLiteral("network")) {
+        return QStringLiteral("network(%1)").arg(networkPort);
+    }
+    return lowerPortType.isEmpty() ? QStringLiteral("none") : lowerPortType;
+}
+
+double sanitizedCatTxFrequencyHz(double requestedHz, double rxHz,
+                                 QString const& splitMode, QString const& context)
+{
+    if (requestedHz <= 0.0 || rxHz <= 0.0) {
+        return requestedHz;
+    }
+
+    // In emulate/fake-it split the TX dial should only move by a few kHz.
+    // A stale UI value can briefly look like a VHF dial and make the rig
+    // jump bands; recover to the expected Decodium offset instead.
+    if (std::abs(requestedHz - rxHz) <= 1000000.0) {
+        return requestedHz;
+    }
+
+    double const fallbackHz = rxHz + 4000.0;
+    qWarning().noquote()
+        << "[CATDBG] TX frequency sanitized"
+        << "context=" << context
+        << "splitMode=" << splitMode
+        << "rxHz=" << QString::number(rxHz, 'f', 0)
+        << "requestedTxHz=" << QString::number(requestedHz, 'f', 0)
+        << "fallbackTxHz=" << QString::number(fallbackHz, 'f', 0);
+    return fallbackHz;
 }
 
 bool parseNetworkPortText(QString const& text, quint16* out = nullptr)
@@ -1316,6 +1366,8 @@ static TransceiverFactory::ParameterPack buildParams(const DecodiumTransceiverMa
         << "[CATDBG] Transceiver params"
         << "rig=" << p.rig_name
         << "portType=" << m->portType()
+        << "activeTransport=" << activeCatTransport(p.rig_name, m->portType(), p.serial_port,
+                                                    p.network_port, p.tci_port)
         << "serial=" << p.serial_port
         << "network=" << p.network_port
         << "tci=" << p.tci_port
@@ -1397,6 +1449,9 @@ void DecodiumTransceiverManager::connectRig()
             << "[CATDBG] Connect attempt"
             << "rig=" << params.rig_name
             << "portType=" << m_portType
+            << "activeTransport=" << activeCatTransport(params.rig_name, m_portType,
+                                                        params.serial_port, params.network_port,
+                                                        params.tci_port)
             << "serial=" << params.serial_port
             << "network=" << params.network_port
             << "tci=" << params.tci_port
@@ -1734,6 +1789,10 @@ void DecodiumTransceiverManager::setRigFrequency(double hz)
 
 void DecodiumTransceiverManager::setRigTxFrequency(double hz)
 {
+    double const rxHz = d->desired.frequency() > 0
+        ? static_cast<double>(d->desired.frequency())
+        : m_frequency;
+    hz = sanitizedCatTxFrequencyHz(hz, rxHz, m_splitMode, QStringLiteral("setRigTxFrequency"));
     m_txFrequency = hz;
     emit txFrequencyChanged();
     if (hz > 0.0 && d->desired.frequency() == 0 && m_frequency > 0.0) {
@@ -1753,6 +1812,10 @@ void DecodiumTransceiverManager::setRigTxFrequency(double hz)
 
 void DecodiumTransceiverManager::setRigTxFrequencyAndPtt(double hz, bool on)
 {
+    double const rxHz = d->desired.frequency() > 0
+        ? static_cast<double>(d->desired.frequency())
+        : m_frequency;
+    hz = sanitizedCatTxFrequencyHz(hz, rxHz, m_splitMode, QStringLiteral("setRigTxFrequencyAndPtt"));
     if (hz > 0.0 && d->desired.frequency() == 0 && m_frequency > 0.0) {
         d->desired.frequency(static_cast<Transceiver::Frequency>(m_frequency));
     }

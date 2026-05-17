@@ -573,7 +573,14 @@ int HRDTransceiver::do_start ()
   // appears to be an HRD defect and we cannot work around it
   if ((data_mode_dropdown_ = find_dropdown (QRegularExpression ("^(Data)$"))) >= 0)
     {
-      data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(On|Data1|D1|D1-FIL1)$"));
+      // When HRD exposes both "On" and a data profile such as "D1",
+      // select "On". Some Icom HRD profiles keep the rig in plain USB
+      // when D1 is selected before the DATA state is enabled.
+      data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(On)$"));
+      if (!data_mode_dropdown_selection_on_.size ())
+        {
+          data_mode_dropdown_selection_on_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(Data1|D1|D1-FIL1)$"));
+        }
       data_mode_dropdown_selection_off_ = find_dropdown_selection (data_mode_dropdown_, QRegularExpression ("^(Off)$"));
     }
 
@@ -685,17 +692,26 @@ std::vector<int> HRDTransceiver::find_dropdown_selection (int dropdown, QRegular
 void HRDTransceiver::map_modes (int dropdown, ModeMap *map)
 {
   // order matters here (both in the map and in the regexps)
+  auto with_fallback = [] (std::vector<int> selections, std::vector<int> fallback)
+    {
+      selections.insert (selections.end (), fallback.cbegin (), fallback.cend ());
+      return selections;
+    };
+  auto usb_selection = find_dropdown_selection (dropdown, QRegularExpression ("^(USB\\(N\\)|USB)$"));
+  auto lsb_selection = find_dropdown_selection (dropdown, QRegularExpression ("^(LSB\\(N\\)|LSB)$"));
+  auto fm_selection = find_dropdown_selection (dropdown, QRegularExpression ("^(FM|FM\\(N\\)|FM-N|WFM)$"));
+
   map->push_back (std::forward_as_tuple (CW, find_dropdown_selection (dropdown, QRegularExpression ("^(CW|CW\\(N\\)|CW-LSB|CWL)$"))));
   map->push_back (std::forward_as_tuple (CW_R, find_dropdown_selection (dropdown, QRegularExpression ("^(CW-R|CW-R\\(N\\)|CW|CW-USB|CWU)$"))));
-  map->push_back (std::forward_as_tuple (LSB, find_dropdown_selection (dropdown, QRegularExpression ("^(LSB\\(N\\)|LSB)$"))));
-  map->push_back (std::forward_as_tuple (USB, find_dropdown_selection (dropdown, QRegularExpression ("^(USB\\(N\\)|USB)$"))));
-  map->push_back (std::forward_as_tuple (DIG_U, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGU|DATA-U|PKT-U|DATA|AFSK|USER-U|USB)$"))));
-  map->push_back (std::forward_as_tuple (DIG_L, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGL|DATA-L|PKT-L|DATA-R|USER-L|LSB)$"))));
+  map->push_back (std::forward_as_tuple (LSB, lsb_selection));
+  map->push_back (std::forward_as_tuple (USB, usb_selection));
+  map->push_back (std::forward_as_tuple (DIG_U, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGU|DATA-U|PKT-U|DATA|AFSK|USER-U)$")), usb_selection)));
+  map->push_back (std::forward_as_tuple (DIG_L, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|DIGL|DATA-L|PKT-L|DATA-R|USER-L)$")), lsb_selection)));
   map->push_back (std::forward_as_tuple (FSK, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|FSK|RTTY|RTTY-LSB)$"))));
   map->push_back (std::forward_as_tuple (FSK_R, find_dropdown_selection (dropdown, QRegularExpression ("^(DIG|FSK-R|RTTY-R|RTTY|RTTY-USB)$"))));
   map->push_back (std::forward_as_tuple (AM, find_dropdown_selection (dropdown, QRegularExpression ("^(AM|DSB|SAM|DRM)$"))));
-  map->push_back (std::forward_as_tuple (FM, find_dropdown_selection (dropdown, QRegularExpression ("^(FM|FM\\(N\\)|FM-N|WFM)$"))));
-  map->push_back (std::forward_as_tuple (DIG_FM, find_dropdown_selection (dropdown, QRegularExpression ("^(PKT-FM|PKT|DATA\\(FM\\)|FM)$"))));
+  map->push_back (std::forward_as_tuple (FM, fm_selection));
+  map->push_back (std::forward_as_tuple (DIG_FM, with_fallback (find_dropdown_selection (dropdown, QRegularExpression ("^(PKT-FM|PKT|DATA\\(FM\\))$")), fm_selection)));
 
   CAT_TRACE ("for dropdown" << dropdown_names_[dropdown]);
   std::for_each (map->begin (), map->end (), [this, dropdown] (ModeMap::value_type const& item)

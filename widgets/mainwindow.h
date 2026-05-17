@@ -877,6 +877,7 @@ private:
   int m_rx_audio_buffer_frames;
   int m_tx_audio_buffer_frames;
   qint64 m_last_audio_frame_ms;
+  quint64 m_audio_input_health_check_id {0};
   qint64 m_last_tx_audio_rebind_ms;
   qint64 m_last_wake_audio_rebind_ms;
   Qt::ApplicationState m_last_application_state;

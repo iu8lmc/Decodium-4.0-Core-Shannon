@@ -8165,9 +8165,20 @@ double DecodiumBridge::catSplitTxDialFrequencyHz() const
         return 0.0;
     }
 
-    double dialHz = m_frequency;
+    double dialHz = 0.0;
+    qint64 const nowMs = QDateTime::currentMSecsSinceEpoch();
+    bool const localQsyGuardActive =
+        m_localCatFrequencyTargetHz > 0.0
+        && m_localCatFrequencyGuardUntilMs > 0
+        && nowMs <= m_localCatFrequencyGuardUntilMs;
+    if (localQsyGuardActive) {
+        dialHz = m_frequency;
+    }
     if (dialHz <= 0.0 && isHamlibFamilyBackend(m_catBackend) && m_hamlibCat) {
         dialHz = m_hamlibCat->frequency();
+    }
+    if (dialHz <= 0.0) {
+        dialHz = m_frequency;
     }
     if (dialHz <= 0.0) {
         return 0.0;
@@ -13223,6 +13234,9 @@ QVariant DecodiumBridge::getSetting(const QString& key, const QVariant& defaultV
 void DecodiumBridge::setSetting(const QString& key, const QVariant& value)
 {
     QSettings s("Decodium", "Decodium3");
+    if (key == QStringLiteral("WorldMapDisplayed")) {
+        m_worldMapDisplayed = value.toBool();
+    }
     if (key == QStringLiteral("PromptToLog") || key == QStringLiteral("AutoLog")) {
         bool promptMode = false;
         if (key == QStringLiteral("PromptToLog")) {
@@ -18569,6 +18583,7 @@ void DecodiumBridge::loadSettings()
     m_asyncDecodeEnabled=s.value("asyncDecodeEnabled",false).toBool();
     m_pskReporterEnabled=s.value("pskReporterEnabled",
                                   s.value("PSKReporter", false)).toBool();
+    m_worldMapDisplayed = s.value(QStringLiteral("WorldMapDisplayed"), true).toBool();
     m_directVisualAudioCaptureUnsafe = s.value(QStringLiteral("DirectVisualAudioCaptureUnsafe"), false).toBool();
     m_ftThreads         =std::clamp(s.value("ftThreads",3).toInt(), 1, 8);
     m_lowCpuModeEnabled = s.value(QStringLiteral("LowCpuMode"),
@@ -21039,7 +21054,9 @@ void DecodiumBridge::markWorldMapQsoClosed(const QString& call, const QString& r
     }
 
     m_worldMapClosedQsoCallKeys.insert(key);
-    emit worldMapContactDowngraded(mapCall);
+    if (worldMapFeedEnabled()) {
+        emit worldMapContactDowngraded(mapCall);
+    }
     if (!reason.isEmpty()) {
         bridgeLog(QStringLiteral("WorldMap: closed QSO path %1 (%2)").arg(mapCall, reason));
     }
@@ -21059,8 +21076,16 @@ bool DecodiumBridge::worldMapQsoPathSuppressed(const QString& call) const
     return !key.isEmpty() && m_worldMapClosedQsoCallKeys.contains(key);
 }
 
+bool DecodiumBridge::worldMapFeedEnabled() const
+{
+    return m_worldMapDisplayed;
+}
+
 void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
 {
+    if (!worldMapFeedEnabled()) {
+        return;
+    }
     if (entry.value(QStringLiteral("isTx")).toBool()) {
         return;
     }
@@ -21270,6 +21295,9 @@ void DecodiumBridge::replayWorldMapEntry(const QVariantMap& entry)
 
 void DecodiumBridge::emitCurrentWorldMapQsoPath()
 {
+    if (!worldMapFeedEnabled()) {
+        return;
+    }
     if (m_currentTx == 6) {
         return;
     }
@@ -21314,6 +21342,10 @@ void DecodiumBridge::emitCurrentWorldMapQsoPath()
 
 void DecodiumBridge::replayWorldMapFeed()
 {
+    if (!worldMapFeedEnabled()) {
+        return;
+    }
+
     QSet<QString> seen;
     auto replayList = [this, &seen](QVariantList const& entries) {
         for (QVariant const& value : entries) {

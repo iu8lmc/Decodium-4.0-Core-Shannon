@@ -59,6 +59,13 @@ private:
     // (il backend RHI e' affidabile solo dopo windowChanged).
     void configureForHardware();
     void applyAnimationCadence(bool visible);
+    void handlePaintProfile(double paintMs, double paintAvgMs,
+                            double greylineMs, double greylineAvgMs,
+                            int contactsCount, bool cacheRebuild);
+    void setRepaintIntervalMs(int ms, const QString& reason,
+                              double paintMs = 0.0, double paintAvgMs = 0.0,
+                              double steadyPaintMs = 0.0, double steadyPaintAvgMs = 0.0,
+                              int contactsCount = 0, bool cacheRebuild = false);
 
     WorldMapWidget m_widget;
     QTimer m_repaintTimer;
@@ -67,6 +74,8 @@ private:
     bool m_gpuAccelerated {false};
     bool m_lowSpecMode {false};
     bool m_userActive {true};
+    int m_baseRepaintIntervalMs {250};
     int m_repaintIntervalMs {250};
     int m_animationIntervalActiveMs {60};
+    int m_fastPaintProfileCount {0};
 };
