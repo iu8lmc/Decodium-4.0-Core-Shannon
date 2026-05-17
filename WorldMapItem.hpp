@@ -8,9 +8,14 @@
 class WorldMapItem : public QQuickPaintedItem
 {
     Q_OBJECT
+    Q_PROPERTY(bool gpuAccelerated READ gpuAccelerated CONSTANT)
+    Q_PROPERTY(bool lowSpecMode READ lowSpecMode CONSTANT)
 
 public:
     explicit WorldMapItem(QQuickItem* parent = nullptr);
+
+    bool gpuAccelerated() const { return m_gpuAccelerated; }
+    bool lowSpecMode() const { return m_lowSpecMode; }
 
     Q_INVOKABLE void setHomeGrid(const QString& grid);
     Q_INVOKABLE void setGreylineEnabled(bool enabled);
@@ -30,6 +35,10 @@ public:
                                         double sourceLat,
                                         const QString& destinationGrid,
                                         int role = 0);
+    // 1.0.213 — Permette a LiveMapPanel di sospendere l'animation timer
+    // interno del widget legacy quando il pannello non e' visibile
+    // (Pop minimizzato, tab non selezionato, finestra detach nascosta).
+    Q_INVOKABLE void setActive(bool active);
 
     void paint(QPainter* painter) override;
 
@@ -38,14 +47,26 @@ Q_SIGNALS:
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void itemChange(ItemChange change, const ItemChangeData& data) override;
 
 private:
     static WorldMapWidget::PathRole pathRoleFromInt(int role);
     void syncWidgetSize();
+    void markDirty();
+
+    // 1.0.213 — Rileva GPU/CPU/RAM e configura render target + intervalli.
+    // Chiamata una sola volta quando il QQuickItem ottiene la finestra
+    // (il backend RHI e' affidabile solo dopo windowChanged).
+    void configureForHardware();
+    void applyAnimationCadence(bool visible);
 
     WorldMapWidget m_widget;
     QTimer m_repaintTimer;
-    // 1.0.209 — dirty flag per evitare repaint in idle (50% CPU sprecato a 16Hz)
     bool m_dirty {true};
-    void markDirty();
+    bool m_hardwareConfigured {false};
+    bool m_gpuAccelerated {false};
+    bool m_lowSpecMode {false};
+    bool m_userActive {true};
+    int m_repaintIntervalMs {250};
+    int m_animationIntervalActiveMs {60};
 };

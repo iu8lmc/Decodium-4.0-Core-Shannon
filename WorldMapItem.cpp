@@ -1,15 +1,32 @@
 #include "WorldMapItem.hpp"
 
+#include <QDebug>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QThread>
+
+#ifdef Q_OS_WIN
+#  include <windows.h>
+#endif
 
 namespace {
 
-// 1.0.209 — Repaint timer ridotto da 60ms (16Hz always-on, ~50% CPU sprecato
-// in idle perche' paint() invocava QWidget::render full su texture 1280x720)
-// a 250ms (4Hz). Combinato con dirty flag: il timer fa update() SOLO se c'e'
-// un cambio pending (m_dirty true). In idle, zero paint.
-constexpr int kWorldMapRepaintMs = 250;
+// 1.0.213 — Cadenze tre-livello scelte dinamicamente a runtime in base
+// alla detection hardware:
+//   GPU full      -> 80ms  (~12Hz, scene-graph blitta texture FBO, costo basso)
+//   GPU low-mem   -> 160ms (~6Hz, riduce upload texture su VRAM scarsa)
+//   CPU/Software  -> 333ms (~3Hz, blit raster pesante: meno frame, piu' fluido)
+// Animation phase widget legacy:
+//   Active high   -> 60ms  (smooth greyline + tx travel arc)
+//   Active low    -> 120ms (still readable, dimezza CPU pulse)
+constexpr int kRepaintGpuFullMs = 80;
+constexpr int kRepaintGpuLowMs = 160;
+constexpr int kRepaintCpuMs = 333;
+constexpr int kAnimationHighMs = 60;
+constexpr int kAnimationLowMs = 120;
+constexpr int kAnimationIdleMs = 0;  // 0 => stop timer
 
 }
 
@@ -32,13 +49,9 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
     m_widget.resize(1280, 720);
     m_widget.show();
     m_widget.ensurePolished();
-    // 1.0.213 — RIMOSSO setTextureSize(1280x720) ereditato da 1.0.156.
-    // Il cap forzava il backing buffer di QQuickPaintedItem a 1280x720,
-    // ma con drawImage(0,0,QImage(w_effettivo,h_effettivo)) si finiva
-    // per copiare solo il top-left 1280x720 dell'immagine (resto clippato)
-    // = utente vedeva solo l'angolo della mappa = sembrava vuota.
-    // Senza cap, il backing scala con l'item e drawImage riesce a copiare
-    // l'intera immagine renderizzata dal widget legacy.
+    // 1.0.213 — Pausato all'avvio. L'attivazione vera arriva da QML
+    // setActive(true) o dal primo visibleChanged.
+    m_widget.setAnimationActive(false);
 
     connect(&m_widget, &WorldMapWidget::contactClicked,
             this, &WorldMapItem::contactClicked);
@@ -52,17 +65,17 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
         markDirty();
     });
     connect(this, &QQuickItem::visibleChanged, this, [this]() {
+        applyAnimationCadence(isVisible());
         if (isVisible()) {
             syncWidgetSize();
             markDirty();
         }
     });
 
-    m_repaintTimer.setInterval(kWorldMapRepaintMs);
+    // Default conservativo; configureForHardware() lo aggiorna appena
+    // il QQuickItem entra in una finestra (windowChanged signal).
+    m_repaintTimer.setInterval(m_repaintIntervalMs);
     connect(&m_repaintTimer, &QTimer::timeout, this, [this]() {
-        // 1.0.209 — Solo se visibile E dirty. Risparmia il 50% CPU in idle
-        // (era timer 60ms always-on che chiamava QWidget::render full anche
-        // quando la mappa non era cambiata).
         if (isVisible() && m_dirty) {
             m_dirty = false;
             update();
@@ -75,12 +88,31 @@ void WorldMapItem::markDirty()
 {
     m_dirty = true;
     // 1.0.210 — Se visibile, chiama subito update() per primo paint
-    // istantaneo. Il timer 250ms resta come coalesce backup per evitare
-    // burst >4Hz quando arrivano molti addContact ravvicinati: il timer
-    // tick fa update solo se m_dirty true (ancora marcato dopo paint).
+    // istantaneo. Il timer m_repaintIntervalMs resta come coalesce backup
+    // per evitare burst quando arrivano molti addContact ravvicinati.
     if (isVisible()) {
         update();
     }
+}
+
+void WorldMapItem::setActive(bool active)
+{
+    m_userActive = active;
+    applyAnimationCadence(active && isVisible());
+    if (active && isVisible()) {
+        markDirty();
+    }
+}
+
+void WorldMapItem::applyAnimationCadence(bool visible)
+{
+    if (!visible) {
+        m_widget.setAnimationActive(false);
+        return;
+    }
+    int const ms = m_lowSpecMode ? kAnimationLowMs : kAnimationHighMs;
+    m_widget.setAnimationInterval(ms);
+    m_widget.setAnimationActive(true);
 }
 
 void WorldMapItem::setHomeGrid(const QString& grid)
@@ -151,10 +183,11 @@ void WorldMapItem::paint(QPainter* painter)
     }
 
     syncWidgetSize();
-    // 1.0.213e — Approccio finale: render direct via render(painter) senza
-    // flag (default DrawWindowBackground | DrawChildren). Niente FBO,
-    // niente offscreen QImage, niente fillColor. Il widget legacy disegna
-    // direttamente sul painter del QQuickPaintedItem.
+    // Render diretto del widget legacy. Con renderTarget=FramebufferObject
+    // (GPU mode) Qt Quick blitta la texture FBO senza ridipingere finche'
+    // !m_dirty: il widget legacy stesso pero' fa cache layered del background
+    // (earth+overlay+grid) -> il render() reale e' molto piu' leggero del
+    // pre-1.0.213 anche in dirty case.
     m_widget.render(painter);
 }
 
@@ -172,6 +205,72 @@ void WorldMapItem::mousePressEvent(QMouseEvent* event)
     }
 
     QQuickPaintedItem::mousePressEvent(event);
+}
+
+void WorldMapItem::itemChange(ItemChange change, const ItemChangeData& data)
+{
+    if (change == ItemSceneChange && data.window && !m_hardwareConfigured) {
+        configureForHardware();
+    }
+    QQuickPaintedItem::itemChange(change, data);
+}
+
+void WorldMapItem::configureForHardware()
+{
+    m_hardwareConfigured = true;
+
+    QSGRendererInterface::GraphicsApi api = QSGRendererInterface::Unknown;
+    if (auto* win = window()) {
+        if (auto* iface = win->rendererInterface()) {
+            api = iface->graphicsApi();
+        }
+    }
+    if (api == QSGRendererInterface::Unknown) {
+        api = QQuickWindow::graphicsApi();
+    }
+
+    m_gpuAccelerated = (api != QSGRendererInterface::Software
+                        && api != QSGRendererInterface::Unknown);
+
+    int const cores = qMax(1, QThread::idealThreadCount());
+    bool lowMemory = false;
+    quint64 totalRamMb = 0;
+#ifdef Q_OS_WIN
+    MEMORYSTATUSEX mem;
+    ZeroMemory(&mem, sizeof(mem));
+    mem.dwLength = sizeof(mem);
+    if (GlobalMemoryStatusEx(&mem)) {
+        totalRamMb = mem.ullTotalPhys / (1024ull * 1024ull);
+        // <= 4 GB totale = low memory
+        lowMemory = totalRamMb <= 4096ull;
+    }
+#endif
+
+    m_lowSpecMode = (cores < 4) || lowMemory || !m_gpuAccelerated;
+
+    // Adapt render target + perf hints
+    if (m_gpuAccelerated) {
+        setRenderTarget(QQuickPaintedItem::FramebufferObject);
+        setPerformanceHint(QQuickPaintedItem::FastFBOResizing, true);
+        setMipmap(false);
+        m_repaintIntervalMs = m_lowSpecMode ? kRepaintGpuLowMs : kRepaintGpuFullMs;
+    } else {
+        setRenderTarget(QQuickPaintedItem::Image);
+        m_repaintIntervalMs = kRepaintCpuMs;
+    }
+    m_repaintTimer.setInterval(m_repaintIntervalMs);
+
+    // Apply animation cadence if already visible
+    applyAnimationCadence(m_userActive && isVisible());
+
+    qInfo().nospace()
+        << "[WorldMapItem] hw: gpuApi=" << int(api)
+        << " gpuAccel=" << m_gpuAccelerated
+        << " cores=" << cores
+        << " ramMB=" << totalRamMb
+        << " lowSpec=" << m_lowSpecMode
+        << " repaintMs=" << m_repaintIntervalMs
+        << " animMs=" << (m_lowSpecMode ? kAnimationLowMs : kAnimationHighMs);
 }
 
 WorldMapWidget::PathRole WorldMapItem::pathRoleFromInt(int role)

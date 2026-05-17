@@ -39,12 +39,19 @@ public:
                           PathRole role = PathRole::Generic);
   void handleMapClick(QPointF const& clickPos);  // called from MainWindow's eventFilter
 
+  // 1.0.213 — animation timer (greyline pulse + tx travel arc) controllabile
+  // dal QQuickItem host: pause quando il pannello non e' visibile, interval
+  // adattivo in base alla detection hardware (60ms full, 120ms low-spec).
+  void setAnimationActive(bool active);
+  void setAnimationInterval(int ms);
+
 signals:
   void contactClicked(QString const& call, QString const& grid);
 
 protected:
   void mousePressEvent(QMouseEvent *event) override;
   void paintEvent(QPaintEvent * event) override;
+  void resizeEvent(QResizeEvent * event) override;
   QSize minimumSizeHint() const override;
 
 private:
@@ -75,6 +82,14 @@ private:
   bool computeCircularLongitudeBounds(QVector<double> const& longitudes, double * centerLon, double * spanLon) const;
   void pruneExpiredContacts();
   static double wrapLongitude(double lon);
+
+  // 1.0.213 — cache layered: pre-renderizza earth + overlay + grid in
+  // QPixmap statica, ricostruita solo se viewport/size cambiano. In idle
+  // (viewport stabilizzato) ogni paintEvent diventa blit cheap + overlay
+  // dinamici (day/night + contacts + transmit arc). Su CPU bassa il
+  // guadagno e' >70% del tempo paint.
+  bool backgroundCacheValid(QRectF const& bounds) const;
+  void rebuildBackgroundCache(QRectF const& bounds);
 
   QString m_homeGrid;
   QPointF m_homeLonLat;
@@ -107,6 +122,17 @@ private:
   double m_targetCenterLat {0.0};
   double m_targetSpanLon {360.0};
   double m_targetSpanLat {180.0};
+
+  // 1.0.213 — Cache del background renderizzato (earth + overlay + grid).
+  // Invalidata implicitamente quando i parametri cambiano (check via
+  // backgroundCacheValid). Devicepixel ratio salvato per HiDPI.
+  QPixmap m_backgroundCache;
+  QSizeF m_bgCacheBoundsSize;
+  double m_bgCacheCenterLon {0.0};
+  double m_bgCacheCenterLat {0.0};
+  double m_bgCacheSpanLon {0.0};
+  double m_bgCacheSpanLat {0.0};
+  qreal m_bgCacheDpr {1.0};
 };
 
 #endif // WORLDMAPWIDGET_H

@@ -215,12 +215,93 @@ WorldMapWidget::WorldMapWidget(QWidget * parent)
   m_animationTimer.setInterval(60);
   connect(&m_animationTimer, &QTimer::timeout, this, [this] {
     pruneExpiredContacts();
+    double const prevCenterLon = m_viewCenterLon;
+    double const prevCenterLat = m_viewCenterLat;
+    double const prevSpanLon = m_viewSpanLon;
+    double const prevSpanLat = m_viewSpanLat;
     updateViewportTargets();
     smoothViewport();
+    // 1.0.213 — invalida background cache se viewport si e' mosso
+    // davvero (smoothViewport e' interpolato continuo finche' velocity!=0).
+    bool const viewportShifted =
+        !qFuzzyCompare(prevCenterLon + 1.0, m_viewCenterLon + 1.0)
+        || !qFuzzyCompare(prevCenterLat + 1.0, m_viewCenterLat + 1.0)
+        || !qFuzzyCompare(prevSpanLon + 1.0, m_viewSpanLon + 1.0)
+        || !qFuzzyCompare(prevSpanLat + 1.0, m_viewSpanLat + 1.0);
+    if (viewportShifted) {
+        m_backgroundCache = QPixmap();
+    }
     m_animationPhase = std::fmod(m_animationPhase + 0.006, 1.0);
     update();
   });
   m_animationTimer.start();
+}
+
+void WorldMapWidget::setAnimationActive(bool active)
+{
+  if (active) {
+    if (!m_animationTimer.isActive()) {
+      m_animationTimer.start();
+    }
+  } else {
+    if (m_animationTimer.isActive()) {
+      m_animationTimer.stop();
+    }
+  }
+}
+
+void WorldMapWidget::setAnimationInterval(int ms)
+{
+  int const clamped = qBound(40, ms, 1000);
+  if (m_animationTimer.interval() != clamped) {
+    m_animationTimer.setInterval(clamped);
+  }
+}
+
+void WorldMapWidget::resizeEvent(QResizeEvent * event)
+{
+  // 1.0.213 — invalida cache su resize: la QPixmap dipende dalle dimensioni.
+  m_backgroundCache = QPixmap();
+  QWidget::resizeEvent(event);
+}
+
+bool WorldMapWidget::backgroundCacheValid(QRectF const& bounds) const
+{
+  if (m_backgroundCache.isNull()) return false;
+  if (m_bgCacheBoundsSize != bounds.size()) return false;
+  if (!qFuzzyCompare(m_bgCacheCenterLon + 1.0, m_viewCenterLon + 1.0)) return false;
+  if (!qFuzzyCompare(m_bgCacheCenterLat + 1.0, m_viewCenterLat + 1.0)) return false;
+  if (!qFuzzyCompare(m_bgCacheSpanLon + 1.0, m_viewSpanLon + 1.0)) return false;
+  if (!qFuzzyCompare(m_bgCacheSpanLat + 1.0, m_viewSpanLat + 1.0)) return false;
+  return true;
+}
+
+void WorldMapWidget::rebuildBackgroundCache(QRectF const& bounds)
+{
+  qreal const dpr = devicePixelRatioF() > 0 ? devicePixelRatioF() : 1.0;
+  QSize const pixelSize {
+      qMax(1, qRound(bounds.width() * dpr)),
+      qMax(1, qRound(bounds.height() * dpr))};
+  m_backgroundCache = QPixmap(pixelSize);
+  m_backgroundCache.setDevicePixelRatio(dpr);
+  m_backgroundCache.fill(Qt::transparent);
+
+  QPainter cachePainter {&m_backgroundCache};
+  cachePainter.setRenderHint(QPainter::Antialiasing, true);
+  cachePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+  // bounds traslato all'origine del pixmap
+  QRectF const localBounds {0.0, 0.0, bounds.width(), bounds.height()};
+  drawBackground(&cachePainter, localBounds);
+  drawGeoOverlay(&cachePainter, localBounds);
+  drawGrid(&cachePainter, localBounds);
+  cachePainter.end();
+
+  m_bgCacheBoundsSize = bounds.size();
+  m_bgCacheCenterLon = m_viewCenterLon;
+  m_bgCacheCenterLat = m_viewCenterLat;
+  m_bgCacheSpanLon = m_viewSpanLon;
+  m_bgCacheSpanLat = m_viewSpanLat;
+  m_bgCacheDpr = dpr;
 }
 
 void WorldMapWidget::setHomeGrid(QString const& grid)
@@ -572,10 +653,18 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
   painter.save();
   painter.setClipPath(clipPath);
 
-  drawBackground(&painter, mapBounds);
-  drawGeoOverlay(&painter, mapBounds);
+  // 1.0.213 — Background cache layered: earth + overlay + grid rebuildati
+  // SOLO se viewport o size sono cambiati. In idle (viewport settled), il
+  // paintEvent diventa drawPixmap(cache) + day/night + contacts. Pre-cache
+  // queste 3 chiamate erano i 70% del costo paint (drawPixmap tile x2
+  // su texture 2048x1024 + grid).
+  if (!backgroundCacheValid(mapBounds)) {
+    rebuildBackgroundCache(mapBounds);
+  }
+  painter.drawPixmap(mapBounds.topLeft(), m_backgroundCache);
+  // Day/night dipende dall'orario UTC (cambia lentamente ma e' overlay
+  // semi-trasparente leggero, ridipinto ogni frame).
   drawDayNightMask(&painter, mapBounds);
-  drawGrid(&painter, mapBounds);
 
   QList<Contact> contacts = m_contacts.values();
   std::sort(contacts.begin(), contacts.end(), [] (Contact const& a, Contact const& b) {

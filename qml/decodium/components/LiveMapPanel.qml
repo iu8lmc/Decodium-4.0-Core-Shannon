@@ -68,8 +68,17 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: if (visible) scheduleRebuild()
-    onVisibleChanged: if (visible) scheduleRebuild()
+    Component.onCompleted: {
+        // 1.0.213 — pausa l'animation timer del widget legacy quando il
+        // pannello non e' visibile (riduce sprechi CPU ~50% in idle dietro
+        // ad altri tab/pop-out chiusi).
+        worldMap.setActive(visible)
+        if (visible) scheduleRebuild()
+    }
+    onVisibleChanged: {
+        worldMap.setActive(visible)
+        if (visible) scheduleRebuild()
+    }
 
     ColumnLayout {
         anchors.fill: parent
