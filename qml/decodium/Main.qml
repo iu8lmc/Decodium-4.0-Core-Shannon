@@ -5466,9 +5466,12 @@ NumberAnimation {
                                             readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
                                             width: evenPeriodList.width
                                             height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
-	                                            property var highlightFill: isPeriodSeparator ? null : mainWindow.decodeHighlightFill(modelData)
-	                                            property var highlightBorder: isPeriodSeparator ? null : mainWindow.decodeHighlightBorder(modelData)
-	                                            color: isPeriodSeparator ? "transparent" :
+	                                            property var highlightFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightFill(modelData)
+	                                            property var highlightBorder: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightBorder(modelData)
+	                                            // 1.0.205 — guard !modelData per evitare TypeError flood (~46/s) durante
+	                                            // model swap transients che saturava il main thread via logger sincrono.
+	                                            color: !modelData ? "transparent" :
+	                                                   isPeriodSeparator ? "transparent" :
 	                                                   highlightFill ? highlightFill :
 	                                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.12) :
 	                                                   decodePanel.isAtRxFrequency(modelData.freq || "0", modelData) ? Qt.rgba(76/255, 175/255, 80/255, 0.2) :
@@ -9506,9 +9509,12 @@ NumberAnimation {
 	                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
 	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
 		                            radius: 3
-		                            property var highlightFill: isPeriodSeparator ? null : mainWindow.decodeHighlightFill(modelData)
-		                            property var highlightBorder: isPeriodSeparator ? null : mainWindow.decodeHighlightBorder(modelData)
-		                            color: isPeriodSeparator ? "transparent" :
+		                            property var highlightFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightFill(modelData)
+		                            property var highlightBorder: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightBorder(modelData)
+		                            // 1.0.205 — guard !modelData per evitare TypeError flood (~46/s) durante
+		                            // model swap transients che saturava il main thread via logger sincrono.
+		                            color: !modelData ? "transparent" :
+		                                   isPeriodSeparator ? "transparent" :
 		                                   highlightFill ? highlightFill :
 		                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
 		                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
