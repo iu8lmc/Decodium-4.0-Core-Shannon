@@ -49,13 +49,37 @@ QString audioErrorName(QAudio::Error error)
   return QStringLiteral("UnknownError(%1)").arg(static_cast<int>(error));
 }
 
+// 1.0.216 — park-and-delete anche su Windows per eliminare lo stutter
+// "WASAPI destroy + recreate" ad ogni fine TX FT2 (slot 7.5s). Pre-1.0.216
+// retireStream() su Windows faceva reset()+stop()+delete sincrono, e
+// il prossimo startTx() ricreava un sink nuovo entro ~50ms: Qt WASAPI
+// engine cleanup + new session connect = 100-200ms di stutter audio.
+// Ora il sink viene "parcheggiato" (setVolume(0) + disconnect) e
+// distrutto dopo una window > slot ma << 2 slot, in modo che la cleanup
+// del backend non avvenga MAI dentro la pipeline TX successiva.
 bool deferCoreAudioSinkDelete()
 {
 #if defined(Q_OS_MAC)
   return QOperatingSystemVersion::current()
       >= QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 15);
+#elif defined(Q_OS_WIN)
+  return true;
 #else
   return false;
+#endif
+}
+
+int parkedSinkLifetimeMs()
+{
+#if defined(Q_OS_MAC)
+  // Mac: 30s come pre-1.0.216 (workaround stopAudioUnit crash CoreAudio).
+  return 30000;
+#elif defined(Q_OS_WIN)
+  // Win: 8s = oltre 1 slot FT2 (7.5s), sotto 2 slot. Max ~2 sink parked
+  // contemporanei, no accumulo memoria.
+  return 8000;
+#else
+  return 30000;
 #endif
 }
 
@@ -69,7 +93,7 @@ void deleteStreamAfterCoreAudioCallbacks(QAudioSink *stream, QString const& reas
   if (!context) {
 #if defined(Q_OS_MAC)
     stream->setVolume(0.0f);
-    qInfo() << "TX SoundOutput CoreAudio sink parked without app context:"
+    qInfo() << "TX SoundOutput sink parked without app context:"
             << reason
             << "state=" << audioStateName(stream->state())
             << "error=" << audioErrorName(stream->error());
@@ -82,20 +106,33 @@ void deleteStreamAfterCoreAudioCallbacks(QAudioSink *stream, QString const& reas
 
   QPointer<QAudioSink> guard(stream);
   stream->setParent(nullptr);
-  QTimer::singleShot(30000, context, [guard, reason]() {
+  int const lifetimeMs = parkedSinkLifetimeMs();
+  QTimer::singleShot(lifetimeMs, context, [guard, reason]() {
     if (!guard) {
       return;
     }
     guard->disconnect();
     if (guard->state() == QAudio::StoppedState) {
       guard->deleteLater();
-      qInfo() << "TX SoundOutput CoreAudio sink deferred delete released:" << reason;
+      qInfo() << "TX SoundOutput sink deferred delete released:" << reason;
       return;
     }
-    qInfo() << "TX SoundOutput CoreAudio sink parked to avoid Qt stopAudioUnit crash:"
+    // Su Windows il sink potrebbe non essere arrivato in StoppedState
+    // (es. underrun cronico). In quel caso forziamo stop() ora — l'utente
+    // ha gia' avuto i suoi 8s di safe-window post-TX.
+#if defined(Q_OS_WIN)
+    guard->stop();
+    guard->deleteLater();
+    qInfo() << "TX SoundOutput sink parked stop+delete after lifetime:"
+            << reason
+            << "state=" << audioStateName(guard->state());
+    return;
+#else
+    qInfo() << "TX SoundOutput sink parked to avoid backend crash:"
             << reason
             << "state=" << audioStateName(guard->state())
             << "error=" << audioErrorName(guard->error());
+#endif
   });
 }
 }
