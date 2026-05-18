@@ -1550,6 +1550,14 @@ private:
     // marginali). Default ON — disabilitabile da setting per chi vuole
     // vedere TUTTO comprese le decode dubbie.
     bool m_hideGhostDecodes {true};
+    // 1.0.225 — reentry guard per checkAndStartPeriodicTx coalescing.
+    // Pre-1.0.225 al fine TX FT2 venivano scheduate 3 QTimer::singleShot
+    // verso checkAndStartPeriodicTx (da noteTxPlaybackFinished +
+    // completeTxPlayback con 0ms e 220ms) -> 3 chiamate consecutive,
+    // ognuna con 12+ bridgeLog flush. Ora il primo singleShot setta
+    // m_periodicTxCheckScheduled=true, gli altri short-circuit; il
+    // callback resetta a false prima di entrare nel body.
+    bool m_periodicTxCheckScheduled {false};
     // 1.0.174 — FT2 weak-signal pack master flag (opt-in, default OFF).
     bool m_ft2Conservative {false};
     // 1.0.187 — FT2 Weak-Signal Pack F v2: partner-memory state

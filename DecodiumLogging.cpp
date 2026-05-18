@@ -364,7 +364,15 @@ void DecodiumLogging::diag(DiagCategory cat, const QString& message) {
         QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz"),
         DecodiumLogging::categoryToString(cat), message);
     g_diagFile->write(line.toUtf8());
-    g_diagFile->flush();
+    // 1.0.225 — flush() solo per WARN/ERR/CAT critical paths. Pre-1.0.225
+    // ogni linea (~100/sec durante TX) faceva fsync su disco = 5-30ms su
+    // HDD/AV. Buffer del file system flusha automaticamente entro ~1s, e
+    // le linee INFO/DEBUG/AUDIO/DECODE/TX/QML possono attendere quel
+    // flush implicito. Solo ERR/WARN richiedono fsync immediato per
+    // diagnostic post-mortem dopo crash.
+    if (cat == DiagCategory::WARNING || cat == DiagCategory::ERR) {
+        g_diagFile->flush();
+    }
 }
 
 QStringList DecodiumLogging::readLastLines(int n) {

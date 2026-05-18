@@ -239,7 +239,12 @@ static void retireAudioSink(QAudioSink *sink, QBuffer *buffer, const QString& re
             buffer->setParent(nullptr);
         }
 
-        sink->setVolume(0.0f);
+        // 1.0.225 — setVolume(0) solo se sink non e' gia' StoppedState
+        // (Qt6 logga warning "QAudioSink::setVolume() called on stopped
+        // sink" che attraversa il qt-message-handler -> log sync flush).
+        if (sink->state() != QAudio::StoppedState) {
+            sink->setVolume(0.0f);
+        }
         if (buffer) {
             buffer->close();
         }
@@ -10907,11 +10912,19 @@ void DecodiumBridge::noteTxPlaybackFinished(const QString& reason, bool error)
                   .arg(m_nTx73)
                   .arg(reason, finishedMessage));
 
-    QTimer::singleShot(0, this, [this]() {
-        if (!m_transmitting && !m_tuning) {
-            checkAndStartPeriodicTx();
-        }
-    });
+    // 1.0.225 — guard reentry (BUG #8 agente-tx). Senza guard, al fine TX
+    // FT2 venivano scheduate 3 singleShot in coda verso
+    // checkAndStartPeriodicTx (qui + 2 da completeTxPlayback) -> 3
+    // chiamate consecutive, ognuna 12+ bridgeLog flush.
+    if (!m_periodicTxCheckScheduled) {
+        m_periodicTxCheckScheduled = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_periodicTxCheckScheduled = false;
+            if (!m_transmitting && !m_tuning) {
+                checkAndStartPeriodicTx();
+            }
+        });
+    }
 }
 
 bool DecodiumBridge::shouldAlignTxAudioToCurrentSyncSlot() const
@@ -11294,6 +11307,20 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
         m_txPcmData.clear();
     }
 
+    // 1.0.225 — Chiudi PRIMA la finestra m_transmitting=true, poi setPtt.
+    // Pre-1.0.225 l'ordine era inverso: setPtt(false) -> 5-30ms di radio
+    // gia' in RX con m_transmitting still true -> autoSequenceStep dropping
+    // legitimate decode FT2 con guard "ignore stale TX% payload while TX
+    // active". Risultato percepito: sequencer non risponde subito al
+    // partner al fine TX. Spostando l'emit transmittingChanged() PRIMA di
+    // setPtt, decode-receiver vede m_transmitting=false e non droppa.
+    bool const wasTransmitting = m_transmitting;
+    int const finishedTx = m_activeTxNumber;
+    if (m_transmitting) {
+        m_transmitting = false;
+        emit transmittingChanged();
+    }
+
     if (activeCatCanPtt(m_nativeCat, m_hamlibCat, m_catBackend, m_omniRigCat, m_legacyBackend)) {
         activeCatSetPtt(m_nativeCat, m_hamlibCat, m_catBackend, false, m_omniRigCat, m_legacyBackend);
     }
@@ -11301,13 +11328,7 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
         stopTciTxAudioStream(true);
     }
 
-    bool const wasTransmitting = m_transmitting;
-    int const finishedTx = m_activeTxNumber;
     noteTxPlaybackFinished(reason, error);
-    if (m_transmitting) {
-        m_transmitting = false;
-        emit transmittingChanged();
-    }
 
     restoreTxAudioSchedulingBoost(reason);
     resumeRxAudioAfterTx(reason);
@@ -11384,19 +11405,36 @@ void DecodiumBridge::completeTxPlayback(const QString& reason, bool error)
         }
     }
 
+    // 1.0.225 — guard reentry (BUG #8 agente-tx). Pre-1.0.225 questi 2
+    // singleShot venivano coda CONTEMPORANEA al singleShot di
+    // noteTxPlaybackFinished -> 3 chiamate consecutive, ognuna 12+ log
+    // flush. Ora una sola in coda viene eseguita, le altre short-circuit.
     if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled) {
         m_asyncLastTxEndMs = QDateTime::currentMSecsSinceEpoch();
-        QTimer::singleShot(0, this, [this]() {
-            if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled &&
-                m_txEnabled && !m_transmitting && !m_tuning) {
-                checkAndStartPeriodicTx();
-            }
-        });
+        if (!m_periodicTxCheckScheduled) {
+            m_periodicTxCheckScheduled = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_periodicTxCheckScheduled = false;
+                if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled &&
+                    m_txEnabled && !m_transmitting && !m_tuning) {
+                    checkAndStartPeriodicTx();
+                }
+            });
+        }
+        // Il secondo singleShot 220ms e' un fallback per casi in cui il
+        // primo (0ms) trovi m_transmitting ancora true. Mantenuto ma
+        // gated dallo stesso flag: se il primo gia' fired, il secondo
+        // re-trigger (se serve, m_periodicTxCheckScheduled e' false).
         QTimer::singleShot(220, this, [this]() {
-            if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled &&
-                m_txEnabled && !m_transmitting && !m_tuning) {
-                checkAndStartPeriodicTx();
-            }
+            if (m_periodicTxCheckScheduled) return;
+            m_periodicTxCheckScheduled = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_periodicTxCheckScheduled = false;
+                if (m_mode == QStringLiteral("FT2") && m_asyncTxEnabled &&
+                    m_txEnabled && !m_transmitting && !m_tuning) {
+                    checkAndStartPeriodicTx();
+                }
+            });
         });
     }
 
@@ -11465,7 +11503,12 @@ void DecodiumBridge::startTx()
         emit statusMessage(QStringLiteral("TX bloccato: messaggio non coerente con il QSO attivo"));
         return;
     }
-    m_lastTransmittedMessage = msg.trimmed();
+    // 1.0.225 — m_lastTransmittedMessage spostato DOPO ensureTxAudioPrepared
+    // (BUG #11 agente-tx). Pre-1.0.225 era scritto qui PRIMA del prepare:
+    // se ensureTxAudioPrepared falliva, m_lastTransmittedMessage restava
+    // settato pur senza aver TX, causando completeFinishedSignoffIfReady
+    // falsi positivi su TX5/RR73 inferenza signoff -> log QSO prematuro.
+    // Ora settato solo dopo ensureTxAudioPrepared OK.
     m_lastTxActivityUtc = QDateTime::currentDateTimeUtc();
 
     if (usingLegacyBackendForTx()) {
@@ -11747,6 +11790,11 @@ void DecodiumBridge::startTx()
     }
 
     quint64 const txSerial = ++m_txPlaybackSerial;
+    // 1.0.225 — set m_lastTransmittedMessage QUI (DOPO ensureTxAudioPrepared
+    // OK + PTT successful), BUG #11 agente-tx. Pre-1.0.225 era settato a
+    // riga 11506 PRIMA del prepare: prepare fail => m_lastTransmittedMessage
+    // settato senza TX reale => completeFinishedSignoffIfReady false-positive.
+    m_lastTransmittedMessage = msg.trimmed();
     m_transmitting = true;
     emit transmittingChanged();
     applyTxAudioSchedulingBoost(QStringLiteral("tx"));
@@ -17452,6 +17500,16 @@ void DecodiumBridge::checkAndStartPeriodicTx()
         m_logAfterOwn73 = false;
         m_ft2DeferredLogPending = false;
         m_pendingAutoSeqTxAfterActiveTx = 0;
+        // 1.0.225 — reset anche le stringhe pending (BUG #9 agente-tx).
+        // Pre-1.0.225 solo l'integer m_pendingAutoSeqTxAfterActiveTx era
+        // resettato; le stringhe associate rimanevano dal QSO precedente.
+        // Se nel prossimo QSO il pending era ri-settato (es. TX deferred
+        // durante un nuovo TX attivo), completeTxPlayback leggeva le STALE
+        // m_pendingAutoSeqMessage/PartnerBase/Mode -> falso positivo
+        // "partner does not mention" -> deferred TX legittimo droppato.
+        m_pendingAutoSeqPartnerBase.clear();
+        m_pendingAutoSeqMessage.clear();
+        m_pendingAutoSeqMode.clear();
         m_quickPeerSignaled = false;
         if (!preserveAutoTx) {
             setTxEnabled(false);
@@ -18121,6 +18179,16 @@ void DecodiumBridge::autoSequenceStep(const QStringList& f)
         m_logAfterOwn73 = false;
         m_ft2DeferredLogPending = false;
         m_pendingAutoSeqTxAfterActiveTx = 0;
+        // 1.0.225 — reset anche le stringhe pending (BUG #9 agente-tx).
+        // Pre-1.0.225 solo l'integer m_pendingAutoSeqTxAfterActiveTx era
+        // resettato; le stringhe associate rimanevano dal QSO precedente.
+        // Se nel prossimo QSO il pending era ri-settato (es. TX deferred
+        // durante un nuovo TX attivo), completeTxPlayback leggeva le STALE
+        // m_pendingAutoSeqMessage/PartnerBase/Mode -> falso positivo
+        // "partner does not mention" -> deferred TX legittimo droppato.
+        m_pendingAutoSeqPartnerBase.clear();
+        m_pendingAutoSeqMessage.clear();
+        m_pendingAutoSeqMode.clear();
         m_quickPeerSignaled = false;
         if (!preserveAutoTx) {
             setTxEnabled(false);
