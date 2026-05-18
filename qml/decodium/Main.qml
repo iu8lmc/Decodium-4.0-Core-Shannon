@@ -623,6 +623,16 @@ ApplicationWindow {
     property bool period1Detached: false
     property bool period1Minimized: false
     property bool period1DockHighlighted: false
+    // 1.0.229 — Compact mode Full Spectrum: row height ridotta per
+    // raddoppiare le righe visibili nella stessa viewport quando i
+    // decode sono tanti (es. FT8 burst 20+ per slot). Opt-in default OFF.
+    property bool compactFullSpectrum: bridge ? !!bridge.getSetting("CompactFullSpectrum", false) : false
+    property int fullSpectrumRowHeight: compactFullSpectrum ? 14 : 26
+    function toggleCompactFullSpectrum() {
+        compactFullSpectrum = !compactFullSpectrum
+        if (bridge)
+            bridge.setSetting("CompactFullSpectrum", compactFullSpectrum)
+    }
     property bool period2Detached: false
     property bool period2Minimized: false
     property bool period2DockHighlighted: false
@@ -5251,6 +5261,44 @@ ApplicationWindow {
                                             }
                                         }
 
+	                                        // 1.0.229 — Compact mode toggle Full Spectrum.
+	                                        // Quando ON, row height passa da 26px a 14px:
+	                                        // ~2x decode visibili in stessa viewport.
+	                                        Rectangle {
+	                                            Layout.preferredWidth: 34
+	                                            Layout.preferredHeight: 18
+	                                            radius: 4
+	                                            color: p1CompactMA.containsMouse
+	                                                ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3)
+	                                                : (mainWindow.compactFullSpectrum
+	                                                    ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2)
+	                                                    : "transparent")
+	                                            border.color: (p1CompactMA.containsMouse || mainWindow.compactFullSpectrum)
+	                                                ? secondaryCyan
+	                                                : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+	                                            border.width: 1
+	                                            Text {
+	                                                anchors.centerIn: parent
+	                                                text: mainWindow.compactFullSpectrum ? "Full" : "Compact"
+	                                                font.pixelSize: mainWindow.compactFullSpectrum ? 10 : 9
+	                                                font.bold: true
+	                                                color: (p1CompactMA.containsMouse || mainWindow.compactFullSpectrum)
+	                                                    ? secondaryCyan : textSecondary
+	                                            }
+	                                            MouseArea {
+	                                                id: p1CompactMA
+	                                                anchors.fill: parent
+	                                                hoverEnabled: true
+	                                                cursorShape: Qt.PointingHandCursor
+	                                                onClicked: mainWindow.toggleCompactFullSpectrum()
+	                                            }
+	                                            ToolTip.visible: p1CompactMA.containsMouse
+	                                            ToolTip.text: mainWindow.compactFullSpectrum
+	                                                ? qsTr("Switch to normal row height")
+	                                                : qsTr("Compact rows (2x more visible decodes)")
+	                                            ToolTip.delay: 500
+	                                        }
+
 	                                        // Pop button
 	                                        Rectangle {
 	                                            Layout.preferredWidth: 34
@@ -5366,6 +5414,10 @@ ApplicationWindow {
                                         property bool followTail: true
                                         property bool tailFollowPending: false
 	                                        property bool tailFollowQueued: false
+	                                        // 1.0.231 — counter pending decodes mentre user scrolla up.
+	                                        // Permette al floating button "↓ N new" di sapere quanti
+	                                        // decode sono arrivati dopo la perdita di tail-follow.
+	                                        property int pendingNewDecodes: 0
 	                                        function isNearTail() {
 	                                            return contentHeight <= height + 2
 	                                                || contentY >= Math.max(0, contentHeight - height - 48)
@@ -5374,6 +5426,8 @@ ApplicationWindow {
                                             if (tailFollowPending)
                                                 return
                                             followTail = isNearTail()
+                                            // 1.0.231 — reset counter "↓ N new" quando torna a tail
+                                            if (followTail) pendingNewDecodes = 0
                                         }
                                         function tailContentY() {
                                             return Math.max(0, contentHeight - height)
@@ -5381,6 +5435,7 @@ ApplicationWindow {
                                         function finishTailFollow() {
                                             tailFollowPending = false
                                             followTail = isNearTail()
+                                            if (followTail) pendingNewDecodes = 0
                                         }
                                         function forceTailFollow() {
     followTail = true
@@ -5459,11 +5514,18 @@ NumberAnimation {
                                         // thread saturation -> Full Spectrum freeze.
                                         onCountChanged: {
                                             if (period1Detached) return
+                                            // 1.0.231 — se user e' in scroll-back, no forced tail
+                                            // ma incrementa counter per il floating "↓ N new" button.
+                                            if (!followTail) {
+                                                pendingNewDecodes++
+                                                return
+                                            }
                                             forceTailFollow()
                                         }
                                         property int _ver: decodePanel.decodeListVersion
                                         on_VerChanged: {
                                             if (period1Detached) return
+                                            if (!followTail) return
                                             forceTailFollow()
                                         }
 	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
@@ -5496,7 +5558,9 @@ NumberAnimation {
                                             // 1.0.155: separator meno invasivo — riga sottile, no label.
                                             readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
                                             width: evenPeriodList.width
-                                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(26 * fs)
+                                            // 1.0.229 — height adattiva via mainWindow.fullSpectrumRowHeight
+                                            // (compact 14px / normal 26px). Toggle via toolbar o Ctrl+Shift+C.
+                                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(mainWindow.fullSpectrumRowHeight * fs)
 	                                            property var highlightFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightFill(modelData)
 	                                            property var highlightBorder: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightBorder(modelData)
 	                                            // 1.0.205 — guard !modelData per evitare TypeError flood (~46/s) durante
@@ -5625,6 +5689,51 @@ NumberAnimation {
                                             color: textSecondary
                                             horizontalAlignment: Text.AlignHCenter
                                             visible: evenPeriodList.count === 0
+                                        }
+
+                                        // 1.0.231 — floating button "↓ N new decodes" visibile quando
+                                        // l'utente scrolla up e arrivano nuovi decode in fondo.
+                                        // Click → torna in fondo + reset counter. Allineato a
+                                        // pattern Twitter "show N new tweets" / Slack "new messages".
+                                        Rectangle {
+                                            id: evenPeriodPendingButton
+                                            anchors.bottom: parent.bottom
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            anchors.bottomMargin: 8
+                                            width: pendingLabel.implicitWidth + 24
+                                            height: 24
+                                            radius: 12
+                                            visible: evenPeriodList.pendingNewDecodes > 0 && !period1Detached
+                                            color: pendingMA.containsMouse
+                                                ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 1.0)
+                                                : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.85)
+                                            border.color: secondaryCyan
+                                            border.width: 1
+                                            opacity: visible ? 1.0 : 0.0
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            z: 100
+                                            Text {
+                                                id: pendingLabel
+                                                anchors.centerIn: parent
+                                                text: "↓ " + evenPeriodList.pendingNewDecodes + " new"
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                color: bgDeep
+                                            }
+                                            MouseArea {
+                                                id: pendingMA
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    evenPeriodList.pendingNewDecodes = 0
+                                                    evenPeriodList.followTail = true
+                                                    evenPeriodList.forceTailFollow()
+                                                }
+                                            }
+                                            ToolTip.visible: pendingMA.containsMouse
+                                            ToolTip.text: qsTr("Jump to latest decode")
+                                            ToolTip.delay: 500
                                         }
                                     }
                                 }
@@ -5893,6 +6002,8 @@ NumberAnimation {
                                             if (tailFollowPending)
                                                 return
                                             followTail = isNearTail()
+                                            // 1.0.231 — reset counter "↓ N new" quando torna a tail
+                                            if (followTail) pendingNewDecodes = 0
                                         }
                                         function tailContentY() {
                                             return Math.max(0, contentHeight - height)
@@ -5900,6 +6011,7 @@ NumberAnimation {
                                         function finishTailFollow() {
                                             tailFollowPending = false
                                             followTail = isNearTail()
+                                            if (followTail) pendingNewDecodes = 0
                                         }
                                         function forceTailFollow() {
     followTail = true
@@ -6717,6 +6829,12 @@ NumberAnimation {
         sequence: "F2"
         context: Qt.ApplicationShortcut
         onActivated: mainWindow.openQsyQuickPicker()
+    }
+    // 1.0.229 — toggle compact mode Full Spectrum
+    Shortcut {
+        sequence: "Ctrl+Shift+C"
+        context: Qt.ApplicationShortcut
+        onActivated: mainWindow.toggleCompactFullSpectrum()
     }
 
     Loader {
@@ -9326,6 +9444,41 @@ NumberAnimation {
 	                                }
 	                            }
 
+		                        // 1.0.229 — Compact toggle anche su floating window
+		                        Rectangle {
+		                            Layout.preferredWidth: 42
+		                            Layout.preferredHeight: 22
+		                            radius: 4
+		                            color: p1FloatCompactMA.containsMouse
+		                                ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.3)
+		                                : (mainWindow.compactFullSpectrum
+		                                    ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.2)
+		                                    : "transparent")
+		                            border.color: (p1FloatCompactMA.containsMouse || mainWindow.compactFullSpectrum)
+		                                ? secondaryCyan
+		                                : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.45)
+		                            border.width: 1
+		                            Text {
+		                                anchors.centerIn: parent
+		                                text: mainWindow.compactFullSpectrum ? "Full" : "Compact"
+		                                font.pixelSize: mainWindow.compactFullSpectrum ? 11 : 10
+		                                font.bold: true
+		                                color: (p1FloatCompactMA.containsMouse || mainWindow.compactFullSpectrum)
+		                                    ? secondaryCyan : textPrimary
+		                            }
+		                            MouseArea {
+		                                id: p1FloatCompactMA
+		                                anchors.fill: parent
+		                                hoverEnabled: true
+		                                cursorShape: Qt.PointingHandCursor
+		                                onClicked: mainWindow.toggleCompactFullSpectrum()
+		                            }
+		                            ToolTip.visible: p1FloatCompactMA.containsMouse
+		                            ToolTip.text: mainWindow.compactFullSpectrum
+		                                ? qsTr("Switch to normal row height")
+		                                : qsTr("Compact rows (2x more visible decodes)")
+		                        }
+
 		                        Rectangle {
 	                            Layout.preferredWidth: 42
 	                            Layout.preferredHeight: 22
@@ -9423,6 +9576,8 @@ NumberAnimation {
                         property bool followTail: true
                         property bool tailFollowPending: false
 	                        property bool tailFollowQueued: false
+	                        // 1.0.231 — counter pending decodes (floating mode)
+	                        property int pendingNewDecodes: 0
 	                        function isNearTail() {
 	                            return contentHeight <= height + 2
 	                                || contentY >= Math.max(0, contentHeight - height - 48)
@@ -9431,6 +9586,7 @@ NumberAnimation {
                             if (tailFollowPending)
                                 return
                             followTail = isNearTail()
+                            if (followTail) pendingNewDecodes = 0
                         }
                         function tailContentY() {
                             return Math.max(0, contentHeight - height)
@@ -9438,6 +9594,7 @@ NumberAnimation {
                         function finishTailFollow() {
                             tailFollowPending = false
                             followTail = isNearTail()
+                            if (followTail) pendingNewDecodes = 0
                         }
                         function forceTailFollow() {
     followTail = true
@@ -9507,16 +9664,19 @@ NumberAnimation {
 	                        }
                         // 1.0.227 — gate simmetrico al evenPeriodList: questo
                         // floating ListView e' attivo solo quando period1Detached=true.
-                        // Quando false (embedded mode) le sue animation/forceTailFollow
-                        // si attivavano in parallelo all'embedded -> doppio costo main
-                        // thread su ogni decode = causa principale "Full Spectrum freeze".
                         onCountChanged: {
                             if (!period1Detached) return
+                            // 1.0.231 — se user in scroll-back, counter ↓N
+                            if (!followTail) {
+                                pendingNewDecodes++
+                                return
+                            }
                             forceTailFollow()
                         }
                         property int _ver: decodePanel.decodeListVersion
                         on_VerChanged: {
                             if (!period1Detached) return
+                            if (!followTail) return
                             forceTailFollow()
                         }
 	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
@@ -9547,7 +9707,8 @@ NumberAnimation {
 	                        delegate: Rectangle {
 		                            width: parent ? parent.width : 100
 	                            readonly property bool isPeriodSeparator: !!(modelData && modelData.isSeparator === true)
-	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
+	                            // 1.0.229 — height adattiva compact mode (vedi mainWindow.fullSpectrumRowHeight)
+	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(mainWindow.fullSpectrumRowHeight * fs)
 		                            radius: 3
 		                            property var highlightFill: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightFill(modelData)
 		                            property var highlightBorder: (!modelData || isPeriodSeparator) ? null : mainWindow.decodeHighlightBorder(modelData)
@@ -9596,6 +9757,41 @@ NumberAnimation {
 	                                onDoubleClicked: { if (!parent.isPeriodSeparator && !modelData.isTx) decodePanel.handleDecodeDoubleClick(modelData) }
 	                            }
 	                        }
+                    }
+
+                    // 1.0.231 — floating "↓ N new" button (floating window)
+                    Rectangle {
+                        id: period1FloatingPendingButton
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottomMargin: 8
+                        width: period1FloatingPendingLabel.implicitWidth + 24
+                        height: 24
+                        radius: 12
+                        visible: period1FloatingList.pendingNewDecodes > 0 && period1Detached
+                        color: period1FloatingPendingMA.containsMouse ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 1.0) : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.85)
+                        border.color: secondaryCyan
+                        border.width: 1
+                        z: 100
+                        Text {
+                            id: period1FloatingPendingLabel
+                            anchors.centerIn: parent
+                            text: "↓ " + period1FloatingList.pendingNewDecodes + " new"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: "#000000"
+                        }
+                        MouseArea {
+                            id: period1FloatingPendingMA
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                period1FloatingList.pendingNewDecodes = 0
+                                period1FloatingList.followTail = true
+                                period1FloatingList.forceTailFollow()
+                            }
+                        }
                     }
                 }
             }

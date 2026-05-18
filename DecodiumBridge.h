@@ -1528,7 +1528,12 @@ private:
     // su lista che cresce indefinitamente → CPU saturo + RAM crescente quando
     // Decodium gira per ore. Cap conservativo 500 (contesti FT8 affollati).
     // m_rxDecodeList condivide stesso cap (QSO scope, raramente >50 entries).
-    static constexpr int kDecodeListCap = 500;
+    // 1.0.229 — Cap ridotto da 500 a 250 (richiesta utente IU8LMC per
+    // contenere la Full Spectrum quando ci sono molti decode). Quando
+    // m_decodeList raggiunge 250, trimDecodeListsIfNeeded rimuove le
+    // entry piu' vecchie (FIFO rolling). RxDecodeList resta 200 (gia'
+    // scope QSO ristretto).
+    static constexpr int kDecodeListCap = 250;
     static constexpr int kRxDecodeListCap = 200;
     void trimDecodeListsIfNeeded();
     // 1.0.142: throttle per decodeListChanged signal nei path high-frequency
