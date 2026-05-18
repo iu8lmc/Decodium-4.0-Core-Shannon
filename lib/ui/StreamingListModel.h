@@ -2,22 +2,30 @@
 // StreamingListModel<T> -- template base class per stream high-frequency
 // di entries che alimentano ListView QML.
 //
-// Use cases pianificati (Phase 6 migration):
-//   - Decode list (FT8/FT2 burst end-of-cycle, 15-20 entries)
+// SCOPE (rivisto 1.0.236 dopo audit):
 //   - DX cluster spots (reconnect storm, 100+ entries/s)
 //   - CAT/Hamlib trace (debug overlay)
+//   - Future streaming sources (alerts, band activity sniffer, etc)
+//
+// NON usare per la decode list. DecodeListModel (DecodeListModel.h)
+// esistente esegue gia' diff smart a 4 casi (append-only, shrink-only,
+// shift-N+append-M, fallback reset), scoped dataChanged per regioni
+// contigue, e separator injection per FT2 period. La sua architettura
+// pull/replace (setEntries con lista gia' filtrata) e' incompatibile
+// con il modello push/streaming del template e perderebbe lo shift-N
+// diff (1.0.207). Phase 2 della roadmap = DONE pre-roadmap per il
+// caso decode list grazie a 1.0.143 fase 2 (DecodeListModel) +
+// 1.0.207-208 (shift-N diff + emit throttle 500ms a monte nel bridge).
 //
 // Caratteristiche:
 //   - Coalescing flush via QTimer (default 100ms): un singolo segnale
 //     rowsInserted per batch, anche se enqueue() viene chiamato molte
-//     volte in rapida successione (esempio: end of T/R cycle).
+//     volte in rapida successione.
 //   - Thread-safe enqueue: protetto da QMutex, puo' essere chiamato da
 //     worker thread (decoder, network, audio callback).
 //   - FIFO row cap: setMaxRows(n) > 0 fa droppare le entries piu' vecchie
-//     in modo che il modello non cresca indefinitamente (vedi regressione
-//     decode list cap 1.0.155 / 1.0.206 in MEMORY.md).
-//   - forceFlush() sincrono dal thread GUI per smaltire la coda subito,
-//     utile a fine ciclo T/R o prima di operazioni che leggono il count.
+//     in modo che il modello non cresca indefinitamente.
+//   - forceFlush() sincrono dal thread GUI per smaltire la coda subito.
 //
 // Concurrency model:
 //   - m_pending protetto da QMutex (enqueue da qualsiasi thread).
@@ -31,12 +39,6 @@
 // Sottoclassi:
 //   - DEVONO override roleNames() + data(index, role).
 //   - Possono usare entryAt(row) (protected) per leggere la entry alla riga.
-//
-// Stato: classe pronta per uso, ma NON ancora integrata. La migrazione di
-// m_decodeList in DecodiumBridge resta pendente -- il bridge attuale
-// (QVariantList m_decodeList + emit throttle 500ms + shift-diff) funziona
-// bene per uso singolo-utente e la migrazione tocca 5 ListView QML +
-// DecodeWindow.qml panel: out of scope per Sprint 3. Vedi roadmap Phase 6.
 #pragma once
 
 #include <QAbstractListModel>
