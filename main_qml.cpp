@@ -1317,6 +1317,41 @@ int main(int argc, char* argv[])
 #endif
     L("QML OK - entering event loop");
 
+    // 1.0.220 — Smoke TX test mode: env var DECODIUM_TX_SMOKE_TEST=1 attiva
+    // una sequenza di startTune/stopTune programmatica per stressare il
+    // lifecycle audio sink senza UI interaction. Utile per CI / verifica
+    // automatica del fix audio sink park Windows (1.0.216→218). Sequenza:
+    //   t=5s   tune ON  (first cycle, ctor sink + WASAPI start)
+    //   t=8s   tune OFF (retire + park 8s window inizia)
+    //   t=11s  tune ON  (verifica recovery: sink_create durante park overlap)
+    //   t=14s  tune OFF (retire seconda volta)
+    //   t=17s  quit     (esegue exit cleanup, verifica delete delayed)
+    // Tutti gli eventi loggati con prefix [TX-SMOKE] + i marker [TX-TL]
+    // standard dei fix 1.0.218 sono visibili nel diagnostic log.
+    if (qEnvironmentVariableIsSet("DECODIUM_TX_SMOKE_TEST")) {
+        L("[TX-SMOKE] DECODIUM_TX_SMOKE_TEST detected — arming Tune cycle");
+        QTimer::singleShot(5000, &bridge, [&bridge]() {
+            qInfo() << "[TX-SMOKE] t=5s startTune (cycle 1)";
+            bridge.startTune();
+        });
+        QTimer::singleShot(8000, &bridge, [&bridge]() {
+            qInfo() << "[TX-SMOKE] t=8s stopTune (cycle 1)";
+            bridge.stopTune();
+        });
+        QTimer::singleShot(11000, &bridge, [&bridge]() {
+            qInfo() << "[TX-SMOKE] t=11s startTune (cycle 2, during park overlap)";
+            bridge.startTune();
+        });
+        QTimer::singleShot(14000, &bridge, [&bridge]() {
+            qInfo() << "[TX-SMOKE] t=14s stopTune (cycle 2)";
+            bridge.stopTune();
+        });
+        QTimer::singleShot(17000, &app, [&app]() {
+            qInfo() << "[TX-SMOKE] t=17s quit";
+            app.quit();
+        });
+    }
+
     int r = app.exec();
     g_shuttingDown.store(true, std::memory_order_relaxed);
     L("app.exec() exited");

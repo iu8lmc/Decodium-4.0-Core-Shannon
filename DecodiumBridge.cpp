@@ -12419,7 +12419,15 @@ bool DecodiumBridge::launchTuneAudio()
     m_txPcmBuffer->open(QIODevice::ReadOnly);
     m_txPcmBuffer->seek(0);
 
+    // 1.0.220 — [TX-TL] timeline diagnostic anche per il path Tune.
+    qint64 const tuneSinkCreateStartMs = QDateTime::currentMSecsSinceEpoch();
     m_txAudioSink = new QAudioSink(outDev, outFmt, this);
+    qint64 const tuneSinkCreateEndMs = QDateTime::currentMSecsSinceEpoch();
+    bridgeLog(QStringLiteral("[TX-TL] tune_sink_create dt=%1ms dev=%2")
+                  .arg(tuneSinkCreateEndMs - tuneSinkCreateStartMs)
+                  .arg(outDev.description().isEmpty()
+                       ? QStringLiteral("<default>")
+                       : outDev.description()));
     m_txAudioSink->setVolume(static_cast<float>(txGainFromSlider(m_txOutputLevel)));
     qsizetype const tuneBufferBytes =
         txAudioBufferBytesForMode(outFmt, QStringLiteral("TUNE"), true,
