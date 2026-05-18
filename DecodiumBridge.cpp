@@ -3869,6 +3869,49 @@ bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
                                       .toDouble(&distOk);
             if (distOk && distKm > 8000.0) return true;
         }
+        // 1.0.222 — strict-callsign ghost filter su pattern myCall + partner
+        // sintatticamente NON-callsign. Screenshot utente 2026-05-18 08:05
+        // ha mostrato 17 decode "IU8LMC <token-rumore>" passare il filtro
+        // SNR/distance perche' Radio::valid_callsign_regexp e' molto loose
+        // (accetta qualunque alfanumerico con transizione alpha/digit).
+        // Usiamo strict_standard_callsign_re per validare il partner: se la
+        // base (no suffix /X /P /M ecc) non matcha "^([A-Z][0-9]?|
+        // [0-9A-Z][A-Z])[0-9][A-Z]{0,3}$" e SNR <= -10, e' ghost.
+        // Cutoff -10 e' generoso: i pattern screenshot sono -12..-22.
+        // Compound calls validi (IU8LMC/P, OH8X/8) restano accettati.
+        QString partnerCandidate = partner;
+        if (partnerCandidate.isEmpty()) {
+            partnerCandidate = fromCall;
+        }
+        if (partnerCandidate.isEmpty()) {
+            // Fallback: estrai secondo token dal messaggio
+            QString const msg = entry.value(QStringLiteral("displayMessage"))
+                                     .toString().trimmed().toUpper();
+            QString const fallback = entry.value(QStringLiteral("message"))
+                                          .toString().trimmed().toUpper();
+            QString const source = msg.isEmpty() ? fallback : msg;
+            QStringList const tokens = source.split(QRegularExpression(QStringLiteral("\\s+")),
+                                                    Qt::SkipEmptyParts);
+            if (tokens.size() >= 2) {
+                partnerCandidate = tokens.at(1);
+                partnerCandidate.remove('<');
+                partnerCandidate.remove('>');
+            }
+        }
+        if (!partnerCandidate.isEmpty() && db <= -10) {
+            QString partnerBase = partnerCandidate;
+            int const slashIdx = partnerBase.indexOf(QLatin1Char('/'));
+            if (slashIdx > 0) {
+                partnerBase = partnerBase.left(slashIdx);
+            }
+            static QRegularExpression const strictCallRe(
+                QStringLiteral("^([A-Z][0-9]?|[0-9A-Z][A-Z])[0-9][A-Z]{0,3}$"));
+            if (!strictCallRe.match(partnerBase).hasMatch()) {
+                bridgeLog(QStringLiteral("[GhostFilter] strict-call reject: partner=%1 base=%2 db=%3")
+                              .arg(partnerCandidate, partnerBase, QString::number(db)));
+                return true;
+            }
+        }
         return false;  // isMyCall non attivo ma SNR/dist non da ghost
     }
 
