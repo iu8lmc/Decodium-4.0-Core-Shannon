@@ -3986,6 +3986,15 @@ bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
     return false;
 }
 
+// 1.0.226 — Q_INVOKABLE wrapper per uso da QML fallback. Restituisce true
+// SOLO se m_hideGhostDecodes attivo E looksLikeGhostDecode positivo.
+// Cosi' il QML chiama un singolo metodo invece di duplicare la logica.
+bool DecodiumBridge::entryLooksLikeGhost(const QVariantMap& entry) const
+{
+    if (!m_hideGhostDecodes) return false;
+    return looksLikeGhostDecode(entry);
+}
+
 void DecodiumBridge::setHideGhostDecodes(bool v)
 {
     if (m_hideGhostDecodes == v) return;

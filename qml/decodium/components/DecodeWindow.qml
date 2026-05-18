@@ -397,6 +397,12 @@ Window {
 	    function shouldDisplayDecodeEntry(item) {
 	        if (!item)
 	            return false
+	        // 1.0.226 — ghost filter via bridge per chiusura fallback. Pre-1.0.226
+	        // QML filtrava SOLO telemetry-only, lasciando passare ghost (myCall +
+	        // partner sintatticamente non-valido o terzo token corrupted) quando
+	        // bridge.rxDecodeModel era momentaneamente null (boot/Loader race).
+	        if (bridge && bridge.entryLooksLikeGhost && bridge.entryLooksLikeGhost(item))
+	            return false
 	        if (!decodeWindow.hideTelemetryOnlyDecodes)
 	            return true
 	        return !isTelemetryOnlyDecodeMessage(item.displayMessage || item.message)

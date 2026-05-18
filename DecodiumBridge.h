@@ -2201,6 +2201,12 @@ private:
 public:
     Q_INVOKABLE bool hideGhostDecodes() const { return m_hideGhostDecodes; }
     Q_INVOKABLE void setHideGhostDecodes(bool v);
+    // 1.0.226 — Esposizione del ghost filter a QML per chiusura fallback.
+    // Le funzioni shouldDisplayDecodeEntry in DecodeWindow.qml e Main.qml
+    // usavano solo hideTelemetryOnlyDecodes ignorando hideGhostDecodes,
+    // mostrando ghost quando bridge.rxDecodeModel era momentaneamente null
+    // (race boot/Loader). Single source of truth ora: il C++.
+    Q_INVOKABLE bool entryLooksLikeGhost(const QVariantMap& entry) const;
     // 1.0.149: esponi flag period-separator per UI sync (era sempre true
     // lato C++ ma desincronizzato dalla QSettings letta dal QML).
     Q_INVOKABLE bool decodeShowPeriodSeparator() const { return m_decodeShowPeriodSeparator; }

@@ -4631,6 +4631,11 @@ ApplicationWindow {
 	                    function shouldDisplayDecodeEntry(item) {
 	                        if (!item)
 	                            return false
+	                        // 1.0.226 — ghost filter via bridge (single source of truth).
+	                        // Pre-1.0.226 filtrava SOLO telemetry-only, ignorando ghost
+	                        // (myCall + partner sintatticamente invalido / corrupted token).
+	                        if (bridge && bridge.entryLooksLikeGhost && bridge.entryLooksLikeGhost(item))
+	                            return false
 	                        if (!decodePanel.hideTelemetryOnlyDecodes)
 	                            return true
 	                        return !mainWindow.isTelemetryOnlyDecodeMessage(item.displayMessage || item.message)
