@@ -1295,10 +1295,16 @@ int main(int argc, char* argv[])
     // per ring buffer frame time, ed espone il backend RHI corrente.
     // Lo slot recordFrameTimestamp short-circuita quando overlay e' off,
     // quindi overhead a riposo = costo di una virtual call + branch.
+    // 1.0.236 fix: QueuedConnection invece di DirectConnection.
+    // frameSwapped e' emesso dal RENDER thread mentre recordFrameTimestamp
+    // scrive in m_frameTimeRing[] / m_perfFrameElapsed (non atomic) e legge
+    // m_devOverlayActive: con DirectConnection si esegue sul render thread
+    // -> race con il QTimer GUI thread che legge gli stessi membri.
+    // Queued route i frame swap sul GUI thread (eventloop bridge), no race.
     if (QQuickWindow* qw = firstQuickWindow(engine)) {
         QObject::connect(qw, &QQuickWindow::frameSwapped,
                          &bridge, &DecodiumBridge::recordFrameTimestamp,
-                         Qt::DirectConnection);
+                         Qt::QueuedConnection);
         QString rhiName = QStringLiteral("unknown");
         if (qw->rendererInterface()) {
             rhiName = QString::fromLatin1(

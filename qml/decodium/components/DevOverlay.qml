@@ -26,6 +26,18 @@ Item {
         return Number(v).toFixed(digits === undefined ? 1 : digits)
     }
 
+    function modelCount(m) {
+        // 1.0.236 fix: DecodeListModel espone count come Q_INVOKABLE method
+        // (non property), quindi va chiamato con parentesi. Vecchio binding
+        // ritornava la function reference -> stampava "function() { [native code] }".
+        if (!m) return -1
+        try {
+            if (typeof m.count === "function") return m.count()
+            if (typeof m.count === "number") return m.count
+        } catch (e) {}
+        return -1
+    }
+
     function buildSnapshot() {
         var t = target
         var lines = []
@@ -48,10 +60,8 @@ Item {
         lines.push("[Delegate counters]")
         var dl = (t && t.decodeList) ? t.decodeList.length : 0
         lines.push("  decodeList size   : " + dl)
-        var bm = (t && t.bandActivityModel && typeof t.bandActivityModel.count !== "undefined")
-                 ? t.bandActivityModel.count : -1
-        var rm = (t && t.rxDecodeModel && typeof t.rxDecodeModel.count !== "undefined")
-                 ? t.rxDecodeModel.count : -1
+        var bm = t ? modelCount(t.bandActivityModel) : -1
+        var rm = t ? modelCount(t.rxDecodeModel) : -1
         lines.push("  bandActivityModel : " + (bm < 0 ? "n/a" : bm))
         lines.push("  rxDecodeModel     : " + (rm < 0 ? "n/a" : rm))
         // Snapshot deliberatamente privo di callsign/grid/freq specifiche (no PII).
@@ -162,14 +172,15 @@ Item {
 
                 Text { text: "Delegates:"; color: "#9AB8C4"; font.pixelSize: 10 }
                 Text {
+                    // Force binding re-eval ad ogni perfMetricsChanged (250ms tick).
+                    property real _tick: target ? target.lastFrameTimeMs : 0
                     text: {
+                        // 1.0.236 fix: DecodeListModel.count() e' Q_INVOKABLE method,
+                        // non property -- chiamare con parentesi via modelCount().
+                        var _ = _tick  // dependency capture per binding re-eval
                         var dl = (target && target.decodeList) ? target.decodeList.length : 0
-                        var bm = (target && target.bandActivityModel
-                                  && typeof target.bandActivityModel.count !== "undefined")
-                                 ? target.bandActivityModel.count : -1
-                        var rm = (target && target.rxDecodeModel
-                                  && typeof target.rxDecodeModel.count !== "undefined")
-                                 ? target.rxDecodeModel.count : -1
+                        var bm = target ? modelCount(target.bandActivityModel) : -1
+                        var rm = target ? modelCount(target.rxDecodeModel) : -1
                         return "list " + dl + "  band " + (bm < 0 ? "?" : bm)
                                + "  rx " + (rm < 0 ? "?" : rm)
                     }
