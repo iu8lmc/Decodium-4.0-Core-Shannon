@@ -2488,7 +2488,10 @@ static bool hasHighConfidenceGhostPrefix(QString const& callRaw)
     }
 
     static const QSet<QString> impossiblePrefixes {
-        "ZH", "ZQ"
+        "ZH", "ZQ",
+        // 1.0.224 — VZ non e' assegnato da ITU (V* assegnati: VA-VG, VK-VO, VP-VV, VX-VY).
+        // HE non aggiunto: Switzerland storica (anche se ora HB9 standard).
+        "VZ"
     };
     return impossiblePrefixes.contains(prefix2);
 }
@@ -3910,6 +3913,34 @@ bool DecodiumBridge::looksLikeGhostDecode(QVariantMap const& entry) const
                 bridgeLog(QStringLiteral("[GhostFilter] strict-call reject: partner=%1 base=%2 db=%3")
                               .arg(partnerCandidate, partnerBase, QString::number(db)));
                 return true;
+            }
+            // 1.0.224 — Anche se il partner e' sintatticamente valido, il
+            // terzo+ token puo' essere noise corrupted (es. "R..83", "AG3...").
+            // Pattern signature decoder-garbage: dots consecutivi `\.\.`,
+            // trailing dots `\.+$`, o char isolato + dots + digit `^[A-Z]\.+\d`.
+            // I sentinel `<...>` per hashed callsign NON matchano (angolari
+            // strippati prima del display). Decode validi non hanno mai dots
+            // multipli dentro o trailing in payload normale (R+report, RR73,
+            // 73, grid, ?). Cutoff db<=-10 invariato.
+            QString const msgFull = entry.value(QStringLiteral("displayMessage"))
+                                          .toString().trimmed().toUpper();
+            QString const msgFallback = entry.value(QStringLiteral("message"))
+                                              .toString().trimmed().toUpper();
+            QString const msgText = msgFull.isEmpty() ? msgFallback : msgFull;
+            QStringList const allTokens = msgText.split(QRegularExpression(QStringLiteral("\\s+")),
+                                                         Qt::SkipEmptyParts);
+            if (allTokens.size() >= 3) {
+                static QRegularExpression const corruptedTokenRe(
+                    QStringLiteral("(\\.\\.)|(\\.+$)|(^[A-Z]\\.+\\d)"));
+                for (int idx = 2; idx < allTokens.size(); ++idx) {
+                    QString const& tok = allTokens.at(idx);
+                    if (tok.startsWith(QLatin1Char('<'))) continue;  // hashed sentinel
+                    if (corruptedTokenRe.match(tok).hasMatch()) {
+                        bridgeLog(QStringLiteral("[GhostFilter] corrupted-token reject: partner=%1 token=%2 db=%3")
+                                      .arg(partnerCandidate, tok, QString::number(db)));
+                        return true;
+                    }
+                }
             }
         }
         return false;  // isMyCall non attivo ma SNR/dist non da ghost
