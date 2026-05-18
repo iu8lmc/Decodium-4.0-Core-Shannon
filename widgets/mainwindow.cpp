@@ -7964,13 +7964,42 @@ void MainWindow::restartConfiguredAudioStreams (bool resume_monitor)
                          : output_device.description ()));
   if (!input_device.isNull ())
     {
-      Q_EMIT startAudioInputStream (input_device
-                                    , m_rx_audio_buffer_frames
-                                    , m_detector, m_downSampleFactor
-                                    , m_config.audio_input_channel ());
-      if (resume_monitor)
+      bool input_already_active {false};
+      auto check_input_active = [this, &input_device, &input_already_active] {
+        input_already_active = m_soundInput
+            && m_soundInput->isActiveFor (input_device
+                                          , m_downSampleFactor
+                                          , m_config.audio_input_channel ());
+      };
+      if (m_soundInput
+          && m_soundInput->thread () != QThread::currentThread ()
+          && m_audioThread.isRunning ())
         {
-          Q_EMIT resumeAudioInputStream ();
+          QMetaObject::invokeMethod (m_soundInput, check_input_active, Qt::BlockingQueuedConnection);
+        }
+      else
+        {
+          check_input_active ();
+        }
+
+      if (input_already_active)
+        {
+          debugToFile (QStringLiteral ("audioRest   input already active, resume only"));
+          if (resume_monitor)
+            {
+              Q_EMIT resumeAudioInputStream ();
+            }
+        }
+      else
+        {
+          Q_EMIT startAudioInputStream (input_device
+                                        , m_rx_audio_buffer_frames
+                                        , m_detector, m_downSampleFactor
+                                        , m_config.audio_input_channel ());
+          if (resume_monitor)
+            {
+              Q_EMIT resumeAudioInputStream ();
+            }
         }
     }
   else
@@ -8002,14 +8031,20 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
       return;
     }
 
+  quint64 const check_id = ++m_audio_input_health_check_id;
   debugToFile (QString {"audioCheck  armed baseline:%1 monitor:%2"}
                  .arg (baseline_ms)
                  .arg (m_monitoring));
 
-  static int const delays_ms[] = {2500, 5000, 9000};
+  static int const delays_ms[] = {3500, 7000, 11000};
   for (auto const delay_ms : delays_ms)
     {
-      QTimer::singleShot (delay_ms, this, [this, baseline_ms, delay_ms] {
+      bool const first_probe = delay_ms == delays_ms[0];
+      QTimer::singleShot (delay_ms, this, [this, baseline_ms, check_id, delay_ms, first_probe] {
+          if (check_id != m_audio_input_health_check_id)
+            {
+              return;
+            }
           if (m_tci_audio || m_transmitting || g_iptt == 1)
             {
               return;
@@ -8020,6 +8055,18 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
             }
           if (m_last_audio_frame_ms >= baseline_ms)
             {
+              return;
+            }
+
+          if (first_probe)
+            {
+              LOG_WARN ("audio health-check: no RX frames after "
+                        << delay_ms
+                        << " ms from monitor start, nudging active audio stream");
+              debugToFile (QString {"audioCheck  no RX frames after %1 ms, reset/resume"}
+                             .arg (delay_ms));
+              Q_EMIT reset_audio_input_stream (false);
+              Q_EMIT resumeAudioInputStream ();
               return;
             }
 
@@ -8037,7 +8084,12 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
 
           restartConfiguredAudioStreams (false);
 
-          QTimer::singleShot (260, this, [this, baseline_ms, delay_ms, was_monitoring] {
+          quint64 const reopen_check_id = ++m_audio_input_health_check_id;
+          QTimer::singleShot (260, this, [this, baseline_ms, delay_ms, was_monitoring, reopen_check_id] {
+              if (reopen_check_id != m_audio_input_health_check_id)
+                {
+                  return;
+                }
               if (m_tci_audio || m_transmitting || g_iptt == 1)
                 {
                   return;
@@ -8066,9 +8118,10 @@ void MainWindow::armAudioInputHealthChecks (qint64 baseline_ms)
               debugToFile (QString {"audioCheck  reopen applied after %1 ms monitor:%2"}
                              .arg (delay_ms)
                              .arg (m_monitoring));
+              armAudioInputHealthChecks (QDateTime::currentMSecsSinceEpoch ());
             });
         });
-  }
+    }
 }
 
 bool MainWindow::needsEmbeddedMonitorPhaseResync () const

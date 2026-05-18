@@ -19,9 +19,11 @@ Rectangle {
     property color textPrimary: engine ? engine.themeManager.textPrimary : "#e5eefc"
     property color textSecondary: engine ? engine.themeManager.textSecondary : "#9db1c9"
     property color glassBorder: engine ? engine.themeManager.glassBorder : "#2a3950"
+    property var worldMap: worldMapLoader.item
+    property bool gpuLiveMapEnabled: engine ? !!engine.getSetting("LiveMapUseGpu", true) : true
 
     function syncMapSettings() {
-        if (!engine)
+        if (!engine || !worldMap)
             return
         worldMap.setHomeGrid(engine.grid)
         worldMap.setGreylineEnabled(!!engine.getSetting("ShowGreyline", true))
@@ -29,7 +31,7 @@ Rectangle {
     }
 
     function syncTxState() {
-        if (!engine)
+        if (!engine || !worldMap)
             return
         var txTargetCall = engine.currentTx === 6 ? "" : engine.dxCall
         var txTargetGrid = engine.currentTx === 6 ? "" : engine.dxGrid
@@ -40,9 +42,19 @@ Rectangle {
     }
 
     function scheduleRebuild() {
-        if (!engine)
+        if (!engine || !worldMap)
             return
         rebuildTimer.restart()
+    }
+
+    function initializeMap() {
+        if (!worldMap)
+            return
+        worldMap.setActive(visible)
+        root.syncMapSettings()
+        root.syncTxState()
+        if (visible)
+            root.scheduleRebuild()
     }
 
     Timer {
@@ -59,7 +71,7 @@ Rectangle {
         interval: 1000
         repeat: false
         onTriggered: {
-            if (!root.engine)
+            if (!root.engine || !root.worldMap)
                 return
             worldMap.clearContacts()
             root.syncMapSettings()
@@ -72,11 +84,11 @@ Rectangle {
         // 1.0.213 — pausa l'animation timer del widget legacy quando il
         // pannello non e' visibile (riduce sprechi CPU ~50% in idle dietro
         // ad altri tab/pop-out chiusi).
-        worldMap.setActive(visible)
-        if (visible) scheduleRebuild()
+        root.initializeMap()
     }
     onVisibleChanged: {
-        worldMap.setActive(visible)
+        if (worldMap)
+            worldMap.setActive(visible)
         if (visible) scheduleRebuild()
     }
 
@@ -161,13 +173,37 @@ Rectangle {
             radius: 4
             clip: true
 
-            WorldMapItem {
-                id: worldMap
+            Loader {
+                id: worldMapLoader
                 anchors.fill: parent
                 anchors.margins: 2
-                onContactClicked: function(call, grid) {
-                    if (root.engine)
-                        root.engine.processMapContactClick(call, grid)
+                sourceComponent: root.gpuLiveMapEnabled ? gpuWorldMapComponent : painterWorldMapComponent
+                onLoaded: root.initializeMap()
+                onStatusChanged: {
+                    if (status === Loader.Error && root.gpuLiveMapEnabled) {
+                        console.warn("Live Map GPU component failed to load; falling back to CPU WorldMapItem")
+                        root.gpuLiveMapEnabled = false
+                    }
+                }
+
+                Component {
+                    id: painterWorldMapComponent
+                    WorldMapItem {
+                        onContactClicked: function(call, grid) {
+                            if (root.engine)
+                                root.engine.processMapContactClick(call, grid)
+                        }
+                    }
+                }
+
+                Component {
+                    id: gpuWorldMapComponent
+                    WorldMapGpuItem {
+                        onContactClicked: function(call, grid) {
+                            if (root.engine)
+                                root.engine.processMapContactClick(call, grid)
+                        }
+                    }
                 }
             }
         }
@@ -218,6 +254,12 @@ Rectangle {
             root.syncTxState()
         }
         function onSettingValueChanged(key, value) {
+            if (key === "LiveMapUseGpu") {
+                root.gpuLiveMapEnabled = !!value
+                return
+            }
+            if (!worldMap)
+                return
             if (key === "ShowGreyline" || key === "MapShowGreyline") {
                 worldMap.setGreylineEnabled(!!value)
             } else if (key === "Miles") {
@@ -227,22 +269,22 @@ Rectangle {
             }
         }
         function onWorldMapResetRequested() {
-            if (!root.visible)
+            if (!root.visible || !worldMap)
                 return
             worldMap.clearContacts()
         }
         function onWorldMapContactAdded(call, sourceGrid, destinationGrid, role) {
-            if (!root.visible)
+            if (!root.visible || !worldMap)
                 return
             worldMap.addContact(call, sourceGrid, destinationGrid, role)
         }
         function onWorldMapContactAddedByLonLat(call, sourceLon, sourceLat, destinationGrid, role) {
-            if (!root.visible)
+            if (!root.visible || !worldMap)
                 return
             worldMap.addContactByLonLat(call, sourceLon, sourceLat, destinationGrid, role)
         }
         function onWorldMapContactDowngraded(call) {
-            if (!root.visible)
+            if (!root.visible || !worldMap)
                 return
             worldMap.downgradeContactToBand(call)
         }

@@ -19,14 +19,16 @@ namespace {
 //   GPU low-mem   -> 160ms (~6Hz, riduce upload texture su VRAM scarsa)
 //   CPU/Software  -> 333ms (~3Hz, blit raster pesante: meno frame, piu' fluido)
 // Animation phase widget legacy:
-//   Active high   -> 60ms  (smooth greyline + tx travel arc)
-//   Active low    -> 120ms (still readable, dimezza CPU pulse)
+//   synced to the effective repaint cap so hidden/coalesced animation ticks do
+//   not burn CPU without producing visible frames.
 constexpr int kRepaintGpuFullMs = 80;
 constexpr int kRepaintGpuLowMs = 160;
 constexpr int kRepaintCpuMs = 333;
-constexpr int kAnimationHighMs = 60;
-constexpr int kAnimationLowMs = 120;
-constexpr int kAnimationIdleMs = 0;  // 0 => stop timer
+constexpr double kPaintStepDownMs = 12.0;
+constexpr double kPaintStepDownAvgMs = 8.0;
+constexpr double kPaintSevereMs = 24.0;
+constexpr double kPaintSevereAvgMs = 16.0;
+constexpr int kPaintRecoveryProfiles = 3;
 
 }
 
@@ -60,6 +62,8 @@ WorldMapItem::WorldMapItem(QQuickItem* parent)
     // throttle vero: max 1 paint per m_repaintIntervalMs.
     connect(&m_widget, &WorldMapWidget::repaintRequested,
             this, &WorldMapItem::markDirty);
+    connect(&m_widget, &WorldMapWidget::paintProfileUpdated,
+            this, &WorldMapItem::handlePaintProfile);
 
     connect(this, &QQuickItem::widthChanged, this, [this]() {
         syncWidgetSize();
@@ -120,19 +124,93 @@ void WorldMapItem::setActive(bool active)
 
 void WorldMapItem::applyAnimationCadence(bool visible)
 {
-    if (!visible) {
-        m_widget.setAnimationActive(false);
-        return;
-    }
     // 1.0.215 — sync anim interval con il paint rate cap. Pre-1.0.215
     // anim girava a 60ms (16Hz) mentre paint rate era capped a 80ms
     // (12.5Hz GPU full) o 333ms (CPU): l'anim tick eccedente NON causava
     // paint visibile = lavoro sprecato (computeCircularLongitudeBounds +
     // smoothViewport + emit signal coalesced dal markDirty throttle).
     // Floor a 60ms per non degradare percezione fluida di greyline.
-    int const ms = qMax(60, m_repaintIntervalMs);
-    m_widget.setAnimationInterval(ms);
-    m_widget.setAnimationActive(true);
+    m_animationIntervalActiveMs = qMax(60, m_repaintIntervalMs);
+    m_widget.setAnimationInterval(m_animationIntervalActiveMs);
+    m_widget.setAnimationActive(visible);
+}
+
+void WorldMapItem::setRepaintIntervalMs(int ms, const QString& reason,
+                                        double paintMs, double paintAvgMs,
+                                        double steadyPaintMs, double steadyPaintAvgMs,
+                                        int contactsCount, bool cacheRebuild)
+{
+    int const clamped = qBound(kRepaintGpuFullMs, ms, kRepaintCpuMs);
+    if (m_repaintIntervalMs == clamped) {
+        return;
+    }
+
+    m_repaintIntervalMs = clamped;
+    m_repaintTimer.setInterval(m_repaintIntervalMs);
+    applyAnimationCadence(m_userActive && isVisible());
+
+    qInfo().nospace()
+        << "[WorldMapItem] adaptive repaint interval_ms=" << m_repaintIntervalMs
+        << " reason=" << reason
+        << " paint_ms=" << QString::number(paintMs, 'f', 2)
+        << " paint_avg_ms=" << QString::number(paintAvgMs, 'f', 2)
+        << " steady_paint_ms=" << QString::number(steadyPaintMs, 'f', 2)
+        << " steady_avg_ms=" << QString::number(steadyPaintAvgMs, 'f', 2)
+        << " contacts=" << contactsCount
+        << " cache_rebuild=" << (cacheRebuild ? 1 : 0)
+        << " animMs=" << (m_userActive && isVisible() ? m_animationIntervalActiveMs : 0)
+        << " animActive=" << (m_userActive && isVisible());
+}
+
+void WorldMapItem::handlePaintProfile(double paintMs, double paintAvgMs,
+                                      double greylineMs, double greylineAvgMs,
+                                      int contactsCount, bool cacheRebuild)
+{
+    if (!m_gpuAccelerated || m_baseRepaintIntervalMs >= kRepaintCpuMs) {
+        return;
+    }
+
+    // Cache rebuilds, especially the 5s greyline refresh, are expected
+    // one-off costs. Throttle on the steady paint cost so a single 25-30ms
+    // cache refresh does not make the live map feel permanently slow.
+    double const steadyPaintMs = cacheRebuild ? qMax(0.0, paintMs - greylineMs) : paintMs;
+    double const steadyPaintAvgMs = cacheRebuild
+        ? qMax(0.0, paintAvgMs - greylineAvgMs)
+        : paintAvgMs;
+
+    int targetInterval = m_baseRepaintIntervalMs;
+    QString reason;
+    if (steadyPaintMs >= kPaintSevereMs || steadyPaintAvgMs >= kPaintSevereAvgMs) {
+        targetInterval = kRepaintCpuMs;
+        reason = QStringLiteral("paint-severe");
+    } else if (steadyPaintMs >= kPaintStepDownMs || steadyPaintAvgMs >= kPaintStepDownAvgMs) {
+        targetInterval = qMax(kRepaintGpuLowMs, m_baseRepaintIntervalMs);
+        reason = QStringLiteral("paint-pressure");
+    }
+
+    if (targetInterval > m_repaintIntervalMs) {
+        m_fastPaintProfileCount = 0;
+        setRepaintIntervalMs(targetInterval, reason, paintMs, paintAvgMs,
+                             steadyPaintMs, steadyPaintAvgMs,
+                             contactsCount, cacheRebuild);
+        return;
+    }
+
+    if (targetInterval == m_baseRepaintIntervalMs && m_repaintIntervalMs > m_baseRepaintIntervalMs) {
+        ++m_fastPaintProfileCount;
+        if (m_fastPaintProfileCount >= kPaintRecoveryProfiles) {
+            int const recoveredInterval = (m_repaintIntervalMs >= kRepaintCpuMs)
+                ? qMax(kRepaintGpuLowMs, m_baseRepaintIntervalMs)
+                : m_baseRepaintIntervalMs;
+            m_fastPaintProfileCount = 0;
+            setRepaintIntervalMs(recoveredInterval, QStringLiteral("paint-recovered"),
+                                 paintMs, paintAvgMs,
+                                 steadyPaintMs, steadyPaintAvgMs,
+                                 contactsCount, cacheRebuild);
+        }
+    } else {
+        m_fastPaintProfileCount = 0;
+    }
 }
 
 void WorldMapItem::setHomeGrid(const QString& grid)
@@ -273,11 +351,12 @@ void WorldMapItem::configureForHardware()
         setRenderTarget(QQuickPaintedItem::FramebufferObject);
         setPerformanceHint(QQuickPaintedItem::FastFBOResizing, true);
         setMipmap(false);
-        m_repaintIntervalMs = m_lowSpecMode ? kRepaintGpuLowMs : kRepaintGpuFullMs;
+        m_baseRepaintIntervalMs = m_lowSpecMode ? kRepaintGpuLowMs : kRepaintGpuFullMs;
     } else {
         setRenderTarget(QQuickPaintedItem::Image);
-        m_repaintIntervalMs = kRepaintCpuMs;
+        m_baseRepaintIntervalMs = kRepaintCpuMs;
     }
+    m_repaintIntervalMs = m_baseRepaintIntervalMs;
     m_repaintTimer.setInterval(m_repaintIntervalMs);
 
     // Apply animation cadence if already visible
@@ -290,7 +369,8 @@ void WorldMapItem::configureForHardware()
         << " ramMB=" << totalRamMb
         << " lowSpec=" << m_lowSpecMode
         << " repaintMs=" << m_repaintIntervalMs
-        << " animMs=" << (m_lowSpecMode ? kAnimationLowMs : kAnimationHighMs);
+        << " animMs=" << (m_userActive && isVisible() ? m_animationIntervalActiveMs : 0)
+        << " animActive=" << (m_userActive && isVisible());
 }
 
 WorldMapWidget::PathRole WorldMapItem::pathRoleFromInt(int role)

@@ -232,6 +232,17 @@ namespace
   int const combo_box_item_enabled (32 | 1);
   int const combo_box_item_disabled (0);
 
+  bool should_trace_transceiver_state (Transceiver::TransceiverState const& state, bool force = false)
+  {
+    return force
+      || state.frequency ()
+      || state.tx_frequency ()
+      || state.ptt ()
+      || state.tune ()
+      || state.audio ()
+      || state.tx_audio ();
+  }
+
 //  QRegExp message_alphabet {"[- A-Za-z0-9+./?]*"};
   QRegularExpression message_alphabet {"[- @A-Za-z0-9+./?#<>;$]*"};
   QRegularExpression RTTY_roundup_exchange_re {
@@ -1443,7 +1454,10 @@ bool Configuration::is_tci () const
 
 bool Configuration::transceiver_online (bool show_error)
 {
-  LOG_TRACE (m_->cached_rig_state_);
+  if (should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (m_->cached_rig_state_);
+    }
   return m_->have_rig (show_error);
 }
 
@@ -1454,49 +1468,73 @@ int Configuration::transceiver_resolution () const
 
 void Configuration::transceiver_offline ()
 {
-  LOG_TRACE (m_->cached_rig_state_);
+  if (should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (m_->cached_rig_state_);
+    }
   m_->close_rig ();
 }
 
 void Configuration::transceiver_frequency (Frequency f)
 {
-  LOG_TRACE (f << ' ' << m_->cached_rig_state_);
+  if (f || should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (f << ' ' << m_->cached_rig_state_);
+    }
   m_->transceiver_frequency (f);
 }
 
 void Configuration::transceiver_tx_frequency (Frequency f)
 {
-  LOG_TRACE (f << ' ' << m_->cached_rig_state_);
+  if (f || should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (f << ' ' << m_->cached_rig_state_);
+    }
   m_->transceiver_tx_frequency (f);
 }
 
 void Configuration::transceiver_mode (MODE mode)
 {
-  LOG_TRACE (mode << ' ' << m_->cached_rig_state_);
+  if (should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (mode << ' ' << m_->cached_rig_state_);
+    }
   m_->transceiver_mode (mode);
 }
 
 void Configuration::set_transceiver_mode_override (MODE mode)
 {
-  LOG_TRACE (mode << ' ' << m_->cached_rig_state_);
+  if (should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (mode << ' ' << m_->cached_rig_state_);
+    }
   m_->set_transceiver_mode_override (mode);
 }
 
 void Configuration::transceiver_ptt (bool on)
 {
-  LOG_TRACE (on << ' ' << m_->cached_rig_state_);
+  if (on || should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (on << ' ' << m_->cached_rig_state_);
+    }
   m_->transceiver_ptt (on);
 }
 
 void Configuration::transceiver_audio (bool on)
 {
-  LOG_TRACE (on << ' ' << m_->cached_rig_state_);
+  if (on || should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (on << ' ' << m_->cached_rig_state_);
+    }
   m_->transceiver_audio (on);
 }
 
 void Configuration::transceiver_tune (bool on)
 {
-  LOG_TRACE (on << ' ' << m_->cached_rig_state_);
+  if (on || should_trace_transceiver_state (m_->cached_rig_state_))
+    {
+      LOG_TRACE (on << ' ' << m_->cached_rig_state_);
+    }
   m_->transceiver_tune (on);
 }
 
@@ -1585,7 +1623,10 @@ void Configuration::transceiver_volume (qreal volume)
 
 void Configuration::sync_transceiver (bool force_signal, bool enforce_mode_and_split)
 {
-  LOG_TRACE ("force signal: " << force_signal << " enforce_mode_and_split: " << enforce_mode_and_split << ' ' << m_->cached_rig_state_);
+  if (should_trace_transceiver_state (m_->cached_rig_state_, force_signal || enforce_mode_and_split))
+    {
+      LOG_TRACE ("force signal: " << force_signal << " enforce_mode_and_split: " << enforce_mode_and_split << ' ' << m_->cached_rig_state_);
+    }
   m_->sync_transceiver (force_signal);
   if (!enforce_mode_and_split)
     {
@@ -6401,7 +6442,10 @@ void Configuration::impl::transceiver_frequency (Frequency f)
   cached_rig_state_.frequency (apply_calibration (f + current_offset_));
 
   // qDebug () << "Configuration::impl::transceiver_frequency: n:" << transceiver_command_number_ + 1 << "f:" << f;
-  LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+  if (should_trace_transceiver_state (cached_rig_state_))
+    {
+      LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+    }
   Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
 }
 
@@ -6428,7 +6472,10 @@ void Configuration::impl::transceiver_tx_frequency (Frequency f)
         }
 
       // qDebug () << "Configuration::impl::transceiver_tx_frequency: n:" << transceiver_command_number_ + 1 << "f:" << f;
-      LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+      if (should_trace_transceiver_state (cached_rig_state_))
+        {
+          LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+        }
       Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
     }
 }
@@ -6438,7 +6485,10 @@ void Configuration::impl::transceiver_mode (MODE m)
   cached_rig_state_.online (true); // we want the rig online
   cached_rig_state_.mode (m);
   // qDebug () << "Configuration::impl::transceiver_mode: n:" << transceiver_command_number_ + 1 << "m:" << m;
-  LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+  if (should_trace_transceiver_state (cached_rig_state_))
+    {
+      LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+    }
   Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
 }
 
@@ -6447,7 +6497,10 @@ void Configuration::impl::set_transceiver_mode_override (MODE m)
   transceiver_mode_override_ = m;
   cached_rig_state_.online (true); // we want the rig online
   set_cached_mode ();
-  LOG_TRACE ("emitting set_transceiver override: requested state:" << cached_rig_state_);
+  if (should_trace_transceiver_state (cached_rig_state_))
+    {
+      LOG_TRACE ("emitting set_transceiver override: requested state:" << cached_rig_state_);
+    }
   Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
 }
 
@@ -6457,7 +6510,10 @@ void Configuration::impl::transceiver_ptt (bool on)
   set_cached_mode ();
   cached_rig_state_.ptt (on);
   // qDebug () << "Configuration::impl::transceiver_ptt: n:" << transceiver_command_number_ + 1 << "on:" << on;
-  LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+  if (should_trace_transceiver_state (cached_rig_state_))
+    {
+      LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+    }
   Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
 }
 
@@ -6480,7 +6536,10 @@ void Configuration::impl::transceiver_tune (bool on)
   //cached_rig_state_.ptt (on);
   cached_rig_state_.tune (on);
   // qDebug () << "Configuration::impl::transceiver_ptt: n:" << transceiver_command_number_ + 1 << "on:" << on;
-  LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+  if (should_trace_transceiver_state (cached_rig_state_))
+    {
+      LOG_TRACE ("emitting set_transceiver: requested state:" << cached_rig_state_);
+    }
   Q_EMIT set_transceiver (cached_rig_state_, ++transceiver_command_number_);
 }
 

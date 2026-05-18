@@ -73,6 +73,7 @@
 #include "WaterfallItem.hpp"
 #include "PanadapterItem.hpp"
 #include "WorldMapItem.hpp"
+#include "WorldMapGpuItem.hpp"
 #include "Detector/FftCompat.hpp"
 #include "lib/init_random_seed.h"
 
@@ -869,6 +870,8 @@ int main(int argc, char* argv[])
     QString const fixedFontFamily = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     if (!fixedFontFamily.isEmpty()) {
         QFont::insertSubstitution(QStringLiteral("Consolas"), fixedFontFamily);
+        QFont::insertSubstitution(QStringLiteral("Monospace"), fixedFontFamily);
+        QFont::insertSubstitution(QStringLiteral("monospace"), fixedFontFamily);
     }
 
     // Forza locale C per numeri (punto decimale) — evita problemi con locale FR/DE/IT
@@ -1103,6 +1106,7 @@ int main(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty("bridge", &bridge);
     engine.rootContext()->setContextProperty("appEngine", &bridge);
+    L("QSG Live Map enabled by default; CPU WorldMapItem fallback remains available via LiveMapUseGpu=false");
 
     // Load BootLoader first so the process shows a real window before the
     // heavy QML tree is compiled. This also lets Windows users recover from
@@ -1141,6 +1145,7 @@ int main(int argc, char* argv[])
     qmlRegisterType<WaterfallItem>("Decodium", 1, 0, "WaterfallItem");
     qmlRegisterType<PanadapterItem>("Decodium", 1, 0, "PanadapterItem");
     qmlRegisterType<WorldMapItem>("Decodium", 1, 0, "WorldMapItem");
+    qmlRegisterType<WorldMapGpuItem>("Decodium", 1, 0, "WorldMapGpuItem");
     // Registra DecodiumDxCluster come tipo QML non-creabile (accessibile solo come proprietà di bridge)
     qmlRegisterUncreatableType<DecodiumDxCluster>("Decodium", 1, 0, "DecodiumDxCluster",
         "DecodiumDxCluster is created by DecodiumBridge");

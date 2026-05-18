@@ -31,6 +31,20 @@ Rectangle {
         return new Date(nowMs)
     }
 
+    function padNumber(value, width) {
+        var text = String(Math.floor(value))
+        while (text.length < width)
+            text = "0" + text
+        return text
+    }
+
+    function formatUtcTime(date) {
+        return padNumber(date.getUTCHours(), 2) + ":"
+             + padNumber(date.getUTCMinutes(), 2) + ":"
+             + padNumber(date.getUTCSeconds(), 2) + "."
+             + padNumber(date.getUTCMilliseconds(), 3) + " UTC"
+    }
+
     Behavior on implicitHeight { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
 
     Column {
@@ -117,7 +131,7 @@ Rectangle {
                 font.pixelSize: 11
                 font.bold: true
                 color: "#00BCD4"
-                text: Qt.formatDateTime(timeSyncPanel.correctedUtcNow(), "HH:mm:ss.z") + " UTC"
+                text: timeSyncPanel.formatUtcTime(timeSyncPanel.correctedUtcNow())
             }
 
             // NTP status dot
@@ -313,7 +327,7 @@ Rectangle {
         interval: 100
         running: true
         repeat: true
-        onTriggered: utcClock.text = Qt.formatDateTime(timeSyncPanel.correctedUtcNow(), "HH:mm:ss.z") + " UTC"
+        onTriggered: utcClock.text = timeSyncPanel.formatUtcTime(timeSyncPanel.correctedUtcNow())
     }
 
 }

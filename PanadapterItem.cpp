@@ -84,6 +84,12 @@ qint64 monotonicMs()
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+bool panadapterDebugLoggingEnabled()
+{
+    static bool const enabled = qEnvironmentVariableIsSet("DECODIUM_PANADAPTER_DEBUG");
+    return enabled;
+}
+
 qint64 gpuFftReadbackTimeoutMs()
 {
 #if defined(Q_OS_MACOS)
@@ -1121,14 +1127,16 @@ void PanadapterItem::addSpectrumData(const QVector<float>& dbValues,
     if (gpuFftOwnsSpectrum
         && dbValues.size() != m_gpuFftUiBinsExpected) {
         if (!m_loggedMismatchedSpectrumSuppressed) {
-            qint64 const lastGpuReadbackAgeMs =
-                m_lastGpuFftReadbackMs > 0 ? nowMs - m_lastGpuFftReadbackMs : -1;
-            qInfo().noquote()
-                << "[PANDBG] Panadapter mismatched spectrum suppressed"
-                << "reason=GPU_FFT_active_resolution_lock"
-                << "bins=" << dbValues.size()
-                << "expected_bins=" << m_gpuFftUiBinsExpected
-                << "last_gpu_readback_ms_ago=" << lastGpuReadbackAgeMs;
+            if (panadapterDebugLoggingEnabled()) {
+                qint64 const lastGpuReadbackAgeMs =
+                    m_lastGpuFftReadbackMs > 0 ? nowMs - m_lastGpuFftReadbackMs : -1;
+                qInfo().noquote()
+                    << "[PANDBG] Panadapter mismatched spectrum suppressed"
+                    << "reason=GPU_FFT_active_resolution_lock"
+                    << "bins=" << dbValues.size()
+                    << "expected_bins=" << m_gpuFftUiBinsExpected
+                    << "last_gpu_readback_ms_ago=" << lastGpuReadbackAgeMs;
+            }
             m_loggedMismatchedSpectrumSuppressed = true;
         }
         return;
@@ -1239,14 +1247,16 @@ void PanadapterItem::addSpectrumDataNorm(const QVector<float>& normValues)
             && m_gpuFftUiBinsExpected > 0;
         if (gpuFftOwnsSpectrum) {
             if (!m_loggedLegacySpectrumSuppressed) {
-                qint64 const lastGpuReadbackAgeMs =
-                    m_lastGpuFftReadbackMs > 0 ? nowMs - m_lastGpuFftReadbackMs : -1;
-                qInfo().noquote()
-                    << "[PANDBG] Panadapter legacy normalized spectrum suppressed"
-                    << "reason=GPU_FFT_active_resolution_lock"
-                    << "legacy_bins=" << normValues.size()
-                    << "expected_bins=" << m_gpuFftUiBinsExpected
-                    << "last_gpu_readback_ms_ago=" << lastGpuReadbackAgeMs;
+                if (panadapterDebugLoggingEnabled()) {
+                    qint64 const lastGpuReadbackAgeMs =
+                        m_lastGpuFftReadbackMs > 0 ? nowMs - m_lastGpuFftReadbackMs : -1;
+                    qInfo().noquote()
+                        << "[PANDBG] Panadapter legacy normalized spectrum suppressed"
+                        << "reason=GPU_FFT_active_resolution_lock"
+                        << "legacy_bins=" << normValues.size()
+                        << "expected_bins=" << m_gpuFftUiBinsExpected
+                        << "last_gpu_readback_ms_ago=" << lastGpuReadbackAgeMs;
+                }
                 m_loggedLegacySpectrumSuppressed = true;
             }
             return;

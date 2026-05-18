@@ -39,14 +39,17 @@ public:
                           PathRole role = PathRole::Generic);
   void handleMapClick(QPointF const& clickPos);  // called from MainWindow's eventFilter
 
-  // 1.0.213 — animation timer (greyline pulse + tx travel arc) controllabile
-  // dal QQuickItem host: pause quando il pannello non e' visibile, interval
-  // adattivo in base alla detection hardware (60ms full, 120ms low-spec).
+  // 1.0.213/215 — animation timer (greyline pulse + tx travel arc)
+  // controllabile dal QQuickItem host: pausa quando il pannello non e'
+  // visibile, interval sincronizzato al repaint cap effettivo.
   void setAnimationActive(bool active);
   void setAnimationInterval(int ms);
 
 signals:
   void contactClicked(QString const& call, QString const& grid);
+  void paintProfileUpdated(double paintMs, double paintAvgMs,
+                           double greylineMs, double greylineAvgMs,
+                           int contactsCount, bool cacheRebuild);
   // 1.0.214 — emit ad ogni tick del m_animationTimer interno cosi' il
   // QQuickPaintedItem host (WorldMapItem) puo' propagare la richiesta di
   // repaint al scene-graph. Senza questo segnale l'animation phase del
@@ -96,6 +99,9 @@ private:
   // guadagno e' >70% del tempo paint.
   bool backgroundCacheValid(QRectF const& bounds) const;
   void rebuildBackgroundCache(QRectF const& bounds);
+  bool greylineCacheValid(QRectF const& bounds) const;
+  void rebuildGreylineCache(QRectF const& bounds);
+  void invalidateGreylineCache();
 
   QString m_homeGrid;
   QPointF m_homeLonLat;
@@ -139,6 +145,23 @@ private:
   double m_bgCacheSpanLon {0.0};
   double m_bgCacheSpanLat {0.0};
   qreal m_bgCacheDpr {1.0};
+
+  // Greyline/night overlay cache. Il calcolo e' per-colonna e dipende solo
+  // da UTC, viewport e size: non serve rifarlo ad ogni frame animato.
+  QPixmap m_greylineCache;
+  QSizeF m_greylineCacheBoundsSize;
+  double m_greylineCacheCenterLon {0.0};
+  double m_greylineCacheCenterLat {0.0};
+  double m_greylineCacheSpanLon {0.0};
+  double m_greylineCacheSpanLat {0.0};
+  qreal m_greylineCacheDpr {1.0};
+  qint64 m_greylineCacheUtcMs {0};
+
+  qint64 m_lastPaintProfileLogMs {0};
+  int m_profilePaintSamples {0};
+  double m_profilePaintMsSum {0.0};
+  double m_profileGreylineMsSum {0.0};
+  bool m_profileCacheRebuildSinceLastLog {false};
 };
 
 #endif // WORLDMAPWIDGET_H

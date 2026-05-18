@@ -1540,6 +1540,8 @@ add_executable (decodium_qml
   PanadapterItem.hpp
   WorldMapItem.cpp
   WorldMapItem.hpp
+  WorldMapGpuItem.cpp
+  WorldMapGpuItem.hpp
   DecodiumAudioSink.h
   Detector/FT8DecodeWorker.cpp
   Detector/FT2DecodeWorker.cpp
@@ -1661,8 +1663,44 @@ if (Qt6ShaderTools_FOUND)
     FILES
       shaders/panadapter_fft.comp
   )
+	  qt_add_shaders(decodium_qml decodium_livemap_greyline_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
+    FILES
+      shaders/livemap_greyline.vert
+      shaders/livemap_greyline.frag
+  )
+	  qt_add_shaders(decodium_qml decodium_livemap_marker_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
+    FILES
+      shaders/livemap_marker.vert
+      shaders/livemap_marker.frag
+  )
+	  qt_add_shaders(decodium_qml decodium_livemap_path_shader
+	    PREFIX
+	      "/shaders"
+	    BASE
+	      "shaders"
+	    GLSL
+	      "120,150,310 es,330,440"
+    FILES
+      shaders/livemap_path.vert
+      shaders/livemap_path.frag
+  )
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_WATERFALL_SHADER_QSB=1)
   target_compile_definitions(decodium_qml PRIVATE DECODIUM_GPU_PANADAPTER_FFT_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_GREYLINE_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_MARKER_QSB=1)
+  target_compile_definitions(decodium_qml PRIVATE DECODIUM_LIVEMAP_PATH_QSB=1)
   file (WRITE "${CMAKE_BINARY_DIR}/decodium_qsb_shaders.enabled" "1\n")
 else ()
   file (WRITE "${CMAKE_BINARY_DIR}/decodium_qsb_shaders.enabled" "0\n")

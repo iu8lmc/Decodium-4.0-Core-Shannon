@@ -31,6 +31,8 @@ int const kRoleDowngradeHoldSeconds = 75;
 int const kPostTxQueueMs = 10 * 1000;
 int const kPostTxQueueMaxVisible = 6;
 int const kClickHighlightMs = 1600;
+qint64 const kGreylineCacheRefreshMs = 5000;
+qint64 const kLiveMapProfileLogMs = 5000;
 double constexpr kEarthRadiusKm = 6371.0;
 
 qint64 monotonicNowMs()
@@ -43,6 +45,11 @@ qint64 monotonicNowMs()
       started = true;
     }
   return timer.elapsed();
+}
+
+double elapsedMs(QElapsedTimer const& timer)
+{
+  return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
 }
 
 qint64 ageSecondsFromMonotonic(qint64 nowMs, qint64 seenMs)
@@ -257,6 +264,7 @@ void WorldMapWidget::resizeEvent(QResizeEvent * event)
 {
   // 1.0.213 — invalida cache su resize: la QPixmap dipende dalle dimensioni.
   m_backgroundCache = QPixmap();
+  invalidateGreylineCache();
   QWidget::resizeEvent(event);
 }
 
@@ -311,6 +319,69 @@ void WorldMapWidget::rebuildBackgroundCache(QRectF const& bounds)
   m_bgCacheDpr = dpr;
 }
 
+bool WorldMapWidget::greylineCacheValid(QRectF const& bounds) const
+{
+  if (!m_greylineEnabled) return true;
+  if (m_greylineCache.isNull()) return false;
+  if (m_greylineCacheBoundsSize != bounds.size()) return false;
+
+  qreal const dpr = devicePixelRatioF() > 0 ? devicePixelRatioF() : 1.0;
+  if (qAbs(m_greylineCacheDpr - dpr) > 0.001) return false;
+
+  qint64 const nowMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+  qint64 const ageMs = nowMs - m_greylineCacheUtcMs;
+  if (ageMs < 0 || ageMs >= kGreylineCacheRefreshMs) return false;
+
+  if (bounds.width() <= 0.0 || bounds.height() <= 0.0) return true;
+  qreal const pxPerDegLon = bounds.width() / qMax(1.0, m_greylineCacheSpanLon);
+  qreal const pxPerDegLat = bounds.height() / qMax(1.0, m_greylineCacheSpanLat);
+  qreal const lonShiftPx = qAbs((m_greylineCacheCenterLon - m_viewCenterLon) * pxPerDegLon);
+  qreal const latShiftPx = qAbs((m_greylineCacheCenterLat - m_viewCenterLat) * pxPerDegLat);
+  if (lonShiftPx > 1.0) return false;
+  if (latShiftPx > 1.0) return false;
+  if (qAbs(m_greylineCacheSpanLon - m_viewSpanLon) > 0.005 * m_greylineCacheSpanLon) return false;
+  if (qAbs(m_greylineCacheSpanLat - m_viewSpanLat) > 0.005 * m_greylineCacheSpanLat) return false;
+  return true;
+}
+
+void WorldMapWidget::rebuildGreylineCache(QRectF const& bounds)
+{
+  if (!m_greylineEnabled)
+    {
+      invalidateGreylineCache();
+      return;
+    }
+
+  qreal const dpr = devicePixelRatioF() > 0 ? devicePixelRatioF() : 1.0;
+  QSize const pixelSize {
+      qMax(1, qRound(bounds.width() * dpr)),
+      qMax(1, qRound(bounds.height() * dpr))};
+  m_greylineCache = QPixmap(pixelSize);
+  m_greylineCache.setDevicePixelRatio(dpr);
+  m_greylineCache.fill(Qt::transparent);
+
+  QPainter cachePainter {&m_greylineCache};
+  cachePainter.setRenderHint(QPainter::Antialiasing, true);
+  QRectF const localBounds {0.0, 0.0, bounds.width(), bounds.height()};
+  drawDayNightMask(&cachePainter, localBounds);
+  cachePainter.end();
+
+  m_greylineCacheBoundsSize = bounds.size();
+  m_greylineCacheCenterLon = m_viewCenterLon;
+  m_greylineCacheCenterLat = m_viewCenterLat;
+  m_greylineCacheSpanLon = m_viewSpanLon;
+  m_greylineCacheSpanLat = m_viewSpanLat;
+  m_greylineCacheDpr = dpr;
+  m_greylineCacheUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+}
+
+void WorldMapWidget::invalidateGreylineCache()
+{
+  m_greylineCache = QPixmap();
+  m_greylineCacheBoundsSize = QSizeF {};
+  m_greylineCacheUtcMs = 0;
+}
+
 void WorldMapWidget::setHomeGrid(QString const& grid)
 {
   QPointF lonLat;
@@ -337,6 +408,7 @@ void WorldMapWidget::setGreylineEnabled(bool enabled)
     }
 
   m_greylineEnabled = enabled;
+  invalidateGreylineCache();
   update();
 }
 
@@ -639,6 +711,11 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
 {
   Q_UNUSED(event);
 
+  QElapsedTimer paintTimer;
+  paintTimer.start();
+  double greylineMs = 0.0;
+  bool cacheRebuild = false;
+
   QPainter painter {this};
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.setRenderHint(QPainter::TextAntialiasing, true);
@@ -672,13 +749,24 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
   // su texture 2048x1024 + grid).
   if (!backgroundCacheValid(mapBounds)) {
     rebuildBackgroundCache(mapBounds);
+    cacheRebuild = true;
   }
   painter.drawPixmap(mapBounds.topLeft(), m_backgroundCache);
-  // Day/night dipende dall'orario UTC (cambia lentamente ma e' overlay
-  // semi-trasparente leggero, ridipinto ogni frame).
-  drawDayNightMask(&painter, mapBounds);
+  // Day/night dipende dall'orario UTC e dal viewport ma cambia lentamente:
+  // cache trasparente aggiornata ogni 5s o quando size/viewport cambiano.
+  if (m_greylineEnabled) {
+    QElapsedTimer greylineTimer;
+    greylineTimer.start();
+    if (!greylineCacheValid(mapBounds)) {
+      rebuildGreylineCache(mapBounds);
+      cacheRebuild = true;
+    }
+    painter.drawPixmap(mapBounds.topLeft(), m_greylineCache);
+    greylineMs = elapsedMs(greylineTimer);
+  }
 
   QList<Contact> contacts = m_contacts.values();
+  int const contactsCount = contacts.size();
   std::sort(contacts.begin(), contacts.end(), [] (Contact const& a, Contact const& b) {
     int pa = rolePriority(a.role);
     int pb = rolePriority(b.role);
@@ -868,6 +956,39 @@ void WorldMapWidget::paintEvent(QPaintEvent * event)
   painter.drawText(frame.adjusted(8, 0, -8, -6), Qt::AlignLeft | Qt::AlignBottom, bottomLeft);
   painter.drawText(frame.adjusted(8, 0, -8, -6), Qt::AlignRight | Qt::AlignBottom,
                    QDateTime::currentDateTimeUtc().toString("hh:mm:ss 'UTC'"));
+
+  double const paintMs = elapsedMs(paintTimer);
+  m_profilePaintSamples += 1;
+  m_profilePaintMsSum += paintMs;
+  m_profileGreylineMsSum += greylineMs;
+  m_profileCacheRebuildSinceLastLog = m_profileCacheRebuildSinceLastLog || cacheRebuild;
+
+  qint64 const profileNowMs = monotonicNowMs();
+  if (m_lastPaintProfileLogMs <= 0
+      || profileNowMs - m_lastPaintProfileLogMs >= kLiveMapProfileLogMs)
+    {
+      int const samples = qMax(1, m_profilePaintSamples);
+      double const paintAvgMs = m_profilePaintMsSum / samples;
+      double const greylineAvgMs = m_profileGreylineMsSum / samples;
+      bool const profileCacheRebuild = m_profileCacheRebuildSinceLastLog;
+      emit paintProfileUpdated(paintMs, paintAvgMs,
+                               greylineMs, greylineAvgMs,
+                               contactsCount, profileCacheRebuild);
+      qInfo().noquote()
+        << QStringLiteral("[MAPDBG] LiveMap profile paint_ms=%1 greyline_ms=%2 contacts_count=%3 cache_rebuild=%4 paint_avg_ms=%5 greyline_avg_ms=%6 samples=%7")
+              .arg(paintMs, 0, 'f', 2)
+              .arg(greylineMs, 0, 'f', 2)
+              .arg(contactsCount)
+              .arg(profileCacheRebuild ? 1 : 0)
+              .arg(paintAvgMs, 0, 'f', 2)
+              .arg(greylineAvgMs, 0, 'f', 2)
+              .arg(samples);
+      m_lastPaintProfileLogMs = profileNowMs;
+      m_profilePaintSamples = 0;
+      m_profilePaintMsSum = 0.0;
+      m_profileGreylineMsSum = 0.0;
+      m_profileCacheRebuildSinceLastLog = false;
+    }
 }
 
 QSize WorldMapWidget::minimumSizeHint() const
