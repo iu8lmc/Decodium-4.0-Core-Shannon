@@ -5355,7 +5355,12 @@ ApplicationWindow {
                                         clip: true
                                         model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes
                                         spacing: 1
-                                        cacheBuffer: 3000
+                                        // 1.0.228 — cacheBuffer 3000 → 600 (allineato a DecodeList.qml).
+                                        // Pre-1.0.228 con 3000px buffer e delegate complessi (RowLayout
+                                        // + 9 Text con highlight checks) si istanziavano ~115 row out-of-
+                                        // viewport, ognuna ricalcolata su decodeListVersion++ -> picco
+                                        // CPU che contribuiva al "effetto molla" su scrolling tail-follow.
+                                        cacheBuffer: 600
                                         reuseItems: true
                                         interactive: true
                                         property bool followTail: true
@@ -5391,15 +5396,16 @@ ApplicationWindow {
         var distance = Math.abs(evenPeriodList.contentY - targetY)
         evenPeriodTailAnimation.stop()
         evenPeriodList.tailFollowPending = true
-        if (distance < 1 || distance > Math.max(12000, evenPeriodList.height * 18)) {
-            evenPeriodList.contentY = targetY
-            evenPeriodList.finishTailFollow()
-            return
-        }
-        evenPeriodTailAnimation.from = evenPeriodList.contentY
-        evenPeriodTailAnimation.to = targetY
-        evenPeriodTailAnimation.duration = Math.max(180, Math.min(620, 130 + distance * 0.24))
-        evenPeriodTailAnimation.start()
+        // 1.0.228 — Assignment diretto (no NumberAnimation main-thread)
+        // sempre per dock mode. L'animation con duration 180-620ms si
+        // sovrapponeva ai nuovi decode -> target shift mid-animation
+        // -> effetto molla + call temporaneamente fuori viewport ("scompaiono").
+        // L'addDisplaced YAnimator delegate gia' fornisce smooth visual sui
+        // delegate appena aggiunti; tail-follow content scroll non serve
+        // animation per essere fluido. In floating mode (vedi
+        // period1FloatingList) mantenuto NumberAnimation perche' UX detached.
+        evenPeriodList.contentY = targetY
+        evenPeriodList.finishTailFollow()
     })
 }
 NumberAnimation {
@@ -5873,7 +5879,7 @@ NumberAnimation {
                                         anchors.margins: 2
 	                                        clip: true
 	                                        spacing: 1
-	                                        cacheBuffer: 3000
+	                                        cacheBuffer: 600  // 1.0.228 — 3000 era eccessivo per delegate complessi
 	                                        reuseItems: true
 	                                        interactive: true
                                         property bool followTail: true
@@ -9411,7 +9417,7 @@ NumberAnimation {
                         clip: true
                         spacing: 1
                         model: (bridge && bridge.bandActivityModel) ? bridge.bandActivityModel : decodePanel.allDecodes
-                        cacheBuffer: 3000
+                        cacheBuffer: 600  // 1.0.228 — 3000 era eccessivo per delegate complessi
                         reuseItems: true
                         interactive: true
                         property bool followTail: true
@@ -9889,7 +9895,7 @@ NumberAnimation {
                         anchors.margins: 4
 	                        clip: true
 	                        spacing: 1
-	                        cacheBuffer: 3000
+	                        cacheBuffer: 600  // 1.0.228 — 3000 era eccessivo per delegate complessi
 	                        reuseItems: true
 	                        interactive: true
                         property bool followTail: true
