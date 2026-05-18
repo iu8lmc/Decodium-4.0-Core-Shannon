@@ -48,12 +48,28 @@ public:
                                         int role = 0);
     Q_INVOKABLE void setActive(bool active);
 
+    // 1.0.221 — Controllo zoom + pan utente.
+    // zoomIn/Out: fattore moltiplicativo sullo span (1.5x in/out).
+    // resetView: torna ad auto-fit (riabilita updateViewportTargets).
+    // setUserViewport: imposta center+span esatti (per programma esterno).
+    // Quando l'utente ha zoomato manualmente, updateViewportTargets non
+    // sovrascrive piu' i parametri: m_userViewportLocked = true.
+    Q_INVOKABLE void zoomIn(double factor = 1.5);
+    Q_INVOKABLE void zoomOut(double factor = 1.5);
+    Q_INVOKABLE void resetView();
+    Q_INVOKABLE void panBy(double deltaLonDeg, double deltaLatDeg);
+    Q_INVOKABLE bool greylineEnabled() const { return m_greylineEnabled; }
+
 Q_SIGNALS:
     void contactClicked(const QString& call, const QString& grid);
+    void viewportLockedChanged(bool locked);
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
 private:
@@ -158,4 +174,11 @@ private:
     int m_lastVisiblePathCount {0};
     int m_lastVisibleBandCount {0};
     QTimer m_frameTimer;
+    // 1.0.221 — Zoom + pan utente. Quando true updateViewportTargets()
+    // non sovrascrive m_targetCenter/m_targetSpan (smoothViewport continua
+    // a interpolare verso i target settati manualmente). resetView()
+    // riabilita l'auto-fit.
+    bool m_userViewportLocked {false};
+    bool m_panActive {false};
+    QPointF m_panLastPos;
 };

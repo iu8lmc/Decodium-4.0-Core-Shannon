@@ -126,6 +126,96 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
+                // 1.0.221 — toolbar zoom (+/−/reset) + toggle greyline.
+                // Wheel su mappa = zoom; left-drag = pan; pulsanti per touch.
+                Component {
+                    id: toolbarBtn
+                    Rectangle {
+                        property string label: ""
+                        property string tip: ""
+                        property bool checkable: false
+                        property bool checked: false
+                        signal clicked()
+                        property color baseAccent: secondaryCyan
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 18
+                        radius: 4
+                        color: ma.containsMouse
+                            ? Qt.rgba(baseAccent.r, baseAccent.g, baseAccent.b, 0.25)
+                            : (checked ? Qt.rgba(baseAccent.r, baseAccent.g, baseAccent.b, 0.18) : "transparent")
+                        border.color: (ma.containsMouse || checked)
+                            ? baseAccent
+                            : Qt.rgba(baseAccent.r, baseAccent.g, baseAccent.b, 0.35)
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: label
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: (ma.containsMouse || checked) ? baseAccent : textSecondary
+                        }
+                        MouseArea {
+                            id: ma
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: parent.clicked()
+                        }
+                        ToolTip.visible: ma.containsMouse && tip !== ""
+                        ToolTip.text: tip
+                        ToolTip.delay: 500
+                    }
+                }
+
+                Loader {
+                    sourceComponent: toolbarBtn
+                    onLoaded: {
+                        item.label = "−"
+                        item.tip = qsTr("Zoom out (wheel down)")
+                        item.clicked.connect(function() {
+                            if (root.worldMap) root.worldMap.zoomOut(1.4)
+                        })
+                    }
+                }
+                Loader {
+                    sourceComponent: toolbarBtn
+                    onLoaded: {
+                        item.label = "+"
+                        item.tip = qsTr("Zoom in (wheel up)")
+                        item.clicked.connect(function() {
+                            if (root.worldMap) root.worldMap.zoomIn(1.4)
+                        })
+                    }
+                }
+                Loader {
+                    sourceComponent: toolbarBtn
+                    onLoaded: {
+                        item.label = "⌂"
+                        item.tip = qsTr("Reset view (auto-fit)")
+                        item.clicked.connect(function() {
+                            if (root.worldMap) root.worldMap.resetView()
+                        })
+                    }
+                }
+                Loader {
+                    sourceComponent: toolbarBtn
+                    property bool greylineOn: engine ? !!engine.getSetting("ShowGreyline", true) : true
+                    onLoaded: {
+                        item.label = "☼"
+                        item.tip = qsTr("Toggle day/night greyline overlay")
+                        item.checkable = true
+                        item.checked = greylineOn
+                        item.clicked.connect(function() {
+                            greylineOn = !greylineOn
+                            item.checked = greylineOn
+                            if (root.engine)
+                                root.engine.setSetting("ShowGreyline", greylineOn)
+                            if (root.worldMap)
+                                root.worldMap.setGreylineEnabled(greylineOn)
+                        })
+                    }
+                }
+
                 Rectangle {
                     visible: root.detachable
                     Layout.preferredWidth: root.detached ? 42 : 34

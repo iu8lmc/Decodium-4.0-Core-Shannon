@@ -40,6 +40,17 @@ public:
     // (Pop minimizzato, tab non selezionato, finestra detach nascosta).
     Q_INVOKABLE void setActive(bool active);
 
+    // 1.0.221 — Stub di compatibilita' con WorldMapGpuItem per uniformare
+    // il toolbar QML. Il widget CPU legacy gia' applica auto-fit + smooth
+    // viewport; il zoom manuale non e' supportato lato CPU per ora (vedi
+    // worldmapwidget.cpp). I metodi ritornano early senza effetto.
+    Q_INVOKABLE void zoomIn(double factor = 1.5) { Q_UNUSED(factor); }
+    Q_INVOKABLE void zoomOut(double factor = 1.5) { Q_UNUSED(factor); }
+    Q_INVOKABLE void resetView() {}
+    Q_INVOKABLE void panBy(double deltaLonDeg, double deltaLatDeg)
+    { Q_UNUSED(deltaLonDeg); Q_UNUSED(deltaLatDeg); }
+    Q_INVOKABLE bool greylineEnabled() const { return true; }
+
     void paint(QPainter* painter) override;
 
 Q_SIGNALS:

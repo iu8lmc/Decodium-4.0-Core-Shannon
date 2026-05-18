@@ -1622,7 +1622,131 @@ void WorldMapGpuItem::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    QQuickItem::mousePressEvent(event);
+    // 1.0.221 — Left click su area vuota -> attiva pan drag.
+    m_panActive = true;
+    m_panLastPos = pos;
+    setCursor(Qt::ClosedHandCursor);
+    event->accept();
+}
+
+void WorldMapGpuItem::mouseMoveEvent(QMouseEvent* event)
+{
+    if (!m_panActive || !event) {
+        QQuickItem::mouseMoveEvent(event);
+        return;
+    }
+    QPointF const pos = event->position();
+    QPointF const delta = pos - m_panLastPos;
+    m_panLastPos = pos;
+
+    QRectF const rect = mapRect();
+    if (rect.width() <= 0.0 || rect.height() <= 0.0) {
+        event->accept();
+        return;
+    }
+
+    // Converti delta pixel in delta lon/lat in funzione dello span corrente.
+    double const dLon = -static_cast<double>(delta.x()) / rect.width() * m_viewSpanLon;
+    double const dLat = static_cast<double>(delta.y()) / rect.height() * m_viewSpanLat;
+
+    if (!m_userViewportLocked) {
+        m_userViewportLocked = true;
+        Q_EMIT viewportLockedChanged(true);
+    }
+    m_targetCenterLon = wrapLongitude(m_targetCenterLon + dLon);
+    double const newLat = m_targetCenterLat + dLat;
+    m_targetCenterLat = qBound(-90.0 + 0.5 * m_targetSpanLat,
+                                newLat,
+                                90.0 - 0.5 * m_targetSpanLat);
+    markDirty();
+    event->accept();
+}
+
+void WorldMapGpuItem::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (m_panActive) {
+        m_panActive = false;
+        setCursor(Qt::ArrowCursor);
+    }
+    QQuickItem::mouseReleaseEvent(event);
+}
+
+void WorldMapGpuItem::wheelEvent(QWheelEvent* event)
+{
+    if (!event) {
+        QQuickItem::wheelEvent(event);
+        return;
+    }
+    // Standard: 120 unit / notch. Positive y = zoom in.
+    int const delta = event->angleDelta().y();
+    if (delta == 0) {
+        QQuickItem::wheelEvent(event);
+        return;
+    }
+    double const stepFactor = (delta > 0) ? 1.18 : 1.0 / 1.18;
+    if (delta > 0) {
+        zoomIn(stepFactor);
+    } else {
+        zoomOut(1.0 / stepFactor);
+    }
+    event->accept();
+}
+
+void WorldMapGpuItem::zoomIn(double factor)
+{
+    if (factor <= 1.0) factor = 1.5;
+    if (!m_userViewportLocked) {
+        m_userViewportLocked = true;
+        Q_EMIT viewportLockedChanged(true);
+    }
+    // Range minimo span: 12° (city-level zoom). Sotto e' troppo per RX FT8.
+    constexpr double kMinSpanLon = 12.0;
+    constexpr double kMinSpanLat = 8.0;
+    m_targetSpanLon = qMax(kMinSpanLon, m_targetSpanLon / factor);
+    m_targetSpanLat = qMax(kMinSpanLat, m_targetSpanLat / factor);
+    markDirty();
+}
+
+void WorldMapGpuItem::zoomOut(double factor)
+{
+    if (factor <= 1.0) factor = 1.5;
+    if (!m_userViewportLocked) {
+        m_userViewportLocked = true;
+        Q_EMIT viewportLockedChanged(true);
+    }
+    constexpr double kMaxSpanLon = 360.0;
+    constexpr double kMaxSpanLat = 180.0;
+    m_targetSpanLon = qMin(kMaxSpanLon, m_targetSpanLon * factor);
+    m_targetSpanLat = qMin(kMaxSpanLat, m_targetSpanLat * factor);
+    // Anche il center va bound (no clipping verticale ai poli oltre lo span).
+    m_targetCenterLat = qBound(-90.0 + 0.5 * m_targetSpanLat,
+                                m_targetCenterLat,
+                                90.0 - 0.5 * m_targetSpanLat);
+    markDirty();
+}
+
+void WorldMapGpuItem::resetView()
+{
+    if (m_userViewportLocked) {
+        m_userViewportLocked = false;
+        Q_EMIT viewportLockedChanged(false);
+    }
+    // Forza un updateViewportTargets immediato per ricalcolare auto-fit.
+    updateViewportTargets();
+    markDirty();
+}
+
+void WorldMapGpuItem::panBy(double deltaLonDeg, double deltaLatDeg)
+{
+    if (!m_userViewportLocked) {
+        m_userViewportLocked = true;
+        Q_EMIT viewportLockedChanged(true);
+    }
+    m_targetCenterLon = wrapLongitude(m_targetCenterLon + deltaLonDeg);
+    m_targetCenterLat = qBound(-90.0 + 0.5 * m_targetSpanLat,
+                                m_targetCenterLat + deltaLatDeg,
+                                90.0 - 0.5 * m_targetSpanLat);
+    markDirty();
 }
 
 void WorldMapGpuItem::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry)
@@ -1852,6 +1976,13 @@ bool WorldMapGpuItem::computeCircularLongitudeBounds(const QVector<double>& long
 
 void WorldMapGpuItem::updateViewportTargets()
 {
+    // 1.0.221 — Se l'utente ha zoomato/pannato manualmente, NON sovrascrive
+    // i target: smoothViewport continua a interpolare verso i parametri
+    // user-set. resetView() rimuove il lock e riabilita l'auto-fit.
+    if (m_userViewportLocked) {
+        return;
+    }
+
     QVector<QPointF> points;
     points.reserve(m_contacts.size() * 2 + (m_hasHome ? 1 : 0));
     if (m_hasHome) {
