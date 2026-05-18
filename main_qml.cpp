@@ -1290,6 +1290,30 @@ int main(int argc, char* argv[])
     QTimer::singleShot(0, &app, [&engine] {
         logFirstQuickWindowGraphicsApi(engine, "event loop start");
     });
+
+    // 1.0.233 — DevOverlay (Sprint 2 Phase 7): connect frameSwapped a Bridge
+    // per ring buffer frame time, ed espone il backend RHI corrente.
+    // Lo slot recordFrameTimestamp short-circuita quando overlay e' off,
+    // quindi overhead a riposo = costo di una virtual call + branch.
+    if (QQuickWindow* qw = firstQuickWindow(engine)) {
+        QObject::connect(qw, &QQuickWindow::frameSwapped,
+                         &bridge, &DecodiumBridge::recordFrameTimestamp,
+                         Qt::DirectConnection);
+        QString rhiName = QStringLiteral("unknown");
+        if (qw->rendererInterface()) {
+            rhiName = QString::fromLatin1(
+                qsgGraphicsApiName(qw->rendererInterface()->graphicsApi()));
+        }
+        if (rhiName == QStringLiteral("unknown")) {
+            QByteArray const env = qgetenv("QSG_RHI_BACKEND");
+            if (!env.isEmpty()) rhiName = QString::fromLatin1(env);
+        }
+        bridge.setActiveRhiBackend(rhiName);
+        L(("DevOverlay: frameSwapped wired, RHI backend = "
+           + rhiName.toLocal8Bit()).constData());
+    } else {
+        L("DevOverlay: no QQuickWindow found, frameSwapped not wired");
+    }
 #ifdef Q_OS_WIN
     if (!safeGraphicsRequested || automaticSafeGraphics || automaticD3d11Fallback) {
         QTimer::singleShot(8000, &app, [graphicsStartupPendingFlag,

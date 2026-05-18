@@ -6836,6 +6836,28 @@ NumberAnimation {
         context: Qt.ApplicationShortcut
         onActivated: mainWindow.toggleCompactFullSpectrum()
     }
+    // 1.0.233 — DevOverlay toggle (Sprint 2 Phase 7 perf roadmap).
+    Shortcut {
+        sequences: ["Ctrl+Shift+F"]
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (bridge) bridge.devOverlayActive = !bridge.devOverlayActive
+        }
+    }
+
+    // 1.0.233 — DevOverlay floating panel (async Loader, zero overhead
+    // quando bridge.devOverlayActive == false).
+    Loader {
+        id: devOverlayLoader
+        active: bridge && bridge.devOverlayActive
+        asynchronous: true
+        source: "components/DevOverlay.qml"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 12
+        anchors.rightMargin: 12
+        z: 9999
+    }
 
     Loader {
         id: bugReportDialogLoader

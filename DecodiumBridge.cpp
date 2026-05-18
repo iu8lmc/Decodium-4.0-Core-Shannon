@@ -4333,6 +4333,7 @@ void DecodiumBridge::appendDecodeMapToList(QVariantMap const& entry)
 {
     m_decodeList.append(QVariant(entry));
     trimDecodeListsIfNeeded();
+    noteDecodeCommitted();  // 1.0.233 DevOverlay counter (no-op se overlay off)
 }
 
 // 1.0.206 — Cap m_decodeList/m_rxDecodeList per evitare crescita illimitata.
@@ -4569,6 +4570,114 @@ void DecodiumBridge::rebuildRxDecodeModel()
     for (QVariant const& value : std::as_const(m_decodeList)) appendUnique(value);
     QVariantList const filtered = filterEntriesForRxDecode(merged);
     m_rxDecodeModel->setEntries(filtered);
+}
+
+// 1.0.233 — DevOverlay metrics (Sprint 2 Phase 7).
+// Gate critico: tutti gli update sample/counter sono no-op quando l'overlay
+// e' nascosto. La connect a QQuickWindow::frameSwapped resta attiva ma il
+// body short-circuita early. Il QTimer perf 250ms parte/ferma con il toggle.
+void DecodiumBridge::recordFrameTimestamp()
+{
+    if (!m_devOverlayActive) return;
+    if (!m_perfFrameElapsedStarted) {
+        m_perfFrameElapsed.start();
+        m_perfFrameElapsedStarted = true;
+        return;
+    }
+    qint64 const ns = m_perfFrameElapsed.nsecsElapsed();
+    m_perfFrameElapsed.restart();
+    double const ms = double(ns) / 1.0e6;
+    m_lastFrameTimeMs = ms;
+    m_frameTimeRing[m_frameTimeRingPos] = ms;
+    m_frameTimeRingPos = (m_frameTimeRingPos + 1) % kPerfFrameRingSize;
+    if (m_frameTimeRingFilled < kPerfFrameRingSize) ++m_frameTimeRingFilled;
+}
+
+void DecodiumBridge::noteDecodeReceived() const
+{
+    if (!m_devOverlayActive) return;
+    m_decodeRateReceivedCounter.fetch_add(1, std::memory_order_relaxed);
+}
+
+void DecodiumBridge::noteDecodeCommitted()
+{
+    if (!m_devOverlayActive) return;
+    m_decodeRateCommittedCounter.fetch_add(1, std::memory_order_relaxed);
+}
+
+QVariantList DecodiumBridge::frameTimeSamples() const
+{
+    QVariantList out;
+    out.reserve(m_frameTimeRingFilled);
+    if (m_frameTimeRingFilled < kPerfFrameRingSize) {
+        for (int i = 0; i < m_frameTimeRingFilled; ++i) {
+            out.append(m_frameTimeRing[i]);
+        }
+    } else {
+        for (int i = 0; i < kPerfFrameRingSize; ++i) {
+            int const idx = (m_frameTimeRingPos + i) % kPerfFrameRingSize;
+            out.append(m_frameTimeRing[idx]);
+        }
+    }
+    return out;
+}
+
+void DecodiumBridge::setActiveRhiBackend(QString const& backend)
+{
+    m_activeRhiBackend = backend.isEmpty()
+        ? QStringLiteral("unknown") : backend;
+}
+
+void DecodiumBridge::setDevOverlayActive(bool v)
+{
+    if (m_devOverlayActive == v) return;
+    m_devOverlayActive = v;
+    if (v) {
+        // Reset state quando l'overlay viene mostrato: counter atomic +
+        // ring buffer ripartono puliti.
+        m_frameTimeRingPos = 0;
+        m_frameTimeRingFilled = 0;
+        m_lastFrameTimeMs = 0.0;
+        m_meanFrameTimeMs = 0.0;
+        m_p99FrameTimeMs = 0.0;
+        m_decodeRateReceivedHz = 0.0;
+        m_decodeRateCommittedHz = 0.0;
+        m_perfFrameElapsedStarted = false;
+        m_decodeRateReceivedCounter.store(0, std::memory_order_relaxed);
+        m_decodeRateCommittedCounter.store(0, std::memory_order_relaxed);
+        if (m_perfMetricsTimer == nullptr) {
+            m_perfMetricsTimer = new QTimer(this);
+            m_perfMetricsTimer->setInterval(250);
+            connect(m_perfMetricsTimer, &QTimer::timeout, this, [this]() {
+                // Calcola mean + p99 dal ring buffer.
+                int const n = m_frameTimeRingFilled;
+                if (n > 0) {
+                    double sum = 0.0;
+                    QVector<double> sorted;
+                    sorted.reserve(n);
+                    for (int i = 0; i < n; ++i) {
+                        sum += m_frameTimeRing[i];
+                        sorted.push_back(m_frameTimeRing[i]);
+                    }
+                    m_meanFrameTimeMs = sum / double(n);
+                    std::sort(sorted.begin(), sorted.end());
+                    int const idx = qMin(n - 1, int(std::ceil(0.99 * n)) - 1);
+                    m_p99FrameTimeMs = sorted.at(qMax(0, idx));
+                }
+                // Decode rate: contatori sample-and-clear ogni 250ms (×4 → Hz).
+                int const recv = m_decodeRateReceivedCounter.exchange(0, std::memory_order_relaxed);
+                int const comm = m_decodeRateCommittedCounter.exchange(0, std::memory_order_relaxed);
+                m_decodeRateReceivedHz  = double(recv) * 4.0;
+                m_decodeRateCommittedHz = double(comm) * 4.0;
+                emit perfMetricsChanged();
+            });
+        }
+        m_perfMetricsTimer->start();
+    } else {
+        if (m_perfMetricsTimer) m_perfMetricsTimer->stop();
+    }
+    emit devOverlayActiveChanged();
+    emit perfMetricsChanged();
 }
 
 void DecodiumBridge::emitDecodeListChangedThrottled()
@@ -21650,6 +21759,7 @@ void DecodiumBridge::processMapContactClick(const QString& call, const QString& 
 
 void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
 {
+    noteDecodeReceived();  // 1.0.233 DevOverlay counter (no-op se overlay off)
     QString msg = entry.value("message").toString();
     QString aptype = entry.value(QStringLiteral("aptype")).toString().trimmed();
     msg = stripDecodeApAnnotation(msg, &aptype);
