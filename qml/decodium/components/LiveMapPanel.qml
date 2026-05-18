@@ -126,94 +126,137 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
-                // 1.0.221 — toolbar zoom (+/−/reset) + toggle greyline.
-                // Wheel su mappa = zoom; left-drag = pan; pulsanti per touch.
-                Component {
-                    id: toolbarBtn
-                    Rectangle {
-                        property string label: ""
-                        property string tip: ""
-                        property bool checkable: false
-                        property bool checked: false
-                        signal clicked()
-                        property color baseAccent: secondaryCyan
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 18
-                        radius: 4
-                        color: ma.containsMouse
-                            ? Qt.rgba(baseAccent.r, baseAccent.g, baseAccent.b, 0.25)
-                            : (checked ? Qt.rgba(baseAccent.r, baseAccent.g, baseAccent.b, 0.18) : "transparent")
-                        border.color: (ma.containsMouse || checked)
-                            ? baseAccent
-                            : Qt.rgba(baseAccent.r, baseAccent.g, baseAccent.b, 0.35)
-                        border.width: 1
-                        Text {
-                            anchors.centerIn: parent
-                            text: label
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: (ma.containsMouse || checked) ? baseAccent : textSecondary
-                        }
-                        MouseArea {
-                            id: ma
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: parent.clicked()
-                        }
-                        ToolTip.visible: ma.containsMouse && tip !== ""
-                        ToolTip.text: tip
-                        ToolTip.delay: 500
+                // 1.0.223 — Toolbar zoom + greyline. Rifatti come Rectangle
+                // inline (no Loader+Component) per evitare il bug 1.0.221 in
+                // cui Layout.preferredWidth/Height era sul template Component
+                // ma non veniva propagato al Loader -> bottoni 0x0 = invisibili
+                // al click. Ora ogni bottone e' un Rectangle diretto figlio
+                // del RowLayout, le Layout attached funzionano.
+                Rectangle {
+                    id: zoomOutBtn
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 18
+                    radius: 4
+                    color: zoomOutMa.containsMouse
+                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
+                        : "transparent"
+                    border.color: zoomOutMa.containsMouse ? secondaryCyan
+                                  : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "−"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: zoomOutMa.containsMouse ? secondaryCyan : textSecondary
                     }
+                    MouseArea {
+                        id: zoomOutMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (root.worldMap) root.worldMap.zoomOut(1.4)
+                    }
+                    ToolTip.visible: zoomOutMa.containsMouse
+                    ToolTip.text: qsTr("Zoom out")
+                    ToolTip.delay: 500
                 }
 
-                Loader {
-                    sourceComponent: toolbarBtn
-                    onLoaded: {
-                        item.label = "−"
-                        item.tip = qsTr("Zoom out (wheel down)")
-                        item.clicked.connect(function() {
-                            if (root.worldMap) root.worldMap.zoomOut(1.4)
-                        })
+                Rectangle {
+                    id: zoomInBtn
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 18
+                    radius: 4
+                    color: zoomInMa.containsMouse
+                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
+                        : "transparent"
+                    border.color: zoomInMa.containsMouse ? secondaryCyan
+                                  : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "+"
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: zoomInMa.containsMouse ? secondaryCyan : textSecondary
                     }
-                }
-                Loader {
-                    sourceComponent: toolbarBtn
-                    onLoaded: {
-                        item.label = "+"
-                        item.tip = qsTr("Zoom in (wheel up)")
-                        item.clicked.connect(function() {
-                            if (root.worldMap) root.worldMap.zoomIn(1.4)
-                        })
+                    MouseArea {
+                        id: zoomInMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (root.worldMap) root.worldMap.zoomIn(1.4)
                     }
+                    ToolTip.visible: zoomInMa.containsMouse
+                    ToolTip.text: qsTr("Zoom in")
+                    ToolTip.delay: 500
                 }
-                Loader {
-                    sourceComponent: toolbarBtn
-                    onLoaded: {
-                        item.label = "⌂"
-                        item.tip = qsTr("Reset view (auto-fit)")
-                        item.clicked.connect(function() {
-                            if (root.worldMap) root.worldMap.resetView()
-                        })
+
+                Rectangle {
+                    id: resetBtn
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 18
+                    radius: 4
+                    color: resetMa.containsMouse
+                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
+                        : "transparent"
+                    border.color: resetMa.containsMouse ? secondaryCyan
+                                  : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⌂"
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: resetMa.containsMouse ? secondaryCyan : textSecondary
                     }
+                    MouseArea {
+                        id: resetMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (root.worldMap) root.worldMap.resetView()
+                    }
+                    ToolTip.visible: resetMa.containsMouse
+                    ToolTip.text: qsTr("Reset view (auto-fit)")
+                    ToolTip.delay: 500
                 }
-                Loader {
-                    sourceComponent: toolbarBtn
+
+                Rectangle {
+                    id: greylineBtn
                     property bool greylineOn: engine ? !!engine.getSetting("ShowGreyline", true) : true
-                    onLoaded: {
-                        item.label = "☼"
-                        item.tip = qsTr("Toggle day/night greyline overlay")
-                        item.checkable = true
-                        item.checked = greylineOn
-                        item.clicked.connect(function() {
-                            greylineOn = !greylineOn
-                            item.checked = greylineOn
-                            if (root.engine)
-                                root.engine.setSetting("ShowGreyline", greylineOn)
-                            if (root.worldMap)
-                                root.worldMap.setGreylineEnabled(greylineOn)
-                        })
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 18
+                    radius: 4
+                    color: greylineMa.containsMouse
+                        ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
+                        : (greylineOn ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18) : "transparent")
+                    border.color: (greylineMa.containsMouse || greylineOn) ? secondaryCyan
+                                  : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "☼"
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: (greylineMa.containsMouse || greylineOn) ? secondaryCyan : textSecondary
                     }
+                    MouseArea {
+                        id: greylineMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            greylineBtn.greylineOn = !greylineBtn.greylineOn
+                            if (root.engine)
+                                root.engine.setSetting("ShowGreyline", greylineBtn.greylineOn)
+                            if (root.worldMap)
+                                root.worldMap.setGreylineEnabled(greylineBtn.greylineOn)
+                        }
+                    }
+                    ToolTip.visible: greylineMa.containsMouse
+                    ToolTip.text: qsTr("Toggle day/night greyline overlay")
+                    ToolTip.delay: 500
                 }
 
                 Rectangle {

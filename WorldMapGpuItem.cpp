@@ -428,7 +428,8 @@ public:
         return 0;
     }
 
-    float sunParams[4] = {0.0f, 0.0f, 1.0f, 0.62f};
+    // 1.0.223 — default maxAlpha 0.85 (era 0.62, poco evidente)
+    float sunParams[4] = {0.0f, 0.0f, 1.0f, 0.85f};
     float viewParams[4] = {0.0f, 0.0f, 360.0f, 180.0f};
 };
 
@@ -1349,7 +1350,8 @@ QSGNode* WorldMapGpuItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
             material->sunParams[0] = static_cast<float>(sun.x());
             material->sunParams[1] = static_cast<float>(sun.y());
             material->sunParams[2] = 1.0f;
-            material->sunParams[3] = 0.62f;
+            // 1.0.223 — maxAlpha 0.62 -> 0.85 per greyline piu' evidente
+            material->sunParams[3] = 0.85f;
             material->viewParams[0] = static_cast<float>(m_viewCenterLon);
             material->viewParams[1] = static_cast<float>(m_viewCenterLat);
             material->viewParams[2] = static_cast<float>(m_viewSpanLon);

@@ -36,9 +36,14 @@ void main()
     float altitude = sin(subLatRad) * sin(latRad)
         + cos(subLatRad) * cos(latRad) * cos(dLon);
 
+    // 1.0.223 — Boost contrast greyline (utente reportava "poco evidente").
+    // Pre-1.0.223: night*0.46 + deepNight*0.16 = max ~0.62 alpha.
+    // Ora: night*0.70 + deepNight*0.32 = max ~1.00 alpha, clamped da sunParams.w.
+    // Colore leggermente piu' scuro (0.01, 0.01, 0.08) per piu' contrasto sul
+    // blu della mappa earth.
     float night = smoothstep(0.06, -0.06, altitude);
     float deepNight = smoothstep(-0.08, -0.28, altitude);
-    float alpha = min(sunParams.w, (night * 0.46 + deepNight * 0.16) * sunParams.w);
+    float alpha = min(sunParams.w, (night * 0.70 + deepNight * 0.32) * sunParams.w);
 
-    fragColor = vec4(0.0, 0.02, 0.12, alpha * qt_Opacity);
+    fragColor = vec4(0.01, 0.01, 0.08, alpha * qt_Opacity);
 }
