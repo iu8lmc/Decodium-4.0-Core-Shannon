@@ -4530,10 +4530,18 @@ ApplicationWindow {
                             decodePanel.allDecodes = src
                             decodePanel.rxDecodes = decodePanel.currentRxDecodes()
                             decodePanel.rxDecodeListVersion++
-                            if (evenPeriodList)
-                                evenPeriodList.forceTailFollow()
-                            if (period1FloatingList)
-                                period1FloatingList.forceTailFollow()
+                            // 1.0.227 — forceTailFollow solo sulla ListView attiva
+                            // (embedded VS floating in base a period1Detached).
+                            // Pre-1.0.227 chiamava SEMPRE entrambe: ognuna schedulava
+                            // Qt.callLater + NumberAnimation main thread anche se
+                            // invisibile = main saturation = freeze Full Spectrum.
+                            if (period1Detached) {
+                                if (period1FloatingList)
+                                    period1FloatingList.forceTailFollow()
+                            } else {
+                                if (evenPeriodList)
+                                    evenPeriodList.forceTailFollow()
+                            }
                             if (rxFrequencyList)
                                 rxFrequencyList.forceTailFollow()
                             if (rxFrequencyFloatingList)
@@ -5417,10 +5425,12 @@ NumberAnimation {
                                         })
                                         onContentYChanged: updateFollowTail()
 	                                        onContentHeightChanged: {
+	                                            if (period1Detached) return
 	                                            if (followTail || tailFollowPending)
 	                                                evenPeriodTailSettleTimer.restart()
 	                                        }
 	                                        onHeightChanged: {
+	                                            if (period1Detached) return
 	                                            if (followTail || tailFollowPending)
 	                                                forceTailFollow()
 	                                            else
@@ -5433,11 +5443,21 @@ NumberAnimation {
 	                                                evenPeriodTailAnimation.stop()
 	                                            }
 	                                        }
+                                        // 1.0.227 — gate i callback su period1Detached. Quando la
+                                        // floating window è detached questo ListView è invisibile
+                                        // (ColumnLayout visible:!period1Detached) ma resta vivo
+                                        // come QObject -> i suoi onCountChanged/on_VerChanged
+                                        // attivano forceTailFollow + NumberAnimation main thread
+                                        // anche se non si vede nulla. Pre-1.0.227 quindi 2 ListView
+                                        // identiche (embedded + floating) animavano ognuna -> main
+                                        // thread saturation -> Full Spectrum freeze.
                                         onCountChanged: {
+                                            if (period1Detached) return
                                             forceTailFollow()
                                         }
                                         property int _ver: decodePanel.decodeListVersion
                                         on_VerChanged: {
+                                            if (period1Detached) return
                                             forceTailFollow()
                                         }
 	                                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.
@@ -9461,10 +9481,12 @@ NumberAnimation {
                         })
                         onContentYChanged: updateFollowTail()
 	                        onContentHeightChanged: {
+	                            if (!period1Detached) return
 	                            if (followTail || tailFollowPending)
 	                                period1FloatingTailSettleTimer.restart()
 	                        }
 	                        onHeightChanged: {
+	                            if (!period1Detached) return
 	                            if (followTail || tailFollowPending)
 	                                forceTailFollow()
 	                            else
@@ -9477,11 +9499,18 @@ NumberAnimation {
 	                                period1FloatingTailAnimation.stop()
 	                            }
 	                        }
+                        // 1.0.227 — gate simmetrico al evenPeriodList: questo
+                        // floating ListView e' attivo solo quando period1Detached=true.
+                        // Quando false (embedded mode) le sue animation/forceTailFollow
+                        // si attivavano in parallelo all'embedded -> doppio costo main
+                        // thread su ogni decode = causa principale "Full Spectrum freeze".
                         onCountChanged: {
+                            if (!period1Detached) return
                             forceTailFollow()
                         }
                         property int _ver: decodePanel.decodeListVersion
                         on_VerChanged: {
+                            if (!period1Detached) return
                             forceTailFollow()
                         }
 	                        // 1.0.186: Animator (render thread) + gate uiQuality !== Low.

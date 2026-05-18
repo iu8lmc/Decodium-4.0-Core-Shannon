@@ -228,10 +228,14 @@ Rectangle {
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 18
                     radius: 4
+                    // 1.0.227 — Reference esplicita greylineBtn.greylineOn per chiudere
+                    // scope chain ambiguity. Pre-1.0.227 alcune builds Qt6.11 lamentavano
+                    // ReferenceError "greylineOn is not defined" su hover/repaint cycle
+                    // (deja-vu 1.0.205 TypeError flood -> logger sync stalls main thread).
                     color: greylineMa.containsMouse
                         ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.25)
-                        : (greylineOn ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18) : "transparent")
-                    border.color: (greylineMa.containsMouse || greylineOn) ? secondaryCyan
+                        : (greylineBtn.greylineOn ? Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.18) : "transparent")
+                    border.color: (greylineMa.containsMouse || greylineBtn.greylineOn) ? secondaryCyan
                                   : Qt.rgba(secondaryCyan.r, secondaryCyan.g, secondaryCyan.b, 0.35)
                     border.width: 1
                     Text {
@@ -239,7 +243,7 @@ Rectangle {
                         text: "☼"
                         font.pixelSize: 12
                         font.bold: true
-                        color: (greylineMa.containsMouse || greylineOn) ? secondaryCyan : textSecondary
+                        color: (greylineMa.containsMouse || greylineBtn.greylineOn) ? secondaryCyan : textSecondary
                     }
                     MouseArea {
                         id: greylineMa
