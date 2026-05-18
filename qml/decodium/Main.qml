@@ -9739,6 +9739,7 @@ NumberAnimation {
 		                            color: !modelData ? "transparent" :
 		                                   isPeriodSeparator ? "transparent" :
 		                                   highlightFill ? highlightFill :
+		                                   modelData.bgColorHex ? modelData.bgColorHex :
 		                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
 		                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
 	                            border.color: !isPeriodSeparator && highlightBorder ? highlightBorder : "transparent"
@@ -10238,6 +10239,7 @@ NumberAnimation {
 	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
 	                            radius: 3
 	                            color: isPeriodSeparator ? "transparent" :
+	                                   modelData.bgColorHex ? modelData.bgColorHex :
 	                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05)
 
 	                            Rectangle {
