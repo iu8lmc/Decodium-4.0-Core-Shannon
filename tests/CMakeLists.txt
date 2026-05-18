@@ -64,6 +64,16 @@ add_executable (test_filedownload test_filedownload.cpp)
 target_link_libraries (test_filedownload wsjt_qt wsjt_cxx Qt6::Test)
 add_test (NAME test_filedownload COMMAND $<TARGET_FILE:test_filedownload>)
 
+# 1.0.234 Sprint 3 / Phase 2 performance roadmap:
+# Test header-only per StreamingListModel<T> in lib/ui/. Nessuna dipendenza
+# da wsjt_qt / wsjt_cxx -- solo Qt6::Test + Qt6::Concurrent (QtConcurrent::run
+# per il caso thread-safety). include_directories aggiunge ${CMAKE_SOURCE_DIR}
+# alla riga 19, quindi #include "lib/ui/StreamingListModel.h" risolve.
+find_package (Qt6 COMPONENTS Concurrent REQUIRED)
+add_executable (test_streaming_list_model test_streaming_list_model.cpp)
+target_link_libraries (test_streaming_list_model Qt6::Test Qt6::Concurrent)
+add_test (NAME test_streaming_list_model COMMAND $<TARGET_FILE:test_streaming_list_model>)
+
 if (WSJT_BUILD_UTILS)
   # CLI smoke tests for utility binaries that are built in the main project.
   add_test (NAME test_q65_usage COMMAND $<TARGET_FILE:test_q65>)
