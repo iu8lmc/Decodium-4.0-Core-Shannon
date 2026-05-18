@@ -105,6 +105,16 @@ class DecodiumBridge : public QObject
 
     // === DECODE ===
     Q_PROPERTY(QVariantList decodeList READ decodeList NOTIFY decodeListChanged)
+    // 1.0.233 — DevOverlay metrics (Phase 7 roadmap performance Sprint 2).
+    // Tutte le sample/contatori sono no-op quando m_devOverlayActive == false.
+    Q_PROPERTY(double lastFrameTimeMs READ lastFrameTimeMs NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double meanFrameTimeMs READ meanFrameTimeMs NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double p99FrameTimeMs READ p99FrameTimeMs NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double decodeRateReceivedHz READ decodeRateReceivedHz NOTIFY perfMetricsChanged)
+    Q_PROPERTY(double decodeRateCommittedHz READ decodeRateCommittedHz NOTIFY perfMetricsChanged)
+    Q_PROPERTY(QString activeRhiBackend READ activeRhiBackend CONSTANT)
+    Q_PROPERTY(bool devOverlayActive READ devOverlayActive WRITE setDevOverlayActive NOTIFY devOverlayActiveChanged)
+    Q_PROPERTY(QVariantList frameTimeSamples READ frameTimeSamples NOTIFY perfMetricsChanged)
     // 1.0.143 fase 2: model nativi per le 2 ListView. Sostituiscono i JS-filter
     // array (filteredDecodeEntries, currentRxDecodes) con QAbstractListModel +
     // diff incrementale → elimina rebuild totale ad ogni decodeListChanged.
@@ -1105,6 +1115,9 @@ signals:
     void audioOutputChannelChanged();
     void decodeListChanged();
     void rxDecodeListChanged();
+    // 1.0.233 — DevOverlay metrics (perf monitoring Sprint 2).
+    void perfMetricsChanged();
+    void devOverlayActiveChanged();
     void worldMapResetRequested();
     void worldMapContactAdded(const QString& call, const QString& sourceGrid, const QString& destinationGrid, int role);
     void worldMapContactAddedByLonLat(const QString& call, double sourceLon, double sourceLat, const QString& destinationGrid, int role);
@@ -1542,6 +1555,27 @@ private:
     // I path low-frequency (clear, mode change, DXCC refresh) emettono diretto.
     QTimer* m_decodeListEmitTimer {nullptr};
     bool m_decodeListEmitPending {false};
+    // 1.0.233 — DevOverlay metrics (Sprint 2). Ring buffer 32 sample frame
+    // time (ms), atomic counters per decode rate "received" (enrich) e
+    // "committed" (appendDecodeMapToList). Update gated dal flag
+    // m_devOverlayActive: quando false, recordFrameTimestamp /
+    // noteDecodeReceived / noteDecodeCommitted ritornano early.
+    static constexpr int kPerfFrameRingSize = 32;
+    double  m_frameTimeRing[kPerfFrameRingSize] {};
+    int     m_frameTimeRingPos {0};
+    int     m_frameTimeRingFilled {0};
+    QElapsedTimer m_perfFrameElapsed;
+    bool    m_perfFrameElapsedStarted {false};
+    double  m_lastFrameTimeMs {0.0};
+    double  m_meanFrameTimeMs {0.0};
+    double  m_p99FrameTimeMs  {0.0};
+    mutable std::atomic<int> m_decodeRateReceivedCounter {0};
+    mutable std::atomic<int> m_decodeRateCommittedCounter {0};
+    double  m_decodeRateReceivedHz {0.0};
+    double  m_decodeRateCommittedHz {0.0};
+    QTimer* m_perfMetricsTimer {nullptr};
+    bool    m_devOverlayActive {false};
+    QString m_activeRhiBackend {QStringLiteral("unknown")};
     // 1.0.143 fase 2: model nativi per le 2 ListView (Band Activity + Signal RX).
     // Sostituiscono i JS-filter array di DecodeWindow.qml. Vengono syncati
     // dal slot di decodeListChanged via setEntries() che applica diff
@@ -2261,6 +2295,24 @@ public:
     // 1.0.152: log dal QML al decodium_diagnostic.log (console.warn QML
     // non viene catturato dal handler bridgeLog).
     Q_INVOKABLE void qmlDebugLog(QString const& msg) const;
+
+    // 1.0.233 — DevOverlay metrics (Sprint 2 Phase 7).
+    // Gate critico: tutte le sample/contatori vengono skippati se
+    // m_devOverlayActive == false. La connect a frameSwapped resta
+    // attiva ma recordFrameTimestamp ritorna early.
+    double  lastFrameTimeMs()      const { return m_lastFrameTimeMs; }
+    double  meanFrameTimeMs()      const { return m_meanFrameTimeMs; }
+    double  p99FrameTimeMs()       const { return m_p99FrameTimeMs; }
+    double  decodeRateReceivedHz() const { return m_decodeRateReceivedHz; }
+    double  decodeRateCommittedHz()const { return m_decodeRateCommittedHz; }
+    QString activeRhiBackend()     const { return m_activeRhiBackend; }
+    bool    devOverlayActive()     const { return m_devOverlayActive; }
+    QVariantList frameTimeSamples() const;
+    void    setActiveRhiBackend(QString const& backend);
+    void    setDevOverlayActive(bool v);
+    Q_INVOKABLE void recordFrameTimestamp();
+    void noteDecodeReceived() const;   // contatore "received" (enrich)
+    void noteDecodeCommitted();        // contatore "committed" (append)
 
 private:
 

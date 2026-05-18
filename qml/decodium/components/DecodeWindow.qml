@@ -1116,7 +1116,7 @@ Component.onCompleted: {
                                     spacing: 0
 
                                     Text {
-                                        text: formatUtcForDisplay(modelData.time)
+                                        text: modelData.formattedTime || formatUtcForDisplay(modelData.time)
                                         font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: textSecondary
@@ -1626,7 +1626,7 @@ Component.onCompleted: {
                                     spacing: 0
 
                                     Text {
-                                        text: formatUtcForDisplay(modelData.time)
+                                        text: modelData.formattedTime || formatUtcForDisplay(modelData.time)
                                         font.family: "Monospace"
                                         font.pixelSize: 11
                                         color: textSecondary

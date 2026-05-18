@@ -5638,8 +5638,8 @@ NumberAnimation {
 	                                                anchors.rightMargin: 6
 	                                                spacing: 0
 
-                                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
-                                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
+                                                Text { text: modelData.formattedTime || decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1Panel.utcColumnWidth }
+                                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.snrColor || (modelData.isTx ? "#f1c40f" : textSecondary); font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dbColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.dbDtGapWidth }
                                                 Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1Panel.dtColumnWidth }
                                                 Item { Layout.preferredWidth: period1Panel.dtFreqGapWidth }
@@ -6189,8 +6189,8 @@ NumberAnimation {
 		                                                anchors.rightMargin: 4
 	                                                spacing: 0
 
-	                                                Text { text: decodePanel.formatUtcForDisplay(rxFrequencyDelegate.entry.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
-	                                                Text { text: rxFrequencyDelegate.entry.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : parseInt(rxFrequencyDelegate.entry.db || "0") > -5 ? accentGreen : parseInt(rxFrequencyDelegate.entry.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
+	                                                Text { text: rxFrequencyDelegate.entry.formattedTime || decodePanel.formatUtcForDisplay(rxFrequencyDelegate.entry.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqPanel.utcColumnWidth }
+	                                                Text { text: rxFrequencyDelegate.entry.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.snrColor || (rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary); font.bold: rxFrequencyDelegate.entry.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dbColumnWidth }
 	                                                Item { Layout.preferredWidth: rxFreqPanel.dbDtGapWidth }
 	                                                Text { text: rxFrequencyDelegate.entry.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: rxFrequencyDelegate.entry.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqPanel.dtColumnWidth }
 	                                                Item { Layout.preferredWidth: rxFreqPanel.gapColumnWidth }
@@ -6835,6 +6835,28 @@ NumberAnimation {
         sequence: "Ctrl+Shift+C"
         context: Qt.ApplicationShortcut
         onActivated: mainWindow.toggleCompactFullSpectrum()
+    }
+    // 1.0.233 — DevOverlay toggle (Sprint 2 Phase 7 perf roadmap).
+    Shortcut {
+        sequences: ["Ctrl+Shift+F"]
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (bridge) bridge.devOverlayActive = !bridge.devOverlayActive
+        }
+    }
+
+    // 1.0.233 — DevOverlay floating panel (async Loader, zero overhead
+    // quando bridge.devOverlayActive == false).
+    Loader {
+        id: devOverlayLoader
+        active: bridge && bridge.devOverlayActive
+        asynchronous: true
+        source: "components/DevOverlay.qml"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 12
+        anchors.rightMargin: 12
+        z: 9999
     }
 
     Loader {
@@ -9717,6 +9739,7 @@ NumberAnimation {
 		                            color: !modelData ? "transparent" :
 		                                   isPeriodSeparator ? "transparent" :
 		                                   highlightFill ? highlightFill :
+		                                   modelData.bgColorHex ? modelData.bgColorHex :
 		                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) :
 		                                   Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b, 0.05)
 	                            border.color: !isPeriodSeparator && highlightBorder ? highlightBorder : "transparent"
@@ -9738,8 +9761,8 @@ NumberAnimation {
 	                                anchors.fill: parent
 	                                anchors.margins: 4
 		                                spacing: 0
-	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
-	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
+	                                Text { text: modelData.formattedTime || decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: period1FloatingWindow.utcColumnWidth }
+	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.snrColor || (modelData.isTx ? "#f1c40f" : textSecondary); font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dbColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.dbDtGapWidth }
 	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: period1FloatingWindow.dtColumnWidth }
 	                                Item { Layout.preferredWidth: period1FloatingWindow.dtFreqGapWidth }
@@ -10216,6 +10239,7 @@ NumberAnimation {
 	                            height: isPeriodSeparator ? Math.round(4 * fs) : Math.round(24 * fs)
 	                            radius: 3
 	                            color: isPeriodSeparator ? "transparent" :
+	                                   modelData.bgColorHex ? modelData.bgColorHex :
 	                                   modelData.isCQ ? Qt.rgba(accentGreen.r, accentGreen.g, accentGreen.b, 0.15) : Qt.rgba(textPrimary.r, textPrimary.g, textPrimary.b,0.05)
 
 	                            Rectangle {
@@ -10234,8 +10258,8 @@ NumberAnimation {
 	                                anchors.fill: parent
 	                                anchors.margins: 4
 		                                spacing: 0
-	                                Text { text: decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
-	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : parseInt(modelData.db || "0") > -5 ? accentGreen : parseInt(modelData.db || "0") > -15 ? secondaryCyan : textSecondary; font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
+	                                Text { text: modelData.formattedTime || decodePanel.formatUtcForDisplay(modelData.time); font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; Layout.preferredWidth: rxFreqFloatingWindow.utcColumnWidth }
+	                                Text { text: modelData.db || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.snrColor || (modelData.isTx ? "#f1c40f" : textSecondary); font.bold: modelData.isTx === true; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dbColumnWidth }
 	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.dbDtGapWidth }
 	                                Text { text: modelData.dt || ""; font.family: mainWindow.decodedTextFontFamily; font.pixelSize: Math.round(mainWindow.decodedTextFontPixelSize * fs); color: modelData.isTx ? "#f1c40f" : textSecondary; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: rxFreqFloatingWindow.dtColumnWidth }
 	                                Item { Layout.preferredWidth: rxFreqFloatingWindow.gapColumnWidth }

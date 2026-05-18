@@ -1290,6 +1290,36 @@ int main(int argc, char* argv[])
     QTimer::singleShot(0, &app, [&engine] {
         logFirstQuickWindowGraphicsApi(engine, "event loop start");
     });
+
+    // 1.0.233 — DevOverlay (Sprint 2 Phase 7): connect frameSwapped a Bridge
+    // per ring buffer frame time, ed espone il backend RHI corrente.
+    // Lo slot recordFrameTimestamp short-circuita quando overlay e' off,
+    // quindi overhead a riposo = costo di una virtual call + branch.
+    // 1.0.236 fix: QueuedConnection invece di DirectConnection.
+    // frameSwapped e' emesso dal RENDER thread mentre recordFrameTimestamp
+    // scrive in m_frameTimeRing[] / m_perfFrameElapsed (non atomic) e legge
+    // m_devOverlayActive: con DirectConnection si esegue sul render thread
+    // -> race con il QTimer GUI thread che legge gli stessi membri.
+    // Queued route i frame swap sul GUI thread (eventloop bridge), no race.
+    if (QQuickWindow* qw = firstQuickWindow(engine)) {
+        QObject::connect(qw, &QQuickWindow::frameSwapped,
+                         &bridge, &DecodiumBridge::recordFrameTimestamp,
+                         Qt::QueuedConnection);
+        QString rhiName = QStringLiteral("unknown");
+        if (qw->rendererInterface()) {
+            rhiName = QString::fromLatin1(
+                qsgGraphicsApiName(qw->rendererInterface()->graphicsApi()));
+        }
+        if (rhiName == QStringLiteral("unknown")) {
+            QByteArray const env = qgetenv("QSG_RHI_BACKEND");
+            if (!env.isEmpty()) rhiName = QString::fromLatin1(env);
+        }
+        bridge.setActiveRhiBackend(rhiName);
+        L(("DevOverlay: frameSwapped wired, RHI backend = "
+           + rhiName.toLocal8Bit()).constData());
+    } else {
+        L("DevOverlay: no QQuickWindow found, frameSwapped not wired");
+    }
 #ifdef Q_OS_WIN
     if (!safeGraphicsRequested || automaticSafeGraphics || automaticD3d11Fallback) {
         QTimer::singleShot(8000, &app, [graphicsStartupPendingFlag,

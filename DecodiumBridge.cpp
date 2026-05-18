@@ -4333,6 +4333,7 @@ void DecodiumBridge::appendDecodeMapToList(QVariantMap const& entry)
 {
     m_decodeList.append(QVariant(entry));
     trimDecodeListsIfNeeded();
+    noteDecodeCommitted();  // 1.0.233 DevOverlay counter (no-op se overlay off)
 }
 
 // 1.0.206 — Cap m_decodeList/m_rxDecodeList per evitare crescita illimitata.
@@ -4569,6 +4570,114 @@ void DecodiumBridge::rebuildRxDecodeModel()
     for (QVariant const& value : std::as_const(m_decodeList)) appendUnique(value);
     QVariantList const filtered = filterEntriesForRxDecode(merged);
     m_rxDecodeModel->setEntries(filtered);
+}
+
+// 1.0.233 — DevOverlay metrics (Sprint 2 Phase 7).
+// Gate critico: tutti gli update sample/counter sono no-op quando l'overlay
+// e' nascosto. La connect a QQuickWindow::frameSwapped resta attiva ma il
+// body short-circuita early. Il QTimer perf 250ms parte/ferma con il toggle.
+void DecodiumBridge::recordFrameTimestamp()
+{
+    if (!m_devOverlayActive) return;
+    if (!m_perfFrameElapsedStarted) {
+        m_perfFrameElapsed.start();
+        m_perfFrameElapsedStarted = true;
+        return;
+    }
+    qint64 const ns = m_perfFrameElapsed.nsecsElapsed();
+    m_perfFrameElapsed.restart();
+    double const ms = double(ns) / 1.0e6;
+    m_lastFrameTimeMs = ms;
+    m_frameTimeRing[m_frameTimeRingPos] = ms;
+    m_frameTimeRingPos = (m_frameTimeRingPos + 1) % kPerfFrameRingSize;
+    if (m_frameTimeRingFilled < kPerfFrameRingSize) ++m_frameTimeRingFilled;
+}
+
+void DecodiumBridge::noteDecodeReceived() const
+{
+    if (!m_devOverlayActive) return;
+    m_decodeRateReceivedCounter.fetch_add(1, std::memory_order_relaxed);
+}
+
+void DecodiumBridge::noteDecodeCommitted()
+{
+    if (!m_devOverlayActive) return;
+    m_decodeRateCommittedCounter.fetch_add(1, std::memory_order_relaxed);
+}
+
+QVariantList DecodiumBridge::frameTimeSamples() const
+{
+    QVariantList out;
+    out.reserve(m_frameTimeRingFilled);
+    if (m_frameTimeRingFilled < kPerfFrameRingSize) {
+        for (int i = 0; i < m_frameTimeRingFilled; ++i) {
+            out.append(m_frameTimeRing[i]);
+        }
+    } else {
+        for (int i = 0; i < kPerfFrameRingSize; ++i) {
+            int const idx = (m_frameTimeRingPos + i) % kPerfFrameRingSize;
+            out.append(m_frameTimeRing[idx]);
+        }
+    }
+    return out;
+}
+
+void DecodiumBridge::setActiveRhiBackend(QString const& backend)
+{
+    m_activeRhiBackend = backend.isEmpty()
+        ? QStringLiteral("unknown") : backend;
+}
+
+void DecodiumBridge::setDevOverlayActive(bool v)
+{
+    if (m_devOverlayActive == v) return;
+    m_devOverlayActive = v;
+    if (v) {
+        // Reset state quando l'overlay viene mostrato: counter atomic +
+        // ring buffer ripartono puliti.
+        m_frameTimeRingPos = 0;
+        m_frameTimeRingFilled = 0;
+        m_lastFrameTimeMs = 0.0;
+        m_meanFrameTimeMs = 0.0;
+        m_p99FrameTimeMs = 0.0;
+        m_decodeRateReceivedHz = 0.0;
+        m_decodeRateCommittedHz = 0.0;
+        m_perfFrameElapsedStarted = false;
+        m_decodeRateReceivedCounter.store(0, std::memory_order_relaxed);
+        m_decodeRateCommittedCounter.store(0, std::memory_order_relaxed);
+        if (m_perfMetricsTimer == nullptr) {
+            m_perfMetricsTimer = new QTimer(this);
+            m_perfMetricsTimer->setInterval(250);
+            connect(m_perfMetricsTimer, &QTimer::timeout, this, [this]() {
+                // Calcola mean + p99 dal ring buffer.
+                int const n = m_frameTimeRingFilled;
+                if (n > 0) {
+                    double sum = 0.0;
+                    QVector<double> sorted;
+                    sorted.reserve(n);
+                    for (int i = 0; i < n; ++i) {
+                        sum += m_frameTimeRing[i];
+                        sorted.push_back(m_frameTimeRing[i]);
+                    }
+                    m_meanFrameTimeMs = sum / double(n);
+                    std::sort(sorted.begin(), sorted.end());
+                    int const idx = qMin(n - 1, int(std::ceil(0.99 * n)) - 1);
+                    m_p99FrameTimeMs = sorted.at(qMax(0, idx));
+                }
+                // Decode rate: contatori sample-and-clear ogni 250ms (×4 → Hz).
+                int const recv = m_decodeRateReceivedCounter.exchange(0, std::memory_order_relaxed);
+                int const comm = m_decodeRateCommittedCounter.exchange(0, std::memory_order_relaxed);
+                m_decodeRateReceivedHz  = double(recv) * 4.0;
+                m_decodeRateCommittedHz = double(comm) * 4.0;
+                emit perfMetricsChanged();
+            });
+        }
+        m_perfMetricsTimer->start();
+    } else {
+        if (m_perfMetricsTimer) m_perfMetricsTimer->stop();
+    }
+    emit devOverlayActiveChanged();
+    emit perfMetricsChanged();
 }
 
 void DecodiumBridge::emitDecodeListChangedThrottled()
@@ -21650,6 +21759,7 @@ void DecodiumBridge::processMapContactClick(const QString& call, const QString& 
 
 void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
 {
+    noteDecodeReceived();  // 1.0.233 DevOverlay counter (no-op se overlay off)
     QString msg = entry.value("message").toString();
     QString aptype = entry.value(QStringLiteral("aptype")).toString().trimmed();
     msg = stripDecodeApAnnotation(msg, &aptype);
@@ -21833,6 +21943,89 @@ void DecodiumBridge::enrichDecodeEntry(QVariantMap& entry) const
                    || dxIsNewCountry
                    || entry.value(QStringLiteral("dxIsMostWanted")).toBool();
     entry["isHighlighted"] = isHl;
+
+    // 1.0.232 (Sprint 1, Phase 4.2.1) — pre-compute 3 display strings/colors
+    // here, instead of recomputing them on every delegate paint in the
+    // ListView. Eliminates JS calls + parseInt + ternary cascades from the
+    // hot painting path for FT8/FT2/JT9/JT65/Q65/WSPR entries (all builders
+    // converge in enrichDecodeEntry).
+    //
+    // (a) formattedTime: replicates decodePanel.formatUtcForDisplay (Main.qml
+    //     :4810). Take any "time" string, strip non-digits, format as
+    //     hh:mm:ss / hh:mm / passthrough.
+    {
+        QString const timeStr = entry.value(QStringLiteral("time")).toString();
+        QString digits;
+        digits.reserve(timeStr.size());
+        for (QChar const c : timeStr) {
+            if (c.isDigit()) digits.append(c);
+        }
+        QString formatted;
+        if (digits.size() >= 6) {
+            formatted = digits.left(2) + QLatin1Char(':')
+                      + digits.mid(2, 2) + QLatin1Char(':')
+                      + digits.mid(4, 2);
+        } else if (digits.size() == 4) {
+            formatted = digits.left(2) + QLatin1Char(':') + digits.mid(2, 2);
+        } else {
+            formatted = timeStr;
+        }
+        entry[QStringLiteral("formattedTime")] = formatted;
+    }
+
+    // (b) snrColor: replicates the db-column ternary cascade used in Main.qml
+    //     delegates (lines 5642 / 6193 / 9742 / 10238):
+    //       isTx → "#f1c40f"
+    //       db > -5  → accentGreen (theme)
+    //       db > -15 → secondaryCyan (theme)
+    //       else     → textSecondary (theme)
+    //     Colors are sampled from the live theme palette so Ocean Blue and
+    //     Stellar Light both render correctly. NB: when the user switches
+    //     theme, already-enriched rows keep stale colors until they get
+    //     re-enriched (refreshDecodeListDxcc / next decode append).
+    {
+        QString snrHex;
+        bool const isTxEntry = entry.value(QStringLiteral("isTx")).toBool();
+        if (isTxEntry) {
+            snrHex = QStringLiteral("#f1c40f");
+        } else if (m_themeManager) {
+            QString const dbStr = entry.value(QStringLiteral("db")).toString();
+            bool parseOk = false;
+            int const dbVal = dbStr.toInt(&parseOk);
+            int const effective = parseOk ? dbVal : 0;
+            QColor pick;
+            if (effective > -5) {
+                pick = m_themeManager->accentColor();
+            } else if (effective > -15) {
+                pick = m_themeManager->secondaryColor();
+            } else {
+                pick = m_themeManager->textSecondary();
+            }
+            snrHex = pick.name(QColor::HexRgb);
+        }
+        entry[QStringLiteral("snrColor")] = snrHex;
+    }
+
+    // (c) bgColorHex: pre-compute the static fragment of the delegate
+    //     background (Main.qml :9720). Does NOT include highlightFill /
+    //     period-separator handling because those depend on per-frame state
+    //     in QML. The delegate is expected to keep its full ternary and use
+    //     bgColorHex only as the final fallback (isCQ vs default text-fade).
+    {
+        bool const isCQEntry = entry.value(QStringLiteral("isCQ")).toBool();
+        QString bgHex;
+        if (m_themeManager) {
+            QColor const base = isCQEntry
+                ? m_themeManager->accentColor()
+                : m_themeManager->textPrimary();
+            // 0.15 alpha for CQ tint, 0.05 alpha for default — match
+            // Qt.rgba(...,0.15) / Qt.rgba(...,0.05) in QML.
+            QColor tinted = base;
+            tinted.setAlphaF(isCQEntry ? 0.15 : 0.05);
+            bgHex = tinted.name(QColor::HexArgb);
+        }
+        entry[QStringLiteral("bgColorHex")] = bgHex;
+    }
 }
 
 void DecodiumBridge::refreshDecodeListDxcc()
