@@ -12571,17 +12571,17 @@ netiks rādītas!</translation>
     <message>
         <location filename="../widgets/qsymonitor.ui" line="32"/>
         <source>QSYMonitor</source>
-        <translation>QSYMonitor</translation>
+        <translation>QSY monitors</translation>
     </message>
     <message>
         <location filename="../widgets/qsymonitor.ui" line="60"/>
         <source>Clear</source>
-        <translation>Clear</translation>
+        <translation>Notīrīt</translation>
     </message>
     <message>
         <location filename="../widgets/qsymonitor.cpp" line="24"/>
         <source>QSY Monitor</source>
-        <translation>QSY Monitor</translation>
+        <translation>QSY monitors</translation>
     </message>
 </context>
 <context>
@@ -20639,12 +20639,12 @@ Right click for insert and delete options.</translation>
     <message>
         <location filename="../wf_palette_design_dialog.ui" line="14"/>
         <source>Palette Designer</source>
-        <translation>Palette Designer</translation>
+        <translation>Paletes redaktors</translation>
     </message>
     <message>
         <location filename="../wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Veiciet dubultklikšķi uz krāsas, lai to rediģētu.&lt;/p&gt;&lt;p&gt;Noklikšķiniet ar labo peles pogu, lai ievietotu vai dzēstu krāsas.&lt;/p&gt;&lt;p&gt;Augšpusē esošās krāsas attēlo vājus signālus,&lt;/p&gt;&lt;p&gt;bet apakšpusē esošās krāsas attēlo stiprus&lt;/p&gt;&lt;p&gt;signālus. Var izmantot līdz 256 krāsām.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
 </TS>
