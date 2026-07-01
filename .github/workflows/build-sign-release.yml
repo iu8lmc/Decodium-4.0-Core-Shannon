@@ -146,6 +146,13 @@ jobs:
             -DWSJT_SKIP_MANPAGES=ON \
             -DWSJT_BUILD_UTILS=OFF
 
+      - name: Gate - build & run FT2-Link tests
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ft2link-tests -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${HAMLIB_PREFIX};/mingw64" -DBUILD_TESTING=ON -DWSJT_GENERATE_DOCS=OFF -DWSJT_SKIP_MANPAGES=ON -DWSJT_BUILD_UTILS=OFF
+          cmake --build build-ft2link-tests --target ft2link_core test_ft2link test_ft2link_qml_adapter --parallel "$(nproc)"
+          ctest --test-dir build-ft2link-tests -R '^(test_ft2link|test_ft2link_qml_adapter)$' --output-on-failure
+
       - name: Build application
         run: |
           set -euo pipefail

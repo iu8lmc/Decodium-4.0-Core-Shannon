@@ -2,6 +2,20 @@ name: Test Runner
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'lib/ft2link/**'
+      - 'controllers/FT2Link*'
+      - 'tests/test_ft2link*'
+      - 'CMakeLists.txt'
+      - '.github/workflows/test-runner.yml'
+  push:
+    paths:
+      - 'lib/ft2link/**'
+      - 'controllers/FT2Link*'
+      - 'tests/test_ft2link*'
+      - 'CMakeLists.txt'
+      - '.github/workflows/test-runner.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
