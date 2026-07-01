@@ -65,7 +65,7 @@ jobs:
             --output-on-failure
 
   ft2link-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Checkout repository
@@ -152,7 +152,6 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-fftw
             mingw-w64-x86_64-gcc-fortran
-            mingw-w64-x86_64-hamlib
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-pkgconf
@@ -167,6 +166,16 @@ jobs:
             mingw-w64-x86_64-qt6-tools
             mingw-w64-x86_64-qt6-translations
             mingw-w64-x86_64-qt6-websockets
+
+      - name: Build and install Hamlib
+        run: |
+          set -euo pipefail
+          curl -fsSL -o hamlib-4.7.0.tar.gz https://github.com/Hamlib/Hamlib/releases/download/4.7.0/hamlib-4.7.0.tar.gz
+          tar -xzf hamlib-4.7.0.tar.gz
+          cd hamlib-4.7.0
+          ./configure --prefix=/mingw64 --disable-static --enable-shared
+          make -j"$(nproc)"
+          make install
 
       - name: Configure
         run: |
