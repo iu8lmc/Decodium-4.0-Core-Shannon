@@ -612,7 +612,7 @@ private Q_SLOTS:
     quint64 const callWindowMs = static_cast<quint64> (
         QDateTime (QDate (2026, 6, 30),
                    QTime (12, 30),
-                   QTimeZone::UTC).toMSecsSinceEpoch ());
+                   QTimeZone(QByteArrayLiteral("UTC"))).toMSecsSinceEpoch ());
     QVariantMap activeSchedule = adapter.activeFrequencySchedule (callWindowMs);
     QVERIFY (activeSchedule.value ("active").toBool ());
     QCOMPARE (activeSchedule.value ("action").toString (),
@@ -633,7 +633,7 @@ private Q_SLOTS:
     quint64 const dataWindowMs = static_cast<quint64> (
         QDateTime (QDate (2026, 6, 30),
                    QTime (13, 10),
-                   QTimeZone::UTC).toMSecsSinceEpoch ());
+                   QTimeZone(QByteArrayLiteral("UTC"))).toMSecsSinceEpoch ());
     guard = adapter.callingFrequencyGuardAt (
         QStringLiteral ("MAIL"), 14105750, 0, dataWindowMs);
     QVERIFY (!guard.value ("blocked").toBool ());
