@@ -13,6 +13,7 @@
 #include <limits>
 
 #include "controllers/FT2LinkQmlAdapter.hpp"
+#include "controllers/FT2LinkAccessGate.hpp"
 #include "lib/ft2link/FT2LinkAppModel.hpp"
 #include "lib/ft2link/FT2LinkFrame.hpp"
 #include "lib/ft2link/FT2LinkWaveform.hpp"
@@ -3625,6 +3626,61 @@ private Q_SLOTS:
               QStringLiteral ("Connected"));
     QCOMPARE (caller.sessionInfo (sessionId).value ("profileName").toString (),
               QStringLiteral ("W2300"));
+  }
+
+  // ===== Gate d'accesso FT2-Link (PBKDF2-HMAC-SHA256) — fail-closed + KAT =====
+  // Copre controllers/FT2LinkAccessGate.hpp (single source usato da DecodiumBridge):
+  // garanzia che una build non provisionata NON possa aprire il modo FT2-Link.
+  void ft2LinkGatePbkdf2MatchesKnownAnswerVectors ()
+  {
+    using namespace decodium::ft2linkgate;
+    // Known-answer vectors PBKDF2-HMAC-SHA256 (RFC 8018): valida l'ALGORITMO.
+    QCOMPARE (pbkdf2Sha256 (QStringLiteral ("password"),
+                            QByteArrayLiteral ("salt"), 1, 32).toHex (),
+              QByteArray ("120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b"));
+    QCOMPARE (pbkdf2Sha256 (QStringLiteral ("password"),
+                            QByteArrayLiteral ("salt"), 2, 32).toHex (),
+              QByteArray ("ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43"));
+  }
+
+  void ft2LinkGateIsFailClosedWhenNotProvisioned ()
+  {
+    using namespace decodium::ft2linkgate;
+    // Build non provisionata: salt/hash vuoti -> NON configurato -> verify sempre false.
+    QVERIFY (!isConfigured (QByteArray (), QByteArray (), 160000));
+    QVERIFY (!verifyPassword (QStringLiteral ("qualsiasi"), QByteArray (),
+                              QByteArray (), 160000));
+    QByteArray const salt16 (16, '\x01');
+    QByteArray const hash32 (32, '\x02');
+    QVERIFY (!isConfigured (QByteArray (15, '\x01'), hash32, 160000));  // salt corto
+    QVERIFY (!isConfigured (salt16, QByteArray (31, '\x02'), 160000));  // hash corto
+    QVERIFY (!isConfigured (salt16, hash32, 9999));                     // iter troppo basse
+    QVERIFY (isConfigured (salt16, hash32, 160000));                    // parametri validi
+  }
+
+  void ft2LinkGateVerifiesCorrectPasswordAndRejectsWrong ()
+  {
+    using namespace decodium::ft2linkgate;
+    // Vettore realistico: salt 00..0f (16B), pw "ft2link-test-pw", iter 10000.
+    QByteArray const salt =
+        QByteArray::fromHex ("000102030405060708090a0b0c0d0e0f");
+    QByteArray const expected = QByteArray::fromHex (
+        "59092daa3dd10513dca798bb62080e3dc2eba23129bdaec29170253dcb1c167e");
+    QCOMPARE (salt.size (), 16);
+    QCOMPARE (expected.size (), 32);
+    QVERIFY (verifyPassword (QStringLiteral ("ft2link-test-pw"), salt, expected, 10000));
+    QVERIFY (!verifyPassword (QStringLiteral ("ft2link-test-pX"), salt, expected, 10000));
+    QVERIFY (!verifyPassword (QString (), salt, expected, 10000));
+  }
+
+  void ft2LinkGateConstantTimeEqualsIsCorrect ()
+  {
+    using namespace decodium::ft2linkgate;
+    QByteArray const a = QByteArrayLiteral ("abcdef");
+    QVERIFY (constantTimeEquals (a, QByteArrayLiteral ("abcdef")));
+    QVERIFY (!constantTimeEquals (a, QByteArrayLiteral ("abcdeg")));
+    QVERIFY (!constantTimeEquals (a, QByteArrayLiteral ("abcde")));  // dimensione diversa
+    QVERIFY (!constantTimeEquals (a, QByteArray ()));
   }
 };
 
