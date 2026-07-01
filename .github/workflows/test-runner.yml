@@ -93,6 +93,8 @@ jobs:
             qt6-5compat-dev \
             qt6-base-dev \
             qt6-base-dev-tools \
+            qt6-base-private-dev \
+            libxkbcommon-dev \
             qt6-declarative-dev \
             qt6-declarative-dev-tools \
             qt6-multimedia-dev \
@@ -173,7 +175,7 @@ jobs:
           curl -fsSL -o hamlib-4.7.0.tar.gz https://github.com/Hamlib/Hamlib/releases/download/4.7.0/hamlib-4.7.0.tar.gz
           tar -xzf hamlib-4.7.0.tar.gz
           cd hamlib-4.7.0
-          ./configure --prefix=/mingw64 --disable-static --enable-shared
+          ./configure --prefix=/mingw64 --disable-static --enable-shared --without-readline
           make -j"$(nproc)"
           make install
 
