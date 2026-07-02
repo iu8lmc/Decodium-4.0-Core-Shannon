@@ -22,8 +22,8 @@
         <location filename="../widgets/AbstractLogWindow.cpp" line="67"/>
         <source>Are you sure you want to delete the %n selected QSO(s) from the log?</source>
         <translation>
-            <numerusform>Are you sure you want to delete the %n selected QSO(s) from the log?</numerusform>
-            <numerusform>Are you sure you want to delete the %n selected QSO(s) from the log?</numerusform>
+            <numerusform>Vai tiešām vēlaties dzēst %n atlasīto QSO ierakstu no žurnāla?</numerusform>
+            <numerusform>Vai tiešām vēlaties dzēst %n atlasīto QSO ierakstu no žurnāla?</numerusform>
             <numerusform></numerusform>
         </translation>
     </message>
@@ -17243,7 +17243,7 @@ Noklusējums: IZSL.</translation>
     <message>
         <location filename="../Transceiver/TransceiverBase.cpp" line="15"/>
         <source>Unexpected rig error</source>
-        <translation>Unexpected rig error</translation>
+        <translation>Negaidīta radioiekārtas kļūda</translation>
     </message>
 </context>
 <context>
