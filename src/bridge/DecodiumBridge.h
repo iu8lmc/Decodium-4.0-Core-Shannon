@@ -2394,7 +2394,7 @@ private:
     QString& m_reportSent = m_seqState.reportSent;
     QString& m_reportReceived = m_seqState.reportReceived;  // default -10 dB (nella struct)
     bool&   m_sendRR73 = m_seqState.sendRR73;               // true=RR73, false=RRR
-    int     m_autoCQPeriodsMissed {0}; // periodi CQ senza risposta (watchdog count-based)
+    int&    m_autoCQPeriodsMissed = m_seqState.autoCQPeriodsMissed; // periodi CQ senza risposta (watchdog count-based) — alias step B4
     bool m_multiAnswerMode {false};
     bool m_autoSeq          {true};
     bool m_waitPounceActive {false};
@@ -3035,15 +3035,15 @@ private:
     QDateTime m_lateAutoLogOff;
     double    m_lateAutoLogDialFreq {0.0};
     QDateTime m_lateAutoLogExpires;
-    QString m_autoCqLockedCall;
-    QString m_autoCqLockedGrid;
-    int     m_autoCqLockedNtx {6};
-    int     m_autoCqLockedProgress {0};
+    QString& m_autoCqLockedCall = m_seqState.autoCqLockedCall;         // alias → QsoSequencerState (step B4)
+    QString& m_autoCqLockedGrid = m_seqState.autoCqLockedGrid;
+    int&     m_autoCqLockedNtx = m_seqState.autoCqLockedNtx;
+    int&     m_autoCqLockedProgress = m_seqState.autoCqLockedProgress;
     int     m_ft2AutoCqAwaitingPartnerTx {0};
     QString m_ft2AutoCqAwaitingPartnerBase;
     QString m_ft2AutoCqAwaitingPartnerDecodeIdentity;
     qint64  m_ft2AutoCqAwaitingPartnerSinceMs {0};
-    QString m_lastAutoSeqDecodeIdentity;
+    QString& m_lastAutoSeqDecodeIdentity = m_seqState.lastAutoSeqDecodeIdentity;   // alias → QsoSequencerState
     QHash<QString, QDateTime> m_recentAutoCqAbandonedUtcByKey;
     QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
     QHash<QString, QDateTime> m_recentQsoLogUtcByKey;

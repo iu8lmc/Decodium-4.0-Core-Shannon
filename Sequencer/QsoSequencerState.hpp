@@ -56,6 +56,14 @@ struct QsoSequencerState
     QString autoSeqRogerReportBase;
     int     activeTxNumber {0};
     QString activeTxMessage;
+
+    // --- Step B4 (port autoSequenceStep): latch AutoCQ + identità autoseq ---
+    int     autoCQPeriodsMissed {0};   // periodi CQ senza risposta (watchdog count-based)
+    QString autoCqLockedCall;          // call agganciato in AutoCQ FT2
+    QString autoCqLockedGrid;
+    int     autoCqLockedNtx {6};
+    int     autoCqLockedProgress {0};
+    QString lastAutoSeqDecodeIdentity; // identità dell'ultimo decode processato
 };
 
 }
