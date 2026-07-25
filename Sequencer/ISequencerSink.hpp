@@ -13,6 +13,7 @@
 // ISequencerSink& e chiama SOLO i metodi qui sotto.
 
 #include <QString>
+#include <QtGlobal>
 
 namespace decodium
 {
@@ -58,6 +59,33 @@ public:
     // identifica quale callback (0 = tick periodico di default). Il tempo e'
     // iniettabile → i test possono simulare l'avanzamento senza QTimer reale.
     virtual void scheduleCallback(int delayMs, int token) = 0;
+
+    // --- Estensioni step D (corpo di DEFAULT: NON pure → FakeSink e impl
+    //     parziali restano validi; desktop e mobile le sovrascrivono). Servono
+    //     ai corpi di autoSequenceStep/checkAndStartPeriodicTx quando migrati. ---
+
+    // Clock iniettabile (sostituisce correctedUtcEpochMs / ...MsecsSinceStartOfDay).
+    virtual qint64 nowEpochMs() const { return 0; }
+    virtual qint64 utcMsSinceStartOfDay() const { return 0; }
+
+    // Costruzione messaggi Tx host (genStdMsgs / buildCurrentTxMessage).
+    virtual QString buildTxMessage(int txNum) { Q_UNUSED(txNum); return QString(); }
+    virtual void regenerateTxMessages() {}
+
+    // Armamento TX host.
+    virtual void setTxEnabled(bool on) { Q_UNUSED(on); }
+    virtual bool txEnabled() const { return false; }
+
+    // Periodo effettivo per modo (desktop: override MSK144; mobile: periodMsForMode).
+    virtual int effectivePeriodMsForMode(const QString& mode) const { Q_UNUSED(mode); return 15000; }
+
+    // Maschera Tx disabilitati (host applica m_txDisabledMask).
+    virtual bool isTxDisabled(int txNum) const { Q_UNUSED(txNum); return false; }
+
+    // Stub multi-QSO / WorldMap / partner-memory (no-op su mobile mono-QSO).
+    virtual void enqueueCaller(const QString& call, const QString& message) { Q_UNUSED(call); Q_UNUSED(message); }
+    virtual void markWorldMapClosed(const QString& call) { Q_UNUSED(call); }
+    virtual void rememberPartnerState() {}
 };
 
 }
