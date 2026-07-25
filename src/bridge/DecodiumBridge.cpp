@@ -16,6 +16,7 @@
 #include "DecodiumProfileSettings.h"
 #include "Sequencer/QsoSequencerRules.hpp"
 #include "Sequencer/MessageTokenRules.hpp"
+#include "Sequencer/SequencerTiming.hpp"
 #include "DecodiumDxCluster.h"
 #include "DecodiumSelfCheck.hpp"
 #include "Network/MessageClient.hpp"
@@ -2465,13 +2466,10 @@ static int signedUtcSecondDelta(int earlierSeconds, int laterSeconds)
     return delta;
 }
 
-static bool bridgeTxPeriodIsEven(int txPeriod)
-{
-    // Bridge runtime convention:
-    //   txPeriod == 1  -> legacy txFirst == true  -> first/even slot (:00/:30)
-    //   txPeriod == 0  -> legacy txFirst == false -> second/odd slot (:15/:45)
-    return txPeriod != 0;
-}
+// bridgeTxPeriodIsEven e autoSeqTxRank vivono in Sequencer/SequencerTiming
+// (step D2 dell'estrazione): qui restano solo i using.
+using decodium::seq::bridgeTxPeriodIsEven;
+using decodium::seq::autoSeqTxRank;
 
 static int replyTxPeriodForClickedDecode(QString const& mode,
                                          QString const& timeStr,
@@ -5943,18 +5941,7 @@ static int autoTxDecodeGraceMs(const QString& mode, bool ft8FastSequence = false
 // (Fase 1 port mobile, step A strangler): regole pure condivise desktop/mobile.
 using decodium::seq::deferredSignoffRetryCapForMode;
 
-static int autoSeqTxRank(int txNum)
-{
-    switch (txNum) {
-    case 5: return 5;
-    case 4: return 4;
-    case 3: return 3;
-    case 2: return 2;
-    case 1: return 1;
-    case 6: return 1;
-    default: return 0;
-    }
-}
+// autoSeqTxRank -> spostata in Sequencer/SequencerTiming (using in cima).
 
 #if defined(Q_OS_MAC)
 static AudioDevice::Channel txOutputChannelForFormat(const QAudioFormat& format, int configuredChannel)

@@ -456,6 +456,9 @@ set (wsjtx_CXXSRCS
   Sequencer/QsoSequencerState.hpp
   Sequencer/ISequencerSink.hpp
   Sequencer/QsoSequencer.hpp
+  Sequencer/SequencerTiming.cpp
+  Sequencer/SequencerTiming.hpp
+  Sequencer/SequencerConfig.hpp
   src/app/DecodiumSelfCheck.cpp
   src/app/DecodiumSelfCheck.hpp
   src/services/UsStateDataManager.cpp
@@ -1790,6 +1793,9 @@ add_executable (decodium_qml
   Sequencer/QsoSequencerState.hpp
   Sequencer/ISequencerSink.hpp
   Sequencer/QsoSequencer.hpp
+  Sequencer/SequencerTiming.cpp
+  Sequencer/SequencerTiming.hpp
+  Sequencer/SequencerConfig.hpp
   src/services/UsStateDataManager.cpp
   src/services/UsStateDataManager.h
   src/models/DecodeListModel.cpp
