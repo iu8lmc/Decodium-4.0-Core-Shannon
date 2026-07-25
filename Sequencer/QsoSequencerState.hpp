@@ -11,6 +11,7 @@
 
 #include <QDateTime>
 #include <QHash>
+#include <QMap>
 #include <QString>
 #include <QtGlobal>
 
@@ -64,6 +65,22 @@ struct QsoSequencerState
     int     autoCqLockedNtx {6};
     int     autoCqLockedProgress {0};
     QString lastAutoSeqDecodeIdentity; // identità dell'ultimo decode processato
+
+    // --- Step B5 (timing/async/watchdog per checkAndStartPeriodicTx+autoSequenceStep) ---
+    int     currentPartnerSnrDb {127}; // SNR del partner corrente (retry cap adattivo)
+    int     txPeriod {0};              // 1=first/even (:00/:30), 0=second/odd (:15/:45)
+    qint64  asyncLastTxEndMs {0};      // fine ultima TX FT2 async
+    qint64  ft2ParityDeferUntilMs {0}; // rinvio TX anti same-phase (0=nessuno)
+    qint64  ft2AsyncPartnerSlotMs {0};
+    qint64  ft2RetryDeferLogMs {0};    // throttle 1/slot del log retry guard
+    quint64 ft2AsyncSmartTxSerial {0};
+    int     txWatchdogTicks {0};       // tick watchdog a 250ms
+    QMap<QString, qint64>  qsoCooldown;          // callsign → timestamp msec UTC
+    QHash<QString, int>    postLogReengageCount; // base call → ri-agganci consumati
+    int     ft2AutoCqAwaitingPartnerTx {0};
+    QString ft2AutoCqAwaitingPartnerBase;
+    QString ft2AutoCqAwaitingPartnerDecodeIdentity;
+    qint64  ft2AutoCqAwaitingPartnerSinceMs {0};
 };
 
 }

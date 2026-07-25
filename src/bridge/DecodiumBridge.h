@@ -2274,7 +2274,7 @@ private:
     // m_ft2PostLogReengageMax RRR di cortesia entro la finestra cooldown (30s), poi sopprime.
     bool m_ft2PostLogReengageGuard {false};
     int  m_ft2PostLogReengageMax {1};
-    QHash<QString,int> m_postLogReengageCount;  // base call -> ri-aggganci consumati (entro cooldown)
+    // m_postLogReengageCount → spostato in QsoSequencerState, alias dopo m_seqState (B5)
     // 1.0.446 - P0-3 opt-in (default OFF): se il TX watchdog scatta con un QSO gia' a
     // scambio report bidirezionale completato (m_qsoProgress>=4), logga il QSO invece di
     // abbandonarlo (1.0.445 armava solo il late-snapshot, perso in QSO manuale).
@@ -2351,7 +2351,7 @@ private:
     QVector<qint64> m_recentShortStalls;
     // 1.0.174 — SNR del partner corrente (m_dxCall) aggiornato dai decode.
     // 127 = sentinel "no data". Usato da ghost filter e retry cap adattivi.
-    int  m_currentPartnerSnrDb {127};
+    // m_currentPartnerSnrDb → spostato in QsoSequencerState, alias dopo m_seqState (B5)
     QSet<QString> m_remoteActivityKeys;
     QStringList m_remoteActivityKeyOrder;
     QHash<QString, QString> m_worldMapGridByCall;
@@ -2406,10 +2406,12 @@ private:
     bool m_deferredManualSyncTx {false};
     bool m_autoCqRepeat     {false};
     bool m_avgDecodeEnabled {false};
-    int  m_txPeriod         {0};   // 1=first/even (:00/:30), 0=second/odd (:15/:45)
+    int&  m_txPeriod = m_seqState.txPeriod;   // 1=first/even (:00/:30), 0=second/odd (:15/:45) — alias B5
+    int&  m_currentPartnerSnrDb = m_seqState.currentPartnerSnrDb;          // alias B5 (dichiar. orig. prima di m_seqState)
+    QHash<QString,int>& m_postLogReengageCount = m_seqState.postLogReengageCount;  // alias B5 (idem)
     bool m_alt12Enabled     {false};
     bool    m_asyncTxEnabled   {true};   // FT2 async TX SEMPRE ON (permanente, non disattivabile): il path FT2 sync e' rimosso di fatto. Solo modo FT2 lo usa (gated ovunque da m_mode=="FT2").
-    qint64  m_asyncLastTxEndMs {0};      // timestamp fine ultima TX FT2 async (per guard timer)
+    qint64&  m_asyncLastTxEndMs = m_seqState.asyncLastTxEndMs;      // fine ultima TX FT2 async — alias B5
     bool m_dualCarrierEnabled{false}; // FT2 dual carrier mode
     bool m_quickQsoEnabled   {false}; // FT2 Quick QSO: salta TX1, flusso Ultra2 (2 messaggi)
     // 1.0.304 — resume-on-reply (#9): se attivo, alla Halt con QSO attivo memorizza il
@@ -2423,7 +2425,7 @@ private:
     int     m_resumeArmedProgress {0};
     int  m_asyncSnrDb          {-99};   // SNR ultimo decode FT2 (per AsyncModeWidget S-meter)
     // FT2 QSO cooldown: evita re-triggering sullo stesso 73 decodificato ogni ~4s (Shannon m_qsoCooldown)
-    QMap<QString, qint64> m_qsoCooldown;  // callsign → timestamp msec UTC
+    QMap<QString, qint64>& m_qsoCooldown = m_seqState.qsoCooldown;  // callsign → ts msec UTC — alias B5
     bool m_catConnected {false};
     QString m_catRigName;
     QString m_lastCatError;
@@ -2552,7 +2554,7 @@ private:
     // FIX A: signal-time slot boundary (epoch ms) of the partner's frame for
     // the current decode burst, derived from the corrected UTC clock + decode DT.
     // 0 = not available -> scheduleSmartFt2AsyncTx falls back to wall-clock estimate.
-    qint64                m_ft2AsyncPartnerSlotMs  {0};
+    qint64&               m_ft2AsyncPartnerSlotMs = m_seqState.ft2AsyncPartnerSlotMs;   // alias B5
     // FIX A v2 (1.0.356): slot-start (epoch ms, corrected-UTC) della finestra audio
     // calcolato al DISPATCH del decode async (stabile), non al callback ready (che e'
     // gonfiato dalla latenza di decode variabile). onFt2AsyncDecodeReady lo usa come
@@ -2560,14 +2562,14 @@ private:
     qint64                m_ft2AsyncDispatchSlotStartMs {0};
     // Sprint1 (1.0.393): ancora rinfrescata + breaker nel path diretto + skip stale.
     qint64                m_ft2AsyncPartnerSlotSetMs {0}; // wall-ms ultimo refresh dell'ancora (freshness gate breaker)
-    qint64                m_ft2ParityDeferUntilMs {0};    // corrected-ms: rinvio TX anti same-phase (0 = nessun rinvio)
+    qint64&               m_ft2ParityDeferUntilMs = m_seqState.ft2ParityDeferUntilMs;    // rinvio TX anti same-phase — alias B5
     quint64               m_ft2AsyncLastDispatchAudioPos {0}; // pos audio all'ultimo dispatch (skip se invariato)
     int                   m_ft2EmptyAsyncAttempts {0};    // contatore attempt vuoti per log aggregato
     qint64                m_ft2EmptyAsyncAttemptLogMs {0};
-    qint64                m_ft2RetryDeferLogMs {0};       // throttle 1/slot del log retry guard
+    qint64&               m_ft2RetryDeferLogMs = m_seqState.ft2RetryDeferLogMs;       // throttle 1/slot log retry — alias B5
     int                   m_ft2AsyncAudioQuietRuns {0};   // consecutive RMS<threshold samples
     bool                  m_ft2AsyncSmartTxPending {false};
-    quint64               m_ft2AsyncSmartTxSerial {0};
+    quint64&              m_ft2AsyncSmartTxSerial = m_seqState.ft2AsyncSmartTxSerial;   // alias B5
     qint64                m_ft2AsyncSmartTxDeadlineMs {0};
     int                   m_ft2AsyncSmartTxRetries {0};
     bool                  m_ft2ManualClickTx1BypassPeriodOnce {false};
@@ -2964,7 +2966,7 @@ private:
     bool    m_targetCallArmedWaiting {false};  // runtime: true=ARMED (attende target), false=CALLING/off
     int     m_armedReArmCount        {0};      // re-arm consumati nella sessione (cap anti-loop DXCC)
 
-    int  m_txWatchdogTicks  {0};   // tick watchdog a 250ms: period/count logic
+    int&  m_txWatchdogTicks = m_seqState.txWatchdogTicks;   // tick watchdog a 250ms — alias B5
     qint64 m_txWatchdogActiveSinceMs {0}; // wall-clock anchor for logs only
     qint64 m_txWatchdogLastProgressLogMs {0};
     QElapsedTimer m_txWatchdogElapsed; // monotonic source for minute watchdog
@@ -3039,10 +3041,10 @@ private:
     QString& m_autoCqLockedGrid = m_seqState.autoCqLockedGrid;
     int&     m_autoCqLockedNtx = m_seqState.autoCqLockedNtx;
     int&     m_autoCqLockedProgress = m_seqState.autoCqLockedProgress;
-    int     m_ft2AutoCqAwaitingPartnerTx {0};
-    QString m_ft2AutoCqAwaitingPartnerBase;
-    QString m_ft2AutoCqAwaitingPartnerDecodeIdentity;
-    qint64  m_ft2AutoCqAwaitingPartnerSinceMs {0};
+    int&     m_ft2AutoCqAwaitingPartnerTx = m_seqState.ft2AutoCqAwaitingPartnerTx;                       // alias B5
+    QString& m_ft2AutoCqAwaitingPartnerBase = m_seqState.ft2AutoCqAwaitingPartnerBase;
+    QString& m_ft2AutoCqAwaitingPartnerDecodeIdentity = m_seqState.ft2AutoCqAwaitingPartnerDecodeIdentity;
+    qint64&  m_ft2AutoCqAwaitingPartnerSinceMs = m_seqState.ft2AutoCqAwaitingPartnerSinceMs;
     QString& m_lastAutoSeqDecodeIdentity = m_seqState.lastAutoSeqDecodeIdentity;   // alias → QsoSequencerState
     QHash<QString, QDateTime> m_recentAutoCqAbandonedUtcByKey;
     QHash<QString, QDateTime> m_recentAutoCqWorkedUtcByKey;
