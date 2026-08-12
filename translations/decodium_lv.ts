@@ -87,14 +87,14 @@
     <message>
         <location filename="../widgets/AbstractLogWindow.cpp" line="66"/>
         <source>Confirm Delete</source>
-        <translation>Confirm Delete</translation>
+        <translation>Apstiprināt dzēšanu</translation>
     </message>
     <message numerus="yes">
         <location filename="../widgets/AbstractLogWindow.cpp" line="67"/>
         <source>Are you sure you want to delete the %n selected QSO(s) from the log?</source>
         <translation>
-            <numerusform>Are you sure you want to delete the %n selected QSO(s) from the log?</numerusform>
-            <numerusform>Are you sure you want to delete the %n selected QSO(s) from the log?</numerusform>
+            <numerusform>Vai tiešām vēlaties dzēst %n atlasīto QSO ierakstu no žurnāla?</numerusform>
+            <numerusform>Vai tiešām vēlaties dzēst %n atlasīto QSO ierakstu no žurnāla?</numerusform>
             <numerusform></numerusform>
         </translation>
     </message>
@@ -104,17 +104,17 @@
     <message>
         <location filename="../widgets/activeStations.ui" line="14"/>
         <source>Message Averaging</source>
-        <translation>Message Averaging</translation>
+        <translation>Ziņojumu vidējošana</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="24"/>
         <source>Band Changes:</source>
-        <translation>Band Changes:</translation>
+        <translation>Diapazonu maiņas:</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="34"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Total score accumulated since most recent reset of Cabrillo log.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Total score accumulated since most recent reset of Cabrillo log.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Kopējais punktu skaits, kas uzkrāts kopš pēdējās Cabrillo žurnāla atiestatīšanas.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="37"/>
@@ -126,12 +126,12 @@
     <message>
         <location filename="../widgets/activeStations.ui" line="56"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Points logged during the past hour.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Points logged during the past hour.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Punkti, kas reģistrēti pēdējās stundas laikā.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="72"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check this box to show only stations ready to be called.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check this box to show only stations ready to be called.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Atzīmējiet šo izvēles rūtiņu, lai rādītu tikai stacijas, kuras ir gatavas izsaukšanai.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="75"/>
@@ -141,68 +141,68 @@
     <message>
         <location filename="../widgets/activeStations.ui" line="85"/>
         <source># Wanted only</source>
-        <translation># Wanted only</translation>
+        <translation># Tikai vajadzīgās stacijas</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="92"/>
         <source>Score:</source>
-        <translation>Score:</translation>
+        <translation>Rezultāts:</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="102"/>
         <source>Rate:</source>
-        <translation>Rate:</translation>
+        <translation>Ātrums:</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="130"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set maximum elapsed number of T/R sequences.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set maximum elapsed number of T/R sequences.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Iestatīt maksimālo pagājušo T/R secību skaitu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="136"/>
         <source>Max Age  </source>
-        <translation>Max Age  </translation>
+        <translation>Maksimālais vecums  </translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="164"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set maximum number of displayed lines.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set maximum number of displayed lines.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Iestatīt maksimālo rādāmo rindu skaitu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="170"/>
         <source>Max N  </source>
-        <translation>Max N  </translation>
+        <translation>Maks. N  </translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="183"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Number of band changes during the past hour.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Number of band changes during the past hour.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Diapazonu maiņu skaits pēdējās stundas laikā.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.ui" line="207"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Click on a line to call that station. &lt;/p&gt;&lt;p&gt;When using QMAP, single click to transfer QSO data and sked frequency to Decodium v3.0 SE KP5, and double click to call that station.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Click on a line to call that station. &lt;/p&gt;&lt;p&gt;When using QMAP, single click to transfer QSO data and sked frequency to Decodium v3.0 SE KP5, and double click to call that station.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Noklikšķiniet uz rindas, lai izsauktu šo staciju. &lt;/p&gt;&lt;p&gt;Izmantojot QMAP, noklikšķiniet vienreiz, lai pārsūtītu QSO datus un sked frekvenci uz Decodium v3.0 SE KP5, un veiciet dubultklikšķi, lai izsauktu šo staciju.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.cpp" line="22"/>
         <source>Active Stations</source>
-        <translation>Active Stations</translation>
+        <translation>Aktīvās stacijas</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.cpp" line="94"/>
         <location filename="../widgets/activeStations.cpp" line="102"/>
         <source>Wanted only</source>
-        <translation>Wanted only</translation>
+        <translation>Tikai vajadzīgās stacijas</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.cpp" line="96"/>
         <source>Message</source>
-        <translation>Message</translation>
+        <translation>Ziņojums</translation>
     </message>
     <message>
         <location filename="../widgets/activeStations.cpp" line="97"/>
         <source>My call only</source>
-        <translation>My call only</translation>
+        <translation>Tikai mans izsaukuma signāls</translation>
     </message>
 </context>
 <context>
@@ -259,7 +259,7 @@
     <message>
         <location filename="../widgets/astro.ui" line="40"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;One station does all Doppler shift correction, their QSO partner receives and transmits on the sked frequency.&lt;/p&gt;&lt;p&gt;If the rig does not accept CAT QSY commands while transmitting a single correction is applied for the whole transmit period.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;One station does all Doppler shift correction, their QSO partner receives and transmits on the sked frequency.&lt;/p&gt;&lt;p&gt;If the rig does not accept CAT QSY commands while transmitting a single correction is applied for the whole transmit period.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Viena stacija veic visu Doplera nobīdes korekciju, bet tās QSO partneris uztver un raida norunātajā frekvencē.&lt;/p&gt;&lt;p&gt;Ja radioiekārta raidīšanas laikā nepieņem CAT QSY komandas, visam raidīšanas periodam tiek piemērota viena korekcija.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../widgets/astro.ui" line="43"/>
@@ -654,17 +654,17 @@ Searched paths:
     <message>
         <location filename="../widgets/asyncmodewidget.cpp" line="77"/>
         <source>Sine Wave</source>
-        <translation>Sine Wave</translation>
+        <translation>Sinusoidāls vilnis</translation>
     </message>
     <message>
         <location filename="../widgets/asyncmodewidget.cpp" line="80"/>
         <source>S-Meter</source>
-        <translation>S-Meter</translation>
+        <translation>Signāla S-metrs</translation>
     </message>
     <message>
         <location filename="../widgets/asyncmodewidget.cpp" line="84"/>
         <source>Hide Widget</source>
-        <translation>Hide Widget</translation>
+        <translation>Paslēpt logrīku</translation>
     </message>
 </context>
 <context>
@@ -672,32 +672,32 @@ Searched paths:
     <message>
         <location filename="../models/Bands.cpp" line="139"/>
         <source>Band name</source>
-        <translation>Band name</translation>
+        <translation>Diapazona nosaukums</translation>
     </message>
     <message>
         <location filename="../models/Bands.cpp" line="140"/>
         <source>Lower frequency limit</source>
-        <translation>Lower frequency limit</translation>
+        <translation>Zemākā frekvences robeža</translation>
     </message>
     <message>
         <location filename="../models/Bands.cpp" line="141"/>
         <source>Upper frequency limit</source>
-        <translation>Upper frequency limit</translation>
+        <translation>Augstākā frekvences robeža</translation>
     </message>
     <message>
         <location filename="../models/Bands.cpp" line="203"/>
         <source>Band</source>
-        <translation>Band</translation>
+        <translation>Diapazons</translation>
     </message>
     <message>
         <location filename="../models/Bands.cpp" line="204"/>
         <source>Lower Limit</source>
-        <translation>Lower Limit</translation>
+        <translation>Zemākā robeža</translation>
     </message>
     <message>
         <location filename="../models/Bands.cpp" line="205"/>
         <source>Upper Limit</source>
-        <translation>Upper Limit</translation>
+        <translation>Augstākā robeža</translation>
     </message>
 </context>
 <context>
@@ -14486,17 +14486,17 @@ netiks rādītas!</translation>
     <message>
         <location filename="../widgets/qsymonitor.ui" line="32"/>
         <source>QSYMonitor</source>
-        <translation>QSYMonitor</translation>
+        <translation>QSY monitors</translation>
     </message>
     <message>
         <location filename="../widgets/qsymonitor.ui" line="60"/>
         <source>Clear</source>
-        <translation>Clear</translation>
+        <translation>Notīrīt</translation>
     </message>
     <message>
         <location filename="../widgets/qsymonitor.cpp" line="24"/>
         <source>QSY Monitor</source>
-        <translation>QSY Monitor</translation>
+        <translation>QSY monitors</translation>
     </message>
 </context>
 <context>
@@ -24014,7 +24014,7 @@ QSO laikā tērē papildu CPU. Noklusējums: IZSL.</translation>
     <message>
         <location filename="../Transceiver/TransceiverBase.cpp" line="15"/>
         <source>Unexpected rig error</source>
-        <translation>Unexpected rig error</translation>
+        <translation>Negaidīta radioiekārtas kļūda</translation>
     </message>
 </context>
 <context>
@@ -27300,12 +27300,12 @@ Right click for insert and delete options.</translation>
     <message>
         <location filename="../wf_palette_design_dialog.ui" line="14"/>
         <source>Palette Designer</source>
-        <translation>Palette Designer</translation>
+        <translation>Paletes redaktors</translation>
     </message>
     <message>
         <location filename="../wf_palette_design_dialog.ui" line="23"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click a color to edit it.&lt;/p&gt;&lt;p&gt;Right click to insert or delete colors.&lt;/p&gt;&lt;p&gt;Colors at the top represent weak signals&lt;/p&gt;&lt;p&gt;and colors at the bottom represent strong&lt;/p&gt;&lt;p&gt;signals. You can have up to 256 colors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Veiciet dubultklikšķi uz krāsas, lai to rediģētu.&lt;/p&gt;&lt;p&gt;Noklikšķiniet ar labo peles pogu, lai ievietotu vai dzēstu krāsas.&lt;/p&gt;&lt;p&gt;Augšpusē esošās krāsas attēlo vājus signālus,&lt;/p&gt;&lt;p&gt;bet apakšpusē esošās krāsas attēlo stiprus&lt;/p&gt;&lt;p&gt;signālus. Var izmantot līdz 256 krāsām.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
 <context>
