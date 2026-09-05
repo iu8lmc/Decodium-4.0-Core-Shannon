@@ -1,24 +1,33 @@
 // gate_weights.hpp — pesi del gate appreso (strato 2, FASTLDPC-AI-SPEC-001 §2).
 //
-// ATTENZIONE, DA LEGGERE PRIMA DI ACCENDERE DECODIUM_LDPC_GATE=1: questi pesi
-// vengono dal pacchetto di ricerca originale (2 settembre 2026), addestrati sul
-// canale FT2 SINTETICO di train/ft2chan.py con la configurazione del decoder di
-// allora. Da allora il decoder di produzione e' cambiato sotto ai piedi di questi
-// pesi: alpha 3/4 -> 0,578 (scala degli LLR), ntau 14 -> 13 e pair_span 0 -> 64
-// (candidati alla CRC), span2 32 -> 64. Le feature "mean_abs" e "score" dipendono
-// dalla scala degli LLR, quindi la loro distribuzione sui candidati veri e falsi
-// NON e' garantita identica a quella su cui questi pesi sono stati tarati.
+// Riaddestrati il 5 settembre 2026 su LLR REALI del decoder di produzione
+// (alpha 0,578, ntau 13, span2 64, pair_span 64 — la configurazione attuale,
+// non quella del pacchetto di ricerca originale), raccolti con
+// tests/ft2_gate_dump.cpp: WAV FT2 con messaggio noto attraverso la catena
+// di decodifica vera (sync, demod, LDPC), non il canale AWGN sintetico di
+// train/ft2chan.py. Dataset: 8 messaggi (CQ, rapporto, R-report, RR73, 73,
+// due nominativi diversi), SNR da -24 a -8 dB, 7350 prove, 317 202 candidati
+// OSD esaminati, di cui 1 717 genuinamente veri (il resto rumore che supera
+// comunque la CRC-14 — e' il problema per cui il gate esiste). Split 80/20,
+// soglia scelta per <=0,5 falsi per mille sul training.
 //
-// Il meccanismo (gate.hpp, il codice che li usa) e' collaudato: a flag spento il
-// comportamento resta bit-identico, verificato. Questi pesi NON sono stati
-// riaddestrati ne' rimisurati su questo decoder, ne' sul traffico vero — esattamente
-// il passo che FASTLDPC-AI-SPEC-001 §2 elenca come necessario prima del rilascio
-// ("prima della release: rifare dataset e soglia sui LLR REALI esportati da
-// DECODIUM"). Trattare DECODIUM_LDPC_GATE=1 come un banco di prova da rimisurare,
-// non come una soglia pronta all'uso. Vedi Detector/fastldpc/lab/gate/README.md e
-// lab/gate/train_gate.py per riaddestrarli.
-static const float GATE_W[10] = {-4.291915f, -1.574422f, -1.256663f, 0.078694f, 1.136246f, -0.020515f, -0.174598f, -1.268278f, 0.000000f, 0.000000f};
-static const float GATE_B = -5.989304f;
-static const float GATE_MU[10] = {0.094402f, 0.197569f, 0.028379f, 0.014154f, 2.271920f, 0.999885f, 0.156348f, 0.070599f, 1.000000f, 1.000000f};
-static const float GATE_SD[10] = {0.030958f, 0.048061f, 0.015475f, 0.014063f, 0.085713f, 0.009374f, 0.062497f, 0.030065f, 0.000001f, 0.000001f};
-static const float GATE_THRESHOLD = 0.581900f;
+// Risultato misurato sul 20% tenuto da parte (mai visto in training):
+//   solo nd<=0,065 (oggi, senza gate): 92,60% veri accettati, 57,89 per mille falsi
+//   con questo gate:                   90,00% veri accettati,  0,65 per mille falsi
+// Cioe' ~89 volte meno candidati fantasma per un costo di 2,6 punti di
+// sensibilita'. Train e held-out sono coerenti (90,88%/0,50 per mille contro
+// 90,00%/0,65 per mille): a differenza del primo tentativo con 218 esempi
+// veri, qui la soglia non balla piu' fra le due meta' del dataset.
+//
+// Il meccanismo (gate.hpp) resta a comportamento invariato quando
+// DECODIUM_LDPC_GATE non e' impostato: questi pesi valgono SOLO se qualcuno
+// accende esplicitamente quella variabile d'ambiente (spenta di default).
+// Non ancora provato in aria su traffico reale (solo su WAV sintetico con
+// AWGN attraverso il demodulatore vero): la prova in aria resta il passo
+// successivo prima di proporre DECODIUM_LDPC_GATE=1 come default.
+// Per riaddestrare: Detector/fastldpc/lab/neural/gate/train_gate.py.
+static const float GATE_W[10] = {-0.419673f, -0.581239f, -0.205885f, -0.043541f, 0.299545f, 0.000000f, -0.332447f, -0.486771f, 0.178712f, 0.000000f};
+static const float GATE_B = -7.146039f;
+static const float GATE_MU[10] = {0.102884f, 0.230003f, 0.025739f, 0.017413f, 1.949061f, 1.000000f, 0.264674f, 0.067119f, 0.970600f, 1.000000f};
+static const float GATE_SD[10] = {0.028520f, 0.028952f, 0.010620f, 0.026249f, 0.494642f, 0.000001f, 0.066366f, 0.031916f, 0.063212f, 0.000001f};
+static const float GATE_THRESHOLD = -4.125135f;
