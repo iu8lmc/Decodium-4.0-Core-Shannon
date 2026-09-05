@@ -49,6 +49,10 @@ extern "C" void fastldpc_simd_decode174_91_batch_c (int, float const*,
                                                     signed char const*, int, int, int,
                                                     signed char*, signed char*, int*,
                                                     int*, float*);
+extern "C" void fastldpc_simd_gate_dump_open_c (char const*);
+extern "C" void fastldpc_simd_gate_dump_close_c ();
+extern "C" void fastldpc_simd_gate_truth_set_c (signed char const*);
+extern "C" void fastldpc_simd_gate_truth_clear_c ();
 #endif
 
 namespace {
@@ -448,4 +452,39 @@ extern "C" void fastldpc_decode174_91_batch_c (int n, float const* llrIn,
                                  nharderrorOut ? nharderrorOut + word : nullptr,
                                  dminOut ? dminOut + word : nullptr);
     }
+}
+
+// Raccolta dati per il riaddestramento del gate (tests/ft2_gate_dump.cpp):
+// niente da fare senza il backend SIMD, non esiste un gate nel decoder
+// originale a cui agganciarsi.
+extern "C" void fastldpc_gate_dump_open_c (char const* path)
+{
+#if defined(DECODIUM_FASTLDPC_AVX2_BUILT) || defined(DECODIUM_FASTLDPC_NEON_BUILT)
+    fastldpc_simd_gate_dump_open_c (path);
+#else
+    (void) path;
+#endif
+}
+
+extern "C" void fastldpc_gate_dump_close_c ()
+{
+#if defined(DECODIUM_FASTLDPC_AVX2_BUILT) || defined(DECODIUM_FASTLDPC_NEON_BUILT)
+    fastldpc_simd_gate_dump_close_c ();
+#endif
+}
+
+extern "C" void fastldpc_gate_truth_set_c (signed char const* cw174)
+{
+#if defined(DECODIUM_FASTLDPC_AVX2_BUILT) || defined(DECODIUM_FASTLDPC_NEON_BUILT)
+    fastldpc_simd_gate_truth_set_c (cw174);
+#else
+    (void) cw174;
+#endif
+}
+
+extern "C" void fastldpc_gate_truth_clear_c ()
+{
+#if defined(DECODIUM_FASTLDPC_AVX2_BUILT) || defined(DECODIUM_FASTLDPC_NEON_BUILT)
+    fastldpc_simd_gate_truth_clear_c ();
+#endif
 }

@@ -96,6 +96,15 @@ add_executable (ft2_make_test_wav ft2_make_test_wav.cpp)
 target_link_libraries (ft2_make_test_wav wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_dependencies (test_qt_helpers ft2_make_test_wav)
 
+# Raccolta dati per il riaddestramento del gate appreso di fastldpc
+# (FASTLDPC-AI-SPEC-001 SS2b): messaggi FT2 noti attraverso la catena di
+# decodifica vera, con verita' calcolata a mano (vedi ftx_ft2_rvec_c in
+# FtxFt2Stage7.cpp) invece che sul canale AWGN sintetico del pacchetto di
+# ricerca originale. Produce il dataset che train_gate.py si aspetta.
+add_executable (ft2_gate_dump ft2_gate_dump.cpp)
+target_link_libraries (ft2_gate_dump wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+add_dependencies (test_qt_helpers ft2_gate_dump)
+
 add_executable (test_tx_pipeline test_tx_pipeline.cpp)
 target_link_libraries (test_tx_pipeline wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_tx_pipeline COMMAND $<TARGET_FILE:test_tx_pipeline>)

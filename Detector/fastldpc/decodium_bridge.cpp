@@ -40,7 +40,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 extern "C" void ftx_ldpc174_91_tables_c (int* Mn_out, int* Nm_out, int* nrw_out, int* ncw_out);
 
@@ -230,6 +232,55 @@ float gate_relax_scelto () {
     return v;
 }
 
+// Raccolta LLR reali per il riaddestramento del gate (FASTLDPC-AI-SPEC-001
+// §2b, vedi il commento su gate_weights.hpp e Detector/fastldpc/lab/neural/gate/).
+// Il pacchetto di ricerca originale genera il dataset su un canale AWGN
+// sintetico (train/ft2chan.py); qui invece si raccolgono le feature VERE che
+// il decoder calcola su un WAV con contenuto NOTO, passato per la stessa
+// catena (sync, demod, LLR) del traffico reale. In produzione nessuno chiama
+// i quattro setter sotto: g_gate_dump_file resta nullo, gate_dump_cb non
+// viene mai impostato in Ft2Config, zero costo e zero cambio di comportamento.
+//
+// g_gate_truth_cw174: 174 bit (dominio scrambled+LDPC) del messaggio che il
+// banco di prova si aspetta in QUESTO momento -- thread_local perche' il
+// decoder e' per-thread e il banco di prova gira su un solo thread, ma cosi'
+// non si rischia di condividere stato fra thread se mai lo si chiamasse da
+// piu' d'uno.
+thread_local std::vector<uint8_t> g_gate_truth_cw174;
+
+std::mutex& gate_dump_mutex () {
+    static std::mutex m;
+    return m;
+}
+
+std::FILE*& gate_dump_file () {
+    static std::FILE* f = nullptr;
+    return f;
+}
+
+// Riga nello stesso formato di gate/make_dataset.sh e letto da train_gate.py:
+// f0..f9 label(1=vero) acc(1=il gate compilato oggi accetterebbe). L'ultima
+// colonna non serve al training, solo a confrontare a occhio il gate vecchio
+// con le etichette vere sullo stesso file.
+void gate_dump_write (const GateFeatures& g, bool label) {
+    std::FILE* f = gate_dump_file ();
+    if (!f) return;
+    std::lock_guard<std::mutex> lock (gate_dump_mutex ());
+    std::fprintf (f, "%.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %d %d\n",
+                 (double) g.f[0], (double) g.f[1], (double) g.f[2], (double) g.f[3],
+                 (double) g.f[4], (double) g.f[5], (double) g.f[6], (double) g.f[7],
+                 (double) g.f[8], (double) g.f[9], label ? 1 : 0, gate_accept (g) ? 1 : 0);
+    std::fflush (f);
+}
+
+void gate_dump_callback (int /*i*/, const GateFeatures& g, const uint8_t* word) {
+    if (g_gate_truth_cw174.empty ()) return;   // nessuna verita' nota: riga non etichettabile, si scarta
+    bool label = true;
+    for (int v = 0; v < kN && label; ++v)
+        if (word[v] != g_gate_truth_cw174[(size_t) v]) label = false;
+    gate_dump_write (g, label);
+}
+
 Ft2Decoder& decoder_for_preset (int ndeep) {
     // Anche i decoder per thread sono perdite volute, per lo stesso motivo:
     // il distruttore di Ft2Decoder libererebbe memoria da dentro
@@ -397,6 +448,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.max_iter = max_iter_scelto ();
             c.gate_mode = gate_mode_scelto () ? 1 : 0;
             c.gate_relax = gate_relax_scelto ();
+            c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
             slot1 = new Ft2Decoder (shared_code(), c);
         }
@@ -410,6 +462,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.max_iter = max_iter_scelto ();
             c.gate_mode = gate_mode_scelto () ? 1 : 0;
             c.gate_relax = gate_relax_scelto ();
+            c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
             slot2 = new Ft2Decoder (shared_code(), c);
         }
@@ -423,6 +476,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
         c.max_iter = max_iter_scelto ();
         c.gate_mode = gate_mode_scelto () ? 1 : 0;
         c.gate_relax = gate_relax_scelto ();
+        c.gate_dump_cb = gate_dump_callback;
         manopole_ft8 (c);
         slot3 = new Ft2Decoder (shared_code(), c);
     }
@@ -492,6 +546,39 @@ static int fastldpc_max_hard_apmsg () {
         return (n > 0 && n <= kN) ? n : 58;
     }();
     return v;
+}
+
+// Le quattro leve del banco di raccolta dati (tests/ft2_gate_dump.cpp).
+// Nessun altro chiamante nel programma le usa: in produzione restano mute.
+//
+// fastldpc_simd_gate_dump_open_c: apre (in append) il file dove scrivere le righe
+// del dataset; path vuoto o nullo chiude e basta. Va chiamata PRIMA del primo
+// decode del thread che decodifica, insieme a DECODIUM_LDPC_GATE=1 (altrimenti
+// gate_mode e' spento e nessuna feature viene calcolata).
+extern "C" void fastldpc_simd_gate_dump_open_c (char const* path) {
+    std::lock_guard<std::mutex> lock (gate_dump_mutex ());
+    std::FILE*& f = gate_dump_file ();
+    if (f) { std::fclose (f); f = nullptr; }
+    if (path && path[0]) f = std::fopen (path, "a");
+}
+
+extern "C" void fastldpc_simd_gate_dump_close_c () {
+    std::lock_guard<std::mutex> lock (gate_dump_mutex ());
+    std::FILE*& f = gate_dump_file ();
+    if (f) { std::fclose (f); f = nullptr; }
+}
+
+// fastldpc_simd_gate_truth_set_c: i 174 bit (dominio scrambled+LDPC) del messaggio
+// che il banco di prova sta per far decodificare. Senza questa chiamata i
+// candidati passano da gate_dump_callback ma vengono scartati (nessuna
+// etichetta nota): serve per non scrivere righe non etichettabili quando il
+// banco genera anche slot di solo rumore.
+extern "C" void fastldpc_simd_gate_truth_set_c (signed char const* cw174) {
+    g_gate_truth_cw174.assign (cw174, cw174 + kN);
+}
+
+extern "C" void fastldpc_simd_gate_truth_clear_c () {
+    g_gate_truth_cw174.clear ();
 }
 
 static int fastldpc_max_hard_per (signed char const* apmask_word) {

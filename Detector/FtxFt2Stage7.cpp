@@ -3057,6 +3057,22 @@ extern "C" void ftx_ft2_cpp_dsp_rollout_stage_reset_c ()
 {
 }
 
+// Vettore di scrambling FT2 (raw_rvec in ensure_symbol_tables): fisso e reso
+// pubblico solo per il banco di raccolta dati del gate appreso
+// (tests/ft2_gate_dump.cpp), che deve derivare la parola di codice VERA di un
+// messaggio noto esattamente come fa questo file, senza duplicare la costante
+// a mano in un secondo posto dove potrebbe andare fuori sincrono.
+extern "C" void ftx_ft2_rvec_c (signed char* out77)
+{
+  static int const raw_rvec[kFt2Bits] = {
+    0,1,0,0,1,0,1,0,0,1,0,1,1,1,1,0,1,0,0,0,1,0,0,1,1,0,1,1,0,
+    1,0,0,1,0,1,1,0,0,0,0,1,0,0,0,1,0,1,0,0,1,1,1,1,0,0,1,0,1,
+    0,1,0,1,0,1,1,0,1,1,1,1,1,0,0,0,1,0,1
+  };
+  if (!out77) return;
+  for (int i = 0; i < kFt2Bits; ++i) out77[i] = static_cast<signed char> (raw_rvec[i]);
+}
+
 extern "C" void ftx_ft2_cpp_dsp_rollout_stage_override_c (int)
 {
 }

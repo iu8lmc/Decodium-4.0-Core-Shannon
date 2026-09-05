@@ -23,6 +23,7 @@
 #include "gate.hpp"
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <vector>
 
 struct Ft2Config {
@@ -45,6 +46,14 @@ struct Ft2Config {
     // questo decoder. gate_mode=1 e' un banco di prova, non una soglia pronta.
     int   gate_mode  = 0;
     float gate_relax = 0.25f;
+    // Raccolta dati per il riaddestramento (FASTLDPC-AI-SPEC-001 §2b): se
+    // impostato, viene chiamato per OGNI candidato che chiude (min-sum o
+    // OSD), gate_mode permettendo, con le feature appena calcolate e i 174
+    // bit del candidato -- accettato dal gate o no. Il chiamante (banco di
+    // prova con messaggio noto) confronta la parola con la verita' e scrive
+    // la riga del dataset; a callback nullo (default, produzione) costo zero
+    // e comportamento invariato. Vedi Detector/fastldpc/decodium_bridge.cpp.
+    std::function<void(int, const GateFeatures&, const uint8_t*)> gate_dump_cb = nullptr;
     // Tipi di messaggio i3 ammessi dal controllo di plausibilita' dentro
     // l'OSD: 0 lo spegne. Vedi cpp/plausible.hpp.
     uint32_t tipi_ammessi = 0;
@@ -182,9 +191,11 @@ public:
                     // Il gate vale solo per i candidati che l'OSD scava dal
                     // rumore: una parola chiusa dal min-sum ha gia' convergenza
                     // vera sul codice, non viene mai messa in discussione.
-                    if (cfg_.gate_mode)
-                        fill_features(i, b, dec, 0.0f,
+                    if (cfg_.gate_mode) {
+                        const GateFeatures& g = fill_features(i, b, dec, 0.0f,
                                       apmask ? &apmask[(size_t)i * N] : nullptr, 0);
+                        if (cfg_.gate_dump_cb) cfg_.gate_dump_cb(i, g, dec);
+                    }
                     continue;
                 }
                 if (cfg_.osd_order < 0) continue;
@@ -217,6 +228,7 @@ public:
                     if (cfg_.gate_mode) {
                         const GateFeatures& g = fill_features(i, b, word_.data(), d,
                                                               apmask ? &apmask[(size_t)i * N] : nullptr, 1);
+                        if (cfg_.gate_dump_cb) cfg_.gate_dump_cb(i, g, word_.data());
                         if (!gate_accept(g)) { ++st_.gate_rejected; continue; }
                     }
                     std::memcpy(dst, word_.data(), (size_t)N);
