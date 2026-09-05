@@ -105,6 +105,15 @@ add_executable (ft2_gate_dump ft2_gate_dump.cpp)
 target_link_libraries (ft2_gate_dump wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_dependencies (test_qt_helpers ft2_gate_dump)
 
+# Stesso banco ma per FT8: pesi del gate separati (GATE_*_FT8 in
+# gate_weights.hpp), canale e tipi di messaggio diversi da FT2.
+add_executable (ft8_gate_dump ft8_gate_dump.cpp)
+target_link_libraries (ft8_gate_dump wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+if (MINGW)
+  target_link_options (ft8_gate_dump PRIVATE -Wl,--stack,67108864)
+endif ()
+add_dependencies (test_qt_helpers ft8_gate_dump)
+
 add_executable (test_tx_pipeline test_tx_pipeline.cpp)
 target_link_libraries (test_tx_pipeline wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
 add_test (NAME test_tx_pipeline COMMAND $<TARGET_FILE:test_tx_pipeline>)

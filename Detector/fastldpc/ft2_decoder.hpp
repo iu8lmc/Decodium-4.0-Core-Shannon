@@ -46,6 +46,11 @@ struct Ft2Config {
     // questo decoder. gate_mode=1 e' un banco di prova, non una soglia pronta.
     int   gate_mode  = 0;
     float gate_relax = 0.25f;
+    // FT2 e FT8 hanno tabelle di pesi separate (gate_weights.hpp): questo
+    // decoder e' condiviso fra i due modi (vedi decodium_bridge.cpp), quindi
+    // va detto a gate_accept() quale tabella usare. Deciso una volta sola a
+    // costruzione, come gli altri campi di questa struct.
+    bool  gate_is_ft8 = false;
     // Raccolta dati per il riaddestramento (FASTLDPC-AI-SPEC-001 §2b): se
     // impostato, viene chiamato per OGNI candidato che chiude (min-sum o
     // OSD), gate_mode permettendo, con le feature appena calcolate e i 174
@@ -229,7 +234,7 @@ public:
                         const GateFeatures& g = fill_features(i, b, word_.data(), d,
                                                               apmask ? &apmask[(size_t)i * N] : nullptr, 1);
                         if (cfg_.gate_dump_cb) cfg_.gate_dump_cb(i, g, word_.data());
-                        if (!gate_accept(g)) { ++st_.gate_rejected; continue; }
+                        if (!gate_accept(g, cfg_.gate_is_ft8)) { ++st_.gate_rejected; continue; }
                     }
                     std::memcpy(dst, word_.data(), (size_t)N);
                     accepted[i] = 1; ++st_.by_osd; ++total;

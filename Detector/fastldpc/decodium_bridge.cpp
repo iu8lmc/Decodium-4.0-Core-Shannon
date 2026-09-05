@@ -262,23 +262,45 @@ std::FILE*& gate_dump_file () {
 // f0..f9 label(1=vero) acc(1=il gate compilato oggi accetterebbe). L'ultima
 // colonna non serve al training, solo a confrontare a occhio il gate vecchio
 // con le etichette vere sullo stesso file.
-void gate_dump_write (const GateFeatures& g, bool label) {
+void gate_dump_write (const GateFeatures& g, bool label, bool ft8) {
     std::FILE* f = gate_dump_file ();
     if (!f) return;
     std::lock_guard<std::mutex> lock (gate_dump_mutex ());
     std::fprintf (f, "%.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %d %d\n",
                  (double) g.f[0], (double) g.f[1], (double) g.f[2], (double) g.f[3],
                  (double) g.f[4], (double) g.f[5], (double) g.f[6], (double) g.f[7],
-                 (double) g.f[8], (double) g.f[9], label ? 1 : 0, gate_accept (g) ? 1 : 0);
+                 (double) g.f[8], (double) g.f[9], label ? 1 : 0, gate_accept (g, ft8) ? 1 : 0);
     std::fflush (f);
 }
 
+// Traccia cosa i gate stanno scartando: DECODIUM_LDPC_GATE_LOG=1. Condivisa
+// con i due gate strutturali (bit ribaltati, coerenza AP) piu' in basso in
+// questo file: stessa variabile d'ambiente, cosi' un operatore vede tutti e
+// tre i filtri insieme sullo stesso log.
+static bool fastldpc_gate_log () {
+    static bool const v = [] {
+        char const* raw = std::getenv ("DECODIUM_LDPC_GATE_LOG");
+        return raw && raw[0] != '0' && raw[0] != 0;
+    }();
+    return v;
+}
+
 void gate_dump_callback (int /*i*/, const GateFeatures& g, const uint8_t* word) {
+    // Il gate appreso (gate_accept, questo file + gate.hpp) non stampava
+    // nulla quando scartava un candidato -- a differenza degli altri due
+    // gate qui sotto, restava invisibile su DECODIUM_LDPC_GATE_LOG=1. Questa
+    // riga lo rende osservabile in aria, sulla stessa variabile d'ambiente.
+    // g_modo_ft8 (sopra in questo file) dice quale tabella di pesi usare: FT2
+    // e FT8 hanno canali diversi, vedi gate_weights.hpp.
+    if (fastldpc_gate_log () && !gate_accept (g, g_modo_ft8))
+        std::fprintf (stderr, "[GATE-ML%s] scartata: nd=%.3f nhard=%.3f score=%.3f\n",
+                     g_modo_ft8 ? "-FT8" : "-FT2",
+                     (double) g.f[0], (double) g.f[1], (double) g.f[7]);
     if (g_gate_truth_cw174.empty ()) return;   // nessuna verita' nota: riga non etichettabile, si scarta
     bool label = true;
     for (int v = 0; v < kN && label; ++v)
         if (word[v] != g_gate_truth_cw174[(size_t) v]) label = false;
-    gate_dump_write (g, label);
+    gate_dump_write (g, label, g_modo_ft8);
 }
 
 Ft2Decoder& decoder_for_preset (int ndeep) {
@@ -448,6 +470,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.max_iter = max_iter_scelto ();
             c.gate_mode = gate_mode_scelto () ? 1 : 0;
             c.gate_relax = gate_relax_scelto ();
+            c.gate_is_ft8 = g_modo_ft8;
             c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
             slot1 = new Ft2Decoder (shared_code(), c);
@@ -462,6 +485,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
             c.max_iter = max_iter_scelto ();
             c.gate_mode = gate_mode_scelto () ? 1 : 0;
             c.gate_relax = gate_relax_scelto ();
+            c.gate_is_ft8 = g_modo_ft8;
             c.gate_dump_cb = gate_dump_callback;
             manopole_ft8 (c);
             slot2 = new Ft2Decoder (shared_code(), c);
@@ -476,6 +500,7 @@ Ft2Decoder& decoder_for_preset (int ndeep) {
         c.max_iter = max_iter_scelto ();
         c.gate_mode = gate_mode_scelto () ? 1 : 0;
         c.gate_relax = gate_relax_scelto ();
+        c.gate_is_ft8 = g_modo_ft8;
         c.gate_dump_cb = gate_dump_callback;
         manopole_ft8 (c);
         slot3 = new Ft2Decoder (shared_code(), c);
@@ -498,15 +523,6 @@ static bool fastldpc_ap_check () {
     static bool const v = [] {
         char const* raw = std::getenv ("DECODIUM_LDPC_AP_CHECK");
         return !raw || (raw[0] != '0' && raw[0] != 0);
-    }();
-    return v;
-}
-
-// Traccia cosa i gate stanno scartando: DECODIUM_LDPC_GATE_LOG=1.
-static bool fastldpc_gate_log () {
-    static bool const v = [] {
-        char const* raw = std::getenv ("DECODIUM_LDPC_GATE_LOG");
-        return raw && raw[0] != '0' && raw[0] != 0;
     }();
     return v;
 }
