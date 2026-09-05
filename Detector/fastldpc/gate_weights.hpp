@@ -30,16 +30,24 @@ static const float GATE_MU_FT2[10] = {0.102884f, 0.230003f, 0.025739f, 0.017413f
 static const float GATE_SD_FT2[10] = {0.028520f, 0.028952f, 0.010620f, 0.026249f, 0.494642f, 0.000001f, 0.066366f, 0.031916f, 0.063212f, 0.000001f};
 static const float GATE_THRESHOLD_FT2 = -4.125135f;
 
-// --- FT8: NON ANCORA ADDESTRATI. Prima di questa tabella, DECODIUM_LDPC_GATE=1
-// applicava alla decodifica FT8 gli stessi pesi di FT2 (stesso decoder
-// condiviso, gate.hpp non distingueva il modo) -- mai validato su FT8, scoperto
-// il 5 settembre 2026 osservando ~700 rigetti/30s su traffico FT8 reale con
-// un gate calibrato sulle statistiche di canale di FT2. Placeholder neutro:
-// pesi a zero e soglia sempre superata, cioe' accetta SEMPRE (equivalente a
-// gate_mode=0, comportamento di oggi) finche' non viene raccolto un dataset
-// reale FT8 con tests/ft8_gate_dump.cpp e riaddestrato come sopra.
-static const float GATE_W_FT8[10] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-static const float GATE_B_FT8 = 1.0f;
-static const float GATE_MU_FT8[10] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-static const float GATE_SD_FT8[10] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-static const float GATE_THRESHOLD_FT8 = 0.0f;
+// --- FT8: riaddestrati il 5 settembre 2026 su LLR REALI, stesso metodo di
+// FT2 ma con tests/ft8_gate_dump.cpp: FT8 non scrambla il messaggio prima
+// dell'LDPC, quindi la verita' viene direttamente da
+// ftx_encode_ft8_candidate_c (niente vettore di scrambling da replicare).
+// Dataset: stessi 8 messaggi di FT2, SNR da -22 a -8 dB, 3000 prove,
+// 952 582 candidati OSD esaminati, di cui 4 395 genuinamente veri. Split
+// 80/20, soglia scelta per <=0,5 falsi per mille sul training.
+//
+// Risultato misurato sul 20% tenuto da parte (mai visto in training):
+//   solo nd<=0,065 (oggi, senza gate): 88,23% veri accettati,  7,57 per mille falsi
+//   con questo gate:                   91,04% veri accettati,  0,46 per mille falsi
+// Qui il gate non e' solo un compromesso: alza la sensibilita' (88,23% ->
+// 91,04%) E abbassa i falsi di ~16x insieme, a differenza di FT2 dove il
+// guadagno sui falsi costava un po' di sensibilita'. Train ed eval coerenti
+// (92,55%/0,50 per mille contro 91,04%/0,46 per mille).
+// Per riaddestrare: Detector/fastldpc/lab/neural/gate/train_gate.py.
+static const float GATE_W_FT8[10] = {-0.346551f, -0.081185f, -0.079960f, 0.053433f, 0.493541f, 0.000000f, -0.332220f, -0.650949f, 0.000000f, 0.000000f};
+static const float GATE_B_FT8 = -7.126093f;
+static const float GATE_MU_FT8[10] = {0.108834f, 0.226586f, 0.028659f, 0.027788f, 2.227563f, 1.000000f, 0.257168f, 0.086401f, 1.000000f, 1.000000f};
+static const float GATE_SD_FT8[10] = {0.022140f, 0.027959f, 0.011783f, 0.037801f, 0.184993f, 0.000001f, 0.061984f, 0.017733f, 0.000001f, 0.000001f};
+static const float GATE_THRESHOLD_FT8 = -4.168874f;
