@@ -3381,6 +3381,20 @@ struct AsyncCollector
     if (nap == 8)
       {
         ftx_ft8_ap_msg_conta_successo_c ();
+        // A differenza di FT2 (DECODIUM_FT2_AP_MSG_LOG), qui non c'era modo
+        // di controllare a occhio i successi della decodifica predittiva:
+        // solo il contatore aggregato ftx_ft8_ap_msg_successi_c(). Questa
+        // riga stampa il testo decodificato per ogni successo, cosi' si puo'
+        // giudicare la plausibilita' (continuazione di QSO sensata) invece
+        // di fidarsi solo del tasso di falsi misurato in laboratorio.
+        if (std::getenv ("DECODIUM_FT8_AP_MSG_LOG"))
+          {
+            std::fprintf (stderr, "[APMSG-FT8] f=%.1f dt=%.2f snr=%d testo=\"%.*s\"\n",
+                          static_cast<double> (freq), static_cast<double> (dt), snr,
+                          static_cast<int> (normalized_decoded.size ()),
+                          normalized_decoded.data ());
+            std::fflush (stderr);
+          }
       }
 
     // La stazione appena letta diventa un'ipotesi a priori per i cicli
