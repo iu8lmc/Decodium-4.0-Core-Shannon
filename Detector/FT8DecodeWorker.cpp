@@ -48,6 +48,7 @@ extern "C"
                                             int cycles, int rx_freq_sensitivity,
                                             int candidate_thin);
   void ftx_ft8_stage4_set_supplemental_c (int supplemental);
+  void ftx_ft8_stage4_set_superfox_options_c (int enabled, int ntol_hz);
   void ftx_ft8_stage4_set_force_fresh_slot_c (int force);
   void ftx_ft8_stage4_set_freqpart_c (int bins);
   void ftx_ft8_stage4_set_syncmin_scale_c (float scale);
@@ -1998,6 +1999,8 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
       !pressureLimitedRequest
       && (request.supplemental || effectiveDepth >= 4);
   ftx_ft8_stage4_set_supplemental_c (supplementalRequested ? 1 : 0);
+  ftx_ft8_stage4_set_superfox_options_c (request.superFoxEnabled ? 1 : 0,
+                                         qBound (1, request.superFoxTolHz, 200));
   // Harvest subpass: dig FRESH (reset slot state, a7 preserved) so the
   // parallelized subpass re-scans for weak signals, not the deep residual.
   ftx_ft8_stage4_set_force_fresh_slot_c (effectiveSubpass ? 1 : 0);
@@ -2076,6 +2079,7 @@ void FT8DecodeWorker::decode (DecodeRequest const& request)
   ftx_ft8_stage4_set_ldpc_osd_c (-1, 0);
   ftx_ft8_stage4_set_decode_options_c (0, 0, 1, 1, 100);
   ftx_ft8_stage4_set_supplemental_c (0);
+  ftx_ft8_stage4_set_superfox_options_c (0, 0);
   ftx_ft8_stage4_set_ldpc_max_iter_c (30);
 
   latestSerial = m_latestDecodeSerial.load (std::memory_order_relaxed);

@@ -51070,6 +51070,9 @@ void DecodiumBridge::queueFt8DecodeRequest(const QVector<short>& audioSnapshot, 
         ? qBound(1, qMin(threadCountOverride, normalThreadCount), kMaxFtDecodeThreads)
         : normalThreadCount;
     req.ncontest = m_ncontest;
+    req.superFoxEnabled = getSetting(QStringLiteral("SuperFox"), true).toBool()
+                          && (m_ncontest == 7);
+    req.superFoxTolHz = getSetting(QStringLiteral("Ftol_SF"), 50).toInt();
     req.emedelay = 0.0f;
     req.nagain = 0;
     req.lft8apon = (ft8ApEnabled && !txAudioActive) ? 1 : 0;

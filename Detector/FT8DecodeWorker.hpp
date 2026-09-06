@@ -38,6 +38,8 @@ struct DecodeRequest
   int threadCount {1};
   float emedelay {0.0f};
   int ncontest {0};
+  bool superFoxEnabled {false};
+  int superFoxTolHz {50};
   int nagain {0};
   int lft8apon {0};
   int lmultift8 {0};

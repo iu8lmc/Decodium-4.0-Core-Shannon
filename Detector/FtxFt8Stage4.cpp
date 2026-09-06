@@ -174,6 +174,18 @@ std::atomic<int>& stage4_candidate_thin ()
   return value;
 }
 
+std::atomic<bool>& stage4_superfox_enabled ()
+{
+  static std::atomic<bool> value {false};
+  return value;
+}
+
+std::atomic<int>& stage4_superfox_tolerance_hz ()
+{
+  static std::atomic<int> value {50};
+  return value;
+}
+
 std::atomic<int>& freqpart_bins_used ()
 {
   static std::atomic<int> value {0};
@@ -1792,7 +1804,7 @@ struct SuperFoxComplexFft
 
 SuperFoxComplexFft& superfox_fft ()
 {
-  static SuperFoxComplexFft fft;
+  static thread_local SuperFoxComplexFft fft;
   return fft;
 }
 
@@ -3074,14 +3086,18 @@ bool superfox_decode_lines_from_wave (short const* iwave, int nfqso, int ntol,
       return false;
     }
 
-  std::array<float, kFt8NMax> dd {};
+  // std::vector, non std::array: kFt8NMax=180000 renderebbe questi due
+  // buffer ~2.16MB su stack, oltre lo stack di default di un thread
+  // Windows -- crash reale verificato (STATUS_STACK_OVERFLOW) col tool
+  // standalone utils/sfrx.cpp prima di questo fix, 6 settembre 2026.
+  std::vector<float> dd (kFt8NMax);
   for (int i = 0; i < kFt8NMax; ++i)
     {
       dd[static_cast<size_t> (i)] = static_cast<float> (iwave[i]);
     }
   ftx_sfox_remove_ft8_c (dd.data (), kFt8NMax);
 
-  std::array<std::complex<float>, kFt8NMax> c0 {};
+  std::vector<std::complex<float>> c0 (kFt8NMax);
   if (!superfox_analytic_signal (dd.data (), kFt8NMax, c0.data ()))
     {
       return false;
@@ -10002,6 +10018,13 @@ extern "C" void ftx_ft8_stage4_set_supplemental_c (int supplemental)
   stage4_supplemental_requested ().store (supplemental != 0, std::memory_order_relaxed);
 }
 
+extern "C" void ftx_ft8_stage4_set_superfox_options_c (int enabled, int ntol_hz)
+{
+  stage4_superfox_enabled ().store (enabled != 0, std::memory_order_relaxed);
+  stage4_superfox_tolerance_hz ().store (std::max (1, std::min (ntol_hz, 200)),
+                                         std::memory_order_relaxed);
+}
+
 extern "C" void ftx_ft8_stage4_set_force_fresh_slot_c (int force)
 {
   stage4_force_fresh_slot ().store (force != 0, std::memory_order_relaxed);
@@ -10078,6 +10101,48 @@ extern "C" void ftx_ft8_async_decode_stage4_c (short const* iwave,
   collector.reset ();
   if (stage4_should_cancel ())
     {
+      return;
+    }
+
+  // 6 settembre 2026 -- SuperFox (Hound): il pacchetto QPC compresso del Fox
+  // occupa l'intera sequenza pari (nutc%10==0) e non e' un segnale FT8
+  // normale -- niente ricerca candidati in parallelo sullo stesso audio
+  // (stesso intento del vecchio percorso sincrono in mainwindow.cpp, mai
+  // collegato a questo worker asincrono). Il decoder QPC vero e proprio
+  // (superfox_decode_lines_from_wave) e' verificato correttamente
+  // funzionante dai tool standalone utils/sfrx.cpp/sfoxsim.cpp; qui viene
+  // agganciato per la prima volta alla pipeline live, solo per il ruolo
+  // Hound (ncontest==7 -- il Fox trasmette il pacchetto, non lo riceve).
+  bool const superfox_wanted =
+      (*ncontest == 7)
+      && stage4_superfox_enabled ().load (std::memory_order_relaxed)
+      && ((*nutc % 10) == 0);
+  if (superfox_wanted)
+    {
+      if (*nzhsym < 50)
+        {
+          return;   // slot pari in corso, aspetta il pass finale
+        }
+      if (stage4_should_cancel ())
+        {
+          return;
+        }
+
+      std::vector<std::string> lines;
+      int nsnr = 0;
+      float freq = 0.0f;
+      float dt = 0.0f;
+      int const ntol = stage4_superfox_tolerance_hz ().load (std::memory_order_relaxed);
+
+      if (superfox_decode_lines_from_wave (iwave, *nfqso, ntol, lines, nsnr, freq, dt))
+        {
+          for (std::string const& line : lines)
+            {
+              collector.append (0.0f, nsnr, dt, freq,
+                                fixed_from_string<kFt8DecodedChars> (line),
+                                0 /* nap */, 1.0f /* qual */, nullptr /* message77 */);
+            }
+        }
       return;
     }
 

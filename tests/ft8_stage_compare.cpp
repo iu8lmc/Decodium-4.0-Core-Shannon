@@ -51,6 +51,7 @@ extern "C"
                                             int cycles, int rx_freq_sensitivity,
                                             int candidate_thin);
   void ftx_ft8_stage4_set_supplemental_c (int supplemental);
+  void ftx_ft8_stage4_set_superfox_options_c (int enabled, int ntol_hz);
   void ftx_ft8_stage4_seed_known_cq_c (char const* call, char const* grid,
                                        float freq, float dt, int nutc);
   void ftx_ft8_stage4_seed_known_cq_call_c (char const* call,
@@ -908,7 +909,9 @@ namespace
                            QByteArray const& mycall, QByteArray const& hiscall,
                            QByteArray const& hisgrid,
                            bool resetStage4Before = true,
-                           bool resetStage4After = true)
+                           bool resetStage4After = true,
+                           int superfoxEnabled = 0,
+                           int sfTolHz = 50)
   {
     std::vector<short> iwave = samples;
     std::array<int, kFt8MaxLines> snrs {};
@@ -952,6 +955,7 @@ namespace
     auto invoke_decode = [&] (int nzhsym_step) {
       ftx_ft8_stage4_set_deadline_ms_c (
           maxDecodeMs > 0 ? steady_clock_ms () + maxDecodeMs : 0);
+      ftx_ft8_stage4_set_superfox_options_c (superfoxEnabled, sfTolHz);
 
       int step_nqsoprogress = nqsoprogress;
       int step_nfqso = nfqso;
@@ -1323,6 +1327,18 @@ int main (int argc, char * argv[])
           QStringLiteral ("value"),
           QStringLiteral ("0")
       };
+      QCommandLineOption const superfox_option {
+          QStringLiteral ("superfox"),
+          QStringLiteral ("Enable SuperFox QPC decode on even sequences (0/1)."),
+          QStringLiteral ("value"),
+          QStringLiteral ("0")
+      };
+      QCommandLineOption const sf_tol_option {
+          QStringLiteral ("sf-tol"),
+          QStringLiteral ("SuperFox frequency search tolerance in Hz."),
+          QStringLiteral ("hz"),
+          QStringLiteral ("50")
+      };
       QCommandLineOption const nagain_option {
           QStringLiteral ("nagain"),
           QStringLiteral ("Again flag (0/1)."),
@@ -1529,6 +1545,8 @@ int main (int argc, char * argv[])
       parser.addOption (depth_option);
       parser.addOption (emedelay_option);
       parser.addOption (ncontest_option);
+      parser.addOption (superfox_option);
+      parser.addOption (sf_tol_option);
       parser.addOption (nagain_option);
       parser.addOption (lft8apon_option);
       parser.addOption (lapcqonly_option);
@@ -1615,6 +1633,8 @@ int main (int argc, char * argv[])
       int const depth = parse_int_option (parser, depth_option, QStringLiteral ("depth"));
       float const emedelay = parse_float_option (parser, emedelay_option, QStringLiteral ("emedelay"));
       int const ncontest = parse_int_option (parser, ncontest_option, QStringLiteral ("ncontest"));
+      int const superfoxEnabled = parse_int_option (parser, superfox_option, QStringLiteral ("superfox"));
+      int const sfTolHz = parse_int_option (parser, sf_tol_option, QStringLiteral ("sf-tol"));
       int const nagain = parse_int_option (parser, nagain_option, QStringLiteral ("nagain"));
       int const lft8apon = parse_int_option (parser, lft8apon_option, QStringLiteral ("lft8apon"));
       int const lapcqonly = parse_int_option (parser, lapcqonly_option, QStringLiteral ("lapcqonly"));
@@ -1760,7 +1780,8 @@ int main (int argc, char * argv[])
                                          parser.value (mycall_option).toLatin1 (),
                                          parser.value (hiscall_option).toLatin1 (),
                                          parser.value (hisgrid_option).toLatin1 (),
-                                         resetBefore, resetAfter));
+                                         resetBefore, resetAfter,
+                                         superfoxEnabled, sfTolHz));
         }
 
       out << '\n';
