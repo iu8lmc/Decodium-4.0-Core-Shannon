@@ -8,9 +8,14 @@ automatic detection for SPE Expert amplifiers.
 ### RTTY puts the radio in the right mode
 
 v1.0.601 switched the radio into the data mode configured for the digital
-modes — DATA-U on a Yaesu FT-991A. That is the wrong mode for RTTY: in DATA-U
-the radio opens the wide digital-mode passband, while in RTTY-U it narrows
-around the two tones, which is what you want when copying RTTY.
+modes — DATA-U on a Yaesu FT-991A. DATA-U is appropriate for audio/AFSK
+RTTY, including transmission from Decodium. Native RTTY modes may offer
+narrower receive filters, but typically require a separate FSK keying input
+for transmission; they are not a general replacement for USB-DATA.
+
+**Chiarimento:** DATA-U/USB-D è adatto alla RTTY via audio/AFSK di Decodium.
+I modi RTTY nativi possono offrire filtri RX dedicati, ma normalmente
+richiedono un ingresso di manipolazione FSK per trasmettere.
 
 - The mode used for RTTY is now a setting of its own, `RttyRigMode`, defaulting
   to **RTTY-U**.

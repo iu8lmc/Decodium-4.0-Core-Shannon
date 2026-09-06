@@ -33,6 +33,7 @@ class RadioHub : public QObject {
     Q_PROPERTY(QString mode READ mode NOTIFY sliceChanged)
     Q_PROPERTY(bool transmitting READ transmitting NOTIFY transmittingChanged)
     Q_PROPERTY(bool canTransmit READ canTransmit NOTIFY connectionChanged)
+    Q_PROPERTY(bool requiresFullScaleTransmitAudio READ requiresFullScaleTransmitAudio NOTIFY connectionChanged)
     Q_PROPERTY(int signalStrengthDbm READ signalStrengthDbm NOTIFY metersChanged)
     // La stazione con cui si condivide la radio. Resta sempre vuoto ora che i
     // FlexRadio non ci sono piu': lo tiene solo la barra di stato, che sa gia'
@@ -64,6 +65,7 @@ public:
     QString mode() const;
     bool    transmitting() const;
     bool    canTransmit() const;
+    bool    requiresFullScaleTransmitAudio() const;
     int     signalStrengthDbm() const;
     // I dispositivi in uso, per poterli riproporre al prossimo avvio.
     QString sharedWith() const;

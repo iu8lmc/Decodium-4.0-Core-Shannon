@@ -33,6 +33,10 @@ double  RadioHub::frequencyMhz() const { return m_link ? m_link->frequencyMhz() 
 QString RadioHub::mode() const       { return m_link ? m_link->mode() : QString(); }
 bool    RadioHub::transmitting() const { return m_link && m_link->isTransmitting(); }
 bool    RadioHub::canTransmit() const  { return m_link && m_link->canTransmit(); }
+bool    RadioHub::requiresFullScaleTransmitAudio() const
+{
+    return m_link && m_link->requiresFullScaleTransmitAudio();
+}
 bool    RadioHub::canControl() const   { return m_link && m_link->canControl(); }
 int     RadioHub::currentBand() const  { return app::bandAt(frequencyMhz()); }
 

@@ -46,6 +46,12 @@ public:
     virtual bool    canControl() const { return isConnected(); }
     virtual int     signalStrengthDbm() const = 0;
 
+    // QMX detects the incoming tone only above its configurable rise
+    // threshold (80% by default), and its manual requires full-scale PC audio.
+    // Conventional AFSK radios keep the operator-adjustable level so their ALC
+    // is not driven.
+    virtual bool    requiresFullScaleTransmitAudio() const { return false; }
+
     virtual void disconnectRadio() = 0;
     virtual void setFrequencyMhz(double mhz) = 0;
     virtual void setMode(const QString& mode) = 0;

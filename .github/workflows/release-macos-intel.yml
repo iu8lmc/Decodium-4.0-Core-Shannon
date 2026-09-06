@@ -72,10 +72,12 @@ jobs:
           echo "Using version: ${VERSION}"
 
       - name: Install build dependencies
+        env:
+          HOMEBREW_NO_INSTALL_UPGRADE: "1"
         run: |
           set -euo pipefail
           brew update
-          packages=(cmake gcc pkg-config create-dmg dylibbundler)
+          packages=(cmake pkg-config create-dmg dylibbundler)
           if [[ "${{ matrix.source_deps }}" == "true" ]]; then
             packages+=(autoconf automake libtool)
           else
@@ -83,10 +85,16 @@ jobs:
           fi
           brew install "${packages[@]}"
 
-          GCC_PREFIX="$(brew --prefix gcc)"
-          GFORTRAN="$(ls "${GCC_PREFIX}"/bin/gfortran-* 2>/dev/null | head -1 || true)"
-          if [[ -z "${GFORTRAN}" ]]; then
-            echo "gfortran not found under ${GCC_PREFIX}/bin"
+          # The Intel image already provides GCC. Do not upgrade it to an
+          # unbottled release: that can spend hours rebuilding the toolchain.
+          GFORTRAN="$(find /usr/local/bin -maxdepth 1 -name 'gfortran*' | sort | head -1)"
+          if [[ -z "${GFORTRAN}" || ! -x "${GFORTRAN}" ]]; then
+            brew install gcc@14
+            GCC_PREFIX="$(brew --prefix gcc@14)"
+            GFORTRAN="${GCC_PREFIX}/bin/gfortran-14"
+          fi
+          if [[ ! -x "${GFORTRAN}" ]]; then
+            echo "No executable gfortran found"
             exit 1
           fi
           echo "FC=${GFORTRAN}" >> "$GITHUB_ENV"

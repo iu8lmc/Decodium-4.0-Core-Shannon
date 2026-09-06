@@ -148,6 +148,17 @@ add_executable (test_qmx_telemetry test_qmx_telemetry.cpp)
 target_link_libraries (test_qmx_telemetry Qt6::Test Qt6::Core)
 add_test (NAME test_qmx_telemetry COMMAND $<TARGET_FILE:test_qmx_telemetry>)
 
+if (TARGET decortty_app)
+  add_executable (test_decortty_tx test_decortty_tx.cpp)
+  target_link_libraries (test_decortty_tx decortty_app Qt6::Test Qt6::Core)
+  target_compile_definitions (test_decortty_tx
+    PRIVATE DECODIUM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+  set_target_properties (test_decortty_tx PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON)
+  add_test (NAME test_decortty_tx COMMAND $<TARGET_FILE:test_decortty_tx>)
+endif ()
+
 add_executable (test_decodium_update_support test_decodium_update_support.cpp)
 target_link_libraries (test_decodium_update_support Qt6::Test Qt6::Core)
 add_test (NAME test_decodium_update_support COMMAND $<TARGET_FILE:test_decodium_update_support>)
@@ -481,6 +492,9 @@ if (TARGET test_fastldpc_neon)
 endif ()
 if (TARGET test_fastldpc_dispatch)
   list (APPEND _decodium_regression_test_targets test_fastldpc_dispatch)
+endif ()
+if (TARGET test_decortty_tx)
+  list (APPEND _decodium_regression_test_targets test_decortty_tx)
 endif ()
 foreach (_decodium_regression_test_target IN LISTS
     _decodium_regression_test_targets)

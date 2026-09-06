@@ -103,6 +103,9 @@ public:
     double squelchDb() const  { return m_params.squelchDb; }
     int    correctionDepth() const { return m_correctionDepth; }
     double transmitLevel() const { return m_modulator.amplitude(); }
+    // Keep the operator's AFSK level separate from a radio-specific effective
+    // override. Switching away from a QMX must not leave another rig at 100%.
+    double configuredTransmitLevel() const { return m_configuredTransmitLevel; }
 
     void setMarkHz(double hz);
     void setShiftHz(double hz);
@@ -205,6 +208,7 @@ private slots:
 
 private:
     void applyParams();
+    void applyRadioTransmitLevelPolicy();
     void rebuildFilters();
     void updateSpectrum(const float* mono, int count);
     void updateSpectrumFloor();
@@ -232,6 +236,7 @@ private:
     double m_spectrumFloorDb{-100.0};
     std::vector<double> m_floorScratch;
     int  m_correctionDepth{4};
+    float m_configuredTransmitLevel{0.35f};
     bool m_transmitting{false};
     bool m_drainingTransmit{false};
     // True while the decoder is held off because the radio is transmitting.

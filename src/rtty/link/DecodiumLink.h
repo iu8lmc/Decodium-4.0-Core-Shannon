@@ -63,6 +63,7 @@ public:
     bool    isTransmitting() const override;
     bool    canTransmit() const override;
     int     signalStrengthDbm() const override { return 0; }
+    bool    requiresFullScaleTransmitAudio() const override;
 
     void disconnectRadio() override;
     void setFrequencyMhz(double mhz) override;

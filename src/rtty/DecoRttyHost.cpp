@@ -206,7 +206,7 @@ void DecoRttyHost::salvaImpostazioni ()
     s.setValue (QStringLiteral ("rtty/autoTune"),        m_motore.autoTuneEnabled ());
     s.setValue (QStringLiteral ("rtty/squelchDb"),       m_motore.squelchDb ());
     s.setValue (QStringLiteral ("rtty/correctionDepth"), m_motore.correctionDepth ());
-    s.setValue (QStringLiteral ("rtty/transmitLevel"),   m_motore.transmitLevel ());
+    s.setValue (QStringLiteral ("rtty/transmitLevel"),   m_motore.configuredTransmitLevel ());
     s.setValue (QStringLiteral ("rtty/stopBits"),        m_motore.stopBits ());
     s.setValue (QStringLiteral ("rtty/dataBits"),        m_motore.dataBits ());
     s.setValue (QStringLiteral ("rtty/parity"),          m_motore.parity ());

@@ -178,7 +178,9 @@ GlassPanel {
 
                     // Transmit audio level. Set it so the radio's ALC barely
                     // moves: on AFSK an ALC that is acting is an ALC that is
-                    // splattering the signal across the band.
+                    // splattering the signal across the band. QMX is the
+                    // exception: its FSK detector requires full-scale audio
+                    // and RF power is controlled by the radio, not this level.
                     Rectangle {
                         width: 50
                         height: 20
@@ -201,16 +203,22 @@ GlassPanel {
                             anchors.rightMargin: 7
                             anchors.verticalCenter: parent.verticalCenter
                             text: Math.round(rtty.transmitLevel * 100)
-                            color: rtty.transmitLevel > 0.6 ? Theme.warning : Theme.textPrimary
+                            color: radio.requiresFullScaleTransmitAudio
+                                   ? Theme.success
+                                   : (rtty.transmitLevel > 0.6 ? Theme.warning : Theme.textPrimary)
                             font.pixelSize: 11
                             font.family: Theme.monoFamily
                         }
 
                         MouseArea {
+                            id: txLevelMouse
                             anchors.fill: parent
-                            cursorShape: Qt.SizeVerCursor
+                            hoverEnabled: true
+                            cursorShape: radio.requiresFullScaleTransmitAudio
+                                         ? Qt.ArrowCursor : Qt.SizeVerCursor
                             // Drag up and down to set it, like a rig's own knob.
                             onWheel: (wheel) => {
+                                if (radio.requiresFullScaleTransmitAudio) return
                                 const step = wheel.angleDelta.y > 0 ? 0.02 : -0.02
                                 rtty.transmitLevel = rtty.transmitLevel + step
                             }
@@ -218,13 +226,15 @@ GlassPanel {
                             property real startLevel: 0
                             onPressed: (mouse) => { startY = mouse.y; startLevel = rtty.transmitLevel }
                             onPositionChanged: (mouse) => {
-                                if (!pressed) return
+                                if (!pressed || radio.requiresFullScaleTransmitAudio) return
                                 rtty.transmitLevel = startLevel + (startY - mouse.y) * 0.01
                             }
                         }
 
-                        ToolTip.visible: rtty.transmitLevel > 0.6
-                        ToolTip.text: qsTr("High enough to drive the ALC — check the meter.")
+                        ToolTip.visible: txLevelMouse.containsMouse
+                        ToolTip.text: radio.requiresFullScaleTransmitAudio
+                                      ? qsTr("QMX FSK requires 100% application audio; RF power is set on the radio.")
+                                      : qsTr("Set the level so the radio's ALC barely moves.")
                     }
                 }
             }

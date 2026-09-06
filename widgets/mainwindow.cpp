@@ -24006,7 +24006,10 @@ void MainWindow::on_actionRTTY_triggered()
 
 void MainWindow::on_actionFT8_triggered()
 {
-  QTimer::singleShot (50, [=] {
+  // SuperFox changes also enter this path. Cancel the deferred UI update
+  // if the embedded window is destroyed, or a different mode is selected.
+  QTimer::singleShot (50, this, [this] {
+    if (m_mode != "FT8") return;
     if(m_specOp!=SpecOp::FOX) ui->TxFreqSpinBox->setValue(m_settings->value("TxFreq_old",1500).toInt());
     if(m_specOp==SpecOp::FOX && !m_config.superFox()) ui->TxFreqSpinBox->setValue(m_TxFreqFox);
     if(SpecOp::HOUND == m_specOp && m_config.superFox()) clearDX();

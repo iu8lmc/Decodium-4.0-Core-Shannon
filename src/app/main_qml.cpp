@@ -4170,7 +4170,13 @@ int main(int argc, char* argv[])
             bridge.rttyMandaAudioTx (c);
         };
         ganci.impostaFrequenzaHz = [&bridge] (double hz) { bridge.setFrequency (hz); };
-        ganci.impostaModo        = [&bridge] (QString const& m) { bridge.setMode (m); };
+        // Questo e' un modo della RADIO, non dell'applicazione. setMode()
+        // accetta RTTY/FT8/FT4 ecc. e scarta correttamente DATA-U come modo
+        // applicativo; usarlo qui faceva quindi apparire "Set radio" riuscito
+        // senza mandare alcun comando CAT all'apparato.
+        ganci.impostaModo        = [&bridge] (QString const& m) {
+            bridge.impostaModoRadioRtty (m);
+        };
         rttyHost.impostaGanciRadio (std::move (ganci));
 
         rttyHost.avvia (rttySettings);

@@ -31961,6 +31961,8 @@ QString DecodiumBridge::legacyConfigGroupName() const
 bool DecodiumBridge::isLegacySyncKey(const QString& key) const
 {
     static QSet<QString> const keys {
+        // Keep manual GPU fallback overrides in ft2.ini in sync with Setup.
+        QStringLiteral("LiveMapUseGpu"),
         QStringLiteral("UDPServer"),
         QStringLiteral("UDPServerPort"),
         QStringLiteral("UDPListenPort"),

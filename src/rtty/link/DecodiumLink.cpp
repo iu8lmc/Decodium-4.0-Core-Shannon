@@ -12,6 +12,11 @@ namespace {
 // che l'applicazione ha gia' in memoria. Quattro volte al secondo bastano
 // perche' la manopola sembri viva e non costano niente.
 constexpr int kIntervalloSondaggioMs = 250;
+
+bool isQmxFamily(QString const& radioName)
+{
+    return radioName.contains(QStringLiteral("QMX"), Qt::CaseInsensitive);
+}
 } // namespace
 
 DecodiumLink::DecodiumLink(Ganci ganci, QObject* parent)
@@ -40,6 +45,11 @@ QString DecodiumLink::radioName() const
         return tr("radio di Decodium");
     QString const nome = m_ganci.nomeRadio();
     return nome.isEmpty() ? tr("radio di Decodium") : nome;
+}
+
+bool DecodiumLink::requiresFullScaleTransmitAudio() const
+{
+    return isQmxFamily(radioName());
 }
 
 double DecodiumLink::frequencyMhz() const
@@ -83,8 +93,22 @@ void DecodiumLink::setFrequencyMhz(double mhz)
 
 void DecodiumLink::setMode(const QString& mode)
 {
-    if (m_ganci.impostaModo && !mode.isEmpty())
-        m_ganci.impostaModo(mode);
+    if (!m_ganci.impostaModo || mode.isEmpty())
+        return;
+
+    QString requested = mode.trimmed().toUpper();
+    // Hamlib exposes QMX FSK as PKTUSB/PKTLSB (Decodium DATA-U/DATA-L), which
+    // is also the Digi mode required by the QMX manual for USB-audio RTTY.
+    // Translate the operator-facing RTTY labels at this radio boundary rather
+    // than asking the QMX backend for unsupported RTTY/RTTYR modes.
+    if (requiresFullScaleTransmitAudio()) {
+        if (requested == QStringLiteral("RTTY-U")
+            || requested == QStringLiteral("RTTY"))
+            requested = QStringLiteral("DATA-U");
+        else if (requested == QStringLiteral("RTTY-L"))
+            requested = QStringLiteral("DATA-L");
+    }
+    m_ganci.impostaModo(requested);
 }
 
 void DecodiumLink::setFilter(int lowHz, int highHz)
@@ -106,8 +130,7 @@ void DecodiumLink::applyRttyProfile(int markHz, int shiftHz)
     // si fa da soli: succede solo quando l'operatore preme "Prepara radio".
     // Prima questa funzione era vuota, e quel pulsante non faceva niente —
     // un comando che non fa nulla e' peggio di un comando che manca.
-    if (m_ganci.impostaModo)
-        m_ganci.impostaModo(QStringLiteral("DATA-U"));
+    setMode(QStringLiteral("DATA-U"));
 }
 
 void DecodiumLink::setTransmit(bool on)

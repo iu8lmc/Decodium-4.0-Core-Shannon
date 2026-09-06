@@ -693,6 +693,25 @@ SettingsPageScroll {
             contentItem: Text { text: ""; leftPadding: 24 }
         }
 
+        Text { text: qsTr("Map GPU:"); color: textSecondary; font.pixelSize: 12; Layout.preferredWidth: 100 }
+        CheckBox {
+            checked: boolSetting("LiveMapUseGpu", true)
+            onToggled: setBoolSettingIfChanged("LiveMapUseGpu", checked, true)
+            hoverEnabled: true
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Use GPU rendering for the live map (default). Disable to use the CPU renderer if station markers are missing or the map has graphical problems.")
+            indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
+            contentItem: Text { text: ""; leftPadding: 24 }
+        }
+        Text {
+            text: qsTr("Disable if map markers are missing. Uses CPU rendering when off.")
+            color: textSecondary
+            font.pixelSize: 11
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            Layout.columnSpan: 2
+        }
+
         // ── Allineamento ──
         Text { text: qsTr("ALIGNMENT"); color: secondaryCyan; font.pixelSize: 12; font.bold: true; Layout.columnSpan: pageColumns; Layout.topMargin: 10 }
         Rectangle { Layout.fillWidth: true; Layout.columnSpan: pageColumns; height: 1; color: Qt.rgba(secondaryCyan.r,secondaryCyan.g,secondaryCyan.b,0.3) }

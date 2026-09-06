@@ -29,7 +29,13 @@ ApplicationWindow {
     visible: true
     flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
          | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
-    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "") + " — " + (bridge ? bridge.callsign : "")
+    property bool superFoxOptionEnabled: bridge ? settingBool("SuperFox", true) : true
+    readonly property string dxpeditionModeLabel: !bridge || bridge.mode !== "FT8" ? ""
+        : bridge.houndMode ? (superFoxOptionEnabled ? "SuperHound" : "Hound")
+        : bridge.foxMode ? (superFoxOptionEnabled ? "SuperFox" : "Fox") : ""
+    title: "Decodium 4.0 — " + (bridge ? bridge.mode : "")
+        + (dxpeditionModeLabel ? " [" + dxpeditionModeLabel + "]" : "")
+        + " — " + (bridge ? bridge.callsign : "")
     property bool windowStateRestoreInProgress: true
     // Persist the native maximised state separately from the last usable
     // windowed geometry.  On Windows QWindow reports the maximised dimensions
@@ -3044,6 +3050,9 @@ ApplicationWindow {
     Connections {
         target: bridge
         function onSettingValueChanged(key, value) {
+            if (key === "SuperFox")
+                mainWindow.superFoxOptionEnabled = value === true || value === 1
+                    || String(value).toLowerCase() === "true" || String(value) === "1"
             if (key === "ShowDXCC" || key === "DXCCEntity")
                 mainWindow.showDxccInfo = !!value
             else if (key === "TXMessagesToRX" || key === "Tx2QSO")
@@ -7812,6 +7821,9 @@ ApplicationWindow {
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             anchors.margins: 4
+                            // Reserve a header row for the drag handle, title and Pop.
+                            // The controls inside Waterfall must not sit under them.
+                            anchors.topMargin: 30
                             visible: mainWindow.waterfallPanelVisible && !waterfallDetached
                                      && mainWindow.startupWaterfallVisualReady
                             // active NON dipende dal parent: il re-parent dello swap NON lo
@@ -13920,7 +13932,7 @@ NumberAnimation { properties: "y"; duration: mainWindow.decodeRowSlideAnim ? 100
                         spacing: 16
 
                         Text {
-                            text: "Mode: " + bridge.mode
+                            text: "Mode: " + bridge.mode + (mainWindow.dxpeditionModeLabel ? " · " + mainWindow.dxpeditionModeLabel : "")
                             font.pixelSize: 11
                             color: secondaryCyan
                         }

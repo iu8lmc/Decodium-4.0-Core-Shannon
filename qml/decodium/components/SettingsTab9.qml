@@ -503,6 +503,10 @@ SettingsPageScroll {
                     Layout.preferredWidth: advancedOperatingGrid.checkWidth; Layout.preferredHeight: controlHeight
                     checked: dialog.boolSetting("SuperFox", true)
                     onToggled: dialog.setBoolSettingIfChanged("SuperFox", checked, true)
+                    enabled: !bridge.transmitting && !bridge.tuning
+                    hoverEnabled: true
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("To work a SuperFox DXpedition, select FT8 and enable Hound Mode as well. This option alone does not enable SuperHound reception.")
                     indicator: Rectangle { width: 18; height: 18; radius: 3; color: parent.checked ? primaryBlue : bgMedium; border.color: glassBorder; y: parent.height/2 - height/2 }
                     contentItem: Text { text: ""; leftPadding: 24 }
                 }
