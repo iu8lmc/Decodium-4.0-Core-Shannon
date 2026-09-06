@@ -1520,6 +1520,124 @@ int ft2_sync_freq_radius_hz ()
   return v;
 }
 
+// Diagnostica per la deriva DENTRO lo slot (vedi ft2_sync_freq_radius_hz
+// sopra): il raggio del sincronismo non aiuta perche' l'intero messaggio
+// viene demodulato con UNA frequenza costante (ftx_ft2_downsample_c su tutto
+// lo slot con un solo f1). Se la perdita e' davvero li', il margine
+// tono-vero-contro-gli-altri-tre deve peggiorare andando dal primo
+// all'ultimo simbolo, su un messaggio con deriva vera. DECODIUM_FT2_SYMBOL_MARGIN_LOG=1
+// stampa il margine per simbolo di ogni decodifica riuscita (serve
+// symbol_mags, altrimenti calcolato solo per il tipo 8).
+bool ft2_symbol_margin_log ()
+{
+  static bool const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_SYMBOL_MARGIN_LOG");
+    return e && e[0] != '0' && e[0] != 0;
+  }();
+  return v;
+}
+
+// ATTENZIONE (6 settembre 2026): NON FUNZIONANTE IN MODO AFFIDABILE.
+// Riaccendere solo dopo aver isolato il bug qui sotto -- per ora e' solo
+// materiale di misura, non una funzione da provare in aria.
+//
+// La matematica del de-chirp e' verificata corretta (recupera davvero il
+// messaggio giusto quando funziona, confermato via log "rescued-drift"),
+// MA il comportamento e' inaffidabile: a parita' di comando, file e
+// variabili d'ambiente, il risultato cambia in modo DETERMINISTICO (non
+// casuale) a seconda che DECODIUM_FT2_STAGE7_DEBUG sia impostato o no --
+// con debug acceso, 5/5 successi; senza, 5/5 fallimenti, sullo stesso
+// identico seme. Sintomo classico di comportamento indefinito (lettura di
+// memoria non inizializzata o simile), non di un errore di soglia o di
+// formula. Escluso lo stack overflow (aggiunto -Wl,--stack,67108864 a
+// tests/CMakeLists.txt per ft2_stage_compare, che ne era privo a
+// differenza di ft8_stage_compare/ft2_gate_dump: nessun cambiamento).
+// Dr. Memory conferma errori di accesso a memoria reali (non solo i "beyond
+// top of stack" risultati rumore dello strumento su binari GCC/MinGW), ma
+// senza simboli di debug utilizzabili nel binario attuale (CMAKE_CXX_FLAGS
+// ha -g -gdwarf-4 ma l'oggetto compilato non ha sezioni .debug_*: da
+// capire dove si perdono) non è stato possibile risalire alla riga esatta.
+// ASan non e' disponibile per il target mingw-w64 con questa toolchain
+// (mingw-w64-x86_64-compiler-rt non include il runtime asan su Windows).
+// Prossimo passo: build dedicata con CMAKE_BUILD_TYPE=Debug (niente
+// ottimizzazioni, simboli sicuri) e Dr. Memory su quella, o una toolchain
+// MSVC+clang-cl con ASan nativo.
+//
+// Ricerca del tasso di deriva (Hz/s), FASE 2 della diagnostica sopra: la
+// misura con DECODIUM_FT2_SYMBOL_MARGIN_LOG ha mostrato un arco simmetrico
+// (margine basso agli estremi del messaggio, buono al centro) -- prova
+// diretta che la ricerca sceglie la frequenza giusta per il centro del
+// messaggio e la deriva vera se ne allontana ai due lati. Spento di default:
+// DECODIUM_FT2_DRIFT_SEARCH=1 lo accende. Si aggancia al meccanismo di
+// "rescue" gia' esistente (freq_deltas/ibest_deltas qui sotto, righe
+// ~2700+), che gia' riprova candidati promettenti falliti sotto lo stesso
+// cancello (enable_local_rescue): stessa logica di rischio/budget, un
+// tentativo in piu' per lo stesso motivo (correggere una stima imperfetta),
+// non un percorso nuovo e non sorvegliato.
+bool ft2_drift_search_attivo ()
+{
+  static bool const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_DRIFT_SEARCH");
+    return e && e[0] != '0' && e[0] != 0;
+  }();
+  return v;
+}
+
+// Estensione del raggio di ricerca del tasso di deriva, in Hz/s, su tutta la
+// durata del messaggio. Il 6 settembre 2026 un tasso di 14 Hz / 2,47 s ≈
+// 5,7 Hz/s mostrava gia' un arco misurabile: 8,0 Hz/s da' margine sopra
+// quel punto senza esagerare (a tassi molto piu' alti il segnale smette di
+// somigliare a un tono FT2 comunque, deriva o non deriva).
+float ft2_drift_search_range_hz_s ()
+{
+  static float const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_DRIFT_RANGE");
+    float const f = e ? static_cast<float> (std::atof (e)) : 0.0f;
+    return f > 0.0f ? f : 8.0f;
+  }();
+  return v;
+}
+
+// Passi per lato (oltre lo zero, gia' tentato dal percorso normale prima
+// che scatti qualunque rescue): 4 passi per lato = 8 tassi provati nel caso
+// peggiore, MAI nel caso comune (si arriva qui solo se il rescue a
+// frequenza/tempo e' gia' stato tentato e fallito, sotto lo stesso cancello
+// enable_local_rescue).
+int ft2_drift_search_steps ()
+{
+  static int const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_DRIFT_STEPS");
+    int const n = e ? std::atoi (e) : 0;
+    return n > 0 ? n : 4;
+  }();
+  return v;
+}
+
+// Rotazione di fase in-place: toglie una deriva lineare di drift_rate_hz_s
+// Hz/s dalla finestra gia' estratta (cd, banda base, kFt2NSeg campioni a
+// 12000/kFt2NDown Hz), t=0 al campione CENTRALE -- coerente con l'arco
+// misurato (la ricerca normale sceglie gia' la frequenza giusta per il
+// centro). Nessuna trasformata: a differenza di tests/ft2_make_test_wav.cpp
+// (che parte da un segnale REALE e deve prima costruire l'inviluppo
+// analitico via Hilbert), cd e' gia' complesso a banda base.
+void apply_dechirp (std::array<Complex, kFt2NSeg>& cd, float drift_rate_hz_s)
+{
+  if (drift_rate_hz_s == 0.0f)
+    {
+      return;
+    }
+  constexpr float kPi = 3.14159265358979323846f;
+  float const sample_rate = 12000.0f / static_cast<float> (kFt2NDown);
+  float const center = 0.5f * static_cast<float> (kFt2NSeg - 1);
+  for (int i = 0; i < kFt2NSeg; ++i)
+    {
+      float const t = (static_cast<float> (i) - center) / sample_rate;
+      float const phase = -kPi * drift_rate_hz_s * t * t;
+      Complex const rot (std::cos (phase), std::sin (phase));
+      cd[static_cast<size_t> (i)] *= rot;
+    }
+}
+
 // Conferma a livello di TONO: con la sequenza di toni del messaggio atteso,
 //   T = somma sui simboli dati di (|tono atteso| - media degli altri tre)
 //       / somma su tutti i simboli dati e i quattro toni di |tono|.
@@ -2563,6 +2681,14 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
 
               extract_ft2_window (cd, cb, ibest);
 
+              // Copia della finestra COSI' COM'E' (deriva zero), prima che il
+              // rescue qui sotto riusi cb/cd per i suoi tentativi a
+              // freq/tempo. Serve solo se DECODIUM_FT2_DRIFT_SEARCH e' acceso
+              // e solo dopo che anche il rescue esistente ha fallito (vedi
+              // piu' sotto) -- copiarla sempre e' piu' semplice che tracciare
+              // quando serve davvero, e costa un array da kFt2NSeg Complex.
+              std::array<Complex, kFt2NSeg> const cd_primary = cd;
+
               int badsync = 0;
               bitmetrics.fill (0.0f);
               ftx_ft2_bitmetrics_c (cd.data (), bitmetrics.data (), &badsync);
@@ -2628,7 +2754,7 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
               apmag *= 1.1f;
 
               std::array<float, kFt2Nn * 4> symbol_mags {};
-              if (ft2_ap_msg_attivo ())
+              if (ft2_ap_msg_attivo () || ft2_symbol_margin_log ())
                 {
                   ftx_ft2_symbol_mags_c (cd.data (), symbol_mags.data ());
                 }
@@ -2639,6 +2765,35 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
               stage7_debug_compare_with_reference (
                   llra, llrb, llrc, llrd, llre, decoded, ndepth0, ncontest, qso_progress,
                   false, nfqso, f1, false, doosd, apmag, mycall, hiscall);
+
+              if (ft2_drift_search_attivo () && std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
+                {
+                  std::fprintf (stderr, "[DRIFTDBG-PRIMARY] cand=%d seg=%d f1=%.1f ok=%d stop=%d\n",
+                               icand + 1, iseg, f1, decoded.ok ? 1 : 0, decoded.stop_candidate ? 1 : 0);
+                  std::fflush (stderr);
+                }
+
+              if (ft2_symbol_margin_log () && decoded.ok)
+                {
+                  std::array<int, kFt2Nn> tones {};
+                  if (message77_to_ft2_tones (decoded.bits, &tones))
+                    {
+                      for (int k = 0; k < kFt2Nn; ++k)
+                        {
+                          if (ft2_symbol_is_costas (k))
+                            {
+                              continue;
+                            }
+                          float const* m = symbol_mags.data () + k * 4;
+                          float const sum = m[0] + m[1] + m[2] + m[3];
+                          float const hit = m[tones[static_cast<size_t> (k)] & 3];
+                          float const margin = sum > 0.0f ? (hit - (sum - hit) / 3.0f) / sum : 0.0f;
+                          std::fprintf (stderr, "[SYMMARGIN] f1=%.1f k=%d margin=%.4f\n",
+                                       static_cast<double> (f1), k, static_cast<double> (margin));
+                        }
+                      std::fflush (stderr);
+                    }
+                }
 
               DecodePassResult decoded_best = decoded;
               int ibest_best = ibest;
@@ -2657,7 +2812,17 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                       && isp >= 2
                       && nsync_qual >= 18
                       && smax >= smaxthresh + 0.10f;
-                  if (!enable_local_rescue)
+                  // Stessa soglia di qualita' e stesso budget di enable_local_rescue,
+                  // MA senza isp>=2: misurato (6 settembre 2026) che il segnale
+                  // bersaglio si trova quasi sempre al PRIMO passaggio, mai a isp>=2,
+                  // quindi con quel vincolo questo ramo non scattava mai (vedi il
+                  // commento piu' esteso vicino al ciclo che usa questa variabile).
+                  bool const enable_drift_rescue =
+                      ft2_drift_search_attivo ()
+                      && local_rescue_budget > 0
+                      && nsync_qual >= 18
+                      && smax >= smaxthresh + 0.10f;
+                  if (!enable_local_rescue && !enable_drift_rescue)
                     {
                       if (decoded_best.stop_candidate)
                         {
@@ -2665,8 +2830,10 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                         }
                       continue;
                     }
-                  --local_rescue_budget;
                   bool rescued = false;
+                  if (enable_local_rescue)
+                  {
+                  --local_rescue_budget;
                   for (float rescue_freq_delta : freq_deltas)
                     {
                       if (abort_if_cancelled ())
@@ -2782,6 +2949,121 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                               decoded_best.message_fixed.constData ());
                         }
                     }
+                  }
+
+                  // Il rescue sopra corregge un errore COSTANTE di frequenza/tempo
+                  // (sub-Hz, pochi campioni): non aiuta con la deriva VERA dentro lo
+                  // slot, che serve un tasso (Hz/s), non un offset.
+                  //
+                  // Cancello PROPRIO, non enable_local_rescue: misurato (6 settembre
+                  // 2026, sweep di deriva) che il segnale bersaglio si trova quasi
+                  // sempre al PRIMO passaggio (isp=1), mai richiamato a isp>=2 -- col
+                  // vincolo isp>=2 di enable_local_rescue questo ramo non scattava mai
+                  // e il confronto acceso/spento risultava identico su tutta la tabella.
+                  // Restano le stesse soglie di qualita' (nsync_qual, smax) e lo stesso
+                  // budget condiviso di enable_local_rescue: un tentativo in piu' su un
+                  // candidato gia' giudicato promettente, non un percorso senza controllo.
+                  // ibest resta quello originale: il de-chirp e' solo di fase, non
+                  // sposta la finestra. f1_best resta f1: se dosubtract sottrae un
+                  // segnale che in realta' deriva, il residuo non si cancella del
+                  // tutto -- limite noto, non e' lo scopo di questa modifica.
+                  if (ft2_drift_search_attivo () && std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
+                    {
+                      std::fprintf (stderr, "[DRIFTDBG] cand=%d seg=%d f1=%.1f ok=%d budget=%d nsync=%d smax=%.3f smaxthresh=%.3f gate=%d\n",
+                                   icand + 1, iseg, f1, decoded_best.ok ? 1 : 0, local_rescue_budget,
+                                   nsync_qual, static_cast<double> (smax), static_cast<double> (smaxthresh),
+                                   enable_drift_rescue ? 1 : 0);
+                      std::fflush (stderr);
+                    }
+                  if (!decoded_best.ok && enable_drift_rescue && local_rescue_budget > 0)
+                    {
+                      // local_rescue_budget puo' essere gia' stato speso dal rescue
+                      // sopra (enable_local_rescue ed enable_drift_rescue leggono lo
+                      // stesso budget prima che nessuno dei due lo scali): il
+                      // controllo qui e' fresco, non il valore di enable_drift_rescue
+                      // calcolato piu' sopra.
+                      --local_rescue_budget;
+                      float const range = ft2_drift_search_range_hz_s ();
+                      int const steps = ft2_drift_search_steps ();
+                      for (int step = 1; step <= steps && !decoded_best.ok; ++step)
+                        {
+                          float const rate = range * static_cast<float> (step) / static_cast<float> (steps);
+                          for (float sign : {1.0f, -1.0f})
+                            {
+                              if (abort_if_cancelled ())
+                                {
+                                  return;
+                                }
+                              std::array<Complex, kFt2NSeg> cd_drift = cd_primary;
+                              apply_dechirp (cd_drift, sign * rate);
+
+                              int badsync_drift = 0;
+                              bitmetrics.fill (0.0f);
+                              ftx_ft2_bitmetrics_c (cd_drift.data (), bitmetrics.data (), &badsync_drift);
+                              int const nsync_drift_probe = ft2_sync_quality (bitmetrics.data ());
+                              if (std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
+                                {
+                                  std::fprintf (stderr, "[DRIFTDBG-TRY] rate=%.2f badsync=%d nsync=%d (primario nsync=%d)\n",
+                                               static_cast<double> (sign * rate), badsync_drift,
+                                               nsync_drift_probe, nsync_qual);
+                                  std::fflush (stderr);
+                                }
+                              if (badsync_drift != 0)
+                                {
+                                  continue;
+                                }
+                              int const nsync_drift = nsync_drift_probe;
+                              int nsync_drift_min = 13;
+                              if (ndepth0 >= 3) nsync_drift_min = 10;
+                              if (nsync_drift < nsync_drift_min)
+                                {
+                                  continue;
+                                }
+
+                              std::array<float, kFt2Codeword> llra_d {};
+                              std::array<float, kFt2Codeword> llrb_d {};
+                              std::array<float, kFt2Codeword> llrc_d {};
+                              std::array<float, kFt2Codeword> llrd_d {};
+                              std::array<float, kFt2Codeword> llre_d {};
+                              build_llr_sets (bitmetrics.data (), llra_d, llrb_d, llrc_d, llrd_d, llre_d);
+
+                              float apmag_d = 0.0f;
+                              for (size_t i = 0; i < llra_d.size (); ++i)
+                                {
+                                  apmag_d = std::max (apmag_d, std::fabs (llra_d[i]));
+                                }
+                              apmag_d *= 1.1f;
+
+                              std::array<float, kFt2Nn * 4> symbol_mags_d {};
+                              if (ft2_ap_msg_attivo ())
+                                {
+                                  ftx_ft2_symbol_mags_c (cd_drift.data (), symbol_mags_d.data ());
+                                }
+                              DecodePassResult const decoded_drift = run_decode_passes (
+                                  state, ap_setup, &context, llra_d, llrb_d, llrc_d, llrd_d, llre_d,
+                                  ndepth0, ncontest, qso_progress, doosd, false, nfqso, f1,
+                                  false, apmag_d,
+                                  ft2_ap_msg_attivo () ? symbol_mags_d.data () : nullptr);
+                              if (!decoded_drift.ok)
+                                {
+                                  if (decoded_drift.stop_candidate)
+                                    {
+                                      decoded_best = decoded_drift;
+                                    }
+                                  continue;
+                                }
+
+                              rescued = true;
+                              decoded_best = decoded_drift;
+                              qual_best = static_cast<float> (nsync_drift);
+                              stage7_debug_logf (
+                                  "rescued-drift cand=%d seg=%d f1=%.3f rate=%.2fHz/s with \"%s\"",
+                                  icand + 1, iseg, f1, static_cast<double> (sign * rate),
+                                  decoded_best.message_fixed.constData ());
+                              break;
+                            }
+                        }
+                    }
 
                   if (decoded_best.stop_candidate)
                     {
@@ -2817,6 +3099,15 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                     }
                 }
 
+              if (ft2_drift_search_attivo () && std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
+                {
+                  bool const dup = std::find (seen_decodes.begin (), seen_decodes.end (),
+                                              decoded_best.message_fixed) != seen_decodes.end ();
+                  std::fprintf (stderr, "[DRIFTDBG-EMIT] ok=%d msg=\"%s\" seen_count=%zu dup=%d\n",
+                               decoded_best.ok ? 1 : 0, decoded_best.message_fixed.constData (),
+                               seen_decodes.size (), dup ? 1 : 0);
+                  std::fflush (stderr);
+                }
               if (std::find (seen_decodes.begin (), seen_decodes.end (), decoded_best.message_fixed)
                   != seen_decodes.end ())
                 {

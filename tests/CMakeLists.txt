@@ -74,6 +74,9 @@ endif ()
 
 add_executable (ft2_stage_compare ft2_stage_compare.cpp)
 target_link_libraries (ft2_stage_compare wsjt_qt wsjt_cxx wsjt_fort Qt6::Core)
+if (MINGW)
+  target_link_options (ft2_stage_compare PRIVATE -Wl,--stack,67108864)
+endif ()
 add_dependencies (test_qt_helpers ft2_stage_compare)
 
 # Collaudo isolato dell'elenco delle stazioni sentite e dei bit del mittente:
