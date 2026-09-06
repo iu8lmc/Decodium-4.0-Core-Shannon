@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -1667,6 +1668,16 @@ std::atomic<int> g_ft2_msg_tentativi {0};
 std::atomic<int> g_ft2_msg_successi {0};
 std::atomic<int> g_ft2_msg_candidati {0};
 
+// Evento rescued-drift esposto al worker (FT2DecodeWorker.cpp) per il log
+// "in aria": seq incrementato ad ogni recupero riuscito, messaggio/tasso
+// protetti da mutex (evento raro, nessun impatto sulle prestazioni). Il
+// chiamante confronta la sua ultima seq vista con quella corrente per
+// sapere se c'e' un nuovo evento da loggare (ftx_ft2_drift_rescue_poll_c).
+std::atomic<unsigned long long> g_ft2_drift_rescue_seq {0};
+std::mutex g_ft2_drift_rescue_mutex;
+float g_ft2_drift_rescue_rate = 0.0f;
+std::string g_ft2_drift_rescue_msg;
+
 // AP MORBIDO dal frame precedente (3b della spec): a differenza del tipo 8,
 // che verifica un messaggio ripetuto TALE E QUALE, questo aiuta un QSO che
 // AVANZA -- stesso mittente e stesso destinatario, ma il rapporto o il
@@ -3054,6 +3065,12 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                                   "rescued-drift cand=%d seg=%d f1=%.3f rate=%.2fHz/s with \"%s\"",
                                   icand + 1, iseg, f1, static_cast<double> (sign * rate),
                                   decoded_best.message_fixed.constData ());
+                              {
+                                std::lock_guard<std::mutex> lock (g_ft2_drift_rescue_mutex);
+                                g_ft2_drift_rescue_rate = sign * rate;
+                                g_ft2_drift_rescue_msg = decoded_best.message_fixed.constData ();
+                              }
+                              g_ft2_drift_rescue_seq.fetch_add (1, std::memory_order_relaxed);
                               break;
                             }
                         }
@@ -3365,6 +3382,34 @@ extern "C" int ftx_ft2_ap_msg_candidati_c ()
 extern "C" int ftx_ft2_ap_soft_tentativi_c ()
 {
   return g_ft2_soft_tentativi.load ();
+}
+
+// Poll per il worker (FT2DecodeWorker.cpp): il chiamante passa l'ultima seq
+// vista (0 alla prima chiamata) e riceve indietro quella corrente. Se sono
+// diverse c'e' un evento nuovo, e msg_out/rate_out sono gia' riempiti col
+// messaggio e il tasso di deriva Hz/s dell'ultimo recupero riuscito.
+extern "C" unsigned long long ftx_ft2_drift_rescue_poll_c (unsigned long long last_seq,
+                                                            char* msg_out, int msg_cap,
+                                                            float* rate_out)
+{
+  unsigned long long const seq = g_ft2_drift_rescue_seq.load (std::memory_order_relaxed);
+  if (seq == last_seq)
+    {
+      return seq;
+    }
+  std::lock_guard<std::mutex> lock (g_ft2_drift_rescue_mutex);
+  if (rate_out)
+    {
+      *rate_out = g_ft2_drift_rescue_rate;
+    }
+  if (msg_out && msg_cap > 0)
+    {
+      std::size_t const n = std::min (static_cast<std::size_t> (msg_cap - 1),
+                                       g_ft2_drift_rescue_msg.size ());
+      std::memcpy (msg_out, g_ft2_drift_rescue_msg.data (), n);
+      msg_out[n] = '\0';
+    }
+  return seq;
 }
 
 extern "C" int ftx_ft2_ap_soft_successi_c ()

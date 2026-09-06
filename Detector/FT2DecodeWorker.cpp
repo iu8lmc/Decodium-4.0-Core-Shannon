@@ -34,6 +34,9 @@ extern "C"
   int ftx_ft2_ap_msg_candidati_c ();
   int ftx_ft2_ap_soft_tentativi_c ();
   int ftx_ft2_ap_soft_successi_c ();
+  unsigned long long ftx_ft2_drift_rescue_poll_c (unsigned long long last_seq,
+                                                   char* msg_out, int msg_cap,
+                                                   float* rate_out);
 }
 
 namespace
@@ -45,6 +48,28 @@ namespace
   constexpr int kFt2StableDspStage {7};
   char constexpr kFt2DspStageEnv[] {"DECODIUM_FT2_CPP_DSP_STAGE"};
   [[maybe_unused]] constexpr int kMaxDecodeThreads {24};
+
+  // 6 settembre 2026 -- log "in aria" del rescue del tasso di deriva FT2
+  // (DECODIUM_FT2_DRIFT_SEARCH): niente a che fare col debug verboso
+  // esistente (DECODIUM_FT2_STAGE7_DEBUG), sempre visibile nel diagnostic
+  // log quando la funzione recupera davvero una decodifica.
+  void log_ft2_drift_rescue_if_new ()
+  {
+    static std::atomic<unsigned long long> lastSeq {0};
+    char msg[64] {};
+    float rate = 0.0f;
+    unsigned long long const seenSeq = lastSeq.load (std::memory_order_relaxed);
+    unsigned long long const seq = ftx_ft2_drift_rescue_poll_c (seenSeq, msg, sizeof (msg), &rate);
+    if (seq == seenSeq)
+      {
+        return;
+      }
+    lastSeq.store (seq, std::memory_order_relaxed);
+    qInfo ().noquote ()
+        << QStringLiteral ("[FT2-DRIFT-RESCUE] rate=%1Hz/s msg=\"%2\"")
+               .arg (static_cast<double> (rate), 0, 'f', 2)
+               .arg (QString::fromLatin1 (msg));
+  }
 
   void apply_decode_thread_limit (int threads)
   {
@@ -298,6 +323,7 @@ void FT2DecodeWorker::decodeAsync (AsyncDecodeRequest const& request)
                                  &bits77[0], &decodeds[0], &nout);
   qint64 const decodeMs = decodeTimer.elapsed ();
   ftx_ft2_set_ap_hash_cache_c (nullptr, 0);
+  log_ft2_drift_rescue_if_new ();
 
   if (m_shuttingDown.load (std::memory_order_relaxed)
       || !m_decodeEnabled.load (std::memory_order_relaxed))
@@ -398,6 +424,7 @@ void FT2DecodeWorker::decode (DecodeRequest const& request)
                                  &bits77[0], &decodeds[0], &nout);
   qint64 const decodeMs = decodeTimer.elapsed ();
   ftx_ft2_set_ap_hash_cache_c (nullptr, 0);
+  log_ft2_drift_rescue_if_new ();
 
   if (m_shuttingDown.load (std::memory_order_relaxed)
       || !m_decodeEnabled.load (std::memory_order_relaxed)
