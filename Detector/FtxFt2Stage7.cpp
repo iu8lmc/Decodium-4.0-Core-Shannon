@@ -1478,6 +1478,48 @@ float ft2_ap_msg_hz ()
   return v;
 }
 
+// Raggio (in Hz, coincide con le unita' di idf) della ricerca GENERALE del
+// sincronismo attorno al candidato trovato da FtxCandidates.cpp -- non solo
+// il percorso del tipo 8. 12 Hz e' il valore nativo di sempre, mai misurato
+// come parametro prima del 6 settembre 2026.
+//
+// MISURATO E SCARTATO (6 settembre 2026): l'ipotesi era che questo raggio
+// fosse il collo di bottiglia della deriva DENTRO lo slot, per analogia col
+// limite +-12 Hz gia' noto per il tipo 8 -- ma quello riguarda la deriva FRA
+// due slot (gia' risolta a parte con DECODIUM_FT2_AP_MSG_HZ, che scavalca i
+// cancelli del sincronismo), un problema diverso. Banco con deriva sintetica
+// lineare dentro lo slot (tests/ft2_make_test_wav.cpp --drift-hz, trasformata
+// di Hilbert), -14 dB, 15 semi per punto, confronto 12 Hz contro 16 Hz:
+//   deriva Hz   0    4    6    8   10   12   14   16
+//   raggio 12  15/15 15/15 15/15 14/15 14/15 13/15 11/15 10/15
+//   raggio 16  15/15 15/15 15/15 14/15 14/15 13/15 11/15 10/15
+// IDENTICO punto per punto: il calo di decodifiche con la deriva e' reale
+// (15/15 -> 10/15) ma allargare questo raggio non ne recupera NEMMENO UNA.
+// Il collo di bottiglia per la deriva dentro lo slot non e' qui -- probabile
+// candidato la demodulazione 4-GFSK simbolo per simbolo, che perde energia
+// quando il tono si sposta durante lo slot indipendentemente da quanto bene
+// il sincronismo si aggancia. NON RIPROVARE questo allargamento per lo stesso
+// motivo: e' gia' stato misurato.
+//
+// Il parametro resta (default 12, comportamento invariato) come strumento di
+// misura per esperimenti futuri: DECODIUM_FT2_SYNC_HZ=16 lo allarga a mano.
+//
+// Limite a 16: state.ctwk2 (sopra, riga 607) e' dimensionato a 33 celle
+// indicizzate da idf_index(idf)=idf+16, cioe' idf in [-16,16]. Andare oltre
+// leggerebbe/scriverebbe fuori dall'array -- non e' un limite di misura, e'
+// un limite di memoria, quindi si taglia qui invece di fidarsi di chi lancia
+// il banco con la variabile d'ambiente.
+int ft2_sync_freq_radius_hz ()
+{
+  static int const v = [] {
+    char const* e = std::getenv ("DECODIUM_FT2_SYNC_HZ");
+    int const n = e ? std::atoi (e) : 0;
+    int const requested = n > 0 ? n : 12;
+    return std::min (requested, 16);
+  }();
+  return v;
+}
+
 // Conferma a livello di TONO: con la sequenza di toni del messaggio atteso,
 //   T = somma sui simboli dati di (|tono atteso| - media degli altri tre)
 //       / somma su tutti i simboli dati e i quattro toni di |tono|.
@@ -2394,8 +2436,9 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                     {
                       return;
                     }
-                  int idfmin = -12;
-                  int idfmax = 12;
+                  int const sync_radius = ft2_sync_freq_radius_hz ();
+                  int idfmin = -sync_radius;
+                  int idfmax = sync_radius;
                   int idfstp = 3;
                   int ibmin = -688;
                   int ibmax = 2024;
