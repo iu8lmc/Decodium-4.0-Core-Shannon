@@ -1537,31 +1537,33 @@ bool ft2_symbol_margin_log ()
   return v;
 }
 
-// ATTENZIONE (6 settembre 2026): NON FUNZIONANTE IN MODO AFFIDABILE.
-// Riaccendere solo dopo aver isolato il bug qui sotto -- per ora e' solo
-// materiale di misura, non una funzione da provare in aria.
-//
-// La matematica del de-chirp e' verificata corretta (recupera davvero il
-// messaggio giusto quando funziona, confermato via log "rescued-drift"),
-// MA il comportamento e' inaffidabile: a parita' di comando, file e
-// variabili d'ambiente, il risultato cambia in modo DETERMINISTICO (non
-// casuale) a seconda che DECODIUM_FT2_STAGE7_DEBUG sia impostato o no --
-// con debug acceso, 5/5 successi; senza, 5/5 fallimenti, sullo stesso
-// identico seme. Sintomo classico di comportamento indefinito (lettura di
-// memoria non inizializzata o simile), non di un errore di soglia o di
-// formula. Escluso lo stack overflow (aggiunto -Wl,--stack,67108864 a
-// tests/CMakeLists.txt per ft2_stage_compare, che ne era privo a
-// differenza di ft8_stage_compare/ft2_gate_dump: nessun cambiamento).
-// Dr. Memory conferma errori di accesso a memoria reali (non solo i "beyond
-// top of stack" risultati rumore dello strumento su binari GCC/MinGW), ma
-// senza simboli di debug utilizzabili nel binario attuale (CMAKE_CXX_FLAGS
-// ha -g -gdwarf-4 ma l'oggetto compilato non ha sezioni .debug_*: da
-// capire dove si perdono) non è stato possibile risalire alla riga esatta.
-// ASan non e' disponibile per il target mingw-w64 con questa toolchain
-// (mingw-w64-x86_64-compiler-rt non include il runtime asan su Windows).
-// Prossimo passo: build dedicata con CMAKE_BUILD_TYPE=Debug (niente
-// ottimizzazioni, simboli sicuri) e Dr. Memory su quella, o una toolchain
-// MSVC+clang-cl con ASan nativo.
+// RISOLTO (6 settembre 2026): il comportamento era dipendente in modo
+// deterministico da DECODIUM_FT2_STAGE7_DEBUG -- stesso comando/file/seme,
+// sempre successo con debug acceso, sempre fallimento senza, sintomo
+// classico di comportamento indefinito. Causa isolata con Dr. Memory (dopo
+// aver ricostruito un eseguibile con simboli non troncati dal link -- il
+// link.txt generato da CMake applica -Wl,-s -Wl,--strip-all anche quando
+// -g -gdwarf-4 e' nei flag di compilazione): un accesso 8 byte oltre la
+// cima dello stack, sempre sulla stessa catena di chiamate
+// decode_ft2_stage7 -> run_decode_passes. Diagnosi: -O3 inlineava
+// run_decode_passes (frame locale non piccolo, un PreparedPass per
+// passata) dentro decode_ft2_stage7, gia' enorme; il nuovo ciclo di
+// ricerca della deriva aggiungeva altri array locali per tentativo, e la
+// somma dei due frame diventava sensibile a variazioni minime di codice
+// intorno al punto di chiamata (come i rami is-debug-enabled dei log, che
+// pur essendo no-op quando spenti cambiano comunque quel poco di codice
+// che basta a spostare la soglia euristica di inlining di GCC). Fix:
+// __attribute__((noinline)) su run_decode_passes (commento li' vicino) --
+// tiene il suo frame separato in ogni condizione di ottimizzazione,
+// indipendente da cosa succede al punto di chiamata. Verificato con
+// sweep incrociati (centinaia di combinazioni drift/SNR/seme, confronto
+// bit-per-bit fra DECODIUM_FT2_STAGE7_DEBUG acceso/spento): zero mismatch,
+// sia con sia senza __attribute__((optimize("O0"))) su decode_ft2_stage7
+// (attributo quindi NON necessario e non tenuto -- costerebbe l'ottimizzazione
+// sull'intero hot path del decoder FT2 per nessun beneficio aggiuntivo).
+// ASan non disponibile per mingw-w64 su questa toolchain (verificato:
+// mingw-w64-x86_64-compiler-rt non include il runtime asan su Windows);
+// Dr. Memory con simboli e' bastato.
 //
 // Ricerca del tasso di deriva (Hz/s), FASE 2 della diagnostica sopra: la
 // misura con DECODIUM_FT2_SYMBOL_MARGIN_LOG ha mostrato un arco simmetrico
@@ -1905,6 +1907,20 @@ bool prepare_ap_pass (Stage7State const& state, ApSetup const& setup,
   return true;
 }
 
+// noinline: run_decode_passes ha gia' un frame locale non piccolo
+// (PreparedPass per passata, fino a npasses), e decode_ft2_stage7 (l'unica
+// chiamante) e' essa stessa enorme. Misurato il 6 settembre 2026: col nuovo
+// ciclo di ricerca della deriva (righe piu' sotto, altri array locali per
+// tentativo) il comportamento del decoder diventava dipendente da
+// DECODIUM_FT2_STAGE7_DEBUG -- stesso comando/file/seme, 5/5 successi con
+// debug (meno inlining con -O3), 5/5 fallimenti senza (inlining aggressivo
+// che soma i frame locali di run_decode_passes dentro quello gia' enorme di
+// decode_ft2_stage7). Dr. Memory ha confermato un accesso 8 byte oltre la
+// cima dello stack esattamente su questa catena di chiamate. noinline tiene
+// il frame di run_decode_passes separato in ogni condizione di
+// ottimizzazione, invece di sperare che l'euristica di GCC per l'inlining
+// non superi mai una soglia critica.
+__attribute__((noinline))
 DecodePassResult run_decode_passes (Stage7State const& state, ApSetup const& setup,
                                     decodium::txmsg::Decode77Context* context,
                                     std::array<float, kFt2Codeword> const& llra,
@@ -2766,13 +2782,6 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                   llra, llrb, llrc, llrd, llre, decoded, ndepth0, ncontest, qso_progress,
                   false, nfqso, f1, false, doosd, apmag, mycall, hiscall);
 
-              if (ft2_drift_search_attivo () && std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
-                {
-                  std::fprintf (stderr, "[DRIFTDBG-PRIMARY] cand=%d seg=%d f1=%.1f ok=%d stop=%d\n",
-                               icand + 1, iseg, f1, decoded.ok ? 1 : 0, decoded.stop_candidate ? 1 : 0);
-                  std::fflush (stderr);
-                }
-
               if (ft2_symbol_margin_log () && decoded.ok)
                 {
                   std::array<int, kFt2Nn> tones {};
@@ -2967,14 +2976,6 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                   // sposta la finestra. f1_best resta f1: se dosubtract sottrae un
                   // segnale che in realta' deriva, il residuo non si cancella del
                   // tutto -- limite noto, non e' lo scopo di questa modifica.
-                  if (ft2_drift_search_attivo () && std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
-                    {
-                      std::fprintf (stderr, "[DRIFTDBG] cand=%d seg=%d f1=%.1f ok=%d budget=%d nsync=%d smax=%.3f smaxthresh=%.3f gate=%d\n",
-                                   icand + 1, iseg, f1, decoded_best.ok ? 1 : 0, local_rescue_budget,
-                                   nsync_qual, static_cast<double> (smax), static_cast<double> (smaxthresh),
-                                   enable_drift_rescue ? 1 : 0);
-                      std::fflush (stderr);
-                    }
                   if (!decoded_best.ok && enable_drift_rescue && local_rescue_budget > 0)
                     {
                       // local_rescue_budget puo' essere gia' stato speso dal rescue
@@ -3001,13 +3002,6 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                               bitmetrics.fill (0.0f);
                               ftx_ft2_bitmetrics_c (cd_drift.data (), bitmetrics.data (), &badsync_drift);
                               int const nsync_drift_probe = ft2_sync_quality (bitmetrics.data ());
-                              if (std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
-                                {
-                                  std::fprintf (stderr, "[DRIFTDBG-TRY] rate=%.2f badsync=%d nsync=%d (primario nsync=%d)\n",
-                                               static_cast<double> (sign * rate), badsync_drift,
-                                               nsync_drift_probe, nsync_qual);
-                                  std::fflush (stderr);
-                                }
                               if (badsync_drift != 0)
                                 {
                                   continue;
@@ -3099,15 +3093,6 @@ void decode_ft2_stage7 (short const* iwave, int nqsoprogress, int nfqso, int nfa
                     }
                 }
 
-              if (ft2_drift_search_attivo () && std::getenv ("DECODIUM_FT2_DRIFT_DEBUG"))
-                {
-                  bool const dup = std::find (seen_decodes.begin (), seen_decodes.end (),
-                                              decoded_best.message_fixed) != seen_decodes.end ();
-                  std::fprintf (stderr, "[DRIFTDBG-EMIT] ok=%d msg=\"%s\" seen_count=%zu dup=%d\n",
-                               decoded_best.ok ? 1 : 0, decoded_best.message_fixed.constData (),
-                               seen_decodes.size (), dup ? 1 : 0);
-                  std::fflush (stderr);
-                }
               if (std::find (seen_decodes.begin (), seen_decodes.end (), decoded_best.message_fixed)
                   != seen_decodes.end ())
                 {
